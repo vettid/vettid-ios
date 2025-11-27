@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- VettID App Icon - Castle tower with keyhole -->
+
+  <!-- Background -->
+  <rect width="1024" height="1024" fill="#2E3192"/>
+
+  <!-- Castle tower battlements -->
+  <path d="M340 240 L380 240 L380 200 L420 200 L420 240 L460 240 L460 200 L500 200 L500 240 L540 240 L540 200 L580 200 L580 240 L620 240 L620 200 L660 200 L660 240 L660 300 L340 300 Z" fill="#F4B942"/>
+
+  <!-- Tower body (trapezoid) -->
+  <path d="M360 300 L664 300 L620 760 L404 760 Z" fill="#F4B942"/>
+
+  <!-- Keyhole circle -->
+  <circle cx="512" cy="440" r="70" fill="#2E3192"/>
+
+  <!-- Keyhole slot -->
+  <path d="M480 490 L544 490 L530 640 L494 640 Z" fill="#2E3192"/>
+</svg>
