@@ -16,6 +16,7 @@ struct VettIDApp: App {
 class AppState: ObservableObject {
     @Published var isAuthenticated = false
     @Published var hasCredential = false
+    @Published var currentUserGuid: String?
     @Published var vaultStatus: VaultStatus?
 
     private let credentialStore = CredentialStore()
@@ -26,13 +27,32 @@ class AppState: ObservableObject {
 
     func checkExistingCredential() {
         hasCredential = credentialStore.hasStoredCredential()
+        if let credential = try? credentialStore.retrieveFirst() {
+            currentUserGuid = credential.userGuid
+            if let status = credential.vaultStatus {
+                vaultStatus = parseVaultStatus(status)
+            }
+        }
     }
-}
 
-enum VaultStatus: Equatable {
-    case pendingEnrollment
-    case provisioning
-    case running(instanceId: String)
-    case stopped
-    case terminated
+    func refreshCredentialState() {
+        checkExistingCredential()
+    }
+
+    private func parseVaultStatus(_ status: String) -> VaultStatus {
+        switch status.uppercased() {
+        case "PENDING_ENROLLMENT":
+            return .pendingEnrollment
+        case "PROVISIONING":
+            return .provisioning
+        case "RUNNING":
+            return .running(instanceId: "")
+        case "STOPPED":
+            return .stopped
+        case "TERMINATED":
+            return .terminated
+        default:
+            return .stopped
+        }
+    }
 }

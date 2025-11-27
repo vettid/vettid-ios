@@ -2,190 +2,284 @@ import Foundation
 import CryptoKit
 import UIKit
 
-/// Handles the complete enrollment flow for new credentials
+/// Handles the complete multi-step enrollment flow for new credentials
+///
+/// Flow:
+/// 1. Start enrollment with invitation code → receive UTKs
+/// 2. User enters password → hash and encrypt with UTK → send to server
+/// 3. Finalize enrollment → receive credential package
 @MainActor
 final class EnrollmentService: ObservableObject {
 
     @Published var state: EnrollmentState = .idle
     @Published var error: EnrollmentError?
 
+    // Session data maintained across steps
+    private var enrollmentSessionId: String?
+    private var userGuid: String?
+    private var transactionKeys: [TransactionKeyInfo] = []
+    private var passwordKeyId: String?
+
     private let apiClient = APIClient()
     private let credentialStore = CredentialStore()
-    private let secureKeyStore = SecureKeyStore()
     private let attestationManager = AttestationManager()
 
-    // MARK: - Enrollment Flow
+    // MARK: - Step 1: Start Enrollment
 
     /// Begin enrollment with an invitation code (from QR or manual entry)
-    func enroll(invitationCode: String) async {
-        state = .generatingKeys
+    func startEnrollment(invitationCode: String) async {
+        state = .startingEnrollment
 
         do {
-            // Step 1: Generate cryptographic keys
-            let keys = try await generateKeys()
+            // Get device ID
+            let deviceId = getDeviceId()
 
-            state = .attestingDevice
+            // Get attestation data (if supported)
+            let attestationData = try await getAttestationData()
 
-            // Step 2: Attest device with App Attest
-            let attestationData = try await prepareAttestation(keys: keys)
-
-            state = .registeringWithServer
-
-            // Step 3: Register with ledger service
-            let response = try await registerWithLedger(
+            // Call API
+            let request = EnrollStartRequest(
                 invitationCode: invitationCode,
-                keys: keys,
+                deviceId: deviceId,
                 attestationData: attestationData
             )
 
+            let response = try await apiClient.enrollStart(request: request)
+
+            // Store session data for subsequent steps
+            enrollmentSessionId = response.enrollmentSessionId
+            userGuid = response.userGuid
+            transactionKeys = response.transactionKeys
+            passwordKeyId = response.passwordPrompt.useKeyId
+
+            // Transition to password entry state
+            state = .awaitingPassword(prompt: response.passwordPrompt.message)
+
+        } catch {
+            handleError(error)
+        }
+    }
+
+    // MARK: - Step 2: Set Password
+
+    /// Set password during enrollment
+    /// Call this after user enters their password in the UI
+    func setPassword(_ password: String) async {
+        guard let sessionId = enrollmentSessionId,
+              let keyId = passwordKeyId,
+              let utk = transactionKeys.first(where: { $0.keyId == keyId }) else {
+            self.error = .invalidState
+            state = .failed(.invalidState)
+            return
+        }
+
+        state = .settingPassword
+
+        do {
+            // Hash password with Argon2id
+            let hashResult = try PasswordHasher.hash(password: password)
+
+            // Encrypt password hash with UTK
+            let encryptedPayload = try CryptoManager.encryptPasswordHash(
+                passwordHash: hashResult.hash,
+                utkPublicKeyBase64: utk.publicKey
+            )
+
+            // Call API
+            let request = EnrollSetPasswordRequest(
+                enrollmentSessionId: sessionId,
+                encryptedPasswordHash: encryptedPayload.encryptedPasswordHash,
+                keyId: keyId,
+                nonce: encryptedPayload.nonce
+            )
+
+            let response = try await apiClient.enrollSetPassword(request: request)
+
+            guard response.status == "password_set" else {
+                throw EnrollmentError.passwordSetFailed
+            }
+
+            // Proceed to finalize
+            await finalizeEnrollment()
+
+        } catch {
+            handleError(error)
+        }
+    }
+
+    // MARK: - Step 3: Finalize Enrollment
+
+    /// Finalize enrollment and receive credential package
+    private func finalizeEnrollment() async {
+        guard let sessionId = enrollmentSessionId else {
+            self.error = .invalidState
+            state = .failed(.invalidState)
+            return
+        }
+
+        state = .finalizingEnrollment
+
+        do {
+            let request = EnrollFinalizeRequest(enrollmentSessionId: sessionId)
+            let response = try await apiClient.enrollFinalize(request: request)
+
+            guard response.status == "enrolled" else {
+                throw EnrollmentError.finalizationFailed
+            }
+
+            // Store credential
             state = .storingCredential
+            try storeCredential(package: response.credentialPackage, vaultStatus: response.vaultStatus)
 
-            // Step 4: Store credential securely
-            try storeCredential(response: response, keys: keys)
+            // Clear session data
+            clearSessionData()
 
-            state = .completed(credentialId: response.credentialId)
+            state = .completed(userGuid: response.credentialPackage.userGuid)
 
-        } catch let enrollmentError as EnrollmentError {
+        } catch {
+            handleError(error)
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func getDeviceId() -> String {
+        return UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
+    }
+
+    private func getAttestationData() async throws -> String {
+        guard attestationManager.isSupported else {
+            // Return empty attestation for unsupported devices (simulator, etc.)
+            return ""
+        }
+
+        do {
+            let keyId = try await attestationManager.generateAttestationKey()
+            let deviceId = getDeviceId()
+            let clientData = "\(deviceId):\(Date().timeIntervalSince1970)".data(using: .utf8)!
+            let attestation = try await attestationManager.attestKey(keyId: keyId, clientData: clientData)
+            return attestation.base64EncodedString()
+        } catch {
+            // Continue without attestation on error
+            return ""
+        }
+    }
+
+    private func storeCredential(package: CredentialPackage, vaultStatus: String) throws {
+        // Convert transaction keys
+        let storedKeys = (package.transactionKeys ?? []).map { keyInfo in
+            StoredUTK(
+                keyId: keyInfo.keyId,
+                publicKey: keyInfo.publicKey,
+                algorithm: keyInfo.algorithm,
+                isUsed: false
+            )
+        }
+
+        // Mark the password key as used
+        var allKeys = storedKeys
+        if let usedKeyId = passwordKeyId {
+            allKeys = allKeys.map { key in
+                if key.keyId == usedKeyId {
+                    return StoredUTK(keyId: key.keyId, publicKey: key.publicKey, algorithm: key.algorithm, isUsed: true)
+                }
+                return key
+            }
+        }
+
+        let credential = StoredCredential(
+            userGuid: package.userGuid,
+            encryptedBlob: package.encryptedBlob,
+            cekVersion: package.cekVersion,
+            ledgerAuthToken: StoredLAT(
+                latId: package.ledgerAuthToken.latId,
+                token: package.ledgerAuthToken.token,
+                version: package.ledgerAuthToken.version
+            ),
+            transactionKeys: allKeys,
+            createdAt: Date(),
+            lastUsedAt: Date(),
+            vaultStatus: vaultStatus
+        )
+
+        try credentialStore.store(credential: credential)
+    }
+
+    private func clearSessionData() {
+        enrollmentSessionId = nil
+        userGuid = nil
+        transactionKeys = []
+        passwordKeyId = nil
+    }
+
+    private func handleError(_ error: Error) {
+        if let enrollmentError = error as? EnrollmentError {
             self.error = enrollmentError
             state = .failed(enrollmentError)
-        } catch {
+        } else if let apiError = error as? APIError {
+            let wrappedError = EnrollmentError.apiError(apiError)
+            self.error = wrappedError
+            state = .failed(wrappedError)
+        } else {
             let wrappedError = EnrollmentError.unexpected(error)
             self.error = wrappedError
             state = .failed(wrappedError)
         }
     }
 
-    // MARK: - Key Generation
+    // MARK: - Reset
 
-    private func generateKeys() async throws -> GeneratedKeys {
-        // Generate CEK (Credential Encryption Key) - X25519
-        let cekKeyPair = CryptoManager.generateX25519KeyPair()
-
-        // Generate signing key - Ed25519
-        let signingKeyPair = CryptoManager.generateEd25519KeyPair()
-
-        // Generate initial pool of 20 transaction keys - X25519
-        var transactionKeys: [TransactionKey] = []
-        for _ in 0..<20 {
-            let tkKeyPair = CryptoManager.generateX25519KeyPair()
-            transactionKeys.append(TransactionKey(
-                keyId: "tk-\(UUID().uuidString)",
-                privateKey: tkKeyPair.privateKey.rawRepresentation,
-                publicKey: tkKeyPair.publicKey.rawRepresentation,
-                isUsed: false
-            ))
-        }
-
-        return GeneratedKeys(
-            cekPrivateKey: cekKeyPair.privateKey,
-            cekPublicKey: cekKeyPair.publicKey,
-            signingPrivateKey: signingKeyPair.privateKey,
-            signingPublicKey: signingKeyPair.publicKey,
-            transactionKeys: transactionKeys
-        )
-    }
-
-    // MARK: - Device Attestation
-
-    private func prepareAttestation(keys: GeneratedKeys) async throws -> EnrollmentAttestationData {
-        guard attestationManager.isSupported else {
-            throw EnrollmentError.attestationNotSupported
-        }
-
-        let keyId = try await attestationManager.generateAttestationKey()
-        let deviceId = await getDeviceId()
-
-        return try await attestationManager.prepareEnrollmentAttestation(
-            keyId: keyId,
-            credentialPublicKey: keys.cekPublicKey.rawRepresentation,
-            deviceId: deviceId
-        )
-    }
-
-    private func getDeviceId() async -> String {
-        // Use a consistent device identifier
-        // In production, consider using identifierForVendor or a stored UUID
-        return UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
-    }
-
-    // MARK: - Server Registration
-
-    private func registerWithLedger(
-        invitationCode: String,
-        keys: GeneratedKeys,
-        attestationData: EnrollmentAttestationData
-    ) async throws -> EnrollmentResponse {
-        let deviceId = await getDeviceId()
-
-        let request = EnrollmentRequest(
-            invitationCode: invitationCode,
-            deviceId: deviceId,
-            cekPublicKey: keys.cekPublicKey.rawRepresentation,
-            signingPublicKey: keys.signingPublicKey.rawRepresentation,
-            transactionPublicKeys: keys.transactionKeys.map { $0.publicKey },
-            attestationData: attestationData.attestation
-        )
-
-        do {
-            return try await apiClient.enroll(request: request)
-        } catch {
-            throw EnrollmentError.serverRegistrationFailed(error)
-        }
-    }
-
-    // MARK: - Credential Storage
-
-    private func storeCredential(response: EnrollmentResponse, keys: GeneratedKeys) throws {
-        let credential = StoredCredential(
-            credentialId: response.credentialId,
-            vaultId: response.vaultId,
-            cekPrivateKey: keys.cekPrivateKey.rawRepresentation,
-            cekPublicKey: keys.cekPublicKey.rawRepresentation,
-            signingPrivateKey: keys.signingPrivateKey.rawRepresentation,
-            signingPublicKey: keys.signingPublicKey.rawRepresentation,
-            latCurrent: response.lat,
-            transactionKeys: keys.transactionKeys,
-            createdAt: Date(),
-            lastUsedAt: Date()
-        )
-
-        do {
-            try credentialStore.store(credential: credential)
-        } catch {
-            throw EnrollmentError.storageFailed(error)
-        }
+    /// Reset the enrollment service to initial state
+    func reset() {
+        state = .idle
+        error = nil
+        clearSessionData()
     }
 }
 
-// MARK: - Supporting Types
-
-struct GeneratedKeys {
-    let cekPrivateKey: Curve25519.KeyAgreement.PrivateKey
-    let cekPublicKey: Curve25519.KeyAgreement.PublicKey
-    let signingPrivateKey: Curve25519.Signing.PrivateKey
-    let signingPublicKey: Curve25519.Signing.PublicKey
-    let transactionKeys: [TransactionKey]
-}
+// MARK: - Enrollment State
 
 enum EnrollmentState: Equatable {
     case idle
-    case generatingKeys
-    case attestingDevice
-    case registeringWithServer
+    case startingEnrollment
+    case awaitingPassword(prompt: String)
+    case settingPassword
+    case finalizingEnrollment
     case storingCredential
-    case completed(credentialId: String)
+    case completed(userGuid: String)
     case failed(EnrollmentError)
+
+    static func == (lhs: EnrollmentState, rhs: EnrollmentState) -> Bool {
+        switch (lhs, rhs) {
+        case (.idle, .idle),
+             (.startingEnrollment, .startingEnrollment),
+             (.settingPassword, .settingPassword),
+             (.finalizingEnrollment, .finalizingEnrollment),
+             (.storingCredential, .storingCredential):
+            return true
+        case let (.awaitingPassword(a), .awaitingPassword(b)):
+            return a == b
+        case let (.completed(a), .completed(b)):
+            return a == b
+        case let (.failed(a), .failed(b)):
+            return a == b
+        default:
+            return false
+        }
+    }
 
     var description: String {
         switch self {
         case .idle:
             return "Ready to enroll"
-        case .generatingKeys:
-            return "Generating cryptographic keys..."
-        case .attestingDevice:
-            return "Verifying device integrity..."
-        case .registeringWithServer:
-            return "Registering with VettID..."
+        case .startingEnrollment:
+            return "Starting enrollment..."
+        case .awaitingPassword:
+            return "Create your password"
+        case .settingPassword:
+            return "Setting password..."
+        case .finalizingEnrollment:
+            return "Finalizing enrollment..."
         case .storingCredential:
             return "Securing credential..."
         case .completed:
@@ -194,41 +288,63 @@ enum EnrollmentState: Equatable {
             return "Failed: \(error.localizedDescription)"
         }
     }
+
+    var isProcessing: Bool {
+        switch self {
+        case .startingEnrollment, .settingPassword, .finalizingEnrollment, .storingCredential:
+            return true
+        default:
+            return false
+        }
+    }
 }
 
-enum EnrollmentError: Error, Equatable {
+// MARK: - Enrollment Error
+
+enum EnrollmentError: Error, Equatable, LocalizedError {
     case attestationNotSupported
-    case keyGenerationFailed(String)
-    case serverRegistrationFailed(Error)
-    case storageFailed(Error)
     case invalidInvitationCode
+    case invitationExpired
+    case passwordSetFailed
+    case finalizationFailed
+    case storageFailed
+    case invalidState
+    case apiError(APIError)
     case unexpected(Error)
 
     static func == (lhs: EnrollmentError, rhs: EnrollmentError) -> Bool {
         switch (lhs, rhs) {
-        case (.attestationNotSupported, .attestationNotSupported):
+        case (.attestationNotSupported, .attestationNotSupported),
+             (.invalidInvitationCode, .invalidInvitationCode),
+             (.invitationExpired, .invitationExpired),
+             (.passwordSetFailed, .passwordSetFailed),
+             (.finalizationFailed, .finalizationFailed),
+             (.storageFailed, .storageFailed),
+             (.invalidState, .invalidState):
             return true
-        case (.invalidInvitationCode, .invalidInvitationCode):
-            return true
-        case let (.keyGenerationFailed(a), .keyGenerationFailed(b)):
-            return a == b
         default:
             return false
         }
     }
 
-    var localizedDescription: String {
+    var errorDescription: String? {
         switch self {
         case .attestationNotSupported:
-            return "Device attestation is not supported on this device"
-        case .keyGenerationFailed(let reason):
-            return "Key generation failed: \(reason)"
-        case .serverRegistrationFailed(let error):
-            return "Server registration failed: \(error.localizedDescription)"
-        case .storageFailed(let error):
-            return "Failed to store credential: \(error.localizedDescription)"
+            return "Device attestation is not supported"
         case .invalidInvitationCode:
-            return "The invitation code is invalid or expired"
+            return "The invitation code is invalid"
+        case .invitationExpired:
+            return "The invitation code has expired"
+        case .passwordSetFailed:
+            return "Failed to set password"
+        case .finalizationFailed:
+            return "Failed to finalize enrollment"
+        case .storageFailed:
+            return "Failed to store credential"
+        case .invalidState:
+            return "Invalid enrollment state"
+        case .apiError(let error):
+            return error.errorDescription
         case .unexpected(let error):
             return "Unexpected error: \(error.localizedDescription)"
         }

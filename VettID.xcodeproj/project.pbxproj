@@ -19,6 +19,8 @@
 		0000000A /* BiometricAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000000A; };
 		0000000B /* VaultService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000000B; };
 		0000000C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1000000C; };
+		0000000D /* PasswordHasher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000000E; };
+		0000000E /* AuthenticationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000000F; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -35,6 +37,8 @@
 		1000000B /* VaultService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultService.swift; sourceTree = "<group>"; };
 		1000000C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		1000000D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		1000000E /* PasswordHasher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasswordHasher.swift; sourceTree = "<group>"; };
+		1000000F /* AuthenticationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationService.swift; sourceTree = "<group>"; };
 		20000001 /* VettID.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VettID.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -119,6 +123,7 @@
 			isa = PBXGroup;
 			children = (
 				10000003 /* CryptoManager.swift */,
+				1000000E /* PasswordHasher.swift */,
 			);
 			path = Crypto;
 			sourceTree = "<group>";
@@ -161,6 +166,7 @@
 			isa = PBXGroup;
 			children = (
 				1000000A /* BiometricAuthService.swift */,
+				1000000F /* AuthenticationService.swift */,
 			);
 			path = Authentication;
 			sourceTree = "<group>";
@@ -253,6 +259,8 @@
 				00000009 /* QRScannerView.swift in Sources */,
 				0000000A /* BiometricAuthService.swift in Sources */,
 				0000000B /* VaultService.swift in Sources */,
+				0000000D /* PasswordHasher.swift in Sources */,
+				0000000E /* AuthenticationService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

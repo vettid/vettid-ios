@@ -15,43 +15,50 @@ actor APIClient {
         self.session = URLSession(configuration: config)
     }
 
-    // MARK: - Enrollment
+    // MARK: - Enrollment (Multi-Step)
 
-    /// Complete device enrollment with the ledger
-    func enroll(request: EnrollmentRequest) async throws -> EnrollmentResponse {
-        return try await post(endpoint: "/v1/enroll", body: request)
+    /// Step 1: Start enrollment with invitation code
+    func enrollStart(request: EnrollStartRequest) async throws -> EnrollStartResponse {
+        return try await post(endpoint: "/api/v1/enroll/start", body: request)
     }
 
-    // MARK: - Authentication
-
-    /// Authenticate with the ledger using LAT
-    func authenticate(request: AuthenticationRequest) async throws -> AuthenticationResponse {
-        return try await post(endpoint: "/v1/auth", body: request)
+    /// Step 2: Set password during enrollment
+    func enrollSetPassword(request: EnrollSetPasswordRequest) async throws -> EnrollSetPasswordResponse {
+        return try await post(endpoint: "/api/v1/enroll/set-password", body: request)
     }
 
-    // MARK: - Vault Operations
+    /// Step 3: Finalize enrollment and receive credential
+    func enrollFinalize(request: EnrollFinalizeRequest) async throws -> EnrollFinalizeResponse {
+        return try await post(endpoint: "/api/v1/enroll/finalize", body: request)
+    }
+
+    // MARK: - Authentication (Action-Based)
+
+    /// Step 1: Request scoped action token
+    func actionRequest(request: ActionRequestBody, cognitoToken: String) async throws -> ActionRequestResponse {
+        return try await post(endpoint: "/api/v1/action/request", body: request, authToken: cognitoToken)
+    }
+
+    /// Step 2: Execute authentication with action token
+    func authExecute(request: AuthExecuteRequest, actionToken: String) async throws -> AuthExecuteResponse {
+        return try await post(endpoint: "/api/v1/auth/execute", body: request, authToken: actionToken)
+    }
+
+    // MARK: - Vault Operations (Phase 5 - Not Yet Deployed)
 
     /// Get current vault status
     func getVaultStatus(vaultId: String, authToken: String) async throws -> VaultStatusResponse {
-        return try await get(endpoint: "/v1/vaults/\(vaultId)/status", authToken: authToken)
+        return try await get(endpoint: "/member/vaults/\(vaultId)/status", authToken: authToken)
     }
 
-    /// Request vault action (start, stop, etc.)
-    func vaultAction(vaultId: String, action: VaultAction, authToken: String) async throws -> VaultActionResponse {
-        let request = VaultActionRequest(action: action)
-        return try await post(endpoint: "/v1/vaults/\(vaultId)/actions", body: request, authToken: authToken)
+    /// Start vault
+    func startVault(vaultId: String, authToken: String) async throws -> VaultActionResponse {
+        return try await post(endpoint: "/member/vaults/\(vaultId)/start", body: EmptyBody(), authToken: authToken)
     }
 
-    // MARK: - Key Rotation
-
-    /// Submit new CEK public key after rotation
-    func rotateCEK(request: CEKRotationRequest, authToken: String) async throws -> CEKRotationResponse {
-        return try await post(endpoint: "/v1/keys/cek/rotate", body: request, authToken: authToken)
-    }
-
-    /// Replenish transaction keys
-    func replenishTransactionKeys(request: TKReplenishRequest, authToken: String) async throws -> TKReplenishResponse {
-        return try await post(endpoint: "/v1/keys/tk/replenish", body: request, authToken: authToken)
+    /// Stop vault
+    func stopVault(vaultId: String, authToken: String) async throws -> VaultActionResponse {
+        return try await post(endpoint: "/member/vaults/\(vaultId)/stop", body: EmptyBody(), authToken: authToken)
     }
 
     // MARK: - HTTP Methods
@@ -79,7 +86,10 @@ actor APIClient {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.httpBody = try JSONEncoder().encode(body)
+
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        request.httpBody = try encoder.encode(body)
 
         if let authToken = authToken {
             request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
@@ -103,43 +113,118 @@ actor APIClient {
         }
 
         do {
-            return try JSONDecoder().decode(T.self, from: data)
+            let decoder = JSONDecoder()
+            decoder.keyDecodingStrategy = .convertFromSnakeCase
+            decoder.dateDecodingStrategy = .iso8601
+            return try decoder.decode(T.self, from: data)
         } catch {
             throw APIError.decodingFailed(error)
         }
     }
 }
 
-// MARK: - Request/Response Types
+// MARK: - Enrollment Request/Response Types
 
-struct EnrollmentRequest: Encodable {
+struct EnrollStartRequest: Encodable {
     let invitationCode: String
     let deviceId: String
-    let cekPublicKey: Data        // X25519 public key
-    let signingPublicKey: Data    // Ed25519 public key
-    let transactionPublicKeys: [Data]  // X25519 public keys
-    let attestationData: Data     // App Attest assertion
+    let attestationData: String  // Base64 encoded
 }
 
-struct EnrollmentResponse: Decodable {
-    let credentialId: String
-    let vaultId: String
-    let lat: Data                 // Initial LAT token
-    let encryptedCredentialBlob: Data
+struct EnrollStartResponse: Decodable {
+    let enrollmentSessionId: String
+    let userGuid: String
+    let transactionKeys: [TransactionKeyInfo]
+    let passwordPrompt: PasswordPrompt
 }
 
-struct AuthenticationRequest: Encodable {
-    let credentialId: String
-    let lat: Data
-    let signature: Data           // Ed25519 signature
-    let timestamp: Date
+struct TransactionKeyInfo: Codable {
+    let keyId: String
+    let publicKey: String  // Base64 encoded X25519 public key
+    let algorithm: String
 }
 
-struct AuthenticationResponse: Decodable {
-    let authToken: String         // Short-lived JWT
-    let newLat: Data              // Rotated LAT
-    let newCekPublicKey: Data?    // If CEK rotation required
+struct PasswordPrompt: Decodable {
+    let useKeyId: String
+    let message: String
 }
+
+struct EnrollSetPasswordRequest: Encodable {
+    let enrollmentSessionId: String
+    let encryptedPasswordHash: String  // Base64 encoded
+    let keyId: String
+    let nonce: String  // Base64 encoded 96-bit nonce
+}
+
+struct EnrollSetPasswordResponse: Decodable {
+    let status: String
+    let nextStep: String
+}
+
+struct EnrollFinalizeRequest: Encodable {
+    let enrollmentSessionId: String
+}
+
+struct EnrollFinalizeResponse: Decodable {
+    let status: String
+    let credentialPackage: CredentialPackage
+    let vaultStatus: String
+}
+
+struct CredentialPackage: Codable {
+    let userGuid: String
+    let encryptedBlob: String  // Base64 encoded
+    let cekVersion: Int
+    let ledgerAuthToken: LedgerAuthToken
+    let transactionKeys: [TransactionKeyInfo]?
+    let newTransactionKeys: [TransactionKeyInfo]?
+}
+
+struct LedgerAuthToken: Codable {
+    let latId: String
+    let token: String  // Hex encoded
+    let version: Int
+}
+
+// MARK: - Authentication Request/Response Types
+
+struct ActionRequestBody: Encodable {
+    let userGuid: String
+    let actionType: String
+    let deviceFingerprint: String?
+}
+
+struct ActionRequestResponse: Decodable {
+    let actionToken: String  // JWT scoped to specific endpoint
+    let actionTokenExpiresAt: String
+    let ledgerAuthToken: LedgerAuthToken
+    let actionEndpoint: String
+    let useKeyId: String
+}
+
+struct AuthExecuteRequest: Encodable {
+    let encryptedBlob: String  // Base64 encoded
+    let cekVersion: Int
+    let encryptedPasswordHash: String  // Base64 encoded
+    let ephemeralPublicKey: String  // Base64 encoded X25519 public key
+    let nonce: String  // Base64 encoded
+    let keyId: String
+}
+
+struct AuthExecuteResponse: Decodable {
+    let status: String
+    let actionResult: ActionResult
+    let credentialPackage: CredentialPackage
+    let usedKeyId: String
+}
+
+struct ActionResult: Decodable {
+    let authenticated: Bool
+    let message: String
+    let timestamp: String
+}
+
+// MARK: - Vault Types
 
 struct VaultStatusResponse: Decodable {
     let vaultId: String
@@ -149,54 +234,49 @@ struct VaultStatusResponse: Decodable {
     let lastHeartbeat: Date?
 }
 
-enum VaultAction: String, Encodable {
-    case start
-    case stop
-    case restart
-    case terminate
-}
-
-struct VaultActionRequest: Encodable {
-    let action: VaultAction
-}
-
 struct VaultActionResponse: Decodable {
     let success: Bool
     let message: String
 }
 
-struct CEKRotationRequest: Encodable {
-    let credentialId: String
-    let newCekPublicKey: Data
-    let signature: Data
-}
+struct EmptyBody: Encodable {}
 
-struct CEKRotationResponse: Decodable {
-    let success: Bool
-    let acknowledgedAt: Date
-}
-
-struct TKReplenishRequest: Encodable {
-    let credentialId: String
-    let newPublicKeys: [Data]
-}
-
-struct TKReplenishResponse: Decodable {
-    let success: Bool
-    let keysAccepted: Int
-}
+// MARK: - Error Types
 
 struct APIErrorResponse: Decodable {
     let message: String
     let code: String?
 }
 
-// MARK: - Errors
-
-enum APIError: Error {
+enum APIError: Error, LocalizedError {
     case invalidResponse
     case httpError(Int)
     case serverError(Int, String)
     case decodingFailed(Error)
     case networkError(Error)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidResponse:
+            return "Invalid response from server"
+        case .httpError(let code):
+            return "HTTP error: \(code)"
+        case .serverError(let code, let message):
+            return "Server error (\(code)): \(message)"
+        case .decodingFailed(let error):
+            return "Failed to decode response: \(error.localizedDescription)"
+        case .networkError(let error):
+            return "Network error: \(error.localizedDescription)"
+        }
+    }
+}
+
+// MARK: - Action Types
+
+enum ActionType: String, Encodable {
+    case authenticate
+    case addSecret = "add_secret"
+    case retrieveSecret = "retrieve_secret"
+    case addPolicy = "add_policy"
+    case modifyCredential = "modify_credential"
 }
