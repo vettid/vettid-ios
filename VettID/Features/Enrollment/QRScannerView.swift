@@ -57,7 +57,7 @@ struct QRScannerView: View {
         .onDisappear {
             viewModel.stopScanning()
         }
-        .onChange(of: viewModel.scannedCode) { _, newValue in
+        .onChange(of: viewModel.scannedCode) { newValue in
             if let code = newValue {
                 onCodeScanned(code)
                 dismiss()

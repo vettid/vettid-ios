@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import UIKit
 
 /// Handles the complete enrollment flow for new credentials
 @MainActor
@@ -65,7 +66,7 @@ final class EnrollmentService: ObservableObject {
 
         // Generate initial pool of 20 transaction keys - X25519
         var transactionKeys: [TransactionKey] = []
-        for i in 0..<20 {
+        for _ in 0..<20 {
             let tkKeyPair = CryptoManager.generateX25519KeyPair()
             transactionKeys.append(TransactionKey(
                 keyId: "tk-\(UUID().uuidString)",
