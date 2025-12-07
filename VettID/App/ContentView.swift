@@ -223,37 +223,70 @@ struct ManualEnrollmentView: View {
 
 // MARK: - Authentication View
 
+/// Entry point for authentication - offers biometric quick unlock or full auth
 struct AuthenticationView: View {
     @EnvironmentObject var appState: AppState
+    @State private var showFullAuth = false
 
     var body: some View {
         VStack(spacing: 24) {
-            Image(systemName: "faceid")
+            Image(systemName: "lock.shield.fill")
                 .font(.system(size: 60))
                 .foregroundStyle(.blue)
 
-            Text("Authenticate")
+            Text("Unlock VettID")
                 .font(.title)
                 .fontWeight(.semibold)
 
-            Button("Unlock with Face ID") {
-                authenticate()
+            Text("Use Face ID for quick access or authenticate with your password")
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+
+            VStack(spacing: 12) {
+                Button(action: {
+                    attemptBiometricUnlock()
+                }) {
+                    Label("Unlock with Face ID", systemImage: "faceid")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+
+                Button(action: {
+                    showFullAuth = true
+                }) {
+                    Text("Use Password")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .padding(.horizontal)
         }
         .padding()
         .onAppear {
-            authenticate()
+            attemptBiometricUnlock()
+        }
+        .sheet(isPresented: $showFullAuth) {
+            AuthenticationContainerView()
+                .environmentObject(appState)
         }
     }
 
-    private func authenticate() {
+    private func attemptBiometricUnlock() {
         Task {
-            // TODO: Implement proper biometric authentication
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            await MainActor.run {
-                appState.isAuthenticated = true
+            let biometricService = BiometricAuthService()
+            do {
+                let success = try await biometricService.authenticate(reason: "Unlock your VettID vault")
+                if success {
+                    await MainActor.run {
+                        appState.isAuthenticated = true
+                    }
+                }
+            } catch {
+                // Biometric failed, user can try password instead
             }
         }
     }

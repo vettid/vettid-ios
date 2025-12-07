@@ -25,6 +25,8 @@
 		00000011 /* PasswordSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000011; };
 		00000012 /* AttestationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000012; };
 		00000013 /* EnrollmentCompleteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000013; };
+		00000014 /* AuthenticationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000014; };
+		00000015 /* AuthenticationContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000015; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -47,6 +49,8 @@
 		10000011 /* PasswordSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasswordSetupView.swift; sourceTree = "<group>"; };
 		10000012 /* AttestationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttestationView.swift; sourceTree = "<group>"; };
 		10000013 /* EnrollmentCompleteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnrollmentCompleteView.swift; sourceTree = "<group>"; };
+		10000014 /* AuthenticationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationViewModel.swift; sourceTree = "<group>"; };
+		10000015 /* AuthenticationContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationContainerView.swift; sourceTree = "<group>"; };
 		20000001 /* VettID.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VettID.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -179,6 +183,8 @@
 			children = (
 				1000000A /* BiometricAuthService.swift */,
 				1000000F /* AuthenticationService.swift */,
+				10000014 /* AuthenticationViewModel.swift */,
+				10000015 /* AuthenticationContainerView.swift */,
 			);
 			path = Authentication;
 			sourceTree = "<group>";
@@ -277,6 +283,8 @@
 				00000011 /* PasswordSetupView.swift in Sources */,
 				00000012 /* AttestationView.swift in Sources */,
 				00000013 /* EnrollmentCompleteView.swift in Sources */,
+				00000014 /* AuthenticationViewModel.swift in Sources */,
+				00000015 /* AuthenticationContainerView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
