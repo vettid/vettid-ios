@@ -295,9 +295,12 @@ struct AuthenticationView: View {
 // MARK: - Main Tab View
 
 struct MainTabView: View {
+    @EnvironmentObject var appState: AppState
+
     var body: some View {
         TabView {
-            VaultView()
+            VaultStatusView()
+                .environmentObject(appState)
                 .tabItem {
                     Label("Vault", systemImage: "building.columns.fill")
                 }
@@ -316,26 +319,6 @@ struct MainTabView: View {
 }
 
 // MARK: - Placeholder Views
-
-struct VaultView: View {
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 20) {
-                Image(systemName: "building.columns.fill")
-                    .font(.system(size: 60))
-                    .foregroundStyle(.blue)
-
-                Text("Your Vault")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
-                Text("Vault management coming soon")
-                    .foregroundStyle(.secondary)
-            }
-            .navigationTitle("My Vault")
-        }
-    }
-}
 
 struct CredentialsView: View {
     var body: some View {

@@ -27,6 +27,9 @@
 		00000013 /* EnrollmentCompleteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000013; };
 		00000014 /* AuthenticationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000014; };
 		00000015 /* AuthenticationContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000015; };
+		00000016 /* VaultStatusViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000016; };
+		00000017 /* VaultStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000017; };
+		00000018 /* VaultBackgroundRefresh.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000018; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -51,6 +54,9 @@
 		10000013 /* EnrollmentCompleteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnrollmentCompleteView.swift; sourceTree = "<group>"; };
 		10000014 /* AuthenticationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationViewModel.swift; sourceTree = "<group>"; };
 		10000015 /* AuthenticationContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationContainerView.swift; sourceTree = "<group>"; };
+		10000016 /* VaultStatusViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultStatusViewModel.swift; sourceTree = "<group>"; };
+		10000017 /* VaultStatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultStatusView.swift; sourceTree = "<group>"; };
+		10000018 /* VaultBackgroundRefresh.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultBackgroundRefresh.swift; sourceTree = "<group>"; };
 		20000001 /* VettID.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VettID.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -193,6 +199,9 @@
 			isa = PBXGroup;
 			children = (
 				1000000B /* VaultService.swift */,
+				10000016 /* VaultStatusViewModel.swift */,
+				10000017 /* VaultStatusView.swift */,
+				10000018 /* VaultBackgroundRefresh.swift */,
 			);
 			path = Vault;
 			sourceTree = "<group>";
@@ -285,6 +294,9 @@
 				00000013 /* EnrollmentCompleteView.swift in Sources */,
 				00000014 /* AuthenticationViewModel.swift in Sources */,
 				00000015 /* AuthenticationContainerView.swift in Sources */,
+				00000016 /* VaultStatusViewModel.swift in Sources */,
+				00000017 /* VaultStatusView.swift in Sources */,
+				00000018 /* VaultBackgroundRefresh.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
