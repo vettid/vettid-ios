@@ -30,6 +30,13 @@
 		00000016 /* VaultStatusViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000016; };
 		00000017 /* VaultStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000017; };
 		00000018 /* VaultBackgroundRefresh.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000018; };
+		00000019 /* NatsCredentials.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000019; };
+		0000001A /* NatsCredentialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000001A; };
+		0000001B /* NatsConnectionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000001B; };
+		0000001C /* OwnerSpaceClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000001C; };
+		0000001D /* NatsTokenRefreshTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000001D; };
+		0000001E /* NatsSetupViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000001E; };
+		0000001F /* NatsConnectionStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000001F; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -57,6 +64,13 @@
 		10000016 /* VaultStatusViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultStatusViewModel.swift; sourceTree = "<group>"; };
 		10000017 /* VaultStatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultStatusView.swift; sourceTree = "<group>"; };
 		10000018 /* VaultBackgroundRefresh.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultBackgroundRefresh.swift; sourceTree = "<group>"; };
+		10000019 /* NatsCredentials.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NatsCredentials.swift; sourceTree = "<group>"; };
+		1000001A /* NatsCredentialStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NatsCredentialStore.swift; sourceTree = "<group>"; };
+		1000001B /* NatsConnectionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NatsConnectionManager.swift; sourceTree = "<group>"; };
+		1000001C /* OwnerSpaceClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OwnerSpaceClient.swift; sourceTree = "<group>"; };
+		1000001D /* NatsTokenRefreshTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NatsTokenRefreshTask.swift; sourceTree = "<group>"; };
+		1000001E /* NatsSetupViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NatsSetupViewModel.swift; sourceTree = "<group>"; };
+		1000001F /* NatsConnectionStatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NatsConnectionStatusView.swift; sourceTree = "<group>"; };
 		20000001 /* VettID.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VettID.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -115,6 +129,7 @@
 				40000009 /* Storage */,
 				4000000A /* Networking */,
 				4000000B /* Attestation */,
+				4000000F /* NATS */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -125,6 +140,7 @@
 				4000000C /* Enrollment */,
 				4000000D /* Authentication */,
 				4000000E /* Vault */,
+				40000010 /* NATS */,
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -204,6 +220,27 @@
 				10000018 /* VaultBackgroundRefresh.swift */,
 			);
 			path = Vault;
+			sourceTree = "<group>";
+		};
+		4000000F /* NATS */ = {
+			isa = PBXGroup;
+			children = (
+				10000019 /* NatsCredentials.swift */,
+				1000001A /* NatsCredentialStore.swift */,
+				1000001B /* NatsConnectionManager.swift */,
+				1000001C /* OwnerSpaceClient.swift */,
+				1000001D /* NatsTokenRefreshTask.swift */,
+			);
+			path = NATS;
+			sourceTree = "<group>";
+		};
+		40000010 /* NATS */ = {
+			isa = PBXGroup;
+			children = (
+				1000001E /* NatsSetupViewModel.swift */,
+				1000001F /* NatsConnectionStatusView.swift */,
+			);
+			path = NATS;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -297,6 +334,13 @@
 				00000016 /* VaultStatusViewModel.swift in Sources */,
 				00000017 /* VaultStatusView.swift in Sources */,
 				00000018 /* VaultBackgroundRefresh.swift in Sources */,
+				00000019 /* NatsCredentials.swift in Sources */,
+				0000001A /* NatsCredentialStore.swift in Sources */,
+				0000001B /* NatsConnectionManager.swift in Sources */,
+				0000001C /* OwnerSpaceClient.swift in Sources */,
+				0000001D /* NatsTokenRefreshTask.swift in Sources */,
+				0000001E /* NatsSetupViewModel.swift in Sources */,
+				0000001F /* NatsConnectionStatusView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

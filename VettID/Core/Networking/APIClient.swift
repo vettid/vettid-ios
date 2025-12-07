@@ -61,6 +61,23 @@ actor APIClient {
         return try await post(endpoint: "/member/vaults/\(vaultId)/stop", body: EmptyBody(), authToken: authToken)
     }
 
+    // MARK: - NATS Operations (Phase 4)
+
+    /// Create NATS account for the user
+    func createNatsAccount(authToken: String) async throws -> NatsAccountResponse {
+        return try await post(endpoint: "/vault/nats/account", body: EmptyBody(), authToken: authToken)
+    }
+
+    /// Generate NATS token for app or vault
+    func generateNatsToken(request: NatsTokenRequest, authToken: String) async throws -> NatsTokenResponse {
+        return try await post(endpoint: "/vault/nats/token", body: request, authToken: authToken)
+    }
+
+    /// Get NATS account status
+    func getNatsStatus(authToken: String) async throws -> NatsStatusResponse {
+        return try await get(endpoint: "/vault/nats/status", authToken: authToken)
+    }
+
     // MARK: - HTTP Methods
 
     private func get<T: Decodable>(endpoint: String, authToken: String? = nil) async throws -> T {
