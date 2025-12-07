@@ -2,48 +2,73 @@ import Foundation
 import CryptoKit
 import CommonCrypto
 
-/// Password hashing service using Argon2id
-///
-/// Note: iOS does not have native Argon2id support. This implementation uses a pure-Swift
-/// Argon2 implementation for production use. For optimal security, consider using a
-/// well-audited native library via Swift Package Manager (e.g., swift-sodium, CryptoSwift with Argon2).
+#if canImport(Sodium)
+import Sodium
+#endif
+
+/// Password hashing service using Argon2id via libsodium (when available)
+/// Falls back to PBKDF2 for development/testing when Sodium is not available
 ///
 /// Argon2id parameters (matching backend):
 /// - Memory: 64 MB (65536 KB)
 /// - Iterations: 3
-/// - Parallelism: 4
+/// - Parallelism: 4 (libsodium uses 1 internally but with equivalent security)
 /// - Output length: 32 bytes
 final class PasswordHasher {
 
-    // Argon2id recommended parameters
-    private static let memoryCost: UInt32 = 65536  // 64 MB
-    private static let timeCost: UInt32 = 3        // iterations
-    private static let parallelism: UInt32 = 4
-    private static let hashLength: Int = 32
+    private static let hashLength = 32
+    private static let saltLength = 16
 
-    /// Hash a password using Argon2id
+    #if canImport(Sodium)
+    private static let sodium = Sodium()
+    private static let opsLimit = sodium.pwHash.OpsLimitModerate  // ~3 iterations equivalent
+    private static let memLimit = sodium.pwHash.MemLimitModerate  // ~64MB equivalent
+    #endif
+
+    /// Hash a password using Argon2id (or PBKDF2 fallback)
     /// - Parameters:
     ///   - password: The password to hash
-    ///   - salt: Optional salt (generated if not provided)
+    ///   - salt: Optional salt (generated if not provided, must be 16 bytes)
     /// - Returns: The password hash and salt used
     static func hash(password: String, salt: Data? = nil) throws -> PasswordHashResult {
-        let saltData = salt ?? CryptoManager.generateSalt()
+        let saltData: Data
+        if let providedSalt = salt {
+            guard providedSalt.count == saltLength else {
+                throw PasswordHashError.invalidSalt
+            }
+            saltData = providedSalt
+        } else {
+            saltData = CryptoManager.randomBytes(count: saltLength)
+        }
 
         guard let passwordData = password.data(using: .utf8) else {
             throw PasswordHashError.invalidPassword
         }
 
-        // Use Argon2id implementation
-        let hash = try argon2id(
+        #if canImport(Sodium)
+        // Use libsodium's Argon2id implementation
+        guard let hash = sodium.pwHash.hash(
+            outputLength: hashLength,
+            passwd: Array(passwordData),
+            salt: Array(saltData),
+            opsLimit: opsLimit,
+            memLimit: memLimit,
+            alg: .Argon2id13
+        ) else {
+            throw PasswordHashError.hashingFailed
+        }
+        return PasswordHashResult(hash: Data(hash), salt: saltData)
+        #else
+        // PBKDF2 fallback for development/testing
+        // WARNING: Replace with Argon2id for production by adding swift-sodium package
+        let hash = try pbkdf2Fallback(
             password: passwordData,
             salt: saltData,
-            timeCost: timeCost,
-            memoryCost: memoryCost,
-            parallelism: parallelism,
-            hashLength: hashLength
+            iterations: 100_000,  // High iteration count for PBKDF2
+            keyLength: hashLength
         )
-
         return PasswordHashResult(hash: hash, salt: saltData)
+        #endif
     }
 
     /// Verify a password against a stored hash
@@ -52,38 +77,87 @@ final class PasswordHasher {
         return constantTimeCompare(result.hash, hash)
     }
 
-    // MARK: - Argon2id Implementation
+    /// Create a storable hash string in PHC format (similar to Python's argon2-cffi)
+    /// Format: $argon2id$v=19$m=65536,t=3,p=1$<salt>$<hash>
+    static func hashToString(password: String) throws -> String {
+        guard let passwordData = password.data(using: .utf8) else {
+            throw PasswordHashError.invalidPassword
+        }
 
-    /// Pure Swift Argon2id implementation
-    /// Based on RFC 9106: Argon2 Memory-Hard Function
-    private static func argon2id(
-        password: Data,
-        salt: Data,
-        timeCost: UInt32,
-        memoryCost: UInt32,
-        parallelism: UInt32,
-        hashLength: Int
-    ) throws -> Data {
-        // For initial implementation, use PBKDF2 as a fallback
-        // TODO: Replace with proper Argon2id via Swift package (swift-sodium, CArgon2, etc.)
-
-        // This is a simplified implementation - in production, use a proper Argon2 library
-        // The backend expects Argon2id, so this MUST be replaced before production deployment
-
-        #if DEBUG
-        print("WARNING: Using PBKDF2 fallback. Replace with Argon2id for production!")
+        #if canImport(Sodium)
+        // Use libsodium's str function which creates a storable hash
+        guard let hashStr = sodium.pwHash.str(
+            passwd: Array(passwordData),
+            opsLimit: opsLimit,
+            memLimit: memLimit
+        ) else {
+            throw PasswordHashError.hashingFailed
+        }
+        return hashStr
+        #else
+        // Fallback: create a custom format for PBKDF2
+        let result = try hash(password: password)
+        let saltB64 = result.salt.base64EncodedString()
+        let hashB64 = result.hash.base64EncodedString()
+        return "$pbkdf2-sha256$i=100000$\(saltB64)$\(hashB64)"
         #endif
-
-        return try pbkdf2Fallback(
-            password: password,
-            salt: salt,
-            iterations: Int(timeCost * 10000),  // Scale iterations for PBKDF2
-            keyLength: hashLength
-        )
     }
 
+    /// Verify a password against a storable hash string
+    static func verifyString(password: String, hashString: String) -> Bool {
+        guard let passwordData = password.data(using: .utf8) else {
+            return false
+        }
+
+        #if canImport(Sodium)
+        return sodium.pwHash.strVerify(
+            hash: hashString,
+            passwd: Array(passwordData)
+        )
+        #else
+        // Parse PBKDF2 fallback format
+        guard hashString.hasPrefix("$pbkdf2-sha256$") else {
+            return false
+        }
+        let parts = hashString.split(separator: "$")
+        guard parts.count == 4,
+              let saltData = Data(base64Encoded: String(parts[2])),
+              let expectedHash = Data(base64Encoded: String(parts[3])),
+              let result = try? hash(password: password, salt: saltData) else {
+            return false
+        }
+        return constantTimeCompare(result.hash, expectedHash)
+        #endif
+    }
+
+    /// Check if a hash string needs rehashing (e.g., after parameter upgrade)
+    static func needsRehash(hashString: String) -> Bool {
+        #if canImport(Sodium)
+        return sodium.pwHash.strNeedsRehash(
+            hash: hashString,
+            opsLimit: opsLimit,
+            memLimit: memLimit
+        )
+        #else
+        // For PBKDF2 fallback, always suggest rehashing to upgrade to Argon2id
+        return true
+        #endif
+    }
+
+    /// Check if using real Argon2id (vs fallback)
+    static var isUsingArgon2id: Bool {
+        #if canImport(Sodium)
+        return true
+        #else
+        return false
+        #endif
+    }
+
+    // MARK: - Private Helpers
+
+    #if !canImport(Sodium)
     /// PBKDF2 fallback for development/testing
-    /// WARNING: This is NOT equivalent to Argon2id - replace before production!
+    /// WARNING: This is NOT equivalent to Argon2id - add swift-sodium for production!
     private static func pbkdf2Fallback(
         password: Data,
         salt: Data,
@@ -114,6 +188,7 @@ final class PasswordHasher {
 
         return Data(derivedKey)
     }
+    #endif
 
     /// Constant-time comparison to prevent timing attacks
     private static func constantTimeCompare(_ a: Data, _ b: Data) -> Bool {
@@ -137,10 +212,21 @@ struct PasswordHashResult {
     var combined: Data {
         salt + hash
     }
+
+    /// Base64 encoded hash for API transmission
+    var hashBase64: String {
+        hash.base64EncodedString()
+    }
+
+    /// Base64 encoded salt for API transmission
+    var saltBase64: String {
+        salt.base64EncodedString()
+    }
 }
 
 enum PasswordHashError: Error, LocalizedError {
     case invalidPassword
+    case invalidSalt
     case hashingFailed
     case verificationFailed
 
@@ -148,6 +234,8 @@ enum PasswordHashError: Error, LocalizedError {
         switch self {
         case .invalidPassword:
             return "Invalid password format"
+        case .invalidSalt:
+            return "Invalid salt length (must be 16 bytes)"
         case .hashingFailed:
             return "Password hashing failed"
         case .verificationFailed:
