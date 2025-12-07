@@ -21,6 +21,10 @@
 		0000000C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1000000C; };
 		0000000D /* PasswordHasher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000000E; };
 		0000000E /* AuthenticationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000000F; };
+		00000010 /* EnrollmentViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000010; };
+		00000011 /* PasswordSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000011; };
+		00000012 /* AttestationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000012; };
+		00000013 /* EnrollmentCompleteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000013; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -39,6 +43,10 @@
 		1000000D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		1000000E /* PasswordHasher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasswordHasher.swift; sourceTree = "<group>"; };
 		1000000F /* AuthenticationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationService.swift; sourceTree = "<group>"; };
+		10000010 /* EnrollmentViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnrollmentViewModel.swift; sourceTree = "<group>"; };
+		10000011 /* PasswordSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasswordSetupView.swift; sourceTree = "<group>"; };
+		10000012 /* AttestationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttestationView.swift; sourceTree = "<group>"; };
+		10000013 /* EnrollmentCompleteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnrollmentCompleteView.swift; sourceTree = "<group>"; };
 		20000001 /* VettID.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VettID.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -158,6 +166,10 @@
 			children = (
 				10000008 /* EnrollmentService.swift */,
 				10000009 /* QRScannerView.swift */,
+				10000010 /* EnrollmentViewModel.swift */,
+				10000011 /* PasswordSetupView.swift */,
+				10000012 /* AttestationView.swift */,
+				10000013 /* EnrollmentCompleteView.swift */,
 			);
 			path = Enrollment;
 			sourceTree = "<group>";
@@ -261,6 +273,10 @@
 				0000000B /* VaultService.swift in Sources */,
 				0000000D /* PasswordHasher.swift in Sources */,
 				0000000E /* AuthenticationService.swift in Sources */,
+				00000010 /* EnrollmentViewModel.swift in Sources */,
+				00000011 /* PasswordSetupView.swift in Sources */,
+				00000012 /* AttestationView.swift in Sources */,
+				00000013 /* EnrollmentCompleteView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
