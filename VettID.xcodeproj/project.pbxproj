@@ -47,6 +47,26 @@
 		00000027 /* HandlerDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000027; };
 		00000028 /* HandlerExecutionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000028; };
 		00000029 /* HandlerExecutionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000029; };
+		0000002A /* Connection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000002A; };
+		0000002B /* Message.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000002B; };
+		0000002C /* Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000002C; };
+		0000002D /* ConnectionCryptoManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000002D; };
+		0000002E /* QRCodeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000002E; };
+		0000002F /* QRCodeScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000002F; };
+		00000030 /* CreateInvitationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000030; };
+		00000031 /* CreateInvitationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000031; };
+		00000032 /* ScanInvitationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000032; };
+		00000033 /* ScanInvitationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000033; };
+		00000034 /* ConnectionsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000034; };
+		00000035 /* ConnectionsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000035; };
+		00000036 /* ConnectionDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000036; };
+		00000037 /* ConnectionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000037; };
+		00000038 /* ProfileViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000038; };
+		00000039 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000039; };
+		0000003A /* EditProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000003A; };
+		0000003B /* ConversationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000003B; };
+		0000003C /* ConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000003C; };
+		0000003D /* MessageSubscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000003D; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -91,6 +111,26 @@
 		10000027 /* HandlerDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandlerDetailView.swift; sourceTree = "<group>"; };
 		10000028 /* HandlerExecutionViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandlerExecutionViewModel.swift; sourceTree = "<group>"; };
 		10000029 /* HandlerExecutionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandlerExecutionView.swift; sourceTree = "<group>"; };
+		1000002A /* Connection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Connection.swift; sourceTree = "<group>"; };
+		1000002B /* Message.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Message.swift; sourceTree = "<group>"; };
+		1000002C /* Profile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Profile.swift; sourceTree = "<group>"; };
+		1000002D /* ConnectionCryptoManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionCryptoManager.swift; sourceTree = "<group>"; };
+		1000002E /* QRCodeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCodeView.swift; sourceTree = "<group>"; };
+		1000002F /* QRCodeScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCodeScannerView.swift; sourceTree = "<group>"; };
+		10000030 /* CreateInvitationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateInvitationViewModel.swift; sourceTree = "<group>"; };
+		10000031 /* CreateInvitationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateInvitationView.swift; sourceTree = "<group>"; };
+		10000032 /* ScanInvitationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanInvitationViewModel.swift; sourceTree = "<group>"; };
+		10000033 /* ScanInvitationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanInvitationView.swift; sourceTree = "<group>"; };
+		10000034 /* ConnectionsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionsViewModel.swift; sourceTree = "<group>"; };
+		10000035 /* ConnectionsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionsListView.swift; sourceTree = "<group>"; };
+		10000036 /* ConnectionDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionDetailViewModel.swift; sourceTree = "<group>"; };
+		10000037 /* ConnectionDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionDetailView.swift; sourceTree = "<group>"; };
+		10000038 /* ProfileViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileViewModel.swift; sourceTree = "<group>"; };
+		10000039 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
+		1000003A /* EditProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditProfileView.swift; sourceTree = "<group>"; };
+		1000003B /* ConversationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationViewModel.swift; sourceTree = "<group>"; };
+		1000003C /* ConversationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationView.swift; sourceTree = "<group>"; };
+		1000003D /* MessageSubscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageSubscriber.swift; sourceTree = "<group>"; };
 		20000001 /* VettID.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VettID.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -118,6 +158,7 @@
 			children = (
 				40000004 /* App */,
 				40000005 /* Core */,
+				40000012 /* Models */,
 				40000006 /* Features */,
 				40000007 /* Resources */,
 				1000000D /* Info.plist */,
@@ -154,6 +195,16 @@
 			path = Core;
 			sourceTree = "<group>";
 		};
+		40000012 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				1000002A /* Connection.swift */,
+				1000002B /* Message.swift */,
+				1000002C /* Profile.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
 		40000006 /* Features */ = {
 			isa = PBXGroup;
 			children = (
@@ -162,8 +213,48 @@
 				4000000E /* Vault */,
 				40000010 /* NATS */,
 				40000011 /* Handlers */,
+				40000013 /* Connections */,
+				40000014 /* Profile */,
+				40000015 /* Messaging */,
 			);
 			path = Features;
+			sourceTree = "<group>";
+		};
+		40000013 /* Connections */ = {
+			isa = PBXGroup;
+			children = (
+				1000002E /* QRCodeView.swift */,
+				1000002F /* QRCodeScannerView.swift */,
+				10000030 /* CreateInvitationViewModel.swift */,
+				10000031 /* CreateInvitationView.swift */,
+				10000032 /* ScanInvitationViewModel.swift */,
+				10000033 /* ScanInvitationView.swift */,
+				10000034 /* ConnectionsViewModel.swift */,
+				10000035 /* ConnectionsListView.swift */,
+				10000036 /* ConnectionDetailViewModel.swift */,
+				10000037 /* ConnectionDetailView.swift */,
+			);
+			path = Connections;
+			sourceTree = "<group>";
+		};
+		40000014 /* Profile */ = {
+			isa = PBXGroup;
+			children = (
+				10000038 /* ProfileViewModel.swift */,
+				10000039 /* ProfileView.swift */,
+				1000003A /* EditProfileView.swift */,
+			);
+			path = Profile;
+			sourceTree = "<group>";
+		};
+		40000015 /* Messaging */ = {
+			isa = PBXGroup;
+			children = (
+				1000003B /* ConversationViewModel.swift */,
+				1000003C /* ConversationView.swift */,
+				1000003D /* MessageSubscriber.swift */,
+			);
+			path = Messaging;
 			sourceTree = "<group>";
 		};
 		40000007 /* Resources */ = {
@@ -179,6 +270,7 @@
 			children = (
 				10000003 /* CryptoManager.swift */,
 				1000000E /* PasswordHasher.swift */,
+				1000002D /* ConnectionCryptoManager.swift */,
 			);
 			path = Crypto;
 			sourceTree = "<group>";
@@ -389,6 +481,26 @@
 				00000027 /* HandlerDetailView.swift in Sources */,
 				00000028 /* HandlerExecutionViewModel.swift in Sources */,
 				00000029 /* HandlerExecutionView.swift in Sources */,
+				0000002A /* Connection.swift in Sources */,
+				0000002B /* Message.swift in Sources */,
+				0000002C /* Profile.swift in Sources */,
+				0000002D /* ConnectionCryptoManager.swift in Sources */,
+				0000002E /* QRCodeView.swift in Sources */,
+				0000002F /* QRCodeScannerView.swift in Sources */,
+				00000030 /* CreateInvitationViewModel.swift in Sources */,
+				00000031 /* CreateInvitationView.swift in Sources */,
+				00000032 /* ScanInvitationViewModel.swift in Sources */,
+				00000033 /* ScanInvitationView.swift in Sources */,
+				00000034 /* ConnectionsViewModel.swift in Sources */,
+				00000035 /* ConnectionsListView.swift in Sources */,
+				00000036 /* ConnectionDetailViewModel.swift in Sources */,
+				00000037 /* ConnectionDetailView.swift in Sources */,
+				00000038 /* ProfileViewModel.swift in Sources */,
+				00000039 /* ProfileView.swift in Sources */,
+				0000003A /* EditProfileView.swift in Sources */,
+				0000003B /* ConversationViewModel.swift in Sources */,
+				0000003C /* ConversationView.swift in Sources */,
+				0000003D /* MessageSubscriber.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

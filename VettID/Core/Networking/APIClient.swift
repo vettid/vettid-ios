@@ -160,6 +160,127 @@ actor APIClient {
         return try await post(endpoint: "/vault/handlers/\(handlerId)/execute", body: request, authToken: authToken)
     }
 
+    // MARK: - Connections (Phase 7)
+
+    /// Create a connection invitation
+    func createInvitation(
+        expiresInMinutes: Int = 60,
+        publicKey: Data,
+        authToken: String
+    ) async throws -> ConnectionInvitation {
+        let request = CreateInvitationRequest(
+            expiresInMinutes: expiresInMinutes,
+            publicKey: publicKey.base64EncodedString()
+        )
+        return try await post(endpoint: "/connections/invite", body: request, authToken: authToken)
+    }
+
+    /// Accept a connection invitation
+    func acceptInvitation(
+        code: String,
+        publicKey: Data,
+        authToken: String
+    ) async throws -> AcceptInvitationResponse {
+        let request = AcceptInvitationRequest(
+            code: code,
+            publicKey: publicKey.base64EncodedString()
+        )
+        return try await post(endpoint: "/connections/accept", body: request, authToken: authToken)
+    }
+
+    /// Revoke a connection
+    func revokeConnection(connectionId: String, authToken: String) async throws {
+        let request = RevokeConnectionRequest(connectionId: connectionId)
+        let _: EmptyResponse = try await post(endpoint: "/connections/revoke", body: request, authToken: authToken)
+    }
+
+    /// List all connections
+    func listConnections(authToken: String) async throws -> [Connection] {
+        let response: ConnectionListResponse = try await get(endpoint: "/connections", authToken: authToken)
+        return response.connections
+    }
+
+    /// Get connection details
+    func getConnection(id: String, authToken: String) async throws -> Connection {
+        return try await get(endpoint: "/connections/\(id)", authToken: authToken)
+    }
+
+    /// Get connection's profile
+    func getConnectionProfile(connectionId: String, authToken: String) async throws -> Profile {
+        let response: ProfileResponse = try await get(endpoint: "/connections/\(connectionId)/profile", authToken: authToken)
+        return response.profile
+    }
+
+    // MARK: - Profiles (Phase 7)
+
+    /// Get own profile
+    func getProfile(authToken: String) async throws -> Profile {
+        let response: ProfileResponse = try await get(endpoint: "/profile", authToken: authToken)
+        return response.profile
+    }
+
+    /// Update own profile
+    func updateProfile(_ profile: Profile, authToken: String) async throws -> Profile {
+        let request = UpdateProfileRequest(
+            displayName: profile.displayName,
+            bio: profile.bio,
+            location: profile.location
+        )
+        let response: ProfileResponse = try await put(endpoint: "/profile", body: request, authToken: authToken)
+        return response.profile
+    }
+
+    /// Publish profile to connections
+    func publishProfile(authToken: String) async throws {
+        let _: EmptyResponse = try await post(endpoint: "/profile/publish", body: EmptyRequest(), authToken: authToken)
+    }
+
+    // MARK: - Messaging (Phase 7)
+
+    /// Send an encrypted message
+    func sendMessage(
+        connectionId: String,
+        encryptedContent: Data,
+        nonce: Data,
+        contentType: MessageContentType = .text,
+        authToken: String
+    ) async throws -> Message {
+        let request = SendMessageRequest(
+            connectionId: connectionId,
+            encryptedContent: encryptedContent.base64EncodedString(),
+            nonce: nonce.base64EncodedString(),
+            contentType: contentType.rawValue
+        )
+        return try await post(endpoint: "/messages/send", body: request, authToken: authToken)
+    }
+
+    /// Get message history for a connection
+    func getMessageHistory(
+        connectionId: String,
+        limit: Int = 50,
+        before: Date? = nil,
+        authToken: String
+    ) async throws -> [Message] {
+        var endpoint = "/messages/\(connectionId)?limit=\(limit)"
+        if let before = before {
+            let formatter = ISO8601DateFormatter()
+            endpoint += "&before=\(formatter.string(from: before))"
+        }
+        let response: MessageHistoryResponse = try await get(endpoint: endpoint, authToken: authToken)
+        return response.messages
+    }
+
+    /// Get unread message counts
+    func getUnreadCount(authToken: String) async throws -> [String: Int] {
+        let response: UnreadCountResponse = try await get(endpoint: "/messages/unread", authToken: authToken)
+        return response.counts
+    }
+
+    /// Mark a message as read
+    func markAsRead(messageId: String, authToken: String) async throws {
+        let _: EmptyResponse = try await post(endpoint: "/messages/\(messageId)/read", body: EmptyRequest(), authToken: authToken)
+    }
+
     // MARK: - HTTP Methods
 
     private func get<T: Decodable>(endpoint: String, authToken: String? = nil) async throws -> T {
@@ -183,6 +304,28 @@ actor APIClient {
         let url = baseURL.appendingPathComponent(endpoint)
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        request.httpBody = try encoder.encode(body)
+
+        if let authToken = authToken {
+            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        }
+
+        return try await execute(request)
+    }
+
+    private func put<T: Encodable, R: Decodable>(
+        endpoint: String,
+        body: T,
+        authToken: String? = nil
+    ) async throws -> R {
+        let url = baseURL.appendingPathComponent(endpoint)
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
@@ -523,3 +666,11 @@ struct ExecuteHandlerResponse: Decodable {
     let error: String?
     let executionTimeMs: Int
 }
+
+// MARK: - Helper Types (Phase 7)
+
+/// Empty request body for endpoints that don't need one
+struct EmptyRequest: Encodable {}
+
+/// Empty response for endpoints that return no body
+struct EmptyResponse: Decodable {}
