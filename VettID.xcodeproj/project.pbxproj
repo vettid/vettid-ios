@@ -81,6 +81,12 @@
 		00000049 /* CredentialRecoveryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000049; };
 		0000004A /* CredentialRecoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000004A; };
 		0000004B /* BackupBackgroundTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000004B; };
+		0000004C /* RuntimeProtection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000004C; };
+		0000004D /* SecureMemory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000004D; };
+		0000004E /* CertificatePinning.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000004E; };
+		0000004F /* RequestSigning.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000004F; };
+		00000050 /* SecurePasteboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000050; };
+		00000051 /* ScreenProtection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000051; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -159,6 +165,12 @@
 		10000049 /* CredentialRecoveryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CredentialRecoveryViewModel.swift; sourceTree = "<group>"; };
 		1000004A /* CredentialRecoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CredentialRecoveryView.swift; sourceTree = "<group>"; };
 		1000004B /* BackupBackgroundTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupBackgroundTask.swift; sourceTree = "<group>"; };
+		1000004C /* RuntimeProtection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeProtection.swift; sourceTree = "<group>"; };
+		1000004D /* SecureMemory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureMemory.swift; sourceTree = "<group>"; };
+		1000004E /* CertificatePinning.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CertificatePinning.swift; sourceTree = "<group>"; };
+		1000004F /* RequestSigning.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RequestSigning.swift; sourceTree = "<group>"; };
+		10000050 /* SecurePasteboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurePasteboard.swift; sourceTree = "<group>"; };
+		10000051 /* ScreenProtection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenProtection.swift; sourceTree = "<group>"; };
 		20000001 /* VettID.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VettID.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -219,8 +231,22 @@
 				4000000A /* Networking */,
 				4000000B /* Attestation */,
 				4000000F /* NATS */,
+				40000017 /* Security */,
 			);
 			path = Core;
+			sourceTree = "<group>";
+		};
+		40000017 /* Security */ = {
+			isa = PBXGroup;
+			children = (
+				1000004C /* RuntimeProtection.swift */,
+				1000004D /* SecureMemory.swift */,
+				1000004E /* CertificatePinning.swift */,
+				1000004F /* RequestSigning.swift */,
+				10000050 /* SecurePasteboard.swift */,
+				10000051 /* ScreenProtection.swift */,
+			);
+			path = Security;
 			sourceTree = "<group>";
 		};
 		40000012 /* Models */ = {
@@ -565,6 +591,12 @@
 				00000049 /* CredentialRecoveryViewModel.swift in Sources */,
 				0000004A /* CredentialRecoveryView.swift in Sources */,
 				0000004B /* BackupBackgroundTask.swift in Sources */,
+				0000004C /* RuntimeProtection.swift in Sources */,
+				0000004D /* SecureMemory.swift in Sources */,
+				0000004E /* CertificatePinning.swift in Sources */,
+				0000004F /* RequestSigning.swift in Sources */,
+				00000050 /* SecurePasteboard.swift in Sources */,
+				00000051 /* ScreenProtection.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -749,6 +781,14 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				/* Security Hardening Settings */
+				ENABLE_BITCODE = NO;
+				STRIP_INSTALLED_PRODUCT = YES;
+				STRIP_STYLE = "non-global";
+				DEAD_CODE_STRIPPING = YES;
+				DEPLOYMENT_POSTPROCESSING = YES;
+				/* Stack protection is enabled by default in Xcode */
+				/* PIE is enabled by default for iOS apps */
 			};
 			name = Release;
 		};

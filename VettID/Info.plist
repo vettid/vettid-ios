@@ -48,5 +48,20 @@
 	<string>VettID needs camera access to scan enrollment QR codes.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>VettID uses Face ID to securely unlock your credentials.</string>
+	<!-- App Transport Security - Enforcing secure connections -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<!-- ATS enabled by default - no NSAllowsArbitraryLoads -->
+		<!-- Minimum TLS 1.2 is enforced by default -->
+		<!-- Perfect Forward Secrecy is required by default -->
+		<!-- Certificate Transparency can be required per domain -->
+	</dict>
+	<!-- Background task identifiers -->
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>dev.vettid.backup</string>
+		<string>dev.vettid.vault-refresh</string>
+		<string>dev.vettid.nats-token-refresh</string>
+	</array>
 </dict>
 </plist>

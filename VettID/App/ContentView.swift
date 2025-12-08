@@ -279,11 +279,10 @@ struct AuthenticationView: View {
         Task {
             let biometricService = BiometricAuthService()
             do {
-                let success = try await biometricService.authenticate(reason: "Unlock your VettID vault")
-                if success {
-                    await MainActor.run {
-                        appState.isAuthenticated = true
-                    }
+                // authenticate() returns LAContext on success, throws on failure
+                _ = try await biometricService.authenticate(reason: "Unlock your VettID vault")
+                await MainActor.run {
+                    appState.isAuthenticated = true
                 }
             } catch {
                 // Biometric failed, user can try password instead
