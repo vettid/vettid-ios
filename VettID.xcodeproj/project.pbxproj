@@ -41,6 +41,12 @@
 		00000021 /* VaultResponseHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000021; };
 		00000022 /* VaultHealthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000022; };
 		00000023 /* VaultHealthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000023; };
+		00000024 /* HandlerDiscoveryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000024; };
+		00000025 /* HandlerDiscoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000025; };
+		00000026 /* HandlerDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000026; };
+		00000027 /* HandlerDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000027; };
+		00000028 /* HandlerExecutionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000028; };
+		00000029 /* HandlerExecutionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000029; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -79,6 +85,12 @@
 		10000021 /* VaultResponseHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultResponseHandler.swift; sourceTree = "<group>"; };
 		10000022 /* VaultHealthViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultHealthViewModel.swift; sourceTree = "<group>"; };
 		10000023 /* VaultHealthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultHealthView.swift; sourceTree = "<group>"; };
+		10000024 /* HandlerDiscoveryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandlerDiscoveryViewModel.swift; sourceTree = "<group>"; };
+		10000025 /* HandlerDiscoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandlerDiscoveryView.swift; sourceTree = "<group>"; };
+		10000026 /* HandlerDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandlerDetailViewModel.swift; sourceTree = "<group>"; };
+		10000027 /* HandlerDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandlerDetailView.swift; sourceTree = "<group>"; };
+		10000028 /* HandlerExecutionViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandlerExecutionViewModel.swift; sourceTree = "<group>"; };
+		10000029 /* HandlerExecutionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandlerExecutionView.swift; sourceTree = "<group>"; };
 		20000001 /* VettID.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VettID.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -149,6 +161,7 @@
 				4000000D /* Authentication */,
 				4000000E /* Vault */,
 				40000010 /* NATS */,
+				40000011 /* Handlers */,
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -255,6 +268,19 @@
 			path = NATS;
 			sourceTree = "<group>";
 		};
+		40000011 /* Handlers */ = {
+			isa = PBXGroup;
+			children = (
+				10000024 /* HandlerDiscoveryViewModel.swift */,
+				10000025 /* HandlerDiscoveryView.swift */,
+				10000026 /* HandlerDetailViewModel.swift */,
+				10000027 /* HandlerDetailView.swift */,
+				10000028 /* HandlerExecutionViewModel.swift */,
+				10000029 /* HandlerExecutionView.swift */,
+			);
+			path = Handlers;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -357,6 +383,12 @@
 				00000021 /* VaultResponseHandler.swift in Sources */,
 				00000022 /* VaultHealthViewModel.swift in Sources */,
 				00000023 /* VaultHealthView.swift in Sources */,
+				00000024 /* HandlerDiscoveryViewModel.swift in Sources */,
+				00000025 /* HandlerDiscoveryView.swift in Sources */,
+				00000026 /* HandlerDetailViewModel.swift in Sources */,
+				00000027 /* HandlerDetailView.swift in Sources */,
+				00000028 /* HandlerExecutionViewModel.swift in Sources */,
+				00000029 /* HandlerExecutionView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

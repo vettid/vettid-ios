@@ -105,6 +105,61 @@ actor APIClient {
         return try await get(endpoint: "/vault/nats/status", authToken: authToken)
     }
 
+    // MARK: - Handler Registry (Phase 6)
+
+    /// List available handlers from registry
+    func listHandlers(
+        category: String? = nil,
+        page: Int = 1,
+        limit: Int = 20,
+        authToken: String
+    ) async throws -> HandlerListResponse {
+        var endpoint = "/registry/handlers?page=\(page)&limit=\(limit)"
+        if let category = category {
+            endpoint += "&category=\(category)"
+        }
+        return try await get(endpoint: endpoint, authToken: authToken)
+    }
+
+    /// Get handler details
+    func getHandler(id: String, authToken: String) async throws -> HandlerDetailResponse {
+        return try await get(endpoint: "/registry/handlers/\(id)", authToken: authToken)
+    }
+
+    // MARK: - Handler Management (Phase 6)
+
+    /// Install handler on vault
+    func installHandler(
+        handlerId: String,
+        version: String,
+        authToken: String
+    ) async throws -> InstallHandlerResponse {
+        let request = InstallHandlerRequest(handlerId: handlerId, version: version)
+        return try await post(endpoint: "/vault/handlers/install", body: request, authToken: authToken)
+    }
+
+    /// Uninstall handler from vault
+    func uninstallHandler(handlerId: String, authToken: String) async throws -> UninstallHandlerResponse {
+        let request = UninstallHandlerRequest(handlerId: handlerId)
+        return try await post(endpoint: "/vault/handlers/uninstall", body: request, authToken: authToken)
+    }
+
+    /// List installed handlers on vault
+    func listInstalledHandlers(authToken: String) async throws -> InstalledHandlersResponse {
+        return try await get(endpoint: "/vault/handlers", authToken: authToken)
+    }
+
+    /// Execute handler with input
+    func executeHandler(
+        handlerId: String,
+        input: [String: AnyCodableValue],
+        timeoutMs: Int = 30000,
+        authToken: String
+    ) async throws -> ExecuteHandlerResponse {
+        let request = HandlerExecutionRequest(input: input, timeoutMs: timeoutMs)
+        return try await post(endpoint: "/vault/handlers/\(handlerId)/execute", body: request, authToken: authToken)
+    }
+
     // MARK: - HTTP Methods
 
     private func get<T: Decodable>(endpoint: String, authToken: String? = nil) async throws -> T {
@@ -373,4 +428,98 @@ enum ActionType: String, Encodable {
     case retrieveSecret = "retrieve_secret"
     case addPolicy = "add_policy"
     case modifyCredential = "modify_credential"
+}
+
+// MARK: - Handler Registry Types (Phase 6)
+
+struct HandlerListResponse: Decodable {
+    let handlers: [HandlerSummary]
+    let total: Int
+    let page: Int
+    let hasMore: Bool
+}
+
+struct HandlerSummary: Codable, Identifiable, Equatable {
+    let id: String
+    let name: String
+    let description: String
+    let version: String
+    let category: String
+    let iconUrl: String?
+    let publisher: String
+    let installed: Bool
+    let installedVersion: String?
+}
+
+struct HandlerDetailResponse: Codable {
+    let id: String
+    let name: String
+    let description: String
+    let version: String
+    let category: String
+    let iconUrl: String?
+    let publisher: String
+    let publishedAt: String
+    let sizeBytes: Int
+    let permissions: [HandlerPermission]
+    let inputSchema: [String: AnyCodableValue]
+    let outputSchema: [String: AnyCodableValue]
+    let changelog: String?
+    let installed: Bool
+    let installedVersion: String?
+}
+
+struct HandlerPermission: Codable, Equatable {
+    let type: String      // "network", "storage", "crypto"
+    let scope: String     // e.g., "api.example.com" for network
+    let description: String
+}
+
+// MARK: - Handler Management Types (Phase 6)
+
+struct InstallHandlerRequest: Encodable {
+    let handlerId: String
+    let version: String
+}
+
+struct InstallHandlerResponse: Decodable {
+    let status: String      // "installed", "failed"
+    let handlerId: String
+    let version: String
+    let installedAt: String?
+}
+
+struct UninstallHandlerRequest: Encodable {
+    let handlerId: String
+}
+
+struct UninstallHandlerResponse: Decodable {
+    let status: String      // "uninstalled", "failed"
+    let handlerId: String
+}
+
+struct InstalledHandlersResponse: Decodable {
+    let handlers: [InstalledHandler]
+}
+
+struct InstalledHandler: Codable, Identifiable, Equatable {
+    let id: String
+    let name: String
+    let version: String
+    let installedAt: String
+    let lastExecutedAt: String?
+    let executionCount: Int
+}
+
+struct HandlerExecutionRequest: Encodable {
+    let input: [String: AnyCodableValue]
+    let timeoutMs: Int
+}
+
+struct ExecuteHandlerResponse: Decodable {
+    let requestId: String
+    let status: String      // "success", "error", "timeout"
+    let output: [String: AnyCodableValue]?
+    let error: String?
+    let executionTimeMs: Int
 }
