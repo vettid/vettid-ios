@@ -154,6 +154,36 @@ final class CredentialStore {
 
         return items.compactMap { $0[kSecAttrAccount as String] as? String }
     }
+
+    // MARK: - Credential Blob Backup/Restore
+
+    /// Retrieve all credentials as a serialized blob for backup
+    func retrieveCredentialBlob() -> Data? {
+        do {
+            let userGuids = try listUserGuids()
+            var credentials: [StoredCredential] = []
+
+            for guid in userGuids {
+                if let credential = try retrieve(userGuid: guid) {
+                    credentials.append(credential)
+                }
+            }
+
+            guard !credentials.isEmpty else { return nil }
+            return try JSONEncoder().encode(credentials)
+        } catch {
+            return nil
+        }
+    }
+
+    /// Store credentials from a serialized backup blob
+    func storeCredentialBlob(_ data: Data) throws {
+        let credentials = try JSONDecoder().decode([StoredCredential].self, from: data)
+
+        for credential in credentials {
+            try store(credential: credential)
+        }
+    }
 }
 
 // MARK: - Stored Credential Model

@@ -67,6 +67,20 @@
 		0000003B /* ConversationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000003B; };
 		0000003C /* ConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000003C; };
 		0000003D /* MessageSubscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000003D; };
+		0000003E /* Backup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000003E; };
+		0000003F /* BIP39WordList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000003F; };
+		00000040 /* RecoveryPhraseManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000040; };
+		00000041 /* BackupListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000041; };
+		00000042 /* BackupListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000042; };
+		00000043 /* BackupDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000043; };
+		00000044 /* BackupDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000044; };
+		00000045 /* BackupSettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000045; };
+		00000046 /* BackupSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000046; };
+		00000047 /* CredentialBackupViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000047; };
+		00000048 /* CredentialBackupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000048; };
+		00000049 /* CredentialRecoveryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000049; };
+		0000004A /* CredentialRecoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000004A; };
+		0000004B /* BackupBackgroundTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000004B; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -131,6 +145,20 @@
 		1000003B /* ConversationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationViewModel.swift; sourceTree = "<group>"; };
 		1000003C /* ConversationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationView.swift; sourceTree = "<group>"; };
 		1000003D /* MessageSubscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageSubscriber.swift; sourceTree = "<group>"; };
+		1000003E /* Backup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Backup.swift; sourceTree = "<group>"; };
+		1000003F /* BIP39WordList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BIP39WordList.swift; sourceTree = "<group>"; };
+		10000040 /* RecoveryPhraseManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryPhraseManager.swift; sourceTree = "<group>"; };
+		10000041 /* BackupListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupListViewModel.swift; sourceTree = "<group>"; };
+		10000042 /* BackupListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupListView.swift; sourceTree = "<group>"; };
+		10000043 /* BackupDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupDetailViewModel.swift; sourceTree = "<group>"; };
+		10000044 /* BackupDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupDetailView.swift; sourceTree = "<group>"; };
+		10000045 /* BackupSettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupSettingsViewModel.swift; sourceTree = "<group>"; };
+		10000046 /* BackupSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupSettingsView.swift; sourceTree = "<group>"; };
+		10000047 /* CredentialBackupViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CredentialBackupViewModel.swift; sourceTree = "<group>"; };
+		10000048 /* CredentialBackupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CredentialBackupView.swift; sourceTree = "<group>"; };
+		10000049 /* CredentialRecoveryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CredentialRecoveryViewModel.swift; sourceTree = "<group>"; };
+		1000004A /* CredentialRecoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CredentialRecoveryView.swift; sourceTree = "<group>"; };
+		1000004B /* BackupBackgroundTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupBackgroundTask.swift; sourceTree = "<group>"; };
 		20000001 /* VettID.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VettID.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -198,6 +226,7 @@
 		40000012 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				1000003E /* Backup.swift */,
 				1000002A /* Connection.swift */,
 				1000002B /* Message.swift */,
 				1000002C /* Profile.swift */,
@@ -216,8 +245,27 @@
 				40000013 /* Connections */,
 				40000014 /* Profile */,
 				40000015 /* Messaging */,
+				40000016 /* Backup */,
 			);
 			path = Features;
+			sourceTree = "<group>";
+		};
+		40000016 /* Backup */ = {
+			isa = PBXGroup;
+			children = (
+				1000004B /* BackupBackgroundTask.swift */,
+				10000044 /* BackupDetailView.swift */,
+				10000043 /* BackupDetailViewModel.swift */,
+				10000042 /* BackupListView.swift */,
+				10000041 /* BackupListViewModel.swift */,
+				10000046 /* BackupSettingsView.swift */,
+				10000045 /* BackupSettingsViewModel.swift */,
+				10000048 /* CredentialBackupView.swift */,
+				10000047 /* CredentialBackupViewModel.swift */,
+				1000004A /* CredentialRecoveryView.swift */,
+				10000049 /* CredentialRecoveryViewModel.swift */,
+			);
+			path = Backup;
 			sourceTree = "<group>";
 		};
 		40000013 /* Connections */ = {
@@ -268,9 +316,11 @@
 		40000008 /* Crypto */ = {
 			isa = PBXGroup;
 			children = (
+				1000003F /* BIP39WordList.swift */,
+				1000002D /* ConnectionCryptoManager.swift */,
 				10000003 /* CryptoManager.swift */,
 				1000000E /* PasswordHasher.swift */,
-				1000002D /* ConnectionCryptoManager.swift */,
+				10000040 /* RecoveryPhraseManager.swift */,
 			);
 			path = Crypto;
 			sourceTree = "<group>";
@@ -501,6 +551,20 @@
 				0000003B /* ConversationViewModel.swift in Sources */,
 				0000003C /* ConversationView.swift in Sources */,
 				0000003D /* MessageSubscriber.swift in Sources */,
+				0000003E /* Backup.swift in Sources */,
+				0000003F /* BIP39WordList.swift in Sources */,
+				00000040 /* RecoveryPhraseManager.swift in Sources */,
+				00000041 /* BackupListViewModel.swift in Sources */,
+				00000042 /* BackupListView.swift in Sources */,
+				00000043 /* BackupDetailViewModel.swift in Sources */,
+				00000044 /* BackupDetailView.swift in Sources */,
+				00000045 /* BackupSettingsViewModel.swift in Sources */,
+				00000046 /* BackupSettingsView.swift in Sources */,
+				00000047 /* CredentialBackupViewModel.swift in Sources */,
+				00000048 /* CredentialBackupView.swift in Sources */,
+				00000049 /* CredentialRecoveryViewModel.swift in Sources */,
+				0000004A /* CredentialRecoveryView.swift in Sources */,
+				0000004B /* BackupBackgroundTask.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

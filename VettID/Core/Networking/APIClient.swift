@@ -281,6 +281,88 @@ actor APIClient {
         let _: EmptyResponse = try await post(endpoint: "/messages/\(messageId)/read", body: EmptyRequest(), authToken: authToken)
     }
 
+    // MARK: - Backup Management (Phase 8)
+
+    /// Trigger a manual backup
+    func triggerBackup(includeMessages: Bool = true, authToken: String) async throws -> Backup {
+        let request = TriggerBackupRequest(includeMessages: includeMessages)
+        return try await post(endpoint: "/vault/backup", body: request, authToken: authToken)
+    }
+
+    /// List available backups
+    func listBackups(authToken: String) async throws -> [Backup] {
+        let response: BackupListResponse = try await get(endpoint: "/vault/backups", authToken: authToken)
+        return response.backups
+    }
+
+    /// Get backup details
+    func getBackup(backupId: String, authToken: String) async throws -> BackupDetailsResponse {
+        return try await get(endpoint: "/vault/backups/\(backupId)", authToken: authToken)
+    }
+
+    /// Restore from a backup
+    func restoreBackup(backupId: String, authToken: String) async throws -> RestoreResult {
+        let request = RestoreBackupRequest(backupId: backupId)
+        return try await post(endpoint: "/vault/restore", body: request, authToken: authToken)
+    }
+
+    /// Delete a backup
+    func deleteBackup(backupId: String, authToken: String) async throws {
+        let _: EmptyResponse = try await delete(endpoint: "/vault/backups/\(backupId)", authToken: authToken)
+    }
+
+    // MARK: - Backup Settings (Phase 8)
+
+    /// Get backup settings
+    func getBackupSettings(authToken: String) async throws -> BackupSettings {
+        return try await get(endpoint: "/vault/backup/settings", authToken: authToken)
+    }
+
+    /// Update backup settings
+    func updateBackupSettings(_ settings: BackupSettings, authToken: String) async throws -> BackupSettings {
+        return try await put(endpoint: "/vault/backup/settings", body: settings, authToken: authToken)
+    }
+
+    // MARK: - Credential Backup (Phase 8)
+
+    /// Create credential backup with encrypted blob
+    func createCredentialBackup(
+        encryptedBlob: Data,
+        salt: Data,
+        nonce: Data,
+        authToken: String
+    ) async throws {
+        let request = CreateCredentialBackupRequest(
+            encryptedBlob: encryptedBlob.base64EncodedString(),
+            salt: salt.base64EncodedString(),
+            nonce: nonce.base64EncodedString()
+        )
+        let _: EmptyResponse = try await post(endpoint: "/vault/credentials/backup", body: request, authToken: authToken)
+    }
+
+    /// Get credential backup status
+    func getCredentialBackupStatus(authToken: String) async throws -> CredentialBackupStatus {
+        return try await get(endpoint: "/vault/credentials/backup", authToken: authToken)
+    }
+
+    /// Download credential backup for recovery
+    func downloadCredentialBackup(authToken: String) async throws -> RecoverCredentialsResponse {
+        return try await get(endpoint: "/vault/credentials/backup/download", authToken: authToken)
+    }
+
+    /// Recover credentials from backup
+    func recoverCredentials(
+        deviceId: String,
+        devicePublicKey: Data,
+        authToken: String
+    ) async throws -> RecoverCredentialsResponse {
+        let request = RecoverCredentialsRequest(
+            deviceId: deviceId,
+            devicePublicKey: devicePublicKey.base64EncodedString()
+        )
+        return try await post(endpoint: "/vault/credentials/recover", body: request, authToken: authToken)
+    }
+
     // MARK: - HTTP Methods
 
     private func get<T: Decodable>(endpoint: String, authToken: String? = nil) async throws -> T {
@@ -332,6 +414,22 @@ actor APIClient {
         let encoder = JSONEncoder()
         encoder.keyEncodingStrategy = .convertToSnakeCase
         request.httpBody = try encoder.encode(body)
+
+        if let authToken = authToken {
+            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        }
+
+        return try await execute(request)
+    }
+
+    private func delete<T: Decodable>(
+        endpoint: String,
+        authToken: String? = nil
+    ) async throws -> T {
+        let url = baseURL.appendingPathComponent(endpoint)
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
 
         if let authToken = authToken {
             request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
@@ -532,6 +630,17 @@ struct VaultManagerHealth: Decodable {
 }
 
 struct EmptyBody: Encodable {}
+
+// MARK: - Backup Types (Phase 8)
+
+struct BackupListResponse: Decodable {
+    let backups: [Backup]
+}
+
+struct BackupDetailsResponse: Decodable {
+    let backup: Backup
+    let contents: BackupContents?
+}
 
 // MARK: - Error Types
 
