@@ -61,6 +61,33 @@ actor APIClient {
         return try await post(endpoint: "/member/vaults/\(vaultId)/stop", body: EmptyBody(), authToken: authToken)
     }
 
+    // MARK: - Vault Lifecycle (Phase 5)
+
+    /// Provision a new vault EC2 instance
+    func provisionVault(authToken: String) async throws -> ProvisionVaultResponse {
+        return try await post(endpoint: "/vault/provision", body: EmptyBody(), authToken: authToken)
+    }
+
+    /// Initialize vault after EC2 is running
+    func initializeVault(authToken: String) async throws -> InitializeVaultResponse {
+        return try await post(endpoint: "/vault/initialize", body: EmptyBody(), authToken: authToken)
+    }
+
+    /// Stop vault (preserve state)
+    func stopVaultInstance(authToken: String) async throws -> VaultLifecycleResponse {
+        return try await post(endpoint: "/vault/stop", body: EmptyBody(), authToken: authToken)
+    }
+
+    /// Terminate vault (cleanup)
+    func terminateVault(authToken: String) async throws -> VaultLifecycleResponse {
+        return try await post(endpoint: "/vault/terminate", body: EmptyBody(), authToken: authToken)
+    }
+
+    /// Get vault health status
+    func getVaultHealth(authToken: String) async throws -> VaultHealthResponse {
+        return try await get(endpoint: "/vault/health", authToken: authToken)
+    }
+
     // MARK: - NATS Operations (Phase 4)
 
     /// Create NATS account for the user
@@ -254,6 +281,56 @@ struct VaultStatusResponse: Decodable {
 struct VaultActionResponse: Decodable {
     let success: Bool
     let message: String
+}
+
+// MARK: - Vault Lifecycle Types (Phase 5)
+
+struct ProvisionVaultResponse: Decodable {
+    let instanceId: String
+    let status: String  // "provisioning", "running", "failed"
+    let region: String
+    let availabilityZone: String
+    let privateIp: String?
+    let estimatedReadyAt: String
+}
+
+struct InitializeVaultResponse: Decodable {
+    let status: String  // "initialized", "failed"
+    let localNatsStatus: String
+    let centralNatsStatus: String
+    let ownerSpaceId: String
+    let messageSpaceId: String
+}
+
+struct VaultLifecycleResponse: Decodable {
+    let status: String
+    let message: String
+}
+
+struct VaultHealthResponse: Decodable {
+    let status: String  // "healthy", "unhealthy", "degraded"
+    let uptimeSeconds: Int
+    let localNats: LocalNatsHealth
+    let centralNats: CentralNatsHealth
+    let vaultManager: VaultManagerHealth
+    let lastEventAt: String?
+}
+
+struct LocalNatsHealth: Decodable {
+    let status: String
+    let connections: Int
+}
+
+struct CentralNatsHealth: Decodable {
+    let status: String
+    let latencyMs: Int
+}
+
+struct VaultManagerHealth: Decodable {
+    let status: String
+    let memoryMb: Int
+    let cpuPercent: Float
+    let handlersLoaded: Int
 }
 
 struct EmptyBody: Encodable {}

@@ -37,6 +37,10 @@
 		0000001D /* NatsTokenRefreshTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000001D; };
 		0000001E /* NatsSetupViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000001E; };
 		0000001F /* NatsConnectionStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000001F; };
+		00000020 /* VaultEventClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000020; };
+		00000021 /* VaultResponseHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000021; };
+		00000022 /* VaultHealthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000022; };
+		00000023 /* VaultHealthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000023; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -71,6 +75,10 @@
 		1000001D /* NatsTokenRefreshTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NatsTokenRefreshTask.swift; sourceTree = "<group>"; };
 		1000001E /* NatsSetupViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NatsSetupViewModel.swift; sourceTree = "<group>"; };
 		1000001F /* NatsConnectionStatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NatsConnectionStatusView.swift; sourceTree = "<group>"; };
+		10000020 /* VaultEventClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultEventClient.swift; sourceTree = "<group>"; };
+		10000021 /* VaultResponseHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultResponseHandler.swift; sourceTree = "<group>"; };
+		10000022 /* VaultHealthViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultHealthViewModel.swift; sourceTree = "<group>"; };
+		10000023 /* VaultHealthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultHealthView.swift; sourceTree = "<group>"; };
 		20000001 /* VettID.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VettID.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -218,6 +226,8 @@
 				10000016 /* VaultStatusViewModel.swift */,
 				10000017 /* VaultStatusView.swift */,
 				10000018 /* VaultBackgroundRefresh.swift */,
+				10000022 /* VaultHealthViewModel.swift */,
+				10000023 /* VaultHealthView.swift */,
 			);
 			path = Vault;
 			sourceTree = "<group>";
@@ -230,6 +240,8 @@
 				1000001B /* NatsConnectionManager.swift */,
 				1000001C /* OwnerSpaceClient.swift */,
 				1000001D /* NatsTokenRefreshTask.swift */,
+				10000020 /* VaultEventClient.swift */,
+				10000021 /* VaultResponseHandler.swift */,
 			);
 			path = NATS;
 			sourceTree = "<group>";
@@ -341,6 +353,10 @@
 				0000001D /* NatsTokenRefreshTask.swift in Sources */,
 				0000001E /* NatsSetupViewModel.swift in Sources */,
 				0000001F /* NatsConnectionStatusView.swift in Sources */,
+				00000020 /* VaultEventClient.swift in Sources */,
+				00000021 /* VaultResponseHandler.swift in Sources */,
+				00000022 /* VaultHealthViewModel.swift in Sources */,
+				00000023 /* VaultHealthView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
