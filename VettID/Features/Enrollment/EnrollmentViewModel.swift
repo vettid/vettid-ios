@@ -43,6 +43,7 @@ final class EnrollmentViewModel: ObservableObject {
         case settingPassword
         case processingPassword
         case finalizing
+        case settingUpNats
         case complete(userGuid: String)
         case error(message: String, retryable: Bool)
 
@@ -58,6 +59,8 @@ final class EnrollmentViewModel: ObservableObject {
                 return "Create Password"
             case .finalizing:
                 return "Completing Setup"
+            case .settingUpNats:
+                return "Setting Up Messaging"
             case .complete:
                 return "Welcome to VettID"
             case .error:
@@ -353,13 +356,59 @@ final class EnrollmentViewModel: ObservableObject {
             // Store credential
             try storeCredential(package: response.credentialPackage, vaultStatus: response.vaultStatus)
 
+            let completedUserGuid = response.credentialPackage.userGuid
+
+            // Set up NATS account for real-time messaging
+            await setupNatsAccount(authToken: memberAuthToken ?? sessionId)
+
             // Clear sensitive data
             clearSessionData()
 
-            state = .complete(userGuid: response.credentialPackage.userGuid)
+            state = .complete(userGuid: completedUserGuid)
 
         } catch {
             handleError(error, retryable: true)
+        }
+    }
+
+    /// Set up NATS account after enrollment for real-time vault communication
+    private func setupNatsAccount(authToken: String) async {
+        state = .settingUpNats
+
+        do {
+            // Check if account already exists
+            let status = try await apiClient.getNatsStatus(authToken: authToken)
+
+            if !status.hasAccount {
+                // Create NATS account
+                let accountResponse = try await apiClient.createNatsAccount(authToken: authToken)
+
+                // Store account info
+                let accountInfo = NatsAccountInfo(
+                    ownerSpaceId: accountResponse.ownerSpaceId,
+                    messageSpaceId: accountResponse.messageSpaceId,
+                    status: accountResponse.status,
+                    createdAt: ISO8601DateFormatter().string(from: Date())
+                )
+                try NatsCredentialStore().saveAccountInfo(accountInfo)
+            }
+
+            // Generate initial NATS token for the app
+            let tokenResponse = try await apiClient.generateNatsToken(
+                request: .app(deviceId: getDeviceId()),
+                authToken: authToken
+            )
+
+            // Store credentials for later connection
+            let credentials = NatsCredentials(from: tokenResponse)
+            try NatsCredentialStore().saveCredentials(credentials)
+
+        } catch {
+            // NATS setup failure is not critical - user can set it up later
+            // Log the error but don't fail enrollment
+            #if DEBUG
+            print("[Enrollment] NATS setup failed: \(error.localizedDescription)")
+            #endif
         }
     }
 

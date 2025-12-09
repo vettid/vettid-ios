@@ -97,6 +97,9 @@ struct EnrollmentContainerView: View {
             case .finalizing:
                 finalizingView
 
+            case .settingUpNats:
+                settingUpNatsView
+
             case .complete(let userGuid):
                 EnrollmentCompleteView(userGuid: userGuid) {
                     appState.refreshCredentialState()
@@ -148,6 +151,22 @@ struct EnrollmentContainerView: View {
                 .font(.headline)
 
             Text("Setting up your secure credential")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: - Setting Up NATS View
+
+    private var settingUpNatsView: some View {
+        VStack(spacing: 20) {
+            ProgressView()
+                .scaleEffect(1.5)
+
+            Text("Setting up messaging...")
+                .font(.headline)
+
+            Text("Configuring secure vault communication")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }

@@ -288,15 +288,16 @@ struct NatsSubscription {
 
 // MARK: - NATS Client Wrapper
 
-/// Wrapper around the actual NATS client library
-/// This abstraction allows for easier testing and potential library swaps
+#if canImport(Nats)
+import Nats
+
+/// Production wrapper using nats.swift library
 class NatsClientWrapper {
     private let endpoint: String
     private let jwt: String
     private let seed: String
-
-    // In a real implementation, this would be the actual NATS client
-    // private var client: NatsClient?
+    private var client: NatsClient?
+    private var subscriptions: [String: NatsSubscription] = [:]
 
     init(endpoint: String, jwt: String, seed: String) {
         self.endpoint = endpoint
@@ -305,36 +306,131 @@ class NatsClientWrapper {
     }
 
     func connect() async throws {
-        // Implementation would use nats.swift library:
-        // let options = NatsClientOptions()
-        //     .url(URL(string: endpoint)!)
-        //     .credentials(jwt: jwt, seed: seed)
-        // client = options.build()
-        // try await client?.connect()
+        guard let url = URL(string: endpoint) else {
+            throw NatsConnectionError.connectionFailed("Invalid NATS endpoint URL")
+        }
 
-        // For now, simulate connection
-        try await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+        let options = NatsClientOptions()
+            .url(url)
+            .credentialsJWT(jwt: jwt, seed: seed)
+
+        client = options.build()
+        try await client?.connect()
     }
 
     func disconnect() async {
-        // await client?.close()
+        // Cancel all subscriptions
+        for (_, subscription) in subscriptions {
+            await subscription.unsubscribe()
+        }
+        subscriptions.removeAll()
+
+        await client?.close()
+        client = nil
     }
 
     func publish(_ data: Data, to topic: String) async throws {
-        // try await client?.publish(data, subject: topic)
+        guard let client = client else {
+            throw NatsConnectionError.notConnected
+        }
+        try await client.publish(data, subject: topic)
     }
 
     func subscribe(to topic: String) async throws -> AsyncStream<NatsMessage> {
-        // let subscription = try await client?.subscribe(subject: topic)
-        // return subscription map to NatsMessage
+        guard let client = client else {
+            throw NatsConnectionError.notConnected
+        }
 
-        // For now, return empty stream
+        let subscription = try await client.subscribe(subject: topic)
+        subscriptions[topic] = subscription
+
+        return AsyncStream { continuation in
+            Task {
+                for try await msg in subscription {
+                    let natsMessage = NatsMessage(
+                        topic: msg.subject,
+                        data: msg.payload ?? Data(),
+                        headers: msg.headers?.dictionary
+                    )
+                    continuation.yield(natsMessage)
+                }
+                continuation.finish()
+            }
+        }
+    }
+
+    func unsubscribe(from topic: String) async {
+        if let subscription = subscriptions.removeValue(forKey: topic) {
+            await subscription.unsubscribe()
+        }
+    }
+}
+
+// Extension to convert NatsHeaderMap to [String: String]
+private extension NatsHeaderMap {
+    var dictionary: [String: String] {
+        var result: [String: String] = [:]
+        for (key, values) in self {
+            if let firstValue = values.first {
+                result[key.description] = firstValue.description
+            }
+        }
+        return result
+    }
+}
+
+#else
+
+/// Stub wrapper for when nats.swift is not available (testing/development)
+class NatsClientWrapper {
+    private let endpoint: String
+    private let jwt: String
+    private let seed: String
+
+    init(endpoint: String, jwt: String, seed: String) {
+        self.endpoint = endpoint
+        self.jwt = jwt
+        self.seed = seed
+        #if DEBUG
+        print("[NATS] Using stub NatsClientWrapper - add nats.swift package for real connectivity")
+        #endif
+    }
+
+    func connect() async throws {
+        // Simulate connection delay
+        try await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+        #if DEBUG
+        print("[NATS] Stub: Connected to \(endpoint)")
+        #endif
+    }
+
+    func disconnect() async {
+        #if DEBUG
+        print("[NATS] Stub: Disconnected")
+        #endif
+    }
+
+    func publish(_ data: Data, to topic: String) async throws {
+        #if DEBUG
+        print("[NATS] Stub: Published \(data.count) bytes to \(topic)")
+        #endif
+    }
+
+    func subscribe(to topic: String) async throws -> AsyncStream<NatsMessage> {
+        #if DEBUG
+        print("[NATS] Stub: Subscribed to \(topic)")
+        #endif
+        // Return empty stream for stub
         return AsyncStream { continuation in
             continuation.finish()
         }
     }
 
     func unsubscribe(from topic: String) async {
-        // await subscription?.unsubscribe()
+        #if DEBUG
+        print("[NATS] Stub: Unsubscribed from \(topic)")
+        #endif
     }
 }
+
+#endif
