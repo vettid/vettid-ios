@@ -22,6 +22,8 @@ final class EnrollmentViewModel: ObservableObject {
     private var transactionKeys: [TransactionKeyInfo] = []
     private var passwordKeyId: String?
     private var attestationKeyId: String?
+    private var attestationChallenge: String?
+    private var memberAuthToken: String?
 
     // MARK: - Dependencies
 
@@ -197,8 +199,16 @@ final class EnrollmentViewModel: ObservableObject {
             transactionKeys = response.transactionKeys
             passwordKeyId = response.passwordPrompt.useKeyId
 
-            // Move to attestation
-            state = .attestationRequired(challenge: response.enrollmentSessionId)
+            // Check if attestation is required and store challenge
+            if response.attestationRequired == true,
+               let challenge = response.attestationChallenge {
+                attestationChallenge = challenge
+                state = .attestationRequired(challenge: challenge)
+            } else {
+                // Skip attestation if not required (unsupported device fallback)
+                state = .attestationComplete
+                await proceedToPassword()
+            }
 
         } catch {
             handleError(error, retryable: true)
@@ -213,38 +223,66 @@ final class EnrollmentViewModel: ObservableObject {
             return
         }
 
+        guard let sessionId = enrollmentSessionId,
+              let challenge = attestationChallenge else {
+            handleError(EnrollmentError.invalidState, retryable: false)
+            return
+        }
+
         state = .attesting(progress: 0.0)
 
         do {
-            // Generate attestation key
-            state = .attesting(progress: 0.25)
+            // Step 1: Generate attestation key
+            state = .attesting(progress: 0.2)
             let keyId = try await attestationManager.generateAttestationKey()
             attestationKeyId = keyId
 
-            // Create client data hash
-            state = .attesting(progress: 0.5)
-            let clientData = createClientDataHash()
-
-            // Perform attestation
-            state = .attesting(progress: 0.75)
-            _ = try await attestationManager.attestKey(
+            // Step 2: Attest key with Apple using the server challenge
+            state = .attesting(progress: 0.4)
+            let attestationObject = try await attestationManager.attestKeyWithChallenge(
                 keyId: keyId,
-                clientData: clientData
+                challengeBase64: challenge
             )
 
-            // Submit attestation to server (if we have the endpoint)
-            // For now, we'll proceed without server verification
-            state = .attesting(progress: 1.0)
+            // Step 3: Submit attestation to backend for verification
+            state = .attesting(progress: 0.6)
+            let attestationRequest = EnrollAttestationIOSRequest(
+                enrollmentSessionId: sessionId,
+                attestationObject: attestationObject.base64EncodedString(),
+                keyId: keyId
+            )
 
+            // Note: memberAuthToken would come from Cognito JWT
+            // For enrollment, the session ID acts as temporary auth
+            let response = try await apiClient.enrollAttestationIOS(
+                request: attestationRequest,
+                authToken: memberAuthToken ?? sessionId
+            )
+
+            // Verify server response
+            guard response.status == "attestation_verified" else {
+                throw AttestationError.serverVerificationFailed(response.status)
+            }
+
+            // Step 4: Store keyId for future assertions
+            state = .attesting(progress: 0.8)
+            try attestationManager.storeKeyId(keyId)
+
+            // Update password key ID from server response
+            passwordKeyId = response.passwordKeyId
+
+            state = .attesting(progress: 1.0)
             try await Task.sleep(nanoseconds: 300_000_000)
 
             state = .attestationComplete
             await proceedToPassword()
 
+        } catch let error as AttestationError {
+            // Handle attestation errors specifically
+            handleError(error, retryable: true)
         } catch {
-            // If attestation fails, still allow enrollment (for development)
-            state = .attestationComplete
-            await proceedToPassword()
+            // For other errors, provide option to retry
+            handleError(error, retryable: true)
         }
     }
 
@@ -415,6 +453,8 @@ final class EnrollmentViewModel: ObservableObject {
         transactionKeys = []
         passwordKeyId = nil
         attestationKeyId = nil
+        attestationChallenge = nil
+        memberAuthToken = nil
         password = ""
         confirmPassword = ""
     }
@@ -425,12 +465,19 @@ final class EnrollmentViewModel: ObservableObject {
             message = enrollmentError.localizedDescription
         } else if let apiError = error as? APIError {
             message = apiError.localizedDescription
+        } else if let attestationError = error as? AttestationError {
+            message = attestationError.localizedDescription
         } else {
             message = error.localizedDescription
         }
 
         errorMessage = message
         state = .error(message: message, retryable: retryable)
+    }
+
+    /// Set the member auth token (from Cognito) for authenticated API calls
+    func setMemberAuthToken(_ token: String) {
+        memberAuthToken = token
     }
 }
 

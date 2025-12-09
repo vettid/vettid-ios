@@ -19,6 +19,9 @@ final class EnrollmentService: ObservableObject {
     private var userGuid: String?
     private var transactionKeys: [TransactionKeyInfo] = []
     private var passwordKeyId: String?
+    private var attestationChallenge: String?
+    private var attestationKeyId: String?
+    private var memberAuthToken: String?
 
     private let apiClient = APIClient()
     private let credentialStore = CredentialStore()
@@ -34,14 +37,11 @@ final class EnrollmentService: ObservableObject {
             // Get device ID
             let deviceId = getDeviceId()
 
-            // Get attestation data (if supported)
-            let attestationData = try await getAttestationData()
-
-            // Call API
+            // Call API (attestation will be sent separately)
             let request = EnrollStartRequest(
                 invitationCode: invitationCode,
                 deviceId: deviceId,
-                attestationData: attestationData
+                attestationData: ""  // Attestation sent in dedicated step
             )
 
             let response = try await apiClient.enrollStart(request: request)
@@ -52,8 +52,84 @@ final class EnrollmentService: ObservableObject {
             transactionKeys = response.transactionKeys
             passwordKeyId = response.passwordPrompt.useKeyId
 
-            // Transition to password entry state
-            state = .awaitingPassword(prompt: response.passwordPrompt.message)
+            // Check if attestation is required
+            if response.attestationRequired == true,
+               let challenge = response.attestationChallenge {
+                attestationChallenge = challenge
+                state = .attestationRequired(challenge: challenge)
+            } else {
+                // Skip attestation if not required
+                state = .awaitingPassword(prompt: response.passwordPrompt.message)
+            }
+
+        } catch {
+            handleError(error)
+        }
+    }
+
+    // MARK: - Step 1b: Device Attestation
+
+    /// Perform device attestation with App Attest
+    func performAttestation() async {
+        guard attestationManager.isSupported else {
+            // Skip attestation for unsupported devices
+            if case .attestationRequired = state {
+                state = .attestationComplete
+                // Proceed to password after a brief delay
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                state = .awaitingPassword(prompt: "Create a secure password")
+            }
+            return
+        }
+
+        guard let sessionId = enrollmentSessionId,
+              let challenge = attestationChallenge else {
+            self.error = .invalidState
+            state = .failed(.invalidState)
+            return
+        }
+
+        state = .attesting
+
+        do {
+            // Generate attestation key
+            let keyId = try await attestationManager.generateAttestationKey()
+            attestationKeyId = keyId
+
+            // Attest key with Apple using server challenge
+            let attestationObject = try await attestationManager.attestKeyWithChallenge(
+                keyId: keyId,
+                challengeBase64: challenge
+            )
+
+            // Submit attestation to backend
+            let attestationRequest = EnrollAttestationIOSRequest(
+                enrollmentSessionId: sessionId,
+                attestationObject: attestationObject.base64EncodedString(),
+                keyId: keyId
+            )
+
+            let response = try await apiClient.enrollAttestationIOS(
+                request: attestationRequest,
+                authToken: memberAuthToken ?? sessionId
+            )
+
+            // Verify server response
+            guard response.status == "attestation_verified" else {
+                throw EnrollmentError.attestationFailed
+            }
+
+            // Store keyId for future assertions
+            try attestationManager.storeKeyId(keyId)
+
+            // Update password key ID from server response
+            passwordKeyId = response.passwordKeyId
+
+            state = .attestationComplete
+
+            // Proceed to password after a brief delay
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            state = .awaitingPassword(prompt: "Create a secure password")
 
         } catch {
             handleError(error)
@@ -147,24 +223,6 @@ final class EnrollmentService: ObservableObject {
         return UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
     }
 
-    private func getAttestationData() async throws -> String {
-        guard attestationManager.isSupported else {
-            // Return empty attestation for unsupported devices (simulator, etc.)
-            return ""
-        }
-
-        do {
-            let keyId = try await attestationManager.generateAttestationKey()
-            let deviceId = getDeviceId()
-            let clientData = "\(deviceId):\(Date().timeIntervalSince1970)".data(using: .utf8)!
-            let attestation = try await attestationManager.attestKey(keyId: keyId, clientData: clientData)
-            return attestation.base64EncodedString()
-        } catch {
-            // Continue without attestation on error
-            return ""
-        }
-    }
-
     private func storeCredential(package: CredentialPackage, vaultStatus: String) throws {
         // Convert transaction keys
         let storedKeys = (package.transactionKeys ?? []).map { keyInfo in
@@ -210,6 +268,14 @@ final class EnrollmentService: ObservableObject {
         userGuid = nil
         transactionKeys = []
         passwordKeyId = nil
+        attestationChallenge = nil
+        attestationKeyId = nil
+        memberAuthToken = nil
+    }
+
+    /// Set the member auth token (from Cognito) for authenticated API calls
+    func setMemberAuthToken(_ token: String) {
+        memberAuthToken = token
     }
 
     private func handleError(_ error: Error) {
@@ -242,6 +308,9 @@ final class EnrollmentService: ObservableObject {
 enum EnrollmentState: Equatable {
     case idle
     case startingEnrollment
+    case attestationRequired(challenge: String)
+    case attesting
+    case attestationComplete
     case awaitingPassword(prompt: String)
     case settingPassword
     case finalizingEnrollment
@@ -253,10 +322,14 @@ enum EnrollmentState: Equatable {
         switch (lhs, rhs) {
         case (.idle, .idle),
              (.startingEnrollment, .startingEnrollment),
+             (.attesting, .attesting),
+             (.attestationComplete, .attestationComplete),
              (.settingPassword, .settingPassword),
              (.finalizingEnrollment, .finalizingEnrollment),
              (.storingCredential, .storingCredential):
             return true
+        case let (.attestationRequired(a), .attestationRequired(b)):
+            return a == b
         case let (.awaitingPassword(a), .awaitingPassword(b)):
             return a == b
         case let (.completed(a), .completed(b)):
@@ -274,6 +347,12 @@ enum EnrollmentState: Equatable {
             return "Ready to enroll"
         case .startingEnrollment:
             return "Starting enrollment..."
+        case .attestationRequired:
+            return "Device verification required"
+        case .attesting:
+            return "Verifying device..."
+        case .attestationComplete:
+            return "Device verified"
         case .awaitingPassword:
             return "Create your password"
         case .settingPassword:
@@ -291,7 +370,7 @@ enum EnrollmentState: Equatable {
 
     var isProcessing: Bool {
         switch self {
-        case .startingEnrollment, .settingPassword, .finalizingEnrollment, .storingCredential:
+        case .startingEnrollment, .attesting, .settingPassword, .finalizingEnrollment, .storingCredential:
             return true
         default:
             return false
@@ -303,6 +382,7 @@ enum EnrollmentState: Equatable {
 
 enum EnrollmentError: Error, Equatable, LocalizedError {
     case attestationNotSupported
+    case attestationFailed
     case invalidInvitationCode
     case invitationExpired
     case passwordSetFailed
@@ -315,6 +395,7 @@ enum EnrollmentError: Error, Equatable, LocalizedError {
     static func == (lhs: EnrollmentError, rhs: EnrollmentError) -> Bool {
         switch (lhs, rhs) {
         case (.attestationNotSupported, .attestationNotSupported),
+             (.attestationFailed, .attestationFailed),
              (.invalidInvitationCode, .invalidInvitationCode),
              (.invitationExpired, .invitationExpired),
              (.passwordSetFailed, .passwordSetFailed),
@@ -331,6 +412,8 @@ enum EnrollmentError: Error, Equatable, LocalizedError {
         switch self {
         case .attestationNotSupported:
             return "Device attestation is not supported"
+        case .attestationFailed:
+            return "Device attestation failed verification"
         case .invalidInvitationCode:
             return "The invitation code is invalid"
         case .invitationExpired:

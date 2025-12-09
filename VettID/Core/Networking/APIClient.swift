@@ -23,11 +23,14 @@ actor APIClient {
 
     init(
         baseURL: URL = URL(string: "https://api.vettid.com")!,
-        deviceId: String = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString,
+        deviceId: String? = nil,
         enforcePinning: Bool = true
     ) {
+        // Get device ID synchronously - use provided value or generate UUID
+        // Note: UIDevice.current.identifierForVendor requires MainActor, so we use a fallback
+        let resolvedDeviceId = deviceId ?? UUID().uuidString
         self.baseURL = baseURL
-        self.deviceId = deviceId
+        self.deviceId = resolvedDeviceId
 
         #if DEBUG
         self.enforcePinning = enforcePinning
@@ -59,7 +62,7 @@ actor APIClient {
         )
 
         // Initialize request signer
-        self.requestSigner = RequestSigner(deviceId: deviceId)
+        self.requestSigner = RequestSigner(deviceId: resolvedDeviceId)
 
         // Set up pin validation failure handler
         pinningDelegate.onPinValidationFailed = { host, reason in
@@ -85,6 +88,11 @@ actor APIClient {
     /// Step 1: Start enrollment with invitation code
     func enrollStart(request: EnrollStartRequest) async throws -> EnrollStartResponse {
         return try await post(endpoint: "/api/v1/enroll/start", body: request)
+    }
+
+    /// Step 1b: Submit iOS device attestation
+    func enrollAttestationIOS(request: EnrollAttestationIOSRequest, authToken: String) async throws -> EnrollAttestationResponse {
+        return try await post(endpoint: "/vault/enroll/attestation/ios", body: request, authToken: authToken)
     }
 
     /// Step 2: Set password during enrollment
@@ -541,6 +549,24 @@ struct EnrollStartResponse: Decodable {
     let userGuid: String
     let transactionKeys: [TransactionKeyInfo]
     let passwordPrompt: PasswordPrompt
+    let attestationRequired: Bool?
+    let attestationChallenge: String?  // Base64 encoded challenge for App Attest
+}
+
+// MARK: - iOS Attestation Request/Response Types
+
+struct EnrollAttestationIOSRequest: Encodable {
+    let enrollmentSessionId: String
+    let attestationObject: String  // Base64-CBOR encoded attestation
+    let keyId: String              // Base64 encoded key ID
+}
+
+struct EnrollAttestationResponse: Decodable {
+    let status: String             // "attestation_verified"
+    let deviceType: String         // "ios"
+    let securityLevel: String      // "hardware"
+    let nextStep: String           // "password_required"
+    let passwordKeyId: String      // UUID for password encryption
 }
 
 struct TransactionKeyInfo: Codable {
