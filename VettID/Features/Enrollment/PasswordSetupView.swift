@@ -46,7 +46,7 @@ struct PasswordSetupView: View {
                 .font(.title2)
                 .fontWeight(.bold)
 
-            Text("This password protects your vault credentials.\nChoose a strong, unique password.")
+            Text("Create a password for managing Vault Services")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

@@ -7,86 +7,86 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		00000001 /* VettIDApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000001; };
-		00000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000002; };
-		00000003 /* CryptoManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000003; };
-		00000004 /* CredentialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000004; };
-		00000005 /* SecureKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000005; };
-		00000006 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000006; };
-		00000007 /* AttestationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000007; };
-		00000008 /* EnrollmentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000008; };
-		00000009 /* QRScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000009; };
-		0000000A /* BiometricAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000000A; };
-		0000000B /* VaultService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000000B; };
-		0000000C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1000000C; };
-		0000000D /* PasswordHasher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000000E; };
-		0000000E /* AuthenticationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000000F; };
-		00000010 /* EnrollmentViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000010; };
-		00000011 /* PasswordSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000011; };
-		00000012 /* AttestationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000012; };
-		00000013 /* EnrollmentCompleteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000013; };
-		00000014 /* AuthenticationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000014; };
-		00000015 /* AuthenticationContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000015; };
-		00000016 /* VaultStatusViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000016; };
-		00000017 /* VaultStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000017; };
-		00000018 /* VaultBackgroundRefresh.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000018; };
-		00000019 /* NatsCredentials.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000019; };
-		0000001A /* NatsCredentialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000001A; };
-		0000001B /* NatsConnectionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000001B; };
-		0000001C /* OwnerSpaceClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000001C; };
-		0000001D /* NatsTokenRefreshTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000001D; };
-		0000001E /* NatsSetupViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000001E; };
-		0000001F /* NatsConnectionStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000001F; };
-		00000020 /* VaultEventClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000020; };
-		00000021 /* VaultResponseHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000021; };
-		00000022 /* VaultHealthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000022; };
-		00000023 /* VaultHealthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000023; };
-		00000024 /* HandlerDiscoveryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000024; };
-		00000025 /* HandlerDiscoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000025; };
-		00000026 /* HandlerDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000026; };
-		00000027 /* HandlerDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000027; };
-		00000028 /* HandlerExecutionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000028; };
-		00000029 /* HandlerExecutionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000029; };
-		0000002A /* Connection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000002A; };
-		0000002B /* Message.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000002B; };
-		0000002C /* Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000002C; };
-		0000002D /* ConnectionCryptoManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000002D; };
-		0000002E /* QRCodeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000002E; };
-		0000002F /* QRCodeScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000002F; };
-		00000030 /* CreateInvitationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000030; };
-		00000031 /* CreateInvitationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000031; };
-		00000032 /* ScanInvitationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000032; };
-		00000033 /* ScanInvitationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000033; };
-		00000034 /* ConnectionsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000034; };
-		00000035 /* ConnectionsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000035; };
-		00000036 /* ConnectionDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000036; };
-		00000037 /* ConnectionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000037; };
-		00000038 /* ProfileViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000038; };
-		00000039 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000039; };
-		0000003A /* EditProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000003A; };
-		0000003B /* ConversationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000003B; };
-		0000003C /* ConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000003C; };
-		0000003D /* MessageSubscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000003D; };
-		0000003E /* Backup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000003E; };
-		0000003F /* BIP39WordList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000003F; };
-		00000040 /* RecoveryPhraseManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000040; };
-		00000041 /* BackupListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000041; };
-		00000042 /* BackupListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000042; };
-		00000043 /* BackupDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000043; };
-		00000044 /* BackupDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000044; };
-		00000045 /* BackupSettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000045; };
-		00000046 /* BackupSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000046; };
-		00000047 /* CredentialBackupViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000047; };
-		00000048 /* CredentialBackupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000048; };
-		00000049 /* CredentialRecoveryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000049; };
-		0000004A /* CredentialRecoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000004A; };
-		0000004B /* BackupBackgroundTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000004B; };
-		0000004C /* RuntimeProtection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000004C; };
-		0000004D /* SecureMemory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000004D; };
-		0000004E /* CertificatePinning.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000004E; };
-		0000004F /* RequestSigning.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000004F; };
-		00000050 /* SecurePasteboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000050; };
-		00000051 /* ScreenProtection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000051; };
+		00000001 /* VettIDApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000001 /* VettIDApp.swift */; };
+		00000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000002 /* ContentView.swift */; };
+		00000003 /* CryptoManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000003 /* CryptoManager.swift */; };
+		00000004 /* CredentialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000004 /* CredentialStore.swift */; };
+		00000005 /* SecureKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000005 /* SecureKeyStore.swift */; };
+		00000006 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000006 /* APIClient.swift */; };
+		00000007 /* AttestationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000007 /* AttestationManager.swift */; };
+		00000008 /* EnrollmentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000008 /* EnrollmentService.swift */; };
+		00000009 /* QRScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000009 /* QRScannerView.swift */; };
+		0000000A /* BiometricAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000000A /* BiometricAuthService.swift */; };
+		0000000B /* VaultService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000000B /* VaultService.swift */; };
+		0000000C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1000000C /* Assets.xcassets */; };
+		0000000D /* PasswordHasher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000000E /* PasswordHasher.swift */; };
+		0000000E /* AuthenticationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000000F /* AuthenticationService.swift */; };
+		00000010 /* EnrollmentViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000010 /* EnrollmentViewModel.swift */; };
+		00000011 /* PasswordSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000011 /* PasswordSetupView.swift */; };
+		00000012 /* AttestationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000012 /* AttestationView.swift */; };
+		00000013 /* EnrollmentCompleteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000013 /* EnrollmentCompleteView.swift */; };
+		00000014 /* AuthenticationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000014 /* AuthenticationViewModel.swift */; };
+		00000015 /* AuthenticationContainerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000015 /* AuthenticationContainerView.swift */; };
+		00000016 /* VaultStatusViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000016 /* VaultStatusViewModel.swift */; };
+		00000017 /* VaultStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000017 /* VaultStatusView.swift */; };
+		00000018 /* VaultBackgroundRefresh.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000018 /* VaultBackgroundRefresh.swift */; };
+		00000019 /* NatsCredentials.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000019 /* NatsCredentials.swift */; };
+		0000001A /* NatsCredentialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000001A /* NatsCredentialStore.swift */; };
+		0000001B /* NatsConnectionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000001B /* NatsConnectionManager.swift */; };
+		0000001C /* OwnerSpaceClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000001C /* OwnerSpaceClient.swift */; };
+		0000001D /* NatsTokenRefreshTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000001D /* NatsTokenRefreshTask.swift */; };
+		0000001E /* NatsSetupViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000001E /* NatsSetupViewModel.swift */; };
+		0000001F /* NatsConnectionStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000001F /* NatsConnectionStatusView.swift */; };
+		00000020 /* VaultEventClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000020 /* VaultEventClient.swift */; };
+		00000021 /* VaultResponseHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000021 /* VaultResponseHandler.swift */; };
+		00000022 /* VaultHealthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000022 /* VaultHealthViewModel.swift */; };
+		00000023 /* VaultHealthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000023 /* VaultHealthView.swift */; };
+		00000024 /* HandlerDiscoveryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000024 /* HandlerDiscoveryViewModel.swift */; };
+		00000025 /* HandlerDiscoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000025 /* HandlerDiscoveryView.swift */; };
+		00000026 /* HandlerDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000026 /* HandlerDetailViewModel.swift */; };
+		00000027 /* HandlerDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000027 /* HandlerDetailView.swift */; };
+		00000028 /* HandlerExecutionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000028 /* HandlerExecutionViewModel.swift */; };
+		00000029 /* HandlerExecutionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000029 /* HandlerExecutionView.swift */; };
+		0000002A /* Connection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000002A /* Connection.swift */; };
+		0000002B /* Message.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000002B /* Message.swift */; };
+		0000002C /* Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000002C /* Profile.swift */; };
+		0000002D /* ConnectionCryptoManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000002D /* ConnectionCryptoManager.swift */; };
+		0000002E /* QRCodeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000002E /* QRCodeView.swift */; };
+		0000002F /* QRCodeScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000002F /* QRCodeScannerView.swift */; };
+		00000030 /* CreateInvitationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000030 /* CreateInvitationViewModel.swift */; };
+		00000031 /* CreateInvitationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000031 /* CreateInvitationView.swift */; };
+		00000032 /* ScanInvitationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000032 /* ScanInvitationViewModel.swift */; };
+		00000033 /* ScanInvitationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000033 /* ScanInvitationView.swift */; };
+		00000034 /* ConnectionsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000034 /* ConnectionsViewModel.swift */; };
+		00000035 /* ConnectionsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000035 /* ConnectionsListView.swift */; };
+		00000036 /* ConnectionDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000036 /* ConnectionDetailViewModel.swift */; };
+		00000037 /* ConnectionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000037 /* ConnectionDetailView.swift */; };
+		00000038 /* ProfileViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000038 /* ProfileViewModel.swift */; };
+		00000039 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000039 /* ProfileView.swift */; };
+		0000003A /* EditProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000003A /* EditProfileView.swift */; };
+		0000003B /* ConversationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000003B /* ConversationViewModel.swift */; };
+		0000003C /* ConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000003C /* ConversationView.swift */; };
+		0000003D /* MessageSubscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000003D /* MessageSubscriber.swift */; };
+		0000003E /* Backup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000003E /* Backup.swift */; };
+		0000003F /* BIP39WordList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000003F /* BIP39WordList.swift */; };
+		00000040 /* RecoveryPhraseManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000040 /* RecoveryPhraseManager.swift */; };
+		00000041 /* BackupListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000041 /* BackupListViewModel.swift */; };
+		00000042 /* BackupListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000042 /* BackupListView.swift */; };
+		00000043 /* BackupDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000043 /* BackupDetailViewModel.swift */; };
+		00000044 /* BackupDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000044 /* BackupDetailView.swift */; };
+		00000045 /* BackupSettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000045 /* BackupSettingsViewModel.swift */; };
+		00000046 /* BackupSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000046 /* BackupSettingsView.swift */; };
+		00000047 /* CredentialBackupViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000047 /* CredentialBackupViewModel.swift */; };
+		00000048 /* CredentialBackupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000048 /* CredentialBackupView.swift */; };
+		00000049 /* CredentialRecoveryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000049 /* CredentialRecoveryViewModel.swift */; };
+		0000004A /* CredentialRecoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000004A /* CredentialRecoveryView.swift */; };
+		0000004B /* BackupBackgroundTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000004B /* BackupBackgroundTask.swift */; };
+		0000004C /* RuntimeProtection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000004C /* RuntimeProtection.swift */; };
+		0000004D /* SecureMemory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000004D /* SecureMemory.swift */; };
+		0000004E /* CertificatePinning.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000004E /* CertificatePinning.swift */; };
+		0000004F /* RequestSigning.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000004F /* RequestSigning.swift */; };
+		00000050 /* SecurePasteboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000050 /* SecurePasteboard.swift */; };
+		00000051 /* ScreenProtection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000051 /* ScreenProtection.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -236,30 +236,6 @@
 			path = Core;
 			sourceTree = "<group>";
 		};
-		40000017 /* Security */ = {
-			isa = PBXGroup;
-			children = (
-				1000004C /* RuntimeProtection.swift */,
-				1000004D /* SecureMemory.swift */,
-				1000004E /* CertificatePinning.swift */,
-				1000004F /* RequestSigning.swift */,
-				10000050 /* SecurePasteboard.swift */,
-				10000051 /* ScreenProtection.swift */,
-			);
-			path = Security;
-			sourceTree = "<group>";
-		};
-		40000012 /* Models */ = {
-			isa = PBXGroup;
-			children = (
-				1000003E /* Backup.swift */,
-				1000002A /* Connection.swift */,
-				1000002B /* Message.swift */,
-				1000002C /* Profile.swift */,
-			);
-			path = Models;
-			sourceTree = "<group>";
-		};
 		40000006 /* Features */ = {
 			isa = PBXGroup;
 			children = (
@@ -274,61 +250,6 @@
 				40000016 /* Backup */,
 			);
 			path = Features;
-			sourceTree = "<group>";
-		};
-		40000016 /* Backup */ = {
-			isa = PBXGroup;
-			children = (
-				1000004B /* BackupBackgroundTask.swift */,
-				10000044 /* BackupDetailView.swift */,
-				10000043 /* BackupDetailViewModel.swift */,
-				10000042 /* BackupListView.swift */,
-				10000041 /* BackupListViewModel.swift */,
-				10000046 /* BackupSettingsView.swift */,
-				10000045 /* BackupSettingsViewModel.swift */,
-				10000048 /* CredentialBackupView.swift */,
-				10000047 /* CredentialBackupViewModel.swift */,
-				1000004A /* CredentialRecoveryView.swift */,
-				10000049 /* CredentialRecoveryViewModel.swift */,
-			);
-			path = Backup;
-			sourceTree = "<group>";
-		};
-		40000013 /* Connections */ = {
-			isa = PBXGroup;
-			children = (
-				1000002E /* QRCodeView.swift */,
-				1000002F /* QRCodeScannerView.swift */,
-				10000030 /* CreateInvitationViewModel.swift */,
-				10000031 /* CreateInvitationView.swift */,
-				10000032 /* ScanInvitationViewModel.swift */,
-				10000033 /* ScanInvitationView.swift */,
-				10000034 /* ConnectionsViewModel.swift */,
-				10000035 /* ConnectionsListView.swift */,
-				10000036 /* ConnectionDetailViewModel.swift */,
-				10000037 /* ConnectionDetailView.swift */,
-			);
-			path = Connections;
-			sourceTree = "<group>";
-		};
-		40000014 /* Profile */ = {
-			isa = PBXGroup;
-			children = (
-				10000038 /* ProfileViewModel.swift */,
-				10000039 /* ProfileView.swift */,
-				1000003A /* EditProfileView.swift */,
-			);
-			path = Profile;
-			sourceTree = "<group>";
-		};
-		40000015 /* Messaging */ = {
-			isa = PBXGroup;
-			children = (
-				1000003B /* ConversationViewModel.swift */,
-				1000003C /* ConversationView.swift */,
-				1000003D /* MessageSubscriber.swift */,
-			);
-			path = Messaging;
 			sourceTree = "<group>";
 		};
 		40000007 /* Resources */ = {
@@ -449,6 +370,85 @@
 			path = Handlers;
 			sourceTree = "<group>";
 		};
+		40000012 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				1000003E /* Backup.swift */,
+				1000002A /* Connection.swift */,
+				1000002B /* Message.swift */,
+				1000002C /* Profile.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		40000013 /* Connections */ = {
+			isa = PBXGroup;
+			children = (
+				1000002E /* QRCodeView.swift */,
+				1000002F /* QRCodeScannerView.swift */,
+				10000030 /* CreateInvitationViewModel.swift */,
+				10000031 /* CreateInvitationView.swift */,
+				10000032 /* ScanInvitationViewModel.swift */,
+				10000033 /* ScanInvitationView.swift */,
+				10000034 /* ConnectionsViewModel.swift */,
+				10000035 /* ConnectionsListView.swift */,
+				10000036 /* ConnectionDetailViewModel.swift */,
+				10000037 /* ConnectionDetailView.swift */,
+			);
+			path = Connections;
+			sourceTree = "<group>";
+		};
+		40000014 /* Profile */ = {
+			isa = PBXGroup;
+			children = (
+				10000038 /* ProfileViewModel.swift */,
+				10000039 /* ProfileView.swift */,
+				1000003A /* EditProfileView.swift */,
+			);
+			path = Profile;
+			sourceTree = "<group>";
+		};
+		40000015 /* Messaging */ = {
+			isa = PBXGroup;
+			children = (
+				1000003B /* ConversationViewModel.swift */,
+				1000003C /* ConversationView.swift */,
+				1000003D /* MessageSubscriber.swift */,
+			);
+			path = Messaging;
+			sourceTree = "<group>";
+		};
+		40000016 /* Backup */ = {
+			isa = PBXGroup;
+			children = (
+				1000004B /* BackupBackgroundTask.swift */,
+				10000044 /* BackupDetailView.swift */,
+				10000043 /* BackupDetailViewModel.swift */,
+				10000042 /* BackupListView.swift */,
+				10000041 /* BackupListViewModel.swift */,
+				10000046 /* BackupSettingsView.swift */,
+				10000045 /* BackupSettingsViewModel.swift */,
+				10000048 /* CredentialBackupView.swift */,
+				10000047 /* CredentialBackupViewModel.swift */,
+				1000004A /* CredentialRecoveryView.swift */,
+				10000049 /* CredentialRecoveryViewModel.swift */,
+			);
+			path = Backup;
+			sourceTree = "<group>";
+		};
+		40000017 /* Security */ = {
+			isa = PBXGroup;
+			children = (
+				1000004C /* RuntimeProtection.swift */,
+				1000004D /* SecureMemory.swift */,
+				1000004E /* CertificatePinning.swift */,
+				1000004F /* RequestSigning.swift */,
+				10000050 /* SecurePasteboard.swift */,
+				10000051 /* ScreenProtection.swift */,
+			);
+			path = Security;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -477,7 +477,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1500;
-				LastUpgradeCheck = 1500;
+				LastUpgradeCheck = 2610;
 				TargetAttributes = {
 					50000001 = {
 						CreatedOnToolsVersion = 15.0;
@@ -661,6 +661,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -717,6 +718,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
@@ -729,7 +731,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 3X25CJ86MV;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VettID/Info.plist;
@@ -760,7 +762,10 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEAD_CODE_STRIPPING = YES;
+				DEPLOYMENT_POSTPROCESSING = YES;
+				DEVELOPMENT_TEAM = 3X25CJ86MV;
+				ENABLE_BITCODE = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VettID/Info.plist;
@@ -781,14 +786,6 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				/* Security Hardening Settings */
-				ENABLE_BITCODE = NO;
-				STRIP_INSTALLED_PRODUCT = YES;
-				STRIP_STYLE = "non-global";
-				DEAD_CODE_STRIPPING = YES;
-				DEPLOYMENT_POSTPROCESSING = YES;
-				/* Stack protection is enabled by default in Xcode */
-				/* PIE is enabled by default for iOS apps */
 			};
 			name = Release;
 		};

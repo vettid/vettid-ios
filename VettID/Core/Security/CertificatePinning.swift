@@ -134,18 +134,14 @@ final class CertificatePinningDelegate: NSObject, URLSessionDelegate {
             return false
         }
 
-        // Get certificate count
-        let certificateCount = SecTrustGetCertificateCount(serverTrust)
-        guard certificateCount > 0 else {
+        // Get certificate chain (iOS 15+ API)
+        guard let certificateChain = SecTrustCopyCertificateChain(serverTrust) as? [SecCertificate],
+              !certificateChain.isEmpty else {
             return false
         }
 
         // Check each certificate in the chain against our pins
-        for i in 0..<certificateCount {
-            guard let certificate = SecTrustGetCertificateAtIndex(serverTrust, i) else {
-                continue
-            }
-
+        for certificate in certificateChain {
             if let publicKeyHash = extractPublicKeyHash(from: certificate) {
                 if config.publicKeyHashes.contains(publicKeyHash) {
                     return true
@@ -156,10 +152,9 @@ final class CertificatePinningDelegate: NSObject, URLSessionDelegate {
         #if DEBUG
         print("CertificatePinning: No matching pin found for \(config.domain)")
         // Log the actual hashes for debugging (only in debug builds)
-        for i in 0..<certificateCount {
-            if let cert = SecTrustGetCertificateAtIndex(serverTrust, i),
-               let hash = extractPublicKeyHash(from: cert) {
-                print("  Certificate \(i) hash: \(hash)")
+        for (index, cert) in certificateChain.enumerated() {
+            if let hash = extractPublicKeyHash(from: cert) {
+                print("  Certificate \(index) hash: \(hash)")
             }
         }
         #endif

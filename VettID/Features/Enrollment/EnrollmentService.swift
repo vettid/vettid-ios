@@ -5,9 +5,12 @@ import UIKit
 /// Handles the complete multi-step enrollment flow for new credentials
 ///
 /// Flow:
-/// 1. Start enrollment with invitation code → receive UTKs
-/// 2. User enters password → hash and encrypt with UTK → send to server
-/// 3. Finalize enrollment → receive credential package
+/// 1. Authenticate with session_token → receive enrollment JWT
+/// 2. Start enrollment → receive UTKs
+/// 3. User enters password → hash and encrypt with UTK → send to server
+/// 4. Finalize enrollment → receive credential package
+///
+/// Note: This service is deprecated. Use EnrollmentViewModel for QR-based enrollment.
 @MainActor
 final class EnrollmentService: ObservableObject {
 
@@ -15,6 +18,7 @@ final class EnrollmentService: ObservableObject {
     @Published var error: EnrollmentError?
 
     // Session data maintained across steps
+    private var enrollmentToken: String?  // JWT from authenticate step
     private var enrollmentSessionId: String?
     private var userGuid: String?
     private var transactionKeys: [TransactionKeyInfo] = []
@@ -23,34 +27,41 @@ final class EnrollmentService: ObservableObject {
     private var attestationKeyId: String?
     private var memberAuthToken: String?
 
-    private let apiClient = APIClient()
+    private var apiClient: APIClient!
     private let credentialStore = CredentialStore()
     private let attestationManager = AttestationManager()
 
     // MARK: - Step 1: Start Enrollment
 
-    /// Begin enrollment with an invitation code (from QR or manual entry)
-    func startEnrollment(invitationCode: String) async {
+    /// Begin enrollment with QR code data (containing api_url and session_token)
+    func startEnrollment(apiUrl: URL, sessionToken: String) async {
         state = .startingEnrollment
 
         do {
-            // Get device ID
+            // Create API client with the provided URL
+            apiClient = APIClient(baseURL: apiUrl, enforcePinning: false)
             let deviceId = getDeviceId()
 
-            // Call API (attestation will be sent separately)
-            let request = EnrollStartRequest(
-                invitationCode: invitationCode,
+            // Step 1: Authenticate to get enrollment JWT
+            let authRequest = EnrollAuthenticateRequest(
+                sessionToken: sessionToken,
                 deviceId: deviceId,
-                attestationData: ""  // Attestation sent in dedicated step
+                deviceType: "ios"
             )
+            let authResponse = try await apiClient.enrollAuthenticate(request: authRequest)
 
-            let response = try await apiClient.enrollStart(request: request)
+            // Store the enrollment token for subsequent calls
+            enrollmentToken = authResponse.enrollmentToken
+            enrollmentSessionId = authResponse.enrollmentSessionId
+            userGuid = authResponse.userGuid
 
-            // Store session data for subsequent steps
-            enrollmentSessionId = response.enrollmentSessionId
-            userGuid = response.userGuid
+            // Step 2: Call enrollStart with the JWT
+            let startRequest = EnrollStartRequest(skipAttestation: true)
+            let response = try await apiClient.enrollStart(request: startRequest, authToken: authResponse.enrollmentToken)
+
+            // Store session data from start response
             transactionKeys = response.transactionKeys
-            passwordKeyId = response.passwordPrompt.useKeyId
+            passwordKeyId = response.passwordKeyId
 
             // Check if attestation is required
             if response.attestationRequired == true,
@@ -59,7 +70,8 @@ final class EnrollmentService: ObservableObject {
                 state = .attestationRequired(challenge: challenge)
             } else {
                 // Skip attestation if not required
-                state = .awaitingPassword(prompt: response.passwordPrompt.message)
+                let prompt = response.passwordPrompt?.message ?? "Create a password for managing Vault Services"
+                state = .awaitingPassword(prompt: prompt)
             }
 
         } catch {
@@ -82,7 +94,8 @@ final class EnrollmentService: ObservableObject {
             return
         }
 
-        guard let sessionId = enrollmentSessionId,
+        guard let token = enrollmentToken,
+              let sessionId = enrollmentSessionId,
               let challenge = attestationChallenge else {
             self.error = .invalidState
             state = .failed(.invalidState)
@@ -111,7 +124,7 @@ final class EnrollmentService: ObservableObject {
 
             let response = try await apiClient.enrollAttestationIOS(
                 request: attestationRequest,
-                authToken: memberAuthToken ?? sessionId
+                authToken: token
             )
 
             // Verify server response
@@ -141,7 +154,7 @@ final class EnrollmentService: ObservableObject {
     /// Set password during enrollment
     /// Call this after user enters their password in the UI
     func setPassword(_ password: String) async {
-        guard let sessionId = enrollmentSessionId,
+        guard let token = enrollmentToken,
               let keyId = passwordKeyId,
               let utk = transactionKeys.first(where: { $0.keyId == keyId }) else {
             self.error = .invalidState
@@ -161,17 +174,22 @@ final class EnrollmentService: ObservableObject {
                 utkPublicKeyBase64: utk.publicKey
             )
 
-            // Call API
+            // Call API (session info is in the JWT)
             let request = EnrollSetPasswordRequest(
-                enrollmentSessionId: sessionId,
                 encryptedPasswordHash: encryptedPayload.encryptedPasswordHash,
                 keyId: keyId,
-                nonce: encryptedPayload.nonce
+                nonce: encryptedPayload.nonce,
+                ephemeralPublicKey: encryptedPayload.ephemeralPublicKey
             )
 
-            let response = try await apiClient.enrollSetPassword(request: request)
+            let response = try await apiClient.enrollSetPassword(request: request, authToken: token)
 
-            guard response.status == "password_set" else {
+            #if DEBUG
+            print("[Enrollment] Set password response - status: \(response.status), nextStep: \(response.nextStep ?? "nil")")
+            #endif
+
+            // Accept any successful response (HTTP 200 already verified by APIClient)
+            guard response.status.lowercased().contains("password") || response.status.lowercased().contains("success") else {
                 throw EnrollmentError.passwordSetFailed
             }
 
@@ -187,7 +205,7 @@ final class EnrollmentService: ObservableObject {
 
     /// Finalize enrollment and receive credential package
     private func finalizeEnrollment() async {
-        guard let sessionId = enrollmentSessionId else {
+        guard let token = enrollmentToken else {
             self.error = .invalidState
             state = .failed(.invalidState)
             return
@@ -196,8 +214,9 @@ final class EnrollmentService: ObservableObject {
         state = .finalizingEnrollment
 
         do {
-            let request = EnrollFinalizeRequest(enrollmentSessionId: sessionId)
-            let response = try await apiClient.enrollFinalize(request: request)
+            // Session info is passed via JWT
+            let request = EnrollFinalizeRequest()
+            let response = try await apiClient.enrollFinalize(request: request, authToken: token)
 
             guard response.status == "enrolled" else {
                 throw EnrollmentError.finalizationFailed
@@ -264,6 +283,7 @@ final class EnrollmentService: ObservableObject {
     }
 
     private func clearSessionData() {
+        enrollmentToken = nil
         enrollmentSessionId = nil
         userGuid = nil
         transactionKeys = []

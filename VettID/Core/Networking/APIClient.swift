@@ -85,9 +85,15 @@ actor APIClient {
 
     // MARK: - Enrollment (Multi-Step)
 
-    /// Step 1: Start enrollment with invitation code
-    func enrollStart(request: EnrollStartRequest) async throws -> EnrollStartResponse {
-        return try await post(endpoint: "/api/v1/enroll/start", body: request)
+    /// Step 0: Authenticate with session_token to get enrollment JWT
+    /// This is a PUBLIC endpoint - no Authorization header needed
+    func enrollAuthenticate(request: EnrollAuthenticateRequest) async throws -> EnrollAuthenticateResponse {
+        return try await post(endpoint: "/vault/enroll/authenticate", body: request)
+    }
+
+    /// Step 1: Start enrollment (requires enrollment JWT from authenticate)
+    func enrollStart(request: EnrollStartRequest, authToken: String) async throws -> EnrollStartResponse {
+        return try await post(endpoint: "/vault/enroll/start", body: request, authToken: authToken)
     }
 
     /// Step 1b: Submit iOS device attestation
@@ -95,14 +101,14 @@ actor APIClient {
         return try await post(endpoint: "/vault/enroll/attestation/ios", body: request, authToken: authToken)
     }
 
-    /// Step 2: Set password during enrollment
-    func enrollSetPassword(request: EnrollSetPasswordRequest) async throws -> EnrollSetPasswordResponse {
-        return try await post(endpoint: "/api/v1/enroll/set-password", body: request)
+    /// Step 2: Set password during enrollment (requires enrollment JWT)
+    func enrollSetPassword(request: EnrollSetPasswordRequest, authToken: String) async throws -> EnrollSetPasswordResponse {
+        return try await post(endpoint: "/vault/enroll/set-password", body: request, authToken: authToken)
     }
 
-    /// Step 3: Finalize enrollment and receive credential
-    func enrollFinalize(request: EnrollFinalizeRequest) async throws -> EnrollFinalizeResponse {
-        return try await post(endpoint: "/api/v1/enroll/finalize", body: request)
+    /// Step 3: Finalize enrollment and receive credential (requires enrollment JWT)
+    func enrollFinalize(request: EnrollFinalizeRequest, authToken: String) async throws -> EnrollFinalizeResponse {
+        return try await post(endpoint: "/vault/enroll/finalize", body: request, authToken: authToken)
     }
 
     // MARK: - Authentication (Action-Based)
@@ -536,9 +542,30 @@ actor APIClient {
     }
 }
 
+// MARK: - Enrollment Authentication Request/Response Types
+
+struct EnrollAuthenticateRequest: Encodable {
+    let sessionToken: String
+    let deviceId: String
+    let deviceType: String
+}
+
+struct EnrollAuthenticateResponse: Decodable {
+    let enrollmentToken: String
+    let tokenType: String
+    let expiresIn: Int
+    let expiresAt: String
+    let enrollmentSessionId: String
+    let userGuid: String
+}
+
 // MARK: - Enrollment Request/Response Types
 
 struct EnrollStartRequest: Encodable {
+    let skipAttestation: Bool?
+}
+
+struct EnrollStartRequestLegacy: Encodable {
     let invitationCode: String
     let deviceId: String
     let attestationData: String  // Base64 encoded
@@ -548,9 +575,13 @@ struct EnrollStartResponse: Decodable {
     let enrollmentSessionId: String
     let userGuid: String
     let transactionKeys: [TransactionKeyInfo]
-    let passwordPrompt: PasswordPrompt
+    let passwordKeyId: String  // Key ID to use for password encryption
+    let nextStep: String?
     let attestationRequired: Bool?
     let attestationChallenge: String?  // Base64 encoded challenge for App Attest
+
+    // Legacy field for backwards compatibility
+    let passwordPrompt: PasswordPrompt?
 }
 
 // MARK: - iOS Attestation Request/Response Types
@@ -581,19 +612,19 @@ struct PasswordPrompt: Decodable {
 }
 
 struct EnrollSetPasswordRequest: Encodable {
-    let enrollmentSessionId: String
-    let encryptedPasswordHash: String  // Base64 encoded
+    let encryptedPasswordHash: String  // Base64 encoded ciphertext + tag
     let keyId: String
-    let nonce: String  // Base64 encoded 96-bit nonce
+    let nonce: String  // Base64 encoded 12-byte nonce
+    let ephemeralPublicKey: String  // Base64 encoded 32-byte X25519 public key
 }
 
 struct EnrollSetPasswordResponse: Decodable {
     let status: String
-    let nextStep: String
+    let nextStep: String?
 }
 
 struct EnrollFinalizeRequest: Encodable {
-    let enrollmentSessionId: String
+    // Empty - session info is passed via JWT
 }
 
 struct EnrollFinalizeResponse: Decodable {
