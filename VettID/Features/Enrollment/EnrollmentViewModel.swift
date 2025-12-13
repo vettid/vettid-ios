@@ -1,6 +1,25 @@
 import Foundation
 import SwiftUI
 
+// MARK: - QR Code Data Model
+
+/// Represents the JSON data encoded in enrollment QR codes
+struct EnrollmentQRCodeData: Codable {
+    let type: String
+    let version: Int
+    let apiUrl: String
+    let sessionToken: String
+    let userGuid: String
+
+    enum CodingKeys: String, CodingKey {
+        case type
+        case version
+        case apiUrl = "api_url"
+        case sessionToken = "session_token"
+        case userGuid = "user_guid"
+    }
+}
+
 /// Manages the complete enrollment flow state
 @MainActor
 final class EnrollmentViewModel: ObservableObject {
@@ -17,6 +36,7 @@ final class EnrollmentViewModel: ObservableObject {
 
     // MARK: - Session Data
 
+    private var enrollmentToken: String?  // JWT from /vault/enroll/authenticate
     private var enrollmentSessionId: String?
     private var userGuid: String?
     private var transactionKeys: [TransactionKeyInfo] = []
@@ -27,7 +47,7 @@ final class EnrollmentViewModel: ObservableObject {
 
     // MARK: - Dependencies
 
-    private let apiClient = APIClient()
+    private var apiClient: APIClient!
     private let credentialStore = CredentialStore()
     private let attestationManager = AttestationManager()
 
@@ -179,28 +199,45 @@ final class EnrollmentViewModel: ObservableObject {
     }
 
     func handleScannedCode(_ code: String) async {
+        print("[Enrollment] handleScannedCode called with: \(code.prefix(100))...")
         scannedCode = code
         state = .processingInvitation
 
         do {
-            // Parse invitation code from QR
-            let invitationCode = parseInvitationCode(code)
+            // Parse QR code JSON data to extract api_url and session_token
+            let qrData = try parseQRCodeData(code)
+            print("[Enrollment] Parsed QR data - apiUrl: \(qrData.apiUrl), userGuid: \(qrData.userGuid)")
 
-            // Call API to start enrollment
+            // Create API client with the URL from QR code
+            guard let apiUrl = URL(string: qrData.apiUrl) else {
+                throw EnrollmentError.invalidInvitationCode
+            }
+            apiClient = APIClient(baseURL: apiUrl, enforcePinning: false)
+
             let deviceId = getDeviceId()
-            let request = EnrollStartRequest(
-                invitationCode: invitationCode,
+
+            // Step 1: Authenticate with session_token to get enrollment JWT
+            print("[Enrollment] Step 1: Authenticating with session token...")
+            let authRequest = EnrollAuthenticateRequest(
+                sessionToken: qrData.sessionToken,
                 deviceId: deviceId,
-                attestationData: ""  // Will be sent in attestation step
+                deviceType: "ios"
             )
+            let authResponse = try await apiClient.enrollAuthenticate(request: authRequest)
+            print("[Enrollment] Auth successful - enrollmentSessionId: \(authResponse.enrollmentSessionId)")
 
-            let response = try await apiClient.enrollStart(request: request)
+            // Store the enrollment token (JWT) for subsequent calls
+            enrollmentToken = authResponse.enrollmentToken
+            enrollmentSessionId = authResponse.enrollmentSessionId
+            userGuid = authResponse.userGuid
 
-            // Store session data
-            enrollmentSessionId = response.enrollmentSessionId
-            userGuid = response.userGuid
+            // Step 2: Call enrollStart with the JWT token
+            let startRequest = EnrollStartRequest(skipAttestation: true)
+            let response = try await apiClient.enrollStart(request: startRequest, authToken: authResponse.enrollmentToken)
+
+            // Store session data from start response
             transactionKeys = response.transactionKeys
-            passwordKeyId = response.passwordPrompt.useKeyId
+            passwordKeyId = response.passwordKeyId
 
             // Check if attestation is required and store challenge
             if response.attestationRequired == true,
@@ -214,6 +251,7 @@ final class EnrollmentViewModel: ObservableObject {
             }
 
         } catch {
+            print("[Enrollment] Error during handleScannedCode: \(error)")
             handleError(error, retryable: true)
         }
     }
@@ -226,7 +264,8 @@ final class EnrollmentViewModel: ObservableObject {
             return
         }
 
-        guard let sessionId = enrollmentSessionId,
+        guard let token = enrollmentToken,
+              let sessionId = enrollmentSessionId,
               let challenge = attestationChallenge else {
             handleError(EnrollmentError.invalidState, retryable: false)
             return
@@ -255,11 +294,10 @@ final class EnrollmentViewModel: ObservableObject {
                 keyId: keyId
             )
 
-            // Note: memberAuthToken would come from Cognito JWT
-            // For enrollment, the session ID acts as temporary auth
+            // Use the enrollment JWT token for authentication
             let response = try await apiClient.enrollAttestationIOS(
                 request: attestationRequest,
-                authToken: memberAuthToken ?? sessionId
+                authToken: token
             )
 
             // Verify server response
@@ -296,7 +334,7 @@ final class EnrollmentViewModel: ObservableObject {
 
     func submitPassword() async {
         guard isPasswordValid else { return }
-        guard let sessionId = enrollmentSessionId,
+        guard let token = enrollmentToken,
               let keyId = passwordKeyId,
               let utk = transactionKeys.first(where: { $0.keyId == keyId }) else {
             handleError(EnrollmentError.invalidState, retryable: false)
@@ -315,17 +353,23 @@ final class EnrollmentViewModel: ObservableObject {
                 utkPublicKeyBase64: utk.publicKey
             )
 
-            // Submit to API
+            // Submit to API (session info is in the JWT)
             let request = EnrollSetPasswordRequest(
-                enrollmentSessionId: sessionId,
                 encryptedPasswordHash: encryptedPayload.encryptedPasswordHash,
                 keyId: keyId,
-                nonce: encryptedPayload.nonce
+                nonce: encryptedPayload.nonce,
+                ephemeralPublicKey: encryptedPayload.ephemeralPublicKey
             )
 
-            let response = try await apiClient.enrollSetPassword(request: request)
+            let response = try await apiClient.enrollSetPassword(request: request, authToken: token)
 
-            guard response.status == "password_set" else {
+            #if DEBUG
+            print("[Enrollment] Set password response - status: \(response.status), nextStep: \(response.nextStep ?? "nil")")
+            #endif
+
+            // Accept any successful response (HTTP 200 already verified by APIClient)
+            // Server returns status: "password_set" on success
+            guard response.status.lowercased().contains("password") || response.status.lowercased().contains("success") else {
                 throw EnrollmentError.passwordSetFailed
             }
 
@@ -338,7 +382,7 @@ final class EnrollmentViewModel: ObservableObject {
     }
 
     private func finalizeEnrollment() async {
-        guard let sessionId = enrollmentSessionId else {
+        guard let token = enrollmentToken else {
             handleError(EnrollmentError.invalidState, retryable: false)
             return
         }
@@ -346,8 +390,9 @@ final class EnrollmentViewModel: ObservableObject {
         state = .finalizing
 
         do {
-            let request = EnrollFinalizeRequest(enrollmentSessionId: sessionId)
-            let response = try await apiClient.enrollFinalize(request: request)
+            // Session info is passed via JWT
+            let request = EnrollFinalizeRequest()
+            let response = try await apiClient.enrollFinalize(request: request, authToken: token)
 
             guard response.status == "enrolled" else {
                 throw EnrollmentError.finalizationFailed
@@ -359,7 +404,7 @@ final class EnrollmentViewModel: ObservableObject {
             let completedUserGuid = response.credentialPackage.userGuid
 
             // Set up NATS account for real-time messaging
-            await setupNatsAccount(authToken: memberAuthToken ?? sessionId)
+            await setupNatsAccount(authToken: token)
 
             // Clear sensitive data
             clearSessionData()
@@ -437,15 +482,46 @@ final class EnrollmentViewModel: ObservableObject {
 
     // MARK: - Private Helpers
 
-    private func parseInvitationCode(_ qrContent: String) -> String {
-        // QR code might be a URL or just the code
+    private func parseQRCodeData(_ qrContent: String) throws -> EnrollmentQRCodeData {
+        // Try to parse as JSON first (new format)
+        if let jsonData = qrContent.data(using: .utf8) {
+            do {
+                let decoder = JSONDecoder()
+                let qrData = try decoder.decode(EnrollmentQRCodeData.self, from: jsonData)
+
+                // Validate the QR code type
+                guard qrData.type == "vettid_enrollment" else {
+                    throw EnrollmentError.invalidInvitationCode
+                }
+
+                return qrData
+            } catch is DecodingError {
+                // Fall through to legacy handling
+            }
+        }
+
+        // Legacy format: QR code might be a URL with code parameter
+        // Create a fallback with default API URL
         if let url = URL(string: qrContent),
            let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
            let code = components.queryItems?.first(where: { $0.name == "code" })?.value {
-            return code
+            return EnrollmentQRCodeData(
+                type: "vettid_enrollment",
+                version: 1,
+                apiUrl: "https://api.vettid.com",
+                sessionToken: code,
+                userGuid: ""
+            )
         }
-        // If not a URL, assume it's the raw code
-        return qrContent
+
+        // If not JSON or URL, assume it's just the raw session token with default API
+        return EnrollmentQRCodeData(
+            type: "vettid_enrollment",
+            version: 1,
+            apiUrl: "https://api.vettid.com",
+            sessionToken: qrContent,
+            userGuid: ""
+        )
     }
 
     private func getDeviceId() -> String {
@@ -497,6 +573,7 @@ final class EnrollmentViewModel: ObservableObject {
     }
 
     private func clearSessionData() {
+        enrollmentToken = nil
         enrollmentSessionId = nil
         userGuid = nil
         transactionKeys = []

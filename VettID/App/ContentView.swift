@@ -25,9 +25,11 @@ struct WelcomeView: View {
                 Spacer()
 
                 // Logo/Icon
-                Image(systemName: "lock.shield.fill")
-                    .font(.system(size: 80))
-                    .foregroundStyle(.blue)
+                Image("VettIDLogo")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 120, height: 120)
+                    .clipShape(RoundedRectangle(cornerRadius: 24))
 
                 // Title
                 Text("Welcome to VettID")
@@ -249,9 +251,11 @@ struct AuthenticationView: View {
 
     var body: some View {
         VStack(spacing: 24) {
-            Image(systemName: "lock.shield.fill")
-                .font(.system(size: 60))
-                .foregroundStyle(.blue)
+            Image("VettIDLogo")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 80, height: 80)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
 
             Text("Unlock VettID")
                 .font(.title)

@@ -10,8 +10,12 @@ struct QRScannerView: View {
 
     var body: some View {
         ZStack {
-            // Camera preview
-            CameraPreviewView(session: viewModel.captureSession)
+            // Camera preview - use Color.black as background
+            Color.black
+                .ignoresSafeArea()
+
+            // Camera preview layer
+            CameraPreviewView(viewModel: viewModel)
                 .ignoresSafeArea()
 
             // Overlay
@@ -41,24 +45,33 @@ struct QRScannerView: View {
                 Spacer()
                     .frame(height: 60)
             }
-        }
-        .navigationTitle("Scan QR Code")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") {
-                    dismiss()
+
+            // Close button overlay (top-left)
+            VStack {
+                HStack {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title)
+                            .foregroundStyle(.white.opacity(0.8))
+                    }
+                    .padding()
+                    Spacer()
                 }
+                Spacer()
             }
         }
+        .navigationBarHidden(true)
         .onAppear {
             viewModel.startScanning()
         }
         .onDisappear {
             viewModel.stopScanning()
         }
-        .onChange(of: viewModel.scannedCode) { newValue in
+        .onReceive(viewModel.$scannedCode) { newValue in
             if let code = newValue {
+                print("[QRScanner] Code scanned: \(code.prefix(50))...")
                 onCodeScanned(code)
                 dismiss()
             }
@@ -80,23 +93,28 @@ struct QRScannerView: View {
 
 // MARK: - View Model
 
-@MainActor
 final class QRScannerViewModel: NSObject, ObservableObject {
     @Published var scannedCode: String?
     @Published var isProcessing = false
     @Published var showPermissionAlert = false
+    @Published var isSessionRunning = false
 
     let captureSession = AVCaptureSession()
     private var metadataOutput = AVCaptureMetadataOutput()
+    private var isConfigured = false
 
     override init() {
         super.init()
-        setupCaptureSession()
     }
 
-    private func setupCaptureSession() {
+    func setupCaptureSession() {
+        guard !isConfigured else { return }
+
+        captureSession.beginConfiguration()
+
         guard let device = AVCaptureDevice.default(for: .video),
               let input = try? AVCaptureDeviceInput(device: device) else {
+            captureSession.commitConfiguration()
             return
         }
 
@@ -109,6 +127,9 @@ final class QRScannerViewModel: NSObject, ObservableObject {
             metadataOutput.setMetadataObjectsDelegate(self, queue: .main)
             metadataOutput.metadataObjectTypes = [.qr]
         }
+
+        captureSession.commitConfiguration()
+        isConfigured = true
     }
 
     func startScanning() {
@@ -118,37 +139,56 @@ final class QRScannerViewModel: NSObject, ObservableObject {
     private func checkCameraPermission() {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
-            startCaptureSession()
+            setupAndStartSession()
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
                 DispatchQueue.main.async {
                     if granted {
-                        self?.startCaptureSession()
+                        self?.setupAndStartSession()
                     } else {
                         self?.showPermissionAlert = true
                     }
                 }
             }
         default:
-            showPermissionAlert = true
+            DispatchQueue.main.async {
+                self.showPermissionAlert = true
+            }
         }
     }
 
+    private func setupAndStartSession() {
+        setupCaptureSession()
+        startCaptureSession()
+    }
+
     private func startCaptureSession() {
+        guard !captureSession.isRunning else { return }
+
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            self?.captureSession.startRunning()
+            guard let self = self else { return }
+            self.captureSession.startRunning()
+            DispatchQueue.main.async {
+                self.isSessionRunning = self.captureSession.isRunning
+            }
         }
     }
 
     func stopScanning() {
+        guard captureSession.isRunning else { return }
+
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            self?.captureSession.stopRunning()
+            guard let self = self else { return }
+            self.captureSession.stopRunning()
+            DispatchQueue.main.async {
+                self.isSessionRunning = false
+            }
         }
     }
 }
 
 extension QRScannerViewModel: AVCaptureMetadataOutputObjectsDelegate {
-    nonisolated func metadataOutput(
+    func metadataOutput(
         _ output: AVCaptureMetadataOutput,
         didOutput metadataObjects: [AVMetadataObject],
         from connection: AVCaptureConnection
@@ -159,9 +199,9 @@ extension QRScannerViewModel: AVCaptureMetadataOutputObjectsDelegate {
             return
         }
 
-        Task { @MainActor in
-            self.isProcessing = true
-            self.scannedCode = code
+        DispatchQueue.main.async { [weak self] in
+            self?.isProcessing = true
+            self?.scannedCode = code
         }
     }
 }
@@ -169,29 +209,60 @@ extension QRScannerViewModel: AVCaptureMetadataOutputObjectsDelegate {
 // MARK: - Camera Preview
 
 struct CameraPreviewView: UIViewRepresentable {
-    let session: AVCaptureSession
+    @ObservedObject var viewModel: QRScannerViewModel
 
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView(frame: .zero)
-
-        let previewLayer = AVCaptureVideoPreviewLayer(session: session)
-        previewLayer.videoGravity = .resizeAspectFill
-        view.layer.addSublayer(previewLayer)
-
-        context.coordinator.previewLayer = previewLayer
-
+    func makeUIView(context: Context) -> CameraPreviewUIView {
+        let view = CameraPreviewUIView()
+        view.session = viewModel.captureSession
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {
-        context.coordinator.previewLayer?.frame = uiView.bounds
+    func updateUIView(_ uiView: CameraPreviewUIView, context: Context) {
+        uiView.updateSession(viewModel.captureSession)
+    }
+}
+
+/// UIView subclass that properly handles AVCaptureVideoPreviewLayer
+final class CameraPreviewUIView: UIView {
+    var session: AVCaptureSession? {
+        didSet {
+            updatePreviewLayer()
+        }
     }
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
+    private var previewLayer: AVCaptureVideoPreviewLayer?
+
+    override class var layerClass: AnyClass {
+        AVCaptureVideoPreviewLayer.self
     }
 
-    class Coordinator {
-        var previewLayer: AVCaptureVideoPreviewLayer?
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = .black
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func updateSession(_ session: AVCaptureSession) {
+        if let previewLayer = layer as? AVCaptureVideoPreviewLayer {
+            previewLayer.session = session
+            previewLayer.videoGravity = .resizeAspectFill
+        }
+    }
+
+    private func updatePreviewLayer() {
+        if let previewLayer = layer as? AVCaptureVideoPreviewLayer {
+            previewLayer.session = session
+            previewLayer.videoGravity = .resizeAspectFill
+        }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if let previewLayer = layer as? AVCaptureVideoPreviewLayer {
+            previewLayer.frame = bounds
+        }
     }
 }
