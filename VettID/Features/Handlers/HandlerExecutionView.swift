@@ -3,12 +3,12 @@ import SwiftUI
 /// View for executing a handler with dynamic input form
 struct HandlerExecutionView: View {
     let handler: HandlerDetailResponse
-    let authTokenProvider: () -> String?
+    let authTokenProvider: @Sendable () -> String?
 
     @StateObject private var viewModel: HandlerExecutionViewModel
     @Environment(\.dismiss) private var dismiss
 
-    init(handler: HandlerDetailResponse, authTokenProvider: @escaping () -> String?) {
+    init(handler: HandlerDetailResponse, authTokenProvider: @escaping @Sendable () -> String?) {
         self.handler = handler
         self.authTokenProvider = authTokenProvider
         self._viewModel = StateObject(wrappedValue: HandlerExecutionViewModel(authTokenProvider: authTokenProvider))

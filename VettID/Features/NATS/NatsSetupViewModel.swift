@@ -72,11 +72,11 @@ final class NatsSetupViewModel: ObservableObject {
 
     init(
         apiClient: APIClient = APIClient(),
-        connectionManager: NatsConnectionManager = NatsConnectionManager(),
+        connectionManager: NatsConnectionManager? = nil,
         credentialStore: NatsCredentialStore = NatsCredentialStore()
     ) {
         self.apiClient = apiClient
-        self.connectionManager = connectionManager
+        self.connectionManager = connectionManager ?? NatsConnectionManager()
         self.credentialStore = credentialStore
     }
 

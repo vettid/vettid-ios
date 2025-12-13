@@ -3,12 +3,12 @@ import SwiftUI
 /// View for displaying handler details with permissions and actions
 struct HandlerDetailView: View {
     let handlerId: String
-    let authTokenProvider: () -> String?
+    let authTokenProvider: @Sendable () -> String?
 
     @StateObject private var viewModel: HandlerDetailViewModel
     @Environment(\.dismiss) private var dismiss
 
-    init(handlerId: String, authTokenProvider: @escaping () -> String?) {
+    init(handlerId: String, authTokenProvider: @escaping @Sendable () -> String?) {
         self.handlerId = handlerId
         self.authTokenProvider = authTokenProvider
         self._viewModel = StateObject(wrappedValue: HandlerDetailViewModel(authTokenProvider: authTokenProvider))

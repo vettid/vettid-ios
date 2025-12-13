@@ -28,8 +28,8 @@ final class NatsConnectionManager: ObservableObject {
 
     // MARK: - Initialization
 
-    nonisolated init(credentialStore: NatsCredentialStore = NatsCredentialStore(),
-                     apiClient: APIClient = APIClient()) {
+    init(credentialStore: NatsCredentialStore = NatsCredentialStore(),
+         apiClient: APIClient = APIClient()) {
         self.credentialStore = credentialStore
         self.apiClient = apiClient
     }

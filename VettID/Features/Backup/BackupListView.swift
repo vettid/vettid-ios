@@ -50,9 +50,11 @@ struct BackupListView: View {
         }
         .sheet(isPresented: $showCreateBackup) {
             CreateBackupView(
-                authTokenProvider: authTokenProvider,
-                onComplete: {
-                    Task { await viewModel.refresh() }
+                authTokenProvider: self.authTokenProvider,
+                onComplete: { [viewModel] in
+                    Task { @MainActor in
+                        await viewModel.refresh()
+                    }
                 }
             )
         }
@@ -207,7 +209,7 @@ struct BackupTypeBadge: View {
 
 struct CreateBackupView: View {
     let authTokenProvider: @Sendable () -> String?
-    let onComplete: () -> Void
+    let onComplete: @Sendable () -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var includeMessages = true

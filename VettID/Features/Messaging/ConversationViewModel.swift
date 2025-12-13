@@ -208,7 +208,7 @@ final class ConversationViewModel: ObservableObject {
                 decrypted.append(message)
             } else {
                 // Attempt to decrypt
-                if let ciphertext = Data(base64Encoded: message.content) {
+                if Data(base64Encoded: message.content) != nil {
                     // The nonce would typically be stored separately
                     // For now, assume the content is already decrypted or handle gracefully
                     decrypted.append(message)

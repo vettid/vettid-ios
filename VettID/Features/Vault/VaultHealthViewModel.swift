@@ -28,13 +28,13 @@ final class VaultHealthViewModel: ObservableObject {
 
     // MARK: - Initialization
 
-    nonisolated init(
+    init(
         apiClient: APIClient = APIClient(),
-        natsConnectionManager: NatsConnectionManager = NatsConnectionManager(),
+        natsConnectionManager: NatsConnectionManager? = nil,
         authTokenProvider: @escaping () -> String?
     ) {
         self.apiClient = apiClient
-        self.natsConnectionManager = natsConnectionManager
+        self.natsConnectionManager = natsConnectionManager ?? NatsConnectionManager()
         self.authTokenProvider = authTokenProvider
     }
 

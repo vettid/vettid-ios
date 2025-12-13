@@ -37,7 +37,7 @@ actor VaultResponseHandler {
                 let responseStream = try await vaultEventClient.subscribeToResponses()
 
                 for await response in responseStream {
-                    await handleResponse(response)
+                    handleResponse(response)
                 }
             } catch {
                 // Log error but keep handler running
@@ -115,7 +115,7 @@ actor VaultResponseHandler {
             // Start timeout task
             Task {
                 try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-                await self.handleTimeout(requestId: requestId)
+                self.handleTimeout(requestId: requestId)
             }
         }
     }
