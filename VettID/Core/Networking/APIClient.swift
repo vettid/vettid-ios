@@ -22,7 +22,7 @@ actor APIClient {
     // MARK: - Initialization
 
     init(
-        baseURL: URL = URL(string: "https://api.vettid.com")!,
+        baseURL: URL = URL(string: "https://tiqpij5mue.execute-api.us-east-1.amazonaws.com")!,
         deviceId: String? = nil,
         enforcePinning: Bool = true
     ) {

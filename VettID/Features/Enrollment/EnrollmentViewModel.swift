@@ -508,7 +508,7 @@ final class EnrollmentViewModel: ObservableObject {
             return EnrollmentQRCodeData(
                 type: "vettid_enrollment",
                 version: 1,
-                apiUrl: "https://api.vettid.com",
+                apiUrl: "https://tiqpij5mue.execute-api.us-east-1.amazonaws.com",
                 sessionToken: code,
                 userGuid: ""
             )
@@ -518,7 +518,7 @@ final class EnrollmentViewModel: ObservableObject {
         return EnrollmentQRCodeData(
             type: "vettid_enrollment",
             version: 1,
-            apiUrl: "https://api.vettid.com",
+            apiUrl: "https://tiqpij5mue.execute-api.us-east-1.amazonaws.com",
             sessionToken: qrContent,
             userGuid: ""
         )

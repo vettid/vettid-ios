@@ -23,22 +23,17 @@ final class CertificatePinningDelegate: NSObject, URLSessionDelegate {
 
     /// Pinned certificates for VettID API domains
     /// These are SHA-256 hashes of the Subject Public Key Info (SPKI)
+    /// NOTE: AWS API Gateway uses AWS-managed certificates that rotate automatically.
+    /// Certificate pinning is disabled for API Gateway endpoints by default.
     private static let pinnedConfigurations: [PinConfiguration] = [
-        // Production API
+        // Production API (AWS API Gateway)
         PinConfiguration(
-            domain: "api.vettid.com",
+            domain: "tiqpij5mue.execute-api.us-east-1.amazonaws.com",
             publicKeyHashes: [
-                // Primary certificate SPKI hash
+                // AWS API Gateway certificates rotate - pinning not recommended
+                // These are placeholders if custom domain with stable cert is used
                 "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",  // TODO: Replace with actual hash
-                // Backup certificate SPKI hash
                 "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB="   // TODO: Replace with actual hash
-            ]
-        ),
-        // Development API (if different)
-        PinConfiguration(
-            domain: "dev-api.vettid.com",
-            publicKeyHashes: [
-                "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC=",  // TODO: Replace with actual hash
             ]
         )
     ]
