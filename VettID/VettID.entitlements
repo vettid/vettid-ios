@@ -3,10 +3,13 @@
 <plist version="1.0">
 <dict>
 	<!-- Associated Domains for Universal Links -->
+	<!-- NOTE: Uncomment when provisioning profile supports Associated Domains -->
+	<!--
 	<key>com.apple.developer.associated-domains</key>
 	<array>
 		<string>applinks:vettid.dev</string>
 		<string>applinks:www.vettid.dev</string>
 	</array>
+	-->
 </dict>
 </plist>
