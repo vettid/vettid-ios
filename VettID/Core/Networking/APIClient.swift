@@ -537,6 +537,13 @@ actor APIClient {
             decoder.dateDecodingStrategy = .iso8601
             return try decoder.decode(T.self, from: data)
         } catch {
+            #if DEBUG
+            print("[APIClient] Decoding failed for \(T.self)")
+            print("[APIClient] Error: \(error)")
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("[APIClient] Raw response: \(responseString)")
+            }
+            #endif
             throw APIError.decodingFailed(error)
         }
     }
@@ -630,12 +637,16 @@ struct EnrollFinalizeRequest: Encodable {
 struct EnrollFinalizeResponse: Decodable {
     let status: String
     let credentialPackage: CredentialPackage
-    let vaultStatus: String
+    let vaultStatus: String?
+    let message: String?
 }
 
 struct CredentialPackage: Codable {
     let userGuid: String
+    let credentialId: String?  // May be present in new API
     let encryptedBlob: String  // Base64 encoded
+    let ephemeralPublicKey: String?  // New API field
+    let nonce: String?  // New API field
     let cekVersion: Int
     let ledgerAuthToken: LedgerAuthToken
     let transactionKeys: [TransactionKeyInfo]?
@@ -643,8 +654,8 @@ struct CredentialPackage: Codable {
 }
 
 struct LedgerAuthToken: Codable {
-    let latId: String
-    let token: String  // Hex encoded
+    let latId: String?  // Optional - may not be present in new API
+    let token: String  // lat_xxx format or hex
     let version: Int
 }
 

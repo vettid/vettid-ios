@@ -119,7 +119,7 @@ final class AuthenticationViewModel: ObservableObject {
             tokenExpiresAt = formatter.date(from: response.actionTokenExpiresAt)
 
             // Set LAT display for verification
-            serverLatId = response.ledgerAuthToken.latId
+            serverLatId = response.ledgerAuthToken.latId ?? response.ledgerAuthToken.token
 
             // Move to LAT verification step
             state = .verifyingLAT

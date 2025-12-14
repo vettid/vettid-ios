@@ -399,7 +399,7 @@ final class EnrollmentViewModel: ObservableObject {
             }
 
             // Store credential
-            try storeCredential(package: response.credentialPackage, vaultStatus: response.vaultStatus)
+            try storeCredential(package: response.credentialPackage, vaultStatus: response.vaultStatus ?? "unknown")
 
             let completedUserGuid = response.credentialPackage.userGuid
 
@@ -559,7 +559,7 @@ final class EnrollmentViewModel: ObservableObject {
             encryptedBlob: package.encryptedBlob,
             cekVersion: package.cekVersion,
             ledgerAuthToken: StoredLAT(
-                latId: package.ledgerAuthToken.latId,
+                latId: package.ledgerAuthToken.latId ?? package.ledgerAuthToken.token,
                 token: package.ledgerAuthToken.token,
                 version: package.ledgerAuthToken.version
             ),

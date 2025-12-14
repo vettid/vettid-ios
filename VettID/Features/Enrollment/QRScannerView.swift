@@ -72,8 +72,9 @@ struct QRScannerView: View {
         .onReceive(viewModel.$scannedCode) { newValue in
             if let code = newValue {
                 print("[QRScanner] Code scanned: \(code.prefix(50))...")
+                viewModel.stopScanning()
                 onCodeScanned(code)
-                dismiss()
+                // Don't dismiss - let the parent view handle the state transition
             }
         }
         .alert("Camera Access Required", isPresented: $viewModel.showPermissionAlert) {

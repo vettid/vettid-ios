@@ -224,7 +224,7 @@ final class EnrollmentService: ObservableObject {
 
             // Store credential
             state = .storingCredential
-            try storeCredential(package: response.credentialPackage, vaultStatus: response.vaultStatus)
+            try storeCredential(package: response.credentialPackage, vaultStatus: response.vaultStatus ?? "unknown")
 
             // Clear session data
             clearSessionData()
@@ -269,7 +269,7 @@ final class EnrollmentService: ObservableObject {
             encryptedBlob: package.encryptedBlob,
             cekVersion: package.cekVersion,
             ledgerAuthToken: StoredLAT(
-                latId: package.ledgerAuthToken.latId,
+                latId: package.ledgerAuthToken.latId ?? package.ledgerAuthToken.token,
                 token: package.ledgerAuthToken.token,
                 version: package.ledgerAuthToken.version
             ),

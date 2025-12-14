@@ -263,7 +263,7 @@ struct StoredCredential: Codable {
             encryptedBlob: package.encryptedBlob,
             cekVersion: package.cekVersion,
             ledgerAuthToken: StoredLAT(
-                latId: package.ledgerAuthToken.latId,
+                latId: package.ledgerAuthToken.latId ?? package.ledgerAuthToken.token,
                 token: package.ledgerAuthToken.token,
                 version: package.ledgerAuthToken.version
             ),
@@ -278,12 +278,13 @@ struct StoredCredential: Codable {
 /// Ledger Auth Token for mutual authentication
 struct StoredLAT: Codable {
     let latId: String
-    let token: String     // Hex encoded 256-bit token
+    let token: String     // Hex encoded 256-bit token or lat_xxx format
     let version: Int
 
     /// Verify the LAT matches what the server sent
     func matches(_ serverLAT: LedgerAuthToken) -> Bool {
-        return latId == serverLAT.latId &&
+        let serverLatId = serverLAT.latId ?? serverLAT.token
+        return latId == serverLatId &&
                token == serverLAT.token &&
                version == serverLAT.version
     }
