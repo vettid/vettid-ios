@@ -36,6 +36,8 @@ struct MainNavigationView: View {
                 // Content
                 currentSectionContent
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .contentShape(Rectangle())
+                    .gesture(tabSwipeGesture)
 
                 // Bottom Nav
                 ContextualBottomNav(
@@ -259,6 +261,41 @@ struct MainNavigationView: View {
                     }
                 }
             }
+    }
+
+    private var tabSwipeGesture: some Gesture {
+        DragGesture(minimumDistance: 50)
+            .onEnded { value in
+                // Don't handle if this is an edge swipe for drawer
+                guard value.startLocation.x >= 50 else { return }
+
+                let horizontalAmount = value.translation.width
+                let maxItems = maxNavItems(for: currentSection)
+
+                // Swipe left = next tab
+                if horizontalAmount < -50 && selectedNavItem < maxItems - 1 {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        selectedNavItem += 1
+                    }
+                }
+                // Swipe right = previous tab
+                else if horizontalAmount > 50 && selectedNavItem > 0 {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        selectedNavItem -= 1
+                    }
+                }
+            }
+    }
+
+    private func maxNavItems(for section: AppSection) -> Int {
+        switch section {
+        case .vault:
+            return VaultNavItem.allCases.count - 1 // Exclude "More"
+        case .vaultServices:
+            return VaultServicesNavItem.allCases.count
+        case .appSettings:
+            return AppSettingsNavItem.allCases.count
+        }
     }
 
     // MARK: - Actions

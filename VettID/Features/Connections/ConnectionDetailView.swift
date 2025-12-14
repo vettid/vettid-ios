@@ -91,6 +91,9 @@ struct ConnectionDetailView: View {
                 ProfileInfoSection(profile: profile)
             }
 
+            // Shared data section
+            SharedDataSection()
+
             // Connection info
             ConnectionInfoSection(connection: connection)
 
@@ -106,16 +109,52 @@ struct ConnectionDetailView: View {
 
     private var actionButtons: some View {
         VStack(spacing: 12) {
-            NavigationLink(destination: ConversationView(
-                connectionId: connectionId,
-                authTokenProvider: authTokenProvider
-            )) {
-                Label("Send Message", systemImage: "message.fill")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            // Primary actions row
+            HStack(spacing: 12) {
+                NavigationLink(destination: ConversationView(
+                    connectionId: connectionId,
+                    authTokenProvider: authTokenProvider
+                )) {
+                    Label("Message", systemImage: "message.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
 
+                Button {
+                    // TODO: Implement share
+                } label: {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+            }
+
+            // Secondary actions
+            HStack(spacing: 12) {
+                Button {
+                    // TODO: Request data share
+                } label: {
+                    Label("Request Data", systemImage: "arrow.down.doc")
+                        .font(.subheadline)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+
+                Button {
+                    // TODO: Send data
+                } label: {
+                    Label("Share Data", systemImage: "arrow.up.doc")
+                        .font(.subheadline)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+            }
+
+            // Danger zone
             Button(role: .destructive) {
                 showRevokeConfirmation = true
             } label: {
@@ -188,6 +227,124 @@ struct ProfileInfoSection: View {
         .padding()
         .background(Color(.systemGray6))
         .cornerRadius(12)
+    }
+}
+
+// MARK: - Shared Data Section
+
+struct SharedDataSection: View {
+    // TODO: Load actual shared data from connection
+    @State private var sharedItems: [SharedDataItem] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Shared Data")
+                    .font(.headline)
+                Spacer()
+                if !sharedItems.isEmpty {
+                    Text("\(sharedItems.count) items")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if sharedItems.isEmpty {
+                HStack {
+                    Spacer()
+                    VStack(spacing: 8) {
+                        Image(systemName: "doc.on.doc")
+                            .font(.title2)
+                            .foregroundStyle(.secondary)
+                        Text("No data shared yet")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 20)
+                    Spacer()
+                }
+            } else {
+                ForEach(sharedItems) { item in
+                    SharedDataItemRow(item: item)
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+    }
+}
+
+struct SharedDataItem: Identifiable {
+    let id: String
+    let type: SharedDataType
+    let label: String
+    let sharedAt: Date
+    let direction: SharedDirection
+
+    enum SharedDataType {
+        case credential
+        case document
+        case profile
+        case custom
+
+        var icon: String {
+            switch self {
+            case .credential: return "key.fill"
+            case .document: return "doc.fill"
+            case .profile: return "person.fill"
+            case .custom: return "cube.fill"
+            }
+        }
+
+        var color: Color {
+            switch self {
+            case .credential: return .purple
+            case .document: return .orange
+            case .profile: return .blue
+            case .custom: return .gray
+            }
+        }
+    }
+
+    enum SharedDirection {
+        case sent
+        case received
+    }
+}
+
+struct SharedDataItemRow: View {
+    let item: SharedDataItem
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: item.type.icon)
+                .font(.body)
+                .foregroundStyle(item.type.color)
+                .frame(width: 24)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.label)
+                    .font(.subheadline)
+                HStack(spacing: 4) {
+                    Image(systemName: item.direction == .sent ? "arrow.up.right" : "arrow.down.left")
+                        .font(.caption2)
+                    Text(item.direction == .sent ? "Sent" : "Received")
+                        .font(.caption)
+                    Text("·")
+                    Text(item.sharedAt, style: .relative)
+                        .font(.caption)
+                }
+                .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 4)
     }
 }
 

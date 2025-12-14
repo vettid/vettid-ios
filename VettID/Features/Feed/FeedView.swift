@@ -356,13 +356,35 @@ struct EventCardView: View {
         switch event {
         case .connectionRequest(let e) where e.status == .pending:
             HStack(spacing: 8) {
-                Button("Accept") {}
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
+                Button("Accept") {
+                    // TODO: Implement accept connection
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
 
-                Button("Decline") {}
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+                Button("Decline") {
+                    // TODO: Implement decline connection
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        case .authRequest(let e) where e.status == .pending:
+            HStack(spacing: 8) {
+                Button {
+                    // TODO: Implement approve auth
+                } label: {
+                    Label("Approve", systemImage: "checkmark")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+
+                Button {
+                    // TODO: Implement deny auth
+                } label: {
+                    Label("Deny", systemImage: "xmark")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             }
         case .authRequest(let e):
             statusBadge(status: e.status)

@@ -74,6 +74,8 @@ struct ContextualBottomNav: View {
     let section: AppSection
     @Binding var selectedItem: Int
     var onMoreTap: (() -> Void)? = nil
+    var unreadFeedCount: Int = 0
+    var pendingConnectionsCount: Int = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -81,7 +83,12 @@ struct ContextualBottomNav: View {
 
             switch section {
             case .vault:
-                VaultNav(selectedItem: $selectedItem, onMoreTap: onMoreTap)
+                VaultNav(
+                    selectedItem: $selectedItem,
+                    onMoreTap: onMoreTap,
+                    feedBadge: unreadFeedCount,
+                    connectionsBadge: pendingConnectionsCount
+                )
             case .vaultServices:
                 VaultServicesNav(selectedItem: $selectedItem, onMoreTap: onMoreTap)
             case .appSettings:
@@ -97,6 +104,8 @@ struct ContextualBottomNav: View {
 struct VaultNav: View {
     @Binding var selectedItem: Int
     var onMoreTap: (() -> Void)?
+    var feedBadge: Int = 0
+    var connectionsBadge: Int = 0
 
     var body: some View {
         HStack(spacing: 0) {
@@ -104,7 +113,8 @@ struct VaultNav: View {
                 NavItem(
                     icon: item.icon,
                     title: item.title,
-                    isSelected: selectedItem == item.rawValue
+                    isSelected: selectedItem == item.rawValue,
+                    badge: badgeCount(for: item)
                 ) {
                     if item == .more {
                         onMoreTap?()
@@ -116,6 +126,14 @@ struct VaultNav: View {
         }
         .padding(.vertical, 8)
         .padding(.bottom, 4)
+    }
+
+    private func badgeCount(for item: VaultNavItem) -> Int {
+        switch item {
+        case .connections: return connectionsBadge
+        case .feed: return feedBadge
+        case .more: return 0
+        }
     }
 }
 
@@ -171,13 +189,22 @@ struct NavItem: View {
     let icon: String
     let title: String
     let isSelected: Bool
+    var badge: Int = 0
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             VStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.system(size: 22))
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: icon)
+                        .font(.system(size: 22))
+
+                    // Badge
+                    if badge > 0 {
+                        BadgeView(count: badge)
+                            .offset(x: 8, y: -4)
+                    }
+                }
 
                 Text(title)
                     .font(.caption2)
@@ -185,6 +212,23 @@ struct NavItem: View {
             .frame(maxWidth: .infinity)
             .foregroundStyle(isSelected ? .blue : .secondary)
         }
+    }
+}
+
+// MARK: - Badge View
+
+struct BadgeView: View {
+    let count: Int
+
+    var body: some View {
+        Text(count > 99 ? "99+" : "\(count)")
+            .font(.system(size: 10, weight: .bold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(Color.red)
+            .clipShape(Capsule())
+            .minimumScaleFactor(0.8)
     }
 }
 
