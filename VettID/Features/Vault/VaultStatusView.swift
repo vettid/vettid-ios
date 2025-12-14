@@ -55,7 +55,7 @@ struct VaultStatusView: View {
         VStack(spacing: 32) {
             Spacer()
 
-            Image(systemName: "building.columns")
+            Image(systemName: "building.2")
                 .font(.system(size: 80))
                 .foregroundStyle(.blue.opacity(0.7))
 
@@ -416,7 +416,7 @@ struct VaultStatusCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Image(systemName: "building.columns.fill")
+                Image(systemName: "building.2.fill")
                     .foregroundStyle(.blue)
                 Text("Vault Status")
                     .font(.headline)

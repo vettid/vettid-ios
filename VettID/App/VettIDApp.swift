@@ -39,6 +39,25 @@ class AppState: ObservableObject {
         checkExistingCredential()
     }
 
+    /// Sign out - clears authentication but keeps credentials
+    func signOut() {
+        isAuthenticated = false
+    }
+
+    /// Lock the app - same as sign out for now
+    func lock() {
+        isAuthenticated = false
+    }
+
+    /// Full sign out - clears credentials (requires re-enrollment)
+    func fullSignOut() {
+        isAuthenticated = false
+        hasCredential = false
+        currentUserGuid = nil
+        vaultStatus = nil
+        // TODO: Clear keychain credentials
+    }
+
     private func parseVaultStatus(_ status: String) -> VaultStatus {
         switch status.uppercased() {
         case "PENDING_ENROLLMENT":

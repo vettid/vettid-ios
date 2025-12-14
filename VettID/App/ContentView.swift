@@ -10,7 +10,7 @@ struct ContentView: View {
             } else if !appState.isAuthenticated {
                 AuthenticationView()
             } else {
-                MainTabView()
+                MainNavigationView()
             }
         }
     }
@@ -314,31 +314,9 @@ struct AuthenticationView: View {
     }
 }
 
-// MARK: - Main Tab View
+// MARK: - Main Tab View (Legacy - replaced by MainNavigationView)
 
-struct MainTabView: View {
-    @EnvironmentObject var appState: AppState
-
-    var body: some View {
-        TabView {
-            VaultStatusView()
-                .environmentObject(appState)
-                .tabItem {
-                    Label("Vault", systemImage: "building.columns.fill")
-                }
-
-            CredentialsView()
-                .tabItem {
-                    Label("Credentials", systemImage: "key.fill")
-                }
-
-            SettingsView()
-                .tabItem {
-                    Label("Settings", systemImage: "gearshape.fill")
-                }
-        }
-    }
-}
+// Using MainNavigationView from Features/Navigation/MainNavigationView.swift
 
 // MARK: - Placeholder Views
 
