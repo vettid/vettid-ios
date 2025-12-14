@@ -2,16 +2,123 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var deepLinkHandler: DeepLinkHandler
+    @StateObject private var lockService = AppLockService.shared
+    @Environment(\.scenePhase) private var scenePhase
+
+    // Deep link navigation state
+    @State private var showEnrollmentFromDeepLink = false
+    @State private var deepLinkEnrollToken: String?
+    @State private var showConnectFromDeepLink = false
+    @State private var deepLinkConnectCode: String?
 
     var body: some View {
-        Group {
-            if !appState.hasCredential {
-                WelcomeView()
-            } else if !appState.isAuthenticated {
-                AuthenticationView()
-            } else {
-                MainNavigationView()
+        ZStack {
+            // Main content
+            Group {
+                if !appState.hasCredential {
+                    WelcomeView()
+                } else if !appState.isAuthenticated {
+                    AuthenticationView()
+                } else {
+                    MainNavigationView()
+                }
             }
+
+            // App lock overlay
+            if lockService.isLocked && appState.isAuthenticated {
+                AppLockView(lockService: lockService)
+                    .transition(.opacity)
+                    .zIndex(100)
+            }
+        }
+        .onChange(of: scenePhase) { newPhase in
+            handleScenePhaseChange(newPhase)
+        }
+        .onChange(of: deepLinkHandler.pendingDeepLink) { deepLink in
+            handleDeepLink(deepLink)
+        }
+        .sheet(isPresented: $showEnrollmentFromDeepLink) {
+            if let token = deepLinkEnrollToken {
+                DeepLinkEnrollmentView(token: token)
+                    .environmentObject(appState)
+            }
+        }
+    }
+
+    private func handleScenePhaseChange(_ phase: ScenePhase) {
+        switch phase {
+        case .background:
+            lockService.appDidEnterBackground()
+        case .active:
+            lockService.appWillEnterForeground()
+        case .inactive:
+            break
+        @unknown default:
+            break
+        }
+    }
+
+    private func handleDeepLink(_ deepLink: DeepLink?) {
+        guard let deepLink = deepLink else { return }
+
+        // Clear the pending deep link
+        deepLinkHandler.clearPendingDeepLink()
+
+        switch deepLink {
+        case .enroll(let token):
+            // If not enrolled, start enrollment with the token
+            if !appState.hasCredential {
+                deepLinkEnrollToken = token
+                showEnrollmentFromDeepLink = true
+            }
+
+        case .connect(let code):
+            // If authenticated, handle connection invitation
+            if appState.isAuthenticated {
+                deepLinkConnectCode = code
+                showConnectFromDeepLink = true
+                // TODO: Navigate to connection flow with code
+            }
+
+        case .message(let connectionId):
+            // If authenticated, navigate to conversation
+            if appState.isAuthenticated {
+                // TODO: Navigate to conversation with connectionId
+                print("Deep link: Open message for connection \(connectionId)")
+            }
+
+        case .vault:
+            // If authenticated, navigate to vault
+            if appState.isAuthenticated {
+                // TODO: Navigate to vault status
+                print("Deep link: Open vault status")
+            }
+
+        case .unknown:
+            break
+        }
+    }
+}
+
+// MARK: - Deep Link Enrollment View
+
+struct DeepLinkEnrollmentView: View {
+    let token: String
+    @EnvironmentObject var appState: AppState
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var viewModel = EnrollmentViewModel()
+
+    var body: some View {
+        NavigationView {
+            EnrollmentContainerView()
+                .environmentObject(appState)
+                .onAppear {
+                    // Start enrollment with the deep link token
+                    Task {
+                        await viewModel.handleScannedCode(token)
+                    }
+                }
         }
     }
 }

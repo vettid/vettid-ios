@@ -48,6 +48,18 @@
 	<string>VettID needs camera access to scan enrollment QR codes.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>VettID uses Face ID to securely unlock your credentials.</string>
+	<!-- URL Schemes for deep linking -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>dev.vettid</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>vettid</string>
+			</array>
+		</dict>
+	</array>
 	<!-- App Transport Security - Enforcing secure connections -->
 	<key>NSAppTransportSecurity</key>
 	<dict>

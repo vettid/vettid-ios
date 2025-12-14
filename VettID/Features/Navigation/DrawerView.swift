@@ -24,6 +24,7 @@ struct DrawerView: View {
     let onSignOut: () -> Void
 
     @EnvironmentObject var appState: AppState
+    @State private var showSignOutSheet = false
 
     private let drawerWidth = UIScreen.main.bounds.width * 0.75
 
@@ -84,6 +85,12 @@ struct DrawerView: View {
                         }
                     }
 
+                    Divider()
+                        .padding(.vertical, 8)
+
+                    // Quick Toggles
+                    QuickTogglesSection()
+
                     Spacer()
 
                     Divider()
@@ -94,7 +101,7 @@ struct DrawerView: View {
                         title: "Sign Out",
                         isDestructive: true
                     ) {
-                        onSignOut()
+                        showSignOutSheet = true
                     }
 
                     // Version info
@@ -111,6 +118,229 @@ struct DrawerView: View {
             .offset(x: isOpen ? 0 : -drawerWidth)
         }
         .animation(.spring(response: 0.3), value: isOpen)
+        .sheet(isPresented: $showSignOutSheet) {
+            SignOutSheet(
+                hasActiveVault: appState.hasActiveVault,
+                onSignOutVault: {
+                    appState.signOut()
+                    withAnimation(.spring(response: 0.3)) {
+                        isOpen = false
+                    }
+                },
+                onSignOutVaultServices: {
+                    appState.fullSignOut()
+                    withAnimation(.spring(response: 0.3)) {
+                        isOpen = false
+                    }
+                }
+            )
+            .presentationDetents([.medium])
+        }
+    }
+}
+
+// MARK: - Quick Toggles Section
+
+struct QuickTogglesSection: View {
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Quick Settings")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 8)
+
+            // Theme toggle
+            QuickToggleRow(
+                icon: appState.theme.icon,
+                title: "Theme",
+                value: appState.theme.rawValue,
+                iconColor: themeIconColor
+            ) {
+                cycleTheme()
+            }
+
+            // Notifications toggle
+            QuickToggleRow(
+                icon: appState.preferences.notificationsEnabled ? "bell.fill" : "bell.slash.fill",
+                title: "Notifications",
+                value: appState.preferences.notificationsEnabled ? "On" : "Off",
+                iconColor: appState.preferences.notificationsEnabled ? .blue : .gray
+            ) {
+                var prefs = appState.preferences
+                prefs.notificationsEnabled.toggle()
+                appState.preferences = prefs
+            }
+        }
+    }
+
+    private var themeIconColor: Color {
+        switch appState.theme {
+        case .auto: return .purple
+        case .light: return .orange
+        case .dark: return .indigo
+        }
+    }
+
+    private func cycleTheme() {
+        let themes = AppTheme.allCases
+        guard let currentIndex = themes.firstIndex(of: appState.theme) else { return }
+        let nextIndex = (currentIndex + 1) % themes.count
+        appState.theme = themes[nextIndex]
+    }
+}
+
+// MARK: - Quick Toggle Row
+
+struct QuickToggleRow: View {
+    let icon: String
+    let title: String
+    let value: String
+    let iconColor: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 16) {
+                Image(systemName: icon)
+                    .font(.system(size: 18))
+                    .foregroundStyle(iconColor)
+                    .frame(width: 24)
+
+                Text(title)
+                    .font(.subheadline)
+
+                Spacer()
+
+                Text(value)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Color(.systemGray5))
+                    .cornerRadius(8)
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
+        }
+        .foregroundStyle(.primary)
+    }
+}
+
+// MARK: - Sign Out Sheet
+
+struct SignOutSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let hasActiveVault: Bool
+    let onSignOutVault: () -> Void
+    let onSignOutVaultServices: () -> Void
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 24) {
+                // Icon
+                Image(systemName: "rectangle.portrait.and.arrow.right")
+                    .font(.system(size: 50))
+                    .foregroundStyle(.orange)
+                    .padding(.top, 32)
+
+                // Title
+                Text("Sign Out")
+                    .font(.title2)
+                    .fontWeight(.bold)
+
+                Text("Choose how you'd like to sign out")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                // Options
+                VStack(spacing: 12) {
+                    if hasActiveVault {
+                        SignOutOptionButton(
+                            icon: "building.2",
+                            title: "Sign out of Vault",
+                            description: "Lock your vault but stay signed in to Vault Services",
+                            color: .orange
+                        ) {
+                            dismiss()
+                            onSignOutVault()
+                        }
+                    }
+
+                    SignOutOptionButton(
+                        icon: "icloud.and.arrow.up",
+                        title: "Sign out of Vault Services",
+                        description: "Sign out completely. You'll need to re-authenticate.",
+                        color: .red
+                    ) {
+                        dismiss()
+                        onSignOutVaultServices()
+                    }
+                }
+                .padding(.horizontal)
+
+                Spacer()
+
+                Button("Cancel") {
+                    dismiss()
+                }
+                .foregroundStyle(.secondary)
+                .padding(.bottom, 20)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+struct SignOutOptionButton: View {
+    let icon: String
+    let title: String
+    let description: String
+    let color: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .fill(color.opacity(0.15))
+                        .frame(width: 44, height: 44)
+
+                    Image(systemName: icon)
+                        .font(.system(size: 20))
+                        .foregroundStyle(color)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.body)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.primary)
+
+                    Text(description)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding()
+            .background(Color(.systemGray6))
+            .cornerRadius(12)
+        }
     }
 }
 

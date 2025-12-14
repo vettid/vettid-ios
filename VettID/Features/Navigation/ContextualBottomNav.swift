@@ -25,51 +25,45 @@ enum VaultNavItem: Int, CaseIterable {
 }
 
 enum VaultServicesNavItem: Int, CaseIterable {
-    case handlers = 0
+    case status = 0
     case backups = 1
-    case messaging = 2
-    case more = 3
+    case manage = 2
 
     var title: String {
         switch self {
-        case .handlers: return "Handlers"
+        case .status: return "Status"
         case .backups: return "Backups"
-        case .messaging: return "Messaging"
-        case .more: return "More"
+        case .manage: return "Manage"
         }
     }
 
     var icon: String {
         switch self {
-        case .handlers: return "puzzlepiece.fill"
+        case .status: return "chart.bar.fill"
         case .backups: return "externaldrive.fill"
-        case .messaging: return "message.fill"
-        case .more: return "ellipsis"
+        case .manage: return "slider.horizontal.3"
         }
     }
 }
 
 enum AppSettingsNavItem: Int, CaseIterable {
-    case profile = 0
-    case secrets = 1
-    case personalData = 2
-    case more = 3
+    case theme = 0
+    case security = 1
+    case about = 2
 
     var title: String {
         switch self {
-        case .profile: return "Profile"
-        case .secrets: return "Secrets"
-        case .personalData: return "Data"
-        case .more: return "More"
+        case .theme: return "Theme"
+        case .security: return "Security"
+        case .about: return "About"
         }
     }
 
     var icon: String {
         switch self {
-        case .profile: return "person.fill"
-        case .secrets: return "lock.fill"
-        case .personalData: return "folder.fill"
-        case .more: return "ellipsis"
+        case .theme: return "paintbrush.fill"
+        case .security: return "lock.shield.fill"
+        case .about: return "info.circle.fill"
         }
     }
 }
@@ -139,11 +133,7 @@ struct VaultServicesNav: View {
                     title: item.title,
                     isSelected: selectedItem == item.rawValue
                 ) {
-                    if item == .more {
-                        onMoreTap?()
-                    } else {
-                        selectedItem = item.rawValue
-                    }
+                    selectedItem = item.rawValue
                 }
             }
         }
@@ -166,11 +156,7 @@ struct AppSettingsNav: View {
                     title: item.title,
                     isSelected: selectedItem == item.rawValue
                 ) {
-                    if item == .more {
-                        onMoreTap?()
-                    } else {
-                        selectedItem = item.rawValue
-                    }
+                    selectedItem = item.rawValue
                 }
             }
         }
@@ -211,6 +197,23 @@ struct VaultMoreMenuSheet: View {
     var body: some View {
         NavigationView {
             List {
+                Section("Personal") {
+                    MoreMenuItem(icon: "person.fill", title: "Profile") {
+                        onSelect("profile")
+                        dismiss()
+                    }
+
+                    MoreMenuItem(icon: "lock.fill", title: "Secrets") {
+                        onSelect("secrets")
+                        dismiss()
+                    }
+
+                    MoreMenuItem(icon: "folder.fill", title: "Personal Data") {
+                        onSelect("personalData")
+                        dismiss()
+                    }
+                }
+
                 Section("Vault") {
                     MoreMenuItem(icon: "key.fill", title: "Credentials") {
                         onSelect("credentials")
@@ -219,6 +222,16 @@ struct VaultMoreMenuSheet: View {
 
                     MoreMenuItem(icon: "clock.fill", title: "Activity Log") {
                         onSelect("activity")
+                        dismiss()
+                    }
+
+                    MoreMenuItem(icon: "archivebox.fill", title: "Archive") {
+                        onSelect("archive")
+                        dismiss()
+                    }
+
+                    MoreMenuItem(icon: "gearshape.fill", title: "Preferences") {
+                        onSelect("preferences")
                         dismiss()
                     }
                 }
@@ -231,7 +244,7 @@ struct VaultMoreMenuSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
     }
 }
 
@@ -243,6 +256,16 @@ struct VaultServicesMoreMenuSheet: View {
         NavigationView {
             List {
                 Section("Services") {
+                    MoreMenuItem(icon: "puzzlepiece.fill", title: "Handlers") {
+                        onSelect("handlers")
+                        dismiss()
+                    }
+
+                    MoreMenuItem(icon: "message.fill", title: "Messaging") {
+                        onSelect("messaging")
+                        dismiss()
+                    }
+
                     MoreMenuItem(icon: "network", title: "NATS Connection") {
                         onSelect("nats")
                         dismiss()

@@ -9,10 +9,8 @@ struct MainNavigationView: View {
     @State private var currentSection: AppSection = .vault
     @State private var selectedNavItem = 0
 
-    // More menu sheets
+    // More menu sheet (only Vault section has More)
     @State private var showVaultMoreMenu = false
-    @State private var showServicesMoreMenu = false
-    @State private var showSettingsMoreMenu = false
 
     // Search state
     @State private var searchText = ""
@@ -20,12 +18,14 @@ struct MainNavigationView: View {
 
     // Action sheets
     @State private var showAddConnection = false
-    @State private var showAddSecret = false
-    @State private var showAddPersonalData = false
     @State private var showAddBackup = false
-    @State private var showEditProfile = false
-    @State private var showHandlerDiscovery = false
-    @State private var showSignOutConfirmation = false
+
+    // Navigation for Vault More menu items
+    @State private var showProfile = false
+    @State private var showSecrets = false
+    @State private var showPersonalData = false
+    @State private var showArchive = false
+    @State private var showPreferences = false
 
     var body: some View {
         ZStack {
@@ -49,7 +49,7 @@ struct MainNavigationView: View {
             DrawerView(
                 isOpen: $isDrawerOpen,
                 currentSection: $currentSection,
-                onSignOut: { showSignOutConfirmation = true }
+                onSignOut: { } // Sign out is handled by drawer's sheet
             )
         }
         .gesture(edgeSwipeGesture)
@@ -61,47 +61,37 @@ struct MainNavigationView: View {
         .sheet(isPresented: $showVaultMoreMenu) {
             VaultMoreMenuSheet(onSelect: handleVaultMoreSelection)
         }
-        .sheet(isPresented: $showServicesMoreMenu) {
-            VaultServicesMoreMenuSheet(onSelect: handleServicesMoreSelection)
-        }
-        .sheet(isPresented: $showSettingsMoreMenu) {
-            AppSettingsMoreMenuSheet(onSelect: handleSettingsMoreSelection)
-        }
         .sheet(isPresented: $showAddConnection) {
             AddConnectionSheet()
-        }
-        .sheet(isPresented: $showAddSecret) {
-            AddSecretSheet()
         }
         .sheet(isPresented: $showAddBackup) {
             CreateBackupSheet()
         }
-        .sheet(isPresented: $showHandlerDiscovery) {
+        .sheet(isPresented: $showProfile) {
             NavigationView {
-                HandlerDiscoveryView(viewModel: HandlerDiscoveryViewModel(authTokenProvider: { nil }))
+                ProfileView(authTokenProvider: { nil })
             }
         }
-        .sheet(isPresented: $showEditProfile) {
-            // TODO: Get actual profile from storage
-            EditProfileView(
-                profile: Profile(guid: "", displayName: "", avatarUrl: nil, bio: nil, location: nil, lastUpdated: Date()),
-                onSave: { _ in }
-            )
+        .sheet(isPresented: $showSecrets) {
+            NavigationView {
+                SecretsView(searchText: "")
+            }
         }
-        .confirmationDialog(
-            "Sign Out",
-            isPresented: $showSignOutConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Sign Out", role: .destructive) {
-                handleSignOut()
+        .sheet(isPresented: $showPersonalData) {
+            NavigationView {
+                PersonalDataView()
             }
-            Button("Lock App") {
-                handleLockApp()
+        }
+        .sheet(isPresented: $showArchive) {
+            NavigationView {
+                ArchiveView()
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Choose an option")
+        }
+        .sheet(isPresented: $showPreferences) {
+            NavigationView {
+                VaultPreferencesView()
+                    .environmentObject(appState)
+            }
         }
     }
 
@@ -146,13 +136,11 @@ struct MainNavigationView: View {
 
     @ViewBuilder
     private var vaultServicesHeader: some View {
-        switch VaultServicesNavItem(rawValue: selectedNavItem) ?? .handlers {
-        case .handlers:
+        switch VaultServicesNavItem(rawValue: selectedNavItem) ?? .status {
+        case .status:
             HeaderView(
-                title: "Handlers",
-                onProfileTap: openDrawer,
-                actionIcon: "magnifyingglass",
-                onActionTap: { showHandlerDiscovery = true }
+                title: "Status",
+                onProfileTap: openDrawer
             )
         case .backups:
             HeaderView(
@@ -161,14 +149,9 @@ struct MainNavigationView: View {
                 actionIcon: "plus",
                 onActionTap: { showAddBackup = true }
             )
-        case .messaging:
+        case .manage:
             HeaderView(
-                title: "Messaging",
-                onProfileTap: openDrawer
-            )
-        case .more:
-            HeaderView(
-                title: "Services",
+                title: "Manage",
                 onProfileTap: openDrawer
             )
         }
@@ -176,33 +159,20 @@ struct MainNavigationView: View {
 
     @ViewBuilder
     private var appSettingsHeader: some View {
-        switch AppSettingsNavItem(rawValue: selectedNavItem) ?? .profile {
-        case .profile:
+        switch AppSettingsNavItem(rawValue: selectedNavItem) ?? .theme {
+        case .theme:
             HeaderView(
-                title: "Profile",
-                onProfileTap: openDrawer,
-                actionIcon: "pencil",
-                onActionTap: { showEditProfile = true }
+                title: "Theme",
+                onProfileTap: openDrawer
             )
-        case .secrets:
-            SearchableHeaderView(
-                title: "Secrets",
-                onProfileTap: openDrawer,
-                searchText: $searchText,
-                isSearching: $isSearching,
-                actionIcon: "plus",
-                onActionTap: { showAddSecret = true }
-            )
-        case .personalData:
+        case .security:
             HeaderView(
-                title: "Personal Data",
-                onProfileTap: openDrawer,
-                actionIcon: "plus",
-                onActionTap: { showAddPersonalData = true }
+                title: "Security",
+                onProfileTap: openDrawer
             )
-        case .more:
+        case .about:
             HeaderView(
-                title: "Settings",
+                title: "About",
                 onProfileTap: openDrawer
             )
         }
@@ -243,41 +213,37 @@ struct MainNavigationView: View {
 
     @ViewBuilder
     private var vaultServicesContent: some View {
-        switch VaultServicesNavItem(rawValue: selectedNavItem) ?? .handlers {
-        case .handlers:
+        switch VaultServicesNavItem(rawValue: selectedNavItem) ?? .status {
+        case .status:
             NavigationStack {
-                HandlersListView(authTokenProvider: { nil })
+                VaultServicesStatusView()
             }
         case .backups:
             NavigationStack {
                 BackupListView(authTokenProvider: { nil })
             }
-        case .messaging:
+        case .manage:
             NavigationStack {
-                MessagingView()
+                ManageVaultView()
             }
-        case .more:
-            EmptyView()
         }
     }
 
     @ViewBuilder
     private var appSettingsContent: some View {
-        switch AppSettingsNavItem(rawValue: selectedNavItem) ?? .profile {
-        case .profile:
+        switch AppSettingsNavItem(rawValue: selectedNavItem) ?? .theme {
+        case .theme:
             NavigationStack {
-                ProfileView(authTokenProvider: { nil })
+                ThemeSettingsView()
             }
-        case .secrets:
+        case .security:
             NavigationStack {
-                SecretsView(searchText: searchText)
+                SecuritySettingsView()
             }
-        case .personalData:
+        case .about:
             NavigationStack {
-                PersonalDataView()
+                AboutView()
             }
-        case .more:
-            EmptyView()
         }
     }
 
@@ -304,37 +270,27 @@ struct MainNavigationView: View {
     }
 
     private func handleMoreTap() {
-        switch currentSection {
-        case .vault:
+        // Only Vault section has More now
+        if currentSection == .vault {
             showVaultMoreMenu = true
-        case .vaultServices:
-            showServicesMoreMenu = true
-        case .appSettings:
-            showSettingsMoreMenu = true
         }
     }
 
     private func handleVaultMoreSelection(_ selection: String) {
-        // Handle vault more menu selections
-        print("Vault more selection: \(selection)")
-    }
-
-    private func handleServicesMoreSelection(_ selection: String) {
-        // Handle services more menu selections
-        print("Services more selection: \(selection)")
-    }
-
-    private func handleSettingsMoreSelection(_ selection: String) {
-        // Handle settings more menu selections
-        print("Settings more selection: \(selection)")
-    }
-
-    private func handleSignOut() {
-        appState.signOut()
-    }
-
-    private func handleLockApp() {
-        appState.lock()
+        switch selection {
+        case "profile":
+            showProfile = true
+        case "secrets":
+            showSecrets = true
+        case "personalData":
+            showPersonalData = true
+        case "archive":
+            showArchive = true
+        case "preferences":
+            showPreferences = true
+        default:
+            print("Vault more selection: \(selection)")
+        }
     }
 }
 

@@ -3,25 +3,60 @@ import SwiftUI
 @main
 struct VettIDApp: App {
     @StateObject private var appState = AppState()
+    @StateObject private var deepLinkHandler = DeepLinkHandler.shared
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(appState)
+                .environmentObject(deepLinkHandler)
+                .onOpenURL { url in
+                    deepLinkHandler.handle(url: url)
+                }
         }
     }
 }
 
 @MainActor
 class AppState: ObservableObject {
+    // Authentication state
     @Published var isAuthenticated = false
     @Published var hasCredential = false
     @Published var currentUserGuid: String?
     @Published var vaultStatus: VaultStatus?
 
+    // Vault state tracking
+    @Published var hasActiveVault: Bool = false
+    @Published var vaultInstanceId: String?
+
+    // User preferences
+    @Published var preferences: UserPreferences {
+        didSet { preferences.save() }
+    }
+
+    // Computed properties
+    var isActive: Bool { hasCredential && hasActiveVault }
+
+    var theme: AppTheme {
+        get { preferences.theme }
+        set {
+            preferences.theme = newValue
+            preferences.save()
+        }
+    }
+
+    var appLock: AppLockSettings {
+        get { preferences.appLock }
+        set {
+            preferences.appLock = newValue
+            preferences.save()
+        }
+    }
+
     private let credentialStore = CredentialStore()
 
     init() {
+        self.preferences = UserPreferences.load()
         checkExistingCredential()
     }
 
@@ -31,6 +66,14 @@ class AppState: ObservableObject {
             currentUserGuid = credential.userGuid
             if let status = credential.vaultStatus {
                 vaultStatus = parseVaultStatus(status)
+                // Update active vault state based on status
+                if case .running(let instanceId) = vaultStatus {
+                    hasActiveVault = true
+                    vaultInstanceId = instanceId
+                } else {
+                    hasActiveVault = false
+                    vaultInstanceId = nil
+                }
             }
         }
     }
@@ -44,9 +87,14 @@ class AppState: ObservableObject {
         isAuthenticated = false
     }
 
-    /// Lock the app - same as sign out for now
+    /// Lock the app using app lock (if enabled)
     func lock() {
-        isAuthenticated = false
+        if preferences.appLock.isEnabled {
+            AppLockService.shared.lock()
+        } else {
+            // If app lock is not enabled, just sign out
+            isAuthenticated = false
+        }
     }
 
     /// Full sign out - clears credentials (requires re-enrollment)

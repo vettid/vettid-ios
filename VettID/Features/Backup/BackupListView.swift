@@ -1,12 +1,14 @@
 import SwiftUI
 
-/// Main backup list view
+/// Main backup list view with sectioned layout
 struct BackupListView: View {
     let authTokenProvider: @Sendable () -> String?
 
     @StateObject private var viewModel: BackupListViewModel
     @State private var showSettings = false
     @State private var showCreateBackup = false
+    @State private var showCredentialBackup = false
+    @State private var showCredentialRecovery = false
 
     init(authTokenProvider: @escaping @Sendable () -> String?) {
         self.authTokenProvider = authTokenProvider
@@ -14,36 +16,95 @@ struct BackupListView: View {
     }
 
     var body: some View {
-        NavigationView {
-            Group {
-                switch viewModel.state {
-                case .loading:
-                    loadingView
-
-                case .empty:
-                    emptyView
-
-                case .loaded(let backups):
-                    backupsList(backups)
-
-                case .error(let message):
-                    errorView(message)
-                }
+        List {
+            // Credential Backup Section
+            Section {
+                credentialBackupRow
+                credentialRecoveryRow
+            } header: {
+                Text("Credential Backup")
+            } footer: {
+                Text("Backup your credentials with a recovery phrase to restore on a new device.")
             }
-            .navigationTitle("Backups")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { showSettings = true }) {
-                        Image(systemName: "gearshape")
+
+            // Auto-Backup Section
+            Section {
+                NavigationLink(destination: BackupSettingsView(authTokenProvider: authTokenProvider)) {
+                    HStack {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .foregroundStyle(.blue)
+                            .frame(width: 24)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Auto-Backup Settings")
+                            Text("Configure automatic vault backups")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
-                ToolbarItem(placement: .primaryAction) {
+            } header: {
+                Text("Automatic Backups")
+            }
+
+            // Vault Backups Section
+            Section {
+                switch viewModel.state {
+                case .loading:
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                        Spacer()
+                    }
+                    .listRowBackground(Color.clear)
+
+                case .empty:
+                    emptyBackupsRow
+
+                case .loaded(let backups):
+                    ForEach(backups.prefix(5)) { backup in
+                        NavigationLink(destination: BackupDetailView(
+                            backupId: backup.id,
+                            authTokenProvider: authTokenProvider
+                        )) {
+                            BackupListRow(backup: backup)
+                        }
+                    }
+                    .onDelete { indexSet in
+                        viewModel.deleteBackups(at: indexSet)
+                    }
+
+                    if backups.count > 5 {
+                        NavigationLink(destination: AllBackupsView(authTokenProvider: authTokenProvider)) {
+                            Text("View All \(backups.count) Backups")
+                                .foregroundStyle(.blue)
+                        }
+                    }
+
+                case .error(let message):
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle")
+                            .foregroundStyle(.red)
+                        Text(message)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                HStack {
+                    Text("Vault Backups")
+                    Spacer()
                     Button(action: { showCreateBackup = true }) {
-                        Image(systemName: "plus")
+                        Image(systemName: "plus.circle.fill")
+                            .foregroundStyle(.blue)
                     }
                     .disabled(viewModel.isCreatingBackup)
                 }
+            } footer: {
+                Text("Vault backups include your connections, messages, and vault data.")
             }
+        }
+        .navigationTitle("Backups")
+        .refreshable {
+            await viewModel.refresh()
         }
         .sheet(isPresented: $showSettings) {
             BackupSettingsView(authTokenProvider: authTokenProvider)
@@ -58,99 +119,174 @@ struct BackupListView: View {
                 }
             )
         }
+        .sheet(isPresented: $showCredentialBackup) {
+            NavigationView {
+                CredentialBackupView(authTokenProvider: authTokenProvider)
+            }
+        }
+        .sheet(isPresented: $showCredentialRecovery) {
+            NavigationView {
+                CredentialRecoveryView(authTokenProvider: authTokenProvider)
+            }
+        }
         .task {
             await viewModel.loadBackups()
         }
     }
 
-    // MARK: - Loading View
+    // MARK: - Credential Backup Row
 
-    private var loadingView: some View {
-        VStack {
-            Spacer()
-            ProgressView()
-            Text("Loading backups...")
-                .foregroundColor(.secondary)
-                .padding(.top, 8)
-            Spacer()
+    private var credentialBackupRow: some View {
+        Button(action: { showCredentialBackup = true }) {
+            HStack {
+                Image(systemName: "key.fill")
+                    .foregroundStyle(.orange)
+                    .frame(width: 24)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Recovery Phrase")
+                    Text("Create or view your backup phrase")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
+        .foregroundStyle(.primary)
     }
 
-    // MARK: - Empty View
+    private var credentialRecoveryRow: some View {
+        Button(action: { showCredentialRecovery = true }) {
+            HStack {
+                Image(systemName: "arrow.counterclockwise")
+                    .foregroundStyle(.green)
+                    .frame(width: 24)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Restore from Backup")
+                    Text("Recover credentials using your phrase")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .foregroundStyle(.primary)
+    }
 
-    private var emptyView: some View {
-        VStack(spacing: 16) {
-            Spacer()
+    // MARK: - Empty Backups Row
 
+    private var emptyBackupsRow: some View {
+        VStack(spacing: 12) {
             Image(systemName: "externaldrive.badge.checkmark")
-                .font(.system(size: 60))
-                .foregroundColor(.secondary)
-
-            Text("No Backups Yet")
-                .font(.headline)
-
-            Text("Create your first backup to protect your data")
+                .font(.system(size: 40))
+                .foregroundStyle(.secondary)
+            Text("No Vault Backups")
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .fontWeight(.medium)
+            Text("Create your first backup to protect your vault data")
+                .font(.caption)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal)
-
             Button("Create Backup") {
                 showCreateBackup = true
             }
             .buttonStyle(.borderedProminent)
-            .padding(.top, 8)
-
-            Spacer()
+            .controlSize(.small)
         }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 20)
+        .listRowBackground(Color.clear)
     }
 
-    // MARK: - Backups List
+}
 
-    private func backupsList(_ backups: [Backup]) -> some View {
-        List {
-            ForEach(backups) { backup in
-                NavigationLink(destination: BackupDetailView(
-                    backupId: backup.id,
-                    authTokenProvider: authTokenProvider
-                )) {
-                    BackupListRow(backup: backup)
+// MARK: - All Backups View
+
+/// Shows all vault backups in a full list
+struct AllBackupsView: View {
+    let authTokenProvider: @Sendable () -> String?
+
+    @StateObject private var viewModel: BackupListViewModel
+    @State private var showCreateBackup = false
+
+    init(authTokenProvider: @escaping @Sendable () -> String?) {
+        self.authTokenProvider = authTokenProvider
+        self._viewModel = StateObject(wrappedValue: BackupListViewModel(authTokenProvider: authTokenProvider))
+    }
+
+    var body: some View {
+        Group {
+            switch viewModel.state {
+            case .loading:
+                ProgressView("Loading backups...")
+
+            case .empty:
+                VStack(spacing: 16) {
+                    Image(systemName: "externaldrive.badge.checkmark")
+                        .font(.system(size: 60))
+                        .foregroundStyle(.secondary)
+                    Text("No Backups")
+                        .font(.headline)
+                }
+
+            case .loaded(let backups):
+                List {
+                    ForEach(backups) { backup in
+                        NavigationLink(destination: BackupDetailView(
+                            backupId: backup.id,
+                            authTokenProvider: authTokenProvider
+                        )) {
+                            BackupListRow(backup: backup)
+                        }
+                    }
+                    .onDelete { indexSet in
+                        viewModel.deleteBackups(at: indexSet)
+                    }
+                }
+                .refreshable {
+                    await viewModel.refresh()
+                }
+
+            case .error(let message):
+                VStack(spacing: 16) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 50))
+                        .foregroundStyle(.red)
+                    Text(message)
+                        .foregroundStyle(.secondary)
+                    Button("Retry") {
+                        Task { await viewModel.loadBackups() }
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
             }
-            .onDelete { indexSet in
-                viewModel.deleteBackups(at: indexSet)
+        }
+        .navigationTitle("All Backups")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: { showCreateBackup = true }) {
+                    Image(systemName: "plus")
+                }
             }
         }
-        .refreshable {
-            await viewModel.refresh()
+        .sheet(isPresented: $showCreateBackup) {
+            CreateBackupView(
+                authTokenProvider: self.authTokenProvider,
+                onComplete: { [viewModel] in
+                    Task { @MainActor in
+                        await viewModel.refresh()
+                    }
+                }
+            )
         }
-    }
-
-    // MARK: - Error View
-
-    private func errorView(_ message: String) -> some View {
-        VStack(spacing: 16) {
-            Spacer()
-
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 50))
-                .foregroundColor(.red)
-
-            Text("Error")
-                .font(.headline)
-
-            Text(message)
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-
-            Button("Retry") {
-                Task { await viewModel.loadBackups() }
-            }
-            .buttonStyle(.borderedProminent)
-
-            Spacer()
+        .task {
+            await viewModel.loadBackups()
         }
     }
 }
