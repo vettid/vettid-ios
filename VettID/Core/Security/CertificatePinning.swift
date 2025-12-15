@@ -23,19 +23,33 @@ final class CertificatePinningDelegate: NSObject, URLSessionDelegate {
 
     /// Pinned certificates for VettID API domains
     /// These are SHA-256 hashes of the Subject Public Key Info (SPKI)
-    /// NOTE: AWS API Gateway uses AWS-managed certificates that rotate automatically.
-    /// Certificate pinning is disabled for API Gateway endpoints by default.
+    ///
+    /// SECURITY NOTE: AWS API Gateway uses AWS-managed certificates that rotate automatically.
+    /// Certificate pinning is NOT recommended for API Gateway endpoints without a custom domain
+    /// with stable certificates from ACM.
+    ///
+    /// Current configuration:
+    /// - Pinning is effectively disabled (empty configuration)
+    /// - HTTPS is still enforced via ATS (App Transport Security)
+    /// - System CA validation is performed
+    ///
+    /// To enable certificate pinning:
+    /// 1. Configure a custom domain (e.g., api.vettid.dev) in API Gateway with ACM certificate
+    /// 2. Generate SPKI hashes using:
+    ///    openssl s_client -connect api.vettid.dev:443 </dev/null 2>/dev/null | \
+    ///    openssl x509 -pubkey -noout | openssl pkey -pubin -outform der | \
+    ///    openssl dgst -sha256 -binary | base64
+    /// 3. Add the hash to the configuration below
+    /// 4. Include backup pins from the CA chain for rotation resilience
     private static let pinnedConfigurations: [PinConfiguration] = [
-        // Production API (AWS API Gateway)
-        PinConfiguration(
-            domain: "tiqpij5mue.execute-api.us-east-1.amazonaws.com",
-            publicKeyHashes: [
-                // AWS API Gateway certificates rotate - pinning not recommended
-                // These are placeholders if custom domain with stable cert is used
-                "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",  // TODO: Replace with actual hash
-                "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB="   // TODO: Replace with actual hash
-            ]
-        )
+        // Custom domain configuration - uncomment and configure when custom domain is deployed
+        // PinConfiguration(
+        //     domain: "api.vettid.dev",
+        //     publicKeyHashes: [
+        //         "YOUR_PRIMARY_SPKI_HASH_BASE64=",  // Primary certificate hash
+        //         "YOUR_BACKUP_SPKI_HASH_BASE64="    // Backup CA hash for rotation
+        //     ]
+        // )
     ]
 
     /// Whether to enforce pinning (can be disabled for testing)
