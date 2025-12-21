@@ -129,6 +129,19 @@ final class CredentialStore {
         }
     }
 
+    /// Delete all credentials from the Keychain
+    func deleteAll() throws {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service
+        ]
+
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw CredentialStoreError.deleteFailed(status)
+        }
+    }
+
     /// List all stored user GUIDs
     func listUserGuids() throws -> [String] {
         let query: [String: Any] = [

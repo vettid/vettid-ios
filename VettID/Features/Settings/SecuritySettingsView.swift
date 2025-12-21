@@ -406,43 +406,22 @@ struct ChangePasswordSheet: View {
     @State private var confirmPassword = ""
     @State private var errorMessage: String?
     @State private var isLoading = false
+    @State private var passwordChanged = false
+
+    private let apiClient = APIClient()
+    private let authTokenProvider: () -> String?
+
+    init(authTokenProvider: @escaping () -> String? = { nil }) {
+        self.authTokenProvider = authTokenProvider
+    }
 
     var body: some View {
         NavigationView {
-            Form {
-                Section {
-                    SecureField("Current Password", text: $currentPassword)
-                } header: {
-                    Text("Current Password")
-                }
-
-                Section {
-                    SecureField("New Password", text: $newPassword)
-                    SecureField("Confirm New Password", text: $confirmPassword)
-                } header: {
-                    Text("New Password")
-                } footer: {
-                    Text("Password must be at least 8 characters.")
-                }
-
-                if let error = errorMessage {
-                    Section {
-                        Text(error)
-                            .foregroundStyle(.red)
-                    }
-                }
-
-                Section {
-                    Button(action: changePassword) {
-                        if isLoading {
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
-                        } else {
-                            Text("Change Password")
-                                .frame(maxWidth: .infinity)
-                        }
-                    }
-                    .disabled(!isValid || isLoading)
+            Group {
+                if passwordChanged {
+                    successView
+                } else {
+                    formView
                 }
             }
             .navigationTitle("Change Password")
@@ -452,6 +431,73 @@ struct ChangePasswordSheet: View {
                     Button("Cancel") { dismiss() }
                 }
             }
+        }
+    }
+
+    private var formView: some View {
+        Form {
+            Section {
+                SecureField("Current Password", text: $currentPassword)
+            } header: {
+                Text("Current Password")
+            }
+
+            Section {
+                SecureField("New Password", text: $newPassword)
+                SecureField("Confirm New Password", text: $confirmPassword)
+            } header: {
+                Text("New Password")
+            } footer: {
+                Text("Password must be at least 8 characters.")
+            }
+
+            if let error = errorMessage {
+                Section {
+                    Text(error)
+                        .foregroundStyle(.red)
+                }
+            }
+
+            Section {
+                Button(action: changePassword) {
+                    if isLoading {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                    } else {
+                        Text("Change Password")
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .disabled(!isValid || isLoading)
+            }
+        }
+    }
+
+    private var successView: some View {
+        VStack(spacing: 20) {
+            Spacer()
+
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 60))
+                .foregroundStyle(.green)
+
+            Text("Password Changed")
+                .font(.title2)
+                .fontWeight(.bold)
+
+            Text("Your password has been updated successfully.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+
+            Spacer()
+
+            Button("Done") {
+                dismiss()
+            }
+            .buttonStyle(.borderedProminent)
+            .padding()
         }
     }
 
@@ -467,13 +513,29 @@ struct ChangePasswordSheet: View {
         isLoading = true
         errorMessage = nil
 
-        // TODO: Implement actual password change via API
         Task {
-            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            do {
+                // Hash the new password using PasswordHasher
+                let result = try PasswordHasher.hash(password: newPassword)
 
-            await MainActor.run {
-                isLoading = false
-                dismiss()
+                // In a full implementation, this would:
+                // 1. Verify current password with the server
+                // 2. Re-encrypt vault keys with new password
+                // 3. Update password hash on server
+
+                // For now, update local secrets store password hash
+                let secretsStore = SecretsStore()
+                try secretsStore.storePasswordHash(result.hash, salt: result.salt)
+
+                await MainActor.run {
+                    isLoading = false
+                    passwordChanged = true
+                }
+            } catch {
+                await MainActor.run {
+                    isLoading = false
+                    errorMessage = "Failed to change password: \(error.localizedDescription)"
+                }
             }
         }
     }

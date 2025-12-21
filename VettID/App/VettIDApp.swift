@@ -132,7 +132,28 @@ class AppState: ObservableObject {
         hasCredential = false
         currentUserGuid = nil
         vaultStatus = nil
-        // TODO: Clear keychain credentials
+        hasActiveVault = false
+        vaultInstanceId = nil
+        currentProfile = nil
+
+        // Clear all keychain data
+        clearAllKeychainData()
+    }
+
+    /// Clear all stored keychain data
+    private func clearAllKeychainData() {
+        // Clear stored credentials
+        try? credentialStore.deleteAll()
+
+        // Clear profile data
+        try? profileStore.deleteAll()
+
+        // Clear secrets
+        let secretsStore = SecretsStore()
+        try? secretsStore.deleteAll()
+
+        // Clear secure keys
+        try? SecureKeyStore().deleteAllKeys()
     }
 
     private func parseVaultStatus(_ status: String) -> VaultStatus {
