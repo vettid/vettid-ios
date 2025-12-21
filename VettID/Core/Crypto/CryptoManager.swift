@@ -67,9 +67,11 @@ final class CryptoManager {
         let sharedSecret = try ephemeralPrivate.sharedSecretFromKeyAgreement(with: utkPublicKey)
 
         // Derive symmetric key using HKDF with the specified info string
+        // Salt must match across all platforms (iOS, Android, Lambda) for interoperability
+        let hkdfSalt = "VettID-HKDF-Salt-v1".data(using: .utf8)!
         let symmetricKey = sharedSecret.hkdfDerivedSymmetricKey(
             using: SHA256.self,
-            salt: Data(),
+            salt: hkdfSalt,
             sharedInfo: "password-encryption".data(using: .utf8)!,
             outputByteCount: 32
         )
@@ -108,9 +110,11 @@ final class CryptoManager {
         let sharedSecret = try ephemeralPrivate.sharedSecretFromKeyAgreement(with: recipientPublicKey)
 
         // Derive symmetric key using HKDF
+        // Salt must match across all platforms (iOS, Android, Lambda) for interoperability
+        let hkdfSalt = "VettID-HKDF-Salt-v1".data(using: .utf8)!
         let symmetricKey = sharedSecret.hkdfDerivedSymmetricKey(
             using: SHA256.self,
-            salt: Data(),
+            salt: hkdfSalt,
             sharedInfo: "credential-encryption-v1".data(using: .utf8)!,
             outputByteCount: 32
         )
@@ -138,9 +142,11 @@ final class CryptoManager {
         let sharedSecret = try privateKey.sharedSecretFromKeyAgreement(with: ephemeralPublicKey)
 
         // Derive symmetric key
+        // Salt must match across all platforms (iOS, Android, Lambda) for interoperability
+        let hkdfSalt = "VettID-HKDF-Salt-v1".data(using: .utf8)!
         let symmetricKey = sharedSecret.hkdfDerivedSymmetricKey(
             using: SHA256.self,
-            salt: Data(),
+            salt: hkdfSalt,
             sharedInfo: "credential-encryption-v1".data(using: .utf8)!,
             outputByteCount: 32
         )
