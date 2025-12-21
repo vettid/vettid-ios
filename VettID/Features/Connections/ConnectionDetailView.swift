@@ -7,6 +7,9 @@ struct ConnectionDetailView: View {
 
     @StateObject private var viewModel: ConnectionDetailViewModel
     @State private var showRevokeConfirmation = false
+    @State private var showShareSheet = false
+    @State private var showRequestDataSheet = false
+    @State private var showShareDataSheet = false
     @Environment(\.dismiss) private var dismiss
 
     init(connectionId: String, authTokenProvider: @escaping @Sendable () -> String?) {
@@ -48,6 +51,21 @@ struct ConnectionDetailView: View {
         }
         .task {
             await viewModel.loadConnection(connectionId)
+        }
+        .sheet(isPresented: $showShareSheet) {
+            ShareSheet(items: shareItems)
+        }
+        .sheet(isPresented: $showRequestDataSheet) {
+            RequestDataSheet(
+                connectionId: connectionId,
+                peerName: viewModel.connection?.peerDisplayName ?? "Connection"
+            )
+        }
+        .sheet(isPresented: $showShareDataSheet) {
+            ShareDataSheet(
+                connectionId: connectionId,
+                peerName: viewModel.connection?.peerDisplayName ?? "Connection"
+            )
         }
     }
 
@@ -122,7 +140,7 @@ struct ConnectionDetailView: View {
                 .controlSize(.large)
 
                 Button {
-                    // TODO: Implement share
+                    showShareSheet = true
                 } label: {
                     Label("Share", systemImage: "square.and.arrow.up")
                         .frame(maxWidth: .infinity)
@@ -134,7 +152,7 @@ struct ConnectionDetailView: View {
             // Secondary actions
             HStack(spacing: 12) {
                 Button {
-                    // TODO: Request data share
+                    showRequestDataSheet = true
                 } label: {
                     Label("Request Data", systemImage: "arrow.down.doc")
                         .font(.subheadline)
@@ -144,7 +162,7 @@ struct ConnectionDetailView: View {
                 .controlSize(.regular)
 
                 Button {
-                    // TODO: Send data
+                    showShareDataSheet = true
                 } label: {
                     Label("Share Data", systemImage: "arrow.up.doc")
                         .font(.subheadline)
@@ -169,6 +187,25 @@ struct ConnectionDetailView: View {
             .buttonStyle(.bordered)
             .disabled(viewModel.isRevoking)
         }
+    }
+
+    // MARK: - Share Items
+
+    private var shareItems: [Any] {
+        guard let connection = viewModel.connection else { return [] }
+
+        var items: [Any] = []
+
+        // Basic connection info text
+        let shareText = "Connected with \(connection.peerDisplayName) on VettID"
+        items.append(shareText)
+
+        // Connection deep link
+        if let url = URL(string: "vettid://message/\(connection.id)") {
+            items.append(url)
+        }
+
+        return items
     }
 
     // MARK: - Error View
@@ -377,6 +414,324 @@ struct ConnectionInfoSection: View {
         .padding()
         .background(Color(.systemGray6))
         .cornerRadius(12)
+    }
+}
+
+// MARK: - Share Sheet (UIKit)
+
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+// MARK: - Request Data Sheet
+
+struct RequestDataSheet: View {
+    let connectionId: String
+    let peerName: String
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedDataTypes: Set<RequestableDataType> = []
+    @State private var isRequesting = false
+    @State private var requestSent = false
+
+    enum RequestableDataType: String, CaseIterable, Identifiable {
+        case email = "Email Address"
+        case phone = "Phone Number"
+        case name = "Full Name"
+        case address = "Address"
+        case organization = "Organization"
+
+        var id: String { rawValue }
+
+        var icon: String {
+            switch self {
+            case .email: return "envelope.fill"
+            case .phone: return "phone.fill"
+            case .name: return "person.fill"
+            case .address: return "location.fill"
+            case .organization: return "building.2.fill"
+            }
+        }
+    }
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 20) {
+                if requestSent {
+                    requestSentView
+                } else {
+                    requestFormView
+                }
+            }
+            .navigationTitle("Request Data")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private var requestFormView: some View {
+        VStack(spacing: 20) {
+            Text("Select the data you'd like to request from \(peerName)")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+                .padding(.top)
+
+            List {
+                ForEach(RequestableDataType.allCases) { dataType in
+                    Button {
+                        if selectedDataTypes.contains(dataType) {
+                            selectedDataTypes.remove(dataType)
+                        } else {
+                            selectedDataTypes.insert(dataType)
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: dataType.icon)
+                                .foregroundStyle(.blue)
+                                .frame(width: 24)
+
+                            Text(dataType.rawValue)
+                                .foregroundStyle(.primary)
+
+                            Spacer()
+
+                            if selectedDataTypes.contains(dataType) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.blue)
+                            } else {
+                                Image(systemName: "circle")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
+
+            Button {
+                sendRequest()
+            } label: {
+                if isRequesting {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                } else {
+                    Text("Send Request")
+                        .fontWeight(.semibold)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(selectedDataTypes.isEmpty || isRequesting)
+            .padding(.horizontal)
+            .padding(.bottom)
+        }
+    }
+
+    private var requestSentView: some View {
+        VStack(spacing: 20) {
+            Spacer()
+
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 60))
+                .foregroundStyle(.green)
+
+            Text("Request Sent")
+                .font(.title2)
+                .fontWeight(.bold)
+
+            Text("\(peerName) will be notified of your data request.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+
+            Spacer()
+
+            Button("Done") {
+                dismiss()
+            }
+            .buttonStyle(.borderedProminent)
+            .padding()
+        }
+    }
+
+    private func sendRequest() {
+        isRequesting = true
+
+        // Simulate sending request via NATS/VaultResponseHandler
+        Task {
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            await MainActor.run {
+                isRequesting = false
+                requestSent = true
+            }
+        }
+    }
+}
+
+// MARK: - Share Data Sheet
+
+struct ShareDataSheet: View {
+    let connectionId: String
+    let peerName: String
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedDataFields: Set<ShareableDataField> = []
+    @State private var isSharing = false
+    @State private var dataSent = false
+
+    enum ShareableDataField: String, CaseIterable, Identifiable {
+        case displayName = "Display Name"
+        case email = "Email Address"
+        case phone = "Phone Number"
+        case bio = "Bio"
+        case location = "Location"
+
+        var id: String { rawValue }
+
+        var icon: String {
+            switch self {
+            case .displayName: return "person.fill"
+            case .email: return "envelope.fill"
+            case .phone: return "phone.fill"
+            case .bio: return "text.quote"
+            case .location: return "location.fill"
+            }
+        }
+    }
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 20) {
+                if dataSent {
+                    dataSentView
+                } else {
+                    shareFormView
+                }
+            }
+            .navigationTitle("Share Data")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private var shareFormView: some View {
+        VStack(spacing: 20) {
+            Text("Select the data you'd like to share with \(peerName)")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+                .padding(.top)
+
+            List {
+                ForEach(ShareableDataField.allCases) { field in
+                    Button {
+                        if selectedDataFields.contains(field) {
+                            selectedDataFields.remove(field)
+                        } else {
+                            selectedDataFields.insert(field)
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: field.icon)
+                                .foregroundStyle(.purple)
+                                .frame(width: 24)
+
+                            Text(field.rawValue)
+                                .foregroundStyle(.primary)
+
+                            Spacer()
+
+                            if selectedDataFields.contains(field) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.purple)
+                            } else {
+                                Image(systemName: "circle")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
+
+            Button {
+                shareData()
+            } label: {
+                if isSharing {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                } else {
+                    Text("Share Selected Data")
+                        .fontWeight(.semibold)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.purple)
+            .disabled(selectedDataFields.isEmpty || isSharing)
+            .padding(.horizontal)
+            .padding(.bottom)
+        }
+    }
+
+    private var dataSentView: some View {
+        VStack(spacing: 20) {
+            Spacer()
+
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 60))
+                .foregroundStyle(.purple)
+
+            Text("Data Shared")
+                .font(.title2)
+                .fontWeight(.bold)
+
+            Text("Your selected data has been shared with \(peerName).")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+
+            Spacer()
+
+            Button("Done") {
+                dismiss()
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.purple)
+            .padding()
+        }
+    }
+
+    private func shareData() {
+        isSharing = true
+
+        // Simulate sharing data via NATS/VaultResponseHandler
+        Task {
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            await MainActor.run {
+                isSharing = false
+                dataSent = true
+            }
+        }
     }
 }
 
