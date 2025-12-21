@@ -124,7 +124,23 @@ struct VaultPreferencesView: View {
     }
 
     private func clearCache() {
-        // TODO: Implement cache clearing
+        // Clear local caches
+        // 1. Clear URLSession cache
+        URLCache.shared.removeAllCachedResponses()
+
+        // 2. Clear temp files
+        let tempDir = FileManager.default.temporaryDirectory
+        if let files = try? FileManager.default.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil) {
+            for file in files {
+                try? FileManager.default.removeItem(at: file)
+            }
+        }
+
+        // 3. Clear image caches (if using any)
+        // In a full implementation, this would also clear:
+        // - NATS message cache
+        // - Local database caches
+        // - Thumbnail caches
     }
 }
 
