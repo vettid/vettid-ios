@@ -9,8 +9,6 @@ struct ContentView: View {
     // Deep link navigation state
     @State private var showEnrollmentFromDeepLink = false
     @State private var deepLinkEnrollToken: String?
-    @State private var showConnectFromDeepLink = false
-    @State private var deepLinkConnectCode: String?
 
     var body: some View {
         ZStack {
@@ -76,23 +74,19 @@ struct ContentView: View {
         case .connect(let code):
             // If authenticated, handle connection invitation
             if appState.isAuthenticated {
-                deepLinkConnectCode = code
-                showConnectFromDeepLink = true
-                // TODO: Navigate to connection flow with code
+                appState.navigateToConnect(code: code)
             }
 
         case .message(let connectionId):
             // If authenticated, navigate to conversation
             if appState.isAuthenticated {
-                // TODO: Navigate to conversation with connectionId
-                print("Deep link: Open message for connection \(connectionId)")
+                appState.navigateToMessage(connectionId: connectionId)
             }
 
         case .vault:
             // If authenticated, navigate to vault
             if appState.isAuthenticated {
-                // TODO: Navigate to vault status
-                print("Deep link: Open vault status")
+                appState.navigateToVaultStatus()
             }
 
         case .unknown:

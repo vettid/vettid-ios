@@ -3,14 +3,16 @@ import SwiftUI
 /// View for scanning and accepting connection invitations
 struct ScanInvitationView: View {
     let authTokenProvider: @Sendable () -> String?
+    let prefilledCode: String?
 
     @StateObject private var viewModel: ScanInvitationViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var manualCode = ""
     @State private var showManualEntry = false
 
-    init(authTokenProvider: @escaping @Sendable () -> String?) {
+    init(authTokenProvider: @escaping @Sendable () -> String?, prefilledCode: String? = nil) {
         self.authTokenProvider = authTokenProvider
+        self.prefilledCode = prefilledCode
         self._viewModel = StateObject(wrappedValue: ScanInvitationViewModel(authTokenProvider: authTokenProvider))
     }
 
@@ -46,6 +48,12 @@ struct ScanInvitationView: View {
             ManualCodeEntryView(code: $manualCode) { code in
                 viewModel.onManualCodeEntered(code)
                 showManualEntry = false
+            }
+        }
+        .onAppear {
+            // Handle prefilled code from deep link
+            if let code = prefilledCode {
+                viewModel.onManualCodeEntered(code)
             }
         }
     }

@@ -27,6 +27,12 @@ struct MainNavigationView: View {
     @State private var showArchive = false
     @State private var showPreferences = false
 
+    // Deep link navigation
+    @State private var showConnectSheet = false
+    @State private var deepLinkConnectCode: String?
+    @State private var showConversation = false
+    @State private var deepLinkConnectionId: String?
+
     var body: some View {
         ZStack {
             VStack(spacing: 0) {
@@ -93,6 +99,55 @@ struct MainNavigationView: View {
             NavigationView {
                 VaultPreferencesView()
                     .environmentObject(appState)
+            }
+        }
+        .sheet(isPresented: $showConnectSheet) {
+            NavigationView {
+                if let code = deepLinkConnectCode {
+                    ScanInvitationView(authTokenProvider: { nil }, prefilledCode: code)
+                } else {
+                    ScanInvitationView(authTokenProvider: { nil })
+                }
+            }
+        }
+        .sheet(isPresented: $showConversation) {
+            NavigationView {
+                if let connectionId = deepLinkConnectionId {
+                    ConversationView(connectionId: connectionId, authTokenProvider: { nil })
+                } else {
+                    Text("Connection not found")
+                }
+            }
+        }
+        .onChange(of: appState.pendingNavigation) { navigation in
+            handlePendingNavigation(navigation)
+        }
+    }
+
+    // MARK: - Deep Link Navigation Handler
+
+    private func handlePendingNavigation(_ navigation: PendingNavigation?) {
+        guard let navigation = navigation else { return }
+
+        // Clear the pending navigation
+        appState.clearPendingNavigation()
+
+        switch navigation {
+        case .message(let connectionId):
+            // Navigate to conversation
+            deepLinkConnectionId = connectionId
+            showConversation = true
+
+        case .connect(let code):
+            // Navigate to connection flow with pre-filled code
+            deepLinkConnectCode = code
+            showConnectSheet = true
+
+        case .vaultStatus:
+            // Navigate to vault services section
+            withAnimation(.easeInOut(duration: 0.2)) {
+                currentSection = .vaultServices
+                selectedNavItem = 0  // Status tab
             }
         }
     }

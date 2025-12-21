@@ -32,6 +32,9 @@ class AppState: ObservableObject {
     @Published var hasActiveVault: Bool = false
     @Published var vaultInstanceId: String?
 
+    // Deep link navigation state
+    @Published var pendingNavigation: PendingNavigation?
+
     // User preferences
     @Published var preferences: UserPreferences {
         didSet { preferences.save() }
@@ -148,4 +151,35 @@ class AppState: ObservableObject {
             return .stopped
         }
     }
+
+    // MARK: - Navigation Helpers
+
+    /// Navigate to a specific connection for messaging
+    func navigateToMessage(connectionId: String) {
+        pendingNavigation = .message(connectionId: connectionId)
+    }
+
+    /// Navigate to connect flow with invitation code
+    func navigateToConnect(code: String) {
+        pendingNavigation = .connect(code: code)
+    }
+
+    /// Navigate to vault services status
+    func navigateToVaultStatus() {
+        pendingNavigation = .vaultStatus
+    }
+
+    /// Clear pending navigation after it's been handled
+    func clearPendingNavigation() {
+        pendingNavigation = nil
+    }
+}
+
+// MARK: - Pending Navigation
+
+/// Represents a pending navigation action from a deep link
+enum PendingNavigation: Equatable {
+    case message(connectionId: String)
+    case connect(code: String)
+    case vaultStatus
 }
