@@ -330,35 +330,75 @@ class ManageVaultViewModel: ObservableObject {
     @Published var statusColor = Color.green
     @Published var region = "us-east-1"
     @Published var createdAt: Date? = Date().addingTimeInterval(-86400 * 30) // 30 days ago
+    @Published var errorMessage: String?
+
+    private let apiClient = APIClient()
+    private let authTokenProvider: () -> String?
+
+    init(authTokenProvider: @escaping () -> String? = { nil }) {
+        self.authTokenProvider = authTokenProvider
+    }
 
     func stopVault() async {
+        guard let authToken = authTokenProvider() else {
+            errorMessage = "Not authenticated"
+            return
+        }
+
         isLoading = true
         defer { isLoading = false }
 
-        // TODO: Implement actual vault stop via API
-        try? await Task.sleep(nanoseconds: 1_000_000_000)
-
-        statusText = "Stopped"
-        statusColor = .orange
+        do {
+            _ = try await apiClient.stopVaultInstance(authToken: authToken)
+            statusText = "Stopped"
+            statusColor = .orange
+        } catch {
+            errorMessage = "Failed to stop vault: \(error.localizedDescription)"
+        }
     }
 
     func restartVault() async {
+        guard let authToken = authTokenProvider() else {
+            errorMessage = "Not authenticated"
+            return
+        }
+
         isLoading = true
         defer { isLoading = false }
 
-        // TODO: Implement actual vault restart via API
-        try? await Task.sleep(nanoseconds: 2_000_000_000)
+        do {
+            // Restart = stop + initialize
+            _ = try await apiClient.stopVaultInstance(authToken: authToken)
+            statusText = "Restarting..."
+            statusColor = .blue
 
-        statusText = "Running"
-        statusColor = .green
+            // Wait briefly then reinitialize
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            _ = try await apiClient.initializeVault(authToken: authToken)
+
+            statusText = "Running"
+            statusColor = .green
+        } catch {
+            errorMessage = "Failed to restart vault: \(error.localizedDescription)"
+        }
     }
 
     func terminateVault() async {
+        guard let authToken = authTokenProvider() else {
+            errorMessage = "Not authenticated"
+            return
+        }
+
         isLoading = true
         defer { isLoading = false }
 
-        // TODO: Implement actual vault termination via API
-        try? await Task.sleep(nanoseconds: 1_500_000_000)
+        do {
+            _ = try await apiClient.terminateVault(authToken: authToken)
+            statusText = "Terminated"
+            statusColor = .red
+        } catch {
+            errorMessage = "Failed to terminate vault: \(error.localizedDescription)"
+        }
     }
 }
 
