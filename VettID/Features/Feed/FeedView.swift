@@ -107,15 +107,37 @@ struct FeedView: View {
     private func eventsList(_ events: [FeedEvent]) -> some View {
         List {
             ForEach(events) { event in
-                EventCardView(event: event)
-                    .onTapGesture {
-                        handleEventTap(event)
+                EventCardView(
+                    event: event,
+                    isProcessing: viewModel.isProcessingAction,
+                    onAcceptConnection: { requestId in
+                        Task { await viewModel.acceptConnection(requestId: requestId) }
+                    },
+                    onDeclineConnection: { requestId in
+                        Task { await viewModel.declineConnection(requestId: requestId) }
+                    },
+                    onApproveAuth: { requestId in
+                        Task { await viewModel.approveAuth(requestId: requestId) }
+                    },
+                    onDenyAuth: { requestId in
+                        Task { await viewModel.denyAuth(requestId: requestId) }
                     }
+                )
+                .onTapGesture {
+                    handleEventTap(event)
+                }
             }
         }
         .listStyle(.plain)
         .refreshable {
             await viewModel.refresh()
+        }
+        .alert("Error", isPresented: .constant(viewModel.actionError != nil)) {
+            Button("OK") {
+                viewModel.actionError = nil
+            }
+        } message: {
+            Text(viewModel.actionError ?? "")
         }
     }
 
@@ -194,6 +216,11 @@ struct FilterChip: View {
 
 struct EventCardView: View {
     let event: FeedEvent
+    let isProcessing: Bool
+    let onAcceptConnection: (String) -> Void
+    let onDeclineConnection: (String) -> Void
+    let onApproveAuth: (String) -> Void
+    let onDenyAuth: (String) -> Void
 
     var body: some View {
         HStack(spacing: 12) {
@@ -357,34 +384,38 @@ struct EventCardView: View {
         case .connectionRequest(let e) where e.status == .pending:
             HStack(spacing: 8) {
                 Button("Accept") {
-                    // TODO: Implement accept connection
+                    onAcceptConnection(e.id)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
+                .disabled(isProcessing)
 
                 Button("Decline") {
-                    // TODO: Implement decline connection
+                    onDeclineConnection(e.id)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .disabled(isProcessing)
             }
         case .authRequest(let e) where e.status == .pending:
             HStack(spacing: 8) {
                 Button {
-                    // TODO: Implement approve auth
+                    onApproveAuth(e.id)
                 } label: {
                     Label("Approve", systemImage: "checkmark")
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
+                .disabled(isProcessing)
 
                 Button {
-                    // TODO: Implement deny auth
+                    onDenyAuth(e.id)
                 } label: {
                     Label("Deny", systemImage: "xmark")
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .disabled(isProcessing)
             }
         case .authRequest(let e):
             statusBadge(status: e.status)

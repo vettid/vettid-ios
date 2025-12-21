@@ -15,6 +15,8 @@ final class FeedViewModel: ObservableObject {
 
     @Published var state: State = .loading
     @Published var filter: FeedFilter = .all
+    @Published var isProcessingAction = false
+    @Published var actionError: String?
 
     enum FeedFilter: String, CaseIterable {
         case all = "All"
@@ -25,6 +27,13 @@ final class FeedViewModel: ObservableObject {
     }
 
     private var allEvents: [FeedEvent] = []
+    private var vaultResponseHandler: VaultResponseHandler?
+
+    // MARK: - Configuration
+
+    func configure(with vaultResponseHandler: VaultResponseHandler) {
+        self.vaultResponseHandler = vaultResponseHandler
+    }
 
     // MARK: - Load Events
 
@@ -120,5 +129,129 @@ final class FeedViewModel: ObservableObject {
 
     var unreadCount: Int {
         allEvents.filter { !$0.isRead }.count
+    }
+
+    // MARK: - Connection Actions
+
+    func acceptConnection(requestId: String) async {
+        guard let handler = vaultResponseHandler else {
+            actionError = "Not connected to vault"
+            return
+        }
+
+        isProcessingAction = true
+        actionError = nil
+
+        do {
+            let event = VaultEventType.acceptConnection(requestId: requestId)
+            let response = try await handler.submitAndAwait(event)
+
+            if response.isSuccess {
+                // Remove the connection request from feed
+                removeEvent(withRequestId: requestId)
+            } else {
+                actionError = response.error ?? "Failed to accept connection"
+            }
+        } catch {
+            actionError = "Failed to accept connection: \(error.localizedDescription)"
+        }
+
+        isProcessingAction = false
+    }
+
+    func declineConnection(requestId: String) async {
+        guard let handler = vaultResponseHandler else {
+            actionError = "Not connected to vault"
+            return
+        }
+
+        isProcessingAction = true
+        actionError = nil
+
+        do {
+            let event = VaultEventType.declineConnection(requestId: requestId)
+            let response = try await handler.submitAndAwait(event)
+
+            if response.isSuccess {
+                // Remove the connection request from feed
+                removeEvent(withRequestId: requestId)
+            } else {
+                actionError = response.error ?? "Failed to decline connection"
+            }
+        } catch {
+            actionError = "Failed to decline connection: \(error.localizedDescription)"
+        }
+
+        isProcessingAction = false
+    }
+
+    // MARK: - Auth Actions
+
+    func approveAuth(requestId: String) async {
+        guard let handler = vaultResponseHandler else {
+            actionError = "Not connected to vault"
+            return
+        }
+
+        isProcessingAction = true
+        actionError = nil
+
+        do {
+            let event = VaultEventType.approveAuth(requestId: requestId)
+            let response = try await handler.submitAndAwait(event)
+
+            if response.isSuccess {
+                // Remove the auth request from feed
+                removeEvent(withRequestId: requestId)
+            } else {
+                actionError = response.error ?? "Failed to approve authentication"
+            }
+        } catch {
+            actionError = "Failed to approve authentication: \(error.localizedDescription)"
+        }
+
+        isProcessingAction = false
+    }
+
+    func denyAuth(requestId: String) async {
+        guard let handler = vaultResponseHandler else {
+            actionError = "Not connected to vault"
+            return
+        }
+
+        isProcessingAction = true
+        actionError = nil
+
+        do {
+            let event = VaultEventType.denyAuth(requestId: requestId)
+            let response = try await handler.submitAndAwait(event)
+
+            if response.isSuccess {
+                // Remove the auth request from feed
+                removeEvent(withRequestId: requestId)
+            } else {
+                actionError = response.error ?? "Failed to deny authentication"
+            }
+        } catch {
+            actionError = "Failed to deny authentication: \(error.localizedDescription)"
+        }
+
+        isProcessingAction = false
+    }
+
+    // MARK: - Helper Methods
+
+    private func removeEvent(withRequestId requestId: String) {
+        allEvents.removeAll { event in
+            switch event {
+            case .connectionRequest(let e):
+                return e.id == requestId
+            case .authRequest(let e):
+                return e.id == requestId
+            default:
+                return false
+            }
+        }
+        applyFilter()
     }
 }

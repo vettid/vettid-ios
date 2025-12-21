@@ -77,6 +77,10 @@ enum VaultEventType {
     case sendMessage(recipient: String, content: String)
     case updateProfile(updates: [String: Any])
     case createConnection(inviteCode: String)
+    case acceptConnection(requestId: String)
+    case declineConnection(requestId: String)
+    case approveAuth(requestId: String)
+    case denyAuth(requestId: String)
     case retrieveSecret(secretId: String)
     case storeSecret(secretId: String, data: Data)
     case custom(type: String, payload: [String: AnyCodableValue])
@@ -86,6 +90,10 @@ enum VaultEventType {
         case .sendMessage: return "messaging.send"
         case .updateProfile: return "profile.update"
         case .createConnection: return "connection.create"
+        case .acceptConnection: return "connection.accept"
+        case .declineConnection: return "connection.decline"
+        case .approveAuth: return "auth.approve"
+        case .denyAuth: return "auth.deny"
         case .retrieveSecret: return "secret.retrieve"
         case .storeSecret: return "secret.store"
         case .custom(let type, _): return type
@@ -103,6 +111,14 @@ enum VaultEventType {
             return updates.compactMapValues { AnyCodableValue($0) }
         case .createConnection(let inviteCode):
             return ["invite_code": AnyCodableValue(inviteCode)]
+        case .acceptConnection(let requestId):
+            return ["request_id": AnyCodableValue(requestId)]
+        case .declineConnection(let requestId):
+            return ["request_id": AnyCodableValue(requestId)]
+        case .approveAuth(let requestId):
+            return ["request_id": AnyCodableValue(requestId)]
+        case .denyAuth(let requestId):
+            return ["request_id": AnyCodableValue(requestId)]
         case .retrieveSecret(let secretId):
             return ["secret_id": AnyCodableValue(secretId)]
         case .storeSecret(let secretId, let data):
