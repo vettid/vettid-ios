@@ -87,6 +87,8 @@
 		0000004F /* RequestSigning.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000004F /* RequestSigning.swift */; };
 		00000050 /* SecurePasteboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000050 /* SecurePasteboard.swift */; };
 		00000051 /* ScreenProtection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000051 /* ScreenProtection.swift */; };
+		00000052 /* ProfileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000052 /* ProfileStore.swift */; };
+		00000053 /* SecretsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000053 /* SecretsStore.swift */; };
 		12AC6B6A5207336BD3912200 /* ThemeSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA573762F5B324146F857357 /* ThemeSettingsView.swift */; };
 		1EAC19EF056BA34609877523 /* ArchiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A4A6BF4B7E19B38EDEF31AC /* ArchiveView.swift */; };
 		3C5A3DA38E4A1DDE8F4639C4 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2D6CF42AD511A65BF8DC12 /* AboutView.swift */; };
@@ -196,6 +198,8 @@
 		1000004F /* RequestSigning.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RequestSigning.swift; sourceTree = "<group>"; };
 		10000050 /* SecurePasteboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurePasteboard.swift; sourceTree = "<group>"; };
 		10000051 /* ScreenProtection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenProtection.swift; sourceTree = "<group>"; };
+		10000052 /* ProfileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileStore.swift; sourceTree = "<group>"; };
+		10000053 /* SecretsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecretsStore.swift; sourceTree = "<group>"; };
 		157809425BFB22E6896C0225 /* DrawerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DrawerView.swift; sourceTree = "<group>"; };
 		20000001 /* VettID.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VettID.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		208B738362A4D7A093432F99 /* PersonalDataViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PersonalDataViewModel.swift; sourceTree = "<group>"; };
@@ -356,6 +360,8 @@
 			isa = PBXGroup;
 			children = (
 				10000004 /* CredentialStore.swift */,
+				10000052 /* ProfileStore.swift */,
+				10000053 /* SecretsStore.swift */,
 				10000005 /* SecureKeyStore.swift */,
 			);
 			path = Storage;
@@ -734,6 +740,8 @@
 				0000004F /* RequestSigning.swift in Sources */,
 				00000050 /* SecurePasteboard.swift in Sources */,
 				00000051 /* ScreenProtection.swift in Sources */,
+				00000052 /* ProfileStore.swift in Sources */,
+				00000053 /* SecretsStore.swift in Sources */,
 				EBA8CC5E3DAC52A8A2738BFE /* DrawerView.swift in Sources */,
 				B0654E219C2D593B6A9355A0 /* HeaderView.swift in Sources */,
 				CA86CA36D9E993B236ED44E6 /* ContextualBottomNav.swift in Sources */,

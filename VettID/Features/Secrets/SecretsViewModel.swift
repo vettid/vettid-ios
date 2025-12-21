@@ -23,23 +23,25 @@ final class SecretsViewModel: ObservableObject {
     private var secrets: [Secret] = []
     private var autoHideTask: Task<Void, Never>?
     private var pendingRevealSecretId: String?
+    private var cachedPassword: String?
+
+    private let secretsStore = SecretsStore()
 
     // MARK: - Load Secrets
 
     func loadSecrets() async {
         state = .loading
 
-        // Simulate loading delay
-        try? await Task.sleep(nanoseconds: 500_000_000)
+        do {
+            secrets = try secretsStore.retrieveAll()
 
-        // For now, use mock data
-        // TODO: Load from secure storage
-        secrets = Secret.mockSecrets()
-
-        if secrets.isEmpty {
-            state = .empty
-        } else {
-            state = .loaded(secrets)
+            if secrets.isEmpty {
+                state = .empty
+            } else {
+                state = .loaded(secrets)
+            }
+        } catch {
+            state = .error("Failed to load secrets: \(error.localizedDescription)")
         }
     }
 
@@ -129,66 +131,92 @@ final class SecretsViewModel: ObservableObject {
     // MARK: - Password Verification
 
     private func verifyPassword(_ password: String) async -> Bool {
-        // TODO: Implement actual password verification using stored hash
-        // For now, accept any non-empty password
-        return !password.isEmpty
+        // Check if password hash is set up
+        guard secretsStore.hasPasswordHash() else {
+            // No password hash set - accept any non-empty password for first-time setup
+            // In production, this should be tied to vault password
+            return !password.isEmpty
+        }
+
+        return await secretsStore.verifyPassword(password)
     }
 
     // MARK: - Decryption
 
     private func decryptSecret(_ secretId: String, password: String) async -> String? {
-        // TODO: Implement actual decryption
-        // For now, return mock value
-
-        // Simulate decryption delay
-        try? await Task.sleep(nanoseconds: 200_000_000)
-
-        // Return mock decrypted value
         guard let secret = secrets.first(where: { $0.id == secretId }) else {
             return nil
         }
 
-        switch secret.category {
-        case .password:
-            return "SuperSecr3tP@ssw0rd!"
-        case .apiKey:
-            return "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-        case .pin:
-            return "1234"
-        case .recoveryCode:
-            return "ABCD-EFGH-IJKL-MNOP\nQRST-UVWX-YZ12-3456"
-        case .note, .other:
-            return "This is the secret content that was encrypted."
+        do {
+            let decrypted = try secretsStore.decryptValue(secret.encryptedValue, password: password)
+            // Cache password for subsequent operations in this session
+            cachedPassword = password
+            return decrypted
+        } catch {
+            #if DEBUG
+            print("Decryption failed: \(error)")
+            #endif
+            return nil
         }
     }
 
     // MARK: - Add Secret
 
-    func addSecret(name: String, value: String, category: Secret.SecretCategory, notes: String?) async {
-        // TODO: Encrypt and store secret
-        let newSecret = Secret(
-            id: UUID().uuidString,
-            name: name,
-            encryptedValue: "encrypted_\(value)",
-            category: category,
-            notes: notes,
-            createdAt: Date(),
-            updatedAt: Date()
-        )
+    func addSecret(name: String, value: String, category: Secret.SecretCategory, notes: String?, password: String) async {
+        do {
+            // Encrypt the secret value
+            let encryptedValue = try secretsStore.encryptValue(value, password: password)
 
-        secrets.insert(newSecret, at: 0)
-        state = .loaded(secrets)
+            let newSecret = Secret(
+                id: UUID().uuidString,
+                name: name,
+                encryptedValue: encryptedValue,
+                category: category,
+                notes: notes,
+                createdAt: Date(),
+                updatedAt: Date()
+            )
+
+            // Store in keychain
+            try secretsStore.store(secret: newSecret)
+
+            secrets.insert(newSecret, at: 0)
+            state = .loaded(secrets)
+        } catch {
+            state = .error("Failed to save secret: \(error.localizedDescription)")
+        }
+    }
+
+    /// Add secret using cached password (from recent verification)
+    func addSecret(name: String, value: String, category: Secret.SecretCategory, notes: String?) async {
+        guard let password = cachedPassword else {
+            state = .error("Password required to add secret")
+            return
+        }
+        await addSecret(name: name, value: value, category: category, notes: notes, password: password)
     }
 
     // MARK: - Delete Secret
 
     func deleteSecret(_ secretId: String) async {
-        secrets.removeAll { $0.id == secretId }
+        do {
+            try secretsStore.delete(id: secretId)
+            secrets.removeAll { $0.id == secretId }
 
-        if secrets.isEmpty {
-            state = .empty
-        } else {
-            state = .loaded(secrets)
+            if secrets.isEmpty {
+                state = .empty
+            } else {
+                state = .loaded(secrets)
+            }
+        } catch {
+            state = .error("Failed to delete secret: \(error.localizedDescription)")
         }
+    }
+
+    // MARK: - Clear Cached Password
+
+    func clearCachedPassword() {
+        cachedPassword = nil
     }
 }

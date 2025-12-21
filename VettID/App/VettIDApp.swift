@@ -25,6 +25,9 @@ class AppState: ObservableObject {
     @Published var currentUserGuid: String?
     @Published var vaultStatus: VaultStatus?
 
+    // User profile
+    @Published var currentProfile: Profile?
+
     // Vault state tracking
     @Published var hasActiveVault: Bool = false
     @Published var vaultInstanceId: String?
@@ -54,10 +57,33 @@ class AppState: ObservableObject {
     }
 
     private let credentialStore = CredentialStore()
+    private let profileStore = ProfileStore()
 
     init() {
         self.preferences = UserPreferences.load()
         checkExistingCredential()
+        loadProfile()
+    }
+
+    /// Load stored profile for current user
+    func loadProfile() {
+        if let guid = currentUserGuid {
+            currentProfile = try? profileStore.retrieve(userGuid: guid)
+        } else {
+            currentProfile = try? profileStore.retrieveFirst()
+        }
+    }
+
+    /// Update and save profile
+    func updateProfile(_ profile: Profile) {
+        do {
+            try profileStore.store(profile: profile)
+            currentProfile = profile
+        } catch {
+            #if DEBUG
+            print("Failed to save profile: \(error)")
+            #endif
+        }
     }
 
     func checkExistingCredential() {

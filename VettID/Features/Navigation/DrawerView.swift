@@ -381,13 +381,12 @@ struct DrawerHeader: View {
     }
 
     private var userName: String {
-        // TODO: Get from stored profile
-        "VettID User"
+        appState.currentProfile?.displayName ?? "VettID User"
     }
 
     private var userEmail: String? {
-        // TODO: Get from stored profile
-        nil
+        // Email is not stored in Profile model, use bio or nil
+        appState.currentProfile?.bio
     }
 
     private var vaultStatusIcon: String {
