@@ -277,6 +277,112 @@ Authorization: Bearer {action_token}     // NOT Cognito token!
 
 ---
 
+## NATS Communication (Vault Operations)
+
+**Important:** All secrets and profile operations go through NATS to the vault EC2 instance. These endpoints are **only accessible when the vault is online**.
+
+### NATS Topics
+
+| Topic | Direction | Purpose |
+|-------|-----------|---------|
+| `OwnerSpace.{user_guid}.forVault.>` | App → Vault | Send commands to vault |
+| `OwnerSpace.{user_guid}.forApp.>` | Vault → App | Receive responses from vault |
+| `OwnerSpace.{user_guid}.control.>` | System | System control messages |
+
+### Message Format (App → Vault)
+
+**IMPORTANT:** The vault-manager expects this exact JSON structure:
+
+```json
+{
+  "id": "unique-request-id",
+  "type": "secrets.datastore.add",
+  "timestamp": "2025-12-22T15:30:00Z",
+  "payload": { ... },
+  "reply_to": "optional-reply-subject"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | Yes | Unique request ID for correlation (UUID recommended) |
+| `type` | string | Yes | Handler/event type (see Event Types below) |
+| `timestamp` | string | Yes | ISO 8601 timestamp |
+| `payload` | object | Yes | Handler-specific payload |
+| `reply_to` | string | No | Optional custom reply subject |
+
+### Response Format (Vault → App)
+
+```json
+{
+  "event_id": "the-request-id-from-message",
+  "success": true,
+  "timestamp": "2025-12-22T15:30:01Z",
+  "result": { ... },
+  "error": null
+}
+```
+
+### Event Types (Built-in Handlers)
+
+#### Secrets - Datastore (Minor Secrets)
+
+| Event Type | Description | Payload |
+|------------|-------------|---------|
+| `secrets.datastore.add` | Add a new secret | `{key, value, metadata}` |
+| `secrets.datastore.update` | Update existing secret | `{key, value, metadata?}` |
+| `secrets.datastore.retrieve` | Get a secret by key | `{key}` |
+| `secrets.datastore.delete` | Delete a secret | `{key}` |
+| `secrets.datastore.list` | List secrets (metadata only) | `{category?, tag?, limit?, cursor?}` |
+
+#### Profile
+
+| Event Type | Description | Payload |
+|------------|-------------|---------|
+| `profile.get` | Get profile fields | `{fields: []}` |
+| `profile.update` | Update profile fields | `{fields: {name: value}}` |
+| `profile.delete` | Delete profile fields | `{fields: []}` |
+
+#### Credential
+
+| Event Type | Description | Payload |
+|------------|-------------|---------|
+| `credential.store` | Store initial credential | `{encrypted_blob, ephemeral_public_key, nonce, version}` |
+| `credential.sync` | Sync after auth rotation | `{encrypted_blob, ephemeral_public_key, nonce, version}` |
+| `credential.get` | Get current credential | `{}` |
+| `credential.version` | Check credential version | `{}` |
+
+### iOS Implementation Notes
+
+```swift
+struct VaultMessage: Encodable {
+    let id: String           // UUID
+    let type: String         // e.g., "secrets.datastore.add"
+    let timestamp: String    // ISO 8601
+    let payload: [String: Any]
+
+    static func create(type: String, payload: [String: Any]) -> VaultMessage {
+        return VaultMessage(
+            id: UUID().uuidString,
+            type: type,
+            timestamp: ISO8601DateFormatter().string(from: Date()),
+            payload: payload
+        )
+    }
+}
+```
+
+### Testing NATS Communication
+
+1. **Ensure vault is online** - Check `/member/vault/status` returns `running`
+2. **Get NATS credentials** - Call `/vault/nats/token` to get fresh credentials
+3. **Connect to NATS** - Use credentials to connect to `nats.vettid.dev:4222`
+4. **Subscribe to responses** - `OwnerSpace.{user_guid}.forApp.>`
+5. **Send test event** - Publish to `OwnerSpace.{user_guid}.forVault.profile.get`
+6. **Verify response** - Check `event_id` matches your request `id`
+
+---
+
 ## Issues
 
 ### Open
