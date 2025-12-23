@@ -37,6 +37,77 @@ struct NatsCredentials: Codable, Equatable {
         )
     }
 
+    /// Create credentials from .creds file content (returned from enrollFinalize)
+    /// .creds format:
+    /// ```
+    /// -----BEGIN NATS USER JWT-----
+    /// {jwt}
+    /// ------END NATS USER JWT------
+    ///
+    /// -----BEGIN USER NKEY SEED-----
+    /// {seed}
+    /// ------END USER NKEY SEED------
+    /// ```
+    init?(
+        fromCredsFileContent content: String,
+        endpoint: String,
+        ownerSpace: String,
+        messageSpace: String,
+        topics: NatsTopics? = nil
+    ) {
+        // Parse JWT from .creds file
+        guard let jwtMatch = content.range(of: "-----BEGIN NATS USER JWT-----\n"),
+              let jwtEndMatch = content.range(of: "\n------END NATS USER JWT------") else {
+            return nil
+        }
+        let jwtStart = jwtMatch.upperBound
+        let jwtEnd = jwtEndMatch.lowerBound
+        let jwt = String(content[jwtStart..<jwtEnd]).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Parse seed from .creds file
+        guard let seedMatch = content.range(of: "-----BEGIN USER NKEY SEED-----\n"),
+              let seedEndMatch = content.range(of: "\n------END USER NKEY SEED------") else {
+            return nil
+        }
+        let seedStart = seedMatch.upperBound
+        let seedEnd = seedEndMatch.lowerBound
+        let seed = String(content[seedStart..<seedEnd]).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Extract expiration from JWT payload if possible
+        // JWT format: header.payload.signature (all base64url encoded)
+        var expiresAt = Date().addingTimeInterval(86400) // Default 24h
+        let jwtParts = jwt.split(separator: ".")
+        if jwtParts.count >= 2 {
+            // Decode the payload (second part)
+            var base64 = String(jwtParts[1])
+            // Convert base64url to base64
+            base64 = base64.replacingOccurrences(of: "-", with: "+")
+                          .replacingOccurrences(of: "_", with: "/")
+            // Add padding if needed
+            while base64.count % 4 != 0 {
+                base64 += "="
+            }
+            if let payloadData = Data(base64Encoded: base64),
+               let payload = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any],
+               let exp = payload["exp"] as? TimeInterval {
+                expiresAt = Date(timeIntervalSince1970: exp)
+            }
+        }
+
+        // Use topics from response or create defaults based on ownerSpace
+        let permissions = NatsPermissions(
+            publish: topics?.publish ?? ["\(ownerSpace).forVault.>"],
+            subscribe: topics?.subscribe ?? ["\(ownerSpace).forApp.>"]
+        )
+
+        self.tokenId = "enrollment-\(UUID().uuidString)"
+        self.jwt = jwt
+        self.seed = seed
+        self.endpoint = endpoint
+        self.expiresAt = expiresAt
+        self.permissions = permissions
+    }
+
     /// Create credentials directly
     init(
         tokenId: String,

@@ -8,7 +8,8 @@ struct EnrollmentQRCodeData: Codable {
     let type: String
     let version: Int
     let apiUrl: String
-    let sessionToken: String
+    let sessionToken: String?      // For QR code flow (web-initiated)
+    let invitationCode: String?    // For direct invitation code flow
     let userGuid: String
 
     enum CodingKeys: String, CodingKey {
@@ -16,8 +17,15 @@ struct EnrollmentQRCodeData: Codable {
         case version
         case apiUrl = "api_url"
         case sessionToken = "session_token"
+        case invitationCode = "invitation_code"
         case userGuid = "user_guid"
     }
+
+    /// Whether this is a QR code flow (has session_token)
+    var isQRFlow: Bool { sessionToken != nil }
+
+    /// Whether this is an invitation code flow
+    var isInvitationFlow: Bool { invitationCode != nil }
 }
 
 /// Manages the complete enrollment flow state
@@ -204,7 +212,7 @@ final class EnrollmentViewModel: ObservableObject {
         state = .processingInvitation
 
         do {
-            // Parse QR code JSON data to extract api_url and session_token
+            // Parse QR code JSON data to extract api_url and session_token or invitation_code
             let qrData = try parseQRCodeData(code)
             print("[Enrollment] Parsed QR data - apiUrl: \(qrData.apiUrl), userGuid: \(qrData.userGuid)")
 
@@ -214,12 +222,55 @@ final class EnrollmentViewModel: ObservableObject {
             }
             apiClient = APIClient(baseURL: apiUrl, enforcePinning: false)
 
+            // Route to appropriate flow based on QR data content
+            if qrData.isQRFlow, let sessionToken = qrData.sessionToken {
+                // QR Code Flow: Authenticate with session_token first
+                await startQRCodeFlow(sessionToken: sessionToken)
+            } else if qrData.isInvitationFlow, let invitationCode = qrData.invitationCode {
+                // Invitation Code Flow: Start enrollment directly
+                await startInvitationCodeFlow(invitationCode: invitationCode)
+            } else {
+                // Fallback: Assume session token for backwards compatibility
+                await startQRCodeFlow(sessionToken: qrData.sessionToken ?? code)
+            }
+
+        } catch {
+            print("[Enrollment] Error during handleScannedCode: \(error)")
+            handleError(error, retryable: true)
+        }
+    }
+
+    /// Handle direct invitation code entry (without QR scan)
+    func handleInvitationCode(_ code: String, apiUrl: String? = nil) async {
+        print("[Enrollment] handleInvitationCode called with: \(code.prefix(20))...")
+        scannedCode = code
+        state = .processingInvitation
+
+        do {
+            // Use provided API URL or default
+            let urlString = apiUrl ?? "https://tiqpij5mue.execute-api.us-east-1.amazonaws.com"
+            guard let url = URL(string: urlString) else {
+                throw EnrollmentError.invalidInvitationCode
+            }
+            apiClient = APIClient(baseURL: url, enforcePinning: false)
+
+            await startInvitationCodeFlow(invitationCode: code)
+
+        } catch {
+            print("[Enrollment] Error during handleInvitationCode: \(error)")
+            handleError(error, retryable: true)
+        }
+    }
+
+    /// QR Code Flow: Authenticate with session_token to get enrollment JWT
+    private func startQRCodeFlow(sessionToken: String) async {
+        do {
             let deviceId = getDeviceId()
 
             // Step 1: Authenticate with session_token to get enrollment JWT
             print("[Enrollment] Step 1: Authenticating with session token...")
             let authRequest = EnrollAuthenticateRequest(
-                sessionToken: qrData.sessionToken,
+                sessionToken: sessionToken,
                 deviceId: deviceId,
                 deviceType: "ios"
             )
@@ -235,24 +286,74 @@ final class EnrollmentViewModel: ObservableObject {
             let startRequest = EnrollStartRequest(skipAttestation: true)
             let response = try await apiClient.enrollStart(request: startRequest, authToken: authResponse.enrollmentToken)
 
-            // Store session data from start response
-            transactionKeys = response.transactionKeys
-            passwordKeyId = response.passwordKeyId
+            // Continue with common flow
+            await handleEnrollStartResponse(response)
 
-            // Check if attestation is required and store challenge
-            if response.attestationRequired == true,
-               let challenge = response.attestationChallenge {
-                attestationChallenge = challenge
-                state = .attestationRequired(challenge: challenge)
-            } else {
-                // Skip attestation if not required (unsupported device fallback)
-                state = .attestationComplete
-                await proceedToPassword()
+        } catch {
+            print("[Enrollment] Error during QR code flow: \(error)")
+            handleError(error, retryable: true)
+        }
+    }
+
+    /// Invitation Code Flow: Start enrollment directly with invitation code
+    /// Note: This flow gets the enrollmentToken in the enrollStart response
+    private func startInvitationCodeFlow(invitationCode: String) async {
+        do {
+            let deviceId = getDeviceId()
+
+            // For invitation code flow, we need to call a different endpoint
+            // that accepts invitation_code directly and returns enrollment token
+            print("[Enrollment] Starting invitation code flow...")
+
+            // First, authenticate to get enrollment token
+            // The invitation code is used as the session token in this flow
+            let authRequest = EnrollAuthenticateRequest(
+                sessionToken: invitationCode,
+                deviceId: deviceId,
+                deviceType: "ios"
+            )
+
+            do {
+                let authResponse = try await apiClient.enrollAuthenticate(request: authRequest)
+
+                // Store the enrollment token (JWT) for subsequent calls
+                enrollmentToken = authResponse.enrollmentToken
+                enrollmentSessionId = authResponse.enrollmentSessionId
+                userGuid = authResponse.userGuid
+
+                // Call enrollStart with the JWT token
+                let startRequest = EnrollStartRequest(skipAttestation: true)
+                let response = try await apiClient.enrollStart(request: startRequest, authToken: authResponse.enrollmentToken)
+
+                await handleEnrollStartResponse(response)
+            } catch {
+                // If authenticate fails, the code might be a legacy invitation code
+                // Try alternative flow or report error
+                print("[Enrollment] Invitation code flow failed: \(error)")
+                throw EnrollmentError.invalidInvitationCode
             }
 
         } catch {
-            print("[Enrollment] Error during handleScannedCode: \(error)")
+            print("[Enrollment] Error during invitation code flow: \(error)")
             handleError(error, retryable: true)
+        }
+    }
+
+    /// Handle the response from enrollStart (common to both flows)
+    private func handleEnrollStartResponse(_ response: EnrollStartResponse) async {
+        // Store session data from start response
+        transactionKeys = response.transactionKeys
+        passwordKeyId = response.passwordKeyId
+
+        // Check if attestation is required and store challenge
+        if response.attestationRequired == true,
+           let challenge = response.attestationChallenge {
+            attestationChallenge = challenge
+            state = .attestationRequired(challenge: challenge)
+        } else {
+            // Skip attestation if not required (unsupported device fallback)
+            state = .attestationComplete
+            await proceedToPassword()
         }
     }
 
@@ -510,6 +611,7 @@ final class EnrollmentViewModel: ObservableObject {
                 version: 1,
                 apiUrl: "https://tiqpij5mue.execute-api.us-east-1.amazonaws.com",
                 sessionToken: code,
+                invitationCode: nil,
                 userGuid: ""
             )
         }
@@ -520,6 +622,7 @@ final class EnrollmentViewModel: ObservableObject {
             version: 1,
             apiUrl: "https://tiqpij5mue.execute-api.us-east-1.amazonaws.com",
             sessionToken: qrContent,
+            invitationCode: nil,
             userGuid: ""
         )
     }

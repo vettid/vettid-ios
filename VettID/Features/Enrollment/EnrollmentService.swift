@@ -27,6 +27,11 @@ final class EnrollmentService: ObservableObject {
     private var attestationKeyId: String?
     private var memberAuthToken: String?
 
+    // NATS credentials from enrollment (auto-provisioned vault)
+    private(set) var natsCredentials: NatsCredentials?
+    private(set) var ownerSpaceId: String?
+    private(set) var messageSpaceId: String?
+
     private var apiClient: APIClient!
     private let credentialStore = CredentialStore()
     private let attestationManager = AttestationManager()
@@ -226,13 +231,45 @@ final class EnrollmentService: ObservableObject {
             state = .storingCredential
             try storeCredential(package: response.credentialPackage, vaultStatus: response.vaultStatus ?? "unknown")
 
-            // Clear session data
+            // Parse and store NATS credentials if provided (auto-provisioned vault)
+            if let natsConnection = response.natsConnection {
+                storeNatsCredentials(from: natsConnection)
+            }
+
+            // Clear session data (but keep NATS credentials accessible)
             clearSessionData()
 
             state = .completed(userGuid: response.credentialPackage.userGuid)
 
         } catch {
             handleError(error)
+        }
+    }
+
+    /// Store NATS credentials parsed from the .creds file content
+    private func storeNatsCredentials(from natsConnection: NatsConnectionInfo) {
+        // Parse the .creds file content to extract JWT and seed
+        if let credentials = NatsCredentials(
+            fromCredsFileContent: natsConnection.credentials,
+            endpoint: natsConnection.endpoint,
+            ownerSpace: natsConnection.ownerSpace,
+            messageSpace: natsConnection.messageSpace,
+            topics: natsConnection.topics
+        ) {
+            self.natsCredentials = credentials
+            self.ownerSpaceId = natsConnection.ownerSpace
+            self.messageSpaceId = natsConnection.messageSpace
+
+            #if DEBUG
+            print("[Enrollment] NATS credentials stored from enrollFinalize")
+            print("[Enrollment] Endpoint: \(natsConnection.endpoint)")
+            print("[Enrollment] OwnerSpace: \(natsConnection.ownerSpace)")
+            print("[Enrollment] JWT expires: \(credentials.expiresAt)")
+            #endif
+        } else {
+            #if DEBUG
+            print("[Enrollment] Warning: Failed to parse NATS credentials from .creds file")
+            #endif
         }
     }
 

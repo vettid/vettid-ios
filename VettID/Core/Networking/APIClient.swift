@@ -639,6 +639,23 @@ struct EnrollFinalizeResponse: Decodable {
     let credentialPackage: CredentialPackage
     let vaultStatus: String?
     let message: String?
+    let natsConnection: NatsConnectionInfo?  // NATS credentials from auto-provisioned vault
+    let vaultInstanceId: String?             // EC2 instance ID for the vault
+}
+
+// MARK: - NATS Connection Info (returned from enrollFinalize)
+
+struct NatsConnectionInfo: Decodable {
+    let endpoint: String           // NATS server URL
+    let credentials: String        // Full .creds file content (JWT + seed)
+    let ownerSpace: String         // OwnerSpace topic prefix
+    let messageSpace: String       // MessageSpace topic prefix
+    let topics: NatsTopics?        // Optional topic permissions
+}
+
+struct NatsTopics: Decodable {
+    let publish: [String]          // Topics the app can publish to
+    let subscribe: [String]        // Topics the app can subscribe to
 }
 
 struct CredentialPackage: Codable {

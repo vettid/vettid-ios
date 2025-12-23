@@ -158,10 +158,14 @@ class AppState: ObservableObject {
 
     private func parseVaultStatus(_ status: String) -> VaultStatus {
         switch status.uppercased() {
-        case "PENDING_ENROLLMENT":
+        case "PENDING_ENROLLMENT", "PENDING-ENROLLMENT":
             return .pendingEnrollment
+        case "PENDING_PROVISION", "PENDING-PROVISION":
+            return .pendingProvision
         case "PROVISIONING":
-            return .provisioning
+            return .provisioning(progress: nil)
+        case "INITIALIZING":
+            return .initializing
         case "RUNNING":
             return .running(instanceId: "")
         case "STOPPED":

@@ -20,17 +20,18 @@ final class VaultEventClient {
 
     /// Submit an event to the vault for processing
     func submitEvent(_ event: VaultEventType) async throws -> String {
-        let requestId = UUID().uuidString
+        let id = UUID().uuidString
         let message = VaultEventMessage(
-            requestId: requestId,
-            eventType: event.type,
+            id: id,
+            type: event.type,
             payload: event.payload,
             timestamp: ISO8601DateFormatter().string(from: Date())
         )
 
-        try await ownerSpaceClient.sendToVault(message, topic: "events.\(event.type)")
+        // Topic is just the event type (no "events." prefix per Android/backend alignment)
+        try await ownerSpaceClient.sendToVault(message, topic: event.type)
 
-        return requestId
+        return id
     }
 
     /// Submit raw event data
@@ -38,17 +39,18 @@ final class VaultEventClient {
         type: String,
         payload: [String: AnyCodableValue]
     ) async throws -> String {
-        let requestId = UUID().uuidString
+        let id = UUID().uuidString
         let message = VaultEventMessage(
-            requestId: requestId,
-            eventType: type,
+            id: id,
+            type: type,
             payload: payload,
             timestamp: ISO8601DateFormatter().string(from: Date())
         )
 
-        try await ownerSpaceClient.sendToVault(message, topic: "events.\(type)")
+        // Topic is just the event type (no "events." prefix per Android/backend alignment)
+        try await ownerSpaceClient.sendToVault(message, topic: type)
 
-        return requestId
+        return id
     }
 
     // MARK: - Response Subscription
@@ -135,36 +137,38 @@ enum VaultEventType {
 // MARK: - Message Types
 
 struct VaultEventMessage: Encodable {
-    let requestId: String
-    let eventType: String
+    let id: String
+    let type: String
     let payload: [String: AnyCodableValue]
     let timestamp: String
 
-    enum CodingKeys: String, CodingKey {
-        case requestId = "request_id"
-        case eventType = "event_type"
-        case payload
-        case timestamp
-    }
+    // No CodingKeys needed - field names match JSON directly
 }
 
 struct VaultEventResponse: Decodable {
-    let requestId: String
-    let status: String  // "success", "error"
+    let eventId: String?      // Primary field name from vault
+    let id: String?           // Fallback field name
+    let success: Bool
+    let timestamp: String
     let result: [String: AnyCodableValue]?
     let error: String?
-    let processedAt: String
 
     enum CodingKeys: String, CodingKey {
-        case requestId = "request_id"
-        case status
+        case eventId = "event_id"
+        case id
+        case success
+        case timestamp
         case result
         case error
-        case processedAt = "processed_at"
+    }
+
+    /// Get the response ID (prefers eventId, falls back to id)
+    var responseId: String {
+        eventId ?? id ?? ""
     }
 
     var isSuccess: Bool {
-        status == "success"
+        success
     }
 }
 

@@ -76,10 +76,14 @@ final class VaultService: ObservableObject {
 
     private func parseStatus(from statusString: String) -> VaultStatus {
         switch statusString.uppercased() {
-        case "PENDING_ENROLLMENT":
+        case "PENDING_ENROLLMENT", "PENDING-ENROLLMENT":
             return .pendingEnrollment
+        case "PENDING_PROVISION", "PENDING-PROVISION":
+            return .pendingProvision
         case "PROVISIONING":
-            return .provisioning
+            return .provisioning(progress: nil)
+        case "INITIALIZING":
+            return .initializing
         case "RUNNING":
             return .running(instanceId: "")
         case "STOPPED":
@@ -112,7 +116,7 @@ final class VaultService: ObservableObject {
                 throw VaultError.actionFailed(response.message)
             }
 
-            status = .provisioning
+            status = .provisioning(progress: nil)
 
         } catch let error as VaultError {
             self.error = error
@@ -160,7 +164,9 @@ final class VaultService: ObservableObject {
 
 enum VaultStatus: Equatable {
     case pendingEnrollment
-    case provisioning
+    case pendingProvision      // Enrollment complete, waiting for vault provision
+    case provisioning(progress: Double?)  // EC2 instance being created
+    case initializing          // Vault software starting up
     case running(instanceId: String)
     case stopped
     case terminated
@@ -169,8 +175,12 @@ enum VaultStatus: Equatable {
         switch self {
         case .pendingEnrollment:
             return "Pending Enrollment"
+        case .pendingProvision:
+            return "Ready to Provision"
         case .provisioning:
-            return "Starting..."
+            return "Provisioning..."
+        case .initializing:
+            return "Initializing..."
         case .running:
             return "Running"
         case .stopped:
@@ -184,7 +194,9 @@ enum VaultStatus: Equatable {
         switch self {
         case .pendingEnrollment:
             return "hourglass"
-        case .provisioning:
+        case .pendingProvision:
+            return "externaldrive.badge.plus"
+        case .provisioning, .initializing:
             return "arrow.clockwise"
         case .running:
             return "checkmark.circle.fill"
@@ -200,6 +212,15 @@ enum VaultStatus: Equatable {
             return true
         }
         return false
+    }
+
+    var isStarting: Bool {
+        switch self {
+        case .provisioning, .initializing:
+            return true
+        default:
+            return false
+        }
     }
 }
 

@@ -121,7 +121,8 @@ actor VaultResponseHandler {
     }
 
     private func handleResponse(_ response: VaultEventResponse) {
-        guard let continuation = pendingRequests.removeValue(forKey: response.requestId) else {
+        // Use responseId which handles both eventId and id fields
+        guard let continuation = pendingRequests.removeValue(forKey: response.responseId) else {
             // No pending request for this response - might be fire-and-forget or timed out
             return
         }

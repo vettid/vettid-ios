@@ -76,6 +76,45 @@ final class NatsConnectionManager: ObservableObject {
         }
     }
 
+    /// Connect to NATS using credentials from enrollment
+    /// This is called after enrollment when credentials are provided in the enrollFinalize response
+    func connectWithEnrollmentCredentials(_ credentials: NatsCredentials) async throws {
+        guard connectionState != .connected else { return }
+
+        connectionState = .connecting
+        lastError = nil
+
+        do {
+            // Store the credentials for future use
+            try credentialStore.saveCredentials(credentials)
+
+            // Create and connect NATS client
+            natsClient = NatsClientWrapper(
+                endpoint: credentials.endpoint,
+                jwt: credentials.jwt,
+                seed: credentials.seed
+            )
+
+            try await natsClient?.connect()
+
+            connectionState = .connected
+
+            // Start monitoring connection
+            startConnectionMonitoring()
+
+            #if DEBUG
+            print("[NATS] Connected with enrollment credentials")
+            print("[NATS] Endpoint: \(credentials.endpoint)")
+            print("[NATS] JWT expires: \(credentials.expiresAt)")
+            #endif
+
+        } catch {
+            lastError = error
+            connectionState = .error(error)
+            throw error
+        }
+    }
+
     /// Disconnect from NATS
     func disconnect() async {
         reconnectTask?.cancel()

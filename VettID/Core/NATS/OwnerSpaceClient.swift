@@ -40,24 +40,24 @@ final class OwnerSpaceClient {
 
     /// Execute a handler in the vault
     func executeHandler(handlerId: String, payload: [String: Any]) async throws -> String {
-        let requestId = UUID().uuidString
+        let id = UUID().uuidString
         let message = ExecuteHandlerRequest(
-            requestId: requestId,
+            id: id,
             handlerId: handlerId,
             payload: payload
         )
 
         try await sendToVault(message, topic: "execute")
-        return requestId
+        return id
     }
 
     /// Request vault status
     func requestStatus() async throws -> String {
-        let requestId = UUID().uuidString
-        let message = StatusRequest(requestId: requestId)
+        let id = UUID().uuidString
+        let message = StatusRequest(id: id)
 
         try await sendToVault(message, topic: "status")
-        return requestId
+        return id
     }
 
     // MARK: - Subscribe from Vault
@@ -144,19 +144,19 @@ final class OwnerSpaceClient {
 // MARK: - Request Types
 
 struct ExecuteHandlerRequest: Encodable {
-    let requestId: String
+    let id: String
     let handlerId: String
     let payload: [String: Any]
 
     enum CodingKeys: String, CodingKey {
-        case requestId = "request_id"
+        case id
         case handlerId = "handler_id"
         case payload
     }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(requestId, forKey: .requestId)
+        try container.encode(id, forKey: .id)
         try container.encode(handlerId, forKey: .handlerId)
         // Encode payload as JSON string for simplicity
         if let jsonData = try? JSONSerialization.data(withJSONObject: payload),
@@ -167,11 +167,9 @@ struct ExecuteHandlerRequest: Encodable {
 }
 
 struct StatusRequest: Encodable {
-    let requestId: String
+    let id: String
 
-    enum CodingKeys: String, CodingKey {
-        case requestId = "request_id"
-    }
+    // No CodingKeys needed - field name matches JSON directly
 }
 
 // MARK: - Response Types
@@ -210,13 +208,14 @@ enum VaultResponse: Decodable {
 }
 
 struct HandlerResultResponse: Decodable {
-    let requestId: String
+    let id: String
     let success: Bool
     let result: [String: String]?
     let error: String?
 
+    // No CodingKeys needed for id - matches JSON directly
     enum CodingKeys: String, CodingKey {
-        case requestId = "request_id"
+        case id
         case success
         case result
         case error
@@ -224,14 +223,14 @@ struct HandlerResultResponse: Decodable {
 }
 
 struct StatusResponse: Decodable {
-    let requestId: String
+    let id: String
     let vaultStatus: String
     let health: String
     let activeHandlers: Int
     let lastActivity: String?
 
     enum CodingKeys: String, CodingKey {
-        case requestId = "request_id"
+        case id
         case vaultStatus = "vault_status"
         case health
         case activeHandlers = "active_handlers"
