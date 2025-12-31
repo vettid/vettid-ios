@@ -41,12 +41,15 @@ struct VaultStatusView: View {
         VStack(spacing: 20) {
             ProgressView()
                 .scaleEffect(1.5)
+                .accessibilityIdentifier("vault.loading.spinner")
 
             Text("Loading vault status...")
                 .font(.headline)
                 .foregroundStyle(.secondary)
+                .accessibilityIdentifier("vault.loading.text")
         }
         .frame(maxWidth: .infinity, minHeight: 300)
+        .accessibilityIdentifier("vault.loadingView")
     }
 
     // MARK: - Not Enrolled View
@@ -58,17 +61,20 @@ struct VaultStatusView: View {
             Image(systemName: "building.2")
                 .font(.system(size: 80))
                 .foregroundStyle(.blue.opacity(0.7))
+                .accessibilityIdentifier("vault.notEnrolled.icon")
 
             VStack(spacing: 12) {
                 Text("Set Up Your Vault")
                     .font(.title2)
                     .fontWeight(.bold)
+                    .accessibilityIdentifier("vault.notEnrolled.title")
 
                 Text("Your personal vault provides secure storage for your credentials and secrets.")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
+                    .accessibilityIdentifier("vault.notEnrolled.subtitle")
             }
 
             NavigationLink(destination: EnrollmentContainerView()) {
@@ -81,9 +87,11 @@ struct VaultStatusView: View {
                     .cornerRadius(12)
             }
             .padding(.horizontal)
+            .accessibilityIdentifier("vault.notEnrolled.setupButton")
 
             Spacer()
         }
+        .accessibilityIdentifier("vault.notEnrolledView")
     }
 
     // MARK: - Enrolled View
@@ -124,15 +132,18 @@ struct VaultStatusView: View {
                         .font(.system(size: 28))
                         .foregroundStyle(status.status.statusColor)
                 }
+                .accessibilityIdentifier("vault.status.icon")
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Vault Status")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("vault.status.label")
 
                     Text(status.status.displayName)
                         .font(.title2)
                         .fontWeight(.bold)
+                        .accessibilityIdentifier("vault.status.value")
                 }
 
                 Spacer()
@@ -145,6 +156,7 @@ struct VaultStatusView: View {
         .background(Color(.systemBackground))
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.05), radius: 8, y: 4)
+        .accessibilityIdentifier("vault.statusCard")
     }
 
     private func statusMessage(status: VaultLifecycleStatus) -> some View {
@@ -293,6 +305,7 @@ struct VaultStatusView: View {
                         .foregroundColor(.white)
                         .cornerRadius(12)
                 }
+                .accessibilityIdentifier("vault.actions.startButton")
             }
 
             if status.status.canStop {
@@ -309,6 +322,7 @@ struct VaultStatusView: View {
                         .foregroundColor(.white)
                         .cornerRadius(12)
                 }
+                .accessibilityIdentifier("vault.actions.stopButton")
             }
 
             Button(action: {
@@ -324,7 +338,9 @@ struct VaultStatusView: View {
                     .foregroundColor(.primary)
                     .cornerRadius(12)
             }
+            .accessibilityIdentifier("vault.actions.syncButton")
         }
+        .accessibilityIdentifier("vault.actionsSection")
     }
 
     // MARK: - Info Section
@@ -377,26 +393,31 @@ struct VaultStatusView: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 60))
                 .foregroundStyle(.orange)
+                .accessibilityIdentifier("vault.error.icon")
 
             Text("Unable to Load Vault")
                 .font(.title2)
                 .fontWeight(.bold)
+                .accessibilityIdentifier("vault.error.title")
 
             Text(message)
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
+                .accessibilityIdentifier("vault.error.message")
 
             if retryable {
                 Button("Try Again") {
                     viewModel.loadInitialState()
                 }
                 .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("vault.error.retryButton")
             }
 
             Spacer()
         }
+        .accessibilityIdentifier("vault.errorView")
     }
 
     // MARK: - Helpers

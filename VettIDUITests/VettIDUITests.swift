@@ -162,4 +162,97 @@ enum AccessibilityID {
         static let retryButton = "auth.error.retryButton"
         static let cancelButton = "auth.error.cancelButton"
     }
+
+    enum VaultStatus {
+        static let loadingView = "vault.loadingView"
+        static let loadingSpinner = "vault.loading.spinner"
+        static let loadingText = "vault.loading.text"
+
+        static let notEnrolledView = "vault.notEnrolledView"
+        static let notEnrolledIcon = "vault.notEnrolled.icon"
+        static let notEnrolledTitle = "vault.notEnrolled.title"
+        static let notEnrolledSubtitle = "vault.notEnrolled.subtitle"
+        static let setupButton = "vault.notEnrolled.setupButton"
+
+        static let statusCard = "vault.statusCard"
+        static let statusIcon = "vault.status.icon"
+        static let statusLabel = "vault.status.label"
+        static let statusValue = "vault.status.value"
+
+        static let actionsSection = "vault.actionsSection"
+        static let startButton = "vault.actions.startButton"
+        static let stopButton = "vault.actions.stopButton"
+        static let syncButton = "vault.actions.syncButton"
+
+        static let errorView = "vault.errorView"
+        static let errorIcon = "vault.error.icon"
+        static let errorTitle = "vault.error.title"
+        static let errorMessage = "vault.error.message"
+        static let retryButton = "vault.error.retryButton"
+    }
+
+    enum VaultHealth {
+        static let loadingView = "vaultHealth.loadingView"
+        static let loadingSpinner = "vaultHealth.loading.spinner"
+        static let loadingText = "vaultHealth.loading.text"
+
+        static let notProvisionedView = "vaultHealth.notProvisionedView"
+        static let notProvisionedIcon = "vaultHealth.notProvisioned.icon"
+        static let notProvisionedTitle = "vaultHealth.notProvisioned.title"
+        static let notProvisionedSubtitle = "vaultHealth.notProvisioned.subtitle"
+        static let provisionButton = "vaultHealth.notProvisioned.provisionButton"
+
+        static let provisioningView = "vaultHealth.provisioningView"
+        static let provisioningProgressCircle = "vaultHealth.provisioning.progressCircle"
+        static let provisioningProgress = "vaultHealth.provisioning.progress"
+        static let provisioningTitle = "vaultHealth.provisioning.title"
+        static let provisioningStatus = "vaultHealth.provisioning.status"
+        static let provisioningHint = "vaultHealth.provisioning.hint"
+
+        static let stoppedView = "vaultHealth.stoppedView"
+        static let stoppedIcon = "vaultHealth.stopped.icon"
+        static let stoppedTitle = "vaultHealth.stopped.title"
+        static let stoppedSubtitle = "vaultHealth.stopped.subtitle"
+        static let startButton = "vaultHealth.stopped.startButton"
+
+        static let errorView = "vaultHealth.errorView"
+        static let errorIcon = "vaultHealth.error.icon"
+        static let errorTitle = "vaultHealth.error.title"
+        static let errorMessage = "vaultHealth.error.message"
+        static let retryButton = "vaultHealth.error.retryButton"
+
+        // Details View
+        static let statusHeader = "vaultHealth.details.statusHeader"
+        static let statusIndicator = "vaultHealth.details.statusIndicator"
+        static let statusText = "vaultHealth.details.statusText"
+        static let uptime = "vaultHealth.details.uptime"
+        static let actionsSection = "vaultHealth.details.actionsSection"
+        static let stopButton = "vaultHealth.details.stopButton"
+        static let terminateButton = "vaultHealth.details.terminateButton"
+        static let lastEvent = "vaultHealth.details.lastEvent"
+    }
+
+    enum VaultPreferences {
+        static let list = "vaultPreferences.list"
+        static let sessionTimeout = "vaultPreferences.sessionTimeout"
+        static let changePasswordButton = "vaultPreferences.changePasswordButton"
+        static let manageHandlersLink = "vaultPreferences.manageHandlersLink"
+        static let archiveAfterDays = "vaultPreferences.archiveAfterDays"
+        static let deleteAfterDays = "vaultPreferences.deleteAfterDays"
+        static let viewArchiveLink = "vaultPreferences.viewArchiveLink"
+        static let clearCacheButton = "vaultPreferences.clearCacheButton"
+    }
+
+    enum Archive {
+        static let view = "archive.view"
+        static let loading = "archive.loading"
+        static let emptyView = "archive.emptyView"
+        static let emptyIcon = "archive.empty.icon"
+        static let emptyTitle = "archive.empty.title"
+        static let emptySubtitle = "archive.empty.subtitle"
+        static let selectButton = "archive.selectButton"
+        static let deleteButton = "archive.deleteButton"
+        static let list = "archive.list"
+        static let filterSection = "archive.filterSection"
+    }
 }

@@ -18,6 +18,7 @@ struct VaultPreferencesView: View {
                         Text(ttl.displayName).tag(ttl)
                     }
                 }
+                .accessibilityIdentifier("vaultPreferences.sessionTimeout")
             } header: {
                 Text("Session")
             } footer: {
@@ -39,6 +40,7 @@ struct VaultPreferencesView: View {
                     }
                 }
                 .foregroundStyle(.primary)
+                .accessibilityIdentifier("vaultPreferences.changePasswordButton")
             } header: {
                 Text("Security")
             } footer: {
@@ -60,6 +62,7 @@ struct VaultPreferencesView: View {
                         }
                     }
                 }
+                .accessibilityIdentifier("vaultPreferences.manageHandlersLink")
             } header: {
                 Text("Automation")
             }
@@ -74,6 +77,7 @@ struct VaultPreferencesView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                .accessibilityIdentifier("vaultPreferences.archiveAfterDays")
 
                 Stepper(value: $deleteAfterDays, in: 30...730, step: 30) {
                     HStack {
@@ -83,6 +87,7 @@ struct VaultPreferencesView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                .accessibilityIdentifier("vaultPreferences.deleteAfterDays")
             } header: {
                 Text("Archive")
             } footer: {
@@ -104,6 +109,7 @@ struct VaultPreferencesView: View {
                         }
                     }
                 }
+                .accessibilityIdentifier("vaultPreferences.viewArchiveLink")
 
                 Button(role: .destructive, action: clearCache) {
                     HStack {
@@ -112,10 +118,12 @@ struct VaultPreferencesView: View {
                         Text("Clear Local Cache")
                     }
                 }
+                .accessibilityIdentifier("vaultPreferences.clearCacheButton")
             } header: {
                 Text("Data")
             }
         }
+        .accessibilityIdentifier("vaultPreferences.list")
         .navigationTitle("Preferences")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showChangePassword) {

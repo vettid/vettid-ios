@@ -13,12 +13,14 @@ struct ArchiveView: View {
         Group {
             if viewModel.isLoading {
                 ProgressView("Loading archive...")
+                    .accessibilityIdentifier("archive.loading")
             } else if viewModel.isEmpty {
                 emptyView
             } else {
                 archiveList
             }
         }
+        .accessibilityIdentifier("archive.view")
         .navigationTitle("Archive")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, prompt: "Search archive")
@@ -31,6 +33,7 @@ struct ArchiveView: View {
                             selectedItems.removeAll()
                         }
                     }
+                    .accessibilityIdentifier("archive.selectButton")
                 }
             }
 
@@ -41,6 +44,7 @@ struct ArchiveView: View {
                     } label: {
                         Label("Delete \(selectedItems.count)", systemImage: "trash")
                     }
+                    .accessibilityIdentifier("archive.deleteButton")
                 }
             }
         }
@@ -68,16 +72,20 @@ struct ArchiveView: View {
             Image(systemName: "archivebox")
                 .font(.system(size: 60))
                 .foregroundStyle(.secondary)
+                .accessibilityIdentifier("archive.empty.icon")
 
             Text("No Archived Items")
                 .font(.headline)
+                .accessibilityIdentifier("archive.empty.title")
 
             Text("Items will appear here when they are archived based on your preferences.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
+                .accessibilityIdentifier("archive.empty.subtitle")
         }
+        .accessibilityIdentifier("archive.emptyView")
     }
 
     // MARK: - Archive List
@@ -95,6 +103,7 @@ struct ArchiveView: View {
                             ) {
                                 selectedFilter = filter
                             }
+                            .accessibilityIdentifier("archive.filter.\(filter)")
                         }
                     }
                     .padding(.horizontal, 4)
@@ -102,6 +111,7 @@ struct ArchiveView: View {
             }
             .listRowBackground(Color.clear)
             .listRowInsets(EdgeInsets())
+            .accessibilityIdentifier("archive.filterSection")
 
             // Grouped by Month
             ForEach(viewModel.groupedItems(filter: selectedFilter, search: searchText), id: \.month) { group in
@@ -109,12 +119,14 @@ struct ArchiveView: View {
                     ForEach(group.items) { item in
                         ArchiveItemRow(item: item, isSelectionMode: isSelectionMode)
                             .tag(item.id)
+                            .accessibilityIdentifier("archive.item.\(item.id)")
                     }
                 }
             }
         }
         .listStyle(.insetGrouped)
         .environment(\.editMode, .constant(isSelectionMode ? .active : .inactive))
+        .accessibilityIdentifier("archive.list")
     }
 }
 

@@ -80,11 +80,14 @@ struct LoadingView: View {
         VStack(spacing: 16) {
             ProgressView()
                 .scaleEffect(1.5)
+                .accessibilityIdentifier("vaultHealth.loading.spinner")
             Text("Checking vault status...")
                 .foregroundColor(.secondary)
+                .accessibilityIdentifier("vaultHealth.loading.text")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.vertical, 80)
+        .accessibilityIdentifier("vaultHealth.loadingView")
     }
 }
 
@@ -98,16 +101,19 @@ struct NotProvisionedView: View {
             Image(systemName: "server.rack")
                 .font(.system(size: 60))
                 .foregroundColor(.secondary)
+                .accessibilityIdentifier("vaultHealth.notProvisioned.icon")
 
             VStack(spacing: 8) {
                 Text("No Vault Instance")
                     .font(.title2)
                     .fontWeight(.semibold)
+                    .accessibilityIdentifier("vaultHealth.notProvisioned.title")
 
                 Text("You don't have a vault provisioned yet. Your vault securely stores and processes your data.")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
+                    .accessibilityIdentifier("vaultHealth.notProvisioned.subtitle")
             }
 
             Button(action: onProvision) {
@@ -122,8 +128,10 @@ struct NotProvisionedView: View {
                 .background(Color.blue)
                 .cornerRadius(12)
             }
+            .accessibilityIdentifier("vaultHealth.notProvisioned.provisionButton")
         }
         .padding()
+        .accessibilityIdentifier("vaultHealth.notProvisionedView")
     }
 }
 
@@ -151,26 +159,32 @@ struct ProvisioningView: View {
                     Text("\(Int(progress * 100))%")
                         .font(.title2)
                         .fontWeight(.bold)
+                        .accessibilityIdentifier("vaultHealth.provisioning.progress")
                     Image(systemName: "server.rack")
                         .foregroundColor(.blue)
                 }
             }
+            .accessibilityIdentifier("vaultHealth.provisioning.progressCircle")
 
             VStack(spacing: 8) {
                 Text("Provisioning Vault")
                     .font(.title2)
                     .fontWeight(.semibold)
+                    .accessibilityIdentifier("vaultHealth.provisioning.title")
 
                 Text(status)
                     .font(.subheadline)
                     .foregroundColor(.secondary)
+                    .accessibilityIdentifier("vaultHealth.provisioning.status")
             }
 
             Text("This may take 1-2 minutes")
                 .font(.caption)
                 .foregroundColor(.secondary)
+                .accessibilityIdentifier("vaultHealth.provisioning.hint")
         }
         .padding()
+        .accessibilityIdentifier("vaultHealth.provisioningView")
     }
 }
 
@@ -184,16 +198,19 @@ struct StoppedVaultView: View {
             Image(systemName: "pause.circle.fill")
                 .font(.system(size: 60))
                 .foregroundColor(.orange)
+                .accessibilityIdentifier("vaultHealth.stopped.icon")
 
             VStack(spacing: 8) {
                 Text("Vault Stopped")
                     .font(.title2)
                     .fontWeight(.semibold)
+                    .accessibilityIdentifier("vaultHealth.stopped.title")
 
                 Text("Your vault instance is stopped. Start it to access your data.")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
+                    .accessibilityIdentifier("vaultHealth.stopped.subtitle")
             }
 
             Button(action: onStart) {
@@ -208,8 +225,10 @@ struct StoppedVaultView: View {
                 .background(Color.green)
                 .cornerRadius(12)
             }
+            .accessibilityIdentifier("vaultHealth.stopped.startButton")
         }
         .padding()
+        .accessibilityIdentifier("vaultHealth.stoppedView")
     }
 }
 
@@ -224,16 +243,19 @@ struct ErrorView: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 60))
                 .foregroundColor(.red)
+                .accessibilityIdentifier("vaultHealth.error.icon")
 
             VStack(spacing: 8) {
                 Text("Error")
                     .font(.title2)
                     .fontWeight(.semibold)
+                    .accessibilityIdentifier("vaultHealth.error.title")
 
                 Text(message)
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
+                    .accessibilityIdentifier("vaultHealth.error.message")
             }
 
             Button(action: onRetry) {
@@ -248,8 +270,10 @@ struct ErrorView: View {
                 .background(Color.blue)
                 .cornerRadius(12)
             }
+            .accessibilityIdentifier("vaultHealth.error.retryButton")
         }
         .padding()
+        .accessibilityIdentifier("vaultHealth.errorView")
     }
 }
 
@@ -283,10 +307,12 @@ struct VaultHealthDetailsView: View {
             Circle()
                 .fill(statusColor)
                 .frame(width: 20, height: 20)
+                .accessibilityIdentifier("vaultHealth.details.statusIndicator")
 
             Text(info.status.displayName)
                 .font(.title)
                 .fontWeight(.bold)
+                .accessibilityIdentifier("vaultHealth.details.statusText")
 
             Spacer()
 
@@ -296,11 +322,13 @@ struct VaultHealthDetailsView: View {
                     .foregroundColor(.secondary)
                 Text(info.formattedUptime)
                     .font(.headline)
+                    .accessibilityIdentifier("vaultHealth.details.uptime")
             }
         }
         .padding()
         .background(Color(.systemGray6))
         .cornerRadius(12)
+        .accessibilityIdentifier("vaultHealth.details.statusHeader")
     }
 
     private var componentStatusSection: some View {
@@ -370,6 +398,7 @@ struct VaultHealthDetailsView: View {
                     .background(Color.orange)
                     .cornerRadius(12)
                 }
+                .accessibilityIdentifier("vaultHealth.details.stopButton")
 
                 Button(action: { showTerminateConfirmation = true }) {
                     HStack {
@@ -383,6 +412,7 @@ struct VaultHealthDetailsView: View {
                     .background(Color.red)
                     .cornerRadius(12)
                 }
+                .accessibilityIdentifier("vaultHealth.details.terminateButton")
             }
             .alert("Terminate Vault?", isPresented: $showTerminateConfirmation) {
                 Button("Cancel", role: .cancel) {}
@@ -395,8 +425,10 @@ struct VaultHealthDetailsView: View {
                 Text("Last event: \(lastEvent, style: .relative) ago")
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .accessibilityIdentifier("vaultHealth.details.lastEvent")
             }
         }
+        .accessibilityIdentifier("vaultHealth.details.actionsSection")
     }
 
     private var statusColor: Color {
