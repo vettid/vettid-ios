@@ -99,6 +99,7 @@
 		54AE200B5260828DFDDF54CF /* ConnectionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AA0D8823160098FDD1BEDED /* ConnectionHandler.swift */; };
 		5F70C41EB8B0D5E3945DE3D0 /* VaultServicesStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D5FE09BE33592D0D0F1EB3F /* VaultServicesStatusView.swift */; };
 		6AAF4B7C9510C0DBDC732FD9 /* SecretsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAF3A0B1092FFB0A652C013F /* SecretsViewModel.swift */; };
+		7B46109C39D7AEF81970BD2E /* VaultUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52ED012C5B1263AAF3FB77A3 /* VaultUITests.swift */; };
 		7B9473E326FABF243ED653A4 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D1AC5C563F3D0443156417C0 /* Foundation.framework */; };
 		8137D39ECE65372610A42979 /* PersonalDataView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 498392EDCF906E22833BD876 /* PersonalDataView.swift */; };
 		824239CA1C86ECBB99591287 /* FeedEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93A86BE60A75794075747370 /* FeedEvent.swift */; };
@@ -235,6 +236,7 @@
 		3A1F747E77CDE5E01425BE6B /* AuthenticationUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AuthenticationUITests.swift; sourceTree = "<group>"; };
 		48B355FF5FC2FE9E7899E6EB /* SecuritySettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SecuritySettingsView.swift; sourceTree = "<group>"; };
 		498392EDCF906E22833BD876 /* PersonalDataView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PersonalDataView.swift; sourceTree = "<group>"; };
+		52ED012C5B1263AAF3FB77A3 /* VaultUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VaultUITests.swift; sourceTree = "<group>"; };
 		5DAE0DC17A88D051B4A2680E /* VettIDUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VettIDUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		688F0CE3AE28533DD0235DF8 /* Secret.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Secret.swift; sourceTree = "<group>"; };
 		7A4A6BF4B7E19B38EDEF31AC /* ArchiveView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ArchiveView.swift; sourceTree = "<group>"; };
@@ -661,6 +663,7 @@
 				FC77A44439FC6A4671047F51 /* VettIDUITests.swift */,
 				38A823EDB04F986924B6CC2D /* EnrollmentUITests.swift */,
 				3A1F747E77CDE5E01425BE6B /* AuthenticationUITests.swift */,
+				52ED012C5B1263AAF3FB77A3 /* VaultUITests.swift */,
 			);
 			name = VettIDUITests;
 			path = VettIDUITests;
@@ -900,6 +903,7 @@
 				C23FB626255421D48B1E705E /* VettIDUITests.swift in Sources */,
 				FDA99EEB7505FD7031F2B26C /* EnrollmentUITests.swift in Sources */,
 				C2864EC95B4B060ACE9D9C58 /* AuthenticationUITests.swift in Sources */,
+				7B46109C39D7AEF81970BD2E /* VaultUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
