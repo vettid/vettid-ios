@@ -97,17 +97,17 @@ actor SecretsHandler {
         }
 
         guard let result = response.result,
-              let valueBase64 = result["value"] as? String,
+              let valueBase64 = result["value"]?.value as? String,
               let valueData = Data(base64Encoded: valueBase64) else {
             throw SecretsHandlerError.invalidResponse
         }
 
         let metadata = SecretMetadata(
-            label: result["label"] as? String,
-            category: result["category"] as? String,
-            tags: result["tags"] as? [String],
-            createdAt: (result["created_at"] as? String).flatMap { ISO8601DateFormatter().date(from: $0) },
-            updatedAt: (result["updated_at"] as? String).flatMap { ISO8601DateFormatter().date(from: $0) }
+            label: result["label"]?.value as? String,
+            category: result["category"]?.value as? String,
+            tags: result["tags"]?.value as? [String],
+            createdAt: (result["created_at"]?.value as? String).flatMap { ISO8601DateFormatter().date(from: $0) },
+            updatedAt: (result["updated_at"]?.value as? String).flatMap { ISO8601DateFormatter().date(from: $0) }
         )
 
         return SecretData(key: key, value: valueData, metadata: metadata)
@@ -160,7 +160,7 @@ actor SecretsHandler {
         }
 
         guard let result = response.result,
-              let secretsArray = result["secrets"] as? [[String: Any]] else {
+              let secretsArray = result["secrets"]?.value as? [[String: Any]] else {
             return []
         }
 

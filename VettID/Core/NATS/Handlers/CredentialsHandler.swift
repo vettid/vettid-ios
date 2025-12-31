@@ -67,12 +67,12 @@ actor CredentialsHandler {
         }
 
         return CredentialStatusInfo(
-            isValid: (result["is_valid"] as? Bool) ?? false,
-            latVersion: result["lat_version"] as? Int,
-            cekVersion: result["cek_version"] as? Int,
-            utkCount: result["utk_count"] as? Int ?? 0,
-            expiresAt: (result["expires_at"] as? String).flatMap { ISO8601DateFormatter().date(from: $0) },
-            needsRotation: (result["needs_rotation"] as? Bool) ?? false
+            isValid: (result["is_valid"]?.value as? Bool) ?? false,
+            latVersion: result["lat_version"]?.value as? Int,
+            cekVersion: result["cek_version"]?.value as? Int,
+            utkCount: result["utk_count"]?.value as? Int ?? 0,
+            expiresAt: (result["expires_at"]?.value as? String).flatMap { ISO8601DateFormatter().date(from: $0) },
+            needsRotation: (result["needs_rotation"]?.value as? Bool) ?? false
         )
     }
 
@@ -116,15 +116,15 @@ actor CredentialsHandler {
             )
         }
 
-        let inSync = (result["in_sync"] as? Bool) ?? true
+        let inSync = (result["in_sync"]?.value as? Bool) ?? true
 
         var updatedCredentials: CredentialRefreshResult?
-        if let credDict = result["credentials"] as? [String: Any] {
+        if let credDict = result["credentials"]?.value as? [String: Any] {
             updatedCredentials = try parseCredentialResult(credDict.mapValues { AnyCodableValue($0) })
         }
 
         var newUtks: [TransactionKeyInfo]?
-        if let utksArray = result["new_utks"] as? [[String: Any]] {
+        if let utksArray = result["new_utks"]?.value as? [[String: Any]] {
             newUtks = utksArray.compactMap { dict -> TransactionKeyInfo? in
                 guard let keyId = dict["key_id"] as? String,
                       let publicKey = dict["public_key"] as? String,
@@ -161,7 +161,7 @@ actor CredentialsHandler {
         }
 
         guard let result = response.result,
-              let utksArray = result["utks"] as? [[String: Any]] else {
+              let utksArray = result["utks"]?.value as? [[String: Any]] else {
             return []
         }
 

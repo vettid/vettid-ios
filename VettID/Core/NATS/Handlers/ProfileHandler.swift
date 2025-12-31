@@ -48,10 +48,7 @@ actor ProfileHandler {
         // Convert result to [String: String]
         var profile: [String: String] = [:]
         for (key, value) in result {
-            if let stringValue = value as? String {
-                profile[key] = stringValue
-            } else if let anyValue = value as? AnyCodableValue,
-                      let stringValue = anyValue.value as? String {
+            if let stringValue = value.value as? String {
                 profile[key] = stringValue
             }
         }
