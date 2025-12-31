@@ -1,88 +1,263 @@
-# VettID API Status
+# VettID iOS API Status
 
-**Last Updated:** 2025-11-27 by Backend
+**Last Updated:** 2025-12-31
 
-This file is the master coordination point between backend development and mobile app development (iOS and Android). Mobile developers should reference this file to understand API availability and required actions.
+This file tracks API implementation status for VettID iOS, aligned with the backend API-STATUS.md and Android implementation.
 
 ---
 
 ## Endpoint Status
 
-| Endpoint | Status | Notes |
-|----------|--------|-------|
-| POST /api/v1/enroll/start | **Deployed** | Start enrollment with invitation code |
-| POST /api/v1/enroll/set-password | **Deployed** | Set password during enrollment |
-| POST /api/v1/enroll/finalize | **Deployed** | Finalize enrollment, receive credential |
-| POST /api/v1/action/request | **Deployed** | Request scoped action token |
-| POST /api/v1/auth/execute | **Deployed** | Execute authentication with action token |
-| GET /member/vaults/{id}/status | Not Started | Phase 5 |
-| POST /member/vaults/{id}/start | Not Started | Phase 5 |
-| POST /member/vaults/{id}/stop | Not Started | Phase 5 |
+| Endpoint | Status | iOS Implementation |
+|----------|--------|-------------------|
+| POST /api/v1/enroll/start | **Implemented** | `EnrollmentService.startEnrollment()` |
+| POST /api/v1/enroll/set-password | **Implemented** | `EnrollmentService.setPassword()` |
+| POST /api/v1/enroll/finalize | **Implemented** | `EnrollmentService.finalize()` |
+| POST /api/v1/action/request | **Implemented** | `AuthenticationService.requestAction()` |
+| POST /api/v1/auth/execute | **Implemented** | `AuthenticationService.authenticate()` |
+| GET /vault/health | **Implemented** | `APIClient.getVaultHealth()` |
+| GET /vault/status | **Implemented** | `APIClient.getVaultStatus()` |
+| POST /vault/start | **Implemented** | `APIClient.startVaultInstance()` |
+| POST /vault/stop | **Implemented** | `APIClient.stopVaultInstance()` |
+| POST /vault/terminate | **Implemented** | `APIClient.terminateVault()` |
+
+---
+
+## NATS Handler Status
+
+| Handler | Status | iOS Implementation |
+|---------|--------|-------------------|
+| `app.bootstrap` | **Implemented** | `SessionKeyManager` + `NatsConnectionManager.performBootstrap()` |
+| `secrets.datastore.*` | **Implemented** | `SecretsHandler` actor |
+| `profile.*` | **Implemented** | `ProfileHandler` actor |
+| `credentials.*` | **Implemented** | `CredentialsHandler` actor |
+| `connection.*` | **Implemented** | `ConnectionHandler` actor |
+| `message.send` | **Implemented** | `MessageHandler` actor |
+| `message.read-receipt` | **Implemented** | `MessageHandler` actor |
+| `profile.broadcast` | **Implemented** | `MessageHandler` actor |
+| `connection.notify-revoke` | **Implemented** | `MessageHandler` actor |
 
 ---
 
 ## Recent Changes
 
-### 2025-11-27 - Vault Services Infrastructure Deployed
+### 2025-12-31 - Phase 4: MessageHandler Implemented
 
-- **Endpoints:** All enrollment and authentication endpoints now deployed
-  - POST /api/v1/enroll/start
-  - POST /api/v1/enroll/set-password
-  - POST /api/v1/enroll/finalize
-  - POST /api/v1/action/request
-  - POST /api/v1/auth/execute
+- **Files:** `VettID/Core/NATS/Handlers/MessageHandler.swift`, `VettID/Features/Messaging/ConversationViewModel.swift`
 
-- **Breaking:** Yes - API design changed from original spec
-  - Old: Single POST /api/v1/enroll endpoint
-  - New: Multi-step enrollment (start → set-password → finalize)
-  - Old: 3-step auth (request-lat → challenge → verify)
-  - New: 2-step auth (action/request → auth/execute)
+- **Features:**
+  - `message.send` - Send encrypted messages to peer vaults
+  - `message.read-receipt` - Send read receipts to sender vault
+  - `profile.broadcast` - Broadcast profile updates to all connections
+  - `connection.notify-revoke` - Notify peer of connection revocation
+
+- **Architecture:** Messages flow vault-to-vault via NATS MessageSpace
+  - App → Vault (OwnerSpace.forVault) → Peer Vault (MessageSpace.forOwner) → Peer App
+
+- **ConversationViewModel Updates:**
+  - `configureMessageHandler()` for NATS integration
+  - Uses MessageHandler when available, falls back to API
+  - `handleIncomingMessage()` for real-time message processing
+  - `handleReadReceipt()` for receipt handling
 
 - **Mobile Action Required:**
-  - [ ] iOS: Implement new multi-step enrollment flow
-  - [ ] iOS: Implement action-specific authentication flow
-  - [ ] iOS: Update crypto to handle UTK encryption
-  - [ ] Android: Implement new multi-step enrollment flow
-  - [ ] Android: Implement action-specific authentication flow
-  - [ ] Android: Update crypto to handle UTK encryption
+  - [x] iOS: Implement `message.send` for sending messages - `MessageHandler.sendMessage()`
+  - [x] iOS: Implement `message.read-receipt` - `MessageHandler.sendReadReceipt()`
+  - [x] iOS: Implement `profile.broadcast` - `MessageHandler.broadcastProfileUpdate()`
+  - [x] iOS: Update ConversationViewModel to use MessageHandler
 
-- **Notes:**
-  - Key ownership changed: **Ledger now owns all keys (CEK, LTK)**
-  - Mobile only stores: encrypted blob, UTKs (public keys), LAT
-  - UTKs are used to encrypt password hashes before sending to server
-  - LAT is used for mutual authentication (phishing protection)
+### 2025-12-31 - Phase 3: NATS Vault Handlers Implemented
 
-### 2025-11-26 - Test Harness Infrastructure Ready
+- **Files:** `VettID/Core/NATS/Handlers/*.swift`
 
-- **What:** Test harness project structure created
-- **Breaking:** N/A
-- **Notes:** Test harness uses `@noble/curves` for cryptography
+- **Handlers Implemented:**
+  - `SecretsHandler` - CRUD for encrypted secrets (`secrets.datastore.*`)
+  - `ProfileHandler` - Profile field management (`profile.*`)
+  - `CredentialsHandler` - Credential lifecycle (`credentials.*`, `credential.*`)
+  - `ConnectionHandler` - Peer connections (`connection.*`)
+
+- **All handlers use:**
+  - Actor isolation for concurrency safety
+  - `VaultResponseHandler` for request/response correlation
+  - `AnyCodableValue` for flexible JSON payloads
+
+- **Mobile Action Required:**
+  - [x] iOS: Implement SecretsHandler
+  - [x] iOS: Implement ProfileHandler
+  - [x] iOS: Implement CredentialsHandler
+  - [x] iOS: Implement ConnectionHandler
+
+### 2025-12-31 - Phase 1-2: E2E Bootstrap & Vault Lifecycle
+
+- **Files:**
+  - `VettID/Core/NATS/SessionKeyManager.swift` - E2E session management
+  - `VettID/Core/NATS/EncryptedEnvelope.swift` - Encrypted message types
+  - `VettID/Features/Vault/VaultHealthViewModel.swift` - Lifecycle management
+
+- **E2E Session Encryption:**
+  - X25519 ECDH key exchange during `app.bootstrap`
+  - HKDF-SHA256 session key derivation ("app-vault-session-v1")
+  - ChaCha20-Poly1305 message encryption
+  - Session persistence in Keychain
+  - Key rotation triggers (1000 messages or 24 hours)
+
+- **Vault Lifecycle:**
+  - `startVault()` - Start stopped vault instance
+  - `pollForStartup()` - Monitor provisioning progress
+  - `needsAttention` - Health status indicator
+
+- **Mobile Action Required:**
+  - [x] iOS: Implement SessionKeyManager for E2E encryption
+  - [x] iOS: Add `performBootstrap()` to NatsConnectionManager
+  - [x] iOS: Update VaultEventClient to encrypt messages
+  - [x] iOS: Add vault start/stop controls
+
+### 2025-11-27 - Initial API Deployment
+
+- **Endpoints:** All enrollment and authentication endpoints deployed
+- **Mobile Action Required:**
+  - [x] iOS: Implement multi-step enrollment flow
+  - [x] iOS: Implement action-specific authentication flow
+  - [x] iOS: Update crypto to handle UTK encryption
 
 ---
 
-## Mobile Status
+## iOS Implementation Details
 
-### iOS
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Project Setup | Complete | Basic Xcode project created |
-| Enrollment | **Action Required** | Backend API ready, implement multi-step flow |
-| Auth | **Action Required** | Backend API ready, implement action tokens |
-| Vault | Not Started | Awaiting backend API |
+### Key Files
 
-### Android
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Project Setup | Complete | Basic Android Studio project created |
-| Enrollment | **Action Required** | Backend API ready, implement multi-step flow |
-| Auth | **Action Required** | Backend API ready, implement action tokens |
-| Vault | Not Started | Awaiting backend API |
+| Component | File | Description |
+|-----------|------|-------------|
+| **Enrollment** | `EnrollmentService.swift` | Multi-step enrollment flow |
+| **Authentication** | `AuthenticationService.swift` | Action-token auth flow |
+| **API Client** | `APIClient.swift` | HTTP client for Ledger Service |
+| **NATS Connection** | `NatsConnectionManager.swift` | NATS lifecycle + bootstrap |
+| **Session Crypto** | `SessionKeyManager.swift` | E2E encryption for app-vault |
+| **Vault Events** | `VaultEventClient.swift` | Event submission with encryption |
+| **Response Handler** | `VaultResponseHandler.swift` | Request/response correlation |
+| **Secrets** | `SecretsHandler.swift` | Encrypted secrets CRUD |
+| **Profile** | `ProfileHandler.swift` | Profile field management |
+| **Credentials** | `CredentialsHandler.swift` | Credential lifecycle |
+| **Connections** | `ConnectionHandler.swift` | Peer connection management |
+| **Messaging** | `MessageHandler.swift` | Vault-to-vault messaging |
+
+### Cryptographic Implementation
+
+| Operation | iOS Implementation |
+|-----------|-------------------|
+| X25519 ECDH | `CryptoKit.Curve25519.KeyAgreement` |
+| ChaCha20-Poly1305 | `CryptoKit.ChaChaPoly` |
+| HKDF-SHA256 | `CryptoKit.HKDF` (via SharedSecret) |
+| Argon2id | `PasswordHasher` (PBKDF2 fallback until swift-sodium added) |
+| Ed25519 Signing | `CryptoKit.Curve25519.Signing` |
+
+### Storage
+
+| Data | Storage Location |
+|------|------------------|
+| Credentials (blob, LAT, UTKs) | Keychain (`.afterFirstUnlockThisDeviceOnly`) |
+| Session keys | Keychain |
+| NATS credentials | `NatsCredentialStore` (Keychain) |
+| Profile data | `ProfileStore` (Keychain) |
+| Secrets | `SecretsStore` (Keychain + ChaCha20 encryption) |
+
+### NATS Message Format
+
+iOS sends messages matching vault-manager expectations:
+
+```swift
+struct VaultEventMessage: Encodable {
+    let id: String           // UUID for correlation
+    let type: String         // Handler type (e.g., "profile.get")
+    let payload: [String: AnyCodableValue]
+    let timestamp: String    // ISO 8601
+}
+```
+
+Response parsing handles both field names:
+```swift
+struct VaultEventResponse: Decodable {
+    let eventId: String?     // Primary field from vault
+    let id: String?          // Fallback field
+    let success: Bool
+    // ...
+
+    var responseId: String {
+        eventId ?? id ?? ""
+    }
+}
+```
 
 ---
 
-## API Specifications (Updated)
+## Incoming Notifications (Vault → App)
 
-### Key Ownership Model (Important Change!)
+Subscribe to `forApp.*` topics for real-time notifications:
+
+| Topic | iOS Type | Description |
+|-------|----------|-------------|
+| `forApp.new-message` | `IncomingMessage` | New message from peer |
+| `forApp.read-receipt` | `IncomingReadReceipt` | Peer read your message |
+| `forApp.profile-update` | `IncomingProfileUpdate` | Profile update from peer |
+| `forApp.connection-revoked` | `IncomingConnectionRevoked` | Peer revoked connection |
+| `forApp.credentials.rotate` | *Pending* | Vault-initiated credential rotation |
+
+---
+
+## Implementation Checklist
+
+### Enrollment & Auth
+- [x] Multi-step enrollment (start → set-password → finalize)
+- [x] Action-token authentication flow
+- [x] LAT verification (anti-phishing)
+- [x] UTK pool management
+- [x] Credential rotation on auth
+
+### NATS Communication
+- [x] NATS connection with JWT/seed auth
+- [x] E2E bootstrap key exchange
+- [x] Session key derivation (HKDF)
+- [x] Message encryption (ChaCha20-Poly1305)
+- [x] Session persistence in Keychain
+- [x] Request/response correlation
+
+### Vault Handlers
+- [x] `secrets.datastore.*` - Secrets CRUD
+- [x] `profile.*` - Profile management
+- [x] `credentials.*` - Credential lifecycle
+- [x] `connection.*` - Connection management
+- [x] `message.*` - Vault-to-vault messaging
+
+### Vault Lifecycle
+- [x] Health status monitoring
+- [x] Start/stop vault instance
+- [x] Provisioning polling
+- [ ] Background sync (BGAppRefreshTask)
+
+### Pending
+- [ ] Subscribe to `forApp.credentials.rotate` for proactive rotation
+- [ ] Implement credential rotation handler
+- [ ] Background sync worker (like Android WorkManager)
+- [ ] Add swift-sodium for native Argon2id
+- [ ] Add nats.swift for production NATS connectivity
+
+---
+
+## Known Differences from Android
+
+| Feature | Android | iOS |
+|---------|---------|-----|
+| NATS Library | `nats.java` | Stub wrapper (pending `nats.swift`) |
+| Argon2id | `argon2-jvm` | PBKDF2 fallback (pending `swift-sodium`) |
+| Background Sync | WorkManager | BGAppRefreshTask (pending) |
+| Keystore | Android Keystore | iOS Keychain |
+| Attestation | SafetyNet/Play Integrity | App Attest |
+
+---
+
+## API Specifications
+
+### Key Ownership Model
 
 **Ledger (Backend) Owns:**
 - CEK (Credential Encryption Key) - X25519 private key for encrypting credential blob
@@ -92,153 +267,6 @@ This file is the master coordination point between backend development and mobil
 - Encrypted credential blob (cannot decrypt without CEK)
 - UTK pool (User Transaction Keys) - X25519 **public** keys for encrypting password
 - LAT (Ledger Auth Token) - 256-bit token for verifying server authenticity
-
-### Enrollment Flow (Multi-Step)
-
-**Step 1: Start Enrollment**
-```
-POST /api/v1/enroll/start
-{
-  "invitation_code": "string",
-  "device_id": "string (vendor ID)",
-  "attestation_data": "base64 (platform attestation)"
-}
-→ {
-    "enrollment_session_id": "enroll_xxx",
-    "user_guid": "user_xxx",
-    "transaction_keys": [
-      { "key_id": "tk_xxx", "public_key": "base64", "algorithm": "X25519" },
-      ... // 20 keys
-    ],
-    "password_prompt": {
-      "use_key_id": "tk_xxx",
-      "message": "Please create a secure password..."
-    }
-  }
-```
-
-**Step 2: Set Password**
-```
-POST /api/v1/enroll/set-password
-{
-  "enrollment_session_id": "enroll_xxx",
-  "encrypted_password_hash": "base64",  // Argon2id hash encrypted with UTK
-  "key_id": "tk_xxx",                   // Must match password_prompt.use_key_id
-  "nonce": "base64"                     // 96-bit random nonce
-}
-→ {
-    "status": "password_set",
-    "next_step": "finalize"
-  }
-```
-
-**Step 3: Finalize Enrollment**
-```
-POST /api/v1/enroll/finalize
-{
-  "enrollment_session_id": "enroll_xxx"
-}
-→ {
-    "status": "enrolled",
-    "credential_package": {
-      "user_guid": "user_xxx",
-      "encrypted_blob": "base64",        // Store this - cannot decrypt
-      "cek_version": 1,
-      "ledger_auth_token": {
-        "lat_id": "lat_xxx",
-        "token": "hex",                  // Store securely for verification
-        "version": 1
-      },
-      "transaction_keys": [...]          // Remaining unused UTKs
-    },
-    "vault_status": "PROVISIONING"
-  }
-```
-
-### Authentication Flow (Action-Specific)
-
-**Step 1: Request Action Token**
-```
-POST /api/v1/action/request
-Authorization: Bearer {cognito_token}
-{
-  "user_guid": "user_xxx",
-  "action_type": "authenticate",
-  "device_fingerprint": "optional"
-}
-→ {
-    "action_token": "eyJ...",            // JWT scoped to specific endpoint
-    "action_token_expires_at": "ISO8601",
-    "ledger_auth_token": {
-      "lat_id": "lat_xxx",
-      "token": "hex",                    // Compare with stored LAT!
-      "version": 1
-    },
-    "action_endpoint": "/api/v1/auth/execute",
-    "use_key_id": "tk_xxx"               // UTK to use for password encryption
-  }
-```
-
-**IMPORTANT:** Mobile MUST verify `ledger_auth_token.token` matches stored LAT before proceeding!
-
-**Step 2: Execute Authentication**
-```
-POST /api/v1/auth/execute
-Authorization: Bearer {action_token}     // NOT Cognito token!
-{
-  "encrypted_blob": "base64",            // Current encrypted blob
-  "cek_version": 1,
-  "encrypted_password_hash": "base64",   // Argon2id hash encrypted with UTK
-  "ephemeral_public_key": "base64",      // Your X25519 ephemeral public key
-  "nonce": "base64",
-  "key_id": "tk_xxx"                     // Must match use_key_id from step 1
-}
-→ {
-    "status": "success",
-    "action_result": {
-      "authenticated": true,
-      "message": "Authentication successful",
-      "timestamp": "ISO8601"
-    },
-    "credential_package": {
-      "encrypted_blob": "base64",        // NEW blob - replace stored blob
-      "cek_version": 2,                  // Incremented - CEK rotated
-      "ledger_auth_token": {
-        "lat_id": "lat_xxx",
-        "token": "hex",                  // NEW LAT - replace stored LAT
-        "version": 2                     // Incremented - LAT rotated
-      },
-      "new_transaction_keys": [...]      // Replenished if pool low
-    },
-    "used_key_id": "tk_xxx"              // Remove this UTK from pool
-  }
-```
-
-### Action Types
-
-| Action Type | Endpoint | Description |
-|-------------|----------|-------------|
-| `authenticate` | /api/v1/auth/execute | Basic authentication |
-| `add_secret` | /api/v1/secrets/add | Add a secret to vault |
-| `retrieve_secret` | /api/v1/secrets/retrieve | Retrieve a secret |
-| `add_policy` | /api/v1/policies/update | Update vault policies |
-| `modify_credential` | /api/v1/credential/modify | Modify credential |
-
-### Error Codes
-
-| Code | Meaning |
-|------|---------|
-| 400 | Bad Request - missing or invalid parameters |
-| 401 | Unauthorized - invalid or missing token |
-| 403 | Forbidden - token already used or wrong scope |
-| 404 | Not Found - resource doesn't exist |
-| 409 | Conflict - version mismatch or state conflict |
-| 410 | Gone - invitation expired |
-| 500 | Internal Server Error |
-
----
-
-## Cryptographic Requirements
 
 ### Password Encryption Flow
 
@@ -250,136 +278,39 @@ Authorization: Bearer {action_token}     // NOT Cognito token!
 6. Encrypt: `encrypted = ChaCha20-Poly1305(password_hash, key, nonce)`
 7. Send: `encrypted_password_hash`, `ephemeral_public_key`, `nonce`, `key_id`
 
-### Key Types
-
-| Key Type | Algorithm | Location | Purpose |
-|----------|-----------|----------|---------|
-| CEK | X25519 | Ledger only | Encrypt credential blob |
-| LTK | X25519 | Ledger only | Decrypt password hashes |
-| UTK | X25519 | Mobile (public only) | Encrypt password hashes |
-| LAT | 256-bit random | Both | Mutual authentication |
-
-### Platform-Specific Implementations
-
-**iOS:**
-- Use CryptoKit for X25519 (`Curve25519.KeyAgreement`)
-- Use swift-crypto for ChaCha20-Poly1305
-- Store UTKs and LAT in Keychain with `.whenUnlockedThisDeviceOnly`
-- Use App Attest for device attestation
-- Use Argon2 via external library (argon2-swift or similar)
-
-**Android:**
-- Use Tink or BouncyCastle for X25519
-- Use Tink for ChaCha20-Poly1305
-- Store UTKs and LAT in Android Keystore
-- Use Hardware Key Attestation (GrapheneOS compatible)
-- Use argon2-jvm for Argon2id
-
----
-
-## NATS Communication (Vault Operations)
-
-**Important:** All secrets and profile operations go through NATS to the vault EC2 instance. These endpoints are **only accessible when the vault is online**.
-
 ### NATS Topics
 
 | Topic | Direction | Purpose |
 |-------|-----------|---------|
 | `OwnerSpace.{user_guid}.forVault.>` | App → Vault | Send commands to vault |
 | `OwnerSpace.{user_guid}.forApp.>` | Vault → App | Receive responses from vault |
-| `OwnerSpace.{user_guid}.control.>` | System | System control messages |
+| `MessageSpace.{user_guid}.forOwner.>` | Peer Vault → Your Vault | Incoming peer messages |
 
-### Message Format (App → Vault)
+---
 
-**IMPORTANT:** The vault-manager expects this exact JSON structure:
+## Testing
 
-```json
-{
-  "id": "unique-request-id",
-  "type": "secrets.datastore.add",
-  "timestamp": "2025-12-22T15:30:00Z",
-  "payload": { ... },
-  "reply_to": "optional-reply-subject"
-}
+### Build Command
+```bash
+xcodebuild -scheme VettID -configuration Debug \
+  -destination 'platform=iOS Simulator,name=iPhone 17' build
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `id` | string | Yes | Unique request ID for correlation (UUID recommended) |
-| `type` | string | Yes | Handler/event type (see Event Types below) |
-| `timestamp` | string | Yes | ISO 8601 timestamp |
-| `payload` | object | Yes | Handler-specific payload |
-| `reply_to` | string | No | Optional custom reply subject |
+### Simulator Testing
+```bash
+# Boot simulator
+xcrun simctl boot "iPhone 17"
+open -a Simulator
 
-### Response Format (Vault → App)
-
-```json
-{
-  "event_id": "the-request-id-from-message",
-  "success": true,
-  "timestamp": "2025-12-22T15:30:01Z",
-  "result": { ... },
-  "error": null
-}
+# Install app
+xcrun simctl install booted build/Debug-iphonesimulator/VettID.app
 ```
 
-### Event Types (Built-in Handlers)
-
-#### Secrets - Datastore (Minor Secrets)
-
-| Event Type | Description | Payload |
-|------------|-------------|---------|
-| `secrets.datastore.add` | Add a new secret | `{key, value, metadata}` |
-| `secrets.datastore.update` | Update existing secret | `{key, value, metadata?}` |
-| `secrets.datastore.retrieve` | Get a secret by key | `{key}` |
-| `secrets.datastore.delete` | Delete a secret | `{key}` |
-| `secrets.datastore.list` | List secrets (metadata only) | `{category?, tag?, limit?, cursor?}` |
-
-#### Profile
-
-| Event Type | Description | Payload |
-|------------|-------------|---------|
-| `profile.get` | Get profile fields | `{fields: []}` |
-| `profile.update` | Update profile fields | `{fields: {name: value}}` |
-| `profile.delete` | Delete profile fields | `{fields: []}` |
-
-#### Credential
-
-| Event Type | Description | Payload |
-|------------|-------------|---------|
-| `credential.store` | Store initial credential | `{encrypted_blob, ephemeral_public_key, nonce, version}` |
-| `credential.sync` | Sync after auth rotation | `{encrypted_blob, ephemeral_public_key, nonce, version}` |
-| `credential.get` | Get current credential | `{}` |
-| `credential.version` | Check credential version | `{}` |
-
-### iOS Implementation Notes
-
-```swift
-struct VaultMessage: Encodable {
-    let id: String           // UUID
-    let type: String         // e.g., "secrets.datastore.add"
-    let timestamp: String    // ISO 8601
-    let payload: [String: Any]
-
-    static func create(type: String, payload: [String: Any]) -> VaultMessage {
-        return VaultMessage(
-            id: UUID().uuidString,
-            type: type,
-            timestamp: ISO8601DateFormatter().string(from: Date()),
-            payload: payload
-        )
-    }
-}
+### Device Logs
+```bash
+# Stream device logs (requires libimobiledevice)
+idevicesyslog | grep VettID
 ```
-
-### Testing NATS Communication
-
-1. **Ensure vault is online** - Check `/member/vault/status` returns `running`
-2. **Get NATS credentials** - Call `/vault/nats/token` to get fresh credentials
-3. **Connect to NATS** - Use credentials to connect to `nats.vettid.dev:4222`
-4. **Subscribe to responses** - `OwnerSpace.{user_guid}.forApp.>`
-5. **Send test event** - Publish to `OwnerSpace.{user_guid}.forVault.profile.get`
-6. **Verify response** - Check `event_id` matches your request `id`
 
 ---
 
@@ -391,4 +322,23 @@ struct VaultMessage: Encodable {
 
 ### Resolved
 
-*No resolved issues yet*
+#### NATS Message Format Alignment
+**Status:** ✅ Fixed (2025-12-30)
+**Affected:** `VaultEventMessage`, `VaultEventResponse`
+
+iOS was sending messages with field names that didn't match vault-manager. Fixed:
+- ✅ Changed `request_id` to `id` in VaultEventMessage
+- ✅ Response parsing uses `event_id` with fallback to `id`
+- ✅ Timestamps use ISO 8601 string format
+
+#### App-Vault E2E Encryption Implemented
+**Status:** ✅ Completed (2025-12-31)
+**Affected:** `SessionKeyManager.swift`, `NatsConnectionManager.swift`, `VaultEventClient.swift`
+
+Implemented end-to-end encryption for app-vault NATS communication:
+- ✅ X25519 ECDH key exchange during `app.bootstrap`
+- ✅ HKDF-SHA256 session key derivation ("app-vault-session-v1")
+- ✅ ChaCha20-Poly1305 message encryption
+- ✅ Encrypted payload in sendToVault (bootstrap messages excluded)
+- ✅ Session persistence in Keychain
+- ✅ Session restoration on app restart
