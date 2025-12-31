@@ -166,7 +166,8 @@ final class NatsConnectionManager: ObservableObject {
             let bootstrapRequest = try await sessionKeyManager.initiateBootstrap()
 
             // Subscribe to bootstrap response topic
-            let responseTopic = "\(ownerSpace).forApp.app.bootstrap.response"
+            // Subscribe with wildcard to receive response on forApp.app.bootstrap.{requestId}
+            let responseTopic = "\(ownerSpace).forApp.app.bootstrap.>"
             let responseStream = try await subscribe(to: responseTopic)
 
             // Send bootstrap request

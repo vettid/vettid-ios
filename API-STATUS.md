@@ -502,6 +502,20 @@ Both platforms have matching security implementations:
 | `OwnerSpace.{user_guid}.forApp.>` | Vault → App | Receive responses from vault |
 | `MessageSpace.{user_guid}.forOwner.>` | Peer Vault → Your Vault | Incoming peer messages |
 
+**Response Topic Pattern:**
+```
+Request:  OwnerSpace.{guid}.forVault.{eventType}
+Response: OwnerSpace.{guid}.forApp.{eventType}.{requestId}
+```
+
+Example for `app.bootstrap`:
+```
+Request:  OwnerSpace.abc123.forVault.app.bootstrap
+Response: OwnerSpace.abc123.forApp.app.bootstrap.req-12345
+```
+
+The app subscribes with wildcard `forApp.app.bootstrap.>` to receive responses.
+
 ---
 
 ## Testing
