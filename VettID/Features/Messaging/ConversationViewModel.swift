@@ -131,6 +131,12 @@ final class ConversationViewModel: ObservableObject {
         let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedContent.isEmpty else { return }
 
+        // Check auth early if no message handler configured (will need API fallback)
+        if messageHandler == nil && authTokenProvider() == nil {
+            errorMessage = "Not authenticated"
+            return
+        }
+
         isSending = true
         errorMessage = nil
 

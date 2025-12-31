@@ -172,13 +172,18 @@ final class RecoveryPhraseManager {
 
         // Decrypt with ChaCha20-Poly1305
         let symmetricKey = SymmetricKey(data: key)
-        let sealedBox = try ChaChaPoly.SealedBox(
-            nonce: ChaChaPoly.Nonce(data: encryptedBackup.nonce),
-            ciphertext: actualCiphertext,
-            tag: tag
-        )
+        do {
+            let sealedBox = try ChaChaPoly.SealedBox(
+                nonce: ChaChaPoly.Nonce(data: encryptedBackup.nonce),
+                ciphertext: actualCiphertext,
+                tag: tag
+            )
 
-        return try ChaChaPoly.open(sealedBox, using: symmetricKey)
+            return try ChaChaPoly.open(sealedBox, using: symmetricKey)
+        } catch {
+            // Wrap CryptoKit errors (e.g., authenticationFailure) as decryptionFailed
+            throw RecoveryPhraseError.decryptionFailed
+        }
     }
 
     // MARK: - Private Helpers

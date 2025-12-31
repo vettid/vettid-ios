@@ -52,16 +52,16 @@ final class RecoveryPhraseManagerTests: XCTestCase {
     func testIsValidWord_invalidWords() {
         XCTAssertFalse(manager.isValidWord(""))
         XCTAssertFalse(manager.isValidWord("notaword"))
-        XCTAssertFalse(manager.isValidWord("hello"))
+        XCTAssertFalse(manager.isValidWord("invalidword"))
         XCTAssertFalse(manager.isValidWord("123"))
     }
 
-    func testIsValidWord_caseSensitive() {
-        // Our implementation should handle lowercase
+    func testIsValidWord_caseInsensitive() {
+        // BIP-39 validation is case-insensitive for user convenience
         XCTAssertTrue(manager.isValidWord("abandon"))
-        // Uppercase should be invalid (words are stored lowercase)
-        XCTAssertFalse(manager.isValidWord("ABANDON"))
-        XCTAssertFalse(manager.isValidWord("Abandon"))
+        XCTAssertTrue(manager.isValidWord("ABANDON"))
+        XCTAssertTrue(manager.isValidWord("Abandon"))
+        XCTAssertTrue(manager.isValidWord("ZOO"))
     }
 
     // MARK: - Phrase Validation Tests
@@ -104,18 +104,29 @@ final class RecoveryPhraseManagerTests: XCTestCase {
         XCTAssertTrue(suggestions.isEmpty)
     }
 
-    func testGetSuggestions_singleLetter() {
-        let suggestions = manager.getSuggestions(for: "z")
+    func testGetSuggestions_twoLetterPrefix() {
+        // Suggestions require minimum 2 characters
+        let suggestions = manager.getSuggestions(for: "zo")
 
         XCTAssertFalse(suggestions.isEmpty)
-        XCTAssertTrue(suggestions.allSatisfy { $0.hasPrefix("z") })
+        XCTAssertTrue(suggestions.allSatisfy { $0.hasPrefix("zo") })
+        XCTAssertTrue(suggestions.contains("zone"))
+        XCTAssertTrue(suggestions.contains("zoo"))
+    }
+
+    func testGetSuggestions_singleLetterReturnsEmpty() {
+        // Single letter should return empty (requires 2+ chars for suggestions)
+        let suggestions = manager.getSuggestions(for: "z")
+        XCTAssertTrue(suggestions.isEmpty)
     }
 
     func testGetSuggestions_limitedResults() {
-        let suggestions = manager.getSuggestions(for: "a")
+        // Use "ab" prefix which has many matches
+        let suggestions = manager.getSuggestions(for: "ab")
 
-        // Should be limited (default limit is typically 5-10)
-        XCTAssertLessThanOrEqual(suggestions.count, 10)
+        // Should be limited (default limit is 5)
+        XCTAssertLessThanOrEqual(suggestions.count, 5)
+        XCTAssertTrue(suggestions.allSatisfy { $0.hasPrefix("ab") })
     }
 
     // MARK: - BIP39 Word List Tests
