@@ -20,9 +20,9 @@ This file tracks API implementation status for VettID iOS, aligned with the back
 | POST /vault/start | **Implemented** | `APIClient.startVaultInstance()` (Cognito auth) |
 | POST /vault/stop | **Implemented** | `APIClient.stopVaultInstance()` (Cognito auth) |
 | POST /vault/terminate | **Implemented** | `APIClient.terminateVault()` (Cognito auth) |
-| **POST /api/v1/vault/start** | **NEW** | Pending - action token auth |
-| **POST /api/v1/vault/stop** | **NEW** | Pending - action token auth |
-| **GET /api/v1/vault/status** | **NEW** | Pending - action token auth |
+| POST /api/v1/vault/start | **Implemented** | `APIClient.startVaultAction()` |
+| POST /api/v1/vault/stop | **Implemented** | `APIClient.stopVaultAction()` |
+| GET /api/v1/vault/status | **Implemented** | `APIClient.getVaultStatusAction()` |
 
 ---
 
@@ -121,9 +121,9 @@ The vault-manager bootstrap response topic fix is deployed, but **only on one va
   ```
 
 - **Mobile Action Required:**
-  - [ ] iOS: Implement `VaultLifecycleClient` using action token flow
-  - [ ] iOS: Add vault start/stop to settings screen
-  - [ ] iOS: Auto-start vault when NATS connection fails with "vault stopped" error
+  - [x] iOS: Implement action-token vault lifecycle in APIClient
+  - [x] iOS: Add vault start/stop to ManageVaultView
+  - [x] iOS: Auto-start vault when NATS connection fails
 
 ### 2025-12-30 - Security Module Added
 
@@ -192,6 +192,32 @@ The vault-manager bootstrap response topic fix is deployed, but **only on one va
   - [x] iOS: Implement ProfileHandler
   - [x] iOS: Implement CredentialsHandler
   - [x] iOS: Implement ConnectionHandler
+
+### 2025-12-31 - Background Sync Implemented
+
+- **Files:** `VettID/Features/Vault/VaultBackgroundRefresh.swift`, `VettID/App/VettIDApp.swift`
+
+- **Features:**
+  - Vault sync task (15-minute interval) - checks transaction key pool, credential rotation
+  - NATS credential refresh task (6-hour interval) - refreshes credentials before expiry
+  - Smart scheduling based on credential expiration time
+  - Notifications for low keys, rotation needed, refresh needed
+
+- **Architecture:**
+  - Uses iOS BGAppRefreshTask (equivalent to Android WorkManager)
+  - Tasks registered via AppDelegate at app launch
+  - Scheduled when app enters background (if enrolled)
+  - Cancelled on logout/sign-out
+
+- **Task Identifiers (in Info.plist):**
+  - `dev.vettid.vault-refresh` - Vault sync
+  - `dev.vettid.nats-token-refresh` - NATS credential refresh
+  - `dev.vettid.backup` - Reserved for backup tasks
+
+- **Parity with Android:**
+  - `VaultSyncWorker` → `VaultBackgroundRefresh.performVaultSync()`
+  - `NatsTokenRefreshWorker` → `VaultBackgroundRefresh.performNatsCredentialRefresh()`
+  - Same thresholds: 5 UTKs, 2-hour refresh buffer
 
 ### 2025-12-31 - Phase 1-2: E2E Bootstrap & Vault Lifecycle
 
@@ -459,8 +485,8 @@ Subscribe to `forApp.*` topics for real-time notifications:
 - [x] Health status monitoring
 - [x] Start/stop vault instance (Cognito auth)
 - [x] Provisioning polling
-- [ ] Start/stop vault via action tokens (mobile-friendly)
-- [ ] Background sync (BGAppRefreshTask)
+- [x] Start/stop vault via action tokens (mobile-friendly)
+- [x] Background sync (BGAppRefreshTask)
 
 ### Security
 - [x] HTTPS only (ATS)
@@ -475,7 +501,6 @@ Subscribe to `forApp.*` topics for real-time notifications:
 ### Pending
 - [ ] Subscribe to `forApp.credentials.rotate` for proactive rotation
 - [ ] Implement credential rotation handler
-- [ ] Background sync worker (like Android WorkManager)
 - [ ] Add swift-sodium for native Argon2id
 - [ ] Add nats.swift for production NATS connectivity
 
@@ -487,7 +512,7 @@ Subscribe to `forApp.*` topics for real-time notifications:
 |---------|---------|-----|
 | NATS Library | `nats.java` | Stub wrapper (pending `nats.swift`) |
 | Argon2id | `argon2-jvm` | PBKDF2 fallback (pending `swift-sodium`) |
-| Background Sync | WorkManager | BGAppRefreshTask (pending) |
+| Background Sync | WorkManager | BGAppRefreshTask ✅ |
 | Keystore | Android Keystore | iOS Keychain |
 | Attestation | SafetyNet/Play Integrity | App Attest |
 | Cert Pinning Config | `network_security_config.xml` | `Info.plist` NSPinnedDomains |

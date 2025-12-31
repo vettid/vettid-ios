@@ -1,9 +1,12 @@
 import SwiftUI
+import BackgroundTasks
 
 @main
 struct VettIDApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var appState = AppState()
     @StateObject private var deepLinkHandler = DeepLinkHandler.shared
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -13,7 +16,36 @@ struct VettIDApp: App {
                 .onOpenURL { url in
                     deepLinkHandler.handle(url: url)
                 }
+                .onChange(of: scenePhase) { newPhase in
+                    handleScenePhaseChange(newPhase)
+                }
         }
+    }
+
+    private func handleScenePhaseChange(_ phase: ScenePhase) {
+        switch phase {
+        case .background:
+            VaultBackgroundRefresh.shared.applicationDidEnterBackground()
+        case .active:
+            VaultBackgroundRefresh.shared.applicationDidBecomeActive()
+        case .inactive:
+            break
+        @unknown default:
+            break
+        }
+    }
+}
+
+// MARK: - AppDelegate for Background Task Registration
+
+class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        // Register background tasks
+        VaultBackgroundRefresh.shared.registerBackgroundTasks()
+        return true
     }
 }
 
@@ -138,6 +170,9 @@ class AppState: ObservableObject {
 
         // Clear all keychain data
         clearAllKeychainData()
+
+        // Cancel background sync tasks
+        VaultBackgroundRefresh.shared.onLogout()
     }
 
     /// Clear all stored keychain data

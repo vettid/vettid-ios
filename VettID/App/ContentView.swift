@@ -211,6 +211,8 @@ struct EnrollmentContainerView: View {
             case .complete(let userGuid):
                 EnrollmentCompleteView(userGuid: userGuid) {
                     appState.refreshCredentialState()
+                    // Start background sync after successful enrollment
+                    VaultBackgroundRefresh.shared.onEnrollmentComplete()
                     dismiss()
                 }
 
