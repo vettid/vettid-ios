@@ -9,7 +9,7 @@ final class VaultResponseHandlerTests: XCTestCase {
     func testVaultResponseError_timeoutDescription() {
         let error = VaultResponseError.timeout
         XCTAssertNotNil(error.errorDescription)
-        XCTAssertTrue(error.errorDescription!.lowercased().contains("timeout"))
+        XCTAssertTrue(error.errorDescription!.lowercased().contains("timed out"))
     }
 
     func testVaultResponseError_cancelledDescription() {

@@ -35,9 +35,11 @@ final class NatsCredentialsTests: XCTestCase {
     }
 
     func testEquality() {
-        let credentials1 = makeCredentials(tokenId: "token1")
-        let credentials2 = makeCredentials(tokenId: "token1")
-        let credentials3 = makeCredentials(tokenId: "token2")
+        // Use a fixed date to ensure equality comparison works correctly
+        let fixedDate = Date(timeIntervalSince1970: 1735689600) // 2025-01-01 00:00:00 UTC
+        let credentials1 = makeCredentials(tokenId: "token1", expiresAt: fixedDate)
+        let credentials2 = makeCredentials(tokenId: "token1", expiresAt: fixedDate)
+        let credentials3 = makeCredentials(tokenId: "token2", expiresAt: fixedDate)
 
         XCTAssertEqual(credentials1, credentials2)
         XCTAssertNotEqual(credentials1, credentials3)
