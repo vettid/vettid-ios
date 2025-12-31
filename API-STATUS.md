@@ -71,11 +71,47 @@ The vault-manager bootstrap response topic fix is deployed, but **only on one va
 | user_guid | Has Bootstrap Fix | Use For Testing |
 |-----------|-------------------|-----------------|
 | `user-D84E1A00643A4C679FAEF6D6FA81B103` | ✅ Yes | ✅ Use this one |
-| `user-29680995BC4D4AE19F5B8F046D140005` | ❌ No | ❌ Don't use |
-| `user-0C9D219E6E3444F5B512C401AC6CD739` | ❌ No | ❌ Don't use |
-| `user-E32E2304B6274D9686B00A6E0BF97ECB` | ❌ No | ❌ Don't use |
 
-**For full bootstrap flow testing, always use `user-D84E1A00643A4C679FAEF6D6FA81B103`**
+All other test vaults have been terminated. Only the one with the fix remains.
+
+**For full bootstrap flow testing, use `user-D84E1A00643A4C679FAEF6D6FA81B103`**
+
+### ✅ NEW FIX: HTTP 500 from /api/v1/action/request
+
+**Problem:** The `/api/v1/action/request` endpoint was returning HTTP 500 with DynamoDB error.
+
+**Root Cause:** Lambda handler had incorrect DynamoDB queries that didn't match actual table schemas:
+1. **Credentials table** - Used `GetItem` with just `user_guid`, but table has composite key
+2. **LedgerAuthTokens table** - Queried by `user_guid`, but no GSI existed
+3. **TransactionKeys table** - Queried using wrong GSI name
+
+**Fix Applied:**
+1. Changed Credentials query from `GetItem` to `Query`
+2. Added `user-index` GSI to LedgerAuthTokens table
+3. Fixed TransactionKeys to use correct GSI
+
+**Status:** Deployed and active. The endpoint should now work correctly.
+
+### ✅ NEW FIX: user_guid Vault Reuse
+
+**Problem:** Passing `user_guid` to `/test/create-invitation` to reuse an existing vault didn't work. The enrollment created NEW NATS credentials that the vault didn't recognize.
+
+**Root Cause:** `enrollFinalize.ts` generated new credentials before checking if the account existed.
+
+**Fix Applied:** Now checks for existing NATS accounts FIRST:
+1. If account exists: use existing `account_seed` for bootstrap credentials
+2. If new user: create account and provision vault as before
+
+**New Response:** `vault_status: "EXISTING"` means re-enrollment with existing vault:
+```json
+{
+  "vault_status": "EXISTING",
+  "vault_bootstrap": {
+    "credentials": "...",  // Valid for existing vault
+    "estimated_ready_at": "..."  // Immediate
+  }
+}
+```
 
 ---
 
