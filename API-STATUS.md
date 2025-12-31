@@ -1,6 +1,6 @@
 # VettID iOS API Status
 
-**Last Updated:** 2025-12-31
+**Last Updated:** 2025-12-31 (Action-token vault lifecycle endpoints)
 
 This file tracks API implementation status for VettID iOS, aligned with the backend API-STATUS.md and Android implementation.
 
@@ -15,11 +15,14 @@ This file tracks API implementation status for VettID iOS, aligned with the back
 | POST /api/v1/enroll/finalize | **Implemented** | `EnrollmentService.finalize()` |
 | POST /api/v1/action/request | **Implemented** | `AuthenticationService.requestAction()` |
 | POST /api/v1/auth/execute | **Implemented** | `AuthenticationService.authenticate()` |
-| GET /vault/health | **Implemented** | `APIClient.getVaultHealth()` |
-| GET /vault/status | **Implemented** | `APIClient.getVaultStatus()` |
-| POST /vault/start | **Implemented** | `APIClient.startVaultInstance()` |
-| POST /vault/stop | **Implemented** | `APIClient.stopVaultInstance()` |
-| POST /vault/terminate | **Implemented** | `APIClient.terminateVault()` |
+| GET /vault/health | **Implemented** | `APIClient.getVaultHealth()` (Cognito auth) |
+| GET /vault/status | **Implemented** | `APIClient.getVaultStatus()` (Cognito auth) |
+| POST /vault/start | **Implemented** | `APIClient.startVaultInstance()` (Cognito auth) |
+| POST /vault/stop | **Implemented** | `APIClient.stopVaultInstance()` (Cognito auth) |
+| POST /vault/terminate | **Implemented** | `APIClient.terminateVault()` (Cognito auth) |
+| **POST /api/v1/vault/start** | **NEW** | Pending - action token auth |
+| **POST /api/v1/vault/stop** | **NEW** | Pending - action token auth |
+| **GET /api/v1/vault/status** | **NEW** | Pending - action token auth |
 
 ---
 
@@ -40,6 +43,50 @@ This file tracks API implementation status for VettID iOS, aligned with the back
 ---
 
 ## Recent Changes
+
+### 2025-12-31 - Action-Token Vault Lifecycle Endpoints Deployed
+
+- **Endpoints:** New mobile-friendly vault lifecycle endpoints (no Cognito required)
+  - `POST /api/v1/vault/start` - Start vault EC2 instance
+  - `POST /api/v1/vault/stop` - Stop vault EC2 instance
+  - `GET /api/v1/vault/status` - Get enrollment and instance status
+
+- **Breaking:** No - New functionality only
+
+- **Authentication:** Uses action tokens instead of Cognito JWT
+  - Request action token via `/api/v1/action/request` with `action_type`: `vault_start`, `vault_stop`, or `vault_status`
+  - Execute action with action token in Bearer header (single-use, 5-minute expiry)
+
+- **New Action Types:**
+  - `vault_start` → `/api/v1/vault/start`
+  - `vault_stop` → `/api/v1/vault/stop`
+  - `vault_status` → `/api/v1/vault/status`
+
+- **Response Format:**
+  ```json
+  // POST /api/v1/vault/start
+  {
+    "status": "starting",
+    "instance_id": "i-xxx",
+    "message": "Vault is starting. Please wait for initialization to complete."
+  }
+
+  // GET /api/v1/vault/status
+  {
+    "enrollment_status": "active",
+    "user_guid": "user_xxx",
+    "transaction_keys_remaining": 15,
+    "instance_status": "running",
+    "instance_id": "i-xxx",
+    "instance_ip": "x.x.x.x",
+    "nats_endpoint": "tls://nats.vettid.dev:4222"
+  }
+  ```
+
+- **Mobile Action Required:**
+  - [ ] iOS: Implement `VaultLifecycleClient` using action token flow
+  - [ ] iOS: Add vault start/stop to settings screen
+  - [ ] iOS: Auto-start vault when NATS connection fails with "vault stopped" error
 
 ### 2025-12-30 - Security Module Added
 
@@ -373,8 +420,9 @@ Subscribe to `forApp.*` topics for real-time notifications:
 
 ### Vault Lifecycle
 - [x] Health status monitoring
-- [x] Start/stop vault instance
+- [x] Start/stop vault instance (Cognito auth)
 - [x] Provisioning polling
+- [ ] Start/stop vault via action tokens (mobile-friendly)
 - [ ] Background sync (BGAppRefreshTask)
 
 ### Security
