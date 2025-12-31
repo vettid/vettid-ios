@@ -1,6 +1,6 @@
 # VettID iOS API Status
 
-**Last Updated:** 2025-12-31 (Action-token vault lifecycle endpoints)
+**Last Updated:** 2025-12-31 (Backend fixes for issues #1, #2, #3)
 
 This file tracks API implementation status for VettID iOS, aligned with the backend API-STATUS.md and Android implementation.
 
@@ -39,6 +39,43 @@ This file tracks API implementation status for VettID iOS, aligned with the back
 | `message.read-receipt` | **Implemented** | `MessageHandler` actor |
 | `profile.broadcast` | **Implemented** | `MessageHandler` actor |
 | `connection.notify-revoke` | **Implemented** | `MessageHandler` actor |
+
+---
+
+## Backend Status Updates (2025-12-31)
+
+### ✅ Issue #2 FIXED: Action Token 404 Error
+
+The `/api/v1/action/request` endpoint was only available at `/vault/action/request` (with Cognito auth).
+Mobile apps couldn't get action tokens because they don't have Cognito JWT.
+
+**Fix:** Added public route `/api/v1/action/request` (no Cognito auth). User validation via DynamoDB credential lookup.
+
+### ✅ Issue #3 FIXED: Test Vault Provisioning
+
+The `/test/create-invitation` endpoint now accepts optional `user_guid` parameter to reuse existing vaults.
+
+**Usage:**
+```json
+POST /test/create-invitation
+{
+  "test_user_id": "my_test",
+  "user_guid": "user-D84E1A00643A4C679FAEF6D6FA81B103"
+}
+```
+
+### ⚠️ Issue #1 PARTIAL: Bootstrap Topic Fix
+
+The vault-manager bootstrap response topic fix is deployed, but **only on one vault**:
+
+| user_guid | Has Bootstrap Fix | Use For Testing |
+|-----------|-------------------|-----------------|
+| `user-D84E1A00643A4C679FAEF6D6FA81B103` | ✅ Yes | ✅ Use this one |
+| `user-29680995BC4D4AE19F5B8F046D140005` | ❌ No | ❌ Don't use |
+| `user-0C9D219E6E3444F5B512C401AC6CD739` | ❌ No | ❌ Don't use |
+| `user-E32E2304B6274D9686B00A6E0BF97ECB` | ❌ No | ❌ Don't use |
+
+**For full bootstrap flow testing, always use `user-D84E1A00643A4C679FAEF6D6FA81B103`**
 
 ---
 
