@@ -76,21 +76,28 @@ final class VaultService: ObservableObject {
 
     private func parseStatus(from statusString: String) -> VaultStatus {
         switch statusString.uppercased() {
-        case "PENDING_ENROLLMENT", "PENDING-ENROLLMENT":
+        case "PENDING_ENROLLMENT", "PENDING-ENROLLMENT", "NOT_ENROLLED":
             return .pendingEnrollment
-        case "PENDING_PROVISION", "PENDING-PROVISION":
+        case "PENDING_PROVISION", "PENDING-PROVISION", "ENROLLED":
             return .pendingProvision
         case "PROVISIONING":
             return .provisioning(progress: nil)
         case "INITIALIZING":
             return .initializing
-        case "RUNNING":
+        case "RUNNING", "HEALTHY":
             return .running(instanceId: "")
         case "STOPPED":
             return .stopped
         case "TERMINATED":
             return .terminated
+        case "ERROR", "FAILED":
+            return .error("Unknown error")
         default:
+            // Check if it looks like an error message
+            if statusString.lowercased().contains("error") ||
+               statusString.lowercased().contains("fail") {
+                return .error(statusString)
+            }
             return .stopped
         }
     }
@@ -162,14 +169,19 @@ final class VaultService: ObservableObject {
 
 // MARK: - Vault Status
 
+/// Vault state machine matching Android implementation:
+/// NotEnrolled → Enrolled → Provisioning → Running ↔ Stopped → Terminated
+///                                            ↓
+///                                          Error
 enum VaultStatus: Equatable {
-    case pendingEnrollment
-    case pendingProvision      // Enrollment complete, waiting for vault provision
+    case pendingEnrollment     // Android: NotEnrolled
+    case pendingProvision      // Android: Enrolled - waiting for vault provision
     case provisioning(progress: Double?)  // EC2 instance being created
     case initializing          // Vault software starting up
-    case running(instanceId: String)
-    case stopped
-    case terminated
+    case running(instanceId: String)  // Android: Running
+    case stopped               // Android: Stopped
+    case terminated            // Android: Terminated
+    case error(String)         // Android: Error
 
     var displayName: String {
         switch self {
@@ -187,6 +199,8 @@ enum VaultStatus: Equatable {
             return "Stopped"
         case .terminated:
             return "Terminated"
+        case .error(let message):
+            return "Error: \(message)"
         }
     }
 
@@ -204,6 +218,8 @@ enum VaultStatus: Equatable {
             return "stop.circle.fill"
         case .terminated:
             return "xmark.circle.fill"
+        case .error:
+            return "exclamationmark.triangle.fill"
         }
     }
 
@@ -217,6 +233,22 @@ enum VaultStatus: Equatable {
     var isStarting: Bool {
         switch self {
         case .provisioning, .initializing:
+            return true
+        default:
+            return false
+        }
+    }
+
+    var hasError: Bool {
+        if case .error = self {
+            return true
+        }
+        return false
+    }
+
+    var isOperational: Bool {
+        switch self {
+        case .running, .initializing:
             return true
         default:
             return false

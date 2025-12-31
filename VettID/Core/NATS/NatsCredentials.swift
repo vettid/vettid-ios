@@ -24,6 +24,17 @@ struct NatsCredentials: Codable, Equatable {
         expiresAt.timeIntervalSince(Date())
     }
 
+    /// Extract owner space ID from publish permissions
+    /// Looks for pattern like "{ownerSpace}.forVault.>"
+    var ownerSpace: String? {
+        for pattern in permissions.publish {
+            if pattern.hasSuffix(".forVault.>") {
+                return String(pattern.dropLast(".forVault.>".count))
+            }
+        }
+        return nil
+    }
+
     /// Create credentials from API response
     init(from response: NatsTokenResponse) {
         self.tokenId = response.tokenId
@@ -52,7 +63,7 @@ struct NatsCredentials: Codable, Equatable {
         fromCredsFileContent content: String,
         endpoint: String,
         ownerSpace: String,
-        messageSpace: String,
+        messageSpace: String? = nil,
         topics: NatsTopics? = nil
     ) {
         // Parse JWT from .creds file

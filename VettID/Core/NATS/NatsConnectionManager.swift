@@ -9,29 +9,40 @@ final class NatsConnectionManager: ObservableObject {
 
     @Published private(set) var connectionState: NatsConnectionState = .disconnected
     @Published private(set) var lastError: Error?
+    @Published private(set) var isSessionEstablished: Bool = false
 
     // MARK: - Dependencies
 
     private let credentialStore: NatsCredentialStore
     private let apiClient: APIClient
+    private let sessionKeyManager: SessionKeyManager
 
     // MARK: - Connection State
 
     private var natsClient: NatsClientWrapper?
     private var reconnectTask: Task<Void, Never>?
     private var subscriptions: [String: NatsSubscription] = [:]
+    private var ownerSpaceId: String?
 
     // MARK: - Configuration
 
     private let maxReconnectAttempts = 5
     private let reconnectDelaySeconds: [Double] = [1, 2, 4, 8, 16] // Exponential backoff
+    private let bootstrapTimeout: TimeInterval = 30
 
     // MARK: - Initialization
 
     init(credentialStore: NatsCredentialStore = NatsCredentialStore(),
-         apiClient: APIClient = APIClient()) {
+         apiClient: APIClient = APIClient(),
+         sessionKeyManager: SessionKeyManager = SessionKeyManager()) {
         self.credentialStore = credentialStore
         self.apiClient = apiClient
+        self.sessionKeyManager = sessionKeyManager
+    }
+
+    /// Get the session key manager for E2E operations
+    var keyManager: SessionKeyManager {
+        sessionKeyManager
     }
 
     // MARK: - Connection Management
@@ -78,7 +89,7 @@ final class NatsConnectionManager: ObservableObject {
 
     /// Connect to NATS using credentials from enrollment
     /// This is called after enrollment when credentials are provided in the enrollFinalize response
-    func connectWithEnrollmentCredentials(_ credentials: NatsCredentials) async throws {
+    func connectWithEnrollmentCredentials(_ credentials: NatsCredentials, ownerSpace: String? = nil) async throws {
         guard connectionState != .connected else { return }
 
         connectionState = .connecting
@@ -87,6 +98,9 @@ final class NatsConnectionManager: ObservableObject {
         do {
             // Store the credentials for future use
             try credentialStore.saveCredentials(credentials)
+
+            // Store owner space ID for bootstrap
+            self.ownerSpaceId = ownerSpace ?? credentials.ownerSpace
 
             // Create and connect NATS client
             natsClient = NatsClientWrapper(
@@ -105,14 +119,122 @@ final class NatsConnectionManager: ObservableObject {
             #if DEBUG
             print("[NATS] Connected with enrollment credentials")
             print("[NATS] Endpoint: \(credentials.endpoint)")
+            print("[NATS] OwnerSpace: \(ownerSpaceId ?? "unknown")")
             print("[NATS] JWT expires: \(credentials.expiresAt)")
             #endif
+
+            // Perform E2E bootstrap if owner space is known
+            if ownerSpaceId != nil {
+                try await performBootstrap()
+            }
 
         } catch {
             lastError = error
             connectionState = .error(error)
             throw error
         }
+    }
+
+    // MARK: - E2E Bootstrap
+
+    /// Perform E2E session bootstrap with the vault
+    /// This establishes encrypted communication after NATS connection
+    func performBootstrap() async throws {
+        guard connectionState == .connected else {
+            throw NatsConnectionError.notConnected
+        }
+
+        guard let ownerSpace = ownerSpaceId else {
+            throw NatsConnectionError.connectionFailed("No owner space ID for bootstrap")
+        }
+
+        // Check if we already have an active session
+        if await sessionKeyManager.hasActiveSession {
+            isSessionEstablished = true
+            #if DEBUG
+            print("[NATS] E2E session already established")
+            #endif
+            return
+        }
+
+        #if DEBUG
+        print("[NATS] Starting E2E bootstrap...")
+        #endif
+
+        do {
+            // Generate bootstrap request
+            let bootstrapRequest = try await sessionKeyManager.initiateBootstrap()
+
+            // Subscribe to bootstrap response topic
+            let responseTopic = "\(ownerSpace).forApp.app.bootstrap.response"
+            let responseStream = try await subscribe(to: responseTopic)
+
+            // Send bootstrap request
+            let requestTopic = "\(ownerSpace).forVault.app.bootstrap"
+            let requestData = try JSONEncoder().encode(bootstrapRequest)
+            try await publish(requestData, to: requestTopic)
+
+            // Wait for response with timeout
+            let response = try await withThrowingTaskGroup(of: BootstrapResponse.self) { group in
+                // Response listener task
+                group.addTask {
+                    for await message in responseStream {
+                        if let response = try? JSONDecoder().decode(BootstrapResponse.self, from: message.data) {
+                            if response.requestId == bootstrapRequest.requestId {
+                                return response
+                            }
+                        }
+                    }
+                    throw NatsConnectionError.connectionFailed("Bootstrap response stream ended")
+                }
+
+                // Timeout task
+                group.addTask {
+                    try await Task.sleep(nanoseconds: UInt64(self.bootstrapTimeout * 1_000_000_000))
+                    throw NatsConnectionError.connectionFailed("Bootstrap timed out")
+                }
+
+                // Return first result (response or timeout)
+                guard let result = try await group.next() else {
+                    throw NatsConnectionError.connectionFailed("Bootstrap failed")
+                }
+
+                group.cancelAll()
+                return result
+            }
+
+            // Complete bootstrap key exchange
+            try await sessionKeyManager.completeBootstrap(response: response)
+
+            // Update credentials if provided in response
+            if let newCreds = response.credentials {
+                if let parsed = NatsCredentials(
+                    fromCredsFileContent: newCreds,
+                    endpoint: "", // Keep existing endpoint
+                    ownerSpace: ownerSpace,
+                    messageSpace: nil,
+                    topics: nil
+                ) {
+                    try credentialStore.saveCredentials(parsed)
+                }
+            }
+
+            isSessionEstablished = true
+
+            #if DEBUG
+            print("[NATS] E2E bootstrap complete, sessionId: \(response.sessionId)")
+            #endif
+
+        } catch {
+            await sessionKeyManager.cancelBootstrap()
+            throw error
+        }
+    }
+
+    /// Clear E2E session (e.g., on logout)
+    func clearSession() async {
+        await sessionKeyManager.clearSession()
+        isSessionEstablished = false
     }
 
     /// Disconnect from NATS

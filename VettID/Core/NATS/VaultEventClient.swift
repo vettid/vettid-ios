@@ -4,16 +4,46 @@ import Foundation
 ///
 /// This provides a higher-level interface for event submission
 /// with automatic request ID generation and response subscription.
+/// All messages are encrypted using E2E session keys (except bootstrap).
 final class VaultEventClient {
 
     // MARK: - Properties
 
     private let ownerSpaceClient: OwnerSpaceClient
+    private let sessionKeyManager: SessionKeyManager
+
+    /// Whether to encrypt messages (disabled for bootstrap topic)
+    private var encryptionEnabled: Bool = true
 
     // MARK: - Initialization
 
-    init(ownerSpaceClient: OwnerSpaceClient) {
+    init(ownerSpaceClient: OwnerSpaceClient, sessionKeyManager: SessionKeyManager) {
         self.ownerSpaceClient = ownerSpaceClient
+        self.sessionKeyManager = sessionKeyManager
+    }
+
+    /// Convenience initializer without session manager (for backwards compatibility)
+    convenience init(ownerSpaceClient: OwnerSpaceClient) {
+        self.init(ownerSpaceClient: ownerSpaceClient, sessionKeyManager: SessionKeyManager())
+    }
+
+    // MARK: - Encryption Control
+
+    /// Temporarily disable encryption (for bootstrap messages)
+    func withoutEncryption<T>(_ operation: () async throws -> T) async rethrows -> T {
+        encryptionEnabled = false
+        defer { encryptionEnabled = true }
+        return try await operation()
+    }
+
+    /// Check if E2E session is established
+    func hasActiveSession() async -> Bool {
+        return await sessionKeyManager.hasActiveSession
+    }
+
+    /// Get the session key manager for bootstrap operations
+    var keyManager: SessionKeyManager {
+        sessionKeyManager
     }
 
     // MARK: - Event Submission
@@ -28,8 +58,14 @@ final class VaultEventClient {
             timestamp: ISO8601DateFormatter().string(from: Date())
         )
 
-        // Topic is just the event type (no "events." prefix per Android/backend alignment)
-        try await ownerSpaceClient.sendToVault(message, topic: event.type)
+        // Encrypt if session is active and encryption is enabled
+        let hasSession = await sessionKeyManager.hasActiveSession
+        if encryptionEnabled && hasSession {
+            try await sendEncrypted(message, topic: event.type)
+        } else {
+            // Topic is just the event type (no "events." prefix per Android/backend alignment)
+            try await ownerSpaceClient.sendToVault(message, topic: event.type)
+        }
 
         return id
     }
@@ -47,10 +83,41 @@ final class VaultEventClient {
             timestamp: ISO8601DateFormatter().string(from: Date())
         )
 
-        // Topic is just the event type (no "events." prefix per Android/backend alignment)
-        try await ownerSpaceClient.sendToVault(message, topic: type)
+        // Encrypt if session is active and encryption is enabled
+        let hasSession = await sessionKeyManager.hasActiveSession
+        if encryptionEnabled && hasSession {
+            try await sendEncrypted(message, topic: type)
+        } else {
+            // Topic is just the event type (no "events." prefix per Android/backend alignment)
+            try await ownerSpaceClient.sendToVault(message, topic: type)
+        }
 
         return id
+    }
+
+    // MARK: - Encrypted Message Helpers
+
+    /// Encrypt and send a message to the vault
+    private func sendEncrypted<T: Encodable>(_ message: T, topic: String) async throws {
+        // Encode message to JSON
+        let jsonData = try JSONEncoder().encode(message)
+
+        // Encrypt with session key
+        let envelope = try await sessionKeyManager.encrypt(message: jsonData)
+
+        // Send encrypted envelope
+        try await ownerSpaceClient.sendToVault(envelope, topic: topic)
+    }
+
+    /// Decrypt a received envelope
+    func decryptEnvelope(_ envelope: EncryptedEnvelope) async throws -> Data {
+        try await sessionKeyManager.decrypt(envelope: envelope)
+    }
+
+    /// Decrypt and decode a received envelope
+    func decryptAndDecode<T: Decodable>(_ envelope: EncryptedEnvelope, as type: T.Type) async throws -> T {
+        let decryptedData = try await sessionKeyManager.decrypt(envelope: envelope)
+        return try JSONDecoder().decode(type, from: decryptedData)
     }
 
     // MARK: - Response Subscription

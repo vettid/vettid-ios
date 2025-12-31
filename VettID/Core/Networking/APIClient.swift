@@ -152,6 +152,11 @@ actor APIClient {
         return try await post(endpoint: "/vault/initialize", body: EmptyBody(), authToken: authToken)
     }
 
+    /// Start a stopped vault instance
+    func startVaultInstance(authToken: String) async throws -> VaultLifecycleResponse {
+        return try await post(endpoint: "/vault/start", body: EmptyBody(), authToken: authToken)
+    }
+
     /// Stop vault (preserve state)
     func stopVaultInstance(authToken: String) async throws -> VaultLifecycleResponse {
         return try await post(endpoint: "/vault/stop", body: EmptyBody(), authToken: authToken)
@@ -165,6 +170,11 @@ actor APIClient {
     /// Get vault health status
     func getVaultHealth(authToken: String) async throws -> VaultHealthResponse {
         return try await get(endpoint: "/vault/health", authToken: authToken)
+    }
+
+    /// Get member vault status
+    func getMemberVaultStatus(authToken: String) async throws -> MemberVaultStatusResponse {
+        return try await get(endpoint: "/member/vault/status", authToken: authToken)
     }
 
     // MARK: - NATS Operations (Phase 4)
@@ -722,6 +732,17 @@ struct VaultStatusResponse: Decodable {
     let instanceId: String?
     let publicIP: String?
     let lastHeartbeat: Date?
+}
+
+/// Response from GET /member/vault/status (Android equivalent)
+struct MemberVaultStatusResponse: Decodable {
+    let status: String  // "not_enrolled", "enrolled", "provisioning", "running", "stopped", "terminated"
+    let instanceId: String?
+    let publicIp: String?
+    let privateIp: String?
+    let region: String?
+    let launchedAt: String?
+    let lastHeartbeat: String?
 }
 
 struct VaultActionResponse: Decodable {

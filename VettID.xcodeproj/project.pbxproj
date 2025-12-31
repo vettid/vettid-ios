@@ -107,9 +107,11 @@
 		B0654E219C2D593B6A9355A0 /* HeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5B59320799245103D92C504 /* HeaderView.swift */; };
 		C343F7B83B7C091123598F3D /* AppLockService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA6F4E8A08AC05BC1E9981C6 /* AppLockService.swift */; };
 		CA86CA36D9E993B236ED44E6 /* ContextualBottomNav.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E26681EB4F44673283A603D /* ContextualBottomNav.swift */; };
+		CBB42EE77AAC0795CA3EE203 /* EncryptedEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEBBB6DA11AE9704FF891A7F /* EncryptedEnvelope.swift */; };
 		CDBBDBFDD83502117D46C4C1 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D6D6E4F90B7A138F25B696 /* AppSettings.swift */; };
 		D302C18A23D884DD51D9F532 /* FeedViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDAE474EE81CD7EDDE12ABF5 /* FeedViewModel.swift */; };
 		DBFEF468FD6CAD145C6CDE3B /* MainNavigationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEA5BE7707CCFC71CBA871B7 /* MainNavigationView.swift */; };
+		DF3E299D763958D6155FB562 /* SessionKeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36891E6A55D69502EF90D4CB /* SessionKeyManager.swift */; };
 		E0856AA3F832860B0D0EC949 /* FeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A55B8A854B6DF21A3197B1A0 /* FeedView.swift */; };
 		EBA8CC5E3DAC52A8A2738BFE /* DrawerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 157809425BFB22E6896C0225 /* DrawerView.swift */; };
 		FFEC75DD850E79B5ED665914 /* VaultPreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8285A14EAFF8FCF54C60C6E2 /* VaultPreferencesView.swift */; };
@@ -204,6 +206,7 @@
 		20000001 /* VettID.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VettID.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		208B738362A4D7A093432F99 /* PersonalDataViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PersonalDataViewModel.swift; sourceTree = "<group>"; };
 		2B2D6CF42AD511A65BF8DC12 /* AboutView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
+		36891E6A55D69502EF90D4CB /* SessionKeyManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SessionKeyManager.swift; sourceTree = "<group>"; };
 		392F1BEBBE9997250A75C74A /* VettID.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = VettID.entitlements; sourceTree = "<group>"; };
 		48B355FF5FC2FE9E7899E6EB /* SecuritySettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SecuritySettingsView.swift; sourceTree = "<group>"; };
 		498392EDCF906E22833BD876 /* PersonalDataView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PersonalDataView.swift; sourceTree = "<group>"; };
@@ -217,6 +220,7 @@
 		A2F5A0DDB43ADCF6557660BF /* ManageVaultView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ManageVaultView.swift; sourceTree = "<group>"; };
 		A55B8A854B6DF21A3197B1A0 /* FeedView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FeedView.swift; sourceTree = "<group>"; };
 		AA6F4E8A08AC05BC1E9981C6 /* AppLockService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppLockService.swift; sourceTree = "<group>"; };
+		AEBBB6DA11AE9704FF891A7F /* EncryptedEnvelope.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EncryptedEnvelope.swift; sourceTree = "<group>"; };
 		B5B59320799245103D92C504 /* HeaderView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HeaderView.swift; sourceTree = "<group>"; };
 		B800E13B79F1C90797B3209D /* DeepLinkHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DeepLinkHandler.swift; sourceTree = "<group>"; };
 		BA573762F5B324146F857357 /* ThemeSettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ThemeSettingsView.swift; sourceTree = "<group>"; };
@@ -433,6 +437,8 @@
 				1000001D /* NatsTokenRefreshTask.swift */,
 				10000020 /* VaultEventClient.swift */,
 				10000021 /* VaultResponseHandler.swift */,
+				36891E6A55D69502EF90D4CB /* SessionKeyManager.swift */,
+				AEBBB6DA11AE9704FF891A7F /* EncryptedEnvelope.swift */,
 			);
 			path = NATS;
 			sourceTree = "<group>";
@@ -766,6 +772,8 @@
 				FFEC75DD850E79B5ED665914 /* VaultPreferencesView.swift in Sources */,
 				1EAC19EF056BA34609877523 /* ArchiveView.swift in Sources */,
 				4F867A959C49C7208A76ED50 /* DeepLinkHandler.swift in Sources */,
+				DF3E299D763958D6155FB562 /* SessionKeyManager.swift in Sources */,
+				CBB42EE77AAC0795CA3EE203 /* EncryptedEnvelope.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

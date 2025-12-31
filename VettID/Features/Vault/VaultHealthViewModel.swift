@@ -127,6 +127,29 @@ final class VaultHealthViewModel: ObservableObject {
         }
     }
 
+    /// Start a stopped vault instance
+    func startVault() async {
+        guard let authToken = authTokenProvider() else {
+            healthState = .error("Not authenticated")
+            return
+        }
+
+        healthState = .provisioning(progress: 0, status: "Starting vault...")
+
+        do {
+            let response = try await apiClient.startVaultInstance(authToken: authToken)
+
+            if response.status == "starting" || response.status == "started" {
+                // Poll for vault to become healthy
+                await pollForStartup(authToken: authToken)
+            } else {
+                healthState = .error("Start failed: \(response.message)")
+            }
+        } catch {
+            healthState = .error("Start failed: \(error.localizedDescription)")
+        }
+    }
+
     /// Stop the vault (preserves state)
     func stopVault() async {
         guard let authToken = authTokenProvider() else {
@@ -145,6 +168,54 @@ final class VaultHealthViewModel: ObservableObject {
         } catch {
             healthState = .error("Stop failed: \(error.localizedDescription)")
         }
+    }
+
+    // MARK: - Status Helpers (Android parity)
+
+    /// Returns true if vault needs attention (unhealthy or error state)
+    var needsAttention: Bool {
+        switch healthState {
+        case .error:
+            return true
+        case .loaded(let info):
+            return info.status == .unhealthy
+        default:
+            return false
+        }
+    }
+
+    /// Get a short status summary for home screen display
+    var statusSummary: String {
+        switch healthState {
+        case .loading:
+            return "Checking..."
+        case .notProvisioned:
+            return "Not set up"
+        case .provisioning(_, let status):
+            return status
+        case .stopped:
+            return "Vault stopped"
+        case .loaded(let info):
+            return info.status.displayName
+        case .error(let message):
+            return "Error: \(message)"
+        }
+    }
+
+    /// Whether the vault is running and healthy
+    var isHealthy: Bool {
+        if case .loaded(let info) = healthState {
+            return info.status == .healthy
+        }
+        return false
+    }
+
+    /// Whether the vault is currently operational (healthy or degraded)
+    var isOperational: Bool {
+        if case .loaded(let info) = healthState {
+            return info.status.isOperational
+        }
+        return false
     }
 
     /// Terminate the vault (full cleanup)
@@ -200,6 +271,39 @@ final class VaultHealthViewModel: ObservableObject {
         }
 
         healthState = .error("Provisioning timed out after 2 minutes")
+    }
+
+    private func pollForStartup(authToken: String) async {
+        // Poll with 2-second intervals for up to 60 attempts (2 minutes)
+        for attempt in 0..<maxProvisioningAttempts {
+            if Task.isCancelled { return }
+
+            let progress = Double(attempt) / Double(maxProvisioningAttempts)
+            healthState = .provisioning(progress: progress, status: "Starting vault...")
+
+            do {
+                try await Task.sleep(nanoseconds: UInt64(provisioningPollInterval * 1_000_000_000))
+
+                let health = try await apiClient.getVaultHealth(authToken: authToken)
+
+                switch health.status {
+                case "healthy":
+                    healthState = .loaded(VaultHealthInfo(from: health))
+                    return
+
+                case "degraded":
+                    healthState = .provisioning(progress: progress + 0.1, status: "Services warming up...")
+
+                default:
+                    healthState = .provisioning(progress: progress, status: "Starting...")
+                }
+            } catch {
+                // Still starting
+                healthState = .provisioning(progress: progress, status: "Waiting for startup...")
+            }
+        }
+
+        healthState = .error("Startup timed out after 2 minutes")
     }
 
     deinit {
