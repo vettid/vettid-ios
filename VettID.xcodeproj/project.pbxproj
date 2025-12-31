@@ -89,18 +89,21 @@
 		00000051 /* ScreenProtection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000051 /* ScreenProtection.swift */; };
 		00000052 /* ProfileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000052 /* ProfileStore.swift */; };
 		00000053 /* SecretsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000053 /* SecretsStore.swift */; };
+		0070F8E8A708ED9903FFDB28 /* ProfileHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A802F262C8E724624EE83387 /* ProfileHandler.swift */; };
 		12AC6B6A5207336BD3912200 /* ThemeSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA573762F5B324146F857357 /* ThemeSettingsView.swift */; };
 		1EAC19EF056BA34609877523 /* ArchiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A4A6BF4B7E19B38EDEF31AC /* ArchiveView.swift */; };
 		3C5A3DA38E4A1DDE8F4639C4 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2D6CF42AD511A65BF8DC12 /* AboutView.swift */; };
 		3F35449FD0789E400C52EE54 /* AppLockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6F772E105DCC21AF1751DE5 /* AppLockView.swift */; };
 		498D7D66D5911F127DD808FF /* ManageVaultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2F5A0DDB43ADCF6557660BF /* ManageVaultView.swift */; };
 		4F867A959C49C7208A76ED50 /* DeepLinkHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B800E13B79F1C90797B3209D /* DeepLinkHandler.swift */; };
+		54AE200B5260828DFDDF54CF /* ConnectionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AA0D8823160098FDD1BEDED /* ConnectionHandler.swift */; };
 		5F70C41EB8B0D5E3945DE3D0 /* VaultServicesStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D5FE09BE33592D0D0F1EB3F /* VaultServicesStatusView.swift */; };
 		6AAF4B7C9510C0DBDC732FD9 /* SecretsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAF3A0B1092FFB0A652C013F /* SecretsViewModel.swift */; };
 		8137D39ECE65372610A42979 /* PersonalDataView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 498392EDCF906E22833BD876 /* PersonalDataView.swift */; };
 		824239CA1C86ECBB99591287 /* FeedEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93A86BE60A75794075747370 /* FeedEvent.swift */; };
 		84A8E45EB70FA3689B501714 /* PersonalData.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE89C420DEC861CD3FA91B92 /* PersonalData.swift */; };
 		8C9CBF9173DD16DF29F45476 /* SecretsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AF9A63734413646BB7E375A /* SecretsView.swift */; };
+		98DD4E5D5DC4F6A70092712E /* SecretsHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEA2A69DEB72B748BED4DA14 /* SecretsHandler.swift */; };
 		A47C934A93232A54987BCB2D /* PersonalDataViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 208B738362A4D7A093432F99 /* PersonalDataViewModel.swift */; };
 		A5834109528CE39E4F82E414 /* SecuritySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48B355FF5FC2FE9E7899E6EB /* SecuritySettingsView.swift */; };
 		A62391E4CF05D59BEBA013D4 /* Secret.swift in Sources */ = {isa = PBXBuildFile; fileRef = 688F0CE3AE28533DD0235DF8 /* Secret.swift */; };
@@ -114,6 +117,7 @@
 		DF3E299D763958D6155FB562 /* SessionKeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36891E6A55D69502EF90D4CB /* SessionKeyManager.swift */; };
 		E0856AA3F832860B0D0EC949 /* FeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A55B8A854B6DF21A3197B1A0 /* FeedView.swift */; };
 		EBA8CC5E3DAC52A8A2738BFE /* DrawerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 157809425BFB22E6896C0225 /* DrawerView.swift */; };
+		F602E4DC3720696C53E18F93 /* CredentialsHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 131DE8422D0A3B6CE2B321DB /* CredentialsHandler.swift */; };
 		FFEC75DD850E79B5ED665914 /* VaultPreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8285A14EAFF8FCF54C60C6E2 /* VaultPreferencesView.swift */; };
 /* End PBXBuildFile section */
 
@@ -202,7 +206,9 @@
 		10000051 /* ScreenProtection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenProtection.swift; sourceTree = "<group>"; };
 		10000052 /* ProfileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileStore.swift; sourceTree = "<group>"; };
 		10000053 /* SecretsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecretsStore.swift; sourceTree = "<group>"; };
+		131DE8422D0A3B6CE2B321DB /* CredentialsHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CredentialsHandler.swift; sourceTree = "<group>"; };
 		157809425BFB22E6896C0225 /* DrawerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DrawerView.swift; sourceTree = "<group>"; };
+		1AA0D8823160098FDD1BEDED /* ConnectionHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConnectionHandler.swift; sourceTree = "<group>"; };
 		20000001 /* VettID.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VettID.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		208B738362A4D7A093432F99 /* PersonalDataViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PersonalDataViewModel.swift; sourceTree = "<group>"; };
 		2B2D6CF42AD511A65BF8DC12 /* AboutView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
@@ -219,6 +225,7 @@
 		A1D6D6E4F90B7A138F25B696 /* AppSettings.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		A2F5A0DDB43ADCF6557660BF /* ManageVaultView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ManageVaultView.swift; sourceTree = "<group>"; };
 		A55B8A854B6DF21A3197B1A0 /* FeedView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FeedView.swift; sourceTree = "<group>"; };
+		A802F262C8E724624EE83387 /* ProfileHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProfileHandler.swift; sourceTree = "<group>"; };
 		AA6F4E8A08AC05BC1E9981C6 /* AppLockService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppLockService.swift; sourceTree = "<group>"; };
 		AEBBB6DA11AE9704FF891A7F /* EncryptedEnvelope.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EncryptedEnvelope.swift; sourceTree = "<group>"; };
 		B5B59320799245103D92C504 /* HeaderView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HeaderView.swift; sourceTree = "<group>"; };
@@ -229,6 +236,7 @@
 		DDAE474EE81CD7EDDE12ABF5 /* FeedViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FeedViewModel.swift; sourceTree = "<group>"; };
 		DE89C420DEC861CD3FA91B92 /* PersonalData.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PersonalData.swift; sourceTree = "<group>"; };
 		DEA5BE7707CCFC71CBA871B7 /* MainNavigationView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MainNavigationView.swift; sourceTree = "<group>"; };
+		EEA2A69DEB72B748BED4DA14 /* SecretsHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SecretsHandler.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -242,6 +250,18 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		17AB82EB05818922B0E2A9C1 /* Handlers */ = {
+			isa = PBXGroup;
+			children = (
+				EEA2A69DEB72B748BED4DA14 /* SecretsHandler.swift */,
+				A802F262C8E724624EE83387 /* ProfileHandler.swift */,
+				131DE8422D0A3B6CE2B321DB /* CredentialsHandler.swift */,
+				1AA0D8823160098FDD1BEDED /* ConnectionHandler.swift */,
+			);
+			name = Handlers;
+			path = Handlers;
+			sourceTree = "<group>";
+		};
 		21E9FB3E17B97C61F3E27745 /* Settings */ = {
 			isa = PBXGroup;
 			children = (
@@ -439,6 +459,7 @@
 				10000021 /* VaultResponseHandler.swift */,
 				36891E6A55D69502EF90D4CB /* SessionKeyManager.swift */,
 				AEBBB6DA11AE9704FF891A7F /* EncryptedEnvelope.swift */,
+				17AB82EB05818922B0E2A9C1 /* Handlers */,
 			);
 			path = NATS;
 			sourceTree = "<group>";
@@ -774,6 +795,10 @@
 				4F867A959C49C7208A76ED50 /* DeepLinkHandler.swift in Sources */,
 				DF3E299D763958D6155FB562 /* SessionKeyManager.swift in Sources */,
 				CBB42EE77AAC0795CA3EE203 /* EncryptedEnvelope.swift in Sources */,
+				98DD4E5D5DC4F6A70092712E /* SecretsHandler.swift in Sources */,
+				0070F8E8A708ED9903FFDB28 /* ProfileHandler.swift in Sources */,
+				F602E4DC3720696C53E18F93 /* CredentialsHandler.swift in Sources */,
+				54AE200B5260828DFDDF54CF /* ConnectionHandler.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
