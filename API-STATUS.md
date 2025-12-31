@@ -145,6 +145,26 @@ userGuid = invite.user_guid || generateSecureId('user', 32);
 - `actionRequest`: 10 req / 1 min per user
 - `authExecute`: 5 req / 1 min per user
 
+### ✅ FOURTH FIX: Security + DynamoDB Bug (2025-12-31 22:03 UTC)
+
+**Problems Fixed:**
+
+1. **Security: Action token signing key** - Was using hardcoded fallback key `'dev-signing-key-replace-in-production'` because environment variable was never set.
+
+2. **Bug: undefined device_fingerprint** - Optional field was causing DynamoDB marshall error when not provided.
+
+**Fixes Applied:**
+
+1. Created AWS Secrets Manager secret for action token signing with auto-generated 64-char cryptographic key. Both `actionRequest` (token creation) and `authExecute` (signature verification) now use Secrets Manager with 5-minute caching.
+
+2. Added `removeUndefinedValues: true` to DynamoDB marshall options.
+
+**Verified Working:**
+```bash
+curl -X POST /api/v1/action/request -d '{"user_guid": "user-xxx", "action_type": "vault_status"}'
+# Returns: {"action_token": "eyJ...", "action_endpoint": "/api/v1/vault/status", ...}
+```
+
 ---
 
 ## Recent Changes
