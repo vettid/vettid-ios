@@ -130,6 +130,21 @@ userGuid = invite.user_guid || generateSecureId('user', 32);
 
 **Impact:** Test scenarios with pre-existing vaults now work correctly. When you call `/test/create-invitation` with a `user_guid`, the enrollment flow will properly reuse that vault.
 
+### ✅ THIRD FIX: IAM Permission + Rate Limiting (2025-12-31 21:30 UTC)
+
+**Problem:** `/api/v1/action/request` still returning HTTP 500.
+
+**Root Cause:** The `actionRequest` Lambda was missing IAM permission to query the `user-index` GSI on the LedgerAuthTokens table.
+
+**Fix:** Added `tables.ledgerAuthTokens.grantReadData(this.actionRequest)` in vault-stack.ts.
+
+**Also Added:** Rate limiting to all vault endpoints:
+- `enrollStart`: 10 req / 15 min per IP
+- `enrollSetPassword`: 5 req / 15 min per session
+- `enrollFinalize`: 3 req / 15 min per session
+- `actionRequest`: 10 req / 1 min per user
+- `authExecute`: 5 req / 1 min per user
+
 ---
 
 ## Recent Changes
