@@ -36,9 +36,12 @@ final class VaultHealthViewModel: ObservableObject {
         userGuidProvider: @escaping () -> String? = { nil }
     ) {
         self.apiClient = apiClient
-        self.natsConnectionManager = natsConnectionManager ?? NatsConnectionManager()
         self.authTokenProvider = authTokenProvider
         self.userGuidProvider = userGuidProvider
+        // Pass userGuidProvider to NatsConnectionManager for auto-start vault support
+        self.natsConnectionManager = natsConnectionManager ?? NatsConnectionManager(
+            userGuidProvider: userGuidProvider
+        )
     }
 
     // MARK: - Health Monitoring

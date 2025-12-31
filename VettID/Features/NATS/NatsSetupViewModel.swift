@@ -26,6 +26,10 @@ final class NatsSetupViewModel: ObservableObject {
         case creatingAccount
         case generatingToken
         case connecting
+        /// Starting the vault EC2 instance
+        case startingVault
+        /// Waiting for vault to become ready
+        case waitingForVault
         case connected(NatsAccountStatus)
         case error(String)
 
@@ -36,6 +40,8 @@ final class NatsSetupViewModel: ObservableObject {
             case .creatingAccount: return "Creating Account..."
             case .generatingToken: return "Generating Token..."
             case .connecting: return "Connecting..."
+            case .startingVault: return "Starting Vault..."
+            case .waitingForVault: return "Waiting for Vault..."
             case .connected: return "Connected"
             case .error: return "Error"
             }
@@ -43,7 +49,8 @@ final class NatsSetupViewModel: ObservableObject {
 
         var isProcessing: Bool {
             switch self {
-            case .checkingStatus, .creatingAccount, .generatingToken, .connecting:
+            case .checkingStatus, .creatingAccount, .generatingToken, .connecting,
+                 .startingVault, .waitingForVault:
                 return true
             default:
                 return false
@@ -56,7 +63,9 @@ final class NatsSetupViewModel: ObservableObject {
                  (.checkingStatus, .checkingStatus),
                  (.creatingAccount, .creatingAccount),
                  (.generatingToken, .generatingToken),
-                 (.connecting, .connecting):
+                 (.connecting, .connecting),
+                 (.startingVault, .startingVault),
+                 (.waitingForVault, .waitingForVault):
                 return true
             case (.connected(let a), .connected(let b)):
                 return a == b
@@ -73,10 +82,13 @@ final class NatsSetupViewModel: ObservableObject {
     init(
         apiClient: APIClient = APIClient(),
         connectionManager: NatsConnectionManager? = nil,
-        credentialStore: NatsCredentialStore = NatsCredentialStore()
+        credentialStore: NatsCredentialStore = NatsCredentialStore(),
+        userGuidProvider: @escaping () -> String? = { nil }
     ) {
         self.apiClient = apiClient
-        self.connectionManager = connectionManager ?? NatsConnectionManager()
+        self.connectionManager = connectionManager ?? NatsConnectionManager(
+            userGuidProvider: userGuidProvider
+        )
         self.credentialStore = credentialStore
     }
 
@@ -128,9 +140,9 @@ final class NatsSetupViewModel: ObservableObject {
         let credentials = NatsCredentials(from: tokenResponse)
         try credentialStore.saveCredentials(credentials)
 
-        // Step 3: Connect
+        // Step 3: Connect (with auto-start vault on failure)
         setupState = .connecting
-        try await connectionManager.connect(authToken: authToken)
+        try await connectWithStateSync(authToken: authToken)
 
         // Success
         setupState = .connected(NatsAccountStatus(
@@ -149,13 +161,38 @@ final class NatsSetupViewModel: ObservableObject {
         }
 
         setupState = .connecting
-        try await connectionManager.connect(authToken: authToken)
+        try await connectWithStateSync(authToken: authToken)
 
         setupState = .connected(NatsAccountStatus(
             ownerSpaceId: accountInfo?.ownerSpaceId ?? "",
             messageSpaceId: accountInfo?.messageSpaceId ?? "",
             isConnected: true
         ))
+    }
+
+    /// Connect with auto-start vault and sync connection state to setup state
+    private func connectWithStateSync(authToken: String) async throws {
+        // Start observing connection state changes
+        let stateObservation = Task {
+            for await state in connectionManager.$connectionState.values {
+                await MainActor.run {
+                    switch state {
+                    case .connecting:
+                        self.setupState = .connecting
+                    case .startingVault:
+                        self.setupState = .startingVault
+                    case .waitingForVault:
+                        self.setupState = .waitingForVault
+                    default:
+                        break
+                    }
+                }
+            }
+        }
+
+        defer { stateObservation.cancel() }
+
+        try await connectionManager.connectWithAutoStart(authToken: authToken)
     }
 
     /// Disconnect from NATS

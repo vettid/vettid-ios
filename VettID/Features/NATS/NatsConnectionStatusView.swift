@@ -20,7 +20,8 @@ struct NatsConnectionStatusView: View {
                 .fill(.green)
                 .frame(width: 8, height: 8)
 
-        case .checkingStatus, .creatingAccount, .generatingToken, .connecting:
+        case .checkingStatus, .creatingAccount, .generatingToken, .connecting,
+             .startingVault, .waitingForVault:
             ProgressView()
                 .scaleEffect(0.6)
 
@@ -59,6 +60,14 @@ struct NatsConnectionStatusView: View {
             Text("Connecting...")
                 .foregroundStyle(.secondary)
 
+        case .startingVault:
+            Text("Starting Vault...")
+                .foregroundStyle(.secondary)
+
+        case .waitingForVault:
+            Text("Waiting for Vault...")
+                .foregroundStyle(.secondary)
+
         case .error(let message):
             Text(message)
                 .foregroundStyle(.red)
@@ -73,10 +82,19 @@ struct NatsConnectionStatusView: View {
 
 /// Full NATS setup view with details
 struct NatsSetupView: View {
-    @StateObject private var viewModel = NatsSetupViewModel()
+    @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
 
     let authToken: String
+
+    @StateObject private var viewModel: NatsSetupViewModel
+
+    init(authToken: String, userGuidProvider: @escaping () -> String? = { nil }) {
+        self.authToken = authToken
+        _viewModel = StateObject(wrappedValue: NatsSetupViewModel(
+            userGuidProvider: userGuidProvider
+        ))
+    }
 
     var body: some View {
         NavigationStack {
@@ -85,7 +103,8 @@ struct NatsSetupView: View {
                 case .initial:
                     initialView
 
-                case .checkingStatus, .creatingAccount, .generatingToken, .connecting:
+                case .checkingStatus, .creatingAccount, .generatingToken, .connecting,
+                     .startingVault, .waitingForVault:
                     progressView
 
                 case .connected(let status):
@@ -167,12 +186,28 @@ struct NatsSetupView: View {
                 stepRow(title: "Create Account", completed: stepCompleted(for: .creatingAccount))
                 stepRow(title: "Generate Token", completed: stepCompleted(for: .generatingToken))
                 stepRow(title: "Connect", completed: stepCompleted(for: .connecting))
+
+                // Vault start steps (only shown when relevant)
+                if isVaultStartStep {
+                    stepRow(title: "Start Vault", completed: stepCompleted(for: .startingVault))
+                    stepRow(title: "Wait for Vault", completed: stepCompleted(for: .waitingForVault))
+                }
             }
             .padding()
             .background(Color(.systemGray6))
             .cornerRadius(12)
 
             Spacer()
+        }
+    }
+
+    /// Whether we're in a vault start step
+    private var isVaultStartStep: Bool {
+        switch viewModel.setupState {
+        case .startingVault, .waitingForVault:
+            return true
+        default:
+            return false
         }
     }
 
@@ -186,6 +221,10 @@ struct NatsSetupView: View {
             return "Generating authentication token..."
         case .connecting:
             return "Establishing secure connection..."
+        case .startingVault:
+            return "Starting your vault instance..."
+        case .waitingForVault:
+            return "Waiting for vault to become ready..."
         default:
             return ""
         }
@@ -193,7 +232,8 @@ struct NatsSetupView: View {
 
     private func stepCompleted(for step: NatsSetupViewModel.SetupState) -> Bool? {
         let steps: [NatsSetupViewModel.SetupState] = [
-            .checkingStatus, .creatingAccount, .generatingToken, .connecting
+            .checkingStatus, .creatingAccount, .generatingToken, .connecting,
+            .startingVault, .waitingForVault
         ]
 
         guard let currentIndex = steps.firstIndex(of: viewModel.setupState),
