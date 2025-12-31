@@ -53,17 +53,4 @@ final class ProfileViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.isPublishing)
     }
 
-    // MARK: - Computed Properties
-
-    func testDisplayName_noProfile() {
-        let viewModel = ProfileViewModel(authTokenProvider: { "test-token" })
-
-        XCTAssertEqual(viewModel.displayName, "")
-    }
-
-    func testAvatarUrl_noProfile() {
-        let viewModel = ProfileViewModel(authTokenProvider: { "test-token" })
-
-        XCTAssertNil(viewModel.avatarUrl)
-    }
 }

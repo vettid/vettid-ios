@@ -28,6 +28,20 @@
             buildForAnalyzing = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
+               BlueprintIdentifier = "04B1C0E626228BC38419D4BA"
+               BuildableName = "VettIDTests.xctest"
+               BlueprintName = "VettIDTests"
+               ReferencedContainer = "container:VettID.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
                BlueprintIdentifier = "47A19B9656B5C17D32E3CBF5"
                BuildableName = "VettIDUITests.xctest"
                BlueprintName = "VettIDUITests"
@@ -43,6 +57,17 @@
       shouldUseLaunchSchemeArgsEnv = "YES"
       shouldAutocreateTestPlan = "YES">
       <Testables>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "04B1C0E626228BC38419D4BA"
+               BuildableName = "VettIDTests.xctest"
+               BlueprintName = "VettIDTests"
+               ReferencedContainer = "container:VettID.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
          <TestableReference
             skipped = "NO"
             parallelizable = "YES">
