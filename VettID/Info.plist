@@ -61,12 +61,66 @@
 		</dict>
 	</array>
 	<!-- App Transport Security - Enforcing secure connections -->
+	<!--
+	SECURITY CONFIGURATION FOR VETTID iOS APP
+
+	IMPORTANT: AWS API Gateway uses certificates that rotate automatically.
+	Certificate pinning is NOT recommended for API Gateway endpoints without
+	a custom domain with stable certificates.
+
+	Current setup:
+	- ATS enabled (HTTPS only, TLS 1.2+, PFS required)
+	- Certificate pinning is prepared for custom domains only
+
+	To enable certificate pinning with a custom domain:
+	1. Configure a custom domain in API Gateway with ACM certificate
+	2. Generate SPKI hashes:
+	   openssl s_client -connect api.vettid.dev:443 | \
+	   openssl x509 -pubkey -noout | openssl pkey -pubin -outform der | \
+	   openssl dgst -sha256 -binary | base64
+	3. Add NSPinnedDomains with actual certificate hashes (see below)
+	4. Include backup pins from the CA chain for rotation resilience
+
+	When ready, add inside NSAppTransportSecurity:
+	<key>NSPinnedDomains</key>
+	<dict>
+		<key>api.vettid.dev</key>
+		<dict>
+			<key>NSIncludesSubdomains</key>
+			<true/>
+			<key>NSPinnedCAIdentities</key>
+			<array>
+				<dict>
+					<key>SPKI-SHA256-BASE64</key>
+					<string>YOUR_PRIMARY_PIN_HASH_HERE</string>
+				</dict>
+				<dict>
+					<key>SPKI-SHA256-BASE64</key>
+					<string>YOUR_BACKUP_PIN_HASH_HERE</string>
+				</dict>
+			</array>
+		</dict>
+		<key>vettid.dev</key>
+		<dict>
+			<key>NSIncludesSubdomains</key>
+			<true/>
+			<key>NSPinnedCAIdentities</key>
+			<array>
+				<dict>
+					<key>SPKI-SHA256-BASE64</key>
+					<string>YOUR_PRIMARY_PIN_HASH_HERE</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	-->
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<!-- ATS enabled by default - no NSAllowsArbitraryLoads -->
 		<!-- Minimum TLS 1.2 is enforced by default -->
 		<!-- Perfect Forward Secrecy is required by default -->
-		<!-- Certificate Transparency can be required per domain -->
+		<!-- Certificate pinning disabled until custom domain deployed -->
+		<!-- AWS API Gateway (execute-api.us-east-1.amazonaws.com) rotates certs -->
 	</dict>
 	<!-- Background task identifiers -->
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
