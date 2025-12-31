@@ -1,8 +1,14 @@
 import Foundation
 import LocalAuthentication
+import Security
 
 /// Handles biometric authentication (Face ID / Touch ID)
 /// Security hardened with timeout management and enrollment change detection
+///
+/// Security:
+/// - Domain state stored in Keychain (tamper-resistant)
+/// - Detects biometric enrollment changes
+/// - Configurable timeout for authentication reuse
 final class BiometricAuthService {
 
     // MARK: - Configuration
@@ -13,14 +19,90 @@ final class BiometricAuthService {
     /// Stored domain state for detecting biometric enrollment changes
     private var storedDomainState: Data?
 
-    /// UserDefaults key for persisting domain state
-    private static let domainStateKey = "BiometricDomainState"
+    /// Keychain service for domain state storage
+    private static let keychainService = "com.vettid.biometric"
+    private static let domainStateKey = "domain_state"
 
     // MARK: - Initialization
 
     init() {
-        // Load stored domain state
-        storedDomainState = UserDefaults.standard.data(forKey: Self.domainStateKey)
+        // Load stored domain state from Keychain
+        storedDomainState = loadDomainStateFromKeychain()
+
+        // Migrate from UserDefaults if needed
+        migrateFromUserDefaults()
+    }
+
+    // MARK: - Keychain Storage for Domain State
+
+    /// Load domain state from Keychain
+    private func loadDomainStateFromKeychain() -> Data? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: Self.keychainService,
+            kSecAttrAccount as String: Self.domainStateKey,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        if status == errSecSuccess, let data = result as? Data {
+            return data
+        }
+        return nil
+    }
+
+    /// Save domain state to Keychain
+    private func saveDomainStateToKeychain(_ data: Data) {
+        // Delete existing item first
+        let deleteQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: Self.keychainService,
+            kSecAttrAccount as String: Self.domainStateKey
+        ]
+        SecItemDelete(deleteQuery as CFDictionary)
+
+        // Add new item
+        let addQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: Self.keychainService,
+            kSecAttrAccount as String: Self.domainStateKey,
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+            kSecAttrSynchronizable as String: false  // Never sync to iCloud
+        ]
+
+        let status = SecItemAdd(addQuery as CFDictionary, nil)
+        if status != errSecSuccess && status != errSecDuplicateItem {
+            print("[BiometricAuth] Warning: Failed to save domain state to Keychain: \(status)")
+        }
+    }
+
+    /// Delete domain state from Keychain
+    private func deleteDomainStateFromKeychain() {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: Self.keychainService,
+            kSecAttrAccount as String: Self.domainStateKey
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
+
+    /// Migrate domain state from UserDefaults to Keychain (one-time migration)
+    private func migrateFromUserDefaults() {
+        let legacyKey = "BiometricDomainState"
+        if let legacyData = UserDefaults.standard.data(forKey: legacyKey) {
+            // Only migrate if Keychain is empty
+            if storedDomainState == nil {
+                storedDomainState = legacyData
+                saveDomainStateToKeychain(legacyData)
+                print("[BiometricAuth] Migrated domain state from UserDefaults to Keychain")
+            }
+            // Remove from UserDefaults
+            UserDefaults.standard.removeObject(forKey: legacyKey)
+        }
     }
 
     // MARK: - Biometric Type
@@ -196,13 +278,13 @@ final class BiometricAuthService {
     private func updateStoredDomainState(context: LAContext) {
         guard let domainState = context.evaluatedPolicyDomainState else { return }
         storedDomainState = domainState
-        UserDefaults.standard.set(domainState, forKey: Self.domainStateKey)
+        saveDomainStateToKeychain(domainState)
     }
 
     /// Clear stored domain state (call when user logs out)
     func clearStoredDomainState() {
         storedDomainState = nil
-        UserDefaults.standard.removeObject(forKey: Self.domainStateKey)
+        deleteDomainStateFromKeychain()
     }
 
     /// Initialize domain state for new user

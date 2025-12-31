@@ -91,11 +91,31 @@ actor APIClient {
 
     // MARK: - Security Configuration
 
+    /// Signing key for authenticated requests (optional)
+    private var signingKey: SymmetricKey?
+
+    /// Whether to sign requests (enabled after configureSigningKey is called)
+    private var signRequestsEnabled: Bool = false
+
     /// Configure signing key for authenticated requests
-    /// Call this after user authenticates
+    /// Call this after user authenticates to enable request signing
+    /// - Parameter key: Master key from which signing key will be derived
     func configureSigningKey(_ key: SymmetricKey) {
-        // Signing key is derived from master key
-        // Note: Actual implementation would store this securely
+        // Derive signing key from master key using HKDF
+        self.signingKey = RequestSigner.deriveSigningKey(from: key)
+        self.signRequestsEnabled = true
+        print("[APIClient] Request signing enabled")
+    }
+
+    /// Disable request signing (call on logout)
+    func disableRequestSigning() {
+        self.signingKey = nil
+        self.signRequestsEnabled = false
+    }
+
+    /// Check if request signing is enabled
+    var isRequestSigningEnabled: Bool {
+        return signRequestsEnabled && signingKey != nil
     }
 
     // MARK: - Enrollment (Multi-Step)
@@ -601,8 +621,14 @@ actor APIClient {
         return try await execute(request)
     }
 
-    private func execute<T: Decodable>(_ request: URLRequest) async throws -> T {
-        let (data, response) = try await session.data(for: request)
+    private func execute<T: Decodable>(_ request: URLRequest, signed: Bool = true) async throws -> T {
+        // Apply request signing if enabled and requested
+        var finalRequest = request
+        if signed, signRequestsEnabled, let signingKey = signingKey, let requestSigner = requestSigner {
+            finalRequest = requestSigner.signRequest(request, with: signingKey)
+        }
+
+        let (data, response) = try await session.data(for: finalRequest)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.invalidResponse
