@@ -484,14 +484,58 @@ actor SessionKeyManager {
 
     // MARK: - Helpers
 
+    /// Get or create a stable device ID stored securely in Keychain
+    /// Uses Keychain instead of UserDefaults for:
+    /// - Tamper resistance (cannot be easily modified by attacker with file access)
+    /// - No iCloud backup (stays device-specific)
+    /// - Protection even when device is locked
     private nonisolated func getDeviceId() -> String {
         let key = "com.vettid.device_id"
-        if let deviceId = UserDefaults.standard.string(forKey: key) {
+        let service = "com.vettid.device"
+
+        // Try to retrieve existing device ID from Keychain
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: key,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        if status == errSecSuccess,
+           let data = result as? Data,
+           let deviceId = String(data: data, encoding: .utf8) {
             return deviceId
         }
-        // Generate a stable device ID using UUID (avoids MainActor requirement)
+
+        // Generate new device ID and store in Keychain
         let newId = UUID().uuidString
-        UserDefaults.standard.set(newId, forKey: key)
+        guard let idData = newId.data(using: .utf8) else {
+            return newId  // Fallback if encoding fails
+        }
+
+        let addQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: key,
+            kSecValueData as String: idData,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+            kSecAttrSynchronizable as String: false  // Never sync to iCloud
+        ]
+
+        let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+        if addStatus != errSecSuccess && addStatus != errSecDuplicateItem {
+            print("[SessionKeyManager] Warning: Failed to store device ID in Keychain: \(addStatus)")
+        }
+
+        // Migrate from UserDefaults if present (cleanup old storage)
+        if UserDefaults.standard.string(forKey: key) != nil {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+
         return newId
     }
 }

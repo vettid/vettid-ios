@@ -32,10 +32,25 @@ actor APIClient {
         self.baseURL = baseURL
         self.deviceId = resolvedDeviceId
 
+        // SECURITY: Certificate pinning configuration
+        // - Always enforce in Release builds
+        // - In Debug builds, only allow disabling for simulator (local development)
+        // - TestFlight builds use Release config, so pinning is always enforced
         #if DEBUG
+        #if targetEnvironment(simulator)
+        // Simulator: Allow disabling for local development convenience
         self.enforcePinning = enforcePinning
         #else
-        self.enforcePinning = true  // Always enforce in release
+        // Physical device in debug: Still enforce unless explicitly disabled
+        // This prevents accidental exposure in ad-hoc/TestFlight debug builds
+        if !enforcePinning {
+            print("[Security Warning] Certificate pinning disabled on physical device in DEBUG mode")
+        }
+        self.enforcePinning = enforcePinning
+        #endif
+        #else
+        // Release builds: Always enforce, ignore parameter
+        self.enforcePinning = true
         #endif
 
         // Create certificate pinning delegate

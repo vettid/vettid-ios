@@ -14,6 +14,8 @@ import Sodium
 /// - Iterations: 3
 /// - Parallelism: 4 (libsodium uses 1 internally but with equivalent security)
 /// - Output length: 32 bytes
+///
+/// SECURITY: Production builds MUST use Argon2id. PBKDF2 fallback is for simulator testing only.
 final class PasswordHasher {
 
     private static let hashLength = 32
@@ -23,6 +25,23 @@ final class PasswordHasher {
     private static let sodium = Sodium()
     private static let opsLimit = sodium.pwHash.OpsLimitModerate  // ~3 iterations equivalent
     private static let memLimit = sodium.pwHash.MemLimitModerate  // ~64MB equivalent
+    #else
+    // SECURITY: Verify we're not in a production build without Argon2id
+    private static let productionCheckPerformed: Bool = {
+        #if !DEBUG
+        // In Release builds without Sodium, log a severe warning
+        // This helps catch misconfigured builds
+        print("⚠️ SECURITY WARNING: Argon2id (swift-sodium) not available - using PBKDF2 fallback")
+        print("⚠️ This is NOT acceptable for production use. Add swift-sodium package.")
+
+        #if !targetEnvironment(simulator)
+        // On physical devices in Release, this is a critical error
+        // We use assertionFailure to crash in debug-like release builds but allow TestFlight
+        assertionFailure("SECURITY: Production build must use Argon2id. Add swift-sodium package.")
+        #endif
+        #endif
+        return true
+    }()
     #endif
 
     /// Hash a password using Argon2id (or PBKDF2 fallback)
@@ -60,7 +79,9 @@ final class PasswordHasher {
         return PasswordHashResult(hash: Data(hash), salt: saltData)
         #else
         // PBKDF2 fallback for development/testing
-        // WARNING: Replace with Argon2id for production by adding swift-sodium package
+        // SECURITY: Trigger production check on first use
+        _ = productionCheckPerformed
+
         let hash = try pbkdf2Fallback(
             password: passwordData,
             salt: saltData,

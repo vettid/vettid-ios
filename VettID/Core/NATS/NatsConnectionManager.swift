@@ -676,6 +676,7 @@ class NatsClientWrapper {
         }
 
         // Write credentials to temp file (nats.swift requires file-based credentials)
+        // SECURITY: Use iOS file protection and secure handling
         let credsContent = """
         -----BEGIN NATS USER JWT-----
         \(jwt)
@@ -690,9 +691,26 @@ class NatsClientWrapper {
         ------END USER NKEY SEED------
         """
 
-        let tempDir = FileManager.default.temporaryDirectory
-        let credsFile = tempDir.appendingPathComponent("nats_\(UUID().uuidString).creds")
+        // Use app's private container instead of shared temp directory
+        let containerDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        let credsDir = containerDir.appendingPathComponent("nats_creds", isDirectory: true)
+
+        // Create directory with protection if needed
+        if !FileManager.default.fileExists(atPath: credsDir.path) {
+            try FileManager.default.createDirectory(at: credsDir, withIntermediateDirectories: true, attributes: [
+                .protectionKey: FileProtectionType.complete
+            ])
+        }
+
+        let credsFile = credsDir.appendingPathComponent("nats_\(UUID().uuidString).creds")
+
+        // Write with complete file protection (encrypted when device locked)
         try credsContent.write(to: credsFile, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([
+            .protectionKey: FileProtectionType.complete
+        ], ofItemAtPath: credsFile.path)
+
         credentialsFileURL = credsFile
 
         let options = NatsClientOptions()
@@ -714,10 +732,40 @@ class NatsClientWrapper {
         try? await client?.close()
         client = nil
 
-        // Clean up credentials file
+        // SECURITY: Securely wipe credentials file before deletion
         if let credsFile = credentialsFileURL {
-            try? FileManager.default.removeItem(at: credsFile)
+            securelyDeleteFile(at: credsFile)
             credentialsFileURL = nil
+        }
+    }
+
+    /// Securely delete a file by overwriting with random data before removal
+    private func securelyDeleteFile(at url: URL) {
+        do {
+            // Get file size
+            let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+            guard let fileSize = attributes[.size] as? Int, fileSize > 0 else {
+                try? FileManager.default.removeItem(at: url)
+                return
+            }
+
+            // Overwrite with random data (3 passes for defense-in-depth)
+            let fileHandle = try FileHandle(forWritingTo: url)
+            defer { try? fileHandle.close() }
+
+            for _ in 0..<3 {
+                var randomData = [UInt8](repeating: 0, count: fileSize)
+                _ = SecRandomCopyBytes(kSecRandomDefault, fileSize, &randomData)
+                try fileHandle.seek(toOffset: 0)
+                try fileHandle.write(contentsOf: Data(randomData))
+                try fileHandle.synchronize()
+            }
+
+            try? fileHandle.close()
+            try FileManager.default.removeItem(at: url)
+        } catch {
+            // Best effort - still try to delete even if wiping fails
+            try? FileManager.default.removeItem(at: url)
         }
     }
 

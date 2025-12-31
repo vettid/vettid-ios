@@ -1,31 +1,79 @@
 import Foundation
 import Security
+import LocalAuthentication
 
 /// Secure storage for VettID Credentials using iOS Keychain
 ///
 /// New key ownership model:
 /// - Ledger owns: CEK (private), LTK (private)
 /// - Mobile stores: encrypted blob, UTK pool (public keys only), LAT
+///
+/// Security features:
+/// - Keychain storage with `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`
+/// - Optional biometric protection for sensitive operations
+/// - No iCloud sync (device-only storage)
 final class CredentialStore {
 
     private let service = "com.vettid.credentials"
 
+    /// Service name for biometric-protected credentials
+    private let biometricService = "com.vettid.credentials.biometric"
+
+    // MARK: - Biometric Access Control
+
+    /// Create access control flags for biometric-protected storage
+    private func createBiometricAccessControl() -> SecAccessControl? {
+        var error: Unmanaged<CFError>?
+        let access = SecAccessControlCreateWithFlags(
+            nil,
+            kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            [.biometryCurrentSet, .or, .devicePasscode],  // Biometric or passcode fallback
+            &error
+        )
+        if let error = error {
+            print("[CredentialStore] Failed to create biometric access control: \(error.takeRetainedValue())")
+            return nil
+        }
+        return access
+    }
+
     // MARK: - Credential Storage
 
     /// Store a credential securely in the Keychain
-    func store(credential: StoredCredential) throws {
+    /// - Parameters:
+    ///   - credential: The credential to store
+    ///   - requireBiometric: If true, retrieval will require biometric/passcode authentication
+    func store(credential: StoredCredential, requireBiometric: Bool = false) throws {
         let data = try JSONEncoder().encode(credential)
 
-        let query: [String: Any] = [
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
+            kSecAttrService as String: requireBiometric ? biometricService : service,
             kSecAttrAccount as String: credential.userGuid,
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            kSecValueData as String: data
         ]
 
-        // Delete existing item if present
-        SecItemDelete(query as CFDictionary)
+        // Add biometric access control if requested
+        if requireBiometric, let accessControl = createBiometricAccessControl() {
+            query[kSecAttrAccessControl as String] = accessControl
+        } else {
+            query[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        }
+
+        // Delete existing item if present (from both services)
+        let deleteQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: credential.userGuid
+        ]
+        SecItemDelete(deleteQuery as CFDictionary)
+
+        let deleteBiometricQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: biometricService,
+            kSecAttrAccount as String: credential.userGuid
+        ]
+        SecItemDelete(deleteBiometricQuery as CFDictionary)
 
         let status = SecItemAdd(query as CFDictionary, nil)
         guard status == errSecSuccess else {
@@ -59,7 +107,29 @@ final class CredentialStore {
     }
 
     /// Retrieve a credential from the Keychain by user GUID
-    func retrieve(userGuid: String) throws -> StoredCredential? {
+    /// - Parameters:
+    ///   - userGuid: The user GUID to retrieve
+    ///   - authenticationPrompt: Prompt shown for biometric authentication (if credential requires it)
+    func retrieve(userGuid: String, authenticationPrompt: String = "Authenticate to access your credentials") throws -> StoredCredential? {
+        // Try biometric-protected service first
+        let biometricQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: biometricService,
+            kSecAttrAccount as String: userGuid,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+            kSecUseOperationPrompt as String: authenticationPrompt
+        ]
+
+        var result: AnyObject?
+        var status = SecItemCopyMatching(biometricQuery as CFDictionary, &result)
+
+        // If found in biometric service, return it (will trigger biometric prompt)
+        if status == errSecSuccess, let data = result as? Data {
+            return try JSONDecoder().decode(StoredCredential.self, from: data)
+        }
+
+        // Fall back to non-biometric service
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -68,8 +138,8 @@ final class CredentialStore {
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
 
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        result = nil
+        status = SecItemCopyMatching(query as CFDictionary, &result)
 
         guard status == errSecSuccess, let data = result as? Data else {
             if status == errSecItemNotFound {
@@ -82,7 +152,25 @@ final class CredentialStore {
     }
 
     /// Retrieve the first stored credential (for single-credential scenarios)
-    func retrieveFirst() throws -> StoredCredential? {
+    /// - Parameter authenticationPrompt: Prompt shown for biometric authentication (if credential requires it)
+    func retrieveFirst(authenticationPrompt: String = "Authenticate to access your credentials") throws -> StoredCredential? {
+        // Try biometric-protected service first
+        let biometricQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: biometricService,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+            kSecUseOperationPrompt as String: authenticationPrompt
+        ]
+
+        var result: AnyObject?
+        var status = SecItemCopyMatching(biometricQuery as CFDictionary, &result)
+
+        if status == errSecSuccess, let data = result as? Data {
+            return try JSONDecoder().decode(StoredCredential.self, from: data)
+        }
+
+        // Fall back to non-biometric service
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -90,8 +178,8 @@ final class CredentialStore {
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
 
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        result = nil
+        status = SecItemCopyMatching(query as CFDictionary, &result)
 
         guard status == errSecSuccess, let data = result as? Data else {
             if status == errSecItemNotFound {
@@ -103,42 +191,77 @@ final class CredentialStore {
         return try JSONDecoder().decode(StoredCredential.self, from: data)
     }
 
-    /// Check if any credential is stored
+    /// Check if any credential is stored (does not require authentication)
     func hasStoredCredential() -> Bool {
+        // Check non-biometric service
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
 
-        let status = SecItemCopyMatching(query as CFDictionary, nil)
-        return status == errSecSuccess
+        if SecItemCopyMatching(query as CFDictionary, nil) == errSecSuccess {
+            return true
+        }
+
+        // Check biometric service
+        let biometricQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: biometricService,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        return SecItemCopyMatching(biometricQuery as CFDictionary, nil) == errSecSuccess
     }
 
-    /// Delete a credential from the Keychain
+    /// Delete a credential from the Keychain (from both biometric and non-biometric storage)
     func delete(userGuid: String) throws {
+        // Delete from non-biometric service
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: userGuid
         ]
+        let status1 = SecItemDelete(query as CFDictionary)
 
-        let status = SecItemDelete(query as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else {
-            throw CredentialStoreError.deleteFailed(status)
+        // Delete from biometric service
+        let biometricQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: biometricService,
+            kSecAttrAccount as String: userGuid
+        ]
+        let status2 = SecItemDelete(biometricQuery as CFDictionary)
+
+        // Consider success if deleted from either or not found
+        let success1 = status1 == errSecSuccess || status1 == errSecItemNotFound
+        let success2 = status2 == errSecSuccess || status2 == errSecItemNotFound
+
+        guard success1 && success2 else {
+            throw CredentialStoreError.deleteFailed(success1 ? status2 : status1)
         }
     }
 
-    /// Delete all credentials from the Keychain
+    /// Delete all credentials from the Keychain (from both biometric and non-biometric storage)
     func deleteAll() throws {
+        // Delete from non-biometric service
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service
         ]
+        let status1 = SecItemDelete(query as CFDictionary)
 
-        let status = SecItemDelete(query as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else {
-            throw CredentialStoreError.deleteFailed(status)
+        // Delete from biometric service
+        let biometricQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: biometricService
+        ]
+        let status2 = SecItemDelete(biometricQuery as CFDictionary)
+
+        let success1 = status1 == errSecSuccess || status1 == errSecItemNotFound
+        let success2 = status2 == errSecSuccess || status2 == errSecItemNotFound
+
+        guard success1 && success2 else {
+            throw CredentialStoreError.deleteFailed(success1 ? status2 : status1)
         }
     }
 
