@@ -76,8 +76,8 @@ final class VaultEventClientTests: XCTestCase {
 
     func testVaultEventMessage_encoding() throws {
         let message = VaultEventMessage(
-            requestId: "req-123",
-            eventType: "test.event",
+            id: "req-123",
+            type: "test.event",
             payload: ["key": AnyCodableValue("value")],
             timestamp: "2025-12-07T12:00:00Z"
         )
@@ -86,8 +86,8 @@ final class VaultEventClientTests: XCTestCase {
         let data = try encoder.encode(message)
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
-        XCTAssertEqual(json["request_id"] as? String, "req-123")
-        XCTAssertEqual(json["event_type"] as? String, "test.event")
+        XCTAssertEqual(json["id"] as? String, "req-123")
+        XCTAssertEqual(json["type"] as? String, "test.event")
         XCTAssertEqual(json["timestamp"] as? String, "2025-12-07T12:00:00Z")
         XCTAssertNotNil(json["payload"])
     }
@@ -97,44 +97,60 @@ final class VaultEventClientTests: XCTestCase {
     func testVaultEventResponse_decoding_success() throws {
         let json = """
         {
-            "request_id": "req-456",
-            "status": "success",
+            "event_id": "req-456",
+            "success": true,
+            "timestamp": "2025-12-07T12:01:00Z",
             "result": {"data": "processed"},
-            "error": null,
-            "processed_at": "2025-12-07T12:01:00Z"
+            "error": null
         }
         """
 
         let decoder = JSONDecoder()
         let response = try decoder.decode(VaultEventResponse.self, from: json.data(using: .utf8)!)
 
-        XCTAssertEqual(response.requestId, "req-456")
-        XCTAssertEqual(response.status, "success")
+        XCTAssertEqual(response.responseId, "req-456")
         XCTAssertTrue(response.isSuccess)
         XCTAssertNotNil(response.result)
         XCTAssertNil(response.error)
-        XCTAssertEqual(response.processedAt, "2025-12-07T12:01:00Z")
     }
 
     func testVaultEventResponse_decoding_error() throws {
         let json = """
         {
-            "request_id": "req-789",
-            "status": "error",
+            "event_id": "req-789",
+            "success": false,
+            "timestamp": "2025-12-07T12:02:00Z",
             "result": null,
-            "error": "Handler execution failed",
-            "processed_at": "2025-12-07T12:02:00Z"
+            "error": "Handler execution failed"
         }
         """
 
         let decoder = JSONDecoder()
         let response = try decoder.decode(VaultEventResponse.self, from: json.data(using: .utf8)!)
 
-        XCTAssertEqual(response.requestId, "req-789")
-        XCTAssertEqual(response.status, "error")
+        XCTAssertEqual(response.responseId, "req-789")
         XCTAssertFalse(response.isSuccess)
         XCTAssertNil(response.result)
         XCTAssertEqual(response.error, "Handler execution failed")
+    }
+
+    func testVaultEventResponse_decoding_withIdFallback() throws {
+        let json = """
+        {
+            "id": "req-fallback",
+            "success": true,
+            "timestamp": "2025-12-07T12:03:00Z",
+            "result": null,
+            "error": null
+        }
+        """
+
+        let decoder = JSONDecoder()
+        let response = try decoder.decode(VaultEventResponse.self, from: json.data(using: .utf8)!)
+
+        // Should fall back to id when event_id is not present
+        XCTAssertEqual(response.responseId, "req-fallback")
+        XCTAssertTrue(response.isSuccess)
     }
 
     // MARK: - AnyCodableValue Tests

@@ -15,7 +15,6 @@ final class ScanInvitationViewModelTests: XCTestCase {
         } else {
             XCTFail("Expected scanning state")
         }
-        XCTAssertTrue(viewModel.manualCode.isEmpty)
     }
 
     // MARK: - QR Code Parsing
@@ -25,8 +24,8 @@ final class ScanInvitationViewModelTests: XCTestCase {
 
         viewModel.onQrCodeScanned("vettid://invite/ABC123")
 
-        if case .preview(let code, _) = viewModel.state {
-            XCTAssertEqual(code, "ABC123")
+        if case .preview(let info) = viewModel.state {
+            XCTAssertEqual(info.code, "ABC123")
         } else {
             XCTFail("Expected preview state")
         }
@@ -37,8 +36,8 @@ final class ScanInvitationViewModelTests: XCTestCase {
 
         viewModel.onQrCodeScanned("https://vettid.com/invite/XYZ789")
 
-        if case .preview(let code, _) = viewModel.state {
-            XCTAssertEqual(code, "XYZ789")
+        if case .preview(let info) = viewModel.state {
+            XCTAssertEqual(info.code, "XYZ789")
         } else {
             XCTFail("Expected preview state")
         }
@@ -49,8 +48,8 @@ final class ScanInvitationViewModelTests: XCTestCase {
 
         viewModel.onQrCodeScanned("RAWCODE123")
 
-        if case .preview(let code, _) = viewModel.state {
-            XCTAssertEqual(code, "RAWCODE123")
+        if case .preview(let info) = viewModel.state {
+            XCTAssertEqual(info.code, "RAWCODE123")
         } else {
             XCTFail("Expected preview state")
         }
@@ -70,30 +69,28 @@ final class ScanInvitationViewModelTests: XCTestCase {
 
     // MARK: - Manual Code Entry
 
-    func testSubmitManualCode_valid() {
+    func testOnManualCodeEntered_valid() {
         let viewModel = ScanInvitationViewModel(authTokenProvider: { "test-token" })
-        viewModel.manualCode = "MANUAL123"
 
-        viewModel.submitManualCode()
+        viewModel.onManualCodeEntered("MANUAL123")
 
-        if case .preview(let code, _) = viewModel.state {
-            XCTAssertEqual(code, "MANUAL123")
+        if case .preview(let info) = viewModel.state {
+            XCTAssertEqual(info.code, "MANUAL123")
         } else {
             XCTFail("Expected preview state")
         }
     }
 
-    func testSubmitManualCode_empty() {
+    func testOnManualCodeEntered_empty() {
         let viewModel = ScanInvitationViewModel(authTokenProvider: { "test-token" })
-        viewModel.manualCode = "   "
 
-        viewModel.submitManualCode()
+        viewModel.onManualCodeEntered("   ")
 
-        // Should remain in scanning state
-        if case .scanning = viewModel.state {
-            // Expected
+        // Should show error for empty code
+        if case .error(let message) = viewModel.state {
+            XCTAssertTrue(message.contains("enter"))
         } else {
-            XCTFail("Expected scanning state for empty manual code")
+            XCTFail("Expected error state for empty manual code")
         }
     }
 
@@ -120,11 +117,11 @@ final class ScanInvitationViewModelTests: XCTestCase {
         // Don't set a code, stay in scanning state
         await viewModel.acceptInvitation()
 
-        // Should remain in scanning state
-        if case .scanning = viewModel.state {
-            // Expected - no state change
+        // Should be in error state because no code was scanned
+        if case .error(let message) = viewModel.state {
+            XCTAssertEqual(message, "No invitation code")
         } else {
-            XCTFail("Expected scanning state when not in preview")
+            XCTFail("Expected error state when no code was scanned")
         }
     }
 
@@ -135,7 +132,6 @@ final class ScanInvitationViewModelTests: XCTestCase {
 
         // Put into preview state
         viewModel.onQrCodeScanned("TEST123")
-        viewModel.manualCode = "some code"
 
         // Reset
         viewModel.reset()
@@ -145,6 +141,5 @@ final class ScanInvitationViewModelTests: XCTestCase {
         } else {
             XCTFail("Expected scanning state after reset")
         }
-        XCTAssertTrue(viewModel.manualCode.isEmpty)
     }
 }

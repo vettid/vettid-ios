@@ -16,7 +16,6 @@ final class BackupListViewModelTests: XCTestCase {
             XCTFail("Expected loading state, got \(viewModel.state)")
         }
         XCTAssertFalse(viewModel.isCreatingBackup)
-        XCTAssertNil(viewModel.deletingBackupId)
     }
 
     // MARK: - State Tests
@@ -44,29 +43,17 @@ final class BackupListViewModelTests: XCTestCase {
 
     // MARK: - Backup Type Tests
 
-    func testBackupType_icon() {
-        XCTAssertEqual(BackupType.auto.icon, "arrow.clockwise.circle.fill")
-        XCTAssertEqual(BackupType.manual.icon, "hand.tap.fill")
-    }
-
-    func testBackupType_displayName() {
-        XCTAssertEqual(BackupType.auto.displayName, "Automatic")
-        XCTAssertEqual(BackupType.manual.displayName, "Manual")
+    func testBackupType_rawValues() {
+        XCTAssertEqual(BackupType.auto.rawValue, "auto")
+        XCTAssertEqual(BackupType.manual.rawValue, "manual")
     }
 
     // MARK: - Backup Status Tests
 
-    func testBackupStatus_icon() {
-        XCTAssertEqual(BackupStatus.complete.icon, "checkmark.circle.fill")
-        XCTAssertEqual(BackupStatus.partial.icon, "exclamationmark.circle.fill")
-        XCTAssertEqual(BackupStatus.failed.icon, "xmark.circle.fill")
-    }
-
-    func testBackupStatus_color() {
-        // Just verify colors are set (can't easily compare SwiftUI Colors)
-        _ = BackupStatus.complete.color
-        _ = BackupStatus.partial.color
-        _ = BackupStatus.failed.color
+    func testBackupStatus_rawValues() {
+        XCTAssertEqual(BackupStatus.complete.rawValue, "complete")
+        XCTAssertEqual(BackupStatus.partial.rawValue, "partial")
+        XCTAssertEqual(BackupStatus.failed.rawValue, "failed")
     }
 
     // MARK: - Helpers

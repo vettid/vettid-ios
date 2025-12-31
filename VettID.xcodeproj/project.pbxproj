@@ -1058,8 +1058,7 @@
 				C23FB626255421D48B1E705E /* VettIDUITests.swift in Sources */,
 				FDA99EEB7505FD7031F2B26C /* EnrollmentUITests.swift in Sources */,
 				C2864EC95B4B060ACE9D9C58 /* AuthenticationUITests.swift in Sources */,
-				7B46109C39D7AEF81970BD2E /* VaultUITests.swift in Sources */,
-			);
+				7B46109C39D7AEF81970BD2E /* VaultUITests.swift in Sources */,);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		FA135006B2933D907A7383DA /* Sources */ = {
@@ -1067,6 +1066,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1B2C3D4E5F6000000000000 /* AuthenticationViewModelTests.swift in Sources */,
+				A1B2C3D4E5F6000000000001 /* BackupListViewModelTests.swift in Sources */,
+				A1B2C3D4E5F6000000000002 /* BackupSettingsViewModelTests.swift in Sources */,
 				A1B2C3D4E5F6000000000003 /* ConnectionsViewModelTests.swift in Sources */,
 				A1B2C3D4E5F6000000000004 /* ConversationViewModelTests.swift in Sources */,
 				A1B2C3D4E5F6000000000005 /* CreateInvitationViewModelTests.swift in Sources */,
@@ -1079,6 +1080,8 @@
 				A1B2C3D4E5F6000000000012 /* NatsConnectionManagerTests.swift in Sources */,
 				A1B2C3D4E5F6000000000013 /* ProfileViewModelTests.swift in Sources */,
 				A1B2C3D4E5F6000000000014 /* RecoveryPhraseManagerTests.swift in Sources */,
+				A1B2C3D4E5F6000000000015 /* ScanInvitationViewModelTests.swift in Sources */,
+				A1B2C3D4E5F6000000000016 /* VaultEventClientTests.swift in Sources */,
 				A1B2C3D4E5F6000000000017 /* VaultHealthViewModelTests.swift in Sources */,
 				A1B2C3D4E5F6000000000018 /* VaultStatusViewModelTests.swift in Sources */,
 				7760EC0B29FE0CD3C39CE26D /* ConnectionHandlerTests.swift in Sources */,

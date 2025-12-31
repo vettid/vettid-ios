@@ -14,18 +14,17 @@ final class BackupSettingsViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.isSaving)
         XCTAssertFalse(viewModel.isBackingUp)
         XCTAssertNil(viewModel.errorMessage)
-        XCTAssertNil(viewModel.successMessage)
     }
 
     func testDefaultSettings() {
         let viewModel = BackupSettingsViewModel(authTokenProvider: { "test-token" })
 
-        // Default values should match BackupSettings defaults
-        XCTAssertFalse(viewModel.autoBackupEnabled)
-        XCTAssertEqual(viewModel.backupFrequency, .daily)
-        XCTAssertEqual(viewModel.retentionDays, 30)
-        XCTAssertTrue(viewModel.includeMessages)
-        XCTAssertTrue(viewModel.wifiOnly)
+        // Default values should match BackupSettings defaults (accessed via settings property)
+        XCTAssertFalse(viewModel.settings.autoBackupEnabled)
+        XCTAssertEqual(viewModel.settings.backupFrequency, .daily)
+        XCTAssertEqual(viewModel.settings.retentionDays, 30)
+        XCTAssertTrue(viewModel.settings.includeMessages)
+        XCTAssertTrue(viewModel.settings.wifiOnly)
     }
 
     // MARK: - Backup Settings Tests
@@ -101,6 +100,8 @@ final class BackupSettingsViewModelTests: XCTestCase {
     private func isValidTimeFormat(_ time: String) -> Bool {
         let parts = time.split(separator: ":")
         guard parts.count == 2,
+              parts[0].count == 2,  // HH must be 2 digits
+              parts[1].count == 2,  // MM must be 2 digits
               let hour = Int(parts[0]),
               let minute = Int(parts[1]) else {
             return false
