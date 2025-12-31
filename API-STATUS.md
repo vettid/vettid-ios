@@ -113,6 +113,23 @@ All other test vaults have been terminated. Only the one with the fix remains.
 }
 ```
 
+### ✅ SECOND FIX: enrollStart user_guid (2025-12-31 21:06 UTC)
+
+**Problem:** First fix was incomplete. `enrollStart.ts` was generating NEW user_guid even when invitation had one.
+
+**Root Cause:** Line 206 in `enrollStart.ts` was always calling `generateSecureId('user', 32)`, ignoring the invitation's stored `user_guid`.
+
+**Fix:** Now uses invitation's user_guid if present:
+```typescript
+// Before (BUG):
+userGuid = generateSecureId('user', 32);  // ALWAYS new!
+
+// After (FIXED):
+userGuid = invite.user_guid || generateSecureId('user', 32);
+```
+
+**Impact:** Test scenarios with pre-existing vaults now work correctly. When you call `/test/create-invitation` with a `user_guid`, the enrollment flow will properly reuse that vault.
+
 ---
 
 ## Recent Changes
