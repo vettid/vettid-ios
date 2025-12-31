@@ -185,6 +185,21 @@ curl -X GET /api/v1/vault/status -H "Authorization: Bearer {action_token}"
 # Returns: {"enrollment_status":"active","instance_status":"running",...}
 ```
 
+### ✅ SIXTH FIX: Bootstrap JWT Subscribe Permission (2025-12-31 22:45 UTC)
+
+**Problem:** Bootstrap credentials JWT had wrong subscribe permission. Response topic is `forApp.app.bootstrap.{id}` (includes event type) but JWT only allowed `forApp.bootstrap.>`.
+
+**Fix:** Changed subscribe permission in `nats-jwt.ts`:
+```typescript
+// Before (wrong):
+subAllow = [`${ownerSpace}.forApp.bootstrap.>`]
+
+// After (correct):
+subAllow = [`${ownerSpace}.forApp.app.bootstrap.>`]
+```
+
+**Note:** Existing users must re-enroll to get new bootstrap credentials with the fix.
+
 ---
 
 ## Recent Changes
