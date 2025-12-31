@@ -41,6 +41,28 @@ This file tracks API implementation status for VettID iOS, aligned with the back
 
 ## Recent Changes
 
+### 2025-12-30 - Security Module Added
+
+- **Files:** `VettID/Core/Security/ApiSecurity.swift`, `VettID/Info.plist`
+
+- **Features:**
+  - Request signing with HMAC-SHA256
+  - Nonce-based replay protection
+  - Request timestamp validation
+  - Certificate pinning configuration (ready for custom domain)
+  - URLRequest extension for security headers
+
+- **Platform Parity with Android:**
+  - Matches `ApiSecurity.kt` functionality
+  - Matches `network_security_config.xml` pinning setup
+  - Both platforms ready for `api.vettid.dev` custom domain
+
+- **Mobile Action Required:**
+  - [x] iOS: Implement request signing
+  - [x] iOS: Implement replay protection
+  - [x] iOS: Add certificate pinning config
+  - [ ] Backend: Deploy custom domain for cert pinning
+
 ### 2025-12-31 - Phase 4: MessageHandler Implemented
 
 - **Files:** `VettID/Core/NATS/Handlers/MessageHandler.swift`, `VettID/Features/Messaging/ConversationViewModel.swift`
@@ -140,6 +162,7 @@ This file tracks API implementation status for VettID iOS, aligned with the back
 | **Credentials** | `CredentialsHandler.swift` | Credential lifecycle |
 | **Connections** | `ConnectionHandler.swift` | Peer connection management |
 | **Messaging** | `MessageHandler.swift` | Vault-to-vault messaging |
+| **API Security** | `ApiSecurity.swift` | Request signing, replay protection, cert pinning docs |
 
 ### Cryptographic Implementation
 
@@ -150,6 +173,55 @@ This file tracks API implementation status for VettID iOS, aligned with the back
 | HKDF-SHA256 | `CryptoKit.HKDF` (via SharedSecret) |
 | Argon2id | `PasswordHasher` (PBKDF2 fallback until swift-sodium added) |
 | Ed25519 Signing | `CryptoKit.Curve25519.Signing` |
+| HMAC-SHA256 | `CryptoKit.HMAC<SHA256>` |
+
+### Security
+
+| Feature | Status | Implementation |
+|---------|--------|----------------|
+| HTTPS Only | ✅ Enabled | ATS (App Transport Security) in `Info.plist` |
+| TLS 1.2+ | ✅ Enforced | ATS default requirement |
+| Perfect Forward Secrecy | ✅ Required | ATS default requirement |
+| Certificate Pinning | ⏸️ Ready | `Info.plist` NSPinnedDomains (disabled until custom domain) |
+| Request Signing | ✅ Implemented | `ApiSecurity.signRequest()` HMAC-SHA256 |
+| Replay Protection | ✅ Implemented | `ApiSecurity` nonce + timestamp validation |
+| Request IDs | ✅ Implemented | `ApiSecurity.generateRequestId()` UUID |
+
+#### Certificate Pinning Status
+
+Certificate pinning is **prepared but disabled** because AWS API Gateway uses rotating certificates.
+
+**When to enable:**
+1. Backend deploys custom domain `api.vettid.dev` with stable ACM certificate
+2. Generate SPKI hashes using openssl
+3. Configure `NSPinnedDomains` in Info.plist
+
+**Pinning configuration (in Info.plist comment block):**
+```xml
+<key>NSPinnedDomains</key>
+<dict>
+    <key>api.vettid.dev</key>
+    <dict>
+        <key>NSIncludesSubdomains</key>
+        <true/>
+        <key>NSPinnedCAIdentities</key>
+        <array>
+            <dict>
+                <key>SPKI-SHA256-BASE64</key>
+                <string>YOUR_PIN_HASH_HERE</string>
+            </dict>
+        </array>
+    </dict>
+</dict>
+```
+
+**Generate SPKI hash:**
+```bash
+openssl s_client -connect api.vettid.dev:443 | \
+    openssl x509 -pubkey -noout | \
+    openssl pkey -pubin -outform der | \
+    openssl dgst -sha256 -binary | base64
+```
 
 ### Storage
 
@@ -234,6 +306,16 @@ Subscribe to `forApp.*` topics for real-time notifications:
 - [x] Provisioning polling
 - [ ] Background sync (BGAppRefreshTask)
 
+### Security
+- [x] HTTPS only (ATS)
+- [x] TLS 1.2+ enforced
+- [x] Perfect Forward Secrecy required
+- [x] Request signing (HMAC-SHA256)
+- [x] Replay protection (nonce + timestamp)
+- [x] Request ID tracking
+- [x] Certificate pinning config prepared
+- [ ] Certificate pinning enabled (requires custom domain)
+
 ### Pending
 - [ ] Subscribe to `forApp.credentials.rotate` for proactive rotation
 - [ ] Implement credential rotation handler
@@ -252,6 +334,21 @@ Subscribe to `forApp.*` topics for real-time notifications:
 | Background Sync | WorkManager | BGAppRefreshTask (pending) |
 | Keystore | Android Keystore | iOS Keychain |
 | Attestation | SafetyNet/Play Integrity | App Attest |
+| Cert Pinning Config | `network_security_config.xml` | `Info.plist` NSPinnedDomains |
+| API Security | `ApiSecurity.kt` | `ApiSecurity.swift` |
+
+### Security Parity
+
+Both platforms have matching security implementations:
+
+| Security Feature | Android | iOS |
+|-----------------|---------|-----|
+| HTTPS Only | ✅ `cleartextTrafficPermitted="false"` | ✅ ATS enabled |
+| TLS 1.2+ | ✅ Default | ✅ Default |
+| Cert Pinning | ⏸️ Commented out | ⏸️ Commented out |
+| Request Signing | ✅ `ApiSecurity.signRequest()` | ✅ `ApiSecurity.signRequest()` |
+| Replay Protection | ✅ Nonce + timestamp | ✅ Nonce + timestamp |
+| Request IDs | ✅ `X-VettID-Request-ID` | ✅ `X-VettID-Request-ID` |
 
 ---
 
