@@ -132,7 +132,7 @@ final class OwnerSpaceClientTests: XCTestCase {
     func testHandlerResultResponseDecoding() throws {
         let json = """
         {
-            "request_id": "req-123",
+            "id": "req-123",
             "success": true,
             "result": {"key": "value"},
             "error": null
@@ -142,7 +142,7 @@ final class OwnerSpaceClientTests: XCTestCase {
         let decoder = JSONDecoder()
         let response = try decoder.decode(HandlerResultResponse.self, from: json.data(using: .utf8)!)
 
-        XCTAssertEqual(response.requestId, "req-123")
+        XCTAssertEqual(response.id, "req-123")
         XCTAssertTrue(response.success)
         XCTAssertNotNil(response.result)
         XCTAssertNil(response.error)
@@ -151,7 +151,7 @@ final class OwnerSpaceClientTests: XCTestCase {
     func testHandlerResultResponseDecoding_withError() throws {
         let json = """
         {
-            "request_id": "req-456",
+            "id": "req-456",
             "success": false,
             "result": null,
             "error": "Handler execution failed"
@@ -161,7 +161,7 @@ final class OwnerSpaceClientTests: XCTestCase {
         let decoder = JSONDecoder()
         let response = try decoder.decode(HandlerResultResponse.self, from: json.data(using: .utf8)!)
 
-        XCTAssertEqual(response.requestId, "req-456")
+        XCTAssertEqual(response.id, "req-456")
         XCTAssertFalse(response.success)
         XCTAssertNil(response.result)
         XCTAssertEqual(response.error, "Handler execution failed")
@@ -170,7 +170,7 @@ final class OwnerSpaceClientTests: XCTestCase {
     func testStatusResponseDecoding() throws {
         let json = """
         {
-            "request_id": "status-123",
+            "id": "status-123",
             "vault_status": "running",
             "health": "healthy",
             "active_handlers": 5,
@@ -181,7 +181,7 @@ final class OwnerSpaceClientTests: XCTestCase {
         let decoder = JSONDecoder()
         let response = try decoder.decode(StatusResponse.self, from: json.data(using: .utf8)!)
 
-        XCTAssertEqual(response.requestId, "status-123")
+        XCTAssertEqual(response.id, "status-123")
         XCTAssertEqual(response.vaultStatus, "running")
         XCTAssertEqual(response.health, "healthy")
         XCTAssertEqual(response.activeHandlers, 5)

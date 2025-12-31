@@ -7,6 +7,25 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A1B2C3D4E5F6000000000000 /* AuthenticationViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75A250C49286C1469599CD45 /* AuthenticationViewModelTests.swift */; };
+		A1B2C3D4E5F6000000000001 /* BackupListViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 183C19DE1EB7BD6FCF2BFE78 /* BackupListViewModelTests.swift */; };
+		A1B2C3D4E5F6000000000002 /* BackupSettingsViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6098637FDCF71146C63D9FD /* BackupSettingsViewModelTests.swift */; };
+		A1B2C3D4E5F6000000000003 /* ConnectionsViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A76C59FC4B0D65040C1B3BC2 /* ConnectionsViewModelTests.swift */; };
+		A1B2C3D4E5F6000000000004 /* ConversationViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE35CF9350F1D477CC634FD3 /* ConversationViewModelTests.swift */; };
+		A1B2C3D4E5F6000000000005 /* CreateInvitationViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9907E4ADEC32ED97F95D4E9 /* CreateInvitationViewModelTests.swift */; };
+		A1B2C3D4E5F6000000000006 /* CredentialBackupViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F1AE6EAA7223ED50E8D5AA /* CredentialBackupViewModelTests.swift */; };
+		A1B2C3D4E5F6000000000007 /* CredentialRecoveryViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A665970E0AD5C8D20494FF33 /* CredentialRecoveryViewModelTests.swift */; };
+		A1B2C3D4E5F6000000000008 /* EnrollmentViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2BE3C5AC6A5049A191F87E5 /* EnrollmentViewModelTests.swift */; };
+		A1B2C3D4E5F6000000000009 /* HandlerDetailViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E5E94284D11741CB902B343 /* HandlerDetailViewModelTests.swift */; };
+		A1B2C3D4E5F6000000000010 /* HandlerDiscoveryViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A833E0C94158CB685965731 /* HandlerDiscoveryViewModelTests.swift */; };
+		A1B2C3D4E5F6000000000011 /* HandlerExecutionViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D685CF6E261D5A6229A01CB1 /* HandlerExecutionViewModelTests.swift */; };
+		A1B2C3D4E5F6000000000012 /* NatsConnectionManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 595F692C8F113D4CAC0F9D2D /* NatsConnectionManagerTests.swift */; };
+		A1B2C3D4E5F6000000000013 /* ProfileViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7543D8BF043373D3E739796C /* ProfileViewModelTests.swift */; };
+		A1B2C3D4E5F6000000000014 /* RecoveryPhraseManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3ED9102CCC521BCDFD9ED8B /* RecoveryPhraseManagerTests.swift */; };
+		A1B2C3D4E5F6000000000015 /* ScanInvitationViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C262C514B475C866052AA47B /* ScanInvitationViewModelTests.swift */; };
+		A1B2C3D4E5F6000000000016 /* VaultEventClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04A2A45B0C799F07F7949F6A /* VaultEventClientTests.swift */; };
+		A1B2C3D4E5F6000000000017 /* VaultHealthViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D96D6532F41DCB812C7BB39 /* VaultHealthViewModelTests.swift */; };
+		A1B2C3D4E5F6000000000018 /* VaultStatusViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC46F847CA8B124F9FE8E970 /* VaultStatusViewModelTests.swift */; };
 		00000001 /* VettIDApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000001 /* VettIDApp.swift */; };
 		00000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000002 /* ContentView.swift */; };
 		00000003 /* CryptoManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000003 /* CryptoManager.swift */; };
@@ -1047,6 +1066,21 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1B2C3D4E5F6000000000000 /* AuthenticationViewModelTests.swift in Sources */,
+				A1B2C3D4E5F6000000000003 /* ConnectionsViewModelTests.swift in Sources */,
+				A1B2C3D4E5F6000000000004 /* ConversationViewModelTests.swift in Sources */,
+				A1B2C3D4E5F6000000000005 /* CreateInvitationViewModelTests.swift in Sources */,
+				A1B2C3D4E5F6000000000006 /* CredentialBackupViewModelTests.swift in Sources */,
+				A1B2C3D4E5F6000000000007 /* CredentialRecoveryViewModelTests.swift in Sources */,
+				A1B2C3D4E5F6000000000008 /* EnrollmentViewModelTests.swift in Sources */,
+				A1B2C3D4E5F6000000000009 /* HandlerDetailViewModelTests.swift in Sources */,
+				A1B2C3D4E5F6000000000010 /* HandlerDiscoveryViewModelTests.swift in Sources */,
+				A1B2C3D4E5F6000000000011 /* HandlerExecutionViewModelTests.swift in Sources */,
+				A1B2C3D4E5F6000000000012 /* NatsConnectionManagerTests.swift in Sources */,
+				A1B2C3D4E5F6000000000013 /* ProfileViewModelTests.swift in Sources */,
+				A1B2C3D4E5F6000000000014 /* RecoveryPhraseManagerTests.swift in Sources */,
+				A1B2C3D4E5F6000000000017 /* VaultHealthViewModelTests.swift in Sources */,
+				A1B2C3D4E5F6000000000018 /* VaultStatusViewModelTests.swift in Sources */,
 				7760EC0B29FE0CD3C39CE26D /* ConnectionHandlerTests.swift in Sources */,
 				0CB7F637A987C6A46022474E /* PasswordHasherTests.swift in Sources */,
 				8E218CCA8B5EBA2C3E3F16C1 /* ProfileHandlerTests.swift in Sources */,

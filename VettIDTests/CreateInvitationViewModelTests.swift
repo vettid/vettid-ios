@@ -34,10 +34,10 @@ final class CreateInvitationViewModelTests: XCTestCase {
 
     // MARK: - Computed Properties
 
-    func testInvitation_nilWhenIdle() {
+    func testInvitationCode_nilWhenIdle() {
         let viewModel = CreateInvitationViewModel(authTokenProvider: { "test-token" })
 
-        XCTAssertNil(viewModel.invitation)
+        XCTAssertNil(viewModel.invitationCode)
     }
 
     func testQrCodeData_nilWhenIdle() {
