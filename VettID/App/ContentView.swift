@@ -131,17 +131,20 @@ struct WelcomeView: View {
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 120, height: 120)
                     .clipShape(RoundedRectangle(cornerRadius: 24))
+                    .accessibilityIdentifier("welcome.logo")
 
                 // Title
                 Text("Welcome to VettID")
                     .font(.largeTitle)
                     .fontWeight(.bold)
+                    .accessibilityIdentifier("welcome.title")
 
                 // Subtitle
                 Text("Secure credential management\nfor your personal vault")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+                    .accessibilityIdentifier("welcome.subtitle")
 
                 Spacer()
 
@@ -152,6 +155,7 @@ struct WelcomeView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
+                .accessibilityIdentifier("welcome.scanQRButton")
 
                 // Secondary action - manual entry
                 NavigationLink(destination: ManualEnrollmentView()) {
@@ -160,6 +164,7 @@ struct WelcomeView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
+                .accessibilityIdentifier("welcome.enterCodeButton")
 
                 Spacer()
                     .frame(height: 40)
@@ -233,14 +238,17 @@ struct EnrollmentContainerView: View {
         VStack(spacing: 20) {
             ProgressView()
                 .scaleEffect(1.5)
+                .accessibilityIdentifier("enrollment.progressIndicator")
 
             Text("Processing invitation...")
                 .font(.headline)
+                .accessibilityIdentifier("enrollment.processingText")
 
             Text("Connecting to vault services")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
+        .accessibilityIdentifier("enrollment.processingView")
     }
 
     // MARK: - Finalizing View
@@ -282,30 +290,36 @@ struct EnrollmentContainerView: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 60))
                 .foregroundStyle(.orange)
+                .accessibilityIdentifier("enrollment.errorIcon")
 
             Text("Enrollment Failed")
                 .font(.title2)
                 .fontWeight(.bold)
+                .accessibilityIdentifier("enrollment.errorTitle")
 
             Text(message)
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
+                .accessibilityIdentifier("enrollment.errorMessage")
 
             if retryable {
                 Button("Try Again") {
                     viewModel.reset()
                 }
                 .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("enrollment.retryButton")
             }
 
             Button("Cancel") {
                 dismiss()
             }
             .buttonStyle(.bordered)
+            .accessibilityIdentifier("enrollment.cancelButton")
         }
         .padding()
+        .accessibilityIdentifier("enrollment.errorView")
     }
 }
 
@@ -321,12 +335,14 @@ struct ManualEnrollmentView: View {
         VStack(spacing: 24) {
             Text("Enter your invitation code")
                 .font(.headline)
+                .accessibilityIdentifier("manualEnrollment.instructionText")
 
             TextField("Invitation Code", text: $invitationCode)
                 .textFieldStyle(.roundedBorder)
                 .autocapitalization(.none)
                 .disableAutocorrection(true)
                 .padding(.horizontal)
+                .accessibilityIdentifier("manualEnrollment.codeTextField")
 
             Button("Continue") {
                 Task {
@@ -335,11 +351,13 @@ struct ManualEnrollmentView: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(invitationCode.isEmpty)
+            .accessibilityIdentifier("manualEnrollment.continueButton")
 
             Spacer()
         }
         .padding(.top, 40)
         .navigationTitle("Enter Code")
+        .accessibilityIdentifier("manualEnrollment.view")
     }
 }
 

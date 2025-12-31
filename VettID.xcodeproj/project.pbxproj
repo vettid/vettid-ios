@@ -99,6 +99,7 @@
 		54AE200B5260828DFDDF54CF /* ConnectionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AA0D8823160098FDD1BEDED /* ConnectionHandler.swift */; };
 		5F70C41EB8B0D5E3945DE3D0 /* VaultServicesStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D5FE09BE33592D0D0F1EB3F /* VaultServicesStatusView.swift */; };
 		6AAF4B7C9510C0DBDC732FD9 /* SecretsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAF3A0B1092FFB0A652C013F /* SecretsViewModel.swift */; };
+		7B9473E326FABF243ED653A4 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D1AC5C563F3D0443156417C0 /* Foundation.framework */; };
 		8137D39ECE65372610A42979 /* PersonalDataView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 498392EDCF906E22833BD876 /* PersonalDataView.swift */; };
 		824239CA1C86ECBB99591287 /* FeedEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93A86BE60A75794075747370 /* FeedEvent.swift */; };
 		84A8E45EB70FA3689B501714 /* PersonalData.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE89C420DEC861CD3FA91B92 /* PersonalData.swift */; };
@@ -109,6 +110,7 @@
 		A62391E4CF05D59BEBA013D4 /* Secret.swift in Sources */ = {isa = PBXBuildFile; fileRef = 688F0CE3AE28533DD0235DF8 /* Secret.swift */; };
 		B0654E219C2D593B6A9355A0 /* HeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5B59320799245103D92C504 /* HeaderView.swift */; };
 		C0ACE721614C9896C8C7F46C /* ApiSecurity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AFABA11945E99D1E175383D /* ApiSecurity.swift */; };
+		C23FB626255421D48B1E705E /* VettIDUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC77A44439FC6A4671047F51 /* VettIDUITests.swift */; };
 		C343F7B83B7C091123598F3D /* AppLockService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA6F4E8A08AC05BC1E9981C6 /* AppLockService.swift */; };
 		CA86CA36D9E993B236ED44E6 /* ContextualBottomNav.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E26681EB4F44673283A603D /* ContextualBottomNav.swift */; };
 		CBB42EE77AAC0795CA3EE203 /* EncryptedEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEBBB6DA11AE9704FF891A7F /* EncryptedEnvelope.swift */; };
@@ -120,8 +122,19 @@
 		EBA8CC5E3DAC52A8A2738BFE /* DrawerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 157809425BFB22E6896C0225 /* DrawerView.swift */; };
 		F0E73DBD6B3F29E1CB096093 /* MessageHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2890018C4BA02E8E472C8A62 /* MessageHandler.swift */; };
 		F602E4DC3720696C53E18F93 /* CredentialsHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 131DE8422D0A3B6CE2B321DB /* CredentialsHandler.swift */; };
+		FDA99EEB7505FD7031F2B26C /* EnrollmentUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38A823EDB04F986924B6CC2D /* EnrollmentUITests.swift */; };
 		FFEC75DD850E79B5ED665914 /* VaultPreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8285A14EAFF8FCF54C60C6E2 /* VaultPreferencesView.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		8D9F9FE7810A924BE053BF56 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 70000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 50000001;
+			remoteInfo = VettID;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		0E26681EB4F44673283A603D /* ContextualBottomNav.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ContextualBottomNav.swift; sourceTree = "<group>"; };
@@ -216,9 +229,11 @@
 		2890018C4BA02E8E472C8A62 /* MessageHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MessageHandler.swift; sourceTree = "<group>"; };
 		2B2D6CF42AD511A65BF8DC12 /* AboutView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		36891E6A55D69502EF90D4CB /* SessionKeyManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SessionKeyManager.swift; sourceTree = "<group>"; };
+		38A823EDB04F986924B6CC2D /* EnrollmentUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EnrollmentUITests.swift; sourceTree = "<group>"; };
 		392F1BEBBE9997250A75C74A /* VettID.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = VettID.entitlements; sourceTree = "<group>"; };
 		48B355FF5FC2FE9E7899E6EB /* SecuritySettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SecuritySettingsView.swift; sourceTree = "<group>"; };
 		498392EDCF906E22833BD876 /* PersonalDataView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PersonalDataView.swift; sourceTree = "<group>"; };
+		5DAE0DC17A88D051B4A2680E /* VettIDUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VettIDUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		688F0CE3AE28533DD0235DF8 /* Secret.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Secret.swift; sourceTree = "<group>"; };
 		7A4A6BF4B7E19B38EDEF31AC /* ArchiveView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ArchiveView.swift; sourceTree = "<group>"; };
 		7AF9A63734413646BB7E375A /* SecretsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SecretsView.swift; sourceTree = "<group>"; };
@@ -236,11 +251,13 @@
 		B800E13B79F1C90797B3209D /* DeepLinkHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DeepLinkHandler.swift; sourceTree = "<group>"; };
 		BA573762F5B324146F857357 /* ThemeSettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ThemeSettingsView.swift; sourceTree = "<group>"; };
 		CAF3A0B1092FFB0A652C013F /* SecretsViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SecretsViewModel.swift; sourceTree = "<group>"; };
+		D1AC5C563F3D0443156417C0 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		D6F772E105DCC21AF1751DE5 /* AppLockView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppLockView.swift; sourceTree = "<group>"; };
 		DDAE474EE81CD7EDDE12ABF5 /* FeedViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FeedViewModel.swift; sourceTree = "<group>"; };
 		DE89C420DEC861CD3FA91B92 /* PersonalData.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PersonalData.swift; sourceTree = "<group>"; };
 		DEA5BE7707CCFC71CBA871B7 /* MainNavigationView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MainNavigationView.swift; sourceTree = "<group>"; };
 		EEA2A69DEB72B748BED4DA14 /* SecretsHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SecretsHandler.swift; sourceTree = "<group>"; };
+		FC77A44439FC6A4671047F51 /* VettIDUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VettIDUITests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -248,6 +265,14 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EB66B9258CD6D1C9C82032E8 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7B9473E326FABF243ED653A4 /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -295,6 +320,8 @@
 			children = (
 				40000002 /* VettID */,
 				40000003 /* Products */,
+				FEA3F7453C5C2A10C721EE02 /* Frameworks */,
+				DA8BC5C9F8183B4FF86AD0C2 /* VettIDUITests */,
 			);
 			sourceTree = "<group>";
 		};
@@ -316,6 +343,7 @@
 			isa = PBXGroup;
 			children = (
 				20000001 /* VettID.app */,
+				5DAE0DC17A88D051B4A2680E /* VettIDUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -625,9 +653,53 @@
 			path = PersonalData;
 			sourceTree = "<group>";
 		};
+		DA8BC5C9F8183B4FF86AD0C2 /* VettIDUITests */ = {
+			isa = PBXGroup;
+			children = (
+				FC77A44439FC6A4671047F51 /* VettIDUITests.swift */,
+				38A823EDB04F986924B6CC2D /* EnrollmentUITests.swift */,
+			);
+			name = VettIDUITests;
+			path = VettIDUITests;
+			sourceTree = "<group>";
+		};
+		FE8BB0F52357B236B075801B /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				D1AC5C563F3D0443156417C0 /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+		FEA3F7453C5C2A10C721EE02 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				FE8BB0F52357B236B075801B /* iOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		47A19B9656B5C17D32E3CBF5 /* VettIDUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2BCEDFE9E7D44EC170647334 /* Build configuration list for PBXNativeTarget "VettIDUITests" */;
+			buildPhases = (
+				883FF6CAE2490104B72F2843 /* Sources */,
+				EB66B9258CD6D1C9C82032E8 /* Frameworks */,
+				68F491FEEB3328CCEE15B658 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				78D8DA992EA0284D9A263C4E /* PBXTargetDependency */,
+			);
+			name = VettIDUITests;
+			productName = VettIDUITests;
+			productReference = 5DAE0DC17A88D051B4A2680E /* VettIDUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		50000001 /* VettID */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 60000001 /* Build configuration list for PBXNativeTarget "VettID" */;
@@ -674,6 +746,7 @@
 			projectRoot = "";
 			targets = (
 				50000001 /* VettID */,
+				47A19B9656B5C17D32E3CBF5 /* VettIDUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -684,6 +757,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				0000000C /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		68F491FEEB3328CCEE15B658 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -810,9 +890,51 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		883FF6CAE2490104B72F2843 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C23FB626255421D48B1E705E /* VettIDUITests.swift in Sources */,
+				FDA99EEB7505FD7031F2B26C /* EnrollmentUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		78D8DA992EA0284D9A263C4E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = VettID;
+			target = 50000001 /* VettID */;
+			targetProxy = 8D9F9FE7810A924BE053BF56 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		1A8B1FD3B0E700526054C2E1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = VettIDUITests/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.vettid.app.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = VettID;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		80000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1001,9 +1123,41 @@
 			};
 			name = Release;
 		};
+		D2BE6888D26C1FCC15DBB869 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = VettIDUITests/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.vettid.app.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = VettID;
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		2BCEDFE9E7D44EC170647334 /* Build configuration list for PBXNativeTarget "VettIDUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1A8B1FD3B0E700526054C2E1 /* Release */,
+				D2BE6888D26C1FCC15DBB869 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		60000001 /* Build configuration list for PBXNativeTarget "VettID" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
