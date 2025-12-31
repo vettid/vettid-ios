@@ -262,6 +262,77 @@ struct VaultEventResponse: Decodable {
 
 ---
 
+## Backend Handler Documentation
+
+### app.bootstrap - Full NATS Credentials Exchange
+
+**Status:** ✅ Implemented and Deployed (vault-manager `bootstrap.go`)
+
+The `app.bootstrap` handler issues full NATS credentials and performs E2E session key exchange.
+
+#### Request Format
+```json
+{
+  "id": "unique-request-id",
+  "type": "app.bootstrap",
+  "timestamp": "2025-12-30T15:30:00Z",
+  "payload": {
+    "device_id": "ios-device-xyz",
+    "device_type": "ios",
+    "app_version": "1.0.0",
+    "requested_ttl_hours": 168,
+    "app_session_public_key": "base64-encoded-X25519-public-key"
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `device_id` | string | Yes | Unique device identifier |
+| `device_type` | string | No | "android" or "ios" |
+| `app_version` | string | No | App version for compatibility |
+| `requested_ttl_hours` | int | No | Credential TTL (default: 168 = 7 days, max: 720 = 30 days) |
+| `app_session_public_key` | string | No | X25519 public key (base64) for E2E encryption |
+
+#### Response Format
+```json
+{
+  "event_id": "unique-request-id",
+  "success": true,
+  "timestamp": "2025-12-30T15:30:01Z",
+  "result": {
+    "credentials": "-----BEGIN NATS USER JWT-----\n...",
+    "nats_endpoint": "tls://nats.vettid.dev:4222",
+    "owner_space": "OwnerSpace.abc123",
+    "message_space": "MessageSpace.abc123",
+    "topics": {
+      "send_to_vault": "OwnerSpace.abc123.forVault.>",
+      "receive_from_vault": "OwnerSpace.abc123.forApp.>"
+    },
+    "expires_at": "2026-01-06T15:30:00Z",
+    "ttl_seconds": 604800,
+    "credential_id": "cred-12345678",
+    "rotation_info": {
+      "rotate_before_hours": 24,
+      "rotation_topic": "OwnerSpace.abc123.forVault.credentials.refresh"
+    },
+    "session_info": {
+      "session_id": "sess-87654321",
+      "vault_session_public_key": "base64-encoded-vault-X25519-public-key",
+      "session_expires_at": "2026-01-06T15:30:00Z",
+      "encryption_enabled": true
+    }
+  }
+}
+```
+
+**Notes:**
+- `session_info` is only present if `app_session_public_key` was provided in request
+- `credentials` is a full NATS credentials file (JWT + seed) - replace bootstrap creds
+- iOS implementation: `SessionKeyManager` + `NatsConnectionManager.performBootstrap()`
+
+---
+
 ## Incoming Notifications (Vault → App)
 
 Subscribe to `forApp.*` topics for real-time notifications:
