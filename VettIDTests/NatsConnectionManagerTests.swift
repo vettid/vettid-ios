@@ -12,7 +12,20 @@ final class NatsConnectionManagerTests: XCTestCase {
         XCTAssertFalse(NatsConnectionState.disconnected.isConnected)
         XCTAssertFalse(NatsConnectionState.connecting.isConnected)
         XCTAssertFalse(NatsConnectionState.reconnecting.isConnected)
+        XCTAssertFalse(NatsConnectionState.startingVault.isConnected)
+        XCTAssertFalse(NatsConnectionState.waitingForVault.isConnected)
         XCTAssertFalse(NatsConnectionState.error(NatsConnectionError.notConnected).isConnected)
+    }
+
+    func testConnectionStateIsTransitioning() {
+        XCTAssertTrue(NatsConnectionState.connecting.isTransitioning)
+        XCTAssertTrue(NatsConnectionState.reconnecting.isTransitioning)
+        XCTAssertTrue(NatsConnectionState.startingVault.isTransitioning)
+        XCTAssertTrue(NatsConnectionState.waitingForVault.isTransitioning)
+
+        XCTAssertFalse(NatsConnectionState.disconnected.isTransitioning)
+        XCTAssertFalse(NatsConnectionState.connected.isTransitioning)
+        XCTAssertFalse(NatsConnectionState.error(NatsConnectionError.notConnected).isTransitioning)
     }
 
     func testConnectionStateDisplayName() {
@@ -20,6 +33,8 @@ final class NatsConnectionManagerTests: XCTestCase {
         XCTAssertEqual(NatsConnectionState.connecting.displayName, "Connecting...")
         XCTAssertEqual(NatsConnectionState.connected.displayName, "Connected")
         XCTAssertEqual(NatsConnectionState.reconnecting.displayName, "Reconnecting...")
+        XCTAssertEqual(NatsConnectionState.startingVault.displayName, "Starting Vault...")
+        XCTAssertEqual(NatsConnectionState.waitingForVault.displayName, "Waiting for Vault...")
         XCTAssertEqual(NatsConnectionState.error(NatsConnectionError.notConnected).displayName, "Error")
     }
 
@@ -28,9 +43,13 @@ final class NatsConnectionManagerTests: XCTestCase {
         XCTAssertEqual(NatsConnectionState.connecting, .connecting)
         XCTAssertEqual(NatsConnectionState.connected, .connected)
         XCTAssertEqual(NatsConnectionState.reconnecting, .reconnecting)
+        XCTAssertEqual(NatsConnectionState.startingVault, .startingVault)
+        XCTAssertEqual(NatsConnectionState.waitingForVault, .waitingForVault)
 
         XCTAssertNotEqual(NatsConnectionState.disconnected, .connecting)
         XCTAssertNotEqual(NatsConnectionState.connected, .disconnected)
+        XCTAssertNotEqual(NatsConnectionState.startingVault, .waitingForVault)
+        XCTAssertNotEqual(NatsConnectionState.connecting, .startingVault)
 
         // Error states are equal regardless of the specific error
         let error1 = NatsConnectionState.error(NatsConnectionError.notConnected)
@@ -227,6 +246,8 @@ final class NatsSetupViewModelTests: XCTestCase {
         XCTAssertEqual(NatsSetupViewModel.SetupState.creatingAccount.title, "Creating Account...")
         XCTAssertEqual(NatsSetupViewModel.SetupState.generatingToken.title, "Generating Token...")
         XCTAssertEqual(NatsSetupViewModel.SetupState.connecting.title, "Connecting...")
+        XCTAssertEqual(NatsSetupViewModel.SetupState.startingVault.title, "Starting Vault...")
+        XCTAssertEqual(NatsSetupViewModel.SetupState.waitingForVault.title, "Waiting for Vault...")
         XCTAssertEqual(NatsSetupViewModel.SetupState.connected(NatsAccountStatus(ownerSpaceId: "", messageSpaceId: "", isConnected: true)).title, "Connected")
         XCTAssertEqual(NatsSetupViewModel.SetupState.error("test").title, "Error")
     }
@@ -237,6 +258,8 @@ final class NatsSetupViewModelTests: XCTestCase {
         XCTAssertTrue(NatsSetupViewModel.SetupState.creatingAccount.isProcessing)
         XCTAssertTrue(NatsSetupViewModel.SetupState.generatingToken.isProcessing)
         XCTAssertTrue(NatsSetupViewModel.SetupState.connecting.isProcessing)
+        XCTAssertTrue(NatsSetupViewModel.SetupState.startingVault.isProcessing)
+        XCTAssertTrue(NatsSetupViewModel.SetupState.waitingForVault.isProcessing)
         XCTAssertFalse(NatsSetupViewModel.SetupState.connected(NatsAccountStatus(ownerSpaceId: "", messageSpaceId: "", isConnected: true)).isProcessing)
         XCTAssertFalse(NatsSetupViewModel.SetupState.error("test").isProcessing)
     }
@@ -247,8 +270,12 @@ final class NatsSetupViewModelTests: XCTestCase {
         XCTAssertEqual(NatsSetupViewModel.SetupState.creatingAccount, .creatingAccount)
         XCTAssertEqual(NatsSetupViewModel.SetupState.generatingToken, .generatingToken)
         XCTAssertEqual(NatsSetupViewModel.SetupState.connecting, .connecting)
+        XCTAssertEqual(NatsSetupViewModel.SetupState.startingVault, .startingVault)
+        XCTAssertEqual(NatsSetupViewModel.SetupState.waitingForVault, .waitingForVault)
 
         XCTAssertNotEqual(NatsSetupViewModel.SetupState.initial, .connecting)
+        XCTAssertNotEqual(NatsSetupViewModel.SetupState.startingVault, .waitingForVault)
+        XCTAssertNotEqual(NatsSetupViewModel.SetupState.connecting, .startingVault)
 
         let status1 = NatsAccountStatus(ownerSpaceId: "os1", messageSpaceId: "ms1", isConnected: true)
         let status2 = NatsAccountStatus(ownerSpaceId: "os1", messageSpaceId: "ms1", isConnected: true)
