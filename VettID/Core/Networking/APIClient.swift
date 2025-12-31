@@ -140,6 +140,65 @@ actor APIClient {
         return try await post(endpoint: "/member/vaults/\(vaultId)/stop", body: EmptyBody(), authToken: authToken)
     }
 
+    // MARK: - Action-Token Vault Lifecycle
+
+    /// Get vault status using action token authentication
+    /// Flow: 1) Call actionRequest with vaultStatus, 2) Call this with the action token
+    func getVaultStatusWithActionToken(actionToken: String) async throws -> ActionVaultStatusResponse {
+        return try await get(endpoint: "/api/v1/vault/status", authToken: actionToken)
+    }
+
+    /// Start vault using action token authentication
+    /// Flow: 1) Call actionRequest with vaultStart, 2) Call this with the action token
+    func startVaultWithActionToken(actionToken: String) async throws -> ActionVaultStartResponse {
+        return try await post(endpoint: "/api/v1/vault/start", body: EmptyBody(), authToken: actionToken)
+    }
+
+    /// Stop vault using action token authentication
+    /// Flow: 1) Call actionRequest with vaultStop, 2) Call this with the action token
+    func stopVaultWithActionToken(actionToken: String) async throws -> ActionVaultStopResponse {
+        return try await post(endpoint: "/api/v1/vault/stop", body: EmptyBody(), authToken: actionToken)
+    }
+
+    /// Helper: Request action token and get vault status in one call
+    func getVaultStatusAction(userGuid: String, cognitoToken: String) async throws -> ActionVaultStatusResponse {
+        let actionResponse = try await actionRequest(
+            request: ActionRequestBody(
+                userGuid: userGuid,
+                actionType: ActionType.vaultStatus.rawValue,
+                deviceFingerprint: nil
+            ),
+            cognitoToken: cognitoToken
+        )
+        return try await getVaultStatusWithActionToken(actionToken: actionResponse.actionToken)
+    }
+
+    /// Helper: Request action token and start vault in one call
+    func startVaultAction(userGuid: String, cognitoToken: String) async throws -> ActionVaultStartResponse {
+        let actionResponse = try await actionRequest(
+            request: ActionRequestBody(
+                userGuid: userGuid,
+                actionType: ActionType.vaultStart.rawValue,
+                deviceFingerprint: nil
+            ),
+            cognitoToken: cognitoToken
+        )
+        return try await startVaultWithActionToken(actionToken: actionResponse.actionToken)
+    }
+
+    /// Helper: Request action token and stop vault in one call
+    func stopVaultAction(userGuid: String, cognitoToken: String) async throws -> ActionVaultStopResponse {
+        let actionResponse = try await actionRequest(
+            request: ActionRequestBody(
+                userGuid: userGuid,
+                actionType: ActionType.vaultStop.rawValue,
+                deviceFingerprint: nil
+            ),
+            cognitoToken: cognitoToken
+        )
+        return try await stopVaultWithActionToken(actionToken: actionResponse.actionToken)
+    }
+
     // MARK: - Vault Lifecycle (Phase 5)
 
     /// Provision a new vault EC2 instance
@@ -750,6 +809,73 @@ struct VaultActionResponse: Decodable {
     let message: String
 }
 
+// MARK: - Action-Token Vault Lifecycle Types
+
+/// Response from GET /api/v1/vault/status (action-token authenticated)
+struct ActionVaultStatusResponse: Decodable {
+    // Enrollment status
+    let enrollmentStatus: String  // not_enrolled, pending, enrolled, active, error
+    let userGuid: String?
+    let enrolledAt: String?
+    let lastAuthAt: String?
+    let lastSyncAt: String?
+    let deviceType: String?  // android, ios
+    let securityLevel: String?
+    let transactionKeysRemaining: Int?
+    let credentialVersion: Int?
+
+    // Instance status (if vault exists)
+    let instanceStatus: String?  // running, stopped, stopping, starting, pending, terminated, provisioning, initializing
+    let instanceId: String?
+    let instanceIp: String?
+    let natsEndpoint: String?
+
+    let errorMessage: String?
+
+    enum CodingKeys: String, CodingKey {
+        case enrollmentStatus = "enrollment_status"
+        case userGuid = "user_guid"
+        case enrolledAt = "enrolled_at"
+        case lastAuthAt = "last_auth_at"
+        case lastSyncAt = "last_sync_at"
+        case deviceType = "device_type"
+        case securityLevel = "security_level"
+        case transactionKeysRemaining = "transaction_keys_remaining"
+        case credentialVersion = "credential_version"
+        case instanceStatus = "instance_status"
+        case instanceId = "instance_id"
+        case instanceIp = "instance_ip"
+        case natsEndpoint = "nats_endpoint"
+        case errorMessage = "error_message"
+    }
+}
+
+/// Response from POST /api/v1/vault/start (action-token authenticated)
+struct ActionVaultStartResponse: Decodable {
+    let status: String  // starting, running, pending
+    let instanceId: String
+    let message: String
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case instanceId = "instance_id"
+        case message
+    }
+}
+
+/// Response from POST /api/v1/vault/stop (action-token authenticated)
+struct ActionVaultStopResponse: Decodable {
+    let status: String  // stopping, stopped
+    let instanceId: String
+    let message: String
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case instanceId = "instance_id"
+        case message
+    }
+}
+
 // MARK: - Vault Lifecycle Types (Phase 5)
 
 struct ProvisionVaultResponse: Decodable {
@@ -851,6 +977,10 @@ enum ActionType: String, Encodable {
     case retrieveSecret = "retrieve_secret"
     case addPolicy = "add_policy"
     case modifyCredential = "modify_credential"
+    // Vault lifecycle actions (for mobile apps)
+    case vaultStart = "vault_start"
+    case vaultStop = "vault_stop"
+    case vaultStatus = "vault_status"
 }
 
 // MARK: - Handler Registry Types (Phase 6)

@@ -15,6 +15,7 @@ final class VaultHealthViewModel: ObservableObject {
     private let apiClient: APIClient
     private let natsConnectionManager: NatsConnectionManager
     private let authTokenProvider: () -> String?
+    private let userGuidProvider: () -> String?
 
     // MARK: - Polling Configuration
 
@@ -31,11 +32,13 @@ final class VaultHealthViewModel: ObservableObject {
     init(
         apiClient: APIClient = APIClient(),
         natsConnectionManager: NatsConnectionManager? = nil,
-        authTokenProvider: @escaping () -> String?
+        authTokenProvider: @escaping () -> String?,
+        userGuidProvider: @escaping () -> String? = { nil }
     ) {
         self.apiClient = apiClient
         self.natsConnectionManager = natsConnectionManager ?? NatsConnectionManager()
         self.authTokenProvider = authTokenProvider
+        self.userGuidProvider = userGuidProvider
     }
 
     // MARK: - Health Monitoring
@@ -137,13 +140,25 @@ final class VaultHealthViewModel: ObservableObject {
         healthState = .provisioning(progress: 0, status: "Starting vault...")
 
         do {
-            let response = try await apiClient.startVaultInstance(authToken: authToken)
+            // Try action-token flow first (preferred for mobile)
+            if let userGuid = userGuidProvider() {
+                let response = try await apiClient.startVaultAction(userGuid: userGuid, cognitoToken: authToken)
 
-            if response.status == "starting" || response.status == "started" {
-                // Poll for vault to become healthy
-                await pollForStartup(authToken: authToken)
+                if response.status == "starting" || response.status == "running" || response.status == "pending" {
+                    // Poll for vault to become healthy
+                    await pollForStartup(authToken: authToken)
+                } else {
+                    healthState = .error("Start failed: \(response.message)")
+                }
             } else {
-                healthState = .error("Start failed: \(response.message)")
+                // Fall back to direct API call (legacy)
+                let response = try await apiClient.startVaultInstance(authToken: authToken)
+
+                if response.status == "starting" || response.status == "started" {
+                    await pollForStartup(authToken: authToken)
+                } else {
+                    healthState = .error("Start failed: \(response.message)")
+                }
             }
         } catch {
             healthState = .error("Start failed: \(error.localizedDescription)")
@@ -158,15 +173,80 @@ final class VaultHealthViewModel: ObservableObject {
         }
 
         do {
-            let response = try await apiClient.stopVaultInstance(authToken: authToken)
+            // Try action-token flow first (preferred for mobile)
+            if let userGuid = userGuidProvider() {
+                let response = try await apiClient.stopVaultAction(userGuid: userGuid, cognitoToken: authToken)
 
-            if response.status == "stopped" || response.status == "stopping" {
-                healthState = .stopped
+                if response.status == "stopped" || response.status == "stopping" {
+                    healthState = .stopped
+                } else {
+                    healthState = .error("Stop failed: \(response.message)")
+                }
             } else {
-                healthState = .error("Stop failed: \(response.message)")
+                // Fall back to direct API call (legacy)
+                let response = try await apiClient.stopVaultInstance(authToken: authToken)
+
+                if response.status == "stopped" || response.status == "stopping" {
+                    healthState = .stopped
+                } else {
+                    healthState = .error("Stop failed: \(response.message)")
+                }
             }
         } catch {
             healthState = .error("Stop failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// Get comprehensive vault status using action-token flow
+    /// Returns detailed enrollment and instance status
+    func getVaultStatus() async -> ActionVaultStatusResponse? {
+        guard let authToken = authTokenProvider(),
+              let userGuid = userGuidProvider() else {
+            return nil
+        }
+
+        do {
+            return try await apiClient.getVaultStatusAction(userGuid: userGuid, cognitoToken: authToken)
+        } catch {
+            #if DEBUG
+            print("Failed to get vault status: \(error)")
+            #endif
+            return nil
+        }
+    }
+
+    /// Check and update state based on action-token vault status
+    func checkVaultStatusWithAction() async {
+        guard let status = await getVaultStatus() else {
+            // Fall back to health check
+            await checkHealth()
+            return
+        }
+
+        // Map instance status to health state
+        switch status.instanceStatus {
+        case "running":
+            // Check health for detailed info
+            await checkHealth()
+        case "stopped":
+            healthState = .stopped
+        case "stopping":
+            healthState = .provisioning(progress: 0.5, status: "Stopping...")
+        case "starting", "pending":
+            healthState = .provisioning(progress: 0.5, status: "Starting...")
+        case "provisioning":
+            healthState = .provisioning(progress: 0.3, status: "Provisioning...")
+        case "initializing":
+            healthState = .provisioning(progress: 0.7, status: "Initializing...")
+        case "terminated":
+            healthState = .notProvisioned
+        default:
+            // Check enrollment status
+            if status.enrollmentStatus == "not_enrolled" {
+                healthState = .notProvisioned
+            } else {
+                await checkHealth()
+            }
         }
     }
 
