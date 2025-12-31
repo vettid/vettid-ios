@@ -18,6 +18,10 @@ final class NatsSetupViewModel: ObservableObject {
     private let connectionManager: NatsConnectionManager
     private let credentialStore: NatsCredentialStore
 
+    // MARK: - Handlers
+
+    private var credentialRotationHandler: CredentialRotationHandler?
+
     // MARK: - State Enum
 
     enum SetupState: Equatable {
@@ -193,12 +197,41 @@ final class NatsSetupViewModel: ObservableObject {
         defer { stateObservation.cancel() }
 
         try await connectionManager.connectWithAutoStart(authToken: authToken)
+
+        // Start credential rotation handler after successful connection
+        await startCredentialRotationHandler()
     }
 
     /// Disconnect from NATS
     func disconnect() async {
+        // Stop credential rotation handler
+        await stopCredentialRotationHandler()
+
         await connectionManager.disconnect()
         setupState = .initial
+    }
+
+    // MARK: - Credential Rotation
+
+    /// Start listening for credential rotation messages
+    private func startCredentialRotationHandler() async {
+        guard let ownerSpaceId = accountInfo?.ownerSpaceId ?? (try? credentialStore.getAccountInfo())?.ownerSpaceId else {
+            return
+        }
+
+        let ownerSpaceClient = OwnerSpaceClient(
+            connectionManager: connectionManager,
+            ownerSpaceId: ownerSpaceId
+        )
+
+        credentialRotationHandler = CredentialRotationHandler(ownerSpaceClient: ownerSpaceClient)
+        await credentialRotationHandler?.startListening()
+    }
+
+    /// Stop listening for credential rotation messages
+    private func stopCredentialRotationHandler() async {
+        await credentialRotationHandler?.stopListening()
+        credentialRotationHandler = nil
     }
 
     /// Retry after error

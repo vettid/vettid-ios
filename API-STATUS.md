@@ -489,7 +489,7 @@ Subscribe to `forApp.*` topics for real-time notifications:
 | `forApp.read-receipt` | `IncomingReadReceipt` | Peer read your message |
 | `forApp.profile-update` | `IncomingProfileUpdate` | Profile update from peer |
 | `forApp.connection-revoked` | `IncomingConnectionRevoked` | Peer revoked connection |
-| `forApp.credentials.rotate` | *Pending* | Vault-initiated credential rotation |
+| `forApp.credentials.rotate` | `CredentialRotationHandler` | Vault-initiated credential rotation |
 
 ---
 
@@ -535,8 +535,8 @@ Subscribe to `forApp.*` topics for real-time notifications:
 - [ ] Certificate pinning enabled (requires custom domain)
 
 ### Pending
-- [ ] Subscribe to `forApp.credentials.rotate` for proactive rotation
-- [ ] Implement credential rotation handler
+- [x] Subscribe to `forApp.credentials.rotate` for proactive rotation
+- [x] Implement credential rotation handler
 - [ ] Add swift-sodium for native Argon2id
 - [ ] Add nats.swift for production NATS connectivity
 

@@ -158,6 +158,7 @@
 		ED4716F6467662F7F601AC64 /* SecurityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B6DD5A0C4647D925FCE5B7D /* SecurityTests.swift */; };
 		F0E73DBD6B3F29E1CB096093 /* MessageHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2890018C4BA02E8E472C8A62 /* MessageHandler.swift */; };
 		F602E4DC3720696C53E18F93 /* CredentialsHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 131DE8422D0A3B6CE2B321DB /* CredentialsHandler.swift */; };
+		F602E4DC3720696C53E18F94 /* CredentialRotationHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 131DE8422D0A3B6CE2B321DC /* CredentialRotationHandler.swift */; };
 		FC3D5A2B37C468B12B42145D /* VaultResponseHandlerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E83815BD60753356B2025839 /* VaultResponseHandlerTests.swift */; };
 		FDA99EEB7505FD7031F2B26C /* EnrollmentUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38A823EDB04F986924B6CC2D /* EnrollmentUITests.swift */; };
 		FFEC75DD850E79B5ED665914 /* VaultPreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8285A14EAFF8FCF54C60C6E2 /* VaultPreferencesView.swift */; };
@@ -268,6 +269,7 @@
 		10000052 /* ProfileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileStore.swift; sourceTree = "<group>"; };
 		10000053 /* SecretsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecretsStore.swift; sourceTree = "<group>"; };
 		131DE8422D0A3B6CE2B321DB /* CredentialsHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CredentialsHandler.swift; sourceTree = "<group>"; };
+		131DE8422D0A3B6CE2B321DC /* CredentialRotationHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CredentialRotationHandler.swift; sourceTree = "<group>"; };
 		157809425BFB22E6896C0225 /* DrawerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DrawerView.swift; sourceTree = "<group>"; };
 		183C19DE1EB7BD6FCF2BFE78 /* BackupListViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BackupListViewModelTests.swift; sourceTree = "<group>"; };
 		1A1D138C4F8D39751D20BE46 /* SecretsHandlerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SecretsHandlerTests.swift; sourceTree = "<group>"; };
@@ -374,6 +376,7 @@
 				EEA2A69DEB72B748BED4DA14 /* SecretsHandler.swift */,
 				A802F262C8E724624EE83387 /* ProfileHandler.swift */,
 				131DE8422D0A3B6CE2B321DB /* CredentialsHandler.swift */,
+				131DE8422D0A3B6CE2B321DC /* CredentialRotationHandler.swift */,
 				1AA0D8823160098FDD1BEDED /* ConnectionHandler.swift */,
 				2890018C4BA02E8E472C8A62 /* MessageHandler.swift */,
 			);
@@ -1045,6 +1048,7 @@
 				98DD4E5D5DC4F6A70092712E /* SecretsHandler.swift in Sources */,
 				0070F8E8A708ED9903FFDB28 /* ProfileHandler.swift in Sources */,
 				F602E4DC3720696C53E18F93 /* CredentialsHandler.swift in Sources */,
+				F602E4DC3720696C53E18F94 /* CredentialRotationHandler.swift in Sources */,
 				54AE200B5260828DFDDF54CF /* ConnectionHandler.swift in Sources */,
 				F0E73DBD6B3F29E1CB096093 /* MessageHandler.swift in Sources */,
 				C0ACE721614C9896C8C7F46C /* ApiSecurity.swift in Sources */,
