@@ -117,6 +117,7 @@
 		DF3E299D763958D6155FB562 /* SessionKeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36891E6A55D69502EF90D4CB /* SessionKeyManager.swift */; };
 		E0856AA3F832860B0D0EC949 /* FeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A55B8A854B6DF21A3197B1A0 /* FeedView.swift */; };
 		EBA8CC5E3DAC52A8A2738BFE /* DrawerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 157809425BFB22E6896C0225 /* DrawerView.swift */; };
+		F0E73DBD6B3F29E1CB096093 /* MessageHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2890018C4BA02E8E472C8A62 /* MessageHandler.swift */; };
 		F602E4DC3720696C53E18F93 /* CredentialsHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 131DE8422D0A3B6CE2B321DB /* CredentialsHandler.swift */; };
 		FFEC75DD850E79B5ED665914 /* VaultPreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8285A14EAFF8FCF54C60C6E2 /* VaultPreferencesView.swift */; };
 /* End PBXBuildFile section */
@@ -211,6 +212,7 @@
 		1AA0D8823160098FDD1BEDED /* ConnectionHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConnectionHandler.swift; sourceTree = "<group>"; };
 		20000001 /* VettID.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VettID.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		208B738362A4D7A093432F99 /* PersonalDataViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PersonalDataViewModel.swift; sourceTree = "<group>"; };
+		2890018C4BA02E8E472C8A62 /* MessageHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MessageHandler.swift; sourceTree = "<group>"; };
 		2B2D6CF42AD511A65BF8DC12 /* AboutView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		36891E6A55D69502EF90D4CB /* SessionKeyManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SessionKeyManager.swift; sourceTree = "<group>"; };
 		392F1BEBBE9997250A75C74A /* VettID.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = VettID.entitlements; sourceTree = "<group>"; };
@@ -257,6 +259,7 @@
 				A802F262C8E724624EE83387 /* ProfileHandler.swift */,
 				131DE8422D0A3B6CE2B321DB /* CredentialsHandler.swift */,
 				1AA0D8823160098FDD1BEDED /* ConnectionHandler.swift */,
+				2890018C4BA02E8E472C8A62 /* MessageHandler.swift */,
 			);
 			name = Handlers;
 			path = Handlers;
@@ -799,6 +802,7 @@
 				0070F8E8A708ED9903FFDB28 /* ProfileHandler.swift in Sources */,
 				F602E4DC3720696C53E18F93 /* CredentialsHandler.swift in Sources */,
 				54AE200B5260828DFDDF54CF /* ConnectionHandler.swift in Sources */,
+				F0E73DBD6B3F29E1CB096093 /* MessageHandler.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
