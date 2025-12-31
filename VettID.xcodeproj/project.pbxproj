@@ -869,6 +869,10 @@
 			dependencies = (
 			);
 			name = VettID;
+			packageProductDependencies = (
+				SPM00001 /* Sodium */,
+				SPM00002 /* Nats */,
+			);
 			productName = VettID;
 			productReference = 20000001 /* VettID.app */;
 			productType = "com.apple.product-type.application";
@@ -897,6 +901,10 @@
 				Base,
 			);
 			mainGroup = 40000001;
+			packageReferences = (
+				PKG00001 /* XCRemoteSwiftPackageReference "swift-sodium" */,
+				PKG00002 /* XCRemoteSwiftPackageReference "nats.swift" */,
+			);
 			productRefGroup = 40000003 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -1437,6 +1445,38 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		PKG00001 /* XCRemoteSwiftPackageReference "swift-sodium" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/jedisct1/swift-sodium.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.9.1;
+			};
+		};
+		PKG00002 /* XCRemoteSwiftPackageReference "nats.swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/nats-io/nats.swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.4.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		SPM00001 /* Sodium */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = PKG00001 /* XCRemoteSwiftPackageReference "swift-sodium" */;
+			productName = Sodium;
+		};
+		SPM00002 /* Nats */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = PKG00002 /* XCRemoteSwiftPackageReference "nats.swift" */;
+			productName = Nats;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 70000001 /* Project object */;
 }

@@ -661,7 +661,8 @@ class NatsClientWrapper {
     private let jwt: String
     private let seed: String
     private var client: NatsClient?
-    private var subscriptions: [String: NatsSubscription] = [:]
+    private var credentialsFileURL: URL?
+    private var subscriptionTasks: [String: Task<Void, Never>] = [:]
 
     init(endpoint: String, jwt: String, seed: String) {
         self.endpoint = endpoint
@@ -674,23 +675,50 @@ class NatsClientWrapper {
             throw NatsConnectionError.connectionFailed("Invalid NATS endpoint URL")
         }
 
+        // Write credentials to temp file (nats.swift requires file-based credentials)
+        let credsContent = """
+        -----BEGIN NATS USER JWT-----
+        \(jwt)
+        ------END NATS USER JWT------
+
+        ************************* IMPORTANT *************************
+        NKEY Seed printed below can be used to sign and prove identity.
+        NKEYs are sensitive and should be treated as secrets.
+
+        -----BEGIN USER NKEY SEED-----
+        \(seed)
+        ------END USER NKEY SEED------
+        """
+
+        let tempDir = FileManager.default.temporaryDirectory
+        let credsFile = tempDir.appendingPathComponent("nats_\(UUID().uuidString).creds")
+        try credsContent.write(to: credsFile, atomically: true, encoding: .utf8)
+        credentialsFileURL = credsFile
+
         let options = NatsClientOptions()
             .url(url)
-            .credentialsJWT(jwt: jwt, seed: seed)
+            .credentialsFile(credsFile)
 
         client = options.build()
         try await client?.connect()
     }
 
     func disconnect() async {
-        // Cancel all subscriptions
-        for (_, subscription) in subscriptions {
-            await subscription.unsubscribe()
+        // Cancel all subscription tasks
+        for (_, task) in subscriptionTasks {
+            task.cancel()
         }
-        subscriptions.removeAll()
+        subscriptionTasks.removeAll()
 
-        await client?.close()
+        // Close client
+        try? await client?.close()
         client = nil
+
+        // Clean up credentials file
+        if let credsFile = credentialsFileURL {
+            try? FileManager.default.removeItem(at: credsFile)
+            credentialsFileURL = nil
+        }
     }
 
     func publish(_ data: Data, to topic: String) async throws {
@@ -706,40 +734,32 @@ class NatsClientWrapper {
         }
 
         let subscription = try await client.subscribe(subject: topic)
-        subscriptions[topic] = subscription
 
         return AsyncStream { continuation in
-            Task {
-                for try await msg in subscription {
-                    let natsMessage = NatsMessage(
-                        topic: msg.subject,
-                        data: msg.payload ?? Data(),
-                        headers: msg.headers?.dictionary
-                    )
-                    continuation.yield(natsMessage)
+            let task = Task {
+                do {
+                    for try await msg in subscription {
+                        if Task.isCancelled { break }
+                        let natsMessage = NatsMessage(
+                            topic: msg.subject,
+                            data: msg.payload ?? Data(),
+                            headers: nil  // Headers handled separately if needed
+                        )
+                        continuation.yield(natsMessage)
+                    }
+                } catch {
+                    // Stream ended or error
                 }
                 continuation.finish()
             }
+            self.subscriptionTasks[topic] = task
         }
     }
 
     func unsubscribe(from topic: String) async {
-        if let subscription = subscriptions.removeValue(forKey: topic) {
-            await subscription.unsubscribe()
+        if let task = subscriptionTasks.removeValue(forKey: topic) {
+            task.cancel()
         }
-    }
-}
-
-// Extension to convert NatsHeaderMap to [String: String]
-private extension NatsHeaderMap {
-    var dictionary: [String: String] {
-        var result: [String: String] = [:]
-        for (key, values) in self {
-            if let firstValue = values.first {
-                result[key.description] = firstValue.description
-            }
-        }
-        return result
     }
 }
 

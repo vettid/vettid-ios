@@ -53,7 +53,7 @@ final class PasswordHasher {
             salt: Array(saltData),
             opsLimit: opsLimit,
             memLimit: memLimit,
-            alg: .Argon2id13
+            alg: .Argon2ID13
         ) else {
             throw PasswordHashError.hashingFailed
         }

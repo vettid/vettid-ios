@@ -554,8 +554,8 @@ Subscribe to `forApp.*` topics for real-time notifications:
 ### Pending
 - [x] Subscribe to `forApp.credentials.rotate` for proactive rotation
 - [x] Implement credential rotation handler
-- [ ] Add swift-sodium for native Argon2id
-- [ ] Add nats.swift for production NATS connectivity
+- [x] Add swift-sodium for native Argon2id
+- [x] Add nats.swift for production NATS connectivity
 
 ---
 
@@ -563,8 +563,8 @@ Subscribe to `forApp.*` topics for real-time notifications:
 
 | Feature | Android | iOS |
 |---------|---------|-----|
-| NATS Library | `nats.java` | Stub wrapper (pending `nats.swift`) |
-| Argon2id | `argon2-jvm` | PBKDF2 fallback (pending `swift-sodium`) |
+| NATS Library | `nats.java` | `nats.swift` ✅ |
+| Argon2id | `argon2-jvm` | `swift-sodium` ✅ |
 | Background Sync | WorkManager | BGAppRefreshTask ✅ |
 | Keystore | Android Keystore | iOS Keychain |
 | Attestation | SafetyNet/Play Integrity | App Attest |
