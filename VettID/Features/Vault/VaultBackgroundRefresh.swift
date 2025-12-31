@@ -1,6 +1,7 @@
 import Foundation
 import BackgroundTasks
 import UIKit
+import os.log
 
 /// Manages background refresh tasks for vault synchronization
 ///
@@ -10,6 +11,10 @@ import UIKit
 ///
 /// Matches Android VaultSyncWorker and NatsTokenRefreshWorker functionality.
 final class VaultBackgroundRefresh {
+
+    // MARK: - Logging
+
+    private static let logger = Logger(subsystem: "dev.vettid", category: "BackgroundSync")
 
     // MARK: - Task Identifiers (must match Info.plist BGTaskSchedulerPermittedIdentifiers)
 
@@ -63,9 +68,7 @@ final class VaultBackgroundRefresh {
             self?.handleNatsRefreshTask(task as! BGAppRefreshTask)
         }
 
-        #if DEBUG
-        print("[VaultBackgroundRefresh] Registered background tasks")
-        #endif
+        Self.logger.info("Registered background tasks")
     }
 
     // MARK: - Scheduling
@@ -84,13 +87,9 @@ final class VaultBackgroundRefresh {
 
         do {
             try BGTaskScheduler.shared.submit(request)
-            #if DEBUG
-            print("[VaultBackgroundRefresh] Scheduled vault sync task for \(vaultSyncInterval/60) minutes from now")
-            #endif
+            Self.logger.info("Scheduled vault sync task for \(self.vaultSyncInterval/60, privacy: .public) minutes from now")
         } catch {
-            #if DEBUG
-            print("[VaultBackgroundRefresh] Failed to schedule vault sync task: \(error)")
-            #endif
+            Self.logger.error("Failed to schedule vault sync task: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -113,13 +112,9 @@ final class VaultBackgroundRefresh {
 
         do {
             try BGTaskScheduler.shared.submit(request)
-            #if DEBUG
-            print("[VaultBackgroundRefresh] Scheduled NATS refresh task for \(scheduledInterval/60) minutes from now")
-            #endif
+            Self.logger.info("Scheduled NATS refresh task for \(scheduledInterval/60, privacy: .public) minutes from now")
         } catch {
-            #if DEBUG
-            print("[VaultBackgroundRefresh] Failed to schedule NATS refresh task: \(error)")
-            #endif
+            Self.logger.error("Failed to schedule NATS refresh task: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -128,17 +123,13 @@ final class VaultBackgroundRefresh {
         BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.vaultSyncTaskId)
         BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.natsRefreshTaskId)
 
-        #if DEBUG
-        print("[VaultBackgroundRefresh] Cancelled all background tasks")
-        #endif
+        Self.logger.info("Cancelled all background tasks")
     }
 
     // MARK: - Task Handlers
 
     private func handleVaultSyncTask(_ task: BGAppRefreshTask) {
-        #if DEBUG
-        print("[VaultBackgroundRefresh] Starting vault sync task")
-        #endif
+        Self.logger.info("Starting vault sync task")
 
         // Schedule next refresh immediately
         scheduleVaultSyncTask()
@@ -151,25 +142,19 @@ final class VaultBackgroundRefresh {
         // Handle task expiration
         task.expirationHandler = {
             syncTask.cancel()
-            #if DEBUG
-            print("[VaultBackgroundRefresh] Vault sync task expired")
-            #endif
+            Self.logger.warning("Vault sync task expired")
         }
 
         // Complete task when done
         Task {
             _ = await syncTask.result
             task.setTaskCompleted(success: true)
-            #if DEBUG
-            print("[VaultBackgroundRefresh] Vault sync task completed")
-            #endif
+            Self.logger.info("Vault sync task completed")
         }
     }
 
     private func handleNatsRefreshTask(_ task: BGAppRefreshTask) {
-        #if DEBUG
-        print("[VaultBackgroundRefresh] Starting NATS refresh task")
-        #endif
+        Self.logger.info("Starting NATS refresh task")
 
         // Schedule next refresh
         scheduleNatsRefreshTask()
@@ -182,18 +167,14 @@ final class VaultBackgroundRefresh {
         // Handle task expiration
         task.expirationHandler = {
             refreshTask.cancel()
-            #if DEBUG
-            print("[VaultBackgroundRefresh] NATS refresh task expired")
-            #endif
+            Self.logger.warning("NATS refresh task expired")
         }
 
         // Complete task when done
         Task {
             _ = await refreshTask.result
             task.setTaskCompleted(success: true)
-            #if DEBUG
-            print("[VaultBackgroundRefresh] NATS refresh task completed")
-            #endif
+            Self.logger.info("NATS refresh task completed")
         }
     }
 
@@ -204,18 +185,14 @@ final class VaultBackgroundRefresh {
         // 1. Check if user is enrolled
         guard credentialStore.hasStoredCredential(),
               let credential = try? credentialStore.retrieveFirst() else {
-            #if DEBUG
-            print("[VaultBackgroundRefresh] No credential stored, skipping sync")
-            #endif
+            Self.logger.debug("No credential stored, skipping sync")
             return
         }
 
         // 2. Check transaction key pool
         let utkCount = credential.unusedKeyCount
         if utkCount < keyPoolThreshold {
-            #if DEBUG
-            print("[VaultBackgroundRefresh] Transaction keys low: \(utkCount) < \(keyPoolThreshold)")
-            #endif
+            Self.logger.warning("Transaction keys low: \(utkCount, privacy: .public) < \(self.keyPoolThreshold, privacy: .public)")
 
             // Post notification to warn user
             await MainActor.run {
@@ -248,18 +225,14 @@ final class VaultBackgroundRefresh {
             )
         }
 
-        #if DEBUG
-        print("[VaultBackgroundRefresh] Vault sync completed. UTK count: \(utkCount)")
-        #endif
+        Self.logger.info("Vault sync completed. UTK count: \(utkCount, privacy: .public)")
     }
 
     /// Request additional transaction keys via NATS CredentialsHandler
     private func requestMoreTransactionKeys() async {
         // This requires NATS connection - will be handled by CredentialsHandler
         // when the user next opens the app or NATS reconnects
-        #if DEBUG
-        print("[VaultBackgroundRefresh] Would request more UTKs - requires NATS connection")
-        #endif
+        Self.logger.info("UTK replenishment needed - requires NATS connection")
 
         // Post notification so app can handle when foregrounded
         await MainActor.run {
@@ -280,9 +253,7 @@ final class VaultBackgroundRefresh {
         ).day ?? 0
 
         if daysSinceUse > 30 {
-            #if DEBUG
-            print("[VaultBackgroundRefresh] Credential rotation recommended: \(daysSinceUse) days since last use")
-            #endif
+            Self.logger.warning("Credential rotation recommended: \(daysSinceUse, privacy: .public) days since last use")
 
             await MainActor.run {
                 NotificationCenter.default.post(
@@ -298,24 +269,18 @@ final class VaultBackgroundRefresh {
     private func performNatsCredentialRefresh() async {
         // 1. Check if we have NATS credentials
         guard let credentials = try? natsCredentialStore.getCredentials() else {
-            #if DEBUG
-            print("[VaultBackgroundRefresh] No NATS credentials stored, skipping refresh")
-            #endif
+            Self.logger.debug("No NATS credentials stored, skipping refresh")
             return
         }
 
         // 2. Check if credentials need refresh (within 2-hour buffer)
         let timeUntilExpiry = credentials.expiresAt.timeIntervalSinceNow
         if timeUntilExpiry > tokenRefreshBuffer {
-            #if DEBUG
-            print("[VaultBackgroundRefresh] NATS credentials still valid (\(Int(timeUntilExpiry/3600))h remaining), no refresh needed")
-            #endif
+            Self.logger.debug("NATS credentials still valid (\(Int(timeUntilExpiry/3600), privacy: .public)h remaining), no refresh needed")
             return
         }
 
-        #if DEBUG
-        print("[VaultBackgroundRefresh] NATS credentials need refresh (\(Int(timeUntilExpiry/60))min remaining)")
-        #endif
+        Self.logger.warning("NATS credentials need refresh (\(Int(timeUntilExpiry/60), privacy: .public)min remaining)")
 
         // 3. Request refresh via vault handler
         // This requires active NATS connection - post notification for app to handle
@@ -447,42 +412,36 @@ extension VaultBackgroundRefresh {
     /// Call after successful enrollment to start background sync
     func onEnrollmentComplete() {
         scheduleAllTasks()
-        #if DEBUG
-        print("[VaultBackgroundRefresh] Scheduled background tasks after enrollment")
-        #endif
+        Self.logger.info("Scheduled background tasks after enrollment")
     }
 
     /// Call on logout to stop background sync
     func onLogout() {
         cancelAllTasks()
-        #if DEBUG
-        print("[VaultBackgroundRefresh] Cancelled background tasks on logout")
-        #endif
+        Self.logger.info("Cancelled background tasks on logout")
     }
 }
 
 // MARK: - Debug Helpers
 
-#if DEBUG
 extension VaultBackgroundRefresh {
-    /// Simulate a background task for testing
-    /// Call from Xcode debugger: e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"dev.vettid.vault-refresh"]
-    func debugPrintScheduledTasks() {
-        print("[VaultBackgroundRefresh] Task identifiers:")
-        print("  - Vault sync: \(Self.vaultSyncTaskId)")
-        print("  - NATS refresh: \(Self.natsRefreshTaskId)")
-        print("  - Backup: \(Self.backupTaskId)")
-
+    /// Log current sync status for debugging
+    /// Simulate background task in Xcode debugger:
+    /// e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"dev.vettid.vault-refresh"]
+    func logSyncStatus() {
         let status = getSyncStatus()
-        print("[VaultBackgroundRefresh] Current status:")
-        print("  - Has credential: \(status.hasCredential)")
-        print("  - Has NATS credentials: \(status.hasNatsCredentials)")
-        print("  - UTK count: \(status.transactionKeyCount)")
-        print("  - Keys need replenishment: \(status.keysNeedReplenishment)")
+
+        Self.logger.info("""
+            Sync Status:
+            - Has credential: \(status.hasCredential, privacy: .public)
+            - Has NATS credentials: \(status.hasNatsCredentials, privacy: .public)
+            - UTK count: \(status.transactionKeyCount, privacy: .public)
+            - Keys need replenishment: \(status.keysNeedReplenishment, privacy: .public)
+            - NATS needs refresh: \(status.natsNeedsRefresh, privacy: .public)
+            """)
+
         if let expiry = status.natsCredentialsExpireAt {
-            print("  - NATS expires: \(expiry)")
-            print("  - NATS needs refresh: \(status.natsNeedsRefresh)")
+            Self.logger.info("NATS expires at: \(expiry, privacy: .public)")
         }
     }
 }
-#endif
