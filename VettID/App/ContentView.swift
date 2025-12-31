@@ -375,16 +375,19 @@ struct AuthenticationView: View {
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 80, height: 80)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
+                .accessibilityIdentifier("unlock.logo")
 
             Text("Unlock VettID")
                 .font(.title)
                 .fontWeight(.semibold)
+                .accessibilityIdentifier("unlock.title")
 
             Text("Use Face ID for quick access or authenticate with your password")
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
+                .accessibilityIdentifier("unlock.subtitle")
 
             VStack(spacing: 12) {
                 Button(action: {
@@ -395,6 +398,7 @@ struct AuthenticationView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
+                .accessibilityIdentifier("unlock.biometricButton")
 
                 Button(action: {
                     showFullAuth = true
@@ -404,10 +408,12 @@ struct AuthenticationView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
+                .accessibilityIdentifier("unlock.passwordButton")
             }
             .padding(.horizontal)
         }
         .padding()
+        .accessibilityIdentifier("unlockView")
         .onAppear {
             attemptBiometricUnlock()
         }

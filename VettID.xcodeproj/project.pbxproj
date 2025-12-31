@@ -111,6 +111,7 @@
 		B0654E219C2D593B6A9355A0 /* HeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5B59320799245103D92C504 /* HeaderView.swift */; };
 		C0ACE721614C9896C8C7F46C /* ApiSecurity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AFABA11945E99D1E175383D /* ApiSecurity.swift */; };
 		C23FB626255421D48B1E705E /* VettIDUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC77A44439FC6A4671047F51 /* VettIDUITests.swift */; };
+		C2864EC95B4B060ACE9D9C58 /* AuthenticationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A1F747E77CDE5E01425BE6B /* AuthenticationUITests.swift */; };
 		C343F7B83B7C091123598F3D /* AppLockService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA6F4E8A08AC05BC1E9981C6 /* AppLockService.swift */; };
 		CA86CA36D9E993B236ED44E6 /* ContextualBottomNav.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E26681EB4F44673283A603D /* ContextualBottomNav.swift */; };
 		CBB42EE77AAC0795CA3EE203 /* EncryptedEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEBBB6DA11AE9704FF891A7F /* EncryptedEnvelope.swift */; };
@@ -231,6 +232,7 @@
 		36891E6A55D69502EF90D4CB /* SessionKeyManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SessionKeyManager.swift; sourceTree = "<group>"; };
 		38A823EDB04F986924B6CC2D /* EnrollmentUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EnrollmentUITests.swift; sourceTree = "<group>"; };
 		392F1BEBBE9997250A75C74A /* VettID.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = VettID.entitlements; sourceTree = "<group>"; };
+		3A1F747E77CDE5E01425BE6B /* AuthenticationUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AuthenticationUITests.swift; sourceTree = "<group>"; };
 		48B355FF5FC2FE9E7899E6EB /* SecuritySettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SecuritySettingsView.swift; sourceTree = "<group>"; };
 		498392EDCF906E22833BD876 /* PersonalDataView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PersonalDataView.swift; sourceTree = "<group>"; };
 		5DAE0DC17A88D051B4A2680E /* VettIDUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VettIDUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -658,6 +660,7 @@
 			children = (
 				FC77A44439FC6A4671047F51 /* VettIDUITests.swift */,
 				38A823EDB04F986924B6CC2D /* EnrollmentUITests.swift */,
+				3A1F747E77CDE5E01425BE6B /* AuthenticationUITests.swift */,
 			);
 			name = VettIDUITests;
 			path = VettIDUITests;
@@ -896,6 +899,7 @@
 			files = (
 				C23FB626255421D48B1E705E /* VettIDUITests.swift in Sources */,
 				FDA99EEB7505FD7031F2B26C /* EnrollmentUITests.swift in Sources */,
+				C2864EC95B4B060ACE9D9C58 /* AuthenticationUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

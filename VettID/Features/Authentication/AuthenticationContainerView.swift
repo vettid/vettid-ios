@@ -55,14 +55,18 @@ struct AuthenticationContainerView: View {
         VStack(spacing: 20) {
             ProgressView()
                 .scaleEffect(1.5)
+                .accessibilityIdentifier("auth.requestingToken.spinner")
 
             Text("Connecting to server...")
                 .font(.headline)
+                .accessibilityIdentifier("auth.requestingToken.title")
 
             Text("Requesting authentication session")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .accessibilityIdentifier("auth.requestingToken.subtitle")
         }
+        .accessibilityIdentifier("auth.requestingTokenView")
     }
 
     // MARK: - Authenticating View
@@ -71,14 +75,18 @@ struct AuthenticationContainerView: View {
         VStack(spacing: 20) {
             ProgressView()
                 .scaleEffect(1.5)
+                .accessibilityIdentifier("auth.authenticating.spinner")
 
             Text("Authenticating...")
                 .font(.headline)
+                .accessibilityIdentifier("auth.authenticating.title")
 
             Text("Verifying your credentials")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .accessibilityIdentifier("auth.authenticating.subtitle")
         }
+        .accessibilityIdentifier("auth.authenticatingView")
     }
 
     // MARK: - Error View
@@ -88,30 +96,36 @@ struct AuthenticationContainerView: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 60))
                 .foregroundStyle(.orange)
+                .accessibilityIdentifier("auth.error.icon")
 
             Text("Authentication Failed")
                 .font(.title2)
                 .fontWeight(.bold)
+                .accessibilityIdentifier("auth.error.title")
 
             Text(message)
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
+                .accessibilityIdentifier("auth.error.message")
 
             if retryable {
                 Button("Try Again") {
                     viewModel.reset()
                 }
                 .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("auth.error.retryButton")
             }
 
             Button("Cancel") {
                 dismiss()
             }
             .buttonStyle(.bordered)
+            .accessibilityIdentifier("auth.error.cancelButton")
         }
         .padding()
+        .accessibilityIdentifier("auth.errorView")
     }
 }
 
@@ -128,18 +142,21 @@ struct ActionRequestView: View {
             Image(systemName: "lock.shield.fill")
                 .font(.system(size: 80))
                 .foregroundStyle(.blue)
+                .accessibilityIdentifier("auth.actionRequest.icon")
 
             // Title
             VStack(spacing: 12) {
                 Text("Secure Authentication")
                     .font(.title2)
                     .fontWeight(.bold)
+                    .accessibilityIdentifier("auth.actionRequest.title")
 
                 Text("VettID uses action-based authentication with mutual verification to protect against phishing.")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
+                    .accessibilityIdentifier("auth.actionRequest.subtitle")
             }
 
             // Key info
@@ -151,6 +168,7 @@ struct ActionRequestView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                .accessibilityIdentifier("auth.actionRequest.keysAvailable")
             } else {
                 HStack {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -159,6 +177,7 @@ struct ActionRequestView: View {
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
+                .accessibilityIdentifier("auth.actionRequest.noKeys")
             }
 
             Spacer()
@@ -180,8 +199,10 @@ struct ActionRequestView: View {
             .disabled(viewModel.needsReenrollment)
             .padding(.horizontal)
             .padding(.bottom, 40)
+            .accessibilityIdentifier("auth.actionRequest.beginButton")
         }
         .padding()
+        .accessibilityIdentifier("auth.actionRequestView")
     }
 }
 
@@ -199,11 +220,13 @@ struct LATVerificationView: View {
             Image(systemName: "checkmark.shield.fill")
                 .font(.system(size: 60))
                 .foregroundStyle(viewModel.verifyLAT() ? .green : .red)
+                .accessibilityIdentifier("auth.latVerification.icon")
 
             // Title
             Text("Verify Server Identity")
                 .font(.title2)
                 .fontWeight(.bold)
+                .accessibilityIdentifier("auth.latVerification.title")
 
             // Explanation
             Text("Before entering your password, verify that the server's Ledger Auth Token (LAT) matches your stored token. This protects against phishing attacks.")
@@ -211,18 +234,21 @@ struct LATVerificationView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
+                .accessibilityIdentifier("auth.latVerification.explanation")
 
             // LAT display
             VStack(spacing: 12) {
                 Text("Server LAT ID")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("auth.latVerification.serverLatLabel")
 
                 Text(viewModel.serverLatId)
                     .font(.system(.body, design: .monospaced))
                     .padding()
                     .background(Color(.systemGray6))
                     .cornerRadius(8)
+                    .accessibilityIdentifier("auth.latVerification.serverLatValue")
 
                 // Verification status
                 HStack {
@@ -237,6 +263,7 @@ struct LATVerificationView: View {
                 .padding()
                 .background(viewModel.verifyLAT() ? Color.green.opacity(0.1) : Color.red.opacity(0.1))
                 .cornerRadius(8)
+                .accessibilityIdentifier(viewModel.verifyLAT() ? "auth.latVerification.verified" : "auth.latVerification.mismatch")
             }
             .padding()
 
@@ -256,11 +283,13 @@ struct LATVerificationView: View {
                         .cornerRadius(12)
                 }
                 .padding(.horizontal)
+                .accessibilityIdentifier("auth.latVerification.continueButton")
             } else {
                 VStack(spacing: 12) {
                     Text("⚠️ DO NOT enter your password!")
                         .font(.headline)
                         .foregroundStyle(.red)
+                        .accessibilityIdentifier("auth.latVerification.phishingWarning")
 
                     Button(action: {
                         viewModel.reportLATMismatch()
@@ -274,6 +303,7 @@ struct LATVerificationView: View {
                             .cornerRadius(12)
                     }
                     .padding(.horizontal)
+                    .accessibilityIdentifier("auth.latVerification.reportButton")
                 }
             }
 
@@ -281,6 +311,7 @@ struct LATVerificationView: View {
                 .frame(height: 40)
         }
         .padding()
+        .accessibilityIdentifier("auth.latVerificationView")
     }
 }
 
@@ -298,17 +329,20 @@ struct PasswordEntryView: View {
             Image(systemName: "lock.fill")
                 .font(.system(size: 60))
                 .foregroundStyle(.blue)
+                .accessibilityIdentifier("auth.password.icon")
 
             // Title
             VStack(spacing: 12) {
                 Text("Enter Your Password")
                     .font(.title2)
                     .fontWeight(.bold)
+                    .accessibilityIdentifier("auth.password.title")
 
                 Text("Server verified. Enter your vault password to authenticate.")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+                    .accessibilityIdentifier("auth.password.subtitle")
             }
 
             // Password field
@@ -319,6 +353,7 @@ struct PasswordEntryView: View {
                     .padding()
                     .background(Color(.systemGray6))
                     .cornerRadius(10)
+                    .accessibilityIdentifier("auth.password.textField")
             }
             .padding(.horizontal)
 
@@ -342,8 +377,10 @@ struct PasswordEntryView: View {
             .disabled(viewModel.password.isEmpty)
             .padding(.horizontal)
             .padding(.bottom, 40)
+            .accessibilityIdentifier("auth.password.submitButton")
         }
         .padding()
+        .accessibilityIdentifier("auth.passwordView")
         .onAppear {
             isPasswordFocused = true
         }
@@ -373,12 +410,14 @@ struct AuthSuccessView: View {
                         .font(.title)
                         .fontWeight(.bold)
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        .accessibilityIdentifier("auth.success.title")
 
                     Text("Your credentials have been securely rotated.")
                         .font(.body)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                         .transition(.opacity)
+                        .accessibilityIdentifier("auth.success.subtitle")
 
                     // Rotation info
                     if case .credentialRotated(let cekVersion, let latVersion) = viewModel.state {
@@ -405,8 +444,10 @@ struct AuthSuccessView: View {
                 .padding(.horizontal)
                 .padding(.bottom, 40)
                 .transition(.opacity.combined(with: .move(edge: .bottom)))
+                .accessibilityIdentifier("auth.success.continueButton")
             }
         }
+        .accessibilityIdentifier("auth.successView")
         .onAppear {
             animateIn()
         }
@@ -435,6 +476,7 @@ struct AuthSuccessView: View {
                 .opacity(showCheckmark ? 1 : 0)
         }
         .animation(.spring(response: 0.5, dampingFraction: 0.6), value: showCheckmark)
+        .accessibilityIdentifier("auth.success.icon")
     }
 
     // MARK: - Rotation Info
@@ -445,6 +487,7 @@ struct AuthSuccessView: View {
                 .font(.subheadline)
                 .fontWeight(.medium)
                 .foregroundStyle(.secondary)
+                .accessibilityIdentifier("auth.success.rotationTitle")
 
             HStack(spacing: 24) {
                 VStack {
@@ -455,6 +498,7 @@ struct AuthSuccessView: View {
                         .font(.headline)
                         .foregroundStyle(.green)
                 }
+                .accessibilityIdentifier("auth.success.cekVersion")
 
                 Divider()
                     .frame(height: 30)
@@ -467,11 +511,13 @@ struct AuthSuccessView: View {
                         .font(.headline)
                         .foregroundStyle(.green)
                 }
+                .accessibilityIdentifier("auth.success.latVersion")
             }
             .padding()
             .background(Color(.systemGray6))
             .cornerRadius(12)
         }
+        .accessibilityIdentifier("auth.success.rotationInfo")
     }
 
     // MARK: - Animation
