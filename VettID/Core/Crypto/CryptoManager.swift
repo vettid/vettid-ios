@@ -119,12 +119,16 @@ final class CryptoManager {
             outputByteCount: 32
         )
 
+        // Generate explicit random 96-bit nonce for auditability
+        let nonceData = randomBytes(count: 12)
+        let nonce = try ChaChaPoly.Nonce(data: nonceData)
+
         // Encrypt with ChaCha20-Poly1305
-        let sealedBox = try ChaChaPoly.seal(plaintext, using: symmetricKey)
+        let sealedBox = try ChaChaPoly.seal(plaintext, using: symmetricKey, nonce: nonce)
 
         return EncryptedPayload(
             ephemeralPublicKey: ephemeralPublic.rawRepresentation,
-            nonce: sealedBox.nonce.withUnsafeBytes { Data($0) },
+            nonce: nonceData,
             ciphertext: sealedBox.ciphertext,
             tag: sealedBox.tag
         )
