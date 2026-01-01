@@ -1,8 +1,23 @@
 # VettID iOS API Status
 
-**Last Updated:** 2025-12-31 (Backend fixes for issues #1, #2, #3)
+**Last Updated:** 2025-12-31 (Backend fixes #1-#6 deployed, fresh test invite created)
 
 This file tracks API implementation status for VettID iOS, aligned with the backend API-STATUS.md and Android implementation.
+
+---
+
+## FRESH TEST INVITATION
+
+**Invite Code:** `0D0F65119FA2367D`
+**Expires:** 2026-01-07
+**Max Uses:** 5
+**Purpose:** Test Fix #6 (bootstrap JWT subscribe permission)
+
+**Instructions:**
+1. Delete app or clear Keychain data
+2. Re-enroll using invite code above
+3. Test NATS bootstrap connection
+4. Report results in this file
 
 ---
 
