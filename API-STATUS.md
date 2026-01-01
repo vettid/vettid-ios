@@ -1,6 +1,6 @@
 # VettID iOS API Status
 
-**Last Updated:** 2025-12-31 (Backend fixes #1-#6 deployed, fresh test invite created)
+**Last Updated:** 2025-12-31 (Fix #7 deployed - HKDF context mismatch)
 
 This file tracks API implementation status for VettID iOS, aligned with the backend API-STATUS.md and Android implementation.
 
@@ -11,7 +11,7 @@ This file tracks API implementation status for VettID iOS, aligned with the back
 **Invite Code:** `0D0F65119FA2367D`
 **Expires:** 2026-01-07
 **Max Uses:** 5
-**Purpose:** Test Fix #6 (bootstrap JWT subscribe permission)
+**Purpose:** Test Fix #7 (HKDF context mismatch)
 
 **Instructions:**
 1. Delete app or clear Keychain data
@@ -214,6 +214,36 @@ subAllow = [`${ownerSpace}.forApp.app.bootstrap.>`]
 ```
 
 **Note:** Existing users must re-enroll to get new bootstrap credentials with the fix.
+
+### ✅ SEVENTH FIX: HKDF Context Mismatch (2025-12-31)
+
+**Problem:** EnrollFinalize Lambda failed with "Failed to decrypt password hash: Decryption failed: authentication error"
+
+**Root Cause:** HKDF key derivation used mismatched context strings:
+- **Mobile apps** used: `"password-encryption"`
+- **Backend** expected: `"transaction-encryption-v1"`
+
+HKDF-SHA256 derives completely different symmetric keys from the same shared secret when the info/context string differs. This caused ChaCha20-Poly1305 authenticated decryption to fail.
+
+**Fix Applied:**
+- `CryptoManager.swift` line 75: Changed sharedInfo from `"password-encryption"` to `"transaction-encryption-v1"`
+- `CryptoManager.kt` line 156: Changed default info from `"password-encryption"` to `"transaction-encryption-v1"` (Android)
+
+**Action Required:**
+- [ ] iOS: Pull latest changes and rebuild
+- [ ] Android: Pull latest changes and rebuild
+- [ ] Test enrollment with fresh invitation
+
+**Technical Details:**
+```swift
+// Before (incorrect)
+sharedInfo: "password-encryption".data(using: .utf8)!
+
+// After (matches backend)
+sharedInfo: "transaction-encryption-v1".data(using: .utf8)!
+```
+
+The backend's `decryptWithTransactionKey()` in `crypto-keys.ts` uses `"transaction-encryption-v1"` for all transaction-level encryption operations.
 
 ---
 

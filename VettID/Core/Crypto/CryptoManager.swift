@@ -72,7 +72,7 @@ final class CryptoManager {
         let symmetricKey = sharedSecret.hkdfDerivedSymmetricKey(
             using: SHA256.self,
             salt: hkdfSalt,
-            sharedInfo: "password-encryption".data(using: .utf8)!,
+            sharedInfo: "transaction-encryption-v1".data(using: .utf8)!,
             outputByteCount: 32
         )
 
