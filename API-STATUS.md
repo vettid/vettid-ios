@@ -1,6 +1,6 @@
 # VettID iOS API Status
 
-**Last Updated:** 2025-12-31 (Fix #7 deployed - HKDF context mismatch)
+**Last Updated:** 2026-01-01 (New vault AMI deployed, clean slate for testing)
 
 This file tracks API implementation status for VettID iOS, aligned with the backend API-STATUS.md and Android implementation.
 
@@ -11,13 +11,21 @@ This file tracks API implementation status for VettID iOS, aligned with the back
 **Invite Code:** `0D0F65119FA2367D`
 **Expires:** 2026-01-07
 **Max Uses:** 5
-**Purpose:** Test Fix #7 (HKDF context mismatch)
+**Purpose:** Test Fix #7 (HKDF context) + Fix #8 (vault reply subjects)
+
+**IMPORTANT - NEW AMI DEPLOYED:**
+- New vault AMI: `ami-0c4331d3c781c3c23` (built 2026-01-01)
+- Old vault instance terminated
+- Old NATS account records deleted
+- **Fresh enrollment will provision a new vault automatically**
 
 **Instructions:**
-1. Delete app or clear Keychain data
-2. Re-enroll using invite code above
-3. Test NATS bootstrap connection
-4. Report results in this file
+1. Pull latest code: `git pull`
+2. Rebuild app (HKDF fix is in mobile code)
+3. Delete app or clear Keychain data
+4. Re-enroll using invite code above
+5. Test NATS bootstrap connection
+6. Report results in this file
 
 ---
 
