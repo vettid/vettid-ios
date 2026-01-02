@@ -84,12 +84,56 @@ struct BootstrapResponse: Codable {
     /// Credential TTL in seconds
     let credentialsTtl: Int?
 
+    /// NATS endpoint URL
+    let natsEndpoint: String?
+
+    /// Credential identifier for rotation tracking
+    let credentialId: String?
+
+    /// Whether credentials must be rotated immediately (security requirement)
+    let requiresImmediateRotation: Bool?
+
+    /// Session encryption info
+    let sessionInfo: BootstrapSessionInfo?
+
+    /// Credential rotation configuration
+    let rotationInfo: BootstrapRotationInfo?
+
     enum CodingKeys: String, CodingKey {
         case requestId = "request_id"
         case vaultPublicKey = "vault_public_key"
         case sessionId = "session_id"
         case credentials
         case credentialsTtl = "credentials_ttl"
+        case natsEndpoint = "nats_endpoint"
+        case credentialId = "credential_id"
+        case requiresImmediateRotation = "requires_immediate_rotation"
+        case sessionInfo = "session_info"
+        case rotationInfo = "rotation_info"
+    }
+}
+
+/// Session encryption details from bootstrap
+struct BootstrapSessionInfo: Codable {
+    let sessionId: String
+    let vaultSessionPublicKey: String
+    let encryptionEnabled: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case sessionId = "session_id"
+        case vaultSessionPublicKey = "vault_session_public_key"
+        case encryptionEnabled = "encryption_enabled"
+    }
+}
+
+/// Credential rotation configuration from bootstrap
+struct BootstrapRotationInfo: Codable {
+    let rotateBeforeHours: Int
+    let rotationTopic: String
+
+    enum CodingKeys: String, CodingKey {
+        case rotateBeforeHours = "rotate_before_hours"
+        case rotationTopic = "rotation_topic"
     }
 }
 
@@ -169,4 +213,42 @@ struct DecryptedMessage<T: Decodable> {
 
     /// When the message was decrypted
     let decryptedAt: Date
+}
+
+// MARK: - Credential Rotation Types
+
+/// Request to rotate NATS credentials over encrypted channel
+struct CredentialsRefreshRequest: Codable {
+    /// Device identifier
+    let deviceId: String
+
+    /// Current credential ID being rotated
+    let currentCredentialId: String
+
+    enum CodingKeys: String, CodingKey {
+        case deviceId = "device_id"
+        case currentCredentialId = "current_credential_id"
+    }
+}
+
+/// Result of credential rotation
+struct CredentialsRefreshResult: Codable {
+    /// New NATS credentials (.creds file content)
+    let credentials: String
+
+    /// When the new credentials expire
+    let expiresAt: String
+
+    /// TTL in seconds
+    let ttlSeconds: Int
+
+    /// New credential identifier
+    let credentialId: String
+
+    enum CodingKeys: String, CodingKey {
+        case credentials
+        case expiresAt = "expires_at"
+        case ttlSeconds = "ttl_seconds"
+        case credentialId = "credential_id"
+    }
 }

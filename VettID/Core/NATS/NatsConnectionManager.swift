@@ -23,6 +23,7 @@ final class NatsConnectionManager: ObservableObject {
     private var reconnectTask: Task<Void, Never>?
     private var subscriptions: [String: NatsSubscription] = [:]
     private var ownerSpaceId: String?
+    private var currentCredentialId: String?
 
     // MARK: - Configuration
 
@@ -233,11 +234,28 @@ final class NatsConnectionManager: ObservableObject {
                 }
             }
 
+            // Store credential ID for rotation tracking
+            if let credId = response.credentialId {
+                currentCredentialId = credId
+            }
+
             isSessionEstablished = true
 
             #if DEBUG
             print("[NATS] E2E bootstrap complete, sessionId: \(response.sessionId)")
             #endif
+
+            // Perform mandatory credential rotation if required
+            // Bootstrap credentials are short-lived (5 min) for security
+            if response.requiresImmediateRotation == true {
+                #if DEBUG
+                print("[NATS] Immediate credential rotation required")
+                #endif
+                try await rotateCredentialsAfterBootstrap(
+                    ownerSpace: ownerSpace,
+                    rotationTopic: response.rotationInfo?.rotationTopic
+                )
+            }
 
         } catch {
             await sessionKeyManager.cancelBootstrap()
@@ -249,6 +267,108 @@ final class NatsConnectionManager: ObservableObject {
     func clearSession() async {
         await sessionKeyManager.clearSession()
         isSessionEstablished = false
+    }
+
+    // MARK: - Credential Rotation After Bootstrap
+
+    /// Rotate credentials immediately after bootstrap (security requirement)
+    ///
+    /// Bootstrap credentials are short-lived (5 minutes) to minimize the window
+    /// for credential interception during the unencrypted bootstrap exchange.
+    /// This method rotates them over the E2E encrypted channel to obtain
+    /// long-lived credentials.
+    private func rotateCredentialsAfterBootstrap(ownerSpace: String, rotationTopic: String?) async throws {
+        guard let credentialId = currentCredentialId else {
+            #if DEBUG
+            print("[NATS] No credential ID for rotation")
+            #endif
+            return
+        }
+
+        // Build rotation topic (use provided or construct default)
+        let topic = rotationTopic ?? "\(ownerSpace).forVault.credentials.refresh"
+
+        // Create rotation request
+        let request = CredentialsRefreshRequest(
+            deviceId: getDeviceId(),
+            currentCredentialId: credentialId
+        )
+
+        // Encode request
+        let requestData = try JSONEncoder().encode(request)
+
+        // Encrypt the request using E2E session key
+        let encryptedEnvelope = try await sessionKeyManager.encrypt(message: requestData)
+
+        // Subscribe to response topic
+        let responseTopic = "\(ownerSpace).forApp.credentials.refresh.>"
+        let responseStream = try await subscribe(to: responseTopic)
+
+        // Send encrypted rotation request
+        let envelopeData = try JSONEncoder().encode(encryptedEnvelope)
+        try await publish(envelopeData, to: topic)
+
+        #if DEBUG
+        print("[NATS] Sent credential rotation request to \(topic)")
+        #endif
+
+        // Wait for response with timeout (30 seconds)
+        let rotationTimeout: TimeInterval = 30
+        let result: CredentialsRefreshResult = try await withThrowingTaskGroup(of: CredentialsRefreshResult.self) { group in
+            // Response listener
+            group.addTask {
+                for await message in responseStream {
+                    // Try to decode as encrypted envelope first
+                    if let envelope = try? JSONDecoder().decode(EncryptedEnvelope.self, from: message.data) {
+                        // Decrypt the response
+                        let decryptedData = try await self.sessionKeyManager.decrypt(envelope: envelope)
+                        if let result = try? JSONDecoder().decode(CredentialsRefreshResult.self, from: decryptedData) {
+                            return result
+                        }
+                    }
+
+                    // Try direct decode (in case vault sends unencrypted for some reason)
+                    if let result = try? JSONDecoder().decode(CredentialsRefreshResult.self, from: message.data) {
+                        return result
+                    }
+                }
+                throw NatsConnectionError.connectionFailed("Credential rotation response stream ended")
+            }
+
+            // Timeout
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(rotationTimeout * 1_000_000_000))
+                throw NatsConnectionError.connectionFailed("Credential rotation timed out")
+            }
+
+            guard let result = try await group.next() else {
+                throw NatsConnectionError.connectionFailed("Credential rotation failed")
+            }
+
+            group.cancelAll()
+            return result
+        }
+
+        // Clean up subscription
+        await unsubscribe(from: responseTopic)
+
+        // Parse and store new credentials
+        if let newCreds = NatsCredentials(
+            fromCredsFileContent: result.credentials,
+            endpoint: "", // Keep existing endpoint
+            ownerSpace: ownerSpace,
+            messageSpace: nil,
+            topics: nil
+        ) {
+            try credentialStore.saveCredentials(newCreds)
+        }
+
+        // Update current credential ID
+        currentCredentialId = result.credentialId
+
+        #if DEBUG
+        print("[NATS] Credential rotation complete. New TTL: \(result.ttlSeconds)s")
+        #endif
     }
 
     /// Disconnect from NATS
