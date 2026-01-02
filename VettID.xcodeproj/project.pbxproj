@@ -92,9 +92,11 @@
 		0070F8E8A708ED9903FFDB28 /* ProfileHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A802F262C8E724624EE83387 /* ProfileHandler.swift */; };
 		0A8A714766B1CBF27A4F71D7 /* ConnectionTypesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D394BF5857A8C321E286295 /* ConnectionTypesTests.swift */; };
 		0CB7F637A987C6A46022474E /* PasswordHasherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F6BD7EF25140C61B7085558 /* PasswordHasherTests.swift */; };
+		0ED83C63EF0A1AEC36CEF699 /* ProteanRecoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B59E35C2BB3BD24E77AE5E7A /* ProteanRecoveryView.swift */; };
 		12AC6B6A5207336BD3912200 /* ThemeSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA573762F5B324146F857357 /* ThemeSettingsView.swift */; };
 		18C5D633D920711DA38E2063 /* CredentialsHandlerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44150EB12110B89318BB186E /* CredentialsHandlerTests.swift */; };
 		1A3B380AA57E9D3E5F083B4A /* SecureKeyStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 003A6313C942B5D9E98B959D /* SecureKeyStoreTests.swift */; };
+		1B86F6ED89057B594F13EAB2 /* ProteanCredentialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 398233EFE1A4530AB4A978BB /* ProteanCredentialStore.swift */; };
 		1EAC19EF056BA34609877523 /* ArchiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A4A6BF4B7E19B38EDEF31AC /* ArchiveView.swift */; };
 		3378B15F29C4D1B5D31EAEAB /* CryptoManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F7146B25BADFE6EBCFBC681 /* CryptoManagerTests.swift */; };
 		3C5A3DA38E4A1DDE8F4639C4 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2D6CF42AD511A65BF8DC12 /* AboutView.swift */; };
@@ -141,6 +143,7 @@
 		A47C934A93232A54987BCB2D /* PersonalDataViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 208B738362A4D7A093432F99 /* PersonalDataViewModel.swift */; };
 		A5834109528CE39E4F82E414 /* SecuritySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48B355FF5FC2FE9E7899E6EB /* SecuritySettingsView.swift */; };
 		A62391E4CF05D59BEBA013D4 /* Secret.swift in Sources */ = {isa = PBXBuildFile; fileRef = 688F0CE3AE28533DD0235DF8 /* Secret.swift */; };
+		AD241C3C0E0AC31232D6A3C8 /* ProteanRecoveryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B151BDC063C66B44EC75B8DA /* ProteanRecoveryService.swift */; };
 		B0654E219C2D593B6A9355A0 /* HeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5B59320799245103D92C504 /* HeaderView.swift */; };
 		B3E5CB8C4570BFB1322A0082 /* BackupTypesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2DC213E62E9E578E40588F /* BackupTypesTests.swift */; };
 		B42DFE54DFC64BD92494BE34 /* HandlerTypesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD26F7972848FCE5C4EE6520 /* HandlerTypesTests.swift */; };
@@ -289,6 +292,7 @@
 		36F1AE6EAA7223ED50E8D5AA /* CredentialBackupViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CredentialBackupViewModelTests.swift; sourceTree = "<group>"; };
 		38A823EDB04F986924B6CC2D /* EnrollmentUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EnrollmentUITests.swift; sourceTree = "<group>"; };
 		392F1BEBBE9997250A75C74A /* VettID.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = VettID.entitlements; sourceTree = "<group>"; };
+		398233EFE1A4530AB4A978BB /* ProteanCredentialStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProteanCredentialStore.swift; sourceTree = "<group>"; };
 		3A1F747E77CDE5E01425BE6B /* AuthenticationUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AuthenticationUITests.swift; sourceTree = "<group>"; };
 		3A2DC213E62E9E578E40588F /* BackupTypesTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BackupTypesTests.swift; sourceTree = "<group>"; };
 		44150EB12110B89318BB186E /* CredentialsHandlerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CredentialsHandlerTests.swift; sourceTree = "<group>"; };
@@ -327,7 +331,9 @@
 		AA6F4E8A08AC05BC1E9981C6 /* AppLockService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppLockService.swift; sourceTree = "<group>"; };
 		AC46F847CA8B124F9FE8E970 /* VaultStatusViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VaultStatusViewModelTests.swift; sourceTree = "<group>"; };
 		AEBBB6DA11AE9704FF891A7F /* EncryptedEnvelope.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EncryptedEnvelope.swift; sourceTree = "<group>"; };
+		B151BDC063C66B44EC75B8DA /* ProteanRecoveryService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProteanRecoveryService.swift; sourceTree = "<group>"; };
 		B3ED9102CCC521BCDFD9ED8B /* RecoveryPhraseManagerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecoveryPhraseManagerTests.swift; sourceTree = "<group>"; };
+		B59E35C2BB3BD24E77AE5E7A /* ProteanRecoveryView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProteanRecoveryView.swift; sourceTree = "<group>"; };
 		B5B59320799245103D92C504 /* HeaderView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HeaderView.swift; sourceTree = "<group>"; };
 		B6B8DC6D217039260AC73583 /* expected_pcrs.json */ = {isa = PBXFileReference; includeInIndex = 1; name = expected_pcrs.json; path = expected_pcrs.json; sourceTree = "<group>"; };
 		B800E13B79F1C90797B3209D /* DeepLinkHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DeepLinkHandler.swift; sourceTree = "<group>"; };
@@ -490,6 +496,7 @@
 				ADEFB19163EC12C63F133244 /* PersonalData */,
 				21E9FB3E17B97C61F3E27745 /* Settings */,
 				6D08E19C73569F295FA6C491 /* VaultServices */,
+				C663B06B2CB9E4783127A5AA /* Recovery */,
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -522,6 +529,7 @@
 				10000052 /* ProfileStore.swift */,
 				10000053 /* SecretsStore.swift */,
 				10000005 /* SecureKeyStore.swift */,
+				398233EFE1A4530AB4A978BB /* ProteanCredentialStore.swift */,
 			);
 			path = Storage;
 			sourceTree = "<group>";
@@ -756,6 +764,16 @@
 			);
 			name = PersonalData;
 			path = PersonalData;
+			sourceTree = "<group>";
+		};
+		C663B06B2CB9E4783127A5AA /* Recovery */ = {
+			isa = PBXGroup;
+			children = (
+				B151BDC063C66B44EC75B8DA /* ProteanRecoveryService.swift */,
+				B59E35C2BB3BD24E77AE5E7A /* ProteanRecoveryView.swift */,
+			);
+			name = Recovery;
+			path = Recovery;
 			sourceTree = "<group>";
 		};
 		DA8BC5C9F8183B4FF86AD0C2 /* VettIDUITests */ = {
@@ -1075,6 +1093,9 @@
 				615FE23B95C6133464EE1F14 /* ExpectedPCRStore.swift in Sources */,
 				7D06B931B0E2103C0BF5F1B5 /* NitroAttestationVerifier.swift in Sources */,
 				80F6BFC53747CE4F25B27771 /* PCRUpdateService.swift in Sources */,
+				1B86F6ED89057B594F13EAB2 /* ProteanCredentialStore.swift in Sources */,
+				AD241C3C0E0AC31232D6A3C8 /* ProteanRecoveryService.swift in Sources */,
+				0ED83C63EF0A1AEC36CEF699 /* ProteanRecoveryView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

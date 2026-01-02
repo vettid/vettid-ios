@@ -34,6 +34,7 @@ final class EnrollmentService: ObservableObject {
 
     private var apiClient: APIClient!
     private let credentialStore = CredentialStore()
+    private let proteanCredentialStore = ProteanCredentialStore()
     private let attestationManager = AttestationManager()
 
     // MARK: - Step 1: Start Enrollment
@@ -231,6 +232,13 @@ final class EnrollmentService: ObservableObject {
             state = .storingCredential
             try storeCredential(package: response.credentialPackage, vaultStatus: response.vaultStatus ?? "unknown")
 
+            // Store and backup Protean Credential
+            await storeAndBackupProteanCredential(
+                encryptedBlob: response.credentialPackage.encryptedBlob,
+                userGuid: response.credentialPackage.userGuid,
+                authToken: token
+            )
+
             // Parse and store NATS credentials if provided (auto-provisioned vault)
             if let natsConnection = response.natsConnection {
                 storeNatsCredentials(from: natsConnection)
@@ -277,6 +285,55 @@ final class EnrollmentService: ObservableObject {
 
     private func getDeviceId() -> String {
         return UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
+    }
+
+    /// Store Protean Credential locally and backup to VettID
+    private func storeAndBackupProteanCredential(
+        encryptedBlob: String,
+        userGuid: String,
+        authToken: String
+    ) async {
+        guard let blobData = Data(base64Encoded: encryptedBlob) else {
+            #if DEBUG
+            print("[Enrollment] Failed to decode Protean Credential blob")
+            #endif
+            return
+        }
+
+        // Store locally in Keychain
+        let metadata = ProteanCredentialMetadata(
+            version: 1,
+            createdAt: Date(),
+            sizeBytes: blobData.count,
+            userGuid: userGuid
+        )
+
+        do {
+            try proteanCredentialStore.store(blob: blobData, metadata: metadata)
+
+            #if DEBUG
+            print("[Enrollment] Protean Credential stored locally (\(blobData.count) bytes)")
+            #endif
+
+            // Backup to VettID for recovery
+            let response = try await apiClient.backupProteanCredential(
+                credentialBlob: blobData,
+                authToken: authToken
+            )
+
+            // Mark as backed up
+            try proteanCredentialStore.markAsBackedUp(backupId: response.backupId)
+
+            #if DEBUG
+            print("[Enrollment] Protean Credential backed up - ID: \(response.backupId)")
+            #endif
+
+        } catch {
+            // Non-fatal error - credential is stored locally, backup can be retried
+            #if DEBUG
+            print("[Enrollment] Failed to backup Protean Credential: \(error.localizedDescription)")
+            #endif
+        }
     }
 
     private func storeCredential(package: CredentialPackage, vaultStatus: String) throws {

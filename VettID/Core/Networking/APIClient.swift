@@ -560,6 +560,71 @@ actor APIClient {
         return try await get(endpoint: "/vault/pcrs/signing-key")
     }
 
+    // MARK: - Protean Credential Backup (Issue #4)
+
+    /// Backup Protean Credential to VettID
+    /// Called after credential creation to enable recovery
+    func backupProteanCredential(
+        credentialBlob: Data,
+        authToken: String
+    ) async throws -> ProteanBackupResponse {
+        let request = ProteanBackupRequest(
+            credentialBlob: credentialBlob.base64EncodedString()
+        )
+        return try await post(endpoint: "/vault/backup/credential", body: request, authToken: authToken)
+    }
+
+    /// Get Protean Credential backup status
+    func getProteanBackupStatus(authToken: String) async throws -> ProteanBackupStatusResponse {
+        return try await get(endpoint: "/vault/backup/credential/status", authToken: authToken)
+    }
+
+    // MARK: - Protean Credential Recovery (Issue #4)
+
+    /// Request credential recovery - initiates 24-hour delay
+    func requestProteanRecovery(authToken: String) async throws -> ProteanRecoveryRequestResponse {
+        return try await post(
+            endpoint: "/vault/recovery/request",
+            body: EmptyRequest(),
+            authToken: authToken
+        )
+    }
+
+    /// Check recovery request status
+    func getProteanRecoveryStatus(
+        recoveryId: String,
+        authToken: String
+    ) async throws -> ProteanRecoveryStatusResponse {
+        return try await get(
+            endpoint: "/vault/recovery/status?recovery_id=\(recoveryId)",
+            authToken: authToken
+        )
+    }
+
+    /// Cancel a pending recovery request
+    func cancelProteanRecovery(
+        recoveryId: String,
+        authToken: String
+    ) async throws {
+        let request = ProteanRecoveryCancelRequest(recoveryId: recoveryId)
+        let _: EmptyResponse = try await post(
+            endpoint: "/vault/recovery/cancel",
+            body: request,
+            authToken: authToken
+        )
+    }
+
+    /// Download recovered credential (available after 24-hour delay)
+    func downloadRecoveredCredential(
+        recoveryId: String,
+        authToken: String
+    ) async throws -> ProteanRecoveryDownloadResponse {
+        return try await get(
+            endpoint: "/vault/recovery/download?recovery_id=\(recoveryId)",
+            authToken: authToken
+        )
+    }
+
     // MARK: - HTTP Methods
 
     private func get<T: Decodable>(endpoint: String, authToken: String? = nil) async throws -> T {
@@ -1188,6 +1253,109 @@ struct PCRSigningKeyResponse: Decodable {
     enum CodingKeys: String, CodingKey {
         case publicKey = "public_key"
     }
+}
+
+// MARK: - Protean Credential Backup Types (Issue #4)
+
+/// Request to backup Protean Credential
+struct ProteanBackupRequest: Encodable {
+    let credentialBlob: String  // Base64 encoded
+
+    enum CodingKeys: String, CodingKey {
+        case credentialBlob = "credential_blob"
+    }
+}
+
+/// Response from Protean Credential backup
+struct ProteanBackupResponse: Decodable {
+    let backupId: String
+    let createdAt: String
+    let sizeBytes: Int
+
+    enum CodingKeys: String, CodingKey {
+        case backupId = "backup_id"
+        case createdAt = "created_at"
+        case sizeBytes = "size_bytes"
+    }
+}
+
+/// Response from backup status check
+struct ProteanBackupStatusResponse: Decodable {
+    let hasBackup: Bool
+    let backupId: String?
+    let createdAt: String?
+    let sizeBytes: Int?
+    let version: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case hasBackup = "has_backup"
+        case backupId = "backup_id"
+        case createdAt = "created_at"
+        case sizeBytes = "size_bytes"
+        case version
+    }
+}
+
+// MARK: - Protean Credential Recovery Types (Issue #4)
+
+/// Response from recovery request
+struct ProteanRecoveryRequestResponse: Decodable {
+    let recoveryId: String
+    let requestedAt: String
+    let availableAt: String  // 24 hours later
+    let status: String       // "pending"
+
+    enum CodingKeys: String, CodingKey {
+        case recoveryId = "recovery_id"
+        case requestedAt = "requested_at"
+        case availableAt = "available_at"
+        case status
+    }
+}
+
+/// Response from recovery status check
+struct ProteanRecoveryStatusResponse: Decodable {
+    let recoveryId: String
+    let status: String       // "pending", "ready", "cancelled", "expired"
+    let requestedAt: String
+    let availableAt: String
+    let remainingSeconds: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case recoveryId = "recovery_id"
+        case status
+        case requestedAt = "requested_at"
+        case availableAt = "available_at"
+        case remainingSeconds = "remaining_seconds"
+    }
+}
+
+/// Request to cancel recovery
+struct ProteanRecoveryCancelRequest: Encodable {
+    let recoveryId: String
+
+    enum CodingKeys: String, CodingKey {
+        case recoveryId = "recovery_id"
+    }
+}
+
+/// Response from recovery download (after 24 hours)
+struct ProteanRecoveryDownloadResponse: Decodable {
+    let credentialBlob: String  // Base64 encoded
+    let version: Int
+
+    enum CodingKeys: String, CodingKey {
+        case credentialBlob = "credential_blob"
+        case version
+    }
+}
+
+/// Recovery status enum for easier handling
+enum ProteanRecoveryStatus: String, Codable {
+    case pending
+    case ready
+    case cancelled
+    case expired
 }
 
 // MARK: - Helper Types (Phase 7)
