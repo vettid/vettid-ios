@@ -546,6 +546,20 @@ actor APIClient {
         return try await post(endpoint: "/vault/credentials/recover", body: request, authToken: authToken)
     }
 
+    // MARK: - PCR Management (Nitro Enclave)
+
+    /// Get current expected PCR values for Nitro Enclave attestation
+    /// This is a PUBLIC endpoint - no authentication required
+    func getCurrentPCRs() async throws -> PCRUpdateResponse {
+        return try await get(endpoint: "/vault/pcrs/current")
+    }
+
+    /// Get the PCR signing public key
+    /// This is a PUBLIC endpoint - no authentication required
+    func getPCRSigningKey() async throws -> PCRSigningKeyResponse {
+        return try await get(endpoint: "/vault/pcrs/signing-key")
+    }
+
     // MARK: - HTTP Methods
 
     private func get<T: Decodable>(endpoint: String, authToken: String? = nil) async throws -> T {
@@ -1116,6 +1130,64 @@ struct ExecuteHandlerResponse: Decodable {
     let output: [String: AnyCodableValue]?
     let error: String?
     let executionTimeMs: Int
+}
+
+// MARK: - PCR Types (Nitro Enclave)
+
+/// Response from GET /vault/pcrs/current
+struct PCRUpdateResponse: Decodable {
+    let pcrSets: [PCRSetDTO]
+    let signature: String
+    let signedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case pcrSets = "pcr_sets"
+        case signature
+        case signedAt = "signed_at"
+    }
+}
+
+/// Individual PCR set in the update response
+struct PCRSetDTO: Decodable {
+    let id: String
+    let pcr0: String
+    let pcr1: String
+    let pcr2: String
+    let validFrom: Date
+    let validUntil: Date?
+    let isCurrent: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case pcr0
+        case pcr1
+        case pcr2
+        case validFrom = "valid_from"
+        case validUntil = "valid_until"
+        case isCurrent = "is_current"
+    }
+
+    /// Convert to ExpectedPCRStore.PCRSet
+    func toPCRSet() -> ExpectedPCRStore.PCRSet {
+        ExpectedPCRStore.PCRSet(
+            id: id,
+            pcr0: pcr0,
+            pcr1: pcr1,
+            pcr2: pcr2,
+            validFrom: validFrom,
+            validUntil: validUntil,
+            isCurrent: isCurrent
+        )
+    }
+}
+
+/// Response from GET /vault/pcrs/signing-key
+struct PCRSigningKeyResponse: Decodable {
+    let publicKey: String
+
+    enum CodingKeys: String, CodingKey {
+        case publicKey = "public_key"
+    }
 }
 
 // MARK: - Helper Types (Phase 7)

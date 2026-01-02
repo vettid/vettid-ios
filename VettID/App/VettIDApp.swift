@@ -26,8 +26,10 @@ struct VettIDApp: App {
         switch phase {
         case .background:
             VaultBackgroundRefresh.shared.applicationDidEnterBackground()
+            PCRUpdateService.shared.onAppDidEnterBackground()
         case .active:
             VaultBackgroundRefresh.shared.applicationDidBecomeActive()
+            PCRUpdateService.shared.onAppDidBecomeActive()
         case .inactive:
             break
         @unknown default:
@@ -45,6 +47,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     ) -> Bool {
         // Register background tasks
         VaultBackgroundRefresh.shared.registerBackgroundTasks()
+        PCRUpdateService.registerBackgroundTask()
         return true
     }
 }

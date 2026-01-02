@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 // MARK: - Expected PCR Store
 
@@ -24,6 +25,13 @@ final class ExpectedPCRStore {
         let validFrom: Date
         let validUntil: Date?
         let isCurrent: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case id, pcr0, pcr1, pcr2
+            case validFrom = "valid_from"
+            case validUntil = "valid_until"
+            case isCurrent = "is_current"
+        }
 
         /// Convert to ExpectedPCRs for verification
         func toExpectedPCRs() -> NitroAttestationVerifier.ExpectedPCRs {
