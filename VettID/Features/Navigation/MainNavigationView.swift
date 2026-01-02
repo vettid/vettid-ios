@@ -18,7 +18,6 @@ struct MainNavigationView: View {
 
     // Action sheets
     @State private var showAddConnection = false
-    @State private var showAddBackup = false
 
     // Navigation for Vault More menu items
     @State private var showProfile = false
@@ -71,9 +70,6 @@ struct MainNavigationView: View {
         }
         .sheet(isPresented: $showAddConnection) {
             AddConnectionSheet()
-        }
-        .sheet(isPresented: $showAddBackup) {
-            CreateBackupSheet()
         }
         .sheet(isPresented: $showProfile) {
             NavigationView {
@@ -202,9 +198,7 @@ struct MainNavigationView: View {
         case .backups:
             HeaderView(
                 title: "Backups",
-                onProfileTap: openDrawer,
-                actionIcon: "plus",
-                onActionTap: { showAddBackup = true }
+                onProfileTap: openDrawer
             )
         case .manage:
             HeaderView(
@@ -572,23 +566,6 @@ struct AddSecretSheet: View {
         NavigationView {
             Text("Add Secret - Coming Soon")
                 .navigationTitle("Add Secret")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { dismiss() }
-                    }
-                }
-        }
-    }
-}
-
-struct CreateBackupSheet: View {
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationView {
-            CredentialBackupView(authTokenProvider: { nil })
-                .navigationTitle("Create Backup")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {

@@ -48,9 +48,9 @@ final class BackupSettingsViewModel: ObservableObject {
             settings = try await apiClient.getBackupSettings(authToken: authToken)
             backupTime = parseTimeString(settings.backupTimeUtc)
 
-            // Load credential backup status
-            let status = try await apiClient.getCredentialBackupStatus(authToken: authToken)
-            credentialBackupExists = status.exists
+            // Load Protean credential backup status
+            let proteanStatus = try await apiClient.getProteanBackupStatus(authToken: authToken)
+            credentialBackupExists = proteanStatus.hasBackup
 
             // Load last backup date from backup list
             let backups = try await apiClient.listBackups(authToken: authToken)

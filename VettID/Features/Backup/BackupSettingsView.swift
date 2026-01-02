@@ -109,25 +109,25 @@ struct BackupSettingsView: View {
                 .disabled(viewModel.isBackingUp)
             }
 
-            // Credential backup section
+            // Credential recovery section
             Section {
-                NavigationLink(destination: CredentialBackupView(authTokenProvider: authTokenProvider)) {
+                NavigationLink(destination: ProteanRecoveryView(authTokenProvider: authTokenProvider)) {
                     HStack {
-                        Text("Recovery Phrase")
+                        Text("Credential Recovery")
                         Spacer()
                         if viewModel.credentialBackupExists {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundColor(.green)
                         } else {
-                            Text("Not Set")
+                            Text("Not Backed Up")
                                 .foregroundColor(.secondary)
                         }
                     }
                 }
             } header: {
-                Text("Credential Backup")
+                Text("Credential Protection")
             } footer: {
-                Text("Your recovery phrase allows you to restore your credentials if you lose access to your device.")
+                Text("Your credential is encrypted and stored securely. Recovery requires a 24-hour waiting period for security.")
             }
 
             // Backup list link

@@ -506,46 +506,6 @@ actor APIClient {
         return try await put(endpoint: "/vault/backup/settings", body: settings, authToken: authToken)
     }
 
-    // MARK: - Credential Backup (Phase 8)
-
-    /// Create credential backup with encrypted blob
-    func createCredentialBackup(
-        encryptedBlob: Data,
-        salt: Data,
-        nonce: Data,
-        authToken: String
-    ) async throws {
-        let request = CreateCredentialBackupRequest(
-            encryptedBlob: encryptedBlob.base64EncodedString(),
-            salt: salt.base64EncodedString(),
-            nonce: nonce.base64EncodedString()
-        )
-        let _: EmptyResponse = try await post(endpoint: "/vault/credentials/backup", body: request, authToken: authToken)
-    }
-
-    /// Get credential backup status
-    func getCredentialBackupStatus(authToken: String) async throws -> CredentialBackupStatus {
-        return try await get(endpoint: "/vault/credentials/backup", authToken: authToken)
-    }
-
-    /// Download credential backup for recovery
-    func downloadCredentialBackup(authToken: String) async throws -> RecoverCredentialsResponse {
-        return try await get(endpoint: "/vault/credentials/backup/download", authToken: authToken)
-    }
-
-    /// Recover credentials from backup
-    func recoverCredentials(
-        deviceId: String,
-        devicePublicKey: Data,
-        authToken: String
-    ) async throws -> RecoverCredentialsResponse {
-        let request = RecoverCredentialsRequest(
-            deviceId: deviceId,
-            devicePublicKey: devicePublicKey.base64EncodedString()
-        )
-        return try await post(endpoint: "/vault/credentials/recover", body: request, authToken: authToken)
-    }
-
     // MARK: - PCR Management (Nitro Enclave)
 
     /// Get current expected PCR values for Nitro Enclave attestation

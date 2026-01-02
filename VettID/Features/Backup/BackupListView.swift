@@ -7,7 +7,6 @@ struct BackupListView: View {
     @StateObject private var viewModel: BackupListViewModel
     @State private var showSettings = false
     @State private var showCreateBackup = false
-    @State private var showCredentialBackup = false
     @State private var showCredentialRecovery = false
 
     init(authTokenProvider: @escaping @Sendable () -> String?) {
@@ -17,14 +16,13 @@ struct BackupListView: View {
 
     var body: some View {
         List {
-            // Credential Backup Section
+            // Credential Recovery Section
             Section {
-                credentialBackupRow
                 credentialRecoveryRow
             } header: {
-                Text("Credential Backup")
+                Text("Credential Protection")
             } footer: {
-                Text("Backup your credentials with a recovery phrase to restore on a new device.")
+                Text("Your credentials are automatically backed up. Recovery requires a 24-hour security delay.")
             }
 
             // Auto-Backup Section
@@ -119,53 +117,25 @@ struct BackupListView: View {
                 }
             )
         }
-        .sheet(isPresented: $showCredentialBackup) {
-            NavigationView {
-                CredentialBackupView(authTokenProvider: authTokenProvider)
-            }
-        }
         .sheet(isPresented: $showCredentialRecovery) {
-            NavigationView {
-                CredentialRecoveryView(authTokenProvider: authTokenProvider)
-            }
+            ProteanRecoveryView(authTokenProvider: authTokenProvider)
         }
         .task {
             await viewModel.loadBackups()
         }
     }
 
-    // MARK: - Credential Backup Row
-
-    private var credentialBackupRow: some View {
-        Button(action: { showCredentialBackup = true }) {
-            HStack {
-                Image(systemName: "key.fill")
-                    .foregroundStyle(.orange)
-                    .frame(width: 24)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Recovery Phrase")
-                    Text("Create or view your backup phrase")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .foregroundStyle(.primary)
-    }
+    // MARK: - Credential Recovery Row
 
     private var credentialRecoveryRow: some View {
         Button(action: { showCredentialRecovery = true }) {
             HStack {
-                Image(systemName: "arrow.counterclockwise")
-                    .foregroundStyle(.green)
+                Image(systemName: "key.horizontal.fill")
+                    .foregroundStyle(.orange)
                     .frame(width: 24)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Restore from Backup")
-                    Text("Recover credentials using your phrase")
+                    Text("Credential Recovery")
+                    Text("Request recovery with 24-hour security delay")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

@@ -155,26 +155,3 @@ enum BackupListState: Equatable {
     case error(String)
 }
 
-// MARK: - Credential Backup State
-
-/// State for credential backup flow
-enum CredentialBackupState: Equatable {
-    case initial
-    case generating
-    case showingPhrase([String])
-    case verifying([String], [Int])  // words, indices to verify
-    case uploading
-    case complete
-    case error(String)
-}
-
-// MARK: - Credential Recovery State
-
-/// State for credential recovery flow
-enum CredentialRecoveryState: Equatable {
-    case entering
-    case validating
-    case recovering
-    case complete
-    case error(String)
-}

@@ -68,18 +68,12 @@
 		0000003C /* ConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000003C /* ConversationView.swift */; };
 		0000003D /* MessageSubscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000003D /* MessageSubscriber.swift */; };
 		0000003E /* Backup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000003E /* Backup.swift */; };
-		0000003F /* BIP39WordList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000003F /* BIP39WordList.swift */; };
-		00000040 /* RecoveryPhraseManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000040 /* RecoveryPhraseManager.swift */; };
 		00000041 /* BackupListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000041 /* BackupListViewModel.swift */; };
 		00000042 /* BackupListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000042 /* BackupListView.swift */; };
 		00000043 /* BackupDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000043 /* BackupDetailViewModel.swift */; };
 		00000044 /* BackupDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000044 /* BackupDetailView.swift */; };
 		00000045 /* BackupSettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000045 /* BackupSettingsViewModel.swift */; };
 		00000046 /* BackupSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000046 /* BackupSettingsView.swift */; };
-		00000047 /* CredentialBackupViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000047 /* CredentialBackupViewModel.swift */; };
-		00000048 /* CredentialBackupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000048 /* CredentialBackupView.swift */; };
-		00000049 /* CredentialRecoveryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000049 /* CredentialRecoveryViewModel.swift */; };
-		0000004A /* CredentialRecoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000004A /* CredentialRecoveryView.swift */; };
 		0000004B /* BackupBackgroundTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000004B /* BackupBackgroundTask.swift */; };
 		0000004C /* RuntimeProtection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000004C /* RuntimeProtection.swift */; };
 		0000004D /* SecureMemory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000004D /* SecureMemory.swift */; };
@@ -127,15 +121,12 @@
 		A1B2C3D4E5F6000000000003 /* ConnectionsViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A76C59FC4B0D65040C1B3BC2 /* ConnectionsViewModelTests.swift */; };
 		A1B2C3D4E5F6000000000004 /* ConversationViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE35CF9350F1D477CC634FD3 /* ConversationViewModelTests.swift */; };
 		A1B2C3D4E5F6000000000005 /* CreateInvitationViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9907E4ADEC32ED97F95D4E9 /* CreateInvitationViewModelTests.swift */; };
-		A1B2C3D4E5F6000000000006 /* CredentialBackupViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F1AE6EAA7223ED50E8D5AA /* CredentialBackupViewModelTests.swift */; };
-		A1B2C3D4E5F6000000000007 /* CredentialRecoveryViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A665970E0AD5C8D20494FF33 /* CredentialRecoveryViewModelTests.swift */; };
 		A1B2C3D4E5F6000000000008 /* EnrollmentViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2BE3C5AC6A5049A191F87E5 /* EnrollmentViewModelTests.swift */; };
 		A1B2C3D4E5F6000000000009 /* HandlerDetailViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E5E94284D11741CB902B343 /* HandlerDetailViewModelTests.swift */; };
 		A1B2C3D4E5F6000000000010 /* HandlerDiscoveryViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A833E0C94158CB685965731 /* HandlerDiscoveryViewModelTests.swift */; };
 		A1B2C3D4E5F6000000000011 /* HandlerExecutionViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D685CF6E261D5A6229A01CB1 /* HandlerExecutionViewModelTests.swift */; };
 		A1B2C3D4E5F6000000000012 /* NatsConnectionManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 595F692C8F113D4CAC0F9D2D /* NatsConnectionManagerTests.swift */; };
 		A1B2C3D4E5F6000000000013 /* ProfileViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7543D8BF043373D3E739796C /* ProfileViewModelTests.swift */; };
-		A1B2C3D4E5F6000000000014 /* RecoveryPhraseManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3ED9102CCC521BCDFD9ED8B /* RecoveryPhraseManagerTests.swift */; };
 		A1B2C3D4E5F6000000000015 /* ScanInvitationViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C262C514B475C866052AA47B /* ScanInvitationViewModelTests.swift */; };
 		A1B2C3D4E5F6000000000016 /* VaultEventClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04A2A45B0C799F07F7949F6A /* VaultEventClientTests.swift */; };
 		A1B2C3D4E5F6000000000017 /* VaultHealthViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D96D6532F41DCB812C7BB39 /* VaultHealthViewModelTests.swift */; };
@@ -253,18 +244,12 @@
 		1000003C /* ConversationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationView.swift; sourceTree = "<group>"; };
 		1000003D /* MessageSubscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageSubscriber.swift; sourceTree = "<group>"; };
 		1000003E /* Backup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Backup.swift; sourceTree = "<group>"; };
-		1000003F /* BIP39WordList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BIP39WordList.swift; sourceTree = "<group>"; };
-		10000040 /* RecoveryPhraseManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryPhraseManager.swift; sourceTree = "<group>"; };
 		10000041 /* BackupListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupListViewModel.swift; sourceTree = "<group>"; };
 		10000042 /* BackupListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupListView.swift; sourceTree = "<group>"; };
 		10000043 /* BackupDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupDetailViewModel.swift; sourceTree = "<group>"; };
 		10000044 /* BackupDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupDetailView.swift; sourceTree = "<group>"; };
 		10000045 /* BackupSettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupSettingsViewModel.swift; sourceTree = "<group>"; };
 		10000046 /* BackupSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupSettingsView.swift; sourceTree = "<group>"; };
-		10000047 /* CredentialBackupViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CredentialBackupViewModel.swift; sourceTree = "<group>"; };
-		10000048 /* CredentialBackupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CredentialBackupView.swift; sourceTree = "<group>"; };
-		10000049 /* CredentialRecoveryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CredentialRecoveryViewModel.swift; sourceTree = "<group>"; };
-		1000004A /* CredentialRecoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CredentialRecoveryView.swift; sourceTree = "<group>"; };
 		1000004B /* BackupBackgroundTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupBackgroundTask.swift; sourceTree = "<group>"; };
 		1000004C /* RuntimeProtection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeProtection.swift; sourceTree = "<group>"; };
 		1000004D /* SecureMemory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureMemory.swift; sourceTree = "<group>"; };
@@ -289,7 +274,6 @@
 		2B2D6CF42AD511A65BF8DC12 /* AboutView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		2D96D6532F41DCB812C7BB39 /* VaultHealthViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VaultHealthViewModelTests.swift; sourceTree = "<group>"; };
 		36891E6A55D69502EF90D4CB /* SessionKeyManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SessionKeyManager.swift; sourceTree = "<group>"; };
-		36F1AE6EAA7223ED50E8D5AA /* CredentialBackupViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CredentialBackupViewModelTests.swift; sourceTree = "<group>"; };
 		38A823EDB04F986924B6CC2D /* EnrollmentUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EnrollmentUITests.swift; sourceTree = "<group>"; };
 		392F1BEBBE9997250A75C74A /* VettID.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = VettID.entitlements; sourceTree = "<group>"; };
 		398233EFE1A4530AB4A978BB /* ProteanCredentialStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProteanCredentialStore.swift; sourceTree = "<group>"; };
@@ -324,7 +308,6 @@
 		A1D6D6E4F90B7A138F25B696 /* AppSettings.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		A2F5A0DDB43ADCF6557660BF /* ManageVaultView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ManageVaultView.swift; sourceTree = "<group>"; };
 		A55B8A854B6DF21A3197B1A0 /* FeedView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FeedView.swift; sourceTree = "<group>"; };
-		A665970E0AD5C8D20494FF33 /* CredentialRecoveryViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CredentialRecoveryViewModelTests.swift; sourceTree = "<group>"; };
 		A76C59FC4B0D65040C1B3BC2 /* ConnectionsViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConnectionsViewModelTests.swift; sourceTree = "<group>"; };
 		A802F262C8E724624EE83387 /* ProfileHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProfileHandler.swift; sourceTree = "<group>"; };
 		A9907E4ADEC32ED97F95D4E9 /* CreateInvitationViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CreateInvitationViewModelTests.swift; sourceTree = "<group>"; };
@@ -332,7 +315,6 @@
 		AC46F847CA8B124F9FE8E970 /* VaultStatusViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VaultStatusViewModelTests.swift; sourceTree = "<group>"; };
 		AEBBB6DA11AE9704FF891A7F /* EncryptedEnvelope.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EncryptedEnvelope.swift; sourceTree = "<group>"; };
 		B151BDC063C66B44EC75B8DA /* ProteanRecoveryService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProteanRecoveryService.swift; sourceTree = "<group>"; };
-		B3ED9102CCC521BCDFD9ED8B /* RecoveryPhraseManagerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecoveryPhraseManagerTests.swift; sourceTree = "<group>"; };
 		B59E35C2BB3BD24E77AE5E7A /* ProteanRecoveryView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProteanRecoveryView.swift; sourceTree = "<group>"; };
 		B5B59320799245103D92C504 /* HeaderView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HeaderView.swift; sourceTree = "<group>"; };
 		B6B8DC6D217039260AC73583 /* expected_pcrs.json */ = {isa = PBXFileReference; includeInIndex = 1; name = expected_pcrs.json; path = expected_pcrs.json; sourceTree = "<group>"; };
@@ -513,11 +495,9 @@
 		40000008 /* Crypto */ = {
 			isa = PBXGroup;
 			children = (
-				1000003F /* BIP39WordList.swift */,
 				1000002D /* ConnectionCryptoManager.swift */,
 				10000003 /* CryptoManager.swift */,
 				1000000E /* PasswordHasher.swift */,
-				10000040 /* RecoveryPhraseManager.swift */,
 			);
 			path = Crypto;
 			sourceTree = "<group>";
@@ -691,10 +671,6 @@
 				10000041 /* BackupListViewModel.swift */,
 				10000046 /* BackupSettingsView.swift */,
 				10000045 /* BackupSettingsViewModel.swift */,
-				10000048 /* CredentialBackupView.swift */,
-				10000047 /* CredentialBackupViewModel.swift */,
-				1000004A /* CredentialRecoveryView.swift */,
-				10000049 /* CredentialRecoveryViewModel.swift */,
 			);
 			path = Backup;
 			sourceTree = "<group>";
@@ -808,14 +784,11 @@
 				1B6DD5A0C4647D925FCE5B7D /* SecurityTests.swift */,
 				44150EB12110B89318BB186E /* CredentialsHandlerTests.swift */,
 				E83815BD60753356B2025839 /* VaultResponseHandlerTests.swift */,
-				A665970E0AD5C8D20494FF33 /* CredentialRecoveryViewModelTests.swift */,
 				D685CF6E261D5A6229A01CB1 /* HandlerExecutionViewModelTests.swift */,
 				C262C514B475C866052AA47B /* ScanInvitationViewModelTests.swift */,
 				595F692C8F113D4CAC0F9D2D /* NatsConnectionManagerTests.swift */,
 				8E5E94284D11741CB902B343 /* HandlerDetailViewModelTests.swift */,
 				7C0030C9EAAF02A570641C21 /* NatsCredentialsTests.swift */,
-				36F1AE6EAA7223ED50E8D5AA /* CredentialBackupViewModelTests.swift */,
-				B3ED9102CCC521BCDFD9ED8B /* RecoveryPhraseManagerTests.swift */,
 				75A250C49286C1469599CD45 /* AuthenticationViewModelTests.swift */,
 				1D394BF5857A8C321E286295 /* ConnectionTypesTests.swift */,
 				1A1D138C4F8D39751D20BE46 /* SecretsHandlerTests.swift */,
@@ -1036,18 +1009,12 @@
 				0000003C /* ConversationView.swift in Sources */,
 				0000003D /* MessageSubscriber.swift in Sources */,
 				0000003E /* Backup.swift in Sources */,
-				0000003F /* BIP39WordList.swift in Sources */,
-				00000040 /* RecoveryPhraseManager.swift in Sources */,
 				00000041 /* BackupListViewModel.swift in Sources */,
 				00000042 /* BackupListView.swift in Sources */,
 				00000043 /* BackupDetailViewModel.swift in Sources */,
 				00000044 /* BackupDetailView.swift in Sources */,
 				00000045 /* BackupSettingsViewModel.swift in Sources */,
 				00000046 /* BackupSettingsView.swift in Sources */,
-				00000047 /* CredentialBackupViewModel.swift in Sources */,
-				00000048 /* CredentialBackupView.swift in Sources */,
-				00000049 /* CredentialRecoveryViewModel.swift in Sources */,
-				0000004A /* CredentialRecoveryView.swift in Sources */,
 				0000004B /* BackupBackgroundTask.swift in Sources */,
 				0000004C /* RuntimeProtection.swift in Sources */,
 				0000004D /* SecureMemory.swift in Sources */,
@@ -1120,15 +1087,12 @@
 				A1B2C3D4E5F6000000000003 /* ConnectionsViewModelTests.swift in Sources */,
 				A1B2C3D4E5F6000000000004 /* ConversationViewModelTests.swift in Sources */,
 				A1B2C3D4E5F6000000000005 /* CreateInvitationViewModelTests.swift in Sources */,
-				A1B2C3D4E5F6000000000006 /* CredentialBackupViewModelTests.swift in Sources */,
-				A1B2C3D4E5F6000000000007 /* CredentialRecoveryViewModelTests.swift in Sources */,
 				A1B2C3D4E5F6000000000008 /* EnrollmentViewModelTests.swift in Sources */,
 				A1B2C3D4E5F6000000000009 /* HandlerDetailViewModelTests.swift in Sources */,
 				A1B2C3D4E5F6000000000010 /* HandlerDiscoveryViewModelTests.swift in Sources */,
 				A1B2C3D4E5F6000000000011 /* HandlerExecutionViewModelTests.swift in Sources */,
 				A1B2C3D4E5F6000000000012 /* NatsConnectionManagerTests.swift in Sources */,
 				A1B2C3D4E5F6000000000013 /* ProfileViewModelTests.swift in Sources */,
-				A1B2C3D4E5F6000000000014 /* RecoveryPhraseManagerTests.swift in Sources */,
 				A1B2C3D4E5F6000000000015 /* ScanInvitationViewModelTests.swift in Sources */,
 				A1B2C3D4E5F6000000000016 /* VaultEventClientTests.swift in Sources */,
 				A1B2C3D4E5F6000000000017 /* VaultHealthViewModelTests.swift in Sources */,
