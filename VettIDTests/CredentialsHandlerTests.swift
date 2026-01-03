@@ -62,16 +62,18 @@ final class CredentialsHandlerTests: XCTestCase {
         ]
 
         let result = CredentialRefreshResult(
-            encryptedBlob: "encrypted-data",
-            cekVersion: 5,
+            sealedCredential: "sealed-credential-data",
+            enclavePublicKey: "enclave-public-key",
+            backupKey: "backup-key",
             latToken: "lat-token-abc",
             latVersion: 3,
             latId: "lat-id-123",
             transactionKeys: utks
         )
 
-        XCTAssertEqual(result.encryptedBlob, "encrypted-data")
-        XCTAssertEqual(result.cekVersion, 5)
+        XCTAssertEqual(result.sealedCredential, "sealed-credential-data")
+        XCTAssertEqual(result.enclavePublicKey, "enclave-public-key")
+        XCTAssertEqual(result.backupKey, "backup-key")
         XCTAssertEqual(result.latToken, "lat-token-abc")
         XCTAssertEqual(result.latVersion, 3)
         XCTAssertEqual(result.latId, "lat-id-123")
@@ -80,16 +82,18 @@ final class CredentialsHandlerTests: XCTestCase {
 
     func testCredentialRefreshResult_minimalInitialization() {
         let result = CredentialRefreshResult(
-            encryptedBlob: "blob",
-            cekVersion: 1,
+            sealedCredential: "sealed",
+            enclavePublicKey: "enclave-key",
+            backupKey: "backup",
             latToken: nil,
             latVersion: nil,
             latId: nil,
             transactionKeys: nil
         )
 
-        XCTAssertEqual(result.encryptedBlob, "blob")
-        XCTAssertEqual(result.cekVersion, 1)
+        XCTAssertEqual(result.sealedCredential, "sealed")
+        XCTAssertEqual(result.enclavePublicKey, "enclave-key")
+        XCTAssertEqual(result.backupKey, "backup")
         XCTAssertNil(result.latToken)
         XCTAssertNil(result.latVersion)
         XCTAssertNil(result.latId)
@@ -103,7 +107,6 @@ final class CredentialsHandlerTests: XCTestCase {
         let status = CredentialStatusInfo(
             isValid: true,
             latVersion: 5,
-            cekVersion: 3,
             utkCount: 10,
             expiresAt: expiryDate,
             needsRotation: false
@@ -111,7 +114,6 @@ final class CredentialsHandlerTests: XCTestCase {
 
         XCTAssertTrue(status.isValid)
         XCTAssertEqual(status.latVersion, 5)
-        XCTAssertEqual(status.cekVersion, 3)
         XCTAssertEqual(status.utkCount, 10)
         XCTAssertNotNil(status.expiresAt)
         XCTAssertFalse(status.needsRotation)
@@ -121,7 +123,6 @@ final class CredentialsHandlerTests: XCTestCase {
         let status = CredentialStatusInfo(
             isValid: true,
             latVersion: 1,
-            cekVersion: 1,
             utkCount: 2,
             expiresAt: nil,
             needsRotation: true
@@ -136,7 +137,6 @@ final class CredentialsHandlerTests: XCTestCase {
         let status = CredentialStatusInfo(
             isValid: false,
             latVersion: nil,
-            cekVersion: nil,
             utkCount: 0,
             expiresAt: nil,
             needsRotation: true
@@ -144,7 +144,6 @@ final class CredentialsHandlerTests: XCTestCase {
 
         XCTAssertFalse(status.isValid)
         XCTAssertNil(status.latVersion)
-        XCTAssertNil(status.cekVersion)
         XCTAssertEqual(status.utkCount, 0)
         XCTAssertTrue(status.needsRotation)
     }
@@ -153,14 +152,16 @@ final class CredentialsHandlerTests: XCTestCase {
 
     func testCredentialStoreRequest_initialization() {
         let request = CredentialStoreRequest(
-            encryptedBlob: "encrypted-blob-data",
-            cekVersion: 7,
+            sealedCredential: "sealed-credential-data",
+            enclavePublicKey: "enclave-public-key",
+            backupKey: "backup-key",
             latToken: "new-lat-token",
             latVersion: 4
         )
 
-        XCTAssertEqual(request.encryptedBlob, "encrypted-blob-data")
-        XCTAssertEqual(request.cekVersion, 7)
+        XCTAssertEqual(request.sealedCredential, "sealed-credential-data")
+        XCTAssertEqual(request.enclavePublicKey, "enclave-public-key")
+        XCTAssertEqual(request.backupKey, "backup-key")
         XCTAssertEqual(request.latToken, "new-lat-token")
         XCTAssertEqual(request.latVersion, 4)
     }
@@ -181,8 +182,9 @@ final class CredentialsHandlerTests: XCTestCase {
 
     func testCredentialSyncResult_outOfSyncWithUpdates() {
         let creds = CredentialRefreshResult(
-            encryptedBlob: "new-blob",
-            cekVersion: 8,
+            sealedCredential: "new-sealed",
+            enclavePublicKey: "new-enclave-key",
+            backupKey: "new-backup-key",
             latToken: "new-lat",
             latVersion: 5,
             latId: "new-lat-id",
@@ -201,7 +203,8 @@ final class CredentialsHandlerTests: XCTestCase {
 
         XCTAssertFalse(result.inSync)
         XCTAssertNotNil(result.updatedCredentials)
-        XCTAssertEqual(result.updatedCredentials?.cekVersion, 8)
+        XCTAssertEqual(result.updatedCredentials?.sealedCredential, "new-sealed")
+        XCTAssertEqual(result.updatedCredentials?.enclavePublicKey, "new-enclave-key")
         XCTAssertNotNil(result.newUtks)
         XCTAssertEqual(result.newUtks?.count, 1)
     }
@@ -281,7 +284,6 @@ final class CredentialsHandlerTests: XCTestCase {
         let lowCount = CredentialStatusInfo(
             isValid: true,
             latVersion: 1,
-            cekVersion: 1,
             utkCount: 3,
             expiresAt: nil,
             needsRotation: false
@@ -290,7 +292,6 @@ final class CredentialsHandlerTests: XCTestCase {
         let healthyCount = CredentialStatusInfo(
             isValid: true,
             latVersion: 1,
-            cekVersion: 1,
             utkCount: 10,
             expiresAt: nil,
             needsRotation: false
@@ -302,15 +303,11 @@ final class CredentialsHandlerTests: XCTestCase {
 
     // MARK: - Version Tracking Tests
 
-    func testVersionTracking_incrementing() {
+    func testVersionTracking_latIncrementing() {
         var latVersion = 1
-        var cekVersion = 1
 
-        // Simulate version increments
+        // Simulate LAT version increment
         latVersion += 1
         XCTAssertEqual(latVersion, 2)
-
-        cekVersion += 1
-        XCTAssertEqual(cekVersion, 2)
     }
 }

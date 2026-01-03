@@ -22,8 +22,9 @@ final class CredentialStoreTests: XCTestCase {
     func createTestCredential(userGuid: String? = nil) -> StoredCredential {
         return StoredCredential(
             userGuid: userGuid ?? testUserGuid,
-            encryptedBlob: "dGVzdC1lbmNyeXB0ZWQtYmxvYg==",  // Base64 test data
-            cekVersion: 1,
+            sealedCredential: "dGVzdC1zZWFsZWQtY3JlZGVudGlhbA==",  // Base64 test data
+            enclavePublicKey: "dGVzdC1lbmNsYXZlLXB1YmxpYy1rZXk=",  // Base64 enclave public key
+            backupKey: "dGVzdC1iYWNrdXAta2V5",  // Base64 backup key
             ledgerAuthToken: StoredLAT(
                 latId: "lat-123",
                 token: "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
@@ -50,8 +51,9 @@ final class CredentialStoreTests: XCTestCase {
 
         XCTAssertNotNil(retrieved)
         XCTAssertEqual(retrieved?.userGuid, credential.userGuid)
-        XCTAssertEqual(retrieved?.encryptedBlob, credential.encryptedBlob)
-        XCTAssertEqual(retrieved?.cekVersion, credential.cekVersion)
+        XCTAssertEqual(retrieved?.sealedCredential, credential.sealedCredential)
+        XCTAssertEqual(retrieved?.enclavePublicKey, credential.enclavePublicKey)
+        XCTAssertEqual(retrieved?.backupKey, credential.backupKey)
         XCTAssertEqual(retrieved?.vaultStatus, credential.vaultStatus)
     }
 
@@ -79,21 +81,23 @@ final class CredentialStoreTests: XCTestCase {
         // Create updated credential
         let updated = StoredCredential(
             userGuid: testUserGuid,
-            encryptedBlob: "dXBkYXRlZC1ibG9i",
-            cekVersion: 2,
+            sealedCredential: "dXBkYXRlZC1zZWFsZWQ=",
+            enclavePublicKey: "dXBkYXRlZC1lbmNsYXZlLWtleQ==",
+            backupKey: "dXBkYXRlZC1iYWNrdXAta2V5",
             ledgerAuthToken: credential.ledgerAuthToken,
             transactionKeys: credential.transactionKeys,
             createdAt: credential.createdAt,
             lastUsedAt: Date(),
-            vaultStatus: "stopped"
+            vaultStatus: "running"
         )
 
         try credentialStore.update(credential: updated)
 
         let retrieved = try credentialStore.retrieve(userGuid: testUserGuid)
-        XCTAssertEqual(retrieved?.encryptedBlob, "dXBkYXRlZC1ibG9i")
-        XCTAssertEqual(retrieved?.cekVersion, 2)
-        XCTAssertEqual(retrieved?.vaultStatus, "stopped")
+        XCTAssertEqual(retrieved?.sealedCredential, "dXBkYXRlZC1zZWFsZWQ=")
+        XCTAssertEqual(retrieved?.enclavePublicKey, "dXBkYXRlZC1lbmNsYXZlLWtleQ==")
+        XCTAssertEqual(retrieved?.backupKey, "dXBkYXRlZC1iYWNrdXAta2V5")
+        XCTAssertEqual(retrieved?.vaultStatus, "running")
     }
 
     func testUpdateCreatesIfNotExists() throws {
@@ -237,8 +241,12 @@ final class CredentialStoreTests: XCTestCase {
 
         let package = CredentialPackage(
             userGuid: testUserGuid,
-            encryptedBlob: "bmV3LWJsb2I=",
-            cekVersion: 2,
+            credentialId: "cred-123",
+            sealedCredential: "bmV3LXNlYWxlZA==",
+            enclavePublicKey: "bmV3LWVuY2xhdmUta2V5",
+            backupKey: "bmV3LWJhY2t1cC1rZXk=",
+            ephemeralPublicKey: nil,
+            nonce: nil,
             ledgerAuthToken: LedgerAuthToken(latId: "lat-new", token: "newtoken", version: 2),
             transactionKeys: nil,
             newTransactionKeys: [
@@ -248,8 +256,9 @@ final class CredentialStoreTests: XCTestCase {
 
         let updated = credential.updatedWith(package: package, usedKeyId: "utk-1")
 
-        XCTAssertEqual(updated.encryptedBlob, "bmV3LWJsb2I=")
-        XCTAssertEqual(updated.cekVersion, 2)
+        XCTAssertEqual(updated.sealedCredential, "bmV3LXNlYWxlZA==")
+        XCTAssertEqual(updated.enclavePublicKey, "bmV3LWVuY2xhdmUta2V5")
+        XCTAssertEqual(updated.backupKey, "bmV3LWJhY2t1cC1rZXk=")
         XCTAssertEqual(updated.ledgerAuthToken.latId, "lat-new")
         XCTAssertTrue(updated.getKey(byId: "utk-1")!.isUsed)
         XCTAssertNotNil(updated.getKey(byId: "utk-new"))

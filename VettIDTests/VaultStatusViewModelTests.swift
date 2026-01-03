@@ -2,6 +2,7 @@ import XCTest
 @testable import VettID
 
 /// Tests for VaultStatusViewModel state machine and vault lifecycle management
+/// Note: Nitro Enclave architecture - vault is always running (no start/stop)
 @MainActor
 final class VaultStatusViewModelTests: XCTestCase {
 
@@ -41,60 +42,30 @@ final class VaultStatusViewModelTests: XCTestCase {
             health: .healthy
         )
         let enrolledState = VaultStatusViewModel.VaultViewState.enrolled(statusInfo)
-        XCTAssertEqual(enrolledState.title, "Running")
+        XCTAssertEqual(enrolledState.title, "Enclave Ready")
     }
 
-    // MARK: - Vault Lifecycle Status Tests
+    // MARK: - Vault Lifecycle Status Tests (Nitro - Simplified)
 
     func testVaultLifecycleStatusDisplayNames() {
         XCTAssertEqual(VaultLifecycleStatus.pendingEnrollment.displayName, "Pending Enrollment")
         XCTAssertEqual(VaultLifecycleStatus.enrolled.displayName, "Enrolled")
-        XCTAssertEqual(VaultLifecycleStatus.provisioning.displayName, "Starting...")
-        XCTAssertEqual(VaultLifecycleStatus.running.displayName, "Running")
-        XCTAssertEqual(VaultLifecycleStatus.stopped.displayName, "Stopped")
+        XCTAssertEqual(VaultLifecycleStatus.running.displayName, "Enclave Ready")
         XCTAssertEqual(VaultLifecycleStatus.terminated.displayName, "Terminated")
     }
 
     func testVaultLifecycleStatusSystemImages() {
         XCTAssertEqual(VaultLifecycleStatus.pendingEnrollment.systemImage, "hourglass")
         XCTAssertEqual(VaultLifecycleStatus.enrolled.systemImage, "checkmark.seal")
-        XCTAssertEqual(VaultLifecycleStatus.provisioning.systemImage, "arrow.clockwise")
-        XCTAssertEqual(VaultLifecycleStatus.running.systemImage, "checkmark.circle.fill")
-        XCTAssertEqual(VaultLifecycleStatus.stopped.systemImage, "stop.circle.fill")
+        XCTAssertEqual(VaultLifecycleStatus.running.systemImage, "checkmark.shield.fill")
         XCTAssertEqual(VaultLifecycleStatus.terminated.systemImage, "xmark.circle.fill")
     }
 
     func testVaultLifecycleStatusColors() {
         XCTAssertEqual(VaultLifecycleStatus.pendingEnrollment.statusColor, .orange)
         XCTAssertEqual(VaultLifecycleStatus.enrolled.statusColor, .blue)
-        XCTAssertEqual(VaultLifecycleStatus.provisioning.statusColor, .yellow)
         XCTAssertEqual(VaultLifecycleStatus.running.statusColor, .green)
-        XCTAssertEqual(VaultLifecycleStatus.stopped.statusColor, .gray)
         XCTAssertEqual(VaultLifecycleStatus.terminated.statusColor, .red)
-    }
-
-    func testVaultLifecycleStatusCanStart() {
-        // Can start from enrolled or stopped
-        XCTAssertTrue(VaultLifecycleStatus.enrolled.canStart)
-        XCTAssertTrue(VaultLifecycleStatus.stopped.canStart)
-
-        // Cannot start from other states
-        XCTAssertFalse(VaultLifecycleStatus.pendingEnrollment.canStart)
-        XCTAssertFalse(VaultLifecycleStatus.provisioning.canStart)
-        XCTAssertFalse(VaultLifecycleStatus.running.canStart)
-        XCTAssertFalse(VaultLifecycleStatus.terminated.canStart)
-    }
-
-    func testVaultLifecycleStatusCanStop() {
-        // Can only stop from running
-        XCTAssertTrue(VaultLifecycleStatus.running.canStop)
-
-        // Cannot stop from other states
-        XCTAssertFalse(VaultLifecycleStatus.pendingEnrollment.canStop)
-        XCTAssertFalse(VaultLifecycleStatus.enrolled.canStop)
-        XCTAssertFalse(VaultLifecycleStatus.provisioning.canStop)
-        XCTAssertFalse(VaultLifecycleStatus.stopped.canStop)
-        XCTAssertFalse(VaultLifecycleStatus.terminated.canStop)
     }
 
     // MARK: - Vault Health Status Tests
@@ -164,7 +135,7 @@ final class VaultStatusViewModelTests: XCTestCase {
             health: .healthy
         )
         let statusInfo3 = VaultStatusViewModel.VaultStatusInfo(
-            status: .stopped,
+            status: .terminated,
             instanceId: "test-1",
             health: .healthy
         )
@@ -248,7 +219,7 @@ final class VaultStatusViewModelTests: XCTestCase {
         )
 
         let statusInfo3 = VaultStatusViewModel.VaultStatusInfo(
-            status: .stopped,
+            status: .terminated,
             instanceId: "test-instance",
             health: .healthy
         )
@@ -257,25 +228,21 @@ final class VaultStatusViewModelTests: XCTestCase {
         XCTAssertNotEqual(statusInfo1, statusInfo3)
     }
 
-    // MARK: - All Status Cases Tests
+    // MARK: - All Status Cases Tests (Nitro - Simplified)
 
     func testAllVaultLifecycleStatusCases() {
         let allCases = VaultLifecycleStatus.allCases
-        XCTAssertEqual(allCases.count, 6)
+        XCTAssertEqual(allCases.count, 4)  // pendingEnrollment, enrolled, running, terminated
         XCTAssertTrue(allCases.contains(.pendingEnrollment))
         XCTAssertTrue(allCases.contains(.enrolled))
-        XCTAssertTrue(allCases.contains(.provisioning))
         XCTAssertTrue(allCases.contains(.running))
-        XCTAssertTrue(allCases.contains(.stopped))
         XCTAssertTrue(allCases.contains(.terminated))
     }
 
     func testVaultLifecycleStatusRawValues() {
         XCTAssertEqual(VaultLifecycleStatus.pendingEnrollment.rawValue, "pending_enrollment")
         XCTAssertEqual(VaultLifecycleStatus.enrolled.rawValue, "enrolled")
-        XCTAssertEqual(VaultLifecycleStatus.provisioning.rawValue, "provisioning")
         XCTAssertEqual(VaultLifecycleStatus.running.rawValue, "running")
-        XCTAssertEqual(VaultLifecycleStatus.stopped.rawValue, "stopped")
         XCTAssertEqual(VaultLifecycleStatus.terminated.rawValue, "terminated")
     }
 

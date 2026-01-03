@@ -37,7 +37,7 @@ final class AuthenticationViewModelTests: XCTestCase {
         XCTAssertEqual(AuthenticationViewModel.AuthenticationState.awaitingPassword.title, "Enter Password")
         XCTAssertEqual(AuthenticationViewModel.AuthenticationState.authenticating.title, "Authenticating...")
         XCTAssertEqual(AuthenticationViewModel.AuthenticationState.success.title, "Success")
-        XCTAssertEqual(AuthenticationViewModel.AuthenticationState.credentialRotated(newCekVersion: 1, newLatVersion: 1).title, "Success")
+        XCTAssertEqual(AuthenticationViewModel.AuthenticationState.credentialRotated(newLatVersion: 1).title, "Success")
         XCTAssertEqual(AuthenticationViewModel.AuthenticationState.error(message: "test", retryable: true).title, "Error")
     }
 
@@ -50,7 +50,7 @@ final class AuthenticationViewModelTests: XCTestCase {
         XCTAssertFalse(AuthenticationViewModel.AuthenticationState.requestingToken.canGoBack)
         XCTAssertFalse(AuthenticationViewModel.AuthenticationState.authenticating.canGoBack)
         XCTAssertFalse(AuthenticationViewModel.AuthenticationState.success.canGoBack)
-        XCTAssertFalse(AuthenticationViewModel.AuthenticationState.credentialRotated(newCekVersion: 1, newLatVersion: 1).canGoBack)
+        XCTAssertFalse(AuthenticationViewModel.AuthenticationState.credentialRotated(newLatVersion: 1).canGoBack)
     }
 
     // MARK: - State Is Processing Tests
@@ -168,9 +168,9 @@ final class AuthenticationViewModelTests: XCTestCase {
     }
 
     func testStateEqualityWithAssociatedValues() {
-        let rotated1 = AuthenticationViewModel.AuthenticationState.credentialRotated(newCekVersion: 1, newLatVersion: 1)
-        let rotated2 = AuthenticationViewModel.AuthenticationState.credentialRotated(newCekVersion: 1, newLatVersion: 1)
-        let rotated3 = AuthenticationViewModel.AuthenticationState.credentialRotated(newCekVersion: 2, newLatVersion: 1)
+        let rotated1 = AuthenticationViewModel.AuthenticationState.credentialRotated(newLatVersion: 1)
+        let rotated2 = AuthenticationViewModel.AuthenticationState.credentialRotated(newLatVersion: 1)
+        let rotated3 = AuthenticationViewModel.AuthenticationState.credentialRotated(newLatVersion: 2)
 
         XCTAssertEqual(rotated1, rotated2)
         XCTAssertNotEqual(rotated1, rotated3)

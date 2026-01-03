@@ -9,22 +9,9 @@ final class VaultHealthViewModelTests: XCTestCase {
 
     func testVaultHealthState_equality() {
         XCTAssertEqual(VaultHealthState.loading, .loading)
-        XCTAssertEqual(VaultHealthState.notProvisioned, .notProvisioned)
-        XCTAssertEqual(VaultHealthState.stopped, .stopped)
+        XCTAssertEqual(VaultHealthState.notEnrolled, .notEnrolled)
 
-        XCTAssertNotEqual(VaultHealthState.loading, .notProvisioned)
-        XCTAssertNotEqual(VaultHealthState.stopped, .loading)
-    }
-
-    func testVaultHealthState_provisioningEquality() {
-        let state1 = VaultHealthState.provisioning(progress: 0.5, status: "Starting...")
-        let state2 = VaultHealthState.provisioning(progress: 0.5, status: "Starting...")
-        let state3 = VaultHealthState.provisioning(progress: 0.7, status: "Starting...")
-        let state4 = VaultHealthState.provisioning(progress: 0.5, status: "Different")
-
-        XCTAssertEqual(state1, state2)
-        XCTAssertNotEqual(state1, state3)
-        XCTAssertNotEqual(state1, state4)
+        XCTAssertNotEqual(VaultHealthState.loading, .notEnrolled)
     }
 
     func testVaultHealthState_errorEquality() {
@@ -38,9 +25,7 @@ final class VaultHealthViewModelTests: XCTestCase {
 
     func testVaultHealthState_displayTitles() {
         XCTAssertEqual(VaultHealthState.loading.displayTitle, "Loading...")
-        XCTAssertEqual(VaultHealthState.notProvisioned.displayTitle, "No Vault")
-        XCTAssertEqual(VaultHealthState.provisioning(progress: 0, status: "").displayTitle, "Provisioning...")
-        XCTAssertEqual(VaultHealthState.stopped.displayTitle, "Stopped")
+        XCTAssertEqual(VaultHealthState.notEnrolled.displayTitle, "No Vault")
         XCTAssertEqual(VaultHealthState.error("test").displayTitle, "Error")
     }
 
@@ -48,18 +33,9 @@ final class VaultHealthViewModelTests: XCTestCase {
         let healthInfo = makeHealthInfo()
 
         XCTAssertFalse(VaultHealthState.loading.isLoaded)
-        XCTAssertFalse(VaultHealthState.notProvisioned.isLoaded)
-        XCTAssertFalse(VaultHealthState.provisioning(progress: 0, status: "").isLoaded)
-        XCTAssertFalse(VaultHealthState.stopped.isLoaded)
+        XCTAssertFalse(VaultHealthState.notEnrolled.isLoaded)
         XCTAssertFalse(VaultHealthState.error("test").isLoaded)
         XCTAssertTrue(VaultHealthState.loaded(healthInfo).isLoaded)
-    }
-
-    func testVaultHealthState_isProvisioning() {
-        XCTAssertFalse(VaultHealthState.loading.isProvisioning)
-        XCTAssertFalse(VaultHealthState.notProvisioned.isProvisioning)
-        XCTAssertTrue(VaultHealthState.provisioning(progress: 0.5, status: "test").isProvisioning)
-        XCTAssertFalse(VaultHealthState.stopped.isProvisioning)
     }
 
     // MARK: - VaultHealthInfo Tests
