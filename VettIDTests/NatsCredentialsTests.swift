@@ -123,7 +123,7 @@ final class NatsCredentialsTests: XCTestCase {
             "token_id": "nats_abc123",
             "nats_jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
             "nats_seed": "SUAM1234567890",
-            "nats_endpoint": "nats://nats.vettid.dev:4222",
+            "nats_endpoint": "tls://nats.vettid.dev:443",
             "expires_at": "2025-12-08T12:00:00Z",
             "permissions": {
                 "publish": ["OwnerSpace.guid.forVault.>"],
@@ -138,7 +138,7 @@ final class NatsCredentialsTests: XCTestCase {
         XCTAssertEqual(response.tokenId, "nats_abc123")
         XCTAssertEqual(response.natsJwt, "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9")
         XCTAssertEqual(response.natsSeed, "SUAM1234567890")
-        XCTAssertEqual(response.natsEndpoint, "nats://nats.vettid.dev:4222")
+        XCTAssertEqual(response.natsEndpoint, "tls://nats.vettid.dev:443")
         XCTAssertEqual(response.permissions.publish.count, 1)
         XCTAssertEqual(response.permissions.subscribe.count, 1)
     }
@@ -149,7 +149,7 @@ final class NatsCredentialsTests: XCTestCase {
             "token_id": "nats_abc123",
             "nats_jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
             "nats_seed": "SUAM1234567890",
-            "nats_endpoint": "nats://nats.vettid.dev:4222",
+            "nats_endpoint": "tls://nats.vettid.dev:443",
             "expires_at": "2025-12-08T12:00:00Z",
             "permissions": {
                 "publish": ["OwnerSpace.guid.forVault.>"],
@@ -165,7 +165,7 @@ final class NatsCredentialsTests: XCTestCase {
         XCTAssertEqual(credentials.tokenId, "nats_abc123")
         XCTAssertEqual(credentials.jwt, "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9")
         XCTAssertEqual(credentials.seed, "SUAM1234567890")
-        XCTAssertEqual(credentials.endpoint, "nats://nats.vettid.dev:4222")
+        XCTAssertEqual(credentials.endpoint, "tls://nats.vettid.dev:443")
     }
 
     // MARK: - NatsAccountResponse Tests
@@ -175,7 +175,7 @@ final class NatsCredentialsTests: XCTestCase {
         {
             "owner_space_id": "OwnerSpace.user-guid-123",
             "message_space_id": "MessageSpace.user-guid-123",
-            "nats_endpoint": "nats://nats.vettid.dev:4222",
+            "nats_endpoint": "tls://nats.vettid.dev:443",
             "status": "active"
         }
         """
@@ -209,7 +209,7 @@ final class NatsCredentialsTests: XCTestCase {
                     "status": "active"
                 }
             ],
-            "nats_endpoint": "nats://nats.vettid.dev:4222"
+            "nats_endpoint": "tls://nats.vettid.dev:443"
         }
         """
 
@@ -229,7 +229,7 @@ final class NatsCredentialsTests: XCTestCase {
             "has_account": false,
             "account": null,
             "active_tokens": [],
-            "nats_endpoint": "nats://nats.vettid.dev:4222"
+            "nats_endpoint": "tls://nats.vettid.dev:443"
         }
         """
 
@@ -270,7 +270,7 @@ final class NatsCredentialsTests: XCTestCase {
         tokenId: String = "test-token-id",
         jwt: String = "test-jwt",
         seed: String = "test-seed",
-        endpoint: String = "nats://localhost:4222",
+        endpoint: String = "nats://localhost:443",
         expiresAt: Date = Date().addingTimeInterval(3600)
     ) -> NatsCredentials {
         NatsCredentials(
