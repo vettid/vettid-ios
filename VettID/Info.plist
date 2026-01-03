@@ -130,5 +130,15 @@
 		<string>dev.vettid.nats-token-refresh</string>
 		<string>dev.vettid.pcr-refresh</string>
 	</array>
+	<!-- Background modes for VoIP calls -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>voip</string>
+		<string>remote-notification</string>
+		<string>fetch</string>
+	</array>
+	<!-- Microphone usage for VoIP calls -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>VettID needs microphone access for voice and video calls.</string>
 </dict>
 </plist>
