@@ -59,6 +59,10 @@ final class EnrollmentViewModel: ObservableObject {
     private let credentialStore = CredentialStore()
     private let attestationManager = AttestationManager()
 
+    // Nitro Enclave attestation
+    private var enclavePublicKey: Data?  // Verified enclave key for password encryption
+    private let nitroVerifier = NitroAttestationVerifier()
+
     // MARK: - Enrollment State
 
     enum EnrollmentState: Equatable {
@@ -345,16 +349,64 @@ final class EnrollmentViewModel: ObservableObject {
         transactionKeys = response.transactionKeys
         passwordKeyId = response.passwordKeyId
 
-        // Check if attestation is required and store challenge
-        if response.attestationRequired == true,
-           let challenge = response.attestationChallenge {
-            attestationChallenge = challenge
-            state = .attestationRequired(challenge: challenge)
-        } else {
-            // Skip attestation if not required (unsupported device fallback)
+        // Verify Nitro Enclave attestation (required)
+        guard let attestation = response.enclaveAttestation else {
+            handleError(EnrollmentError.missingAttestation, retryable: false)
+            return
+        }
+
+        do {
+            let attestationResult = try verifyEnclaveAttestation(attestation)
+            self.enclavePublicKey = attestationResult.enclavePublicKey
+
+            #if DEBUG
+            print("[Enrollment] Enclave attestation verified, public key: \(enclavePublicKey!.base64EncodedString().prefix(20))...")
+            #endif
+
+            // Proceed directly to password (no App Attest needed with Nitro)
             state = .attestationComplete
             await proceedToPassword()
+        } catch {
+            handleError(error, retryable: false)
         }
+    }
+
+    /// Verify Nitro Enclave attestation document
+    private func verifyEnclaveAttestation(_ attestation: EnclaveAttestation) throws -> NitroAttestationVerifier.AttestationResult {
+        guard let documentData = Data(base64Encoded: attestation.attestationDocument) else {
+            throw EnrollmentError.invalidAttestation
+        }
+
+        guard let pcrSet = attestation.expectedPcrs.first else {
+            throw EnrollmentError.missingPCRs
+        }
+
+        let expectedPCRs = NitroAttestationVerifier.ExpectedPCRs(
+            pcr0: pcrSet.pcr0,
+            pcr1: pcrSet.pcr1,
+            pcr2: pcrSet.pcr2,
+            validFrom: Date(),
+            validUntil: nil
+        )
+
+        let nonce = Data(base64Encoded: attestation.nonce)
+
+        let result = try nitroVerifier.verify(
+            attestationDocument: documentData,
+            expectedPCRs: expectedPCRs,
+            nonce: nonce
+        )
+
+        // Verify extracted key matches response
+        guard let responseKey = Data(base64Encoded: attestation.enclavePublicKey) else {
+            throw EnrollmentError.invalidAttestation
+        }
+
+        guard result.enclavePublicKey == responseKey else {
+            throw EnrollmentError.publicKeyMismatch
+        }
+
+        return result
     }
 
     func performAttestation() async {
@@ -437,7 +489,7 @@ final class EnrollmentViewModel: ObservableObject {
         guard isPasswordValid else { return }
         guard let token = enrollmentToken,
               let keyId = passwordKeyId,
-              let utk = transactionKeys.first(where: { $0.keyId == keyId }) else {
+              let enclaveKey = enclavePublicKey else {
             handleError(EnrollmentError.invalidState, retryable: false)
             return
         }
@@ -448,10 +500,10 @@ final class EnrollmentViewModel: ObservableObject {
             // Hash password with Argon2id
             let hashResult = try PasswordHasher.hash(password: password)
 
-            // Encrypt password hash with UTK
+            // Encrypt password hash to enclave public key (verified during attestation)
             let encryptedPayload = try CryptoManager.encryptPasswordHash(
                 passwordHash: hashResult.hash,
-                utkPublicKeyBase64: utk.publicKey
+                utkPublicKeyBase64: enclaveKey.base64EncodedString()
             )
 
             // Submit to API (session info is in the JWT)
@@ -659,8 +711,9 @@ final class EnrollmentViewModel: ObservableObject {
 
         let credential = StoredCredential(
             userGuid: package.userGuid,
-            encryptedBlob: package.encryptedBlob,
-            cekVersion: package.cekVersion,
+            sealedCredential: package.sealedCredential,
+            enclavePublicKey: package.enclavePublicKey,
+            backupKey: package.backupKey,
             ledgerAuthToken: StoredLAT(
                 latId: package.ledgerAuthToken.latId ?? package.ledgerAuthToken.token,
                 token: package.ledgerAuthToken.token,
@@ -669,7 +722,7 @@ final class EnrollmentViewModel: ObservableObject {
             transactionKeys: allKeys,
             createdAt: Date(),
             lastUsedAt: Date(),
-            vaultStatus: vaultStatus
+            vaultStatus: "running"  // Enclave is always running
         )
 
         try credentialStore.store(credential: credential)
@@ -684,6 +737,7 @@ final class EnrollmentViewModel: ObservableObject {
         attestationKeyId = nil
         attestationChallenge = nil
         memberAuthToken = nil
+        enclavePublicKey = nil
         password = ""
         confirmPassword = ""
     }

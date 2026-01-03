@@ -27,6 +27,10 @@ final class EnrollmentService: ObservableObject {
     private var attestationKeyId: String?
     private var memberAuthToken: String?
 
+    // Nitro Enclave attestation
+    private var enclavePublicKey: Data?  // Verified enclave key for password encryption
+    private let nitroVerifier = NitroAttestationVerifier()
+
     // NATS credentials from enrollment (auto-provisioned vault)
     private(set) var natsCredentials: NatsCredentials?
     private(set) var ownerSpaceId: String?
@@ -69,16 +73,21 @@ final class EnrollmentService: ObservableObject {
             transactionKeys = response.transactionKeys
             passwordKeyId = response.passwordKeyId
 
-            // Check if attestation is required
-            if response.attestationRequired == true,
-               let challenge = response.attestationChallenge {
-                attestationChallenge = challenge
-                state = .attestationRequired(challenge: challenge)
-            } else {
-                // Skip attestation if not required
-                let prompt = response.passwordPrompt?.message ?? "Create a password for managing Vault Services"
-                state = .awaitingPassword(prompt: prompt)
+            // Verify Nitro Enclave attestation (required)
+            guard let attestation = response.enclaveAttestation else {
+                throw EnrollmentError.missingAttestation
             }
+
+            let attestationResult = try verifyEnclaveAttestation(attestation)
+            self.enclavePublicKey = attestationResult.enclavePublicKey
+
+            #if DEBUG
+            print("[Enrollment] Enclave attestation verified, public key: \(enclavePublicKey!.base64EncodedString().prefix(20))...")
+            #endif
+
+            // Proceed to password (no App Attest needed with Nitro)
+            let prompt = response.passwordPrompt?.message ?? "Create a password for managing Vault Services"
+            state = .awaitingPassword(prompt: prompt)
 
         } catch {
             handleError(error)
@@ -162,7 +171,7 @@ final class EnrollmentService: ObservableObject {
     func setPassword(_ password: String) async {
         guard let token = enrollmentToken,
               let keyId = passwordKeyId,
-              let utk = transactionKeys.first(where: { $0.keyId == keyId }) else {
+              let enclaveKey = enclavePublicKey else {
             self.error = .invalidState
             state = .failed(.invalidState)
             return
@@ -174,10 +183,10 @@ final class EnrollmentService: ObservableObject {
             // Hash password with Argon2id
             let hashResult = try PasswordHasher.hash(password: password)
 
-            // Encrypt password hash with UTK
+            // Encrypt password hash to enclave public key (verified during attestation)
             let encryptedPayload = try CryptoManager.encryptPasswordHash(
                 passwordHash: hashResult.hash,
-                utkPublicKeyBase64: utk.publicKey
+                utkPublicKeyBase64: enclaveKey.base64EncodedString()
             )
 
             // Call API (session info is in the JWT)
@@ -234,7 +243,7 @@ final class EnrollmentService: ObservableObject {
 
             // Store and backup Protean Credential
             await storeAndBackupProteanCredential(
-                encryptedBlob: response.credentialPackage.encryptedBlob,
+                sealedCredential: response.credentialPackage.sealedCredential,
                 userGuid: response.credentialPackage.userGuid,
                 authToken: token
             )
@@ -287,13 +296,52 @@ final class EnrollmentService: ObservableObject {
         return UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
     }
 
+    /// Verify Nitro Enclave attestation document
+    private func verifyEnclaveAttestation(_ attestation: EnclaveAttestation) throws -> NitroAttestationVerifier.AttestationResult {
+        guard let documentData = Data(base64Encoded: attestation.attestationDocument) else {
+            throw EnrollmentError.invalidAttestation
+        }
+
+        // Build expected PCRs from response
+        guard let pcrSet = attestation.expectedPcrs.first else {
+            throw EnrollmentError.missingPCRs
+        }
+
+        let expectedPCRs = NitroAttestationVerifier.ExpectedPCRs(
+            pcr0: pcrSet.pcr0,
+            pcr1: pcrSet.pcr1,
+            pcr2: pcrSet.pcr2,
+            validFrom: Date(),
+            validUntil: nil
+        )
+
+        let nonce = Data(base64Encoded: attestation.nonce)
+
+        let result = try nitroVerifier.verify(
+            attestationDocument: documentData,
+            expectedPCRs: expectedPCRs,
+            nonce: nonce
+        )
+
+        // Verify extracted key matches response
+        guard let responseKey = Data(base64Encoded: attestation.enclavePublicKey) else {
+            throw EnrollmentError.invalidAttestation
+        }
+
+        guard result.enclavePublicKey == responseKey else {
+            throw EnrollmentError.publicKeyMismatch
+        }
+
+        return result
+    }
+
     /// Store Protean Credential locally and backup to VettID
     private func storeAndBackupProteanCredential(
-        encryptedBlob: String,
+        sealedCredential: String,
         userGuid: String,
         authToken: String
     ) async {
-        guard let blobData = Data(base64Encoded: encryptedBlob) else {
+        guard let blobData = Data(base64Encoded: sealedCredential) else {
             #if DEBUG
             print("[Enrollment] Failed to decode Protean Credential blob")
             #endif
@@ -347,30 +395,20 @@ final class EnrollmentService: ObservableObject {
             )
         }
 
-        // Mark the password key as used
-        var allKeys = storedKeys
-        if let usedKeyId = passwordKeyId {
-            allKeys = allKeys.map { key in
-                if key.keyId == usedKeyId {
-                    return StoredUTK(keyId: key.keyId, publicKey: key.publicKey, algorithm: key.algorithm, isUsed: true)
-                }
-                return key
-            }
-        }
-
         let credential = StoredCredential(
             userGuid: package.userGuid,
-            encryptedBlob: package.encryptedBlob,
-            cekVersion: package.cekVersion,
+            sealedCredential: package.sealedCredential,
+            enclavePublicKey: package.enclavePublicKey,
+            backupKey: package.backupKey,
             ledgerAuthToken: StoredLAT(
                 latId: package.ledgerAuthToken.latId ?? package.ledgerAuthToken.token,
                 token: package.ledgerAuthToken.token,
                 version: package.ledgerAuthToken.version
             ),
-            transactionKeys: allKeys,
+            transactionKeys: storedKeys,
             createdAt: Date(),
             lastUsedAt: Date(),
-            vaultStatus: vaultStatus
+            vaultStatus: "running"  // Enclave is always running
         )
 
         try credentialStore.store(credential: credential)
@@ -505,6 +543,11 @@ enum EnrollmentError: Error, Equatable, LocalizedError {
     case invalidState
     case apiError(APIError)
     case unexpected(Error)
+    // Nitro Enclave attestation errors
+    case missingAttestation
+    case invalidAttestation
+    case missingPCRs
+    case publicKeyMismatch
 
     static func == (lhs: EnrollmentError, rhs: EnrollmentError) -> Bool {
         switch (lhs, rhs) {
@@ -515,7 +558,11 @@ enum EnrollmentError: Error, Equatable, LocalizedError {
              (.passwordSetFailed, .passwordSetFailed),
              (.finalizationFailed, .finalizationFailed),
              (.storageFailed, .storageFailed),
-             (.invalidState, .invalidState):
+             (.invalidState, .invalidState),
+             (.missingAttestation, .missingAttestation),
+             (.invalidAttestation, .invalidAttestation),
+             (.missingPCRs, .missingPCRs),
+             (.publicKeyMismatch, .publicKeyMismatch):
             return true
         default:
             return false
@@ -544,6 +591,14 @@ enum EnrollmentError: Error, Equatable, LocalizedError {
             return error.errorDescription
         case .unexpected(let error):
             return "Unexpected error: \(error.localizedDescription)"
+        case .missingAttestation:
+            return "Server did not provide enclave attestation"
+        case .invalidAttestation:
+            return "Invalid enclave attestation document"
+        case .missingPCRs:
+            return "Missing expected PCR values in attestation"
+        case .publicKeyMismatch:
+            return "Enclave public key does not match attestation"
         }
     }
 }

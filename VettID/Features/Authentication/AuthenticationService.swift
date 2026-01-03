@@ -128,8 +128,7 @@ final class AuthenticationService: ObservableObject {
 
             // Build request
             let request = AuthExecuteRequest(
-                encryptedBlob: credential.encryptedBlob,
-                cekVersion: credential.cekVersion,
+                sealedCredential: credential.sealedCredential,
                 encryptedPasswordHash: encryptedPayload.encryptedPasswordHash,
                 ephemeralPublicKey: encryptedPayload.ephemeralPublicKey,
                 nonce: encryptedPayload.nonce,

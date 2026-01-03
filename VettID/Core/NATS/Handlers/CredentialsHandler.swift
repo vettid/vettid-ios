@@ -69,7 +69,6 @@ actor CredentialsHandler {
         return CredentialStatusInfo(
             isValid: (result["is_valid"]?.value as? Bool) ?? false,
             latVersion: result["lat_version"]?.value as? Int,
-            cekVersion: result["cek_version"]?.value as? Int,
             utkCount: result["utk_count"]?.value as? Int ?? 0,
             expiresAt: (result["expires_at"]?.value as? String).flatMap { ISO8601DateFormatter().date(from: $0) },
             needsRotation: (result["needs_rotation"]?.value as? Bool) ?? false
@@ -81,8 +80,9 @@ actor CredentialsHandler {
     /// - Returns: Response indicating success/failure
     func storeCredential(package: CredentialStoreRequest) async throws -> VaultEventResponse {
         let payload: [String: AnyCodableValue] = [
-            "encrypted_blob": AnyCodableValue(package.encryptedBlob),
-            "cek_version": AnyCodableValue(package.cekVersion),
+            "sealed_credential": AnyCodableValue(package.sealedCredential),
+            "enclave_public_key": AnyCodableValue(package.enclavePublicKey),
+            "backup_key": AnyCodableValue(package.backupKey),
             "lat_token": AnyCodableValue(package.latToken),
             "lat_version": AnyCodableValue(package.latVersion)
         ]
@@ -178,8 +178,9 @@ actor CredentialsHandler {
     // MARK: - Private Helpers
 
     private func parseCredentialResult(_ result: [String: AnyCodableValue]) throws -> CredentialRefreshResult {
-        guard let encryptedBlob = result["encrypted_blob"]?.value as? String,
-              let cekVersion = result["cek_version"]?.value as? Int else {
+        guard let sealedCredential = result["sealed_credential"]?.value as? String,
+              let enclavePublicKey = result["enclave_public_key"]?.value as? String,
+              let backupKey = result["backup_key"]?.value as? String else {
             throw CredentialsHandlerError.invalidResponse
         }
 
@@ -206,8 +207,9 @@ actor CredentialsHandler {
         }
 
         return CredentialRefreshResult(
-            encryptedBlob: encryptedBlob,
-            cekVersion: cekVersion,
+            sealedCredential: sealedCredential,
+            enclavePublicKey: enclavePublicKey,
+            backupKey: backupKey,
             latToken: latToken,
             latVersion: latVersion,
             latId: latId,
@@ -220,8 +222,9 @@ actor CredentialsHandler {
 
 /// Result from credential refresh
 struct CredentialRefreshResult {
-    let encryptedBlob: String
-    let cekVersion: Int
+    let sealedCredential: String
+    let enclavePublicKey: String
+    let backupKey: String
     let latToken: String?
     let latVersion: Int?
     let latId: String?
@@ -232,7 +235,6 @@ struct CredentialRefreshResult {
 struct CredentialStatusInfo {
     let isValid: Bool
     let latVersion: Int?
-    let cekVersion: Int?
     let utkCount: Int
     let expiresAt: Date?
     let needsRotation: Bool
@@ -240,8 +242,9 @@ struct CredentialStatusInfo {
 
 /// Request to store credentials
 struct CredentialStoreRequest {
-    let encryptedBlob: String
-    let cekVersion: Int
+    let sealedCredential: String
+    let enclavePublicKey: String
+    let backupKey: String
     let latToken: String
     let latVersion: Int
 }

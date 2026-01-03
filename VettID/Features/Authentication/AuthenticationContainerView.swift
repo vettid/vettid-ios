@@ -420,8 +420,8 @@ struct AuthSuccessView: View {
                         .accessibilityIdentifier("auth.success.subtitle")
 
                     // Rotation info
-                    if case .credentialRotated(let cekVersion, let latVersion) = viewModel.state {
-                        rotationInfo(cekVersion: cekVersion, latVersion: latVersion)
+                    if case .credentialRotated(let latVersion) = viewModel.state {
+                        rotationInfo(latVersion: latVersion)
                             .transition(.opacity.combined(with: .move(edge: .bottom)))
                     }
                 }
@@ -481,7 +481,7 @@ struct AuthSuccessView: View {
 
     // MARK: - Rotation Info
 
-    private func rotationInfo(cekVersion: Int, latVersion: Int) -> some View {
+    private func rotationInfo(latVersion: Int) -> some View {
         VStack(spacing: 12) {
             Text("Security Keys Rotated")
                 .font(.subheadline)
@@ -489,34 +489,19 @@ struct AuthSuccessView: View {
                 .foregroundStyle(.secondary)
                 .accessibilityIdentifier("auth.success.rotationTitle")
 
-            HStack(spacing: 24) {
-                VStack {
-                    Text("CEK")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("v\(cekVersion)")
-                        .font(.headline)
-                        .foregroundStyle(.green)
-                }
-                .accessibilityIdentifier("auth.success.cekVersion")
-
-                Divider()
-                    .frame(height: 30)
-
-                VStack {
-                    Text("LAT")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("v\(latVersion)")
-                        .font(.headline)
-                        .foregroundStyle(.green)
-                }
-                .accessibilityIdentifier("auth.success.latVersion")
+            VStack {
+                Text("LAT Version")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("v\(latVersion)")
+                    .font(.headline)
+                    .foregroundStyle(.green)
             }
-            .padding()
-            .background(Color(.systemGray6))
-            .cornerRadius(12)
+            .accessibilityIdentifier("auth.success.latVersion")
         }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
         .accessibilityIdentifier("auth.success.rotationInfo")
     }
 

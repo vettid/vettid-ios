@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Main vault health display view
+/// Main vault health display view (Nitro Enclave)
 struct VaultHealthView: View {
     @StateObject var viewModel: VaultHealthViewModel
 
@@ -12,7 +12,7 @@ struct VaultHealthView: View {
                 }
                 .padding()
             }
-            .navigationTitle("Vault Health")
+            .navigationTitle("Enclave Health")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     if viewModel.isPolling {
@@ -41,25 +41,12 @@ struct VaultHealthView: View {
         case .loading:
             LoadingView()
 
-        case .notProvisioned:
-            NotProvisionedView(onProvision: {
-                Task { await viewModel.provisionVault() }
-            })
-
-        case .provisioning(let progress, let status):
-            ProvisioningView(progress: progress, status: status)
-
-        case .stopped:
-            StoppedVaultView(onStart: {
-                Task { await viewModel.provisionVault() }
-            })
+        case .notEnrolled:
+            NotEnrolledView()
 
         case .loaded(let info):
             VaultHealthDetailsView(
                 info: info,
-                onStop: {
-                    Task { await viewModel.stopVault() }
-                },
                 onTerminate: {
                     Task { await viewModel.terminateVault() }
                 }
@@ -81,7 +68,7 @@ struct LoadingView: View {
             ProgressView()
                 .scaleEffect(1.5)
                 .accessibilityIdentifier("vaultHealth.loading.spinner")
-            Text("Checking vault status...")
+            Text("Checking enclave status...")
                 .foregroundColor(.secondary)
                 .accessibilityIdentifier("vaultHealth.loading.text")
         }
@@ -91,144 +78,31 @@ struct LoadingView: View {
     }
 }
 
-// MARK: - Not Provisioned View
+// MARK: - Not Enrolled View
 
-struct NotProvisionedView: View {
-    let onProvision: () -> Void
-
+struct NotEnrolledView: View {
     var body: some View {
         VStack(spacing: 24) {
-            Image(systemName: "server.rack")
+            Image(systemName: "shield.checkered")
                 .font(.system(size: 60))
                 .foregroundColor(.secondary)
-                .accessibilityIdentifier("vaultHealth.notProvisioned.icon")
+                .accessibilityIdentifier("vaultHealth.notEnrolled.icon")
 
             VStack(spacing: 8) {
-                Text("No Vault Instance")
+                Text("Not Enrolled")
                     .font(.title2)
                     .fontWeight(.semibold)
-                    .accessibilityIdentifier("vaultHealth.notProvisioned.title")
+                    .accessibilityIdentifier("vaultHealth.notEnrolled.title")
 
-                Text("You don't have a vault provisioned yet. Your vault securely stores and processes your data.")
+                Text("Complete enrollment to access your secure Nitro Enclave vault.")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
-                    .accessibilityIdentifier("vaultHealth.notProvisioned.subtitle")
+                    .accessibilityIdentifier("vaultHealth.notEnrolled.subtitle")
             }
-
-            Button(action: onProvision) {
-                HStack {
-                    Image(systemName: "plus.circle.fill")
-                    Text("Provision Vault")
-                }
-                .font(.headline)
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color.blue)
-                .cornerRadius(12)
-            }
-            .accessibilityIdentifier("vaultHealth.notProvisioned.provisionButton")
         }
         .padding()
-        .accessibilityIdentifier("vaultHealth.notProvisionedView")
-    }
-}
-
-// MARK: - Provisioning View
-
-struct ProvisioningView: View {
-    let progress: Double
-    let status: String
-
-    var body: some View {
-        VStack(spacing: 24) {
-            ZStack {
-                Circle()
-                    .stroke(Color.gray.opacity(0.3), lineWidth: 8)
-                    .frame(width: 120, height: 120)
-
-                Circle()
-                    .trim(from: 0, to: progress)
-                    .stroke(Color.blue, style: StrokeStyle(lineWidth: 8, lineCap: .round))
-                    .frame(width: 120, height: 120)
-                    .rotationEffect(.degrees(-90))
-                    .animation(.linear(duration: 0.5), value: progress)
-
-                VStack(spacing: 4) {
-                    Text("\(Int(progress * 100))%")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .accessibilityIdentifier("vaultHealth.provisioning.progress")
-                    Image(systemName: "server.rack")
-                        .foregroundColor(.blue)
-                }
-            }
-            .accessibilityIdentifier("vaultHealth.provisioning.progressCircle")
-
-            VStack(spacing: 8) {
-                Text("Provisioning Vault")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                    .accessibilityIdentifier("vaultHealth.provisioning.title")
-
-                Text(status)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .accessibilityIdentifier("vaultHealth.provisioning.status")
-            }
-
-            Text("This may take 1-2 minutes")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .accessibilityIdentifier("vaultHealth.provisioning.hint")
-        }
-        .padding()
-        .accessibilityIdentifier("vaultHealth.provisioningView")
-    }
-}
-
-// MARK: - Stopped Vault View
-
-struct StoppedVaultView: View {
-    let onStart: () -> Void
-
-    var body: some View {
-        VStack(spacing: 24) {
-            Image(systemName: "pause.circle.fill")
-                .font(.system(size: 60))
-                .foregroundColor(.orange)
-                .accessibilityIdentifier("vaultHealth.stopped.icon")
-
-            VStack(spacing: 8) {
-                Text("Vault Stopped")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                    .accessibilityIdentifier("vaultHealth.stopped.title")
-
-                Text("Your vault instance is stopped. Start it to access your data.")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .accessibilityIdentifier("vaultHealth.stopped.subtitle")
-            }
-
-            Button(action: onStart) {
-                HStack {
-                    Image(systemName: "play.fill")
-                    Text("Start Vault")
-                }
-                .font(.headline)
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color.green)
-                .cornerRadius(12)
-            }
-            .accessibilityIdentifier("vaultHealth.stopped.startButton")
-        }
-        .padding()
-        .accessibilityIdentifier("vaultHealth.stoppedView")
+        .accessibilityIdentifier("vaultHealth.notEnrolledView")
     }
 }
 
@@ -281,7 +155,6 @@ struct ErrorView: View {
 
 struct VaultHealthDetailsView: View {
     let info: VaultHealthInfo
-    let onStop: () -> Void
     let onTerminate: () -> Void
 
     @State private var showTerminateConfirmation = false
@@ -291,14 +164,17 @@ struct VaultHealthDetailsView: View {
             // Status Header
             statusHeader
 
+            // Enclave Info
+            enclaveInfoSection
+
             // Component Status Section
             componentStatusSection
 
             // Stats Section
             statsSection
 
-            // Actions Section
-            actionsSection
+            // Danger Zone
+            dangerZoneSection
         }
     }
 
@@ -329,6 +205,32 @@ struct VaultHealthDetailsView: View {
         .background(Color(.systemGray6))
         .cornerRadius(12)
         .accessibilityIdentifier("vaultHealth.details.statusHeader")
+    }
+
+    private var enclaveInfoSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Enclave")
+                .font(.headline)
+                .foregroundColor(.secondary)
+
+            HStack {
+                Image(systemName: "shield.checkered")
+                    .foregroundColor(.green)
+                    .frame(width: 24)
+
+                Text("Nitro Enclave")
+                    .font(.subheadline)
+
+                Spacer()
+
+                Text("Hardware Isolated")
+                    .font(.caption)
+                    .foregroundColor(.green)
+            }
+            .padding()
+            .background(Color(.systemGray6))
+            .cornerRadius(12)
+        }
     }
 
     private var componentStatusSection: some View {
@@ -379,46 +281,34 @@ struct VaultHealthDetailsView: View {
         }
     }
 
-    private var actionsSection: some View {
+    private var dangerZoneSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Actions")
-                .font(.headline)
-                .foregroundColor(.secondary)
-
-            HStack(spacing: 12) {
-                Button(action: onStop) {
-                    HStack {
-                        Image(systemName: "pause.fill")
-                        Text("Stop")
-                    }
+            HStack {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(.red)
+                Text("Danger Zone")
                     .font(.headline)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.orange)
-                    .cornerRadius(12)
-                }
-                .accessibilityIdentifier("vaultHealth.details.stopButton")
-
-                Button(action: { showTerminateConfirmation = true }) {
-                    HStack {
-                        Image(systemName: "trash.fill")
-                        Text("Terminate")
-                    }
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.red)
-                    .cornerRadius(12)
-                }
-                .accessibilityIdentifier("vaultHealth.details.terminateButton")
+                    .foregroundColor(.secondary)
             }
+
+            Button(action: { showTerminateConfirmation = true }) {
+                HStack {
+                    Image(systemName: "trash.fill")
+                    Text("Terminate Vault")
+                }
+                .font(.headline)
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.red)
+                .cornerRadius(12)
+            }
+            .accessibilityIdentifier("vaultHealth.details.terminateButton")
             .alert("Terminate Vault?", isPresented: $showTerminateConfirmation) {
                 Button("Cancel", role: .cancel) {}
                 Button("Terminate", role: .destructive, action: onTerminate)
             } message: {
-                Text("This will permanently delete your vault instance. This action cannot be undone.")
+                Text("This will permanently delete your vault. This action cannot be undone.")
             }
 
             if let lastEvent = info.lastEventAt {
@@ -428,7 +318,7 @@ struct VaultHealthDetailsView: View {
                     .accessibilityIdentifier("vaultHealth.details.lastEvent")
             }
         }
-        .accessibilityIdentifier("vaultHealth.details.actionsSection")
+        .accessibilityIdentifier("vaultHealth.details.dangerZoneSection")
     }
 
     private var statusColor: Color {
@@ -504,7 +394,6 @@ struct StatCard: View {
 #if DEBUG
 struct VaultHealthView_Previews: PreviewProvider {
     static var previews: some View {
-        // Preview with mock data would go here
         Text("VaultHealthView Preview")
     }
 }

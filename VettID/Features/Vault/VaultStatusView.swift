@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Main vault status view showing current status and actions
+/// Main vault status view (Nitro Enclave - simplified)
 struct VaultStatusView: View {
     @StateObject private var viewModel = VaultStatusViewModel()
     @EnvironmentObject var appState: AppState
@@ -58,7 +58,7 @@ struct VaultStatusView: View {
         VStack(spacing: 32) {
             Spacer()
 
-            Image(systemName: "building.2")
+            Image(systemName: "shield.checkered")
                 .font(.system(size: 80))
                 .foregroundStyle(.blue.opacity(0.7))
                 .accessibilityIdentifier("vault.notEnrolled.icon")
@@ -69,7 +69,7 @@ struct VaultStatusView: View {
                     .fontWeight(.bold)
                     .accessibilityIdentifier("vault.notEnrolled.title")
 
-                Text("Your personal vault provides secure storage for your credentials and secrets.")
+                Text("Your secure Nitro Enclave vault provides hardware-isolated storage for your credentials and secrets.")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -101,6 +101,9 @@ struct VaultStatusView: View {
             // Status Card
             statusCard(status: status)
 
+            // Enclave Info
+            enclaveInfoCard
+
             // Quick Stats
             quickStatsSection
 
@@ -110,7 +113,7 @@ struct VaultStatusView: View {
             }
 
             // Actions
-            actionsSection(status: status)
+            actionsSection
 
             // Info Section
             infoSection
@@ -135,7 +138,7 @@ struct VaultStatusView: View {
                 .accessibilityIdentifier("vault.status.icon")
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Vault Status")
+                    Text("Enclave Status")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .accessibilityIdentifier("vault.status.label")
@@ -149,8 +152,21 @@ struct VaultStatusView: View {
                 Spacer()
             }
 
-            // Status-specific message
-            statusMessage(status: status.status)
+            // Status message
+            HStack {
+                Image(systemName: "checkmark.circle")
+                    .foregroundStyle(.green)
+
+                Text("Your vault is running in a secure Nitro Enclave")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 12)
+            .background(Color.green.opacity(0.1))
+            .cornerRadius(8)
         }
         .padding()
         .background(Color(.systemBackground))
@@ -159,66 +175,37 @@ struct VaultStatusView: View {
         .accessibilityIdentifier("vault.statusCard")
     }
 
-    private func statusMessage(status: VaultLifecycleStatus) -> some View {
-        HStack {
-            Image(systemName: statusMessageIcon(status))
-                .foregroundStyle(statusMessageColor(status))
+    // MARK: - Enclave Info Card
 
-            Text(statusMessageText(status))
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+    private var enclaveInfoCard: some View {
+        HStack {
+            Image(systemName: "shield.checkered")
+                .foregroundStyle(.green)
+                .frame(width: 24)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Nitro Enclave")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+
+                Text("Hardware-isolated secure execution")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
             Spacer()
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 12)
-        .background(statusMessageColor(status).opacity(0.1))
-        .cornerRadius(8)
-    }
 
-    private func statusMessageIcon(_ status: VaultLifecycleStatus) -> String {
-        switch status {
-        case .running:
-            return "checkmark.circle"
-        case .provisioning:
-            return "arrow.clockwise"
-        case .stopped:
-            return "info.circle"
-        case .enrolled:
-            return "arrow.right.circle"
-        default:
-            return "info.circle"
+            Text("Always On")
+                .font(.caption)
+                .foregroundStyle(.green)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.green.opacity(0.1))
+                .cornerRadius(6)
         }
-    }
-
-    private func statusMessageColor(_ status: VaultLifecycleStatus) -> Color {
-        switch status {
-        case .running:
-            return .green
-        case .provisioning:
-            return .blue
-        case .stopped:
-            return .orange
-        default:
-            return .gray
-        }
-    }
-
-    private func statusMessageText(_ status: VaultLifecycleStatus) -> String {
-        switch status {
-        case .running:
-            return "Your vault is running and ready to use"
-        case .provisioning:
-            return "Your vault is starting up..."
-        case .stopped:
-            return "Start your vault to access your secrets"
-        case .enrolled:
-            return "Tap Start Vault to provision your instance"
-        case .pendingEnrollment:
-            return "Complete enrollment to use your vault"
-        case .terminated:
-            return "This vault has been terminated"
-        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
     }
 
     // MARK: - Quick Stats
@@ -289,42 +276,8 @@ struct VaultStatusView: View {
 
     // MARK: - Actions Section
 
-    private func actionsSection(status: VaultStatusViewModel.VaultStatusInfo) -> some View {
+    private var actionsSection: some View {
         VStack(spacing: 12) {
-            if status.status.canStart {
-                Button(action: {
-                    Task {
-                        await viewModel.startVault(authToken: "")
-                    }
-                }) {
-                    Label("Start Vault", systemImage: "play.fill")
-                        .fontWeight(.semibold)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.green)
-                        .foregroundColor(.white)
-                        .cornerRadius(12)
-                }
-                .accessibilityIdentifier("vault.actions.startButton")
-            }
-
-            if status.status.canStop {
-                Button(action: {
-                    Task {
-                        await viewModel.stopVault(authToken: "")
-                    }
-                }) {
-                    Label("Stop Vault", systemImage: "stop.fill")
-                        .fontWeight(.semibold)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.orange)
-                        .foregroundColor(.white)
-                        .cornerRadius(12)
-                }
-                .accessibilityIdentifier("vault.actions.stopButton")
-            }
-
             Button(action: {
                 Task {
                     await viewModel.syncVault(authToken: "")
@@ -358,12 +311,10 @@ struct VaultStatusView: View {
                         infoRow(label: "Enrolled", value: formatDate(enrolledAt))
                     }
 
+                    infoRow(label: "Type", value: "Nitro Enclave")
+
                     if let lastBackup = info.lastBackup {
                         infoRow(label: "Last Backup", value: formatDate(lastBackup))
-                    }
-
-                    if let instanceId = info.instanceId {
-                        infoRow(label: "Instance", value: instanceId)
                     }
                 }
             }
@@ -437,9 +388,9 @@ struct VaultStatusCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Image(systemName: "building.2.fill")
+                Image(systemName: "shield.checkered")
                     .foregroundStyle(.blue)
-                Text("Vault Status")
+                Text("Enclave Status")
                     .font(.headline)
                 Spacer()
                 NavigationLink(destination: VaultStatusView()) {

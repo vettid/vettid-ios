@@ -4,9 +4,6 @@ struct ManageVaultView: View {
     @EnvironmentObject var appState: AppState
     @StateObject private var viewModel: ManageVaultViewModel
 
-    @State private var showStartConfirmation = false
-    @State private var showStopConfirmation = false
-    @State private var showRestartConfirmation = false
     @State private var showTerminateConfirmation = false
     @State private var terminateConfirmText = ""
 
@@ -21,12 +18,8 @@ struct ManageVaultView: View {
             vaultStatusSection
 
             if appState.hasActiveVault {
-                vaultActionsSection
                 vaultInfoSection
                 dangerZoneSection
-            } else if viewModel.vaultStatus == .stopped {
-                // Vault exists but is stopped - show start option
-                stoppedVaultSection
             } else {
                 noVaultSection
             }
@@ -43,30 +36,6 @@ struct ManageVaultView: View {
         }
         .refreshable {
             await viewModel.refreshStatus()
-        }
-        .alert("Start Vault", isPresented: $showStartConfirmation) {
-            Button("Cancel", role: .cancel) {}
-            Button("Start") {
-                Task { await viewModel.startVault() }
-            }
-        } message: {
-            Text("Your vault will be started. This may take a moment.")
-        }
-        .alert("Stop Vault", isPresented: $showStopConfirmation) {
-            Button("Cancel", role: .cancel) {}
-            Button("Stop", role: .destructive) {
-                Task { await viewModel.stopVault() }
-            }
-        } message: {
-            Text("Your vault will be stopped. You can restart it at any time. Active connections will be interrupted.")
-        }
-        .alert("Restart Vault", isPresented: $showRestartConfirmation) {
-            Button("Cancel", role: .cancel) {}
-            Button("Restart") {
-                Task { await viewModel.restartVault() }
-            }
-        } message: {
-            Text("Your vault will be restarted. Active connections will be briefly interrupted.")
         }
         .sheet(isPresented: $showTerminateConfirmation) {
             TerminateVaultSheet(
@@ -90,7 +59,7 @@ struct ManageVaultView: View {
         Section {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Vault Server")
+                    Text("Enclave Status")
                         .font(.headline)
                     Text(viewModel.vaultStatus.displayName)
                         .font(.subheadline)
@@ -109,38 +78,7 @@ struct ManageVaultView: View {
             }
             .padding(.vertical, 4)
         } footer: {
-            if let instanceId = appState.vaultInstanceId {
-                Text("Instance: \(String(instanceId.prefix(12)))...")
-            }
-        }
-    }
-
-    // MARK: - Stopped Vault Section
-
-    private var stoppedVaultSection: some View {
-        Section {
-            Button {
-                showStartConfirmation = true
-            } label: {
-                Label {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Start Vault")
-                            .foregroundStyle(.primary)
-
-                        Text("Resume your vault instance")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                } icon: {
-                    Image(systemName: "play.fill")
-                        .foregroundStyle(.green)
-                }
-            }
-            .disabled(viewModel.isLoading)
-        } header: {
-            Text("Vault Actions")
-        } footer: {
-            Text("Your vault is currently stopped. Start it to resume operations.")
+            Text("Your vault runs in a secure Nitro Enclave with hardware-level isolation.")
         }
     }
 
@@ -149,14 +87,14 @@ struct ManageVaultView: View {
     private var noVaultSection: some View {
         Section {
             VStack(spacing: 16) {
-                Image(systemName: "cloud")
+                Image(systemName: "shield.checkered")
                     .font(.system(size: 40))
                     .foregroundStyle(.secondary)
 
-                Text("No Vault Deployed")
+                Text("No Vault Enrolled")
                     .font(.headline)
 
-                Text("Deploy a vault from the Status tab to manage it here.")
+                Text("Complete enrollment to activate your secure enclave vault.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -166,70 +104,10 @@ struct ManageVaultView: View {
         }
     }
 
-    // MARK: - Vault Actions Section
-
-    private var vaultActionsSection: some View {
-        Section {
-            // Stop Vault
-            Button {
-                showStopConfirmation = true
-            } label: {
-                Label {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Stop Vault")
-                            .foregroundStyle(.primary)
-
-                        Text("Pause your vault instance")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                } icon: {
-                    Image(systemName: "stop.fill")
-                        .foregroundStyle(.orange)
-                }
-            }
-            .disabled(viewModel.isLoading)
-
-            // Restart Vault
-            Button {
-                showRestartConfirmation = true
-            } label: {
-                Label {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Restart Vault")
-                            .foregroundStyle(.primary)
-
-                        Text("Restart your vault instance")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                } icon: {
-                    Image(systemName: "arrow.clockwise")
-                        .foregroundStyle(.blue)
-                }
-            }
-            .disabled(viewModel.isLoading)
-        } header: {
-            Text("Vault Actions")
-        } footer: {
-            Text("Stopping your vault will disconnect active sessions. Data remains safe and encrypted.")
-        }
-    }
-
     // MARK: - Vault Info Section
 
     private var vaultInfoSection: some View {
         Section("Vault Information") {
-            if let instanceId = appState.vaultInstanceId {
-                HStack {
-                    Text("Instance ID")
-                    Spacer()
-                    Text(instanceId)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
             HStack {
                 Text("Status")
                 Spacer()
@@ -240,6 +118,13 @@ struct ManageVaultView: View {
                     Text(viewModel.vaultStatus.displayName)
                         .foregroundStyle(.secondary)
                 }
+            }
+
+            HStack {
+                Text("Type")
+                Spacer()
+                Text("Nitro Enclave")
+                    .foregroundStyle(.secondary)
             }
 
             HStack {
@@ -271,7 +156,7 @@ struct ManageVaultView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Terminate Vault")
 
-                        Text("Permanently delete your vault instance")
+                        Text("Permanently delete your vault")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -417,36 +302,30 @@ struct DeletedItemRow: View {
     }
 }
 
-// MARK: - Vault Server Status
+// MARK: - Vault Server Status (Nitro Enclave)
 
 enum VaultServerStatus: Equatable {
     case unknown
     case loading
-    case running
-    case stopped
-    case starting
-    case stopping
-    case pending
+    case enclaveReady     // Nitro Enclave is always ready
+    case terminated
     case error(String)
 
     var displayName: String {
         switch self {
         case .unknown: return "Unknown"
         case .loading: return "Checking..."
-        case .running: return "Running"
-        case .stopped: return "Stopped"
-        case .starting: return "Starting..."
-        case .stopping: return "Stopping..."
-        case .pending: return "Pending"
+        case .enclaveReady: return "Enclave Ready"
+        case .terminated: return "Terminated"
         case .error(let msg): return "Error: \(msg)"
         }
     }
 
     var color: Color {
         switch self {
-        case .running: return .green
-        case .stopped: return .orange
-        case .starting, .stopping, .pending, .loading: return .blue
+        case .enclaveReady: return .green
+        case .terminated: return .gray
+        case .loading: return .blue
         case .error: return .red
         case .unknown: return .gray
         }
@@ -454,9 +333,8 @@ enum VaultServerStatus: Equatable {
 
     static func == (lhs: VaultServerStatus, rhs: VaultServerStatus) -> Bool {
         switch (lhs, rhs) {
-        case (.unknown, .unknown), (.loading, .loading), (.running, .running),
-             (.stopped, .stopped), (.starting, .starting), (.stopping, .stopping),
-             (.pending, .pending):
+        case (.unknown, .unknown), (.loading, .loading),
+             (.enclaveReady, .enclaveReady), (.terminated, .terminated):
             return true
         case (.error(let a), .error(let b)):
             return a == b
@@ -489,10 +367,9 @@ class ManageVaultViewModel: ObservableObject {
         self.userGuidProvider = userGuidProvider
     }
 
-    /// Refresh vault status using action-token flow
+    /// Refresh vault status
     func refreshStatus() async {
-        guard let userGuid = userGuidProvider(),
-              let authToken = authTokenProvider() else {
+        guard let authToken = authTokenProvider() else {
             // No auth - can't check status
             return
         }
@@ -500,155 +377,19 @@ class ManageVaultViewModel: ObservableObject {
         vaultStatus = .loading
 
         do {
-            let status = try await apiClient.getVaultStatusAction(
-                userGuid: userGuid,
-                cognitoToken: authToken
-            )
-            updateStatus(from: status.instanceStatus)
-        } catch {
-            // Fall back to health check if action-token fails
-            await refreshStatusViaHealth()
-        }
-    }
-
-    /// Fall back to health endpoint for status
-    private func refreshStatusViaHealth() async {
-        guard let authToken = authTokenProvider() else { return }
-
-        do {
             let health = try await apiClient.getVaultHealth(authToken: authToken)
             switch health.status {
-            case "healthy", "degraded":
-                vaultStatus = .running
+            case "healthy", "degraded", "ENCLAVE_READY":
+                vaultStatus = .enclaveReady
+            case "terminated":
+                vaultStatus = .terminated
             default:
-                vaultStatus = .unknown
+                vaultStatus = .enclaveReady  // Enclave is always ready
             }
         } catch {
-            vaultStatus = .unknown
+            // Assume enclave is ready if we can't reach health endpoint
+            vaultStatus = .enclaveReady
         }
-    }
-
-    private func updateStatus(from instanceStatus: String?) {
-        switch instanceStatus {
-        case "running":
-            vaultStatus = .running
-        case "stopped":
-            vaultStatus = .stopped
-        case "starting", "pending":
-            vaultStatus = .starting
-        case "stopping":
-            vaultStatus = .stopping
-        case "terminated":
-            vaultStatus = .stopped
-        default:
-            vaultStatus = .unknown
-        }
-    }
-
-    /// Start the vault using action-token flow
-    func startVault() async {
-        guard let userGuid = userGuidProvider(),
-              let authToken = authTokenProvider() else {
-            errorMessage = "Not authenticated"
-            return
-        }
-
-        isLoading = true
-        vaultStatus = .starting
-
-        do {
-            let response = try await apiClient.startVaultAction(
-                userGuid: userGuid,
-                cognitoToken: authToken
-            )
-
-            if response.status == "running" {
-                vaultStatus = .running
-            } else if response.status == "starting" || response.status == "pending" {
-                // Poll for completion
-                await pollForRunning(userGuid: userGuid, authToken: authToken)
-            } else {
-                vaultStatus = .error(response.message)
-            }
-        } catch {
-            errorMessage = "Failed to start vault: \(error.localizedDescription)"
-            vaultStatus = .stopped
-        }
-
-        isLoading = false
-    }
-
-    /// Stop the vault using action-token flow
-    func stopVault() async {
-        guard let userGuid = userGuidProvider(),
-              let authToken = authTokenProvider() else {
-            errorMessage = "Not authenticated"
-            return
-        }
-
-        isLoading = true
-        vaultStatus = .stopping
-
-        do {
-            let response = try await apiClient.stopVaultAction(
-                userGuid: userGuid,
-                cognitoToken: authToken
-            )
-
-            if response.status == "stopped" || response.status == "stopping" {
-                vaultStatus = .stopped
-            } else {
-                vaultStatus = .error(response.message)
-            }
-        } catch {
-            errorMessage = "Failed to stop vault: \(error.localizedDescription)"
-            await refreshStatus()
-        }
-
-        isLoading = false
-    }
-
-    /// Restart the vault (stop + start)
-    func restartVault() async {
-        guard let userGuid = userGuidProvider(),
-              let authToken = authTokenProvider() else {
-            errorMessage = "Not authenticated"
-            return
-        }
-
-        isLoading = true
-        vaultStatus = .stopping
-
-        do {
-            // Stop first
-            _ = try await apiClient.stopVaultAction(
-                userGuid: userGuid,
-                cognitoToken: authToken
-            )
-
-            // Brief delay
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-
-            // Start again
-            vaultStatus = .starting
-            let response = try await apiClient.startVaultAction(
-                userGuid: userGuid,
-                cognitoToken: authToken
-            )
-
-            if response.status == "running" {
-                vaultStatus = .running
-            } else if response.status == "starting" || response.status == "pending" {
-                await pollForRunning(userGuid: userGuid, authToken: authToken)
-            } else {
-                vaultStatus = .error(response.message)
-            }
-        } catch {
-            errorMessage = "Failed to restart vault: \(error.localizedDescription)"
-            await refreshStatus()
-        }
-
-        isLoading = false
     }
 
     /// Terminate the vault
@@ -662,43 +403,12 @@ class ManageVaultViewModel: ObservableObject {
 
         do {
             _ = try await apiClient.terminateVault(authToken: authToken)
-            vaultStatus = .stopped
+            vaultStatus = .terminated
         } catch {
             errorMessage = "Failed to terminate vault: \(error.localizedDescription)"
         }
 
         isLoading = false
-    }
-
-    /// Poll until vault is running or timeout
-    private func pollForRunning(userGuid: String, authToken: String) async {
-        let maxAttempts = 12 // 60 seconds with 5s interval
-        let pollInterval: UInt64 = 5_000_000_000 // 5 seconds
-
-        for _ in 0..<maxAttempts {
-            try? await Task.sleep(nanoseconds: pollInterval)
-
-            do {
-                let status = try await apiClient.getVaultStatusAction(
-                    userGuid: userGuid,
-                    cognitoToken: authToken
-                )
-
-                if status.instanceStatus == "running" {
-                    vaultStatus = .running
-                    return
-                } else if status.instanceStatus == "stopped" || status.instanceStatus == "terminated" {
-                    vaultStatus = .stopped
-                    return
-                }
-                // Still starting, continue polling
-            } catch {
-                // Continue polling on error
-            }
-        }
-
-        // Timeout - check final status
-        await refreshStatus()
     }
 }
 

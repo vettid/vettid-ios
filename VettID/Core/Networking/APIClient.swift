@@ -735,9 +735,27 @@ struct EnrollStartResponse: Decodable {
     let nextStep: String?
     let attestationRequired: Bool?
     let attestationChallenge: String?  // Base64 encoded challenge for App Attest
-
-    // Legacy field for backwards compatibility
     let passwordPrompt: PasswordPrompt?
+
+    // Nitro Enclave attestation (required for enrollment)
+    let enclaveAttestation: EnclaveAttestation?
+}
+
+// MARK: - Nitro Enclave Attestation Types
+
+struct EnclaveAttestation: Decodable {
+    let attestationDocument: String     // Base64-encoded CBOR
+    let enclavePublicKey: String        // Base64 X25519 public key
+    let nonce: String                   // Base64 32-byte nonce
+    let expectedPcrs: [ExpectedPCRSet]
+}
+
+struct ExpectedPCRSet: Decodable {
+    let pcr0: String  // Hex 48 bytes
+    let pcr1: String
+    let pcr2: String
+    let validFrom: String?
+    let validUntil: String?
 }
 
 // MARK: - iOS Attestation Request/Response Types
@@ -809,11 +827,12 @@ struct NatsTopics: Decodable {
 
 struct CredentialPackage: Codable {
     let userGuid: String
-    let credentialId: String?  // May be present in new API
-    let encryptedBlob: String  // Base64 encoded
-    let ephemeralPublicKey: String?  // New API field
-    let nonce: String?  // New API field
-    let cekVersion: Int
+    let credentialId: String?
+    let sealedCredential: String        // Base64 enclave-sealed blob
+    let enclavePublicKey: String        // Identity public key
+    let backupKey: String               // For backup encryption
+    let ephemeralPublicKey: String?
+    let nonce: String?
     let ledgerAuthToken: LedgerAuthToken
     let transactionKeys: [TransactionKeyInfo]?
     let newTransactionKeys: [TransactionKeyInfo]?
@@ -842,8 +861,7 @@ struct ActionRequestResponse: Decodable {
 }
 
 struct AuthExecuteRequest: Encodable {
-    let encryptedBlob: String  // Base64 encoded
-    let cekVersion: Int
+    let sealedCredential: String  // Base64 enclave-sealed blob
     let encryptedPasswordHash: String  // Base64 encoded
     let ephemeralPublicKey: String  // Base64 encoded X25519 public key
     let nonce: String  // Base64 encoded

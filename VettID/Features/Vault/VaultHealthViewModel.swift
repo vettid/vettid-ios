@@ -1,7 +1,7 @@
 import Foundation
 import Combine
 
-/// ViewModel for monitoring vault health status
+/// ViewModel for monitoring Nitro Enclave vault health status
 @MainActor
 final class VaultHealthViewModel: ObservableObject {
 
@@ -20,8 +20,6 @@ final class VaultHealthViewModel: ObservableObject {
     // MARK: - Polling Configuration
 
     private let pollingInterval: TimeInterval = 30  // 30 seconds
-    private let provisioningPollInterval: TimeInterval = 2  // 2 seconds during provisioning
-    private let maxProvisioningAttempts = 60  // 2 minutes max
 
     // MARK: - Task Management
 
@@ -38,7 +36,6 @@ final class VaultHealthViewModel: ObservableObject {
         self.apiClient = apiClient
         self.authTokenProvider = authTokenProvider
         self.userGuidProvider = userGuidProvider
-        // Pass userGuidProvider to NatsConnectionManager for auto-start vault support
         self.natsConnectionManager = natsConnectionManager ?? NatsConnectionManager(
             userGuidProvider: userGuidProvider
         )
@@ -80,7 +77,7 @@ final class VaultHealthViewModel: ObservableObject {
         } catch let error as APIError {
             switch error {
             case .httpError(404):
-                healthState = .notProvisioned
+                healthState = .notEnrolled
             default:
                 healthState = .error(error.localizedDescription)
             }
@@ -89,171 +86,7 @@ final class VaultHealthViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Vault Lifecycle
-
-    /// Provision a new vault instance
-    func provisionVault() async {
-        guard let authToken = authTokenProvider() else {
-            healthState = .error("Not authenticated")
-            return
-        }
-
-        healthState = .provisioning(progress: 0, status: "Starting provisioning...")
-
-        do {
-            let provision = try await apiClient.provisionVault(authToken: authToken)
-            await pollForProvisioning(instanceId: provision.instanceId, authToken: authToken)
-        } catch {
-            healthState = .error("Provisioning failed: \(error.localizedDescription)")
-        }
-    }
-
-    /// Initialize the vault after provisioning
-    func initializeVault() async {
-        guard let authToken = authTokenProvider() else {
-            healthState = .error("Not authenticated")
-            return
-        }
-
-        healthState = .provisioning(progress: 0.8, status: "Initializing vault services...")
-
-        do {
-            let initResponse = try await apiClient.initializeVault(authToken: authToken)
-
-            if initResponse.status == "initialized" {
-                healthState = .provisioning(progress: 1.0, status: "Vault ready!")
-                // Transition to loaded state after brief delay
-                try? await Task.sleep(nanoseconds: 500_000_000)
-                await checkHealth()
-            } else {
-                healthState = .error("Initialization failed: \(initResponse.status)")
-            }
-        } catch {
-            healthState = .error("Initialization failed: \(error.localizedDescription)")
-        }
-    }
-
-    /// Start a stopped vault instance
-    func startVault() async {
-        guard let authToken = authTokenProvider() else {
-            healthState = .error("Not authenticated")
-            return
-        }
-
-        healthState = .provisioning(progress: 0, status: "Starting vault...")
-
-        do {
-            // Try action-token flow first (preferred for mobile)
-            if let userGuid = userGuidProvider() {
-                let response = try await apiClient.startVaultAction(userGuid: userGuid, cognitoToken: authToken)
-
-                if response.status == "starting" || response.status == "running" || response.status == "pending" {
-                    // Poll for vault to become healthy
-                    await pollForStartup(authToken: authToken)
-                } else {
-                    healthState = .error("Start failed: \(response.message)")
-                }
-            } else {
-                // Fall back to direct API call (legacy)
-                let response = try await apiClient.startVaultInstance(authToken: authToken)
-
-                if response.status == "starting" || response.status == "started" {
-                    await pollForStartup(authToken: authToken)
-                } else {
-                    healthState = .error("Start failed: \(response.message)")
-                }
-            }
-        } catch {
-            healthState = .error("Start failed: \(error.localizedDescription)")
-        }
-    }
-
-    /// Stop the vault (preserves state)
-    func stopVault() async {
-        guard let authToken = authTokenProvider() else {
-            healthState = .error("Not authenticated")
-            return
-        }
-
-        do {
-            // Try action-token flow first (preferred for mobile)
-            if let userGuid = userGuidProvider() {
-                let response = try await apiClient.stopVaultAction(userGuid: userGuid, cognitoToken: authToken)
-
-                if response.status == "stopped" || response.status == "stopping" {
-                    healthState = .stopped
-                } else {
-                    healthState = .error("Stop failed: \(response.message)")
-                }
-            } else {
-                // Fall back to direct API call (legacy)
-                let response = try await apiClient.stopVaultInstance(authToken: authToken)
-
-                if response.status == "stopped" || response.status == "stopping" {
-                    healthState = .stopped
-                } else {
-                    healthState = .error("Stop failed: \(response.message)")
-                }
-            }
-        } catch {
-            healthState = .error("Stop failed: \(error.localizedDescription)")
-        }
-    }
-
-    /// Get comprehensive vault status using action-token flow
-    /// Returns detailed enrollment and instance status
-    func getVaultStatus() async -> ActionVaultStatusResponse? {
-        guard let authToken = authTokenProvider(),
-              let userGuid = userGuidProvider() else {
-            return nil
-        }
-
-        do {
-            return try await apiClient.getVaultStatusAction(userGuid: userGuid, cognitoToken: authToken)
-        } catch {
-            #if DEBUG
-            print("Failed to get vault status: \(error)")
-            #endif
-            return nil
-        }
-    }
-
-    /// Check and update state based on action-token vault status
-    func checkVaultStatusWithAction() async {
-        guard let status = await getVaultStatus() else {
-            // Fall back to health check
-            await checkHealth()
-            return
-        }
-
-        // Map instance status to health state
-        switch status.instanceStatus {
-        case "running":
-            // Check health for detailed info
-            await checkHealth()
-        case "stopped":
-            healthState = .stopped
-        case "stopping":
-            healthState = .provisioning(progress: 0.5, status: "Stopping...")
-        case "starting", "pending":
-            healthState = .provisioning(progress: 0.5, status: "Starting...")
-        case "provisioning":
-            healthState = .provisioning(progress: 0.3, status: "Provisioning...")
-        case "initializing":
-            healthState = .provisioning(progress: 0.7, status: "Initializing...")
-        case "terminated":
-            healthState = .notProvisioned
-        default:
-            // Check enrollment status
-            if status.enrollmentStatus == "not_enrolled" {
-                healthState = .notProvisioned
-            } else {
-                await checkHealth()
-            }
-        }
-    }
-
-    // MARK: - Status Helpers (Android parity)
+    // MARK: - Status Helpers
 
     /// Returns true if vault needs attention (unhealthy or error state)
     var needsAttention: Bool {
@@ -272,12 +105,8 @@ final class VaultHealthViewModel: ObservableObject {
         switch healthState {
         case .loading:
             return "Checking..."
-        case .notProvisioned:
-            return "Not set up"
-        case .provisioning(_, let status):
-            return status
-        case .stopped:
-            return "Vault stopped"
+        case .notEnrolled:
+            return "Not enrolled"
         case .loaded(let info):
             return info.status.displayName
         case .error(let message):
@@ -301,7 +130,7 @@ final class VaultHealthViewModel: ObservableObject {
         return false
     }
 
-    /// Terminate the vault (full cleanup)
+    /// Terminate the vault
     func terminateVault() async {
         guard let authToken = authTokenProvider() else {
             healthState = .error("Not authenticated")
@@ -312,7 +141,7 @@ final class VaultHealthViewModel: ObservableObject {
             let response = try await apiClient.terminateVault(authToken: authToken)
 
             if response.status == "terminated" || response.status == "terminating" {
-                healthState = .notProvisioned
+                healthState = .notEnrolled
             } else {
                 healthState = .error("Terminate failed: \(response.message)")
             }
@@ -321,97 +150,24 @@ final class VaultHealthViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Private Methods
-
-    private func pollForProvisioning(instanceId: String, authToken: String) async {
-        for attempt in 0..<maxProvisioningAttempts {
-            if Task.isCancelled { return }
-
-            let progress = Double(attempt) / Double(maxProvisioningAttempts) * 0.7 // Max 70% during provisioning
-
-            do {
-                try await Task.sleep(nanoseconds: UInt64(provisioningPollInterval * 1_000_000_000))
-
-                let health = try await apiClient.getVaultHealth(authToken: authToken)
-
-                switch health.status {
-                case "healthy":
-                    healthState = .loaded(VaultHealthInfo(from: health))
-                    return
-
-                case "degraded":
-                    // Still initializing, update progress
-                    healthState = .provisioning(progress: progress + 0.1, status: "Services starting...")
-
-                default:
-                    // Still provisioning
-                    healthState = .provisioning(progress: progress, status: "Instance starting...")
-                }
-            } catch {
-                // Still provisioning - instance not ready yet
-                healthState = .provisioning(progress: progress, status: "Waiting for instance...")
-            }
-        }
-
-        healthState = .error("Provisioning timed out after 2 minutes")
-    }
-
-    private func pollForStartup(authToken: String) async {
-        // Poll with 2-second intervals for up to 60 attempts (2 minutes)
-        for attempt in 0..<maxProvisioningAttempts {
-            if Task.isCancelled { return }
-
-            let progress = Double(attempt) / Double(maxProvisioningAttempts)
-            healthState = .provisioning(progress: progress, status: "Starting vault...")
-
-            do {
-                try await Task.sleep(nanoseconds: UInt64(provisioningPollInterval * 1_000_000_000))
-
-                let health = try await apiClient.getVaultHealth(authToken: authToken)
-
-                switch health.status {
-                case "healthy":
-                    healthState = .loaded(VaultHealthInfo(from: health))
-                    return
-
-                case "degraded":
-                    healthState = .provisioning(progress: progress + 0.1, status: "Services warming up...")
-
-                default:
-                    healthState = .provisioning(progress: progress, status: "Starting...")
-                }
-            } catch {
-                // Still starting
-                healthState = .provisioning(progress: progress, status: "Waiting for startup...")
-            }
-        }
-
-        healthState = .error("Startup timed out after 2 minutes")
-    }
-
     deinit {
         healthCheckTask?.cancel()
     }
 }
 
-// MARK: - Health State
+// MARK: - Health State (Nitro Enclave - simplified)
 
 enum VaultHealthState: Equatable {
     case loading
-    case notProvisioned
-    case provisioning(progress: Double, status: String)
-    case stopped
-    case loaded(VaultHealthInfo)
+    case notEnrolled           // User not enrolled yet
+    case loaded(VaultHealthInfo)   // Enclave is always ready when enrolled
     case error(String)
 
     static func == (lhs: VaultHealthState, rhs: VaultHealthState) -> Bool {
         switch (lhs, rhs) {
         case (.loading, .loading),
-             (.notProvisioned, .notProvisioned),
-             (.stopped, .stopped):
+             (.notEnrolled, .notEnrolled):
             return true
-        case (.provisioning(let p1, let s1), .provisioning(let p2, let s2)):
-            return p1 == p2 && s1 == s2
         case (.loaded(let h1), .loaded(let h2)):
             return h1 == h2
         case (.error(let e1), .error(let e2)):
@@ -426,17 +182,10 @@ enum VaultHealthState: Equatable {
         return false
     }
 
-    var isProvisioning: Bool {
-        if case .provisioning = self { return true }
-        return false
-    }
-
     var displayTitle: String {
         switch self {
         case .loading: return "Loading..."
-        case .notProvisioned: return "No Vault"
-        case .provisioning: return "Provisioning..."
-        case .stopped: return "Stopped"
+        case .notEnrolled: return "Not Enrolled"
         case .loaded(let info): return info.status.displayName
         case .error: return "Error"
         }

@@ -324,12 +324,13 @@ final class CredentialStore {
 
 // MARK: - Stored Credential Model
 
-/// Credential stored locally on the device
-/// Note: Mobile does NOT store private keys - only encrypted blob and UTK public keys
+/// Credential stored locally on the device (Nitro Enclave format)
+/// Note: Mobile does NOT store private keys - only sealed credential and UTK public keys
 struct StoredCredential: Codable {
     let userGuid: String
-    let encryptedBlob: String         // Base64 encoded - cannot decrypt locally
-    let cekVersion: Int               // Track CEK version for sync
+    let sealedCredential: String      // Base64 enclave-sealed blob
+    let enclavePublicKey: String      // Identity public key from enclave
+    let backupKey: String             // For backup encryption
     let ledgerAuthToken: StoredLAT    // For verifying server authenticity
     let transactionKeys: [StoredUTK]  // Pool of User Transaction Keys (public only)
     let createdAt: Date
@@ -362,8 +363,9 @@ struct StoredCredential: Codable {
 
         return StoredCredential(
             userGuid: userGuid,
-            encryptedBlob: encryptedBlob,
-            cekVersion: cekVersion,
+            sealedCredential: sealedCredential,
+            enclavePublicKey: enclavePublicKey,
+            backupKey: backupKey,
             ledgerAuthToken: ledgerAuthToken,
             transactionKeys: updatedKeys,
             createdAt: createdAt,
@@ -396,8 +398,9 @@ struct StoredCredential: Codable {
 
         return StoredCredential(
             userGuid: userGuid,
-            encryptedBlob: package.encryptedBlob,
-            cekVersion: package.cekVersion,
+            sealedCredential: package.sealedCredential,
+            enclavePublicKey: package.enclavePublicKey,
+            backupKey: package.backupKey,
             ledgerAuthToken: StoredLAT(
                 latId: package.ledgerAuthToken.latId ?? package.ledgerAuthToken.token,
                 token: package.ledgerAuthToken.token,

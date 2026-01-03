@@ -46,7 +46,7 @@ final class AuthenticationViewModel: ObservableObject {
         case awaitingPassword
         case authenticating
         case success
-        case credentialRotated(newCekVersion: Int, newLatVersion: Int)
+        case credentialRotated(newLatVersion: Int)
         case error(message: String, retryable: Bool)
 
         var title: String {
@@ -207,8 +207,7 @@ final class AuthenticationViewModel: ObservableObject {
 
             // Build request
             let request = AuthExecuteRequest(
-                encryptedBlob: credential.encryptedBlob,
-                cekVersion: credential.cekVersion,
+                sealedCredential: credential.sealedCredential,
                 encryptedPasswordHash: encryptedPayload.encryptedPasswordHash,
                 ephemeralPublicKey: encryptedPayload.ephemeralPublicKey,
                 nonce: encryptedPayload.nonce,
@@ -234,7 +233,6 @@ final class AuthenticationViewModel: ObservableObject {
 
             // Show success with rotation info
             state = .credentialRotated(
-                newCekVersion: response.credentialPackage.cekVersion,
                 newLatVersion: response.credentialPackage.ledgerAuthToken.version
             )
 

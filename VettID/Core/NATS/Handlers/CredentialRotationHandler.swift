@@ -203,8 +203,9 @@ actor CredentialRotationHandler {
 
         let updatedCredential = StoredCredential(
             userGuid: credential.userGuid,
-            encryptedBlob: credential.encryptedBlob,
-            cekVersion: credential.cekVersion,
+            sealedCredential: credential.sealedCredential,
+            enclavePublicKey: credential.enclavePublicKey,
+            backupKey: credential.backupKey,
             ledgerAuthToken: newLat,
             transactionKeys: credential.transactionKeys,
             createdAt: credential.createdAt,
@@ -285,8 +286,9 @@ actor CredentialRotationHandler {
 
         let updatedCredential = StoredCredential(
             userGuid: credential.userGuid,
-            encryptedBlob: credential.encryptedBlob,
-            cekVersion: credential.cekVersion,
+            sealedCredential: credential.sealedCredential,
+            enclavePublicKey: credential.enclavePublicKey,
+            backupKey: credential.backupKey,
             ledgerAuthToken: credential.ledgerAuthToken,
             transactionKeys: updatedKeys,
             createdAt: credential.createdAt,

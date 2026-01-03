@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-/// Manages vault status display and actions
+/// Manages vault status display (Nitro Enclave - simplified)
 @MainActor
 final class VaultStatusViewModel: ObservableObject {
 
@@ -22,7 +22,6 @@ final class VaultStatusViewModel: ObservableObject {
     // MARK: - Dependencies
 
     private let credentialStore = CredentialStore()
-    private let vaultService = VaultService()
     private var refreshTask: Task<Void, Never>?
 
     // MARK: - View State
@@ -82,8 +81,8 @@ final class VaultStatusViewModel: ObservableObject {
                 return
             }
 
-            // Get vault status from stored credential
-            let vaultStatus = parseVaultStatus(credential.vaultStatus)
+            // With Nitro, vault is always running when enrolled
+            let vaultStatus: VaultLifecycleStatus = .running
             unusedKeyCount = credential.unusedKeyCount
 
             let statusInfo = VaultStatusInfo(
@@ -111,7 +110,7 @@ final class VaultStatusViewModel: ObservableObject {
 
     // MARK: - Refresh Status
 
-    /// Refresh vault status from server
+    /// Refresh vault status
     func refreshStatus(authToken: String = "") async {
         guard case .enrolled = state else {
             return
@@ -122,10 +121,6 @@ final class VaultStatusViewModel: ObservableObject {
                 state = .notEnrolled
                 return
             }
-
-            // In a real implementation, we would call the API
-            // For now, use stored data
-            // let response = try await apiClient.getVaultStatus(...)
 
             unusedKeyCount = credential.unusedKeyCount
             lastSyncAt = Date()
@@ -144,69 +139,8 @@ final class VaultStatusViewModel: ObservableObject {
 
     // MARK: - Vault Actions
 
-    /// Start the vault
-    func startVault(authToken: String) async {
-        guard var currentInfo = vaultInfo else { return }
-
-        do {
-            // Update to provisioning state
-            currentInfo = VaultInfo(
-                userGuid: currentInfo.userGuid,
-                status: .provisioning,
-                enrolledAt: currentInfo.enrolledAt,
-                instanceId: nil,
-                region: currentInfo.region,
-                lastBackup: currentInfo.lastBackup,
-                health: .unknown
-            )
-            vaultInfo = currentInfo
-            state = .enrolled(VaultStatusInfo(
-                status: .provisioning,
-                instanceId: nil,
-                health: .unknown
-            ))
-
-            try await vaultService.startVault(authToken: authToken)
-
-            // Poll for running status
-            await pollForStatus(.running, authToken: authToken)
-
-        } catch {
-            handleError(error, retryable: true)
-        }
-    }
-
-    /// Stop the vault
-    func stopVault(authToken: String) async {
-        guard var currentInfo = vaultInfo else { return }
-
-        do {
-            try await vaultService.stopVault(authToken: authToken)
-
-            currentInfo = VaultInfo(
-                userGuid: currentInfo.userGuid,
-                status: .stopped,
-                enrolledAt: currentInfo.enrolledAt,
-                instanceId: currentInfo.instanceId,
-                region: currentInfo.region,
-                lastBackup: Date(),  // Backup triggered on stop
-                health: .unknown
-            )
-            vaultInfo = currentInfo
-            state = .enrolled(VaultStatusInfo(
-                status: .stopped,
-                instanceId: currentInfo.instanceId,
-                health: .unknown
-            ))
-
-        } catch {
-            handleError(error, retryable: true)
-        }
-    }
-
     /// Trigger manual sync
     func syncVault(authToken: String) async {
-        // Sync implementation - would call API
         lastSyncAt = Date()
     }
 
@@ -231,40 +165,6 @@ final class VaultStatusViewModel: ObservableObject {
     }
 
     // MARK: - Private Helpers
-
-    private func pollForStatus(_ targetStatus: VaultLifecycleStatus, authToken: String) async {
-        for _ in 0..<30 {  // Poll for up to 5 minutes
-            try? await Task.sleep(nanoseconds: 10_000_000_000)  // 10 seconds
-            await refreshStatus(authToken: authToken)
-
-            if let info = vaultInfo, info.status == targetStatus {
-                return
-            }
-        }
-    }
-
-    private func parseVaultStatus(_ statusString: String?) -> VaultLifecycleStatus {
-        guard let status = statusString?.uppercased() else {
-            return .enrolled
-        }
-
-        switch status {
-        case "PENDING_ENROLLMENT":
-            return .pendingEnrollment
-        case "ENROLLED":
-            return .enrolled
-        case "PROVISIONING":
-            return .provisioning
-        case "RUNNING":
-            return .running
-        case "STOPPED":
-            return .stopped
-        case "TERMINATED":
-            return .terminated
-        default:
-            return .enrolled
-        }
-    }
 
     private func handleError(_ error: Error, retryable: Bool) {
         let message: String
@@ -294,14 +194,12 @@ final class VaultStatusViewModel: ObservableObject {
     }
 }
 
-// MARK: - Vault Lifecycle Status
+// MARK: - Vault Lifecycle Status (Nitro Enclave - simplified)
 
 enum VaultLifecycleStatus: String, Equatable, CaseIterable {
     case pendingEnrollment = "pending_enrollment"
     case enrolled = "enrolled"
-    case provisioning = "provisioning"
-    case running = "running"
-    case stopped = "stopped"
+    case running = "running"       // Enclave is always ready
     case terminated = "terminated"
 
     var displayName: String {
@@ -310,12 +208,8 @@ enum VaultLifecycleStatus: String, Equatable, CaseIterable {
             return "Pending Enrollment"
         case .enrolled:
             return "Enrolled"
-        case .provisioning:
-            return "Starting..."
         case .running:
-            return "Running"
-        case .stopped:
-            return "Stopped"
+            return "Enclave Ready"
         case .terminated:
             return "Terminated"
         }
@@ -327,12 +221,8 @@ enum VaultLifecycleStatus: String, Equatable, CaseIterable {
             return "hourglass"
         case .enrolled:
             return "checkmark.seal"
-        case .provisioning:
-            return "arrow.clockwise"
         case .running:
-            return "checkmark.circle.fill"
-        case .stopped:
-            return "stop.circle.fill"
+            return "checkmark.shield.fill"
         case .terminated:
             return "xmark.circle.fill"
         }
@@ -344,23 +234,11 @@ enum VaultLifecycleStatus: String, Equatable, CaseIterable {
             return .orange
         case .enrolled:
             return .blue
-        case .provisioning:
-            return .yellow
         case .running:
             return .green
-        case .stopped:
-            return .gray
         case .terminated:
             return .red
         }
-    }
-
-    var canStart: Bool {
-        self == .enrolled || self == .stopped
-    }
-
-    var canStop: Bool {
-        self == .running
     }
 }
 
