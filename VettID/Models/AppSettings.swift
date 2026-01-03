@@ -36,23 +36,44 @@ enum AppTheme: String, CaseIterable, Codable {
 
 enum AppLockMethod: String, CaseIterable, Codable {
     case pin = "PIN"
+    case pattern = "Pattern"
     case biometrics = "Biometrics"
     case both = "PIN & Biometrics"
+    case patternBiometrics = "Pattern & Biometrics"
 
     var icon: String {
         switch self {
         case .pin: return "lock.fill"
+        case .pattern: return "square.grid.3x3.fill"
         case .biometrics: return "faceid"
         case .both: return "lock.shield.fill"
+        case .patternBiometrics: return "square.grid.3x3.topleft.filled"
         }
     }
 
     var description: String {
         switch self {
         case .pin: return "Use a 4-6 digit PIN"
+        case .pattern: return "Draw a pattern to unlock"
         case .biometrics: return "Use Face ID or Touch ID"
         case .both: return "Use both PIN and biometrics"
+        case .patternBiometrics: return "Use pattern and biometrics"
         }
+    }
+
+    /// Whether this method requires a PIN
+    var requiresPIN: Bool {
+        self == .pin || self == .both
+    }
+
+    /// Whether this method requires a pattern
+    var requiresPattern: Bool {
+        self == .pattern || self == .patternBiometrics
+    }
+
+    /// Whether this method uses biometrics
+    var usesBiometrics: Bool {
+        self == .biometrics || self == .both || self == .patternBiometrics
     }
 }
 
@@ -83,8 +104,20 @@ struct AppLockSettings: Codable, Equatable {
     var method: AppLockMethod = .biometrics
     var autoLockTimeout: AutoLockTimeout = .fiveMinutes
     var pinHash: String? = nil
+    var patternHash: String? = nil
+    var patternGridSize: Int = 3  // 3x3 default, can be 4 for 4x4
 
     static let `default` = AppLockSettings()
+
+    /// Check if pattern is configured
+    var hasPattern: Bool {
+        patternHash != nil
+    }
+
+    /// Check if PIN is configured
+    var hasPIN: Bool {
+        pinHash != nil
+    }
 }
 
 // MARK: - User Preferences

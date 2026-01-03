@@ -6,6 +6,8 @@ struct SecuritySettingsView: View {
     @StateObject private var lockService = AppLockService.shared
     @State private var showPINSetup = false
     @State private var showChangePIN = false
+    @State private var showPatternSetup = false
+    @State private var showChangePattern = false
     @State private var showChangePassword = false
     @State private var biometricsAvailable = false
     @State private var biometricType: LABiometryType = .none
@@ -18,9 +20,11 @@ struct SecuritySettingsView: View {
                     get: { appState.appLock.isEnabled },
                     set: { newValue in
                         if newValue {
-                            // If enabling, show PIN setup if using PIN
-                            if appState.appLock.method == .pin || appState.appLock.method == .both {
+                            // If enabling, show appropriate setup based on method
+                            if appState.appLock.method.requiresPIN {
                                 showPINSetup = true
+                            } else if appState.appLock.method.requiresPattern {
+                                showPatternSetup = true
                             } else {
                                 var settings = appState.appLock
                                 settings.isEnabled = true
@@ -28,6 +32,7 @@ struct SecuritySettingsView: View {
                             }
                         } else {
                             lockService.clearPIN()
+                            lockService.clearPattern()
                         }
                     }
                 ))
@@ -72,10 +77,19 @@ struct SecuritySettingsView: View {
                 }
 
                 // PIN Management
-                if appState.appLock.method == .pin || appState.appLock.method == .both {
+                if appState.appLock.method.requiresPIN {
                     Section {
                         Button("Change PIN") {
                             showChangePIN = true
+                        }
+                    }
+                }
+
+                // Pattern Management
+                if appState.appLock.method.requiresPattern {
+                    Section {
+                        Button("Change Pattern") {
+                            showChangePattern = true
                         }
                     }
                 }
@@ -110,6 +124,18 @@ struct SecuritySettingsView: View {
                 appState.preferences = UserPreferences.load()
             }
         }
+        .sheet(isPresented: $showPatternSetup) {
+            PatternSetupView { pattern in
+                _ = lockService.setPattern(pattern)
+                appState.preferences = UserPreferences.load()
+            }
+        }
+        .sheet(isPresented: $showChangePattern) {
+            PatternSetupView(isChange: true) { pattern in
+                _ = lockService.setPattern(pattern)
+                appState.preferences = UserPreferences.load()
+            }
+        }
         .sheet(isPresented: $showChangePassword) {
             ChangePasswordSheet()
         }
@@ -137,10 +163,13 @@ struct SecuritySettingsView: View {
     }
 
     private func selectLockMethod(_ method: AppLockMethod) {
-        if method == .pin || method == .both {
-            if appState.appLock.pinHash == nil {
-                showPINSetup = true
-            }
+        // Show setup for PIN methods if no PIN set
+        if method.requiresPIN && appState.appLock.pinHash == nil {
+            showPINSetup = true
+        }
+        // Show setup for pattern methods if no pattern set
+        if method.requiresPattern && appState.appLock.patternHash == nil {
+            showPatternSetup = true
         }
         var settings = appState.appLock
         settings.method = method
@@ -191,32 +220,46 @@ struct LockMethodRow: View {
         switch method {
         case .pin:
             return "lock.fill"
+        case .pattern:
+            return "square.grid.3x3.fill"
         case .biometrics:
             return biometricType == .faceID ? "faceid" : "touchid"
         case .both:
             return "lock.shield.fill"
+        case .patternBiometrics:
+            return "square.grid.3x3.topleft.filled"
         }
     }
 
     private var displayName: String {
+        let bioName = biometricType == .faceID ? "Face ID" : "Touch ID"
         switch method {
         case .pin:
             return "PIN"
+        case .pattern:
+            return "Pattern"
         case .biometrics:
-            return biometricType == .faceID ? "Face ID" : "Touch ID"
+            return bioName
         case .both:
-            return "PIN & \(biometricType == .faceID ? "Face ID" : "Touch ID")"
+            return "PIN & \(bioName)"
+        case .patternBiometrics:
+            return "Pattern & \(bioName)"
         }
     }
 
     private var description: String {
+        let bioName = biometricType == .faceID ? "Face ID" : "Touch ID"
         switch method {
         case .pin:
             return "Use a 4-6 digit PIN"
+        case .pattern:
+            return "Draw a pattern to unlock"
         case .biometrics:
-            return "Use \(biometricType == .faceID ? "Face ID" : "Touch ID") to unlock"
+            return "Use \(bioName) to unlock"
         case .both:
             return "Use both for maximum security"
+        case .patternBiometrics:
+            return "Pattern with \(bioName) fallback"
         }
     }
 }
@@ -535,6 +578,135 @@ struct ChangePasswordSheet: View {
                 await MainActor.run {
                     isLoading = false
                     errorMessage = "Failed to change password: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Pattern Setup View
+
+struct PatternSetupView: View {
+    @Environment(\.dismiss) private var dismiss
+    var isChange: Bool = false
+    let onComplete: ([Int]) -> Void
+
+    @State private var pattern: [Int] = []
+    @State private var confirmPattern: [Int] = []
+    @State private var patternError = false
+    @State private var step: PatternSetupStep = .enter
+    @State private var errorMessage: String?
+
+    enum PatternSetupStep {
+        case enter
+        case confirm
+    }
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 32) {
+                Spacer()
+
+                // Icon
+                Image(systemName: "square.grid.3x3.fill")
+                    .font(.system(size: 60))
+                    .foregroundStyle(.blue)
+
+                // Title
+                Text(stepTitle)
+                    .font(.title2)
+                    .fontWeight(.bold)
+
+                Text(stepSubtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+
+                // Pattern grid
+                PatternGridView(
+                    pattern: step == .enter ? $pattern : $confirmPattern,
+                    isError: $patternError
+                ) { completedPattern in
+                    handlePatternComplete(completedPattern)
+                }
+
+                // Error message
+                if let error = errorMessage {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+
+                Spacer()
+
+                // Instructions
+                Text("Connect at least 4 dots")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.bottom)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private var stepTitle: String {
+        switch step {
+        case .enter:
+            return isChange ? "Draw New Pattern" : "Create Pattern"
+        case .confirm:
+            return "Confirm Pattern"
+        }
+    }
+
+    private var stepSubtitle: String {
+        switch step {
+        case .enter:
+            return "Draw a pattern to use for unlocking"
+        case .confirm:
+            return "Draw your pattern again to confirm"
+        }
+    }
+
+    private func handlePatternComplete(_ completedPattern: [Int]) {
+        errorMessage = nil
+
+        if step == .enter {
+            // Validate pattern length
+            let validation = PatternAuthenticator.validate(completedPattern)
+            if validation.isValid {
+                pattern = completedPattern
+                step = .confirm
+                // Clear for confirm step
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    // Pattern will be cleared by the grid view automatically
+                }
+            } else {
+                errorMessage = validation.errorMessage
+                patternError = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    pattern = []
+                    patternError = false
+                }
+            }
+        } else {
+            // Confirm step - check if patterns match
+            if completedPattern == pattern {
+                onComplete(pattern)
+                dismiss()
+            } else {
+                errorMessage = "Patterns don't match. Try again."
+                patternError = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    confirmPattern = []
+                    patternError = false
+                    step = .enter
+                    pattern = []
                 }
             }
         }

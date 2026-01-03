@@ -139,6 +139,78 @@ class AppLockService: ObservableObject {
         isLocked = false
     }
 
+    // MARK: - Pattern Management
+
+    /// Attempt to unlock with pattern
+    func unlockWithPattern(_ pattern: [Int]) -> Bool {
+        // Check for lockout
+        if let lockoutEnd = lockoutEndTime, Date() < lockoutEnd {
+            return false
+        }
+
+        guard let storedHash = settings.patternHash else {
+            return false
+        }
+
+        if PatternAuthenticator.verify(pattern, against: storedHash) {
+            isLocked = false
+            failedAttempts = 0
+            lockoutEndTime = nil
+            return true
+        } else {
+            failedAttempts += 1
+            // Pattern uses more aggressive rate limiting (3 attempts)
+            if failedAttempts >= 3 {
+                lockoutEndTime = Date().addingTimeInterval(lockoutDuration)
+                failedAttempts = 0
+            }
+            return false
+        }
+    }
+
+    /// Set a new pattern
+    func setPattern(_ pattern: [Int], gridSize: Int = 3) -> Bool {
+        // Validate pattern
+        let validation = PatternAuthenticator.validate(
+            pattern,
+            gridSize: gridSize == 4 ? .fourByFour : .threeByThree
+        )
+        guard validation.isValid else {
+            return false
+        }
+
+        var prefs = UserPreferences.load()
+        prefs.appLock.patternHash = PatternAuthenticator.hash(pattern)
+        prefs.appLock.patternGridSize = gridSize
+        prefs.appLock.isEnabled = true
+        prefs.save()
+
+        return true
+    }
+
+    /// Verify current pattern
+    func verifyPattern(_ pattern: [Int]) -> Bool {
+        guard let storedHash = settings.patternHash else {
+            return false
+        }
+        return PatternAuthenticator.verify(pattern, against: storedHash)
+    }
+
+    /// Clear pattern
+    func clearPattern() {
+        var prefs = UserPreferences.load()
+        prefs.appLock.patternHash = nil
+        if !prefs.appLock.hasPIN {
+            prefs.appLock.isEnabled = false
+        }
+        prefs.save()
+    }
+
+    /// Get the configured pattern grid size
+    var patternGridSize: Int {
+        settings.patternGridSize
+    }
+
     // MARK: - Biometric Support
 
     /// Check if biometrics are available
@@ -159,14 +231,22 @@ class AppLockService: ObservableObject {
     /// Check if biometrics should be used based on settings
     var shouldUseBiometrics: Bool {
         guard isBiometricsAvailable else { return false }
-        let method = settings.method
-        return method == .biometrics || method == .both
+        return settings.method.usesBiometrics
     }
 
     /// Check if PIN should be used based on settings
     var shouldUsePIN: Bool {
-        let method = settings.method
-        return method == .pin || method == .both
+        return settings.method.requiresPIN
+    }
+
+    /// Check if pattern should be used based on settings
+    var shouldUsePattern: Bool {
+        return settings.method.requiresPattern
+    }
+
+    /// Check if pattern is configured
+    var hasPattern: Bool {
+        settings.hasPattern
     }
 
     // MARK: - Lockout

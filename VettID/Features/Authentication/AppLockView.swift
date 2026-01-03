@@ -4,9 +4,16 @@ import LocalAuthentication
 struct AppLockView: View {
     @ObservedObject var lockService: AppLockService
     @State private var pin = ""
+    @State private var pattern: [Int] = []
+    @State private var patternError = false
     @State private var errorMessage: String?
     @State private var isShaking = false
     @State private var showBiometricPrompt = false
+
+    /// Whether to show pattern or PIN input
+    private var usePattern: Bool {
+        lockService.shouldUsePattern && lockService.hasPattern
+    }
 
     var body: some View {
         ZStack {
@@ -29,7 +36,7 @@ struct AppLockView: View {
                         .font(.title)
                         .fontWeight(.bold)
 
-                    Text("Enter your PIN to unlock")
+                    Text(usePattern ? "Draw your pattern to unlock" : "Enter your PIN to unlock")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -52,10 +59,34 @@ struct AppLockView: View {
                     .padding()
                     .background(Color.red.opacity(0.1))
                     .cornerRadius(12)
+                } else if usePattern {
+                    // Pattern grid
+                    PatternGridView(
+                        gridSize: lockService.patternGridSize,
+                        pattern: $pattern,
+                        isError: $patternError
+                    ) { completedPattern in
+                        attemptPatternUnlock(completedPattern)
+                    }
+                    .modifier(ShakeEffect(shakes: isShaking ? 2 : 0))
+
+                    // Error message
+                    if let error = errorMessage {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+
+                    // Failed attempts indicator
+                    if lockService.failedAttempts > 0 {
+                        Text("\(lockService.failedAttempts) failed attempt\(lockService.failedAttempts > 1 ? "s" : "")")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
                 } else {
                     // PIN dots
                     HStack(spacing: 16) {
-                        ForEach(0..<6) { index in
+                        ForEach(0..<6, id: \.self) { index in
                             Circle()
                                 .fill(dotFill(for: index))
                                 .frame(width: 16, height: 16)
@@ -84,9 +115,9 @@ struct AppLockView: View {
 
                 Spacer()
 
-                // Keypad
-                if !lockService.isLockedOut {
-                    PINKeypadView(pin: $pin, onComplete: attemptUnlock)
+                // Keypad (only for PIN mode)
+                if !lockService.isLockedOut && !usePattern {
+                    PINKeypadView(pin: $pin, onComplete: attemptPINUnlock)
                 }
 
                 // Biometric button
@@ -107,8 +138,8 @@ struct AppLockView: View {
             .padding()
         }
         .onAppear {
-            // Automatically prompt for biometrics if available
-            if lockService.shouldUseBiometrics && !lockService.shouldUsePIN {
+            // Automatically prompt for biometrics if available and no other input required
+            if lockService.shouldUseBiometrics && !lockService.shouldUsePIN && !lockService.shouldUsePattern {
                 attemptBiometricUnlock()
             }
         }
@@ -131,7 +162,7 @@ struct AppLockView: View {
         lockService.biometricType == .faceID ? "Face ID" : "Touch ID"
     }
 
-    private func attemptUnlock() {
+    private func attemptPINUnlock() {
         guard pin.count >= 4 else { return }
 
         if lockService.unlockWithPIN(pin) {
@@ -148,6 +179,28 @@ struct AppLockView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 isShaking = false
                 pin = ""
+            }
+        }
+    }
+
+    private func attemptPatternUnlock(_ completedPattern: [Int]) {
+        if lockService.unlockWithPattern(completedPattern) {
+            // Success - view will dismiss
+            pattern = []
+            patternError = false
+            errorMessage = nil
+        } else {
+            // Failure
+            errorMessage = "Incorrect pattern"
+            patternError = true
+            withAnimation(.default) {
+                isShaking = true
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                isShaking = false
+                pattern = []
+                patternError = false
             }
         }
     }

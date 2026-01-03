@@ -104,6 +104,7 @@
 		4AD62CC5A64A23D92C571E5B /* CallCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB6A98EE6E329C7C64AF5E6B /* CallCoordinatorTests.swift */; };
 		4F867A959C49C7208A76ED50 /* DeepLinkHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B800E13B79F1C90797B3209D /* DeepLinkHandler.swift */; };
 		54AE200B5260828DFDDF54CF /* ConnectionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AA0D8823160098FDD1BEDED /* ConnectionHandler.swift */; };
+		567E46C8B9ECDBC6BFD62D32 /* PatternGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EDFB39DA4D3D204789EDB65 /* PatternGridView.swift */; };
 		5F70C41EB8B0D5E3945DE3D0 /* VaultServicesStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D5FE09BE33592D0D0F1EB3F /* VaultServicesStatusView.swift */; };
 		615FE23B95C6133464EE1F14 /* ExpectedPCRStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2508C629676886E946486AC6 /* ExpectedPCRStore.swift */; };
 		6372EBD57830A0ABB43521E5 /* expected_pcrs.json in Resources */ = {isa = PBXBuildFile; fileRef = B6B8DC6D217039260AC73583 /* expected_pcrs.json */; };
@@ -126,6 +127,7 @@
 		8E218CCA8B5EBA2C3E3F16C1 /* ProfileHandlerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AD4667BD8AA73E54DC3A24A /* ProfileHandlerTests.swift */; };
 		9178B120C0122606F1ECAF51 /* CallKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E3E9B78635C6EAF5E223808 /* CallKitManager.swift */; };
 		98DD4E5D5DC4F6A70092712E /* SecretsHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEA2A69DEB72B748BED4DA14 /* SecretsHandler.swift */; };
+		991BCE25C8226316E8F3949B /* PatternAuthenticatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B14631A6DCDC4E9897C16D1A /* PatternAuthenticatorTests.swift */; };
 		A1B2C3D4E5F6000000000000 /* AuthenticationViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75A250C49286C1469599CD45 /* AuthenticationViewModelTests.swift */; };
 		A1B2C3D4E5F6000000000001 /* BackupListViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 183C19DE1EB7BD6FCF2BFE78 /* BackupListViewModelTests.swift */; };
 		A1B2C3D4E5F6000000000002 /* BackupSettingsViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6098637FDCF71146C63D9FD /* BackupSettingsViewModelTests.swift */; };
@@ -310,6 +312,7 @@
 		5DAE0DC17A88D051B4A2680E /* VettIDUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VettIDUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		688F0CE3AE28533DD0235DF8 /* Secret.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Secret.swift; sourceTree = "<group>"; };
 		6CCAD04F327E6A42D6E529AA /* PCRUpdateServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PCRUpdateServiceTests.swift; sourceTree = "<group>"; };
+		6EDFB39DA4D3D204789EDB65 /* PatternGridView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PatternGridView.swift; sourceTree = "<group>"; };
 		7543D8BF043373D3E739796C /* ProfileViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProfileViewModelTests.swift; sourceTree = "<group>"; };
 		75A250C49286C1469599CD45 /* AuthenticationViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AuthenticationViewModelTests.swift; sourceTree = "<group>"; };
 		7A4A6BF4B7E19B38EDEF31AC /* ArchiveView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ArchiveView.swift; sourceTree = "<group>"; };
@@ -341,6 +344,7 @@
 		AA6F4E8A08AC05BC1E9981C6 /* AppLockService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppLockService.swift; sourceTree = "<group>"; };
 		AC46F847CA8B124F9FE8E970 /* VaultStatusViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VaultStatusViewModelTests.swift; sourceTree = "<group>"; };
 		AEBBB6DA11AE9704FF891A7F /* EncryptedEnvelope.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EncryptedEnvelope.swift; sourceTree = "<group>"; };
+		B14631A6DCDC4E9897C16D1A /* PatternAuthenticatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PatternAuthenticatorTests.swift; sourceTree = "<group>"; };
 		B151BDC063C66B44EC75B8DA /* ProteanRecoveryService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProteanRecoveryService.swift; sourceTree = "<group>"; };
 		B59E35C2BB3BD24E77AE5E7A /* ProteanRecoveryView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProteanRecoveryView.swift; sourceTree = "<group>"; };
 		B5B59320799245103D92C504 /* HeaderView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HeaderView.swift; sourceTree = "<group>"; };
@@ -590,6 +594,7 @@
 				10000014 /* AuthenticationViewModel.swift */,
 				10000015 /* AuthenticationContainerView.swift */,
 				D6F772E105DCC21AF1751DE5 /* AppLockView.swift */,
+				6EDFB39DA4D3D204789EDB65 /* PatternGridView.swift */,
 			);
 			path = Authentication;
 			sourceTree = "<group>";
@@ -858,6 +863,7 @@
 				915F60E176AEED011A002234 /* PushKitManagerTests.swift */,
 				FBABDAFB67C4C9CBAF4C02FF /* WebRTCClientTests.swift */,
 				FB6A98EE6E329C7C64AF5E6B /* CallCoordinatorTests.swift */,
+				B14631A6DCDC4E9897C16D1A /* PatternAuthenticatorTests.swift */,
 			);
 			name = VettIDTests;
 			path = VettIDTests;
@@ -1129,6 +1135,7 @@
 				3C0E9C349D2113DAA1CBB37E /* PushKitManager.swift in Sources */,
 				B20AD24C34B073B114B53C15 /* WebRTCClient.swift in Sources */,
 				AB54E5D214A4FACB44AF9726 /* CallCoordinator.swift in Sources */,
+				567E46C8B9ECDBC6BFD62D32 /* PatternGridView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1188,6 +1195,7 @@
 				F416934996C02180A456B871 /* PushKitManagerTests.swift in Sources */,
 				22202BC75ED02B05AF645F74 /* WebRTCClientTests.swift in Sources */,
 				4AD62CC5A64A23D92C571E5B /* CallCoordinatorTests.swift in Sources */,
+				991BCE25C8226316E8F3949B /* PatternAuthenticatorTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
