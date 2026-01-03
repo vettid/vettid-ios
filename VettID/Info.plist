@@ -119,8 +119,33 @@
 		<!-- ATS enabled by default - no NSAllowsArbitraryLoads -->
 		<!-- Minimum TLS 1.2 is enforced by default -->
 		<!-- Perfect Forward Secrecy is required by default -->
-		<!-- Certificate pinning disabled until custom domain deployed -->
-		<!-- AWS API Gateway (execute-api.us-east-1.amazonaws.com) rotates certs -->
+		<key>NSPinnedDomains</key>
+		<dict>
+			<key>api.vettid.dev</key>
+			<dict>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSPinnedCAIdentities</key>
+				<array>
+					<dict>
+						<key>SPKI-SHA256-BASE64</key>
+						<string>9QtkkgnK4aEEt3xxiK1NwP/A1D06Pl1HFV7ZpffNLQA=</string>
+					</dict>
+				</array>
+			</dict>
+			<key>vettid.dev</key>
+			<dict>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSPinnedCAIdentities</key>
+				<array>
+					<dict>
+						<key>SPKI-SHA256-BASE64</key>
+						<string>9QtkkgnK4aEEt3xxiK1NwP/A1D06Pl1HFV7ZpffNLQA=</string>
+					</dict>
+				</array>
+			</dict>
+		</dict>
 	</dict>
 	<!-- Background task identifiers -->
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
