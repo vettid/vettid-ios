@@ -93,6 +93,7 @@
 		1A3B380AA57E9D3E5F083B4A /* SecureKeyStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 003A6313C942B5D9E98B959D /* SecureKeyStoreTests.swift */; };
 		1B86F6ED89057B594F13EAB2 /* ProteanCredentialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 398233EFE1A4530AB4A978BB /* ProteanCredentialStore.swift */; };
 		1EAC19EF056BA34609877523 /* ArchiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A4A6BF4B7E19B38EDEF31AC /* ArchiveView.swift */; };
+		30DA77705EA532C0C04D8BAA /* CallEventSubscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF818CF1DCC2A9CBF4936988 /* CallEventSubscriber.swift */; };
 		3378B15F29C4D1B5D31EAEAB /* CryptoManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F7146B25BADFE6EBCFBC681 /* CryptoManagerTests.swift */; };
 		3C5A3DA38E4A1DDE8F4639C4 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2D6CF42AD511A65BF8DC12 /* AboutView.swift */; };
 		3C81DCE733F08D269B3B88F3 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D1AC5C563F3D0443156417C0 /* Foundation.framework */; };
@@ -117,8 +118,10 @@
 		832CEA5AFBE87EF370DA9605 /* ProteanRecoveryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A076FA3ED0902947E6F5D518 /* ProteanRecoveryServiceTests.swift */; };
 		84676E81B940EC6099365567 /* SessionKeyManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47B51FE6F401DEC178ABB973 /* SessionKeyManagerTests.swift */; };
 		84A8E45EB70FA3689B501714 /* PersonalData.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE89C420DEC861CD3FA91B92 /* PersonalData.swift */; };
+		86BBDB104D0C083FDF512D05 /* CallKitManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97FB1E42DF9D543A67CCDDE0 /* CallKitManagerTests.swift */; };
 		8C9CBF9173DD16DF29F45476 /* SecretsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AF9A63734413646BB7E375A /* SecretsView.swift */; };
 		8E218CCA8B5EBA2C3E3F16C1 /* ProfileHandlerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AD4667BD8AA73E54DC3A24A /* ProfileHandlerTests.swift */; };
+		9178B120C0122606F1ECAF51 /* CallKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E3E9B78635C6EAF5E223808 /* CallKitManager.swift */; };
 		98DD4E5D5DC4F6A70092712E /* SecretsHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEA2A69DEB72B748BED4DA14 /* SecretsHandler.swift */; };
 		A1B2C3D4E5F6000000000000 /* AuthenticationViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75A250C49286C1469599CD45 /* AuthenticationViewModelTests.swift */; };
 		A1B2C3D4E5F6000000000001 /* BackupListViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 183C19DE1EB7BD6FCF2BFE78 /* BackupListViewModelTests.swift */; };
@@ -308,6 +311,7 @@
 		7AF9A63734413646BB7E375A /* SecretsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SecretsView.swift; sourceTree = "<group>"; };
 		7AFABA11945E99D1E175383D /* ApiSecurity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ApiSecurity.swift; sourceTree = "<group>"; };
 		7C0030C9EAAF02A570641C21 /* NatsCredentialsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NatsCredentialsTests.swift; sourceTree = "<group>"; };
+		7E3E9B78635C6EAF5E223808 /* CallKitManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CallKitManager.swift; sourceTree = "<group>"; };
 		80D6C81AAEA975F5D4A6FD84 /* NitroAttestationVerifier.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NitroAttestationVerifier.swift; path = NitroAttestationVerifier.swift; sourceTree = "<group>"; };
 		81DB56C55B5B70F6A7CECFA3 /* CredentialStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CredentialStoreTests.swift; sourceTree = "<group>"; };
 		8285A14EAFF8FCF54C60C6E2 /* VaultPreferencesView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VaultPreferencesView.swift; sourceTree = "<group>"; };
@@ -317,6 +321,7 @@
 		8E5E94284D11741CB902B343 /* HandlerDetailViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HandlerDetailViewModelTests.swift; sourceTree = "<group>"; };
 		93A86BE60A75794075747370 /* FeedEvent.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FeedEvent.swift; sourceTree = "<group>"; };
 		93AE3AEAA330B2DBA8C07A78 /* MessageHandlerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MessageHandlerTests.swift; sourceTree = "<group>"; };
+		97FB1E42DF9D543A67CCDDE0 /* CallKitManagerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CallKitManagerTests.swift; sourceTree = "<group>"; };
 		9F6BD7EF25140C61B7085558 /* PasswordHasherTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PasswordHasherTests.swift; sourceTree = "<group>"; };
 		A076FA3ED0902947E6F5D518 /* ProteanRecoveryServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProteanRecoveryServiceTests.swift; sourceTree = "<group>"; };
 		A1D6D6E4F90B7A138F25B696 /* AppSettings.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
@@ -340,6 +345,7 @@
 		CAF3A0B1092FFB0A652C013F /* SecretsViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SecretsViewModel.swift; sourceTree = "<group>"; };
 		CD26F7972848FCE5C4EE6520 /* HandlerTypesTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HandlerTypesTests.swift; sourceTree = "<group>"; };
 		CE35CF9350F1D477CC634FD3 /* ConversationViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConversationViewModelTests.swift; sourceTree = "<group>"; };
+		CF818CF1DCC2A9CBF4936988 /* CallEventSubscriber.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CallEventSubscriber.swift; sourceTree = "<group>"; };
 		D1AC5C563F3D0443156417C0 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		D685CF6E261D5A6229A01CB1 /* HandlerExecutionViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HandlerExecutionViewModelTests.swift; sourceTree = "<group>"; };
 		D6F772E105DCC21AF1751DE5 /* AppLockView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppLockView.swift; sourceTree = "<group>"; };
@@ -496,6 +502,7 @@
 				21E9FB3E17B97C61F3E27745 /* Settings */,
 				6D08E19C73569F295FA6C491 /* VaultServices */,
 				C663B06B2CB9E4783127A5AA /* Recovery */,
+				EB815E7844A65D4395A41BB3 /* Calling */,
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -781,6 +788,16 @@
 			path = VettIDUITests;
 			sourceTree = "<group>";
 		};
+		EB815E7844A65D4395A41BB3 /* Calling */ = {
+			isa = PBXGroup;
+			children = (
+				7E3E9B78635C6EAF5E223808 /* CallKitManager.swift */,
+				CF818CF1DCC2A9CBF4936988 /* CallEventSubscriber.swift */,
+			);
+			name = Calling;
+			path = Calling;
+			sourceTree = "<group>";
+		};
 		F633A05A74757C8E505A8817 /* VettIDTests */ = {
 			isa = PBXGroup;
 			children = (
@@ -822,6 +839,7 @@
 				47B51FE6F401DEC178ABB973 /* SessionKeyManagerTests.swift */,
 				6CCAD04F327E6A42D6E529AA /* PCRUpdateServiceTests.swift */,
 				2E5E1B56D033895A6F501A57 /* CallSignalingHandlerTests.swift */,
+				97FB1E42DF9D543A67CCDDE0 /* CallKitManagerTests.swift */,
 			);
 			name = VettIDTests;
 			path = VettIDTests;
@@ -1088,6 +1106,8 @@
 				AD241C3C0E0AC31232D6A3C8 /* ProteanRecoveryService.swift in Sources */,
 				0ED83C63EF0A1AEC36CEF699 /* ProteanRecoveryView.swift in Sources */,
 				68FCADBEB0F169258485374F /* CallSignalingHandler.swift in Sources */,
+				9178B120C0122606F1ECAF51 /* CallKitManager.swift in Sources */,
+				30DA77705EA532C0C04D8BAA /* CallEventSubscriber.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1143,6 +1163,7 @@
 				84676E81B940EC6099365567 /* SessionKeyManagerTests.swift in Sources */,
 				D961BDE01C7949FDA006CA90 /* PCRUpdateServiceTests.swift in Sources */,
 				DB79F2D985E0BF4B448A5E42 /* CallSignalingHandlerTests.swift in Sources */,
+				86BBDB104D0C083FDF512D05 /* CallKitManagerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
