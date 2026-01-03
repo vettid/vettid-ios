@@ -279,9 +279,24 @@ final class ExpectedPCRStore {
 
     // MARK: - Bundled Resources
 
+    /// VettID's Ed25519 public key for verifying PCR signatures (X.509 SubjectPublicKeyInfo DER, Base64)
+    /// Generated: 2026-01-03, Key ID: vettid-pcr-signing-key-v1
+    private static let signingPublicKeyBase64 = "MCowBQYDK2VwAyEA+1FRzTi+cZ1BIuBzNjnarDkN4T+gxNnDi4BCS7tbwX0="
+
     /// Load the Ed25519 public key for verifying PCR updates
     private static func loadSigningPublicKey() -> Data? {
-        // Look for the signing key in the app bundle
+        // First try embedded key (preferred)
+        if let keyData = Data(base64Encoded: signingPublicKeyBase64) {
+            // Extract raw 32-byte public key from X.509 SubjectPublicKeyInfo DER format
+            // Format: 30 2a (SEQUENCE) 30 05 (SEQUENCE) 06 03 2b6570 (OID for Ed25519) 03 21 00 <32 bytes>
+            // The raw key starts at offset 12
+            if keyData.count == 44 {
+                return keyData.suffix(32)
+            }
+            return keyData
+        }
+
+        // Fallback: look for the signing key in the app bundle
         guard let keyURL = Bundle.main.url(forResource: "pcr_signing_key", withExtension: "pub"),
               let keyBase64 = try? String(contentsOf: keyURL, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
               let keyData = Data(base64Encoded: keyBase64) else {
