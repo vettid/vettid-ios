@@ -50,6 +50,23 @@ actor CallEventSubscriber {
         self.ownerSpaceId = ownerSpaceId
     }
 
+    // MARK: - Callback Configuration
+
+    /// Configure the SDP offer callback
+    func setOnSdpOffer(_ callback: @escaping @Sendable (CallSdp) async -> Void) {
+        self.onSdpOffer = callback
+    }
+
+    /// Configure the SDP answer callback
+    func setOnSdpAnswer(_ callback: @escaping @Sendable (CallSdp) async -> Void) {
+        self.onSdpAnswer = callback
+    }
+
+    /// Configure the ICE candidate callback
+    func setOnIceCandidate(_ callback: @escaping @Sendable (CallCandidate) async -> Void) {
+        self.onIceCandidate = callback
+    }
+
     // MARK: - Subscription Management
 
     /// Start listening for call events
