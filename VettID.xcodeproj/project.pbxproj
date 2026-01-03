@@ -103,6 +103,7 @@
 		5F70C41EB8B0D5E3945DE3D0 /* VaultServicesStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D5FE09BE33592D0D0F1EB3F /* VaultServicesStatusView.swift */; };
 		615FE23B95C6133464EE1F14 /* ExpectedPCRStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2508C629676886E946486AC6 /* ExpectedPCRStore.swift */; };
 		6372EBD57830A0ABB43521E5 /* expected_pcrs.json in Resources */ = {isa = PBXBuildFile; fileRef = B6B8DC6D217039260AC73583 /* expected_pcrs.json */; };
+		68FCADBEB0F169258485374F /* CallSignalingHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A84C9D858511724C0C0031E4 /* CallSignalingHandler.swift */; };
 		6AAF4B7C9510C0DBDC732FD9 /* SecretsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAF3A0B1092FFB0A652C013F /* SecretsViewModel.swift */; };
 		6CC132C1046013D66F2D65EE /* MessageHandlerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93AE3AEAA330B2DBA8C07A78 /* MessageHandlerTests.swift */; };
 		7760EC0B29FE0CD3C39CE26D /* ConnectionHandlerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C78640951FD7268FE0322F1F /* ConnectionHandlerTests.swift */; };
@@ -153,6 +154,7 @@
 		D302C18A23D884DD51D9F532 /* FeedViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDAE474EE81CD7EDDE12ABF5 /* FeedViewModel.swift */; };
 		D9455BC5C73EC21C76E5D6DE /* NatsCredentialsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C0030C9EAAF02A570641C21 /* NatsCredentialsTests.swift */; };
 		D961BDE01C7949FDA006CA90 /* PCRUpdateServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CCAD04F327E6A42D6E529AA /* PCRUpdateServiceTests.swift */; };
+		DB79F2D985E0BF4B448A5E42 /* CallSignalingHandlerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E5E1B56D033895A6F501A57 /* CallSignalingHandlerTests.swift */; };
 		DBFEF468FD6CAD145C6CDE3B /* MainNavigationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEA5BE7707CCFC71CBA871B7 /* MainNavigationView.swift */; };
 		DF3E299D763958D6155FB562 /* SessionKeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36891E6A55D69502EF90D4CB /* SessionKeyManager.swift */; };
 		E0856AA3F832860B0D0EC949 /* FeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A55B8A854B6DF21A3197B1A0 /* FeedView.swift */; };
@@ -280,6 +282,7 @@
 		2890018C4BA02E8E472C8A62 /* MessageHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MessageHandler.swift; sourceTree = "<group>"; };
 		2B2D6CF42AD511A65BF8DC12 /* AboutView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		2D96D6532F41DCB812C7BB39 /* VaultHealthViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VaultHealthViewModelTests.swift; sourceTree = "<group>"; };
+		2E5E1B56D033895A6F501A57 /* CallSignalingHandlerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CallSignalingHandlerTests.swift; sourceTree = "<group>"; };
 		36891E6A55D69502EF90D4CB /* SessionKeyManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SessionKeyManager.swift; sourceTree = "<group>"; };
 		38A823EDB04F986924B6CC2D /* EnrollmentUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EnrollmentUITests.swift; sourceTree = "<group>"; };
 		392F1BEBBE9997250A75C74A /* VettID.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = VettID.entitlements; sourceTree = "<group>"; };
@@ -321,6 +324,7 @@
 		A55B8A854B6DF21A3197B1A0 /* FeedView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FeedView.swift; sourceTree = "<group>"; };
 		A76C59FC4B0D65040C1B3BC2 /* ConnectionsViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConnectionsViewModelTests.swift; sourceTree = "<group>"; };
 		A802F262C8E724624EE83387 /* ProfileHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProfileHandler.swift; sourceTree = "<group>"; };
+		A84C9D858511724C0C0031E4 /* CallSignalingHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CallSignalingHandler.swift; sourceTree = "<group>"; };
 		A9907E4ADEC32ED97F95D4E9 /* CreateInvitationViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CreateInvitationViewModelTests.swift; sourceTree = "<group>"; };
 		AA6F4E8A08AC05BC1E9981C6 /* AppLockService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppLockService.swift; sourceTree = "<group>"; };
 		AC46F847CA8B124F9FE8E970 /* VaultStatusViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VaultStatusViewModelTests.swift; sourceTree = "<group>"; };
@@ -386,6 +390,7 @@
 				131DE8422D0A3B6CE2B321DC /* CredentialRotationHandler.swift */,
 				1AA0D8823160098FDD1BEDED /* ConnectionHandler.swift */,
 				2890018C4BA02E8E472C8A62 /* MessageHandler.swift */,
+				A84C9D858511724C0C0031E4 /* CallSignalingHandler.swift */,
 			);
 			name = Handlers;
 			path = Handlers;
@@ -816,6 +821,7 @@
 				07710AC509DF127357D930EB /* ExpectedPCRStoreTests.swift */,
 				47B51FE6F401DEC178ABB973 /* SessionKeyManagerTests.swift */,
 				6CCAD04F327E6A42D6E529AA /* PCRUpdateServiceTests.swift */,
+				2E5E1B56D033895A6F501A57 /* CallSignalingHandlerTests.swift */,
 			);
 			name = VettIDTests;
 			path = VettIDTests;
@@ -1081,6 +1087,7 @@
 				1B86F6ED89057B594F13EAB2 /* ProteanCredentialStore.swift in Sources */,
 				AD241C3C0E0AC31232D6A3C8 /* ProteanRecoveryService.swift in Sources */,
 				0ED83C63EF0A1AEC36CEF699 /* ProteanRecoveryView.swift in Sources */,
+				68FCADBEB0F169258485374F /* CallSignalingHandler.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1135,6 +1142,7 @@
 				0F3EE91A24F30EAFD1F1CAC8 /* ExpectedPCRStoreTests.swift in Sources */,
 				84676E81B940EC6099365567 /* SessionKeyManagerTests.swift in Sources */,
 				D961BDE01C7949FDA006CA90 /* PCRUpdateServiceTests.swift in Sources */,
+				DB79F2D985E0BF4B448A5E42 /* CallSignalingHandlerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
