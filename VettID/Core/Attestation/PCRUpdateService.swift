@@ -63,11 +63,16 @@ final class PCRUpdateService: ObservableObject {
             // Fetch current PCRs from API
             let response = try await apiClient.getCurrentPCRs()
 
+            // Create the signed payload (what the backend actually signed)
+            // Backend signs: JSON.stringify({ PCR0, PCR1, PCR2 })
+            let signedPayload = try createSignedPayload(from: response)
+
             // Convert API response to store format
             let storeResponse = ExpectedPCRStore.PCRUpdateResponse(
                 pcrSets: response.pcrSets.map { $0.toPCRSet() },
                 signature: response.signature,
-                signedAt: response.signedAt
+                signedAt: response.signedAt,
+                signedPayload: signedPayload
             )
 
             // Store and verify the update
@@ -87,6 +92,27 @@ final class PCRUpdateService: ObservableObject {
         }
 
         isUpdating = false
+    }
+
+    /// Create the signed payload from API response
+    /// Backend signs: JSON.stringify({ PCR0, PCR1, PCR2, [PCR3 if present] })
+    private func createSignedPayload(from response: PCRUpdateResponse) throws -> Data {
+        // Build the payload exactly as the backend does
+        var dict: [String: String] = [
+            "PCR0": response.pcrs.pcr0,
+            "PCR1": response.pcrs.pcr1,
+            "PCR2": response.pcrs.pcr2
+        ]
+
+        // PCR3 is only included if non-null
+        if let pcr3 = response.pcrs.pcr3, !pcr3.isEmpty {
+            dict["PCR3"] = pcr3
+        }
+
+        // Encode with sorted keys to match backend
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        return try encoder.encode(dict)
     }
 
     /// Get the current valid PCR sets

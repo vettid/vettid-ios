@@ -1178,20 +1178,58 @@ struct ExecuteHandlerResponse: Decodable {
 // MARK: - PCR Types (Nitro Enclave)
 
 /// Response from GET /vault/pcrs/current
+/// Backend returns a single PCR configuration with signature
 struct PCRUpdateResponse: Decodable {
-    let pcrSets: [PCRSetDTO]
+    let pcrs: PCRValues
+    let version: String
+    let publishedAt: String
     let signature: String
-    let signedAt: Date
+    let keyId: String
 
     enum CodingKeys: String, CodingKey {
-        case pcrSets = "pcr_sets"
+        case pcrs
+        case version
+        case publishedAt = "published_at"
         case signature
-        case signedAt = "signed_at"
+        case keyId = "key_id"
+    }
+
+    /// Convert to store format (array of PCR sets for compatibility)
+    var pcrSets: [PCRSetDTO] {
+        [PCRSetDTO(
+            id: version,
+            pcr0: pcrs.pcr0,
+            pcr1: pcrs.pcr1,
+            pcr2: pcrs.pcr2,
+            validFrom: ISO8601DateFormatter().date(from: publishedAt) ?? Date(),
+            validUntil: nil,
+            isCurrent: true
+        )]
+    }
+
+    /// Signed-at date for downgrade protection
+    var signedAt: Date {
+        ISO8601DateFormatter().date(from: publishedAt) ?? Date()
     }
 }
 
-/// Individual PCR set in the update response
-struct PCRSetDTO: Decodable {
+/// PCR values from the backend
+struct PCRValues: Decodable {
+    let pcr0: String
+    let pcr1: String
+    let pcr2: String
+    let pcr3: String?
+
+    enum CodingKeys: String, CodingKey {
+        case pcr0 = "PCR0"
+        case pcr1 = "PCR1"
+        case pcr2 = "PCR2"
+        case pcr3 = "PCR3"
+    }
+}
+
+/// Individual PCR set (for store compatibility)
+struct PCRSetDTO {
     let id: String
     let pcr0: String
     let pcr1: String
@@ -1199,16 +1237,6 @@ struct PCRSetDTO: Decodable {
     let validFrom: Date
     let validUntil: Date?
     let isCurrent: Bool
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case pcr0
-        case pcr1
-        case pcr2
-        case validFrom = "valid_from"
-        case validUntil = "valid_until"
-        case isCurrent = "is_current"
-    }
 
     /// Convert to ExpectedPCRStore.PCRSet
     func toPCRSet() -> ExpectedPCRStore.PCRSet {

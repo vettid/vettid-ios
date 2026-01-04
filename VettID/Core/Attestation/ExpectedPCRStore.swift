@@ -53,16 +53,18 @@ final class ExpectedPCRStore {
         }
     }
 
-    /// Response from PCR update endpoint
+    /// Response from PCR update endpoint (converted from API format)
     struct PCRUpdateResponse: Codable {
         let pcrSets: [PCRSet]
         let signature: String
         let signedAt: Date
+        let signedPayload: Data?  // The exact bytes that were signed (for verification)
 
         enum CodingKeys: String, CodingKey {
             case pcrSets = "pcr_sets"
             case signature
             case signedAt = "signed_at"
+            case signedPayload = "signed_payload"
         }
     }
 
@@ -173,8 +175,14 @@ final class ExpectedPCRStore {
             throw PCRStoreError.invalidSignature
         }
 
-        // Create the message to verify (JSON of pcr_sets + signed_at)
-        let messageData = try createSignatureMessage(pcrSets: response.pcrSets, signedAt: response.signedAt)
+        // Use the pre-computed signed payload if available, otherwise reconstruct
+        let messageData: Data
+        if let payload = response.signedPayload {
+            messageData = payload
+        } else {
+            // Fallback: reconstruct the signed message from PCR sets
+            messageData = try createSignatureMessage(pcrSets: response.pcrSets)
+        }
 
         // Verify using CryptoKit Ed25519
         do {
@@ -190,22 +198,27 @@ final class ExpectedPCRStore {
     }
 
     /// Create the message bytes that should be signed
-    private func createSignatureMessage(pcrSets: [PCRSet], signedAt: Date) throws -> Data {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = .sortedKeys
-
-        struct SignedMessage: Codable {
-            let pcrSets: [PCRSet]
-            let signedAt: Date
-
-            enum CodingKeys: String, CodingKey {
-                case pcrSets = "pcr_sets"
-                case signedAt = "signed_at"
-            }
+    /// Backend signs: JSON.stringify({ PCR0, PCR1, PCR2, [PCR3 if present] })
+    private func createSignatureMessage(pcrSets: [PCRSet]) throws -> Data {
+        guard let pcrSet = pcrSets.first else {
+            throw PCRStoreError.noPCRSetsAvailable
         }
 
-        return try encoder.encode(SignedMessage(pcrSets: pcrSets, signedAt: signedAt))
+        // Backend signs the pcrs object with uppercase keys, sorted
+        // The format is: {"PCR0":"...","PCR1":"...","PCR2":"..."}
+        var dict: [String: String] = [
+            "PCR0": pcrSet.pcr0,
+            "PCR1": pcrSet.pcr1,
+            "PCR2": pcrSet.pcr2
+        ]
+
+        // PCR3 is optional - only include if non-empty
+        // (Backend doesn't include null values)
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+
+        return try encoder.encode(dict)
     }
 
     // MARK: - Storage
