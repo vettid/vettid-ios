@@ -305,7 +305,8 @@ extension ExpectedPCRStoreTests {
         let response = ExpectedPCRStore.PCRUpdateResponse(
             pcrSets: pcrSets,
             signature: "base64signature==",
-            signedAt: Date(timeIntervalSince1970: 1700000000)
+            signedAt: Date(timeIntervalSince1970: 1700000000),
+            signedPayload: nil
         )
 
         // When
