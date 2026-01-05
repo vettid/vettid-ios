@@ -27,6 +27,75 @@ actor CredentialsHandler {
         self.vaultResponseHandler = vaultResponseHandler
     }
 
+    // MARK: - Credential Creation and Unsealing (KMS-sealed)
+
+    /// Create a new credential in the enclave
+    /// The credential is sealed using KMS envelope encryption with PCR0 binding
+    /// - Parameters:
+    ///   - encryptedPin: Base64-encoded encrypted PIN (encrypted to enclave public key)
+    ///   - authType: Authentication type ("pin", "password", "pattern")
+    /// - Returns: Sealed credential blob
+    func createCredential(encryptedPin: String, authType: String = "pin") async throws -> CredentialCreateResult {
+        let payload: [String: AnyCodableValue] = [
+            "encrypted_pin": AnyCodableValue(encryptedPin),
+            "auth_type": AnyCodableValue(authType)
+        ]
+
+        let response = try await vaultResponseHandler.submitRawAndAwait(
+            type: "credential.create",
+            payload: payload,
+            timeout: defaultTimeout
+        )
+
+        guard response.isSuccess else {
+            throw CredentialsHandlerError.createFailed(response.error ?? "Unknown error")
+        }
+
+        guard let result = response.result,
+              let credential = result["credential"]?.value as? String else {
+            throw CredentialsHandlerError.invalidResponse
+        }
+
+        return CredentialCreateResult(sealedCredential: credential)
+    }
+
+    /// Unseal a credential with authentication challenge
+    /// Requires KMS attestation in production (PCR0-bound)
+    /// - Parameters:
+    ///   - sealedCredential: Base64-encoded sealed credential blob
+    ///   - challengeId: Challenge identifier from authentication request
+    ///   - response: PIN/password response to the challenge
+    /// - Returns: Session token for subsequent operations
+    func unsealCredential(sealedCredential: String, challengeId: String, response: String) async throws -> CredentialUnsealResult {
+        let payload: [String: AnyCodableValue] = [
+            "sealed_credential": AnyCodableValue(sealedCredential),
+            "challenge": AnyCodableValue([
+                "challenge_id": challengeId,
+                "response": response
+            ])
+        ]
+
+        let vaultResponse = try await vaultResponseHandler.submitRawAndAwait(
+            type: "credential.unseal",
+            payload: payload,
+            timeout: defaultTimeout
+        )
+
+        guard vaultResponse.isSuccess else {
+            throw CredentialsHandlerError.unsealFailed(vaultResponse.error ?? "Unknown error")
+        }
+
+        guard let result = vaultResponse.result,
+              let unsealResult = result["unseal_result"]?.value as? [String: Any],
+              let sessionToken = unsealResult["session_token"] as? String else {
+            throw CredentialsHandlerError.invalidResponse
+        }
+
+        let expiresAt = (unsealResult["expires_at"] as? Int).map { Date(timeIntervalSince1970: TimeInterval($0)) }
+
+        return CredentialUnsealResult(sessionToken: sessionToken, expiresAt: expiresAt)
+    }
+
     // MARK: - Credential Operations
 
     /// Request fresh credentials from the vault
@@ -220,6 +289,17 @@ actor CredentialsHandler {
 
 // MARK: - Supporting Types
 
+/// Result from credential creation (KMS-sealed)
+struct CredentialCreateResult {
+    let sealedCredential: String
+}
+
+/// Result from credential unsealing
+struct CredentialUnsealResult {
+    let sessionToken: String
+    let expiresAt: Date?
+}
+
 /// Result from credential refresh
 struct CredentialRefreshResult {
     let sealedCredential: String
@@ -259,6 +339,8 @@ struct CredentialSyncResult {
 // MARK: - Errors
 
 enum CredentialsHandlerError: LocalizedError {
+    case createFailed(String)
+    case unsealFailed(String)
     case refreshFailed(String)
     case statusCheckFailed(String)
     case syncFailed(String)
@@ -267,6 +349,10 @@ enum CredentialsHandlerError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
+        case .createFailed(let reason):
+            return "Failed to create credential: \(reason)"
+        case .unsealFailed(let reason):
+            return "Failed to unseal credential: \(reason)"
         case .refreshFailed(let reason):
             return "Failed to refresh credentials: \(reason)"
         case .statusCheckFailed(let reason):

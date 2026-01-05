@@ -53,6 +53,31 @@ final class CredentialsHandlerTests: XCTestCase {
         XCTAssertEqual(keyInfo.algorithm, "X25519")
     }
 
+    // MARK: - CredentialCreateResult Tests
+
+    func testCredentialCreateResult_initialization() {
+        let result = CredentialCreateResult(sealedCredential: "sealed-kms-credential-blob")
+
+        XCTAssertEqual(result.sealedCredential, "sealed-kms-credential-blob")
+    }
+
+    // MARK: - CredentialUnsealResult Tests
+
+    func testCredentialUnsealResult_withExpiry() {
+        let expiry = Date().addingTimeInterval(3600) // 1 hour from now
+        let result = CredentialUnsealResult(sessionToken: "session-token-abc", expiresAt: expiry)
+
+        XCTAssertEqual(result.sessionToken, "session-token-abc")
+        XCTAssertNotNil(result.expiresAt)
+    }
+
+    func testCredentialUnsealResult_withoutExpiry() {
+        let result = CredentialUnsealResult(sessionToken: "session-token-xyz", expiresAt: nil)
+
+        XCTAssertEqual(result.sessionToken, "session-token-xyz")
+        XCTAssertNil(result.expiresAt)
+    }
+
     // MARK: - CredentialRefreshResult Tests
 
     func testCredentialRefreshResult_fullInitialization() {
@@ -211,6 +236,22 @@ final class CredentialsHandlerTests: XCTestCase {
 
     // MARK: - CredentialsHandlerError Tests
 
+    func testCredentialsHandlerError_createFailedDescription() {
+        let error = CredentialsHandlerError.createFailed("KMS attestation failed")
+
+        XCTAssertNotNil(error.errorDescription)
+        XCTAssertTrue(error.errorDescription!.lowercased().contains("create"))
+        XCTAssertTrue(error.errorDescription!.contains("KMS attestation failed"))
+    }
+
+    func testCredentialsHandlerError_unsealFailedDescription() {
+        let error = CredentialsHandlerError.unsealFailed("Wrong PIN")
+
+        XCTAssertNotNil(error.errorDescription)
+        XCTAssertTrue(error.errorDescription!.lowercased().contains("unseal"))
+        XCTAssertTrue(error.errorDescription!.contains("Wrong PIN"))
+    }
+
     func testCredentialsHandlerError_refreshFailedDescription() {
         let error = CredentialsHandlerError.refreshFailed("Session expired")
 
@@ -252,6 +293,8 @@ final class CredentialsHandlerTests: XCTestCase {
 
     func testCredentialsHandlerError_switchCoverage() {
         let errors: [CredentialsHandlerError] = [
+            .createFailed("test"),
+            .unsealFailed("test"),
             .refreshFailed("test"),
             .statusCheckFailed("test"),
             .syncFailed("test"),
@@ -261,6 +304,10 @@ final class CredentialsHandlerTests: XCTestCase {
 
         for error in errors {
             switch error {
+            case .createFailed(let reason):
+                XCTAssertEqual(reason, "test")
+            case .unsealFailed(let reason):
+                XCTAssertEqual(reason, "test")
             case .refreshFailed(let reason):
                 XCTAssertEqual(reason, "test")
             case .statusCheckFailed(let reason):
