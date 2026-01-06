@@ -69,17 +69,16 @@ final class NitroAttestationVerifier {
 
     // MARK: - Properties
 
-    /// AWS Nitro Attestation Root CA certificate (bundled)
-    private let rootCertificate: SecCertificate?
-
     /// Maximum age for attestation documents (5 minutes)
     private let maxAttestationAge: TimeInterval = 300
+
+    /// Expected AWS Nitro root CA common name
+    private static let awsNitroRootCN = "aws.nitro-enclaves"
 
     // MARK: - Initialization
 
     init() {
-        // Load the AWS Nitro root certificate from bundle
-        self.rootCertificate = Self.loadNitroRootCertificate()
+        // No bundled certificate needed - we dynamically validate from cabundle
     }
 
     // MARK: - Public API
@@ -323,10 +322,15 @@ final class NitroAttestationVerifier {
     // MARK: - Certificate Verification
 
     /// Verify the certificate chain from leaf to AWS Nitro root
+    /// Uses dynamic root CA validation - extracts root from cabundle and validates it
     private func verifyCertificateChain(certificate: Data, cabundle: [Data]) throws {
         // Create SecCertificate objects
         guard let leafCert = SecCertificateCreateWithData(nil, certificate as CFData) else {
             throw NitroAttestationError.certificateChainInvalid("Invalid leaf certificate")
+        }
+
+        guard !cabundle.isEmpty else {
+            throw NitroAttestationError.certificateChainInvalid("CA bundle is empty")
         }
 
         var intermediateCerts: [SecCertificate] = []
@@ -336,13 +340,30 @@ final class NitroAttestationVerifier {
             }
         }
 
-        // Build certificate chain: leaf + intermediates
-        var certsToVerify = [leafCert] + intermediateCerts
-
-        // Add root certificate if available
-        if let root = rootCertificate {
-            certsToVerify.append(root)
+        guard !intermediateCerts.isEmpty else {
+            throw NitroAttestationError.certificateChainInvalid("No valid certificates in CA bundle")
         }
+
+        // The last certificate in cabundle is the root CA
+        let rootCert = intermediateCerts.last!
+
+        // Verify this is the AWS Nitro root CA by checking common name
+        guard let rootSubject = SecCertificateCopySubjectSummary(rootCert) as String? else {
+            throw NitroAttestationError.certificateChainInvalid("Could not extract root CA subject")
+        }
+
+        // AWS Nitro root CA has CN="aws.nitro-enclaves"
+        guard rootSubject.contains(Self.awsNitroRootCN) else {
+            throw NitroAttestationError.certificateChainInvalid(
+                "Root CA is not AWS Nitro: expected '\(Self.awsNitroRootCN)', got '\(rootSubject)'"
+            )
+        }
+
+        // Verify root is self-signed by checking if it can verify itself
+        try verifySelfSigned(rootCert)
+
+        // Build certificate chain: leaf + intermediates (root is last in intermediates)
+        let certsToVerify = [leafCert] + intermediateCerts
 
         // Create trust object
         var trust: SecTrust?
@@ -358,11 +379,9 @@ final class NitroAttestationVerifier {
             throw NitroAttestationError.certificateChainInvalid("Failed to create trust object")
         }
 
-        // Set anchor certificates (root)
-        if let root = rootCertificate {
-            SecTrustSetAnchorCertificates(trust, [root] as CFArray)
-            SecTrustSetAnchorCertificatesOnly(trust, true)
-        }
+        // Set the dynamically validated root as trust anchor
+        SecTrustSetAnchorCertificates(trust, [rootCert] as CFArray)
+        SecTrustSetAnchorCertificatesOnly(trust, true)
 
         // Evaluate trust
         var error: CFError?
@@ -373,6 +392,35 @@ final class NitroAttestationVerifier {
             throw NitroAttestationError.certificateChainInvalid(
                 errorDesc ?? "Certificate chain verification failed"
             )
+        }
+    }
+
+    /// Verify a certificate is self-signed
+    private func verifySelfSigned(_ cert: SecCertificate) throws {
+        // Create a trust with only this certificate
+        var trust: SecTrust?
+        let policy = SecPolicyCreateBasicX509()
+
+        let status = SecTrustCreateWithCertificates(
+            [cert] as CFArray,
+            policy,
+            &trust
+        )
+
+        guard status == errSecSuccess, let trust = trust else {
+            throw NitroAttestationError.certificateChainInvalid("Failed to verify root is self-signed")
+        }
+
+        // Set itself as the only anchor
+        SecTrustSetAnchorCertificates(trust, [cert] as CFArray)
+        SecTrustSetAnchorCertificatesOnly(trust, true)
+
+        // If it's self-signed, it should verify successfully
+        var error: CFError?
+        let verified = SecTrustEvaluateWithError(trust, &error)
+
+        guard verified else {
+            throw NitroAttestationError.certificateChainInvalid("Root CA is not self-signed")
         }
     }
 
@@ -439,21 +487,6 @@ final class NitroAttestationVerifier {
         return encoder.data
     }
 
-    // MARK: - Root Certificate
-
-    /// Load the AWS Nitro Attestation Root CA from bundle
-    private static func loadNitroRootCertificate() -> SecCertificate? {
-        // Look for the root certificate in the app bundle
-        guard let certURL = Bundle.main.url(forResource: "AWS_NitroEnclaves_Root-G1", withExtension: "cer"),
-              let certData = try? Data(contentsOf: certURL) else {
-            #if DEBUG
-            print("[NitroAttestation] Warning: AWS Nitro root certificate not found in bundle")
-            #endif
-            return nil
-        }
-
-        return SecCertificateCreateWithData(nil, certData as CFData)
-    }
 }
 
 // MARK: - Errors
