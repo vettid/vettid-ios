@@ -269,6 +269,215 @@ final class NatsConnectionManager: ObservableObject {
         isSessionEstablished = false
     }
 
+    // MARK: - NATS Authentication (Issue #8)
+
+    /// Authenticate with the vault via NATS using bootstrap credentials
+    /// This is used during credential restore to verify the user's password
+    /// and obtain full NATS credentials.
+    ///
+    /// - Parameters:
+    ///   - topic: The auth topic from VaultBootstrap (e.g., {OwnerSpace}.forVault.app.authenticate)
+    ///   - responseTopic: The response topic from VaultBootstrap
+    ///   - encryptedCredential: Base64-encoded encrypted credential backup
+    ///   - keyId: Key ID for the encrypted credential
+    ///   - password: User's password for verification
+    /// - Returns: Authentication result with new NATS credentials
+    func authenticate(
+        topic: String,
+        responseTopic: String,
+        encryptedCredential: String,
+        keyId: String,
+        password: String
+    ) async throws -> NatsAuthenticateResponse {
+        guard connectionState == .connected else {
+            throw NatsConnectionError.notConnected
+        }
+
+        // Generate a unique request ID
+        let requestId = UUID().uuidString
+
+        // Hash password with Argon2id (or PBKDF2 fallback)
+        let passwordHashResult = try PasswordHasher.hash(password: password)
+        let passwordHashBase64 = passwordHashResult.hash.base64EncodedString()
+
+        // Generate nonce for request freshness
+        let nonce = CryptoManager.randomBytes(count: 16).base64EncodedString()
+
+        // Get app version from bundle
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+
+        // Generate optional session public key for E2E
+        let appSessionPublicKey: String?
+        if await !sessionKeyManager.hasActiveSession {
+            // Generate a new key pair for the session
+            let bootstrapRequest = try await sessionKeyManager.initiateBootstrap()
+            appSessionPublicKey = bootstrapRequest.appPublicKey
+        } else {
+            appSessionPublicKey = nil
+        }
+
+        // Build authenticate request
+        let request = NatsAuthenticateRequest(
+            id: requestId,
+            deviceId: getDeviceId(),
+            deviceType: "ios",
+            appVersion: appVersion,
+            encryptedCredential: encryptedCredential,
+            keyId: keyId,
+            passwordHash: passwordHashBase64,
+            salt: passwordHashResult.salt.base64EncodedString(),
+            nonce: nonce,
+            appSessionPublicKey: appSessionPublicKey
+        )
+
+        // Subscribe to response topic with request ID
+        let fullResponseTopic = "\(responseTopic.replacingOccurrences(of: ".>", with: "")).\(requestId)"
+        let responseStream = try await subscribe(to: fullResponseTopic)
+
+        // Publish authenticate request
+        let requestData = try JSONEncoder().encode(request)
+        try await publish(requestData, to: topic)
+
+        #if DEBUG
+        print("[NATS] Sent authenticate request to \(topic)")
+        print("[NATS] Waiting for response on \(fullResponseTopic)")
+        #endif
+
+        // Wait for response with timeout
+        let authTimeout: TimeInterval = 30
+        let response: NatsAuthenticateResponse = try await withThrowingTaskGroup(of: NatsAuthenticateResponse.self) { group in
+            // Response listener task
+            group.addTask {
+                for await message in responseStream {
+                    if let response = try? JSONDecoder().decode(NatsAuthenticateResponse.self, from: message.data) {
+                        // Verify request ID matches (if present in response)
+                        if response.requestId == nil || response.requestId == requestId {
+                            return response
+                        }
+                    }
+                }
+                throw NatsConnectionError.connectionFailed("Authenticate response stream ended")
+            }
+
+            // Timeout task
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(authTimeout * 1_000_000_000))
+                throw NatsConnectionError.connectionFailed("Authentication timed out")
+            }
+
+            // Return first result (response or timeout)
+            guard let result = try await group.next() else {
+                throw NatsConnectionError.connectionFailed("Authentication failed")
+            }
+
+            group.cancelAll()
+            return result
+        }
+
+        // Clean up subscription
+        await unsubscribe(from: fullResponseTopic)
+
+        // Verify success
+        guard response.success else {
+            throw NatsConnectionError.connectionFailed(response.message ?? "Authentication failed")
+        }
+
+        #if DEBUG
+        print("[NATS] Authentication successful")
+        if let credId = response.credentialId {
+            print("[NATS] New credential ID: \(credId)")
+        }
+        #endif
+
+        // Complete E2E session if we initiated bootstrap and vault provided session info
+        if let sessionInfo = response.sessionInfo,
+           let vaultPublicKey = sessionInfo.vaultPublicKey {
+            // Create a bootstrap response to complete the session
+            let bootstrapResponse = BootstrapResponse(
+                requestId: requestId,
+                vaultPublicKey: vaultPublicKey,
+                sessionId: sessionInfo.sessionId ?? UUID().uuidString,
+                credentials: response.credentials,
+                credentialsTtl: nil,
+                natsEndpoint: response.natsEndpoint,
+                credentialId: response.credentialId,
+                requiresImmediateRotation: response.requiresImmediateRotation,
+                sessionInfo: BootstrapSessionInfo(
+                    sessionId: sessionInfo.sessionId ?? UUID().uuidString,
+                    vaultSessionPublicKey: vaultPublicKey,
+                    encryptionEnabled: true
+                ),
+                rotationInfo: nil
+            )
+            try await sessionKeyManager.completeBootstrap(response: bootstrapResponse)
+            isSessionEstablished = true
+        }
+
+        return response
+    }
+
+    /// Connect with bootstrap credentials and authenticate (convenience method for restore)
+    /// This combines connection and authentication for the credential restore flow.
+    ///
+    /// - Parameters:
+    ///   - bootstrap: VaultBootstrap from confirmRestore response
+    ///   - encryptedCredential: Base64-encoded encrypted credential backup
+    ///   - keyId: Key ID for the encrypted credential
+    ///   - password: User's password for verification
+    /// - Returns: Authentication result with new NATS credentials
+    func connectAndAuthenticate(
+        bootstrap: VaultBootstrap,
+        encryptedCredential: String,
+        keyId: String,
+        password: String
+    ) async throws -> NatsAuthenticateResponse {
+        // Parse bootstrap credentials
+        guard let credentials = NatsCredentials(
+            fromCredsFileContent: bootstrap.credentials,
+            endpoint: bootstrap.natsEndpoint,
+            ownerSpace: bootstrap.ownerSpace,
+            messageSpace: bootstrap.messageSpace,
+            topics: nil
+        ) else {
+            throw NatsConnectionError.connectionFailed("Invalid bootstrap credentials")
+        }
+
+        // Connect with bootstrap credentials
+        try await connectWithEnrollmentCredentials(credentials, ownerSpace: bootstrap.ownerSpace)
+
+        // Store owner space for auth
+        self.ownerSpaceId = bootstrap.ownerSpace
+
+        // Authenticate via NATS
+        let response = try await authenticate(
+            topic: bootstrap.authTopic,
+            responseTopic: bootstrap.responseTopic,
+            encryptedCredential: encryptedCredential,
+            keyId: keyId,
+            password: password
+        )
+
+        // If authentication succeeded and we got new credentials, reconnect with them
+        if let newCredsContent = response.credentials,
+           let newEndpoint = response.natsEndpoint ?? bootstrap.natsEndpoint as String? {
+            let newCreds = NatsCredentials(
+                fromCredsFileContent: newCredsContent,
+                endpoint: newEndpoint,
+                ownerSpace: response.ownerSpace ?? bootstrap.ownerSpace,
+                messageSpace: response.messageSpace ?? bootstrap.messageSpace,
+                topics: nil
+            )
+
+            if let creds = newCreds {
+                // Disconnect and reconnect with new credentials
+                await disconnect()
+                try await connectWithEnrollmentCredentials(creds, ownerSpace: creds.ownerSpace)
+            }
+        }
+
+        return response
+    }
+
     // MARK: - Credential Rotation After Bootstrap
 
     /// Rotate credentials immediately after bootstrap (security requirement)
@@ -768,6 +977,81 @@ struct NatsMessage {
 struct NatsSubscription {
     let topic: String
     let id: String
+}
+
+// MARK: - NATS Authentication Types (Issue #8)
+
+/// Request to authenticate via NATS during credential restore
+struct NatsAuthenticateRequest: Encodable {
+    let id: String
+    let deviceId: String
+    let deviceType: String
+    let appVersion: String
+    let encryptedCredential: String  // Base64
+    let keyId: String
+    let passwordHash: String  // Base64 Argon2id hash
+    let salt: String  // Base64 salt used for hashing
+    let nonce: String  // Base64 nonce for request freshness
+    let appSessionPublicKey: String?  // Optional X25519 public key for E2E
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case deviceId = "device_id"
+        case deviceType = "device_type"
+        case appVersion = "app_version"
+        case encryptedCredential = "encrypted_credential"
+        case keyId = "key_id"
+        case passwordHash = "password_hash"
+        case salt
+        case nonce
+        case appSessionPublicKey = "app_session_public_key"
+    }
+}
+
+/// Response from NATS authentication
+struct NatsAuthenticateResponse: Decodable {
+    let success: Bool
+    let message: String?
+    let requestId: String?
+
+    // NATS credentials for reconnection
+    let credentials: String?  // Full NATS creds file
+    let natsEndpoint: String?
+    let ownerSpace: String?
+    let messageSpace: String?
+    let expiresAt: String?
+
+    // Credential info
+    let credentialId: String?
+    let requiresImmediateRotation: Bool?
+
+    // E2E session info (if app provided public key)
+    let sessionInfo: NatsSessionInfo?
+
+    enum CodingKeys: String, CodingKey {
+        case success
+        case message
+        case requestId = "request_id"
+        case credentials
+        case natsEndpoint = "nats_endpoint"
+        case ownerSpace = "owner_space"
+        case messageSpace = "message_space"
+        case expiresAt = "expires_at"
+        case credentialId = "credential_id"
+        case requiresImmediateRotation = "requires_immediate_rotation"
+        case sessionInfo = "session_info"
+    }
+}
+
+/// Session info returned from authenticate for E2E setup
+struct NatsSessionInfo: Decodable {
+    let sessionId: String?
+    let vaultPublicKey: String?  // X25519 public key for E2E
+
+    enum CodingKeys: String, CodingKey {
+        case sessionId = "session_id"
+        case vaultPublicKey = "vault_public_key"
+    }
 }
 
 // MARK: - NATS Client Wrapper

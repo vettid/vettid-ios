@@ -8,6 +8,17 @@ import UserNotifications
 /// Security rationale: The 24-hour delay prevents immediate credential theft
 /// if an attacker gains access to a user's VettID account. The user has time
 /// to notice suspicious activity and cancel the recovery request.
+///
+/// ## Recovery Flow (Issue #8)
+///
+/// 1. User requests recovery → 24-hour delay starts
+/// 2. After delay, recovery becomes "ready"
+/// 3. User calls `confirmAndAuthenticate(password:)` which:
+///    - Calls Lambda `/vault/credentials/restore/confirm` to get bootstrap credentials
+///    - Connects to NATS with bootstrap credentials
+///    - Authenticates via NATS `app.authenticate` with password
+///    - Vault verifies password and issues full NATS credentials
+///    - Stores restored credential locally
 @MainActor
 final class ProteanRecoveryService: ObservableObject {
 
@@ -21,6 +32,7 @@ final class ProteanRecoveryService: ObservableObject {
 
     private let apiClient: APIClient
     private let credentialStore: ProteanCredentialStore
+    private let natsConnectionManager: NatsConnectionManager
     private let authTokenProvider: @Sendable () -> String?
 
     // MARK: - Polling
@@ -33,11 +45,29 @@ final class ProteanRecoveryService: ObservableObject {
     init(
         apiClient: APIClient = APIClient(),
         credentialStore: ProteanCredentialStore = ProteanCredentialStore(),
+        natsConnectionManager: NatsConnectionManager,
         authTokenProvider: @escaping @Sendable () -> String?
     ) {
         self.apiClient = apiClient
         self.credentialStore = credentialStore
+        self.natsConnectionManager = natsConnectionManager
         self.authTokenProvider = authTokenProvider
+    }
+
+    /// Convenience initializer that creates a new NatsConnectionManager
+    /// - Note: Must be called from MainActor context
+    @MainActor
+    convenience init(
+        apiClient: APIClient = APIClient(),
+        credentialStore: ProteanCredentialStore = ProteanCredentialStore(),
+        authTokenProvider: @escaping @Sendable () -> String?
+    ) {
+        self.init(
+            apiClient: apiClient,
+            credentialStore: credentialStore,
+            natsConnectionManager: NatsConnectionManager(),
+            authTokenProvider: authTokenProvider
+        )
     }
 
     deinit {
@@ -156,7 +186,120 @@ final class ProteanRecoveryService: ObservableObject {
         }
     }
 
+    /// Confirm and authenticate credential restore via NATS (Issue #8)
+    ///
+    /// This is the main restore method that:
+    /// 1. Calls confirmRestore to get bootstrap credentials and encrypted backup
+    /// 2. Connects to NATS with bootstrap credentials
+    /// 3. Authenticates with the vault via NATS (password verification)
+    /// 4. Receives full NATS credentials and restores the credential
+    ///
+    /// - Parameter password: User's vault password for verification
+    func confirmAndAuthenticate(password: String) async {
+        guard let recovery = activeRecovery,
+              recovery.status == .ready,
+              let authToken = authTokenProvider() else {
+            error = .recoveryNotReady
+            return
+        }
+
+        state = .downloading
+
+        do {
+            // Step 1: Call Lambda to get bootstrap credentials and encrypted backup
+            let confirmResponse = try await apiClient.confirmRestore(
+                recoveryId: recovery.recoveryId,
+                authToken: authToken
+            )
+
+            #if DEBUG
+            print("[Recovery] Got bootstrap credentials, connecting to NATS...")
+            #endif
+
+            state = .authenticating
+
+            // Step 2 & 3: Connect to NATS and authenticate with password
+            let authResponse = try await natsConnectionManager.connectAndAuthenticate(
+                bootstrap: confirmResponse.vaultBootstrap,
+                encryptedCredential: confirmResponse.credentialBackup.encryptedCredential,
+                keyId: confirmResponse.credentialBackup.keyId,
+                password: password
+            )
+
+            #if DEBUG
+            print("[Recovery] NATS authentication successful")
+            #endif
+
+            // Step 4: Store the credential
+            // The credential is now decrypted by the vault and we have full NATS access
+            // The encrypted credential backup was sent to the vault which decrypted it
+            // and verified the password hash matches
+
+            // Create metadata for the restored credential
+            let metadata = ProteanCredentialMetadata(
+                version: 1,  // Starting fresh after restore
+                createdAt: Date(),
+                sizeBytes: 0,  // Will be updated when we get the actual credential
+                userGuid: authResponse.ownerSpace ?? ""
+            )
+
+            // Note: The actual credential blob is handled by the vault
+            // We store minimal metadata locally to track that credential exists
+            // The NATS credentials are stored by NatsConnectionManager
+
+            // Mark backup info
+            if let backupId = confirmResponse.credentialBackup.backupId as String? {
+                // Create a placeholder for the credential store
+                // The actual credential data is managed by the vault
+                let placeholderBlob = Data()  // Empty - credential is in vault
+                try credentialStore.store(blob: placeholderBlob, metadata: metadata)
+                try credentialStore.markAsBackedUp(backupId: backupId)
+            }
+
+            activeRecovery = nil
+            state = .complete
+            error = nil
+
+            stopPolling()
+            clearPersistedRecovery()
+
+            #if DEBUG
+            print("[Recovery] Credential restore complete")
+            #endif
+
+        } catch let natsError as NatsConnectionError {
+            #if DEBUG
+            print("[Recovery] NATS error: \(natsError.localizedDescription)")
+            #endif
+
+            // Disconnect NATS on failure
+            await natsConnectionManager.disconnect()
+
+            // Check for password verification failure
+            let errorMessage = natsError.localizedDescription.lowercased()
+            if errorMessage.contains("password") || errorMessage.contains("authentication failed") {
+                self.error = .passwordVerificationFailed
+            } else {
+                self.error = .authenticationFailed(natsError.localizedDescription)
+            }
+            state = .error
+
+        } catch {
+            #if DEBUG
+            print("[Recovery] Failed: \(error.localizedDescription)")
+            #endif
+
+            // Disconnect NATS on failure
+            await natsConnectionManager.disconnect()
+
+            self.error = .downloadFailed(error.localizedDescription)
+            state = .error
+        }
+    }
+
     /// Download recovered credential (available after 24 hours)
+    /// - Note: Deprecated - use confirmAndAuthenticate(password:) instead (Issue #8)
+    @available(*, deprecated, message: "Use confirmAndAuthenticate(password:) instead")
     func downloadCredential() async {
         guard let recovery = activeRecovery,
               recovery.status == .ready,
@@ -212,7 +355,7 @@ final class ProteanRecoveryService: ObservableObject {
 
     /// Check for existing pending recovery on app launch
     func checkForPendingRecovery() async {
-        guard let authToken = authTokenProvider() else {
+        guard authTokenProvider() != nil else {
             return
         }
 
@@ -332,6 +475,7 @@ enum ProteanRecoveryState: Equatable {
     case pending
     case ready
     case downloading
+    case authenticating  // Issue #8: NATS authentication in progress
     case complete
     case cancelling
     case cancelled
@@ -370,6 +514,8 @@ enum ProteanRecoveryError: Error, LocalizedError, Equatable {
     case recoveryNotReady
     case invalidCredentialData
     case noPendingRecovery
+    case authenticationFailed(String)  // Issue #8: NATS authentication error
+    case passwordVerificationFailed    // Issue #8: Vault rejected password
 
     var errorDescription: String? {
         switch self {
@@ -389,6 +535,10 @@ enum ProteanRecoveryError: Error, LocalizedError, Equatable {
             return "Received invalid credential data from server."
         case .noPendingRecovery:
             return "No pending recovery request found."
+        case .authenticationFailed(let message):
+            return "Failed to authenticate with vault: \(message)"
+        case .passwordVerificationFailed:
+            return "Incorrect password. Please verify your vault password and try again."
         }
     }
 }

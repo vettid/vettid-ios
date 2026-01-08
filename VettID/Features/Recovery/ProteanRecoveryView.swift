@@ -33,11 +33,22 @@ struct ProteanRecoveryView: View {
                     }
 
                 case .ready:
-                    RecoveryReadyView(onDownload: downloadCredential)
+                    RecoveryReadyView(onDownload: { password in
+                        confirmAndAuthenticate(password: password)
+                    })
 
                 case .downloading:
-                    ProgressView("Downloading credential...")
+                    ProgressView("Preparing restore...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                case .authenticating:
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                        Text("Authenticating with vault...")
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 case .complete:
                     ProteanRecoveryCompleteView(onDone: { dismiss() })
@@ -95,9 +106,9 @@ struct ProteanRecoveryView: View {
         }
     }
 
-    private func downloadCredential() {
+    private func confirmAndAuthenticate(password: String) {
         Task {
-            await service.downloadCredential()
+            await service.confirmAndAuthenticate(password: password)
         }
     }
 
@@ -260,36 +271,77 @@ private struct RecoveryPendingView: View {
 // MARK: - Recovery Ready View
 
 private struct RecoveryReadyView: View {
-    let onDownload: () -> Void
+    let onDownload: (String) -> Void
+    @State private var password = ""
+    @State private var isPasswordVisible = false
+    @FocusState private var isPasswordFocused: Bool
 
     var body: some View {
         VStack(spacing: 24) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 80))
                 .foregroundStyle(.green)
-                .padding(.top, 60)
+                .padding(.top, 40)
 
             Text("Recovery Ready!")
                 .font(.title)
                 .fontWeight(.bold)
 
-            Text("Your credential is now available. Download it to restore access to your VettID.")
+            Text("Enter your vault password to complete the recovery and restore access to your VettID.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal)
 
+            // Password field
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Vault Password")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+
+                HStack {
+                    Group {
+                        if isPasswordVisible {
+                            TextField("Enter password", text: $password)
+                        } else {
+                            SecureField("Enter password", text: $password)
+                        }
+                    }
+                    .textContentType(.password)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .focused($isPasswordFocused)
+
+                    Button {
+                        isPasswordVisible.toggle()
+                    } label: {
+                        Image(systemName: isPasswordVisible ? "eye.slash" : "eye")
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding()
+                .background(Color(.systemGray6))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+            .padding(.horizontal)
+
             Spacer()
 
-            Button(action: onDownload) {
-                Text("Download Credential")
+            Button {
+                onDownload(password)
+            } label: {
+                Text("Restore Credential")
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(Color.green)
+                    .background(password.isEmpty ? Color.gray : Color.green)
                     .foregroundColor(.white)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             }
+            .disabled(password.isEmpty)
             .padding(.horizontal)
             .padding(.bottom, 40)
+        }
+        .onAppear {
+            isPasswordFocused = true
         }
     }
 }

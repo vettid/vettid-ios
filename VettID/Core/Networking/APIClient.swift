@@ -575,12 +575,33 @@ actor APIClient {
     }
 
     /// Download recovered credential (available after 24-hour delay)
+    /// - Note: Deprecated for Issue #8 - use confirmRestore instead
     func downloadRecoveredCredential(
         recoveryId: String,
         authToken: String
     ) async throws -> ProteanRecoveryDownloadResponse {
         return try await get(
             endpoint: "/vault/recovery/download?recovery_id=\(recoveryId)",
+            authToken: authToken
+        )
+    }
+
+    /// Confirm credential restore and get bootstrap credentials for NATS authentication
+    /// This is the new flow (Issue #8) that returns NATS bootstrap credentials
+    /// instead of downloading the credential directly via HTTP.
+    ///
+    /// After calling this, the app should:
+    /// 1. Connect to NATS using the bootstrap credentials
+    /// 2. Authenticate via NATS to the vault using `app.authenticate`
+    /// 3. Vault verifies password and issues full NATS credentials
+    func confirmRestore(
+        recoveryId: String,
+        authToken: String
+    ) async throws -> RestoreConfirmResponse {
+        let request = RestoreConfirmRequest(recoveryId: recoveryId)
+        return try await post(
+            endpoint: "/vault/credentials/restore/confirm",
+            body: request,
             authToken: authToken
         )
     }
@@ -1362,6 +1383,71 @@ enum ProteanRecoveryStatus: String, Codable {
     case ready
     case cancelled
     case expired
+}
+
+// MARK: - Credential Restore Types (Issue #8)
+
+/// Request to confirm credential restore (step 2 of recovery)
+struct RestoreConfirmRequest: Encodable {
+    let recoveryId: String
+
+    enum CodingKeys: String, CodingKey {
+        case recoveryId = "recovery_id"
+    }
+}
+
+/// Response from restore confirm - contains bootstrap credentials for NATS auth
+struct RestoreConfirmResponse: Decodable {
+    let success: Bool
+    let status: String  // "pending_authentication"
+    let message: String
+
+    let credentialBackup: CredentialBackup
+    let vaultBootstrap: VaultBootstrap
+
+    enum CodingKeys: String, CodingKey {
+        case success
+        case status
+        case message
+        case credentialBackup = "credential_backup"
+        case vaultBootstrap = "vault_bootstrap"
+    }
+}
+
+/// Encrypted credential backup from Lambda
+struct CredentialBackup: Decodable {
+    let encryptedCredential: String  // Base64
+    let backupId: String
+    let createdAt: String
+    let keyId: String
+
+    enum CodingKeys: String, CodingKey {
+        case encryptedCredential = "encrypted_credential"
+        case backupId = "backup_id"
+        case createdAt = "created_at"
+        case keyId = "key_id"
+    }
+}
+
+/// Bootstrap credentials for NATS connection during restore
+struct VaultBootstrap: Decodable {
+    let credentials: String  // Full NATS creds file content
+    let ownerSpace: String
+    let messageSpace: String
+    let natsEndpoint: String
+    let authTopic: String  // {OwnerSpace}.forVault.app.authenticate
+    let responseTopic: String  // {OwnerSpace}.forApp.app.authenticate.>
+    let credentialsTtlSeconds: Int
+
+    enum CodingKeys: String, CodingKey {
+        case credentials
+        case ownerSpace = "owner_space"
+        case messageSpace = "message_space"
+        case natsEndpoint = "nats_endpoint"
+        case authTopic = "auth_topic"
+        case responseTopic = "response_topic"
+        case credentialsTtlSeconds = "credentials_ttl_seconds"
+    }
 }
 
 // MARK: - Helper Types (Phase 7)
