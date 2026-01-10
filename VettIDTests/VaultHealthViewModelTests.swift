@@ -25,7 +25,7 @@ final class VaultHealthViewModelTests: XCTestCase {
 
     func testVaultHealthState_displayTitles() {
         XCTAssertEqual(VaultHealthState.loading.displayTitle, "Loading...")
-        XCTAssertEqual(VaultHealthState.notEnrolled.displayTitle, "No Vault")
+        XCTAssertEqual(VaultHealthState.notEnrolled.displayTitle, "Not Enrolled")
         XCTAssertEqual(VaultHealthState.error("test").displayTitle, "Error")
     }
 
