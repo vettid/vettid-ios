@@ -478,6 +478,129 @@ final class NatsConnectionManager: ObservableObject {
         return response
     }
 
+    // MARK: - Vault Warming (Architecture v2.0 Section 5.8)
+
+    /// Vault temperature state
+    @Published private(set) var vaultTemperature: VaultTemperature = .unknown
+
+    /// Warm the vault by sending PIN to supervisor for DEK derivation
+    ///
+    /// The PIN is sent to the enclave supervisor via NATS, which:
+    /// 1. Unseals the wrapped material from KMS
+    /// 2. Derives the DEK using Argon2id(PIN, salt)
+    /// 3. Loads the DEK into memory, making the vault "warm"
+    ///
+    /// - Parameter pin: The user's 6-digit PIN
+    /// - Returns: VaultWarmResponse with success status and session TTL
+    func warmVault(pin: String) async throws -> VaultWarmResponse {
+        guard connectionState == .connected else {
+            throw NatsConnectionError.notConnected
+        }
+
+        guard let ownerSpace = ownerSpaceId else {
+            throw NatsConnectionError.connectionFailed("No owner space ID for vault warming")
+        }
+
+        vaultTemperature = .warming
+
+        let requestId = UUID().uuidString
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+
+        let request = VaultWarmRequest(
+            id: requestId,
+            pin: pin,
+            deviceId: getDeviceId(),
+            timestamp: timestamp
+        )
+
+        // Subscribe to response topic
+        let responseTopic = "\(ownerSpace).forApp.vault.warm.>"
+        let responseStream = try await subscribe(to: responseTopic)
+
+        // Send warm request to vault
+        let requestTopic = "\(ownerSpace).forVault.vault.warm"
+        let requestData = try JSONEncoder().encode(request)
+        try await publish(requestData, to: requestTopic)
+
+        #if DEBUG
+        print("[NATS] Sent vault warm request to \(requestTopic)")
+        #endif
+
+        // Wait for response with timeout
+        let warmTimeout: TimeInterval = 30
+        let response: VaultWarmResponse = try await withThrowingTaskGroup(of: VaultWarmResponse.self) { group in
+            // Response listener
+            group.addTask {
+                for await message in responseStream {
+                    if let response = try? JSONDecoder().decode(VaultWarmResponse.self, from: message.data) {
+                        if response.requestId == nil || response.requestId == requestId {
+                            return response
+                        }
+                    }
+                }
+                throw NatsConnectionError.connectionFailed("Vault warm response stream ended")
+            }
+
+            // Timeout
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(warmTimeout * 1_000_000_000))
+                throw NatsConnectionError.connectionFailed("Vault warm timed out")
+            }
+
+            guard let result = try await group.next() else {
+                throw NatsConnectionError.connectionFailed("Vault warm failed")
+            }
+
+            group.cancelAll()
+            return result
+        }
+
+        // Clean up subscription
+        await unsubscribe(from: responseTopic)
+
+        // Update vault temperature based on response
+        if response.success {
+            vaultTemperature = .warm(ttlSeconds: response.sessionTtl)
+            #if DEBUG
+            print("[NATS] Vault warmed successfully, TTL: \(response.sessionTtl ?? 0)s")
+            #endif
+        } else {
+            // Check if locked out
+            if let remaining = response.remainingAttempts, remaining <= 0 {
+                // Supervisor locks out for a period after too many failed attempts
+                vaultTemperature = .lockedOut(retryAfter: Date().addingTimeInterval(300)) // 5 min default
+                #if DEBUG
+                print("[NATS] Vault warm failed - locked out")
+                #endif
+            } else {
+                vaultTemperature = .cold
+                #if DEBUG
+                print("[NATS] Vault warm failed: \(response.message ?? "unknown error"), attempts remaining: \(response.remainingAttempts ?? -1)")
+                #endif
+            }
+        }
+
+        return response
+    }
+
+    /// Mark vault as cold (DEK unloaded)
+    ///
+    /// This should be called when:
+    /// - App goes to background for too long
+    /// - Session TTL expires
+    /// - User explicitly locks the vault
+    func markVaultCold() {
+        vaultTemperature = .cold
+        #if DEBUG
+        print("[NATS] Vault marked as cold")
+        #endif
+    }
+
+    /// Reset vault temperature to unknown state
+    func resetVaultTemperature() {
+        vaultTemperature = .unknown
+    }
+
     // MARK: - Credential Rotation After Bootstrap
 
     /// Rotate credentials immediately after bootstrap (security requirement)
@@ -977,6 +1100,74 @@ struct NatsMessage {
 struct NatsSubscription {
     let topic: String
     let id: String
+}
+
+// MARK: - Vault Warming Types (Architecture v2.0 Section 5.8)
+
+/// Request to warm the vault by deriving DEK from PIN
+struct VaultWarmRequest: Encodable {
+    let id: String
+    let pin: String
+    let deviceId: String
+    let timestamp: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case pin
+        case deviceId = "device_id"
+        case timestamp
+    }
+}
+
+/// Response from vault warming request
+struct VaultWarmResponse: Decodable {
+    let success: Bool
+    let message: String?
+    let requestId: String?
+    let sessionTtl: Int?  // How long the vault will stay warm (seconds)
+    let remainingAttempts: Int?  // PIN attempts remaining before lockout
+
+    enum CodingKeys: String, CodingKey {
+        case success
+        case message
+        case requestId = "request_id"
+        case sessionTtl = "session_ttl"
+        case remainingAttempts = "remaining_attempts"
+    }
+}
+
+/// Vault temperature state (warm = DEK loaded, cold = DEK not loaded)
+enum VaultTemperature: Equatable {
+    case unknown
+    case cold
+    case warming
+    case warm(ttlSeconds: Int?)
+    case lockedOut(retryAfter: Date?)
+
+    var isWarm: Bool {
+        if case .warm = self { return true }
+        return false
+    }
+
+    var isCold: Bool {
+        if case .cold = self { return true }
+        return false
+    }
+
+    var isLockedOut: Bool {
+        if case .lockedOut = self { return true }
+        return false
+    }
+
+    var displayName: String {
+        switch self {
+        case .unknown: return "Unknown"
+        case .cold: return "Vault Locked"
+        case .warming: return "Unlocking..."
+        case .warm: return "Vault Unlocked"
+        case .lockedOut: return "Locked Out"
+        }
+    }
 }
 
 // MARK: - NATS Authentication Types (Issue #8)

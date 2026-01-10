@@ -67,6 +67,19 @@ class AppState: ObservableObject {
     @Published var hasActiveVault: Bool = false
     @Published var vaultInstanceId: String?
 
+    // Vault temperature state (Architecture v2.0 Section 5.8)
+    // warm = DEK loaded (vault operations work)
+    // cold = DEK not loaded (need PIN to warm)
+    @Published var vaultTemperature: VaultTemperature = .unknown
+    @Published var vaultWarmingError: String?
+
+    // NATS connection manager for vault operations
+    lazy var natsConnectionManager: NatsConnectionManager = {
+        NatsConnectionManager(userGuidProvider: { [weak self] in
+            self?.currentUserGuid
+        })
+    }()
+
     // Deep link navigation state
     @Published var pendingNavigation: PendingNavigation?
 
@@ -159,6 +172,59 @@ class AppState: ObservableObject {
             // If app lock is not enabled, just sign out
             isAuthenticated = false
         }
+        // Mark vault as cold when app is locked
+        vaultTemperature = .cold
+    }
+
+    // MARK: - Vault Warming (Architecture v2.0 Section 5.8)
+
+    /// Check if vault needs to be warmed before operations
+    var needsVaultWarming: Bool {
+        vaultTemperature.isCold || vaultTemperature == .unknown
+    }
+
+    /// Warm the vault with PIN
+    ///
+    /// Sends the PIN to the supervisor via NATS to derive DEK and load it into memory.
+    /// Must be called on app open before vault operations can proceed.
+    ///
+    /// - Parameter pin: User's 6-digit PIN
+    /// - Throws: NatsConnectionError on failure
+    func warmVault(pin: String) async throws {
+        vaultWarmingError = nil
+
+        do {
+            let response = try await natsConnectionManager.warmVault(pin: pin)
+
+            if response.success {
+                vaultTemperature = .warm(ttlSeconds: response.sessionTtl)
+            } else {
+                vaultWarmingError = response.message ?? "Failed to warm vault"
+                if let remaining = response.remainingAttempts, remaining <= 0 {
+                    vaultTemperature = .lockedOut(retryAfter: Date().addingTimeInterval(300))
+                } else {
+                    vaultTemperature = .cold
+                }
+                throw VaultWarmingError.warmingFailed(response.message ?? "Unknown error")
+            }
+        } catch let error as VaultWarmingError {
+            throw error
+        } catch {
+            vaultWarmingError = error.localizedDescription
+            throw VaultWarmingError.warmingFailed(error.localizedDescription)
+        }
+    }
+
+    /// Mark vault as cold (e.g., after background timeout)
+    func markVaultCold() {
+        vaultTemperature = .cold
+        natsConnectionManager.markVaultCold()
+    }
+
+    /// Reset vault temperature on logout
+    func resetVaultTemperature() {
+        vaultTemperature = .unknown
+        natsConnectionManager.resetVaultTemperature()
     }
 
     /// Full sign out - clears credentials (requires re-enrollment)
@@ -170,6 +236,9 @@ class AppState: ObservableObject {
         hasActiveVault = false
         vaultInstanceId = nil
         currentProfile = nil
+
+        // Reset vault temperature
+        resetVaultTemperature()
 
         // Clear all keychain data
         clearAllKeychainData()
@@ -245,4 +314,31 @@ enum PendingNavigation: Equatable {
     case message(connectionId: String)
     case connect(code: String)
     case vaultStatus
+}
+
+// MARK: - Vault Warming Error
+
+/// Errors that can occur during vault warming
+enum VaultWarmingError: Error, LocalizedError {
+    case warmingFailed(String)
+    case lockedOut(retryAfter: Date?)
+    case notConnected
+    case invalidPIN
+
+    var errorDescription: String? {
+        switch self {
+        case .warmingFailed(let message):
+            return message
+        case .lockedOut(let retryAfter):
+            if let date = retryAfter {
+                let formatter = RelativeDateTimeFormatter()
+                return "Locked out. Try again \(formatter.localizedString(for: date, relativeTo: Date()))"
+            }
+            return "Too many failed attempts. Please try again later."
+        case .notConnected:
+            return "Not connected to vault. Please check your connection."
+        case .invalidPIN:
+            return "Invalid PIN format. PIN must be 6 digits."
+        }
+    }
 }

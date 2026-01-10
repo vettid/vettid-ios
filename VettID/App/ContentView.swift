@@ -10,6 +10,9 @@ struct ContentView: View {
     @State private var showEnrollmentFromDeepLink = false
     @State private var deepLinkEnrollToken: String?
 
+    // Background time tracking for vault cooling
+    @State private var backgroundTime: Date?
+
     var body: some View {
         ZStack {
             // Main content
@@ -18,6 +21,11 @@ struct ContentView: View {
                     WelcomeView()
                 } else if !appState.isAuthenticated {
                     AuthenticationView()
+                } else if appState.needsVaultWarming {
+                    // Vault is cold - need PIN to warm it (Architecture v2.0 Section 5.8)
+                    VaultWarmingView {
+                        // Successfully warmed vault
+                    }
                 } else {
                     MainNavigationView()
                 }
@@ -48,12 +56,33 @@ struct ContentView: View {
         switch phase {
         case .background:
             lockService.appDidEnterBackground()
+            // Store background time for vault cooling check
+            backgroundTime = Date()
         case .active:
             lockService.appWillEnterForeground()
+            // Check if vault should be marked cold based on background duration
+            checkVaultCooling()
         case .inactive:
             break
         @unknown default:
             break
+        }
+    }
+
+    /// Check if vault should be marked cold after returning from background
+    private func checkVaultCooling() {
+        guard let bgTime = backgroundTime else { return }
+        backgroundTime = nil
+
+        let backgroundDuration = Date().timeIntervalSince(bgTime)
+        // Cool vault after 5 minutes in background (matches app lock timeout)
+        let vaultCoolTimeout: TimeInterval = 300
+
+        if backgroundDuration >= vaultCoolTimeout && appState.vaultTemperature.isWarm {
+            #if DEBUG
+            print("[ContentView] Vault cooled after \(Int(backgroundDuration))s in background")
+            #endif
+            appState.markVaultCold()
         }
     }
 

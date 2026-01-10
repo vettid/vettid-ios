@@ -129,6 +129,7 @@
 		9178B120C0122606F1ECAF51 /* CallKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E3E9B78635C6EAF5E223808 /* CallKitManager.swift */; };
 		98DD4E5D5DC4F6A70092712E /* SecretsHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEA2A69DEB72B748BED4DA14 /* SecretsHandler.swift */; };
 		991BCE25C8226316E8F3949B /* PatternAuthenticatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B14631A6DCDC4E9897C16D1A /* PatternAuthenticatorTests.swift */; };
+		9DC143FF0599AAB7EDC49F85 /* VaultWarmingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67D6A99D63AB4B6DAA7749EC /* VaultWarmingView.swift */; };
 		A1B2C3D4E5F6000000000000 /* AuthenticationViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75A250C49286C1469599CD45 /* AuthenticationViewModelTests.swift */; };
 		A1B2C3D4E5F6000000000001 /* BackupListViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 183C19DE1EB7BD6FCF2BFE78 /* BackupListViewModelTests.swift */; };
 		A1B2C3D4E5F6000000000002 /* BackupSettingsViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6098637FDCF71146C63D9FD /* BackupSettingsViewModelTests.swift */; };
@@ -312,6 +313,7 @@
 		53259C4CDFC14FAB1BAA3872 /* VettIDTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VettIDTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		595F692C8F113D4CAC0F9D2D /* NatsConnectionManagerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NatsConnectionManagerTests.swift; sourceTree = "<group>"; };
 		5DAE0DC17A88D051B4A2680E /* VettIDUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VettIDUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		67D6A99D63AB4B6DAA7749EC /* VaultWarmingView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VaultWarmingView.swift; sourceTree = "<group>"; };
 		688F0CE3AE28533DD0235DF8 /* Secret.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Secret.swift; sourceTree = "<group>"; };
 		6CCAD04F327E6A42D6E529AA /* PCRUpdateServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PCRUpdateServiceTests.swift; sourceTree = "<group>"; };
 		6EDFB39DA4D3D204789EDB65 /* PatternGridView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PatternGridView.swift; sourceTree = "<group>"; };
@@ -613,6 +615,7 @@
 				10000023 /* VaultHealthView.swift */,
 				8285A14EAFF8FCF54C60C6E2 /* VaultPreferencesView.swift */,
 				7A4A6BF4B7E19B38EDEF31AC /* ArchiveView.swift */,
+				67D6A99D63AB4B6DAA7749EC /* VaultWarmingView.swift */,
 			);
 			path = Vault;
 			sourceTree = "<group>";
@@ -1140,6 +1143,7 @@
 				AB54E5D214A4FACB44AF9726 /* CallCoordinator.swift in Sources */,
 				567E46C8B9ECDBC6BFD62D32 /* PatternGridView.swift in Sources */,
 				0F889F39E1184359E0A37B95 /* EnrollmentPINSetupView.swift in Sources */,
+				9DC143FF0599AAB7EDC49F85 /* VaultWarmingView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
