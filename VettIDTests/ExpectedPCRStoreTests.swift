@@ -232,6 +232,35 @@ final class ExpectedPCRStoreTests: XCTestCase {
         XCTAssertNil(timestamp)
     }
 
+    // MARK: - Bundled Defaults Tests
+
+    func testIsUsingBundledDefaultsAfterClear() {
+        // Given - clear stored PCR sets
+        store.clearStoredPCRSets()
+
+        // When/Then - should be using bundled defaults
+        XCTAssertTrue(store.isUsingBundledDefaults())
+    }
+
+    func testIsUsingDevelopmentPlaceholder() {
+        // Given - clear stored PCR sets to fall back to bundled
+        store.clearStoredPCRSets()
+
+        // When
+        let isPlaceholder = store.isUsingDevelopmentPlaceholder
+
+        // Then - development placeholder should be detected
+        // (This will be true in tests since there's no expected_pcrs.json bundled)
+        // The actual behavior depends on whether bundled PCRs exist
+        if let currentSet = store.getCurrentPCRSet() {
+            if currentSet.id == "development-placeholder" {
+                XCTAssertTrue(isPlaceholder)
+            } else {
+                XCTAssertFalse(isPlaceholder)
+            }
+        }
+    }
+
     // MARK: - Case Insensitivity Tests
 
     func testHasMatchingPCRSetCaseInsensitive() {

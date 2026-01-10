@@ -238,6 +238,95 @@ final class NitroAttestationVerifierTests: XCTestCase {
     }
 }
 
+// MARK: - PCR Validation Tests
+
+extension NitroAttestationVerifierTests {
+
+    func testValidateApiPCRsMatchesCurrent() {
+        // Given - API PCRs that match the current cached set
+        guard let currentSet = verifier.pcrStore.getCurrentPCRSet() else {
+            // Skip test if no PCR sets available
+            return
+        }
+
+        let apiPCRs = NitroAttestationVerifier.ExpectedPCRs(
+            pcr0: currentSet.pcr0,
+            pcr1: currentSet.pcr1,
+            pcr2: currentSet.pcr2,
+            validFrom: Date().addingTimeInterval(-3600),
+            validUntil: nil
+        )
+
+        // When
+        let result = verifier.validateApiPCRs(apiPCRs)
+
+        // Then
+        XCTAssertTrue(result.isValid)
+        XCTAssertNotNil(result.matchedVersion)
+    }
+
+    func testValidateApiPCRsNoMatch() {
+        // Given - API PCRs that don't match any cached set
+        let apiPCRs = NitroAttestationVerifier.ExpectedPCRs(
+            pcr0: String(repeating: "f", count: 96),  // Non-matching
+            pcr1: String(repeating: "e", count: 96),
+            pcr2: String(repeating: "d", count: 96),
+            validFrom: Date().addingTimeInterval(-3600),
+            validUntil: nil
+        )
+
+        // When
+        let result = verifier.validateApiPCRs(apiPCRs)
+
+        // Then
+        XCTAssertFalse(result.isValid)
+        XCTAssertNil(result.matchedVersion)
+        XCTAssertFalse(result.reason.isEmpty)
+    }
+
+    func testValidateApiPCRsCaseInsensitive() {
+        // Given - API PCRs with different case
+        guard let currentSet = verifier.pcrStore.getCurrentPCRSet() else {
+            return
+        }
+
+        let apiPCRs = NitroAttestationVerifier.ExpectedPCRs(
+            pcr0: currentSet.pcr0.uppercased(),
+            pcr1: currentSet.pcr1.uppercased(),
+            pcr2: currentSet.pcr2.uppercased(),
+            validFrom: Date().addingTimeInterval(-3600),
+            validUntil: nil
+        )
+
+        // When
+        let result = verifier.validateApiPCRs(apiPCRs)
+
+        // Then - should still match due to case-insensitive comparison
+        XCTAssertTrue(result.isValid)
+    }
+
+    func testPCRValidationResultProperties() {
+        // Test valid result
+        let validResult = NitroAttestationVerifier.PCRValidationResult(
+            isValid: true,
+            matchedVersion: "v1.0.0",
+            reason: "Matches current PCR version"
+        )
+        XCTAssertTrue(validResult.isValid)
+        XCTAssertEqual(validResult.matchedVersion, "v1.0.0")
+        XCTAssertTrue(validResult.reason.contains("current"))
+
+        // Test invalid result
+        let invalidResult = NitroAttestationVerifier.PCRValidationResult(
+            isValid: false,
+            matchedVersion: nil,
+            reason: "No matching PCR set found"
+        )
+        XCTAssertFalse(invalidResult.isValid)
+        XCTAssertNil(invalidResult.matchedVersion)
+    }
+}
+
 // MARK: - Data Extension Tests
 
 extension NitroAttestationVerifierTests {

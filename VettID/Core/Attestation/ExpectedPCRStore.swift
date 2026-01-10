@@ -163,6 +163,18 @@ final class ExpectedPCRStore {
         return timestamp
     }
 
+    /// Check if the store is using bundled defaults (no fetched updates)
+    /// Used for detecting when PCR fetch has failed and app is in degraded mode
+    func isUsingBundledDefaults() -> Bool {
+        return loadStoredPCRSets() == nil
+    }
+
+    /// Check if currently using development placeholder PCRs
+    var isUsingDevelopmentPlaceholder: Bool {
+        guard let currentSet = getCurrentPCRSet() else { return false }
+        return currentSet.id == "development-placeholder"
+    }
+
     // MARK: - Signature Verification
 
     /// Verify Ed25519 signature on PCR update

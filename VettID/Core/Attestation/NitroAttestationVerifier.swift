@@ -75,10 +75,25 @@ final class NitroAttestationVerifier {
     /// Expected AWS Nitro root CA common name
     private static let awsNitroRootCN = "aws.nitro-enclaves"
 
+    /// Result of PCR validation against cached values
+    struct PCRValidationResult {
+        /// Whether the PCRs are valid (match a known version)
+        let isValid: Bool
+        /// Version that matched (if any)
+        let matchedVersion: String?
+        /// Human-readable reason for the result
+        let reason: String
+    }
+
+    // MARK: - Dependencies
+
+    /// PCR store for cached validation (internal for testing)
+    let pcrStore: ExpectedPCRStore
+
     // MARK: - Initialization
 
-    init() {
-        // No bundled certificate needed - we dynamically validate from cabundle
+    init(pcrStore: ExpectedPCRStore = ExpectedPCRStore()) {
+        self.pcrStore = pcrStore
     }
 
     // MARK: - Public API
@@ -189,6 +204,131 @@ final class NitroAttestationVerifier {
                 actual: actualPCR2.hexEncodedString()
             )
         }
+    }
+
+    // MARK: - Cached PCR Verification
+
+    /// Verify an attestation document using locally cached PCR values.
+    ///
+    /// This method ignores API-provided PCR values and uses the locally cached ones
+    /// from the PCR store. This provides additional security by not trusting
+    /// the API to provide correct PCR values.
+    ///
+    /// - Parameters:
+    ///   - attestationDocument: Raw CBOR-encoded attestation document
+    ///   - nonce: Optional nonce for freshness verification
+    /// - Returns: Verification result with enclave public key
+    /// - Throws: NitroAttestationError if verification fails
+    func verifyWithCachedPCRs(
+        attestationDocument: Data,
+        nonce: Data? = nil
+    ) throws -> AttestationResult {
+        #if DEBUG
+        print("[NitroAttestation] Verifying with cached PCR values")
+        #endif
+
+        guard let cachedPCRSet = pcrStore.getCurrentPCRSet() else {
+            throw NitroAttestationError.invalidExpectedPCRFormat
+        }
+
+        #if DEBUG
+        print("[NitroAttestation] Using cached PCRs id: \(cachedPCRSet.id)")
+        #endif
+
+        return try verify(
+            attestationDocument: attestationDocument,
+            expectedPCRs: cachedPCRSet.toExpectedPCRs(),
+            nonce: nonce
+        )
+    }
+
+    /// Validate API-provided PCR values against locally cached ones.
+    ///
+    /// This should be called before trusting PCR values from an API response.
+    /// It checks if the API-provided PCRs match any valid cached PCR set
+    /// (to handle rolling updates where multiple versions may be valid).
+    ///
+    /// - Parameter apiPCRs: PCR values from API response
+    /// - Returns: ValidationResult indicating if PCRs are valid and which version matched
+    func validateApiPCRs(_ apiPCRs: ExpectedPCRs) -> PCRValidationResult {
+        #if DEBUG
+        print("[NitroAttestation] Validating API-provided PCRs against cached values")
+        #endif
+
+        let validSets = pcrStore.getValidPCRSets()
+
+        // Check against all valid PCR sets
+        for pcrSet in validSets {
+            if pcrsMatch(apiPCRs, pcrSet: pcrSet) {
+                #if DEBUG
+                print("[NitroAttestation] API PCRs match version: \(pcrSet.id)")
+                #endif
+                return PCRValidationResult(
+                    isValid: true,
+                    matchedVersion: pcrSet.id,
+                    reason: pcrSet.isCurrent ? "Matches current PCR version" : "Matches valid PCR version (rolling update)"
+                )
+            }
+        }
+
+        // PCRs don't match any known version
+        #if DEBUG
+        print("[NitroAttestation] API PCRs do not match any known version")
+        print("[NitroAttestation]   API PCR0: \(apiPCRs.pcr0.prefix(32))...")
+        if let current = validSets.first {
+            print("[NitroAttestation]   Cached PCR0: \(current.pcr0.prefix(32))...")
+        }
+        #endif
+
+        let versions = validSets.map { $0.id }.joined(separator: ", ")
+        return PCRValidationResult(
+            isValid: false,
+            matchedVersion: nil,
+            reason: "API-provided PCRs do not match any known version. Valid versions: \(versions.isEmpty ? "none" : versions)"
+        )
+    }
+
+    /// Verify attestation with full PCR validation.
+    ///
+    /// This method:
+    /// 1. Validates API-provided PCRs against cached values
+    /// 2. If valid, uses the cached PCRs for verification (not API-provided)
+    /// 3. Provides enhanced security against compromised API
+    ///
+    /// - Parameters:
+    ///   - attestationDocument: Raw CBOR-encoded attestation document
+    ///   - apiProvidedPCRs: PCR values from API response (for validation only)
+    ///   - nonce: Optional nonce for freshness verification
+    /// - Returns: Verification result with enclave public key
+    /// - Throws: NitroAttestationError if verification fails
+    func verifyWithPCRValidation(
+        attestationDocument: Data,
+        apiProvidedPCRs: ExpectedPCRs,
+        nonce: Data? = nil
+    ) throws -> AttestationResult {
+        // First validate API PCRs against our cached values
+        let validation = validateApiPCRs(apiProvidedPCRs)
+
+        if !validation.isValid {
+            #if DEBUG
+            print("[NitroAttestation] WARNING: API PCR validation failed - \(validation.reason)")
+            #endif
+            // Continue with verification using cached PCRs
+            // The actual verification will catch any real mismatches
+        }
+
+        // Use cached PCRs for actual verification (more secure)
+        return try verifyWithCachedPCRs(
+            attestationDocument: attestationDocument,
+            nonce: nonce
+        )
+    }
+
+    /// Check if API-provided PCRs match a PCR set
+    private func pcrsMatch(_ apiPCRs: ExpectedPCRs, pcrSet: ExpectedPCRStore.PCRSet) -> Bool {
+        return apiPCRs.pcr0.lowercased() == pcrSet.pcr0.lowercased() &&
+               apiPCRs.pcr1.lowercased() == pcrSet.pcr1.lowercased() &&
+               apiPCRs.pcr2.lowercased() == pcrSet.pcr2.lowercased()
     }
 
     // MARK: - CBOR Parsing

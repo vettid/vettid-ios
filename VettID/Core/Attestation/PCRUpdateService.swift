@@ -18,6 +18,7 @@ final class PCRUpdateService: ObservableObject {
     @Published private(set) var lastUpdateCheck: Date?
     @Published private(set) var updateError: Error?
     @Published private(set) var isUpdating: Bool = false
+    @Published private(set) var isUsingBundledDefaults: Bool = true
 
     // MARK: - Dependencies
 
@@ -35,11 +36,21 @@ final class PCRUpdateService: ObservableObject {
     /// Time for background task to complete
     private let backgroundTaskTimeout: TimeInterval = 25
 
+    /// Maximum retry attempts for PCR fetch
+    private let maxRetryAttempts = 3
+
+    /// Initial retry delay (doubles each attempt)
+    private let initialRetryDelay: TimeInterval = 1.0
+
+    /// Retry backoff multiplier
+    private let retryBackoffMultiplier: Double = 2.0
+
     // MARK: - Initialization
 
     init(apiClient: APIClient = APIClient(), pcrStore: ExpectedPCRStore = ExpectedPCRStore()) {
         self.apiClient = apiClient
         self.pcrStore = pcrStore
+        self.isUsingBundledDefaults = pcrStore.isUsingBundledDefaults()
     }
 
     // MARK: - Public API
@@ -92,6 +103,80 @@ final class PCRUpdateService: ObservableObject {
         }
 
         isUpdating = false
+    }
+
+    /// Check for PCR updates with retry logic and exponential backoff
+    /// - Parameter force: If true, skip the minimum interval check
+    /// - Returns: True if update succeeded, false if all retries exhausted
+    @discardableResult
+    func checkForUpdatesWithRetry(force: Bool = false) async -> Bool {
+        // Skip if recently checked (unless forced)
+        if !force, let lastCheck = lastUpdateCheck,
+           Date().timeIntervalSince(lastCheck) < minimumUpdateInterval {
+            #if DEBUG
+            print("[PCRUpdate] Skipping update check - too recent")
+            #endif
+            return true  // Not a failure, just skipped
+        }
+
+        isUpdating = true
+        updateError = nil
+
+        var currentDelay = initialRetryDelay
+        var lastError: Error?
+
+        for attempt in 1...maxRetryAttempts {
+            do {
+                // Fetch current PCRs from API
+                let response = try await apiClient.getCurrentPCRs()
+
+                // Create the signed payload (what the backend actually signed)
+                let signedPayload = try createSignedPayload(from: response)
+
+                // Convert API response to store format
+                let storeResponse = ExpectedPCRStore.PCRUpdateResponse(
+                    pcrSets: response.pcrSets.map { $0.toPCRSet() },
+                    signature: response.signature,
+                    signedAt: response.signedAt,
+                    signedPayload: signedPayload
+                )
+
+                // Store and verify the update
+                try pcrStore.storeUpdatedPCRSets(storeResponse)
+
+                lastUpdateCheck = Date()
+                isUpdating = false
+                isUsingBundledDefaults = false  // Successfully fetched from API
+
+                #if DEBUG
+                print("[PCRUpdate] Successfully updated PCRs - \(response.pcrSets.count) sets (attempt \(attempt))")
+                #endif
+
+                return true
+
+            } catch {
+                lastError = error
+                #if DEBUG
+                print("[PCRUpdate] Attempt \(attempt)/\(maxRetryAttempts) failed: \(error.localizedDescription)")
+                #endif
+
+                // Don't sleep after the last attempt
+                if attempt < maxRetryAttempts {
+                    try? await Task.sleep(nanoseconds: UInt64(currentDelay * 1_000_000_000))
+                    currentDelay *= retryBackoffMultiplier
+                }
+            }
+        }
+
+        // All retries exhausted
+        updateError = lastError
+        isUpdating = false
+
+        #if DEBUG
+        print("[PCRUpdate] All \(maxRetryAttempts) attempts failed. Using \(pcrStore.isUsingBundledDefaults() ? "bundled defaults" : "cached PCRs")")
+        #endif
+
+        return false
     }
 
     /// Create the signed payload from API response
@@ -188,9 +273,15 @@ final class PCRUpdateService: ObservableObject {
     // MARK: - App Lifecycle Integration
 
     /// Call when app becomes active
+    /// Uses retry logic for startup resilience
     func onAppDidBecomeActive() {
         Task {
-            await checkForUpdates()
+            let success = await checkForUpdatesWithRetry()
+            if !success && pcrStore.isUsingBundledDefaults() {
+                #if DEBUG
+                print("[PCRUpdate] WARNING: App started with bundled PCRs only - attestation may fail against newer enclaves")
+                #endif
+            }
         }
     }
 
