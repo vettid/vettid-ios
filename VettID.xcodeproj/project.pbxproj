@@ -84,6 +84,7 @@
 		00000052 /* ProfileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000052 /* ProfileStore.swift */; };
 		00000053 /* SecretsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000053 /* SecretsStore.swift */; };
 		0070F8E8A708ED9903FFDB28 /* ProfileHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A802F262C8E724624EE83387 /* ProfileHandler.swift */; };
+		00C5B7482359B21C1B209D37 /* EnrollmentNatsHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78032CC009E0FAFFA9613FF4 /* EnrollmentNatsHandler.swift */; };
 		0A8A714766B1CBF27A4F71D7 /* ConnectionTypesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D394BF5857A8C321E286295 /* ConnectionTypesTests.swift */; };
 		0CB7F637A987C6A46022474E /* PasswordHasherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F6BD7EF25140C61B7085558 /* PasswordHasherTests.swift */; };
 		0ED83C63EF0A1AEC36CEF699 /* ProteanRecoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B59E35C2BB3BD24E77AE5E7A /* ProteanRecoveryView.swift */; };
@@ -322,6 +323,7 @@
 		6EDFB39DA4D3D204789EDB65 /* PatternGridView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PatternGridView.swift; sourceTree = "<group>"; };
 		7543D8BF043373D3E739796C /* ProfileViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProfileViewModelTests.swift; sourceTree = "<group>"; };
 		75A250C49286C1469599CD45 /* AuthenticationViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AuthenticationViewModelTests.swift; sourceTree = "<group>"; };
+		78032CC009E0FAFFA9613FF4 /* EnrollmentNatsHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EnrollmentNatsHandler.swift; sourceTree = "<group>"; };
 		7A4A6BF4B7E19B38EDEF31AC /* ArchiveView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ArchiveView.swift; sourceTree = "<group>"; };
 		7A833E0C94158CB685965731 /* HandlerDiscoveryViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HandlerDiscoveryViewModelTests.swift; sourceTree = "<group>"; };
 		7AF9A63734413646BB7E375A /* SecretsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SecretsView.swift; sourceTree = "<group>"; };
@@ -592,6 +594,7 @@
 				10000012 /* AttestationView.swift */,
 				10000013 /* EnrollmentCompleteView.swift */,
 				067A374FCD331C52F728DDF6 /* EnrollmentPINSetupView.swift */,
+				78032CC009E0FAFFA9613FF4 /* EnrollmentNatsHandler.swift */,
 			);
 			path = Enrollment;
 			sourceTree = "<group>";
@@ -1160,6 +1163,7 @@
 				9DC143FF0599AAB7EDC49F85 /* VaultWarmingView.swift in Sources */,
 				B927C1ABE7F81F99EF610AC0 /* OperationAuthorizationService.swift in Sources */,
 				C3B1AE1DEEB0DB59B81EC244 /* PasswordPromptView.swift in Sources */,
+				00C5B7482359B21C1B209D37 /* EnrollmentNatsHandler.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
