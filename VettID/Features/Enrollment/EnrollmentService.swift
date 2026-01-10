@@ -538,7 +538,8 @@ enum EnrollmentError: Error, Equatable, LocalizedError {
     case invalidInvitationCode
     case invitationExpired
     case passwordSetFailed
-    case pinSetFailed           // NEW: PIN setup failed
+    case pinSetFailed           // PIN setup failed
+    case noTransactionKeys      // No UTKs available for credential creation
     case finalizationFailed
     case storageFailed
     case invalidState
@@ -558,6 +559,7 @@ enum EnrollmentError: Error, Equatable, LocalizedError {
              (.invitationExpired, .invitationExpired),
              (.passwordSetFailed, .passwordSetFailed),
              (.pinSetFailed, .pinSetFailed),
+             (.noTransactionKeys, .noTransactionKeys),
              (.finalizationFailed, .finalizationFailed),
              (.storageFailed, .storageFailed),
              (.invalidState, .invalidState),
@@ -585,6 +587,8 @@ enum EnrollmentError: Error, Equatable, LocalizedError {
             return "Failed to set password"
         case .pinSetFailed:
             return "Failed to set vault PIN"
+        case .noTransactionKeys:
+            return "No transaction keys available. Please try again."
         case .finalizationFailed:
             return "Failed to finalize enrollment"
         case .storageFailed:

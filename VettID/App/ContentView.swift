@@ -223,22 +223,37 @@ struct EnrollmentContainerView: View {
             case .processingInvitation:
                 processingView
 
+            case .connectingToNats:
+                connectingToNatsView
+
+            case .requestingAttestation:
+                requestingAttestationView
+
             case .attestationRequired, .attesting, .attestationComplete:
                 AttestationView(viewModel: viewModel) {
                     // Attestation complete callback
                 }
 
+            case .settingPIN, .processingPIN:
+                EnrollmentPINSetupView(viewModel: viewModel)
+
+            case .waitingForVault:
+                waitingForVaultView
+
             case .settingPassword, .processingPassword:
                 PasswordSetupView(viewModel: viewModel)
 
-            case .settingPIN, .processingPIN:
-                EnrollmentPINSetupView(viewModel: viewModel)
+            case .creatingCredential:
+                creatingCredentialView
 
             case .finalizing:
                 finalizingView
 
             case .settingUpNats:
                 settingUpNatsView
+
+            case .verifyingEnrollment:
+                verifyingEnrollmentView
 
             case .complete(let userGuid):
                 EnrollmentCompleteView(userGuid: userGuid) {
@@ -315,6 +330,117 @@ struct EnrollmentContainerView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    // MARK: - Connecting to NATS View
+
+    private var connectingToNatsView: some View {
+        VStack(spacing: 20) {
+            ProgressView()
+                .scaleEffect(1.5)
+                .accessibilityIdentifier("enrollment.connectingProgress")
+
+            Text("Connecting to vault...")
+                .font(.headline)
+                .accessibilityIdentifier("enrollment.connectingText")
+
+            Text("Establishing secure channel")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .accessibilityIdentifier("enrollment.connectingToNatsView")
+    }
+
+    // MARK: - Requesting Attestation View
+
+    private var requestingAttestationView: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "checkmark.shield")
+                .font(.system(size: 50))
+                .foregroundStyle(.blue)
+                .accessibilityIdentifier("enrollment.attestationIcon")
+
+            ProgressView()
+                .scaleEffect(1.2)
+
+            Text("Verifying enclave...")
+                .font(.headline)
+                .accessibilityIdentifier("enrollment.attestationText")
+
+            Text("Validating secure environment")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .accessibilityIdentifier("enrollment.requestingAttestationView")
+    }
+
+    // MARK: - Waiting for Vault View
+
+    private var waitingForVaultView: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "building.2")
+                .font(.system(size: 50))
+                .foregroundStyle(.blue)
+                .accessibilityIdentifier("enrollment.vaultIcon")
+
+            ProgressView()
+                .scaleEffect(1.2)
+
+            Text("Starting your vault...")
+                .font(.headline)
+                .accessibilityIdentifier("enrollment.waitingVaultText")
+
+            Text("This may take a moment")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .accessibilityIdentifier("enrollment.waitingForVaultView")
+    }
+
+    // MARK: - Creating Credential View
+
+    private var creatingCredentialView: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "key.fill")
+                .font(.system(size: 50))
+                .foregroundStyle(.blue)
+                .accessibilityIdentifier("enrollment.credentialIcon")
+
+            ProgressView()
+                .scaleEffect(1.2)
+
+            Text("Creating credential...")
+                .font(.headline)
+                .accessibilityIdentifier("enrollment.creatingCredentialText")
+
+            Text("Generating secure keys")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .accessibilityIdentifier("enrollment.creatingCredentialView")
+    }
+
+    // MARK: - Verifying Enrollment View
+
+    private var verifyingEnrollmentView: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "checkmark.circle")
+                .font(.system(size: 50))
+                .foregroundStyle(.green)
+                .accessibilityIdentifier("enrollment.verifyIcon")
+
+            ProgressView()
+                .scaleEffect(1.2)
+
+            Text("Verifying enrollment...")
+                .font(.headline)
+                .accessibilityIdentifier("enrollment.verifyingText")
+
+            Text("Almost done")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .accessibilityIdentifier("enrollment.verifyingEnrollmentView")
     }
 
     // MARK: - Error View

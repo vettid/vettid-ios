@@ -135,6 +135,32 @@ struct NatsCredentials: Codable, Equatable {
         self.expiresAt = expiresAt
         self.permissions = permissions
     }
+
+    /// Create credentials from NatsConnectionInfo (from enrollFinalize response)
+    init(from connectionInfo: NatsConnectionInfo) {
+        // Parse the .creds file content to extract JWT and seed
+        if let parsed = NatsCredentials(
+            fromCredsFileContent: connectionInfo.credentials,
+            endpoint: connectionInfo.endpoint,
+            ownerSpace: connectionInfo.ownerSpace,
+            messageSpace: connectionInfo.messageSpace,
+            topics: connectionInfo.topics
+        ) {
+            self = parsed
+        } else {
+            // Fallback if parsing fails - create empty credentials
+            // This shouldn't happen with valid .creds file content
+            self.tokenId = "enrollment-\(UUID().uuidString)"
+            self.jwt = ""
+            self.seed = ""
+            self.endpoint = connectionInfo.endpoint
+            self.expiresAt = Date().addingTimeInterval(86400)
+            self.permissions = NatsPermissions(
+                publish: ["\(connectionInfo.ownerSpace).forVault.>"],
+                subscribe: ["\(connectionInfo.ownerSpace).forApp.>"]
+            )
+        }
+    }
 }
 
 /// NATS topic permissions

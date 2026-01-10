@@ -65,21 +65,34 @@ final class EnrollmentViewModel: ObservableObject {
     private var enclavePublicKey: Data?  // Verified enclave key for password encryption
     private let nitroVerifier = NitroAttestationVerifier()
 
+    // NATS-based enrollment (Architecture v2.0)
+    private var enrollmentNatsHandler: EnrollmentNatsHandler?
+    private var natsConnectionManager: NatsConnectionManager?
+    private var natsBootstrapCredentials: NatsCredentials?
+    private var natsOwnerSpace: String?
+    private var vaultUTKs: [VaultReadyResponse.UTKInfo] = []
+    private var useNatsFlow: Bool = true  // Enable NATS-based enrollment by default
+
     // MARK: - Enrollment State
 
     enum EnrollmentState: Equatable {
         case initial
         case scanningQR
         case processingInvitation
+        case connectingToNats        // NATS flow: connecting with bootstrap creds
+        case requestingAttestation   // NATS flow: requesting attestation from supervisor
         case attestationRequired(challenge: String)
         case attesting(progress: Double)
         case attestationComplete
+        case settingPIN              // PIN setup step (before password in NATS flow)
+        case processingPIN           // Sending PIN to supervisor
+        case waitingForVault         // NATS flow: waiting for vault ready + UTKs
         case settingPassword
         case processingPassword
-        case settingPIN          // NEW: PIN setup step
-        case processingPIN       // NEW: Sending PIN to supervisor
+        case creatingCredential      // NATS flow: credential being created
         case finalizing
         case settingUpNats
+        case verifyingEnrollment     // NATS flow: final verification
         case complete(userGuid: String)
         case error(message: String, retryable: Bool)
 
@@ -89,16 +102,26 @@ final class EnrollmentViewModel: ObservableObject {
                 return "Scan QR Code"
             case .processingInvitation:
                 return "Processing..."
-            case .attestationRequired, .attesting:
+            case .connectingToNats:
+                return "Connecting..."
+            case .requestingAttestation, .attestationRequired, .attesting:
                 return "Device Verification"
-            case .attestationComplete, .settingPassword, .processingPassword:
-                return "Create Password"
+            case .attestationComplete:
+                return "Verified"
             case .settingPIN, .processingPIN:
                 return "Create Vault PIN"
+            case .waitingForVault:
+                return "Initializing Vault"
+            case .settingPassword, .processingPassword:
+                return "Create Password"
+            case .creatingCredential:
+                return "Creating Credential"
             case .finalizing:
                 return "Completing Setup"
             case .settingUpNats:
                 return "Setting Up Messaging"
+            case .verifyingEnrollment:
+                return "Verifying..."
             case .complete:
                 return "Welcome to VettID"
             case .error:
@@ -343,16 +366,218 @@ final class EnrollmentViewModel: ObservableObject {
             enrollmentSessionId = authResponse.enrollmentSessionId
             userGuid = authResponse.userGuid
 
-            // Step 2: Call enrollStart with the JWT token
-            let startRequest = EnrollStartRequest(skipAttestation: true)
-            let response = try await apiClient.enrollStart(request: startRequest, authToken: authResponse.enrollmentToken)
-
-            // Continue with common flow
-            await handleEnrollStartResponse(response)
+            // Check if NATS-based flow is enabled and finalize returns NATS creds
+            if useNatsFlow {
+                await startNatsBasedEnrollment()
+            } else {
+                // Legacy API-based flow
+                let startRequest = EnrollStartRequest(skipAttestation: true)
+                let response = try await apiClient.enrollStart(request: startRequest, authToken: authResponse.enrollmentToken)
+                await handleEnrollStartResponse(response)
+            }
 
         } catch {
             print("[Enrollment] Error during QR code flow: \(error)")
             handleError(error, retryable: true)
+        }
+    }
+
+    // MARK: - NATS-Based Enrollment Flow (Architecture v2.0)
+
+    /// Start NATS-based enrollment after authentication
+    ///
+    /// Flow:
+    /// 1. Call finalize to get NATS bootstrap credentials
+    /// 2. Connect to NATS
+    /// 3. Request attestation via NATS (with app-generated nonce)
+    /// 4. Prompt for PIN → send via NATS
+    /// 5. Wait for vault ready + UTKs
+    /// 6. Prompt for password → send via NATS
+    /// 7. Receive credential
+    /// 8. Verify enrollment
+    private func startNatsBasedEnrollment() async {
+        guard let token = enrollmentToken else {
+            handleError(EnrollmentError.invalidState, retryable: false)
+            return
+        }
+
+        do {
+            // Step 1: Call finalize to get NATS bootstrap credentials
+            print("[Enrollment] NATS Flow: Getting bootstrap credentials...")
+            state = .connectingToNats
+
+            let request = EnrollFinalizeRequest()
+            let response = try await apiClient.enrollFinalize(request: request, authToken: token)
+
+            // Extract NATS connection info
+            guard let natsInfo = response.natsConnection else {
+                print("[Enrollment] No NATS connection info in finalize response, falling back to API flow")
+                useNatsFlow = false
+                let startRequest = EnrollStartRequest(skipAttestation: true)
+                let startResponse = try await apiClient.enrollStart(request: startRequest, authToken: token)
+                await handleEnrollStartResponse(startResponse)
+                return
+            }
+
+            // Parse NATS credentials
+            let credentials = NatsCredentials(from: natsInfo)
+            natsBootstrapCredentials = credentials
+            natsOwnerSpace = natsInfo.ownerSpace
+
+            // Step 2: Connect to NATS
+            print("[Enrollment] NATS Flow: Connecting to NATS...")
+            let connectionManager = NatsConnectionManager(userGuidProvider: { [weak self] in
+                self?.userGuid
+            })
+            natsConnectionManager = connectionManager
+
+            let handler = EnrollmentNatsHandler(natsConnectionManager: connectionManager)
+            enrollmentNatsHandler = handler
+
+            try await handler.connect(credentials: credentials, ownerSpace: natsInfo.ownerSpace)
+
+            // Step 3: Request attestation via NATS
+            print("[Enrollment] NATS Flow: Requesting attestation...")
+            state = .requestingAttestation
+
+            let enclaveKey = try await handler.requestAndVerifyAttestation()
+            self.enclavePublicKey = enclaveKey
+
+            print("[Enrollment] NATS Flow: Attestation verified, proceeding to PIN setup")
+            state = .attestationComplete
+
+            // Brief pause for UI feedback
+            try await Task.sleep(nanoseconds: 500_000_000)
+
+            // Step 4: Prompt for PIN (UI will handle this)
+            state = .settingPIN
+
+        } catch {
+            print("[Enrollment] NATS enrollment error: \(error)")
+            handleError(error, retryable: true)
+        }
+    }
+
+    /// Submit PIN via NATS (Architecture v2.0)
+    func submitPINViaNats() async {
+        guard isPINValid else { return }
+        guard let handler = enrollmentNatsHandler else {
+            // Fall back to API-based PIN submission
+            await submitPIN()
+            return
+        }
+
+        state = .processingPIN
+
+        do {
+            // Step 5: Submit encrypted PIN to supervisor via NATS
+            print("[Enrollment] NATS Flow: Submitting PIN...")
+            try await handler.submitPIN(pin)
+
+            // Step 6: Wait for vault ready + UTKs
+            print("[Enrollment] NATS Flow: Waiting for vault ready...")
+            state = .waitingForVault
+
+            let vaultReady = try await handler.waitForVaultReady()
+            vaultUTKs = vaultReady.utks ?? []
+
+            print("[Enrollment] NATS Flow: Vault ready with \(vaultUTKs.count) UTKs")
+
+            // Step 7: Prompt for password
+            state = .settingPassword
+
+        } catch {
+            print("[Enrollment] NATS PIN submission error: \(error)")
+            handleError(error, retryable: true)
+        }
+    }
+
+    /// Submit password via NATS for credential creation (Architecture v2.0)
+    func submitPasswordViaNats() async {
+        guard isPasswordValid else { return }
+        guard let handler = enrollmentNatsHandler else {
+            // Fall back to API-based password submission
+            await submitPassword()
+            return
+        }
+
+        // Get UTK for password encryption
+        guard let utk = vaultUTKs.first else {
+            handleError(EnrollmentError.noTransactionKeys, retryable: false)
+            return
+        }
+
+        state = .processingPassword
+
+        do {
+            // Step 8: Submit password for credential creation
+            print("[Enrollment] NATS Flow: Creating credential...")
+            state = .creatingCredential
+
+            let credentialResponse = try await handler.submitPassword(password, utkPublicKey: utk.publicKey)
+
+            // Store new UTKs if returned
+            if let newUTKs = credentialResponse.utks {
+                vaultUTKs = newUTKs
+            }
+
+            // Store the encrypted credential
+            if let encryptedCred = credentialResponse.encryptedCredential {
+                try storeNatsCredential(encryptedCredential: encryptedCred)
+            }
+
+            // Step 9: Verify enrollment
+            print("[Enrollment] NATS Flow: Verifying enrollment...")
+            state = .verifyingEnrollment
+
+            try await handler.verifyEnrollment()
+
+            print("[Enrollment] NATS Flow: Enrollment complete!")
+
+            // Clear sensitive data
+            clearSessionData()
+
+            state = .complete(userGuid: userGuid ?? "unknown")
+
+        } catch {
+            print("[Enrollment] NATS credential creation error: \(error)")
+            handleError(error, retryable: true)
+        }
+    }
+
+    /// Store credential received via NATS
+    private func storeNatsCredential(encryptedCredential: String) throws {
+        // Build stored credential from NATS response
+        let storedKeys = vaultUTKs.map { utk in
+            StoredUTK(
+                keyId: utk.id,
+                publicKey: utk.publicKey,
+                algorithm: "X25519",
+                isUsed: false
+            )
+        }
+
+        let credential = StoredCredential(
+            userGuid: userGuid ?? "",
+            sealedCredential: encryptedCredential,
+            enclavePublicKey: enclavePublicKey?.base64EncodedString() ?? "",
+            backupKey: "",  // Generated during NATS finalization
+            ledgerAuthToken: StoredLAT(
+                latId: UUID().uuidString,
+                token: "",
+                version: 1
+            ),
+            transactionKeys: storedKeys,
+            createdAt: Date(),
+            lastUsedAt: Date(),
+            vaultStatus: "running"
+        )
+
+        try credentialStore.store(credential: credential)
+
+        // Store NATS credentials for future use
+        if let natsCreds = natsBootstrapCredentials {
+            try NatsCredentialStore().saveCredentials(natsCreds)
         }
     }
 
