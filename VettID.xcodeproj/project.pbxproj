@@ -100,6 +100,7 @@
 		3378B15F29C4D1B5D31EAEAB /* CryptoManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F7146B25BADFE6EBCFBC681 /* CryptoManagerTests.swift */; };
 		3C0E9C349D2113DAA1CBB37E /* PushKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDA0F54C00EF2699AB87B9AA /* PushKitManager.swift */; };
 		3C5A3DA38E4A1DDE8F4639C4 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2D6CF42AD511A65BF8DC12 /* AboutView.swift */; };
+		B24317CC4DE40CF5C3FCCE8C /* CredentialDebugView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CBB703EC793A565D7832784 /* CredentialDebugView.swift */; };
 		3C81DCE733F08D269B3B88F3 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D1AC5C563F3D0443156417C0 /* Foundation.framework */; };
 		3F35449FD0789E400C52EE54 /* AppLockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6F772E105DCC21AF1751DE5 /* AppLockView.swift */; };
 		498D7D66D5911F127DD808FF /* ManageVaultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2F5A0DDB43ADCF6557660BF /* ManageVaultView.swift */; };
@@ -299,6 +300,7 @@
 		2508C629676886E946486AC6 /* ExpectedPCRStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpectedPCRStore.swift; path = ExpectedPCRStore.swift; sourceTree = "<group>"; };
 		2890018C4BA02E8E472C8A62 /* MessageHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MessageHandler.swift; sourceTree = "<group>"; };
 		2B2D6CF42AD511A65BF8DC12 /* AboutView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
+		9CBB703EC793A565D7832784 /* CredentialDebugView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VettID/Features/Debug/CredentialDebugView.swift; name = CredentialDebugView.swift; sourceTree = "<group>"; };
 		2D96D6532F41DCB812C7BB39 /* VaultHealthViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VaultHealthViewModelTests.swift; sourceTree = "<group>"; };
 		2E5E1B56D033895A6F501A57 /* CallSignalingHandlerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CallSignalingHandlerTests.swift; sourceTree = "<group>"; };
 		36891E6A55D69502EF90D4CB /* SessionKeyManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SessionKeyManager.swift; sourceTree = "<group>"; };
@@ -1130,6 +1132,7 @@
 				12AC6B6A5207336BD3912200 /* ThemeSettingsView.swift in Sources */,
 				A5834109528CE39E4F82E414 /* SecuritySettingsView.swift in Sources */,
 				3C5A3DA38E4A1DDE8F4639C4 /* AboutView.swift in Sources */,
+				B24317CC4DE40CF5C3FCCE8C /* CredentialDebugView.swift in Sources */,
 				5F70C41EB8B0D5E3945DE3D0 /* VaultServicesStatusView.swift in Sources */,
 				498D7D66D5911F127DD808FF /* ManageVaultView.swift in Sources */,
 				C343F7B83B7C091123598F3D /* AppLockService.swift in Sources */,

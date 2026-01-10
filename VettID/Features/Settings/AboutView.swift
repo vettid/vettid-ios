@@ -2,6 +2,9 @@ import SwiftUI
 
 struct AboutView: View {
     @State private var showLicenses = false
+    #if DEBUG
+    @State private var showCredentialDebug = false
+    #endif
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
@@ -88,6 +91,17 @@ struct AboutView: View {
                 }
             }
 
+            #if DEBUG
+            // Developer Section (DEBUG builds only)
+            Section("Developer") {
+                Button {
+                    showCredentialDebug = true
+                } label: {
+                    AboutLinkRow(icon: "key.fill", title: "Credential Debug")
+                }
+            }
+            #endif
+
             // Footer
             Section {
                 VStack(spacing: 8) {
@@ -108,6 +122,13 @@ struct AboutView: View {
         .sheet(isPresented: $showLicenses) {
             LicensesView()
         }
+        #if DEBUG
+        .sheet(isPresented: $showCredentialDebug) {
+            NavigationStack {
+                CredentialDebugView()
+            }
+        }
+        #endif
     }
 
     private var deviceId: String {
