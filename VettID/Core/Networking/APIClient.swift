@@ -141,6 +141,12 @@ actor APIClient {
         return try await post(endpoint: "/vault/enroll/set-password", body: request, authToken: authToken)
     }
 
+    /// Step 2b: Set vault PIN for DEK binding (Architecture v2.0 Section 5.7)
+    /// The PIN is encrypted to the enclave's attestation-bound public key.
+    func enrollSetPIN(request: EnrollSetPINRequest, authToken: String) async throws -> EnrollSetPINResponse {
+        return try await post(endpoint: "/vault/enroll/set-pin", body: request, authToken: authToken)
+    }
+
     /// Step 3: Finalize enrollment and receive credential (requires enrollment JWT)
     func enrollFinalize(request: EnrollFinalizeRequest, authToken: String) async throws -> EnrollFinalizeResponse {
         return try await post(endpoint: "/vault/enroll/finalize", body: request, authToken: authToken)
@@ -816,6 +822,30 @@ struct EnrollSetPasswordRequest: Encodable {
 struct EnrollSetPasswordResponse: Decodable {
     let status: String
     let nextStep: String?
+}
+
+// MARK: - PIN Setup Request/Response (Architecture v2.0 Section 5.7)
+
+struct EnrollSetPINRequest: Encodable {
+    let encryptedPIN: String         // Base64 encoded ciphertext (PIN encrypted to enclave key)
+    let nonce: String                // Base64 encoded nonce for replay protection
+    let ephemeralPublicKey: String   // Base64 encoded X25519 ephemeral public key
+
+    enum CodingKeys: String, CodingKey {
+        case encryptedPIN = "encrypted_pin"
+        case nonce
+        case ephemeralPublicKey = "ephemeral_public_key"
+    }
+}
+
+struct EnrollSetPINResponse: Decodable {
+    let status: String               // "pin_set" or "success"
+    let nextStep: String?            // "finalize" or nil
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case nextStep = "next_step"
+    }
 }
 
 struct EnrollFinalizeRequest: Encodable {

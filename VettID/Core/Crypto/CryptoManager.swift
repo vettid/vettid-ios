@@ -95,13 +95,31 @@ final class CryptoManager {
 
     // MARK: - Hybrid Encryption (X25519 + ChaChaPoly)
 
+    /// Encrypt data to a raw X25519 public key (convenience method)
+    /// Used for encrypting PIN to enclave's attestation-bound public key
+    /// - Parameters:
+    ///   - plaintext: Data to encrypt
+    ///   - publicKey: Raw X25519 public key bytes (32 bytes)
+    ///   - additionalData: Optional additional authenticated data (e.g., nonce for replay protection)
+    /// - Returns: Encrypted payload containing ephemeral public key and ciphertext
+    static func encryptToPublicKey(
+        plaintext: Data,
+        publicKey: Data,
+        additionalData: Data? = nil
+    ) throws -> EncryptedPayload {
+        let recipientPublicKey = try Curve25519.KeyAgreement.PublicKey(rawRepresentation: publicKey)
+        return try encrypt(plaintext: plaintext, recipientPublicKey: recipientPublicKey, additionalData: additionalData)
+    }
+
     /// Encrypt data using X25519 key exchange + ChaCha20-Poly1305
     /// - Parameters:
     ///   - plaintext: Data to encrypt
     ///   - recipientPublicKey: Recipient's X25519 public key
+    ///   - additionalData: Optional additional authenticated data
     /// - Returns: Encrypted payload containing ephemeral public key and ciphertext
     static func encrypt(plaintext: Data,
-                        recipientPublicKey: Curve25519.KeyAgreement.PublicKey) throws -> EncryptedPayload {
+                        recipientPublicKey: Curve25519.KeyAgreement.PublicKey,
+                        additionalData: Data? = nil) throws -> EncryptedPayload {
         // Generate ephemeral key pair
         let ephemeralPrivate = Curve25519.KeyAgreement.PrivateKey()
         let ephemeralPublic = ephemeralPrivate.publicKey

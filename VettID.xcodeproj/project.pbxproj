@@ -88,6 +88,7 @@
 		0CB7F637A987C6A46022474E /* PasswordHasherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F6BD7EF25140C61B7085558 /* PasswordHasherTests.swift */; };
 		0ED83C63EF0A1AEC36CEF699 /* ProteanRecoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B59E35C2BB3BD24E77AE5E7A /* ProteanRecoveryView.swift */; };
 		0F3EE91A24F30EAFD1F1CAC8 /* ExpectedPCRStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07710AC509DF127357D930EB /* ExpectedPCRStoreTests.swift */; };
+		0F889F39E1184359E0A37B95 /* EnrollmentPINSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 067A374FCD331C52F728DDF6 /* EnrollmentPINSetupView.swift */; };
 		12AC6B6A5207336BD3912200 /* ThemeSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA573762F5B324146F857357 /* ThemeSettingsView.swift */; };
 		18C5D633D920711DA38E2063 /* CredentialsHandlerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44150EB12110B89318BB186E /* CredentialsHandlerTests.swift */; };
 		1A3B380AA57E9D3E5F083B4A /* SecureKeyStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 003A6313C942B5D9E98B959D /* SecureKeyStoreTests.swift */; };
@@ -200,6 +201,7 @@
 /* Begin PBXFileReference section */
 		003A6313C942B5D9E98B959D /* SecureKeyStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SecureKeyStoreTests.swift; sourceTree = "<group>"; };
 		04A2A45B0C799F07F7949F6A /* VaultEventClientTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VaultEventClientTests.swift; sourceTree = "<group>"; };
+		067A374FCD331C52F728DDF6 /* EnrollmentPINSetupView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EnrollmentPINSetupView.swift; sourceTree = "<group>"; };
 		07710AC509DF127357D930EB /* ExpectedPCRStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ExpectedPCRStoreTests.swift; sourceTree = "<group>"; };
 		0E26681EB4F44673283A603D /* ContextualBottomNav.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ContextualBottomNav.swift; sourceTree = "<group>"; };
 		10000001 /* VettIDApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VettIDApp.swift; sourceTree = "<group>"; };
@@ -582,6 +584,7 @@
 				10000011 /* PasswordSetupView.swift */,
 				10000012 /* AttestationView.swift */,
 				10000013 /* EnrollmentCompleteView.swift */,
+				067A374FCD331C52F728DDF6 /* EnrollmentPINSetupView.swift */,
 			);
 			path = Enrollment;
 			sourceTree = "<group>";
@@ -1136,6 +1139,7 @@
 				B20AD24C34B073B114B53C15 /* WebRTCClient.swift in Sources */,
 				AB54E5D214A4FACB44AF9726 /* CallCoordinator.swift in Sources */,
 				567E46C8B9ECDBC6BFD62D32 /* PatternGridView.swift in Sources */,
+				0F889F39E1184359E0A37B95 /* EnrollmentPINSetupView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

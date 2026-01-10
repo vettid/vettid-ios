@@ -39,6 +39,8 @@ final class EnrollmentViewModel: ObservableObject {
     @Published var password: String = ""
     @Published var confirmPassword: String = ""
     @Published var passwordStrength: PasswordStrength = .weak
+    @Published var pin: String = ""           // NEW: 6-digit vault PIN
+    @Published var confirmPin: String = ""    // NEW: PIN confirmation
     @Published var errorMessage: String?
     @Published var showError: Bool = false
 
@@ -74,6 +76,8 @@ final class EnrollmentViewModel: ObservableObject {
         case attestationComplete
         case settingPassword
         case processingPassword
+        case settingPIN          // NEW: PIN setup step
+        case processingPIN       // NEW: Sending PIN to supervisor
         case finalizing
         case settingUpNats
         case complete(userGuid: String)
@@ -89,6 +93,8 @@ final class EnrollmentViewModel: ObservableObject {
                 return "Device Verification"
             case .attestationComplete, .settingPassword, .processingPassword:
                 return "Create Password"
+            case .settingPIN, .processingPIN:
+                return "Create Vault PIN"
             case .finalizing:
                 return "Completing Setup"
             case .settingUpNats:
@@ -102,7 +108,7 @@ final class EnrollmentViewModel: ObservableObject {
 
         var canGoBack: Bool {
             switch self {
-            case .initial, .scanningQR, .settingPassword:
+            case .initial, .scanningQR, .settingPassword, .settingPIN:
                 return true
             default:
                 return false
@@ -166,6 +172,57 @@ final class EnrollmentViewModel: ObservableObject {
         }
 
         return errors
+    }
+
+    // MARK: - PIN Validation
+
+    /// Validate the 6-digit vault PIN
+    var isPINValid: Bool {
+        pin.count == 6 &&
+        pin.allSatisfy { $0.isNumber } &&
+        pin == confirmPin &&
+        !isWeakPIN(pin)
+    }
+
+    var pinValidationErrors: [String] {
+        var errors: [String] = []
+
+        if pin.count != 6 {
+            errors.append("PIN must be 6 digits")
+        }
+        if !pin.isEmpty && !pin.allSatisfy({ $0.isNumber }) {
+            errors.append("PIN must contain only numbers")
+        }
+        if !pin.isEmpty && isWeakPIN(pin) {
+            errors.append("PIN is too weak (avoid sequences and repeated digits)")
+        }
+        if !confirmPin.isEmpty && pin != confirmPin {
+            errors.append("PINs don't match")
+        }
+
+        return errors
+    }
+
+    /// Check for weak PIN patterns (sequences, repeated digits)
+    private func isWeakPIN(_ pin: String) -> Bool {
+        // Check for repeated digits (e.g., 111111, 222222)
+        if Set(pin).count == 1 { return true }
+
+        // Check for sequential patterns (e.g., 123456, 654321)
+        let digits = pin.compactMap { Int(String($0)) }
+        guard digits.count == 6 else { return true }
+
+        let ascending = zip(digits, digits.dropFirst()).allSatisfy { $1 - $0 == 1 }
+        let descending = zip(digits, digits.dropFirst()).allSatisfy { $0 - $1 == 1 }
+        if ascending || descending { return true }
+
+        // Check for common weak PINs
+        let weakPINs = ["000000", "111111", "222222", "333333", "444444",
+                        "555555", "666666", "777777", "888888", "999999",
+                        "123456", "654321", "123123", "112233"]
+        if weakPINs.contains(pin) { return true }
+
+        return false
     }
 
     // MARK: - Password Strength Calculation
@@ -526,6 +583,57 @@ final class EnrollmentViewModel: ObservableObject {
                 throw EnrollmentError.passwordSetFailed
             }
 
+            // Proceed to PIN setup (Architecture v2.0 - two-factor model)
+            state = .settingPIN
+
+        } catch {
+            handleError(error, retryable: true)
+        }
+    }
+
+    /// Submit vault PIN for DEK binding (Architecture v2.0 Section 5.7)
+    ///
+    /// The PIN is encrypted to the enclave's attestation-bound public key and sent
+    /// to the supervisor, which uses it for DEK derivation during vault warming.
+    func submitPIN() async {
+        guard isPINValid else { return }
+        guard let token = enrollmentToken,
+              let enclaveKey = enclavePublicKey else {
+            handleError(EnrollmentError.invalidState, retryable: false)
+            return
+        }
+
+        state = .processingPIN
+
+        do {
+            // Generate a nonce to prevent replay attacks
+            let nonce = CryptoManager.randomBytes(count: 16)
+
+            // Encrypt PIN to enclave public key (from verified attestation)
+            // The supervisor will receive this and use it for DEK derivation
+            let encryptedPIN = try CryptoManager.encryptToPublicKey(
+                plaintext: Data(pin.utf8),
+                publicKey: enclaveKey,
+                additionalData: nonce
+            )
+
+            // Send encrypted PIN to supervisor via Lambda
+            let request = EnrollSetPINRequest(
+                encryptedPIN: encryptedPIN.ciphertext.base64EncodedString(),
+                nonce: nonce.base64EncodedString(),
+                ephemeralPublicKey: encryptedPIN.ephemeralPublicKey.base64EncodedString()
+            )
+
+            let response = try await apiClient.enrollSetPIN(request: request, authToken: token)
+
+            #if DEBUG
+            print("[Enrollment] Set PIN response - status: \(response.status)")
+            #endif
+
+            guard response.status.lowercased().contains("pin") || response.status.lowercased().contains("success") else {
+                throw EnrollmentError.pinSetFailed
+            }
+
             // Finalize enrollment
             await finalizeEnrollment()
 
@@ -628,6 +736,8 @@ final class EnrollmentViewModel: ObservableObject {
         password = ""
         confirmPassword = ""
         passwordStrength = .weak
+        pin = ""
+        confirmPin = ""
         errorMessage = nil
         showError = false
         clearSessionData()

@@ -202,6 +202,9 @@ struct EnrollmentContainerView: View {
             case .settingPassword, .processingPassword:
                 PasswordSetupView(viewModel: viewModel)
 
+            case .settingPIN, .processingPIN:
+                EnrollmentPINSetupView(viewModel: viewModel)
+
             case .finalizing:
                 finalizingView
 

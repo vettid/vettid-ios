@@ -538,6 +538,7 @@ enum EnrollmentError: Error, Equatable, LocalizedError {
     case invalidInvitationCode
     case invitationExpired
     case passwordSetFailed
+    case pinSetFailed           // NEW: PIN setup failed
     case finalizationFailed
     case storageFailed
     case invalidState
@@ -556,6 +557,7 @@ enum EnrollmentError: Error, Equatable, LocalizedError {
              (.invalidInvitationCode, .invalidInvitationCode),
              (.invitationExpired, .invitationExpired),
              (.passwordSetFailed, .passwordSetFailed),
+             (.pinSetFailed, .pinSetFailed),
              (.finalizationFailed, .finalizationFailed),
              (.storageFailed, .storageFailed),
              (.invalidState, .invalidState),
@@ -581,6 +583,8 @@ enum EnrollmentError: Error, Equatable, LocalizedError {
             return "The invitation code has expired"
         case .passwordSetFailed:
             return "Failed to set password"
+        case .pinSetFailed:
+            return "Failed to set vault PIN"
         case .finalizationFailed:
             return "Failed to finalize enrollment"
         case .storageFailed:
