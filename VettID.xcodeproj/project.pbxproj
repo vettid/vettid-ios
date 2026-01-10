@@ -153,6 +153,8 @@
 		A62391E4CF05D59BEBA013D4 /* Secret.swift in Sources */ = {isa = PBXBuildFile; fileRef = 688F0CE3AE28533DD0235DF8 /* Secret.swift */; };
 		AB54E5D214A4FACB44AF9726 /* CallCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7C84A6DFBF93300042579DB /* CallCoordinator.swift */; };
 		AD241C3C0E0AC31232D6A3C8 /* ProteanRecoveryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B151BDC063C66B44EC75B8DA /* ProteanRecoveryService.swift */; };
+		9A1E96B12D10B6334D55C377 /* QrRecoveryClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A301267E016BC28447A8F73 /* QrRecoveryClient.swift */; };
+		42FA8890DC2285F53F49C4A5 /* RecoveryQrCode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2661EA5665F431D05EE97659 /* RecoveryQrCode.swift */; };
 		B0654E219C2D593B6A9355A0 /* HeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5B59320799245103D92C504 /* HeaderView.swift */; };
 		B20AD24C34B073B114B53C15 /* WebRTCClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCFFDBF04F3B16DEF7FB2B5C /* WebRTCClient.swift */; };
 		B3E5CB8C4570BFB1322A0082 /* BackupTypesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2DC213E62E9E578E40588F /* BackupTypesTests.swift */; };
@@ -358,6 +360,8 @@
 		AEBBB6DA11AE9704FF891A7F /* EncryptedEnvelope.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EncryptedEnvelope.swift; sourceTree = "<group>"; };
 		B14631A6DCDC4E9897C16D1A /* PatternAuthenticatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PatternAuthenticatorTests.swift; sourceTree = "<group>"; };
 		B151BDC063C66B44EC75B8DA /* ProteanRecoveryService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProteanRecoveryService.swift; sourceTree = "<group>"; };
+		9A301267E016BC28447A8F73 /* QrRecoveryClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QrRecoveryClient.swift; sourceTree = "<group>"; };
+		2661EA5665F431D05EE97659 /* RecoveryQrCode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryQrCode.swift; sourceTree = "<group>"; };
 		B59E35C2BB3BD24E77AE5E7A /* ProteanRecoveryView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProteanRecoveryView.swift; sourceTree = "<group>"; };
 		B5B59320799245103D92C504 /* HeaderView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HeaderView.swift; sourceTree = "<group>"; };
 		B6B8DC6D217039260AC73583 /* expected_pcrs.json */ = {isa = PBXFileReference; includeInIndex = 1; name = expected_pcrs.json; path = expected_pcrs.json; sourceTree = "<group>"; };
@@ -811,6 +815,8 @@
 		C663B06B2CB9E4783127A5AA /* Recovery */ = {
 			isa = PBXGroup;
 			children = (
+				9A301267E016BC28447A8F73 /* QrRecoveryClient.swift */,
+				2661EA5665F431D05EE97659 /* RecoveryQrCode.swift */,
 				B151BDC063C66B44EC75B8DA /* ProteanRecoveryService.swift */,
 				B59E35C2BB3BD24E77AE5E7A /* ProteanRecoveryView.swift */,
 			);
@@ -1154,6 +1160,8 @@
 				80F6BFC53747CE4F25B27771 /* PCRUpdateService.swift in Sources */,
 				1B86F6ED89057B594F13EAB2 /* ProteanCredentialStore.swift in Sources */,
 				AD241C3C0E0AC31232D6A3C8 /* ProteanRecoveryService.swift in Sources */,
+				9A1E96B12D10B6334D55C377 /* QrRecoveryClient.swift in Sources */,
+				42FA8890DC2285F53F49C4A5 /* RecoveryQrCode.swift in Sources */,
 				0ED83C63EF0A1AEC36CEF699 /* ProteanRecoveryView.swift in Sources */,
 				68FCADBEB0F169258485374F /* CallSignalingHandler.swift in Sources */,
 				9178B120C0122606F1ECAF51 /* CallKitManager.swift in Sources */,

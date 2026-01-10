@@ -16,7 +16,10 @@ struct ProteanRecoveryView: View {
             Group {
                 switch service.state {
                 case .idle:
-                    RecoveryRequestView(onRequest: requestRecovery)
+                    RecoveryRequestView(
+                        onRequest: requestRecovery,
+                        onScanQr: startQrScanning
+                    )
 
                 case .requesting:
                     ProgressView("Requesting recovery...")
@@ -69,14 +72,38 @@ struct ProteanRecoveryView: View {
                         onRetry: retryAction,
                         onDismiss: { dismiss() }
                     )
+
+                case .scanningQrCode:
+                    RecoveryQrScannerView(
+                        onCodeScanned: processQrCode,
+                        onCancel: cancelQrScanning
+                    )
+
+                case .processingQrCode:
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                        Text("Processing recovery QR code...")
+                            .foregroundColor(.secondary)
+                        Text("Connecting to vault...")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
             .navigationTitle("Credential Recovery")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    if service.state == .idle || service.state == .error {
-                        Button("Cancel") { dismiss() }
+                    if service.state == .idle || service.state == .error || service.state == .scanningQrCode {
+                        Button("Cancel") {
+                            if service.state == .scanningQrCode {
+                                cancelQrScanning()
+                            } else {
+                                dismiss()
+                            }
+                        }
                     }
                 }
             }
@@ -115,12 +142,29 @@ struct ProteanRecoveryView: View {
     private func retryAction() {
         service.reset()
     }
+
+    // MARK: - QR Code Actions (Issue #13)
+
+    private func startQrScanning() {
+        service.startQrScanning()
+    }
+
+    private func cancelQrScanning() {
+        service.cancelQrScanning()
+    }
+
+    private func processQrCode(_ content: String) {
+        Task {
+            await service.processRecoveryQrCode(content)
+        }
+    }
 }
 
 // MARK: - Recovery Request View
 
 private struct RecoveryRequestView: View {
     let onRequest: () -> Void
+    let onScanQr: () -> Void
 
     var body: some View {
         ScrollView {
@@ -166,13 +210,33 @@ private struct RecoveryRequestView: View {
 
                 Spacer()
 
-                Button(action: onRequest) {
-                    Text("Request Recovery")
+                VStack(spacing: 12) {
+                    Button(action: onRequest) {
+                        Text("Request Recovery")
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.accentColor)
+                            .foregroundColor(.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+
+                    // QR Code recovery option (Issue #13)
+                    Button(action: onScanQr) {
+                        HStack {
+                            Image(systemName: "qrcode.viewfinder")
+                            Text("Scan Recovery QR Code")
+                        }
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.accentColor)
-                        .foregroundColor(.white)
+                        .background(Color(.systemGray5))
+                        .foregroundColor(.primary)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+
+                    Text("Have a recovery QR code from the Account Portal? Scan it for instant recovery.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
                 }
                 .padding(.horizontal)
                 .padding(.bottom, 40)
@@ -553,6 +617,107 @@ private struct ProteanInfoRow: View {
                 .fontWeight(.medium)
         }
         .font(.subheadline)
+    }
+}
+
+// MARK: - Recovery QR Scanner View (Issue #13)
+
+private struct RecoveryQrScannerView: View {
+    let onCodeScanned: (String) -> Void
+    let onCancel: () -> Void
+
+    @StateObject private var viewModel = QRScannerViewModel()
+
+    var body: some View {
+        ZStack {
+            // Camera preview - use Color.black as background
+            Color.black
+                .ignoresSafeArea()
+
+            // Camera preview layer
+            CameraPreviewView(viewModel: viewModel)
+                .ignoresSafeArea()
+
+            // Overlay
+            VStack {
+                Spacer()
+
+                // Scan frame
+                RoundedRectangle(cornerRadius: 16)
+                    .strokeBorder(Color.white, lineWidth: 3)
+                    .frame(width: 250, height: 250)
+                    .overlay {
+                        if viewModel.isProcessing {
+                            ProgressView()
+                                .tint(.white)
+                        }
+                    }
+
+                Spacer()
+
+                // Instructions
+                VStack(spacing: 8) {
+                    Text("Scan Recovery QR Code")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+
+                    Text("Position the QR code from the Account Portal within the frame")
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.8))
+                        .multilineTextAlignment(.center)
+                }
+                .padding()
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal)
+
+                Spacer()
+                    .frame(height: 60)
+            }
+
+            // Close button overlay (top-left)
+            VStack {
+                HStack {
+                    Button {
+                        onCancel()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title)
+                            .foregroundStyle(.white.opacity(0.8))
+                    }
+                    .padding()
+                    Spacer()
+                }
+                Spacer()
+            }
+        }
+        .navigationBarHidden(true)
+        .onAppear {
+            viewModel.startScanning()
+        }
+        .onDisappear {
+            viewModel.stopScanning()
+        }
+        .onReceive(viewModel.$scannedCode) { newValue in
+            if let code = newValue {
+                #if DEBUG
+                print("[RecoveryQRScanner] Code scanned: \(code.prefix(50))...")
+                #endif
+                viewModel.stopScanning()
+                onCodeScanned(code)
+            }
+        }
+        .alert("Camera Access Required", isPresented: $viewModel.showPermissionAlert) {
+            Button("Open Settings") {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                onCancel()
+            }
+        } message: {
+            Text("Please enable camera access in Settings to scan recovery QR codes.")
+        }
     }
 }
 

@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import UserNotifications
 
 // MARK: - Protean Recovery Service
@@ -34,6 +35,7 @@ final class ProteanRecoveryService: ObservableObject {
     private let credentialStore: ProteanCredentialStore
     private let natsConnectionManager: NatsConnectionManager
     private let authTokenProvider: @Sendable () -> String?
+    private let qrRecoveryClient: QrRecoveryClient
 
     // MARK: - Polling
 
@@ -46,11 +48,13 @@ final class ProteanRecoveryService: ObservableObject {
         apiClient: APIClient = APIClient(),
         credentialStore: ProteanCredentialStore = ProteanCredentialStore(),
         natsConnectionManager: NatsConnectionManager,
+        qrRecoveryClient: QrRecoveryClient = QrRecoveryClient(),
         authTokenProvider: @escaping @Sendable () -> String?
     ) {
         self.apiClient = apiClient
         self.credentialStore = credentialStore
         self.natsConnectionManager = natsConnectionManager
+        self.qrRecoveryClient = qrRecoveryClient
         self.authTokenProvider = authTokenProvider
     }
 
@@ -66,6 +70,7 @@ final class ProteanRecoveryService: ObservableObject {
             apiClient: apiClient,
             credentialStore: credentialStore,
             natsConnectionManager: NatsConnectionManager(),
+            qrRecoveryClient: QrRecoveryClient(),
             authTokenProvider: authTokenProvider
         )
     }
@@ -353,6 +358,137 @@ final class ProteanRecoveryService: ObservableObject {
         cancelRecoveryNotification()
     }
 
+    // MARK: - QR Code Recovery (Issue #13)
+
+    /// Start QR code scanning for instant recovery
+    func startQrScanning() {
+        state = .scanningQrCode
+        error = nil
+    }
+
+    /// Cancel QR code scanning
+    func cancelQrScanning() {
+        state = .idle
+        error = nil
+    }
+
+    /// Process a scanned QR code for instant recovery
+    ///
+    /// This method:
+    /// 1. Parses the QR code content
+    /// 2. Connects to NATS with temporary credentials
+    /// 3. Exchanges recovery token for full credentials
+    /// 4. Stores the recovered credential
+    ///
+    /// - Parameter qrContent: Raw QR code content (JSON string)
+    func processRecoveryQrCode(_ qrContent: String) async {
+        // Validate QR code format
+        guard RecoveryQrCode.isRecoveryQrCode(qrContent) else {
+            error = .invalidQrCode
+            state = .error
+            return
+        }
+
+        // Parse QR code
+        guard let recoveryQr = RecoveryQrCode.parse(qrContent) else {
+            error = .invalidQrCode
+            state = .error
+            return
+        }
+
+        state = .processingQrCode
+        error = nil
+
+        #if DEBUG
+        print("[Recovery] Processing QR code recovery")
+        print("[Recovery] Vault: \(recoveryQr.natsEndpoint)")
+        print("[Recovery] OwnerSpace: \(recoveryQr.ownerSpace)")
+        #endif
+
+        // Get device ID
+        let deviceId = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+
+        // Exchange recovery token
+        let result = await qrRecoveryClient.exchangeRecoveryToken(
+            recoveryQr: recoveryQr,
+            deviceId: deviceId,
+            appVersion: appVersion
+        )
+
+        switch result {
+        case .success(let exchangeResult):
+            if exchangeResult.success {
+                await handleSuccessfulQrRecovery(exchangeResult)
+            } else {
+                error = .qrRecoveryFailed(exchangeResult.message)
+                state = .error
+            }
+
+        case .failure(let qrError):
+            error = .qrRecoveryFailed(qrError.localizedDescription)
+            state = .error
+        }
+    }
+
+    /// Handle successful QR recovery exchange
+    private func handleSuccessfulQrRecovery(_ result: RecoveryExchangeResult) async {
+        #if DEBUG
+        print("[Recovery] QR recovery successful")
+        print("[Recovery] UserGuid: \(result.userGuid ?? "unknown")")
+        #endif
+
+        // Store the recovered credential
+        do {
+            // Create metadata for the restored credential
+            let metadata = ProteanCredentialMetadata(
+                version: result.credentialVersion ?? 1,
+                createdAt: Date(),
+                sizeBytes: 0,
+                userGuid: result.userGuid ?? ""
+            )
+
+            // Store credential (actual credential data is managed by vault)
+            let placeholderBlob = Data()
+            try credentialStore.store(blob: placeholderBlob, metadata: metadata)
+
+            // If we got NATS credentials, connect with them
+            if let credentialsContent = result.credentials {
+                // Determine endpoint - prefer explicit endpoint, fall back to default
+                let natsEndpoint = result.natsEndpoint ?? "vault.vettid.dev:4222"
+                let ownerSpace = result.ownerSpace ?? ""
+
+                // Parse NATS credentials using the .creds file format initializer
+                if let parsedCreds = NatsCredentials(
+                    fromCredsFileContent: credentialsContent,
+                    endpoint: natsEndpoint,
+                    ownerSpace: ownerSpace,
+                    messageSpace: result.messageSpace
+                ) {
+                    try await natsConnectionManager.connectWithEnrollmentCredentials(
+                        parsedCreds,
+                        ownerSpace: result.ownerSpace
+                    )
+                }
+            }
+
+            state = .complete
+            error = nil
+            clearPersistedRecovery()
+
+            #if DEBUG
+            print("[Recovery] QR credential restore complete")
+            #endif
+
+        } catch {
+            #if DEBUG
+            print("[Recovery] Failed to store QR recovered credential: \(error)")
+            #endif
+            self.error = .qrRecoveryFailed("Failed to store credential: \(error.localizedDescription)")
+            state = .error
+        }
+    }
+
     /// Check for existing pending recovery on app launch
     func checkForPendingRecovery() async {
         guard authTokenProvider() != nil else {
@@ -481,6 +617,8 @@ enum ProteanRecoveryState: Equatable {
     case cancelled
     case expired
     case error
+    case scanningQrCode      // Issue #13: QR code scanning in progress
+    case processingQrCode    // Issue #13: Processing scanned QR code
 }
 
 /// Information about an active recovery request
@@ -516,6 +654,8 @@ enum ProteanRecoveryError: Error, LocalizedError, Equatable {
     case noPendingRecovery
     case authenticationFailed(String)  // Issue #8: NATS authentication error
     case passwordVerificationFailed    // Issue #8: Vault rejected password
+    case qrRecoveryFailed(String)      // Issue #13: QR code recovery error
+    case invalidQrCode                 // Issue #13: Invalid QR code scanned
 
     var errorDescription: String? {
         switch self {
@@ -539,6 +679,10 @@ enum ProteanRecoveryError: Error, LocalizedError, Equatable {
             return "Failed to authenticate with vault: \(message)"
         case .passwordVerificationFailed:
             return "Incorrect password. Please verify your vault password and try again."
+        case .qrRecoveryFailed(let message):
+            return "QR code recovery failed: \(message)"
+        case .invalidQrCode:
+            return "Invalid QR code. Please scan a valid VettID recovery QR code from the Account Portal."
         }
     }
 }
