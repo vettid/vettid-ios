@@ -328,7 +328,9 @@ final class CallCoordinator: ObservableObject {
                 sdpMLineIndex: candidate.sdpMLineIndex
             )
         } catch {
+            #if DEBUG
             print("[CallCoordinator] Failed to send ICE candidate: \(error)")
+            #endif
         }
     }
 

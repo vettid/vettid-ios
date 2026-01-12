@@ -197,7 +197,9 @@ extension PushKitManager {
 
         // Report to CallKit
         guard let callKitManager = callKitManager else {
+            #if DEBUG
             print("[PushKitManager] Error: CallKitManager not configured")
+            #endif
             await reportUnknownCall(payload: payload)
             return
         }
@@ -217,7 +219,9 @@ extension PushKitManager {
             print("[PushKitManager] Reported incoming call: \(callInfo.callId)")
             #endif
         } catch {
+            #if DEBUG
             print("[PushKitManager] Failed to report incoming call: \(error)")
+            #endif
             // CallKit will still show something due to the attempt
         }
     }
@@ -270,7 +274,9 @@ extension PushKitManager {
             // Immediately end it as a failed call
             callKitManager.reportCallEnded(uuid: uuid, reason: .failed)
         } catch {
+            #if DEBUG
             print("[PushKitManager] Failed to report unknown call: \(error)")
+            #endif
         }
     }
 }

@@ -29,10 +29,9 @@ final class PasswordHasher {
     // SECURITY: Verify we're not in a production build without Argon2id
     private static let productionCheckPerformed: Bool = {
         #if !DEBUG
-        // In Release builds without Sodium, log a severe warning
-        // This helps catch misconfigured builds
-        print("⚠️ SECURITY WARNING: Argon2id (swift-sodium) not available - using PBKDF2 fallback")
-        print("⚠️ This is NOT acceptable for production use. Add swift-sodium package.")
+        // In Release builds without Sodium, this is a security issue
+        // DO NOT print warnings to console in production - they leak info to device logs
+        // The assertionFailure below will crash TestFlight builds for testing
 
         #if !targetEnvironment(simulator)
         // On physical devices in Release, this is a critical error

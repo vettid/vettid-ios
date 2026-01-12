@@ -31,7 +31,9 @@ final class CredentialStore {
             &error
         )
         if let error = error {
+            #if DEBUG
             print("[CredentialStore] Failed to create biometric access control: \(error.takeRetainedValue())")
+            #endif
             return nil
         }
         return access

@@ -99,7 +99,9 @@ actor CallEventSubscriber {
                 await handleCallEvent(envelope)
             }
         } catch {
+            #if DEBUG
             print("[CallEventSubscriber] Failed to subscribe: \(error)")
+            #endif
         }
     }
 
@@ -141,10 +143,14 @@ actor CallEventSubscriber {
                 try await handleBusy(envelope)
 
             default:
+                #if DEBUG
                 print("[CallEventSubscriber] Unknown event type: \(envelope.type)")
+                #endif
             }
         } catch {
+            #if DEBUG
             print("[CallEventSubscriber] Error handling event: \(error)")
+            #endif
         }
     }
 

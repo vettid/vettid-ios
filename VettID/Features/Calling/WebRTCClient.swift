@@ -235,7 +235,9 @@ final class WebRTCClient: NSObject, ObservableObject {
                 try audioSession.overrideOutputAudioPort(.none)
             }
         } catch {
+            #if DEBUG
             print("[WebRTCClient] Failed to set speaker: \(error)")
+            #endif
         }
     }
 

@@ -46,9 +46,13 @@ final class NatsTokenRefreshTask {
 
         do {
             try BGTaskScheduler.shared.submit(request)
+            #if DEBUG
             print("[NatsTokenRefresh] Scheduled refresh for \(request.earliestBeginDate ?? Date())")
+            #endif
         } catch {
+            #if DEBUG
             print("[NatsTokenRefresh] Failed to schedule: \(error)")
+            #endif
         }
     }
 
@@ -96,7 +100,9 @@ final class NatsTokenRefreshTask {
         do {
             // Check if we have credentials that need refresh
             guard let credentials = try credentialStore.getCredentials() else {
+                #if DEBUG
                 print("[NatsTokenRefresh] No credentials to refresh")
+                #endif
                 return true // No credentials means nothing to refresh
             }
 
@@ -104,16 +110,22 @@ final class NatsTokenRefreshTask {
             // This provides a buffer beyond the shouldRefresh 1-hour check
             let twoHoursFromNow = Date().addingTimeInterval(2 * 3600)
             guard credentials.expiresAt <= twoHoursFromNow else {
+                #if DEBUG
                 print("[NatsTokenRefresh] Credentials don't need refresh yet")
+                #endif
                 return true
             }
 
+            #if DEBUG
             print("[NatsTokenRefresh] Refreshing credentials (expires: \(credentials.expiresAt))")
+            #endif
 
             // Get auth token from stored credential
             // In production, this would use the stored member JWT or refresh it
             guard let authToken = try await getAuthToken() else {
+                #if DEBUG
                 print("[NatsTokenRefresh] No auth token available")
+                #endif
                 return false
             }
 
@@ -127,11 +139,15 @@ final class NatsTokenRefreshTask {
             let newCredentials = NatsCredentials(from: response)
             try credentialStore.saveCredentials(newCredentials)
 
+            #if DEBUG
             print("[NatsTokenRefresh] Credentials refreshed (new expiry: \(newCredentials.expiresAt))")
+            #endif
             return true
 
         } catch {
+            #if DEBUG
             print("[NatsTokenRefresh] Refresh failed: \(error)")
+            #endif
             return false
         }
     }

@@ -41,7 +41,9 @@ actor VaultResponseHandler {
                 }
             } catch {
                 // Log error but keep handler running
+                #if DEBUG
                 print("VaultResponseHandler: Failed to subscribe to responses: \(error)")
+                #endif
             }
         }
     }

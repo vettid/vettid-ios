@@ -530,7 +530,9 @@ actor SessionKeyManager {
 
         let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
         if addStatus != errSecSuccess && addStatus != errSecDuplicateItem {
+            #if DEBUG
             print("[SessionKeyManager] Warning: Failed to store device ID in Keychain: \(addStatus)")
+            #endif
         }
 
         // Migrate from UserDefaults if present (cleanup old storage)

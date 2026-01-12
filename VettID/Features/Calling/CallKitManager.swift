@@ -290,7 +290,9 @@ final class CallKitManager: NSObject, ObservableObject {
             try audioSession.setCategory(.playAndRecord, mode: .voiceChat, options: [.allowBluetoothHFP, .allowBluetoothA2DP])
             try audioSession.setActive(true)
         } catch {
+            #if DEBUG
             print("[CallKitManager] Failed to configure audio session: \(error)")
+            #endif
         }
     }
 
@@ -300,7 +302,9 @@ final class CallKitManager: NSObject, ObservableObject {
         do {
             try audioSession.setActive(false, options: .notifyOthersOnDeactivation)
         } catch {
+            #if DEBUG
             print("[CallKitManager] Failed to deactivate audio session: \(error)")
+            #endif
         }
     }
 
@@ -378,7 +382,9 @@ extension CallKitManager: CXProviderDelegate {
 
                     action.fulfill()
                 } catch {
+                    #if DEBUG
                     print("[CallKitManager] Failed to accept call: \(error)")
+                    #endif
                     action.fail()
                 }
             } else {
@@ -412,7 +418,9 @@ extension CallKitManager: CXProviderDelegate {
                         callId: info.callId
                     )
                 } catch {
+                    #if DEBUG
                     print("[CallKitManager] Failed to send end call: \(error)")
+                    #endif
                 }
             }
 
@@ -453,12 +461,16 @@ extension CallKitManager: CXProviderDelegate {
 
     nonisolated func provider(_ provider: CXProvider, didActivate audioSession: AVAudioSession) {
         // Audio session activated - start WebRTC audio
+        #if DEBUG
         print("[CallKitManager] Audio session activated")
+        #endif
     }
 
     nonisolated func provider(_ provider: CXProvider, didDeactivate audioSession: AVAudioSession) {
         // Audio session deactivated - stop WebRTC audio
+        #if DEBUG
         print("[CallKitManager] Audio session deactivated")
+        #endif
     }
 }
 

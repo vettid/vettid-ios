@@ -291,14 +291,18 @@ final class EnrollmentViewModel: ObservableObject {
     }
 
     func handleScannedCode(_ code: String) async {
+        #if DEBUG
         print("[Enrollment] handleScannedCode called with: \(code.prefix(100))...")
+        #endif
         scannedCode = code
         state = .processingInvitation
 
         do {
             // Parse QR code JSON data to extract api_url and session_token or invitation_code
             let qrData = try parseQRCodeData(code)
+            #if DEBUG
             print("[Enrollment] Parsed QR data - apiUrl: \(qrData.apiUrl), userGuid: \(qrData.userGuid)")
+            #endif
 
             // Create API client with the URL from QR code
             guard let apiUrl = URL(string: qrData.apiUrl) else {
@@ -319,14 +323,18 @@ final class EnrollmentViewModel: ObservableObject {
             }
 
         } catch {
+            #if DEBUG
             print("[Enrollment] Error during handleScannedCode: \(error)")
+            #endif
             handleError(error, retryable: true)
         }
     }
 
     /// Handle direct invitation code entry (without QR scan)
     func handleInvitationCode(_ code: String, apiUrl: String? = nil) async {
+        #if DEBUG
         print("[Enrollment] handleInvitationCode called with: \(code.prefix(20))...")
+        #endif
         scannedCode = code
         state = .processingInvitation
 
@@ -341,7 +349,9 @@ final class EnrollmentViewModel: ObservableObject {
             await startInvitationCodeFlow(invitationCode: code)
 
         } catch {
+            #if DEBUG
             print("[Enrollment] Error during handleInvitationCode: \(error)")
+            #endif
             handleError(error, retryable: true)
         }
     }
@@ -352,14 +362,18 @@ final class EnrollmentViewModel: ObservableObject {
             let deviceId = getDeviceId()
 
             // Step 1: Authenticate with session_token to get enrollment JWT
+            #if DEBUG
             print("[Enrollment] Step 1: Authenticating with session token...")
+            #endif
             let authRequest = EnrollAuthenticateRequest(
                 sessionToken: sessionToken,
                 deviceId: deviceId,
                 deviceType: "ios"
             )
             let authResponse = try await apiClient.enrollAuthenticate(request: authRequest)
+            #if DEBUG
             print("[Enrollment] Auth successful - enrollmentSessionId: \(authResponse.enrollmentSessionId)")
+            #endif
 
             // Store the enrollment token (JWT) for subsequent calls
             enrollmentToken = authResponse.enrollmentToken
@@ -377,7 +391,9 @@ final class EnrollmentViewModel: ObservableObject {
             }
 
         } catch {
+            #if DEBUG
             print("[Enrollment] Error during QR code flow: \(error)")
+            #endif
             handleError(error, retryable: true)
         }
     }
@@ -403,7 +419,9 @@ final class EnrollmentViewModel: ObservableObject {
 
         do {
             // Step 1: Call finalize to get NATS bootstrap credentials
+            #if DEBUG
             print("[Enrollment] NATS Flow: Getting bootstrap credentials...")
+            #endif
             state = .connectingToNats
 
             let request = EnrollFinalizeRequest()
@@ -411,7 +429,9 @@ final class EnrollmentViewModel: ObservableObject {
 
             // Extract NATS connection info
             guard let natsInfo = response.natsConnection else {
+                #if DEBUG
                 print("[Enrollment] No NATS connection info in finalize response, falling back to API flow")
+                #endif
                 useNatsFlow = false
                 let startRequest = EnrollStartRequest(skipAttestation: true)
                 let startResponse = try await apiClient.enrollStart(request: startRequest, authToken: token)
@@ -425,7 +445,9 @@ final class EnrollmentViewModel: ObservableObject {
             natsOwnerSpace = natsInfo.ownerSpace
 
             // Step 2: Connect to NATS
+            #if DEBUG
             print("[Enrollment] NATS Flow: Connecting to NATS...")
+            #endif
             let connectionManager = NatsConnectionManager(userGuidProvider: { [weak self] in
                 self?.userGuid
             })
@@ -437,13 +459,17 @@ final class EnrollmentViewModel: ObservableObject {
             try await handler.connect(credentials: credentials, ownerSpace: natsInfo.ownerSpace)
 
             // Step 3: Request attestation via NATS
+            #if DEBUG
             print("[Enrollment] NATS Flow: Requesting attestation...")
+            #endif
             state = .requestingAttestation
 
             let enclaveKey = try await handler.requestAndVerifyAttestation()
             self.enclavePublicKey = enclaveKey
 
+            #if DEBUG
             print("[Enrollment] NATS Flow: Attestation verified, proceeding to PIN setup")
+            #endif
             state = .attestationComplete
 
             // Brief pause for UI feedback
@@ -453,7 +479,9 @@ final class EnrollmentViewModel: ObservableObject {
             state = .settingPIN
 
         } catch {
+            #if DEBUG
             print("[Enrollment] NATS enrollment error: \(error)")
+            #endif
             handleError(error, retryable: true)
         }
     }
@@ -471,23 +499,31 @@ final class EnrollmentViewModel: ObservableObject {
 
         do {
             // Step 5: Submit encrypted PIN to supervisor via NATS
+            #if DEBUG
             print("[Enrollment] NATS Flow: Submitting PIN...")
+            #endif
             try await handler.submitPIN(pin)
 
             // Step 6: Wait for vault ready + UTKs
+            #if DEBUG
             print("[Enrollment] NATS Flow: Waiting for vault ready...")
+            #endif
             state = .waitingForVault
 
             let vaultReady = try await handler.waitForVaultReady()
             vaultUTKs = vaultReady.utks ?? []
 
+            #if DEBUG
             print("[Enrollment] NATS Flow: Vault ready with \(vaultUTKs.count) UTKs")
+            #endif
 
             // Step 7: Prompt for password
             state = .settingPassword
 
         } catch {
+            #if DEBUG
             print("[Enrollment] NATS PIN submission error: \(error)")
+            #endif
             handleError(error, retryable: true)
         }
     }
@@ -511,7 +547,9 @@ final class EnrollmentViewModel: ObservableObject {
 
         do {
             // Step 8: Submit password for credential creation
+            #if DEBUG
             print("[Enrollment] NATS Flow: Creating credential...")
+            #endif
             state = .creatingCredential
 
             let credentialResponse = try await handler.submitPassword(password, utkPublicKey: utk.publicKey)
@@ -527,12 +565,16 @@ final class EnrollmentViewModel: ObservableObject {
             }
 
             // Step 9: Verify enrollment
+            #if DEBUG
             print("[Enrollment] NATS Flow: Verifying enrollment...")
+            #endif
             state = .verifyingEnrollment
 
             try await handler.verifyEnrollment()
 
+            #if DEBUG
             print("[Enrollment] NATS Flow: Enrollment complete!")
+            #endif
 
             // Clear sensitive data
             clearSessionData()
@@ -540,7 +582,9 @@ final class EnrollmentViewModel: ObservableObject {
             state = .complete(userGuid: userGuid ?? "unknown")
 
         } catch {
+            #if DEBUG
             print("[Enrollment] NATS credential creation error: \(error)")
+            #endif
             handleError(error, retryable: true)
         }
     }
@@ -589,7 +633,9 @@ final class EnrollmentViewModel: ObservableObject {
 
             // For invitation code flow, we need to call a different endpoint
             // that accepts invitation_code directly and returns enrollment token
+            #if DEBUG
             print("[Enrollment] Starting invitation code flow...")
+            #endif
 
             // First, authenticate to get enrollment token
             // The invitation code is used as the session token in this flow
@@ -615,12 +661,16 @@ final class EnrollmentViewModel: ObservableObject {
             } catch {
                 // If authenticate fails, the code might be a legacy invitation code
                 // Try alternative flow or report error
+                #if DEBUG
                 print("[Enrollment] Invitation code flow failed: \(error)")
+                #endif
                 throw EnrollmentError.invalidInvitationCode
             }
 
         } catch {
+            #if DEBUG
             print("[Enrollment] Error during invitation code flow: \(error)")
+            #endif
             handleError(error, retryable: true)
         }
     }

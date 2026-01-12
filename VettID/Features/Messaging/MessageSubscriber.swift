@@ -125,7 +125,9 @@ final class MessageSubscriber {
             connectionEventSubject.send(.messageReceived(message))
         } catch {
             // Log decryption error but don't crash
+            #if DEBUG
             print("Failed to decrypt message: \(error)")
+            #endif
         }
     }
 

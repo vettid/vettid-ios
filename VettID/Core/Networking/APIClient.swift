@@ -81,7 +81,9 @@ actor APIClient {
         // Derive signing key from master key using HKDF
         self.signingKey = RequestSigner.deriveSigningKey(from: key)
         self.signRequestsEnabled = true
+        #if DEBUG
         print("[APIClient] Request signing enabled")
+        #endif
     }
 
     /// Disable request signing (call on logout)

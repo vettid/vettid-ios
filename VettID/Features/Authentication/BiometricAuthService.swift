@@ -76,7 +76,9 @@ final class BiometricAuthService {
 
         let status = SecItemAdd(addQuery as CFDictionary, nil)
         if status != errSecSuccess && status != errSecDuplicateItem {
+            #if DEBUG
             print("[BiometricAuth] Warning: Failed to save domain state to Keychain: \(status)")
+            #endif
         }
     }
 
@@ -98,7 +100,9 @@ final class BiometricAuthService {
             if storedDomainState == nil {
                 storedDomainState = legacyData
                 saveDomainStateToKeychain(legacyData)
+                #if DEBUG
                 print("[BiometricAuth] Migrated domain state from UserDefaults to Keychain")
+                #endif
             }
             // Remove from UserDefaults
             UserDefaults.standard.removeObject(forKey: legacyKey)
