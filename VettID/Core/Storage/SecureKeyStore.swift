@@ -250,15 +250,49 @@ final class SecureKeyStore {
     // MARK: - Secure Enclave Availability
 
     /// Check if Secure Enclave is available on this device
+    /// This performs an actual hardware check, not just API availability
     static var isSecureEnclaveAvailable: Bool {
+        // Create attributes for a temporary SE key test
         var error: Unmanaged<CFError>?
-        let accessControl = SecAccessControlCreateWithFlags(
+        guard let accessControl = SecAccessControlCreateWithFlags(
             nil,
             kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
-            .privateKeyUsage,
+            [.privateKeyUsage],
             &error
-        )
-        return accessControl != nil && error == nil
+        ) else {
+            return false
+        }
+
+        // Try to create a test key in the Secure Enclave
+        let testKeyTag = "com.vettid.se.availability.test.\(UUID().uuidString)"
+        let attributes: [String: Any] = [
+            kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+            kSecAttrKeySizeInBits as String: 256,
+            kSecAttrTokenID as String: kSecAttrTokenIDSecureEnclave,
+            kSecPrivateKeyAttrs as String: [
+                kSecAttrIsPermanent as String: false,  // Don't persist
+                kSecAttrApplicationTag as String: testKeyTag.data(using: .utf8)!,
+                kSecAttrAccessControl as String: accessControl
+            ]
+        ]
+
+        var testError: Unmanaged<CFError>?
+        let testKey = SecKeyCreateRandomKey(attributes as CFDictionary, &testError)
+
+        // Secure Enclave is available if we could create a key
+        return testKey != nil
+    }
+
+    /// Cached result of Secure Enclave availability check
+    /// Computed once per app session for performance
+    private static var _cachedSEAvailable: Bool?
+    static var isSecureEnclaveAvailableCached: Bool {
+        if let cached = _cachedSEAvailable {
+            return cached
+        }
+        let available = isSecureEnclaveAvailable
+        _cachedSEAvailable = available
+        return available
     }
 
     /// Check if biometric authentication is available
@@ -268,19 +302,179 @@ final class SecureKeyStore {
         return context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
     }
 
-    // MARK: - Secure Enclave P-256 Key (for attestation)
+    // MARK: - Key Protection Level
 
-    /// Generate a P-256 key in Secure Enclave (if available)
-    /// Used for device attestation as Secure Enclave only supports P-256
-    func generateSecureEnclaveKey(keyId: String) throws -> SecKey {
+    /// Protection level of a stored key
+    enum KeyProtectionLevel {
+        case secureEnclave      // Key is in Secure Enclave hardware
+        case keychainProtected  // Key is in Keychain with software protection
+        case unknown            // Unable to determine
+        case notFound           // Key doesn't exist
+    }
+
+    /// Check the protection level of a stored key
+    /// - Parameter keyId: The key identifier to check
+    /// - Returns: The protection level of the key
+    func getKeyProtectionLevel(keyId: String) -> KeyProtectionLevel {
+        // First, try to find a Secure Enclave key
+        let seQuery: [String: Any] = [
+            kSecClass as String: kSecClassKey,
+            kSecAttrApplicationTag as String: keyId.data(using: .utf8)!,
+            kSecAttrTokenID as String: kSecAttrTokenIDSecureEnclave,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        var seResult: AnyObject?
+        let seStatus = SecItemCopyMatching(seQuery as CFDictionary, &seResult)
+        if seStatus == errSecSuccess {
+            return .secureEnclave
+        }
+
+        // Check for regular Keychain key
+        let keychainQuery: [String: Any] = [
+            kSecClass as String: kSecClassKey,
+            kSecAttrApplicationTag as String: keyId.data(using: .utf8)!,
+            kSecAttrService as String: service,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        var keychainResult: AnyObject?
+        let keychainStatus = SecItemCopyMatching(keychainQuery as CFDictionary, &keychainResult)
+        if keychainStatus == errSecSuccess {
+            return .keychainProtected
+        }
+
+        if seStatus == errSecItemNotFound && keychainStatus == errSecItemNotFound {
+            return .notFound
+        }
+
+        return .unknown
+    }
+
+    /// Verify that a key meets minimum security requirements
+    /// - Parameters:
+    ///   - keyId: The key identifier to verify
+    ///   - requireSecureEnclave: If true, key must be in Secure Enclave
+    /// - Returns: True if key meets requirements
+    func verifyKeyProtection(keyId: String, requireSecureEnclave: Bool = false) -> Bool {
+        let level = getKeyProtectionLevel(keyId: keyId)
+
+        switch level {
+        case .secureEnclave:
+            return true
+        case .keychainProtected:
+            return !requireSecureEnclave
+        case .unknown, .notFound:
+            return false
+        }
+    }
+
+    // MARK: - Secure Enclave P-256 Key Generation
+
+    /// Result of Secure Enclave key generation
+    struct SecureEnclaveKeyResult {
+        let privateKey: SecKey
+        let publicKey: SecKey
+        let isSecureEnclaveProtected: Bool
+    }
+
+    /// Generate a P-256 key, preferring Secure Enclave when available
+    ///
+    /// Secure Enclave provides hardware-level protection:
+    /// - Private key never leaves the SE hardware
+    /// - Resistant to software attacks even with root access
+    /// - Keys are bound to the specific device
+    ///
+    /// When SE is not available, falls back to Keychain-protected software key.
+    ///
+    /// - Parameters:
+    ///   - keyId: Unique identifier for the key
+    ///   - requireBiometric: If true, key access requires biometric authentication
+    ///   - allowFallback: If true, falls back to software key when SE unavailable
+    /// - Returns: SecureEnclaveKeyResult with the key and protection status
+    /// - Throws: SecureKeyStoreError if key generation fails
+    func generateSecureEnclaveKeyWithFallback(
+        keyId: String,
+        requireBiometric: Bool = false,
+        allowFallback: Bool = true
+    ) throws -> SecureEnclaveKeyResult {
+        // Delete existing key if present
+        try? deleteSecureEnclaveKey(keyId: keyId)
+        try? secureDelete(keyId: keyId)
+
+        // Try Secure Enclave first
+        if Self.isSecureEnclaveAvailableCached {
+            do {
+                let seKey = try generateSecureEnclaveKey(keyId: keyId, requireBiometric: requireBiometric)
+                guard let publicKey = SecKeyCopyPublicKey(seKey) else {
+                    throw SecureKeyStoreError.storeFailed(errSecInternalError)
+                }
+                return SecureEnclaveKeyResult(
+                    privateKey: seKey,
+                    publicKey: publicKey,
+                    isSecureEnclaveProtected: true
+                )
+            } catch {
+                #if DEBUG
+                print("[SecureKeyStore] Secure Enclave key generation failed: \(error)")
+                #endif
+                if !allowFallback {
+                    throw error
+                }
+            }
+        }
+
+        // Fallback to software key in Keychain
+        guard allowFallback else {
+            throw SecureKeyStoreError.secureEnclaveNotAvailable
+        }
+
+        #if DEBUG
+        print("[SecureKeyStore] Using software key fallback for \(keyId)")
+        #endif
+
+        let softwareKey = try generateSoftwareP256Key(keyId: keyId, requireBiometric: requireBiometric)
+        guard let publicKey = SecKeyCopyPublicKey(softwareKey) else {
+            throw SecureKeyStoreError.storeFailed(errSecInternalError)
+        }
+
+        return SecureEnclaveKeyResult(
+            privateKey: softwareKey,
+            publicKey: publicKey,
+            isSecureEnclaveProtected: false
+        )
+    }
+
+    /// Generate a P-256 key strictly in Secure Enclave (no fallback)
+    ///
+    /// Use this when hardware protection is mandatory (e.g., device attestation keys).
+    /// Will throw if Secure Enclave is not available.
+    ///
+    /// - Parameters:
+    ///   - keyId: Unique identifier for the key
+    ///   - requireBiometric: If true, key access requires biometric authentication
+    /// - Returns: The SE-protected private key
+    /// - Throws: SecureKeyStoreError.secureEnclaveNotAvailable if SE not available
+    func generateSecureEnclaveKey(keyId: String, requireBiometric: Bool = false) throws -> SecKey {
+        guard Self.isSecureEnclaveAvailableCached else {
+            throw SecureKeyStoreError.secureEnclaveNotAvailable
+        }
+
         // Delete existing key if present
         try? deleteSecureEnclaveKey(keyId: keyId)
 
         var error: Unmanaged<CFError>?
+        var flags: SecAccessControlCreateFlags = [.privateKeyUsage]
+        if requireBiometric {
+            flags.insert(.biometryCurrentSet)
+        }
+
         guard let accessControl = SecAccessControlCreateWithFlags(
             nil,
             kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
-            [.privateKeyUsage],
+            flags,
             &error
         ) else {
             throw SecureKeyStoreError.accessControlFailed(error!.takeRetainedValue())
@@ -298,10 +492,85 @@ final class SecureKeyStore {
         ]
 
         guard let privateKey = SecKeyCreateRandomKey(attributes as CFDictionary, &error) else {
+            if let cfError = error?.takeRetainedValue() {
+                throw SecureKeyStoreError.accessControlFailed(cfError)
+            }
             throw SecureKeyStoreError.storeFailed(errSecParam)
         }
 
         return privateKey
+    }
+
+    /// Generate a software P-256 key in Keychain (fallback when SE unavailable)
+    private func generateSoftwareP256Key(keyId: String, requireBiometric: Bool) throws -> SecKey {
+        var error: Unmanaged<CFError>?
+        var flags: SecAccessControlCreateFlags = [.privateKeyUsage]
+        if requireBiometric {
+            flags.insert(.biometryCurrentSet)
+            flags.insert(.or)
+            flags.insert(.devicePasscode)
+        }
+
+        let accessControl = SecAccessControlCreateWithFlags(
+            nil,
+            kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            flags,
+            &error
+        )
+
+        var attributes: [String: Any] = [
+            kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+            kSecAttrKeySizeInBits as String: 256,
+            kSecPrivateKeyAttrs as String: [
+                kSecAttrIsPermanent as String: true,
+                kSecAttrApplicationTag as String: keyId.data(using: .utf8)!,
+                kSecAttrSynchronizable as String: false
+            ]
+        ]
+
+        if let ac = accessControl {
+            var privateAttrs = attributes[kSecPrivateKeyAttrs as String] as! [String: Any]
+            privateAttrs[kSecAttrAccessControl as String] = ac
+            attributes[kSecPrivateKeyAttrs as String] = privateAttrs
+        }
+
+        guard let privateKey = SecKeyCreateRandomKey(attributes as CFDictionary, &error) else {
+            if let cfError = error?.takeRetainedValue() {
+                throw SecureKeyStoreError.accessControlFailed(cfError)
+            }
+            throw SecureKeyStoreError.storeFailed(errSecParam)
+        }
+
+        return privateKey
+    }
+
+    /// Retrieve a Secure Enclave or software P-256 key
+    func retrieveP256Key(keyId: String, context: LAContext? = nil) throws -> SecKey? {
+        // Try Secure Enclave first
+        var query: [String: Any] = [
+            kSecClass as String: kSecClassKey,
+            kSecAttrApplicationTag as String: keyId.data(using: .utf8)!,
+            kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+            kSecReturnRef as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        if let context = context {
+            query[kSecUseAuthenticationContext as String] = context
+        }
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        if status == errSecSuccess, let key = result {
+            return (key as! SecKey)
+        }
+
+        if status == errSecItemNotFound {
+            return nil
+        }
+
+        throw SecureKeyStoreError.retrieveFailed(status)
     }
 
     /// Delete a Secure Enclave key
@@ -310,6 +579,24 @@ final class SecureKeyStore {
             kSecClass as String: kSecClassKey,
             kSecAttrApplicationTag as String: keyId.data(using: .utf8)!,
             kSecAttrTokenID as String: kSecAttrTokenIDSecureEnclave
+        ]
+
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw SecureKeyStoreError.deleteFailed(status)
+        }
+    }
+
+    /// Delete any P-256 key (SE or software)
+    func deleteP256Key(keyId: String) throws {
+        // Delete SE key
+        try? deleteSecureEnclaveKey(keyId: keyId)
+
+        // Delete software key
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassKey,
+            kSecAttrApplicationTag as String: keyId.data(using: .utf8)!,
+            kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom
         ]
 
         let status = SecItemDelete(query as CFDictionary)
