@@ -27,14 +27,72 @@ struct VettIDApp: App {
         case .background:
             VaultBackgroundRefresh.shared.applicationDidEnterBackground()
             PCRUpdateService.shared.onAppDidEnterBackground()
+            // SECURITY: Show privacy screen to hide sensitive data in app switcher
+            showBackgroundPrivacyScreen()
         case .active:
             VaultBackgroundRefresh.shared.applicationDidBecomeActive()
             PCRUpdateService.shared.onAppDidBecomeActive()
+            // Remove privacy screen when app becomes active
+            hideBackgroundPrivacyScreen()
         case .inactive:
-            break
+            // Show privacy screen when app is about to go inactive (app switcher preview)
+            showBackgroundPrivacyScreen()
         @unknown default:
             break
         }
+    }
+
+    /// Tag for identifying the privacy screen view
+    private static let privacyScreenTag = 999_998
+
+    /// Show a privacy screen to hide sensitive content in app switcher
+    private func showBackgroundPrivacyScreen() {
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = windowScene.windows.first else {
+            return
+        }
+
+        // Don't add if already present
+        guard window.viewWithTag(Self.privacyScreenTag) == nil else { return }
+
+        let privacyView = UIView(frame: window.bounds)
+        privacyView.tag = Self.privacyScreenTag
+        privacyView.backgroundColor = UIColor.systemBackground
+
+        // Add app icon or logo for better UX
+        let imageView = UIImageView(image: UIImage(named: "AppIcon"))
+        imageView.contentMode = .scaleAspectFit
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        privacyView.addSubview(imageView)
+
+        // Add "VettID" label
+        let label = UILabel()
+        label.text = "VettID"
+        label.font = .preferredFont(forTextStyle: .title1)
+        label.textColor = .label
+        label.translatesAutoresizingMaskIntoConstraints = false
+        privacyView.addSubview(label)
+
+        NSLayoutConstraint.activate([
+            imageView.centerXAnchor.constraint(equalTo: privacyView.centerXAnchor),
+            imageView.centerYAnchor.constraint(equalTo: privacyView.centerYAnchor, constant: -30),
+            imageView.widthAnchor.constraint(equalToConstant: 80),
+            imageView.heightAnchor.constraint(equalToConstant: 80),
+            label.centerXAnchor.constraint(equalTo: privacyView.centerXAnchor),
+            label.topAnchor.constraint(equalTo: imageView.bottomAnchor, constant: 16)
+        ])
+
+        window.addSubview(privacyView)
+    }
+
+    /// Hide the privacy screen when app becomes active
+    private func hideBackgroundPrivacyScreen() {
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = windowScene.windows.first else {
+            return
+        }
+
+        window.viewWithTag(Self.privacyScreenTag)?.removeFromSuperview()
     }
 }
 
@@ -48,7 +106,39 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Register background tasks
         VaultBackgroundRefresh.shared.registerBackgroundTasks()
         PCRUpdateService.registerBackgroundTask()
+
+        // SECURITY: Start screen capture monitoring
+        // Protects against screen recording and screenshots of sensitive data
+        setupScreenProtection()
+
         return true
+    }
+
+    /// Configure screen protection to detect and respond to screen capture attempts
+    private func setupScreenProtection() {
+        let protection = ScreenProtection.shared
+
+        // Enable automatic privacy overlay during screen recording/mirroring
+        protection.autoShowPrivacyOverlay = true
+
+        // Log screen capture attempts (for security auditing)
+        protection.onScreenCaptureDetected = {
+            #if DEBUG
+            print("[Security] Screen capture detected - privacy overlay shown")
+            #endif
+            // In production, could send security telemetry here
+        }
+
+        // Log screenshot attempts
+        protection.onScreenshotDetected = {
+            #if DEBUG
+            print("[Security] Screenshot detected")
+            #endif
+            // Could show a warning toast to user or log security event
+        }
+
+        // Start monitoring
+        protection.startMonitoring()
     }
 }
 
