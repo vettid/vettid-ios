@@ -15,10 +15,23 @@ final class SecureKeyStore {
     // MARK: - Security Configuration
 
     /// Security level for key storage
+    /// - standard: Device unlock only (no biometric required)
+    /// - biometric: Biometric preferred with passcode fallback (recommended for most keys)
+    /// - biometricStrict: Biometric only, NO passcode fallback (use with caution - risk of lockout)
     enum SecurityLevel {
-        case standard           // Keychain with device unlock protection
-        case biometric          // Requires biometric + current biometric set
-        case biometricStrict    // Biometric only, no passcode fallback
+        /// Keychain with device unlock protection only
+        /// Key accessible whenever device is unlocked
+        case standard
+
+        /// Biometric authentication required, with device passcode as backup
+        /// Recommended: Prevents account lockout if biometric hardware fails
+        /// Uses .biometryCurrentSet to detect enrollment changes
+        case biometric
+
+        /// Biometric authentication required, NO passcode fallback
+        /// WARNING: If biometric hardware fails, key is PERMANENTLY inaccessible
+        /// Only use for keys that can be recovered through other means (e.g., server backup)
+        case biometricStrict
     }
 
     // MARK: - Secure Enclave Key Generation
@@ -112,12 +125,16 @@ final class SecureKeyStore {
             return nil
 
         case .biometric:
-            // Biometric required with current enrollment
-            // .biometryCurrentSet invalidates key if biometrics change
-            flags = [.biometryCurrentSet, .privateKeyUsage]
+            // Biometric with passcode fallback for hardware failure recovery
+            // Uses .biometryCurrentSet to detect enrollment changes
+            // Uses .or + .devicePasscode to allow passcode as backup authentication
+            // This prevents account lockout if biometric hardware fails
+            flags = [.biometryCurrentSet, .or, .devicePasscode, .privateKeyUsage]
 
         case .biometricStrict:
-            // Biometric only - no passcode fallback
+            // Biometric only - NO passcode fallback (maximum security)
+            // WARNING: If biometric hardware fails, keys are permanently inaccessible
+            // Only use this for keys that can be recovered through other means
             flags = [.biometryCurrentSet, .privateKeyUsage]
         }
 
