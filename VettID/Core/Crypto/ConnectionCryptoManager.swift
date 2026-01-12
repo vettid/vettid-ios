@@ -229,7 +229,9 @@ final class ConnectionCryptoManager {
             kSecAttrService as String: keychainService,
             kSecAttrAccount as String: connectionId,
             kSecValueData as String: key,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+            // Security: Prevent synchronization to iCloud Keychain
+            kSecAttrSynchronizable as String: false
         ]
 
         // Delete any existing key first

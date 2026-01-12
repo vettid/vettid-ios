@@ -17,7 +17,9 @@ final class ProfileStore {
             kSecAttrService as String: service,
             kSecAttrAccount as String: profile.guid,
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            // Security: Prevent synchronization to iCloud Keychain
+            kSecAttrSynchronizable as String: false
         ]
 
         // Delete existing item if present

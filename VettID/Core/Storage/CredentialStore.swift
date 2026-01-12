@@ -50,7 +50,9 @@ final class CredentialStore {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: requireBiometric ? biometricService : service,
             kSecAttrAccount as String: credential.userGuid,
-            kSecValueData as String: data
+            kSecValueData as String: data,
+            // Security: Prevent synchronization to iCloud Keychain
+            kSecAttrSynchronizable as String: false
         ]
 
         // Add biometric access control if requested

@@ -443,7 +443,9 @@ actor SessionKeyManager {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: key,
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+            // Security: Prevent synchronization to iCloud Keychain
+            kSecAttrSynchronizable as String: false
         ]
 
         // Delete existing item first

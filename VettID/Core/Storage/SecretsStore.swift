@@ -24,7 +24,9 @@ final class SecretsStore {
             kSecAttrService as String: passwordHashService,
             kSecAttrAccount as String: "password_hash",
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            // Security: Prevent synchronization to iCloud Keychain
+            kSecAttrSynchronizable as String: false
         ]
 
         SecItemDelete(query as CFDictionary)
@@ -141,7 +143,9 @@ final class SecretsStore {
             kSecAttrService as String: service,
             kSecAttrAccount as String: secret.id,
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            // Security: Prevent synchronization to iCloud Keychain
+            kSecAttrSynchronizable as String: false
         ]
 
         SecItemDelete(query as CFDictionary)
