@@ -214,6 +214,8 @@ final class BiometricAuthService {
     }
 
     /// Authenticate with fallback to device passcode
+    /// WARNING: This is less secure as device passcode may be shared/known to others
+    /// Consider using authenticateWithPolicy() instead for policy-controlled behavior
     func authenticateWithFallback(reason: String = "Unlock VettID") async throws -> LAContext {
         let context = createSecureContext()
 
@@ -233,6 +235,91 @@ final class BiometricAuthService {
         } catch {
             throw BiometricError.unknown(error)
         }
+    }
+
+    // MARK: - Policy-Based Authentication
+
+    /// Authentication result including whether fallback was used
+    struct AuthenticationResult {
+        let context: LAContext
+        let usedFallback: Bool
+
+        /// Whether this authentication used device passcode instead of biometrics
+        /// Apps should warn users or require additional verification when true
+        var isWeakerAuthentication: Bool { usedFallback }
+    }
+
+    /// Authenticate according to the specified security policy
+    ///
+    /// - Parameters:
+    ///   - policy: The biometric security policy to enforce
+    ///   - reason: The reason string shown to the user
+    /// - Returns: AuthenticationResult indicating success and whether fallback was used
+    /// - Throws: BiometricError if authentication fails
+    ///
+    /// When policy is `.strict`:
+    /// - Only biometric authentication is accepted
+    /// - If biometric fails, throws an error (caller should offer app PIN instead)
+    ///
+    /// When policy is `.allowDeviceFallback`:
+    /// - Biometric is tried first
+    /// - If biometric fails, device passcode is accepted
+    /// - Result indicates whether fallback was used for audit/warning purposes
+    func authenticateWithPolicy(
+        _ policy: BiometricSecurityPolicy,
+        reason: String = "Unlock VettID"
+    ) async throws -> AuthenticationResult {
+        switch policy {
+        case .strict:
+            // Strict: Only accept biometric authentication
+            let context = try await authenticate(reason: reason)
+            return AuthenticationResult(context: context, usedFallback: false)
+
+        case .allowDeviceFallback:
+            // Try biometric first
+            do {
+                let context = try await authenticate(reason: reason)
+                return AuthenticationResult(context: context, usedFallback: false)
+            } catch {
+                // Biometric failed, try with device passcode fallback
+                let context = try await authenticateWithFallback(reason: reason)
+
+                // Record that fallback was used (for audit purposes)
+                recordFallbackUsage()
+
+                return AuthenticationResult(context: context, usedFallback: true)
+            }
+        }
+    }
+
+    /// Record when device passcode fallback was used (for security audit)
+    private func recordFallbackUsage() {
+        var prefs = UserPreferences.load()
+        prefs.appLock.lastFallbackUsed = Date()
+        prefs.save()
+
+        #if DEBUG
+        print("[BiometricAuth] Device passcode fallback was used")
+        #endif
+    }
+
+    /// Check if device passcode fallback was recently used
+    /// Returns the date if fallback was used within the specified window
+    func recentFallbackUsage(within window: TimeInterval = 86400) -> Date? {
+        let prefs = UserPreferences.load()
+        guard let lastUsed = prefs.appLock.lastFallbackUsed else { return nil }
+
+        if Date().timeIntervalSince(lastUsed) <= window {
+            return lastUsed
+        }
+        return nil
+    }
+
+    /// Clear fallback usage record (e.g., after user acknowledges the warning)
+    func clearFallbackRecord() {
+        var prefs = UserPreferences.load()
+        prefs.appLock.lastFallbackUsed = nil
+        prefs.save()
     }
 
     // MARK: - Secure Context Creation

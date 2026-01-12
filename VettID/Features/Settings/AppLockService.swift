@@ -74,32 +74,56 @@ class AppLockService: ObservableObject {
         }
     }
 
-    /// Attempt to unlock with biometrics
-    func unlockWithBiometrics() async -> Bool {
-        let context = LAContext()
-        var error: NSError?
+    /// Result of biometric unlock attempt
+    struct BiometricUnlockResult {
+        let success: Bool
+        let usedFallback: Bool
+    }
 
-        guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else {
-            return false
-        }
+    /// Attempt to unlock with biometrics using the configured security policy
+    func unlockWithBiometrics() async -> Bool {
+        let result = await unlockWithBiometricsDetailed()
+        return result.success
+    }
+
+    /// Attempt to unlock with biometrics, returning detailed result
+    /// This allows callers to show warnings when device passcode fallback was used
+    func unlockWithBiometricsDetailed() async -> BiometricUnlockResult {
+        let biometricService = BiometricAuthService()
+        let policy = settings.biometricPolicy
 
         do {
-            let success = try await context.evaluatePolicy(
-                .deviceOwnerAuthenticationWithBiometrics,
-                localizedReason: "Unlock VettID"
+            let result = try await biometricService.authenticateWithPolicy(
+                policy,
+                reason: "Unlock VettID"
             )
 
-            if success {
+            await MainActor.run {
+                isLocked = false
+                failedAttempts = 0
+            }
+
+            // If fallback was used, record it for warning purposes
+            if result.usedFallback {
                 await MainActor.run {
-                    isLocked = false
-                    failedAttempts = 0
+                    lastUsedFallback = true
                 }
             }
 
-            return success
+            return BiometricUnlockResult(success: true, usedFallback: result.usedFallback)
         } catch {
-            return false
+            return BiometricUnlockResult(success: false, usedFallback: false)
         }
+    }
+
+    /// Whether device passcode fallback was used in the last unlock
+    /// Reset this after showing a warning to the user
+    @Published var lastUsedFallback = false
+
+    /// Clear the fallback usage flag after user acknowledges
+    func acknowledgeFallbackWarning() {
+        lastUsedFallback = false
+        BiometricAuthService().clearFallbackRecord()
     }
 
     // MARK: - PIN Management

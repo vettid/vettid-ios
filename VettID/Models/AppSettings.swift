@@ -77,6 +77,54 @@ enum AppLockMethod: String, CaseIterable, Codable {
     }
 }
 
+// MARK: - Biometric Security Policy
+
+/// Controls how strictly biometric authentication is enforced
+/// This affects what happens when biometric authentication fails
+enum BiometricSecurityPolicy: String, CaseIterable, Codable {
+    /// Strict: Biometric only, no fallback to device passcode
+    /// If biometric fails, user must use app PIN/password
+    /// RECOMMENDED for high-security applications
+    case strict = "Strict"
+
+    /// Convenience: Allow device passcode as fallback after biometric failure
+    /// Less secure but prevents lockout if biometric hardware fails
+    /// WARNING: Device passcode may be shared/known to others
+    case allowDeviceFallback = "Allow Device Fallback"
+
+    var displayName: String {
+        switch self {
+        case .strict:
+            return "Strict (Recommended)"
+        case .allowDeviceFallback:
+            return "Allow Device Passcode Fallback"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .strict:
+            return "Only accept Face ID/Touch ID. If biometric fails, use your VettID PIN instead."
+        case .allowDeviceFallback:
+            return "Allow device passcode if biometric fails. Less secure - device passcode may be known to others."
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .strict:
+            return "lock.shield.fill"
+        case .allowDeviceFallback:
+            return "lock.open.fill"
+        }
+    }
+
+    /// Whether this policy allows device passcode fallback
+    var allowsDevicePasscodeFallback: Bool {
+        self == .allowDeviceFallback
+    }
+}
+
 // MARK: - Auto Lock Timeout
 
 enum AutoLockTimeout: Int, CaseIterable, Codable {
@@ -106,6 +154,13 @@ struct AppLockSettings: Codable, Equatable {
     var pinHash: String? = nil
     var patternHash: String? = nil
     var patternGridSize: Int = 3  // 3x3 default, can be 4 for 4x4
+
+    /// Biometric security policy (default: strict - no device passcode fallback)
+    /// This controls whether device passcode can be used when biometric fails
+    var biometricPolicy: BiometricSecurityPolicy = .strict
+
+    /// Timestamp when device passcode fallback was last used (for audit/warning)
+    var lastFallbackUsed: Date? = nil
 
     static let `default` = AppLockSettings()
 

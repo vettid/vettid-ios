@@ -93,6 +93,34 @@ struct SecuritySettingsView: View {
                         }
                     }
                 }
+
+                // Biometric Security Policy Section (only show if biometrics are used)
+                if appState.appLock.method.usesBiometrics && biometricsAvailable {
+                    Section {
+                        ForEach(BiometricSecurityPolicy.allCases, id: \.rawValue) { policy in
+                            BiometricPolicyRow(
+                                policy: policy,
+                                isSelected: appState.appLock.biometricPolicy == policy
+                            ) {
+                                selectBiometricPolicy(policy)
+                            }
+                        }
+                    } header: {
+                        Text("Biometric Security")
+                    } footer: {
+                        if appState.appLock.biometricPolicy == .allowDeviceFallback {
+                            Label {
+                                Text("Warning: Device passcode may be shared with or known to others. For maximum security, use Strict mode.")
+                            } icon: {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(.orange)
+                            }
+                            .font(.caption)
+                        } else {
+                            Text("Strict mode requires Face ID/Touch ID. If biometric fails, you'll use your VettID PIN instead of device passcode.")
+                        }
+                    }
+                }
             }
 
             // Password Section
@@ -174,6 +202,52 @@ struct SecuritySettingsView: View {
         var settings = appState.appLock
         settings.method = method
         appState.appLock = settings
+    }
+
+    private func selectBiometricPolicy(_ policy: BiometricSecurityPolicy) {
+        var settings = appState.appLock
+        settings.biometricPolicy = policy
+        appState.appLock = settings
+    }
+}
+
+// MARK: - Biometric Policy Row
+
+struct BiometricPolicyRow: View {
+    let policy: BiometricSecurityPolicy
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 16) {
+                Image(systemName: policy.icon)
+                    .font(.system(size: 20))
+                    .foregroundStyle(policy == .strict ? .green : .orange)
+                    .frame(width: 24)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(policy.displayName)
+                        .font(.body)
+                        .foregroundStyle(.primary)
+
+                    Text(policy.description)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                Spacer()
+
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.blue)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
