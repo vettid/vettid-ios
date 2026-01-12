@@ -13,6 +13,10 @@ struct ContentView: View {
     // Background time tracking for vault cooling
     @State private var backgroundTime: Date?
 
+    // Security warning state
+    @State private var showSecurityWarning = false
+    @State private var securityWarningDismissed = false
+
     var body: some View {
         ZStack {
             // Main content
@@ -37,6 +41,26 @@ struct ContentView: View {
                     .transition(.opacity)
                     .zIndex(100)
             }
+
+            // Security warning overlay (shows on compromised devices)
+            if showSecurityWarning && !securityWarningDismissed {
+                SecurityWarningView(
+                    threats: AppDelegate.detectedThreats,
+                    onContinue: {
+                        securityWarningDismissed = true
+                    },
+                    onExit: {
+                        exit(0)
+                    }
+                )
+                .background(Color(.systemBackground))
+                .transition(.opacity)
+                .zIndex(200)
+            }
+        }
+        .onAppear {
+            // Check security status on first appearance
+            checkDeviceSecurity()
         }
         .onChange(of: scenePhase) { newPhase in
             handleScenePhaseChange(newPhase)
@@ -120,6 +144,17 @@ struct ContentView: View {
 
         case .unknown:
             break
+        }
+    }
+
+    /// Check device security status and show warning if compromised
+    private func checkDeviceSecurity() {
+        // Only check once per app launch
+        guard !securityWarningDismissed else { return }
+
+        // Check if device is compromised
+        if !AppDelegate.isDeviceSecure {
+            showSecurityWarning = true
         }
     }
 }
@@ -647,6 +682,98 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
         }
+    }
+}
+
+// MARK: - Security Warning View
+
+/// Displays security warnings when device integrity issues are detected
+/// Shows on compromised devices (jailbroken, rooted, instrumented)
+struct SecurityWarningView: View {
+    let threats: [String]
+    let onContinue: (() -> Void)?
+    let onExit: (() -> Void)?
+
+    @State private var showDetails = false
+
+    var body: some View {
+        VStack(spacing: 24) {
+            // Warning icon
+            Image(systemName: "exclamationmark.shield.fill")
+                .font(.system(size: 64))
+                .foregroundColor(.red)
+
+            // Title
+            Text("Security Warning")
+                .font(.title)
+                .fontWeight(.bold)
+
+            // Main message
+            Text("This device may be compromised. Using VettID on this device puts your credentials at risk.")
+                .font(.body)
+                .multilineTextAlignment(.center)
+                .foregroundColor(.secondary)
+                .padding(.horizontal)
+
+            // Threat details (expandable)
+            if !threats.isEmpty {
+                DisclosureGroup("Detected Issues (\(threats.count))", isExpanded: $showDetails) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(threats, id: \.self) { threat in
+                            HStack(spacing: 8) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.red)
+                                    .font(.caption)
+                                Text(threat)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    .padding(.top, 8)
+                }
+                .padding()
+                .background(Color(UIColor.systemGray6))
+                .cornerRadius(12)
+                .padding(.horizontal)
+            }
+
+            Spacer()
+
+            // Action buttons
+            VStack(spacing: 12) {
+                if let onContinue = onContinue {
+                    Button(action: onContinue) {
+                        Text("Continue Anyway")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.orange)
+                            .cornerRadius(12)
+                    }
+
+                    Text("Not recommended - your credentials may be exposed")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+
+                if let onExit = onExit {
+                    Button(action: onExit) {
+                        Text("Exit App")
+                            .font(.headline)
+                            .foregroundColor(.red)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color(UIColor.systemGray6))
+                            .cornerRadius(12)
+                    }
+                }
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 32)
+        }
+        .padding(.top, 48)
     }
 }
 

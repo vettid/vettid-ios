@@ -99,10 +99,35 @@ struct VettIDApp: App {
 // MARK: - AppDelegate for Background Task Registration
 
 class AppDelegate: NSObject, UIApplicationDelegate {
+
+    /// Security status from runtime protection check
+    /// Stores detected threats for use throughout the app
+    private(set) static var securityStatus: RuntimeProtection.SecurityStatus?
+
+    /// Whether the device passed security checks
+    static var isDeviceSecure: Bool {
+        guard let status = securityStatus else { return true }
+        #if DEBUG
+        // In debug builds, only block on jailbreak or tampering
+        return !status.isJailbroken && !status.isTampered && !status.isFridaDetected
+        #else
+        return status.isSecure
+        #endif
+    }
+
+    /// Detected security threats (for displaying warnings)
+    static var detectedThreats: [String] {
+        securityStatus?.threats ?? []
+    }
+
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        // SECURITY: Perform runtime protection checks FIRST
+        // Detects jailbreak, debugger, tampering, and instrumentation
+        performRuntimeSecurityCheck()
+
         // Register background tasks
         VaultBackgroundRefresh.shared.registerBackgroundTasks()
         PCRUpdateService.registerBackgroundTask()
@@ -112,6 +137,41 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         setupScreenProtection()
 
         return true
+    }
+
+    /// Perform comprehensive runtime security check
+    private func performRuntimeSecurityCheck() {
+        let status = RuntimeProtection.shared.checkSecurityStatus()
+        Self.securityStatus = status
+
+        #if DEBUG
+        // Log security status in debug builds
+        print("[Security] Runtime protection check completed")
+        print("[Security] Jailbroken: \(status.isJailbroken)")
+        print("[Security] Debugger: \(status.isDebuggerAttached)")
+        print("[Security] Simulator: \(status.isSimulator)")
+        print("[Security] Tampered: \(status.isTampered)")
+        print("[Security] Frida: \(status.isFridaDetected)")
+        print("[Security] RE Tools: \(status.isReverseEngineeringDetected)")
+        if !status.threats.isEmpty {
+            print("[Security] Threats detected: \(status.threats.joined(separator: ", "))")
+        }
+        #endif
+
+        // Log security events (in production, send to security telemetry)
+        if !status.threats.isEmpty {
+            logSecurityEvent(threats: status.threats)
+        }
+    }
+
+    /// Log security events for auditing
+    private func logSecurityEvent(threats: [String]) {
+        // In production, this would send to a security monitoring service
+        // For now, we store it for the app to handle
+        #if !DEBUG
+        // Could integrate with analytics/crash reporting here
+        // e.g., Sentry, Firebase Crashlytics, etc.
+        #endif
     }
 
     /// Configure screen protection to detect and respond to screen capture attempts
