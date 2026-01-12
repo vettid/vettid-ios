@@ -304,7 +304,7 @@ final class EnrollmentViewModel: ObservableObject {
             guard let apiUrl = URL(string: qrData.apiUrl) else {
                 throw EnrollmentError.invalidInvitationCode
             }
-            apiClient = APIClient(baseURL: apiUrl, enforcePinning: false)
+            apiClient = APIClient(baseURL: apiUrl)
 
             // Route to appropriate flow based on QR data content
             if qrData.isQRFlow, let sessionToken = qrData.sessionToken {
@@ -336,7 +336,7 @@ final class EnrollmentViewModel: ObservableObject {
             guard let url = URL(string: urlString) else {
                 throw EnrollmentError.invalidInvitationCode
             }
-            apiClient = APIClient(baseURL: url, enforcePinning: false)
+            apiClient = APIClient(baseURL: url)
 
             await startInvitationCodeFlow(invitationCode: code)
 

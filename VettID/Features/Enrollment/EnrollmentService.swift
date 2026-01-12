@@ -49,7 +49,7 @@ final class EnrollmentService: ObservableObject {
 
         do {
             // Create API client with the provided URL
-            apiClient = APIClient(baseURL: apiUrl, enforcePinning: false)
+            apiClient = APIClient(baseURL: apiUrl)
             let deviceId = getDeviceId()
 
             // Step 1: Authenticate to get enrollment JWT

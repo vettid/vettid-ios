@@ -52,22 +52,17 @@ final class CertificatePinningDelegate: NSObject, URLSessionDelegate {
         // )
     ]
 
-    /// Whether to enforce pinning (can be disabled for testing)
-    private let enforcePinning: Bool
-
     /// Callback for pin validation failures
     var onPinValidationFailed: ((String, String) -> Void)?
 
     // MARK: - Initialization
 
-    init(enforcePinning: Bool = true) {
-        #if DEBUG
-        // Allow disabling pinning in debug builds for testing
-        self.enforcePinning = enforcePinning
-        #else
-        // Always enforce in release builds
-        self.enforcePinning = true
-        #endif
+    /// Certificate pinning is ALWAYS enforced regardless of build configuration.
+    /// For local development with proxy tools (Charles, Proxyman):
+    /// - Install the proxy CA certificate on the device/simulator
+    /// - The proxy will present a valid certificate chain
+    /// DO NOT add parameters to disable pinning - this is a security risk.
+    override init() {
         super.init()
     }
 
@@ -89,22 +84,17 @@ final class CertificatePinningDelegate: NSObject, URLSessionDelegate {
 
         // Find pin configuration for this host
         guard let pinConfig = findPinConfiguration(for: host) else {
-            // No pin configured for this host - use default handling
+            // No pin configured for this host - use default handling (system CA validation)
+            // Note: Default handling still validates against system trusted CAs
             #if DEBUG
-            print("CertificatePinning: No pin configured for \(host), using default handling")
+            print("[CertificatePinning] No pin configured for \(host), using system CA validation")
             #endif
             completionHandler(.performDefaultHandling, nil)
             return
         }
 
-        // Skip pinning if disabled (debug only)
-        guard enforcePinning else {
-            #if DEBUG
-            print("CertificatePinning: Pinning disabled for debugging")
-            #endif
-            completionHandler(.useCredential, URLCredential(trust: serverTrust))
-            return
-        }
+        // SECURITY: Certificate pinning is ALWAYS enforced when configured.
+        // There is no bypass mechanism - this is intentional.
 
         // Validate the certificate chain
         if validateCertificateChain(serverTrust: serverTrust, against: pinConfig) {

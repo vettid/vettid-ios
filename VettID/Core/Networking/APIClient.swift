@@ -11,11 +11,6 @@ actor APIClient {
     private let pinningDelegate: CertificatePinningDelegate
     private var requestSigner: RequestSigner?
 
-    // MARK: - Security Configuration
-
-    /// Enable or disable certificate pinning (only changeable in debug builds)
-    private let enforcePinning: Bool
-
     /// Device ID for request signing
     private let deviceId: String
 
@@ -23,8 +18,7 @@ actor APIClient {
 
     init(
         baseURL: URL = URL(string: "https://api.vettid.dev")!,
-        deviceId: String? = nil,
-        enforcePinning: Bool = true
+        deviceId: String? = nil
     ) {
         // Get device ID synchronously - use provided value or generate UUID
         // Note: UIDevice.current.identifierForVendor requires MainActor, so we use a fallback
@@ -32,29 +26,12 @@ actor APIClient {
         self.baseURL = baseURL
         self.deviceId = resolvedDeviceId
 
-        // SECURITY: Certificate pinning configuration
-        // - Always enforce in Release builds
-        // - In Debug builds, only allow disabling for simulator (local development)
-        // - TestFlight builds use Release config, so pinning is always enforced
-        #if DEBUG
-        #if targetEnvironment(simulator)
-        // Simulator: Allow disabling for local development convenience
-        self.enforcePinning = enforcePinning
-        #else
-        // Physical device in debug: Still enforce unless explicitly disabled
-        // This prevents accidental exposure in ad-hoc/TestFlight debug builds
-        if !enforcePinning {
-            print("[Security Warning] Certificate pinning disabled on physical device in DEBUG mode")
-        }
-        self.enforcePinning = enforcePinning
-        #endif
-        #else
-        // Release builds: Always enforce, ignore parameter
-        self.enforcePinning = true
-        #endif
-
-        // Create certificate pinning delegate
-        self.pinningDelegate = CertificatePinningDelegate(enforcePinning: self.enforcePinning)
+        // SECURITY: Certificate pinning is ALWAYS enforced.
+        // For local development with proxy tools (Charles, Proxyman):
+        // - Install the proxy CA certificate on the device/simulator
+        // - The proxy will present a valid certificate chain
+        // DO NOT add parameters to disable pinning - this is a security risk.
+        self.pinningDelegate = CertificatePinningDelegate()
 
         // Configure URLSession with pinning delegate
         let config = URLSessionConfiguration.default
