@@ -339,10 +339,15 @@ final class EnrollmentViewModel: ObservableObject {
         state = .processingInvitation
 
         do {
-            // Use provided API URL or default
-            let urlString = apiUrl ?? "https://tiqpij5mue.execute-api.us-east-1.amazonaws.com"
-            guard let url = URL(string: urlString) else {
-                throw EnrollmentError.invalidInvitationCode
+            // Use provided API URL or default from configuration
+            let url: URL
+            if let apiUrl = apiUrl {
+                guard let parsedUrl = URL(string: apiUrl) else {
+                    throw EnrollmentError.invalidInvitationCode
+                }
+                url = parsedUrl
+            } else {
+                url = AppConfiguration.enrollmentAPIURL
             }
             apiClient = APIClient(baseURL: url)
 
@@ -1046,7 +1051,7 @@ final class EnrollmentViewModel: ObservableObject {
             return EnrollmentQRCodeData(
                 type: "vettid_enrollment",
                 version: 1,
-                apiUrl: "https://tiqpij5mue.execute-api.us-east-1.amazonaws.com",
+                apiUrl: "https://api.vettid.dev",
                 sessionToken: code,
                 invitationCode: nil,
                 userGuid: ""
@@ -1057,7 +1062,7 @@ final class EnrollmentViewModel: ObservableObject {
         return EnrollmentQRCodeData(
             type: "vettid_enrollment",
             version: 1,
-            apiUrl: "https://tiqpij5mue.execute-api.us-east-1.amazonaws.com",
+            apiUrl: "https://api.vettid.dev",
             sessionToken: qrContent,
             invitationCode: nil,
             userGuid: ""

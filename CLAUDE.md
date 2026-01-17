@@ -74,6 +74,12 @@ To run the unit tests in VettIDTests/:
 4. Add existing test files from VettIDTests/ to the target
 5. Build and run tests
 
-## API Reference
+## Documentation
 
-See `docs/protean_credential_system_design.md` for the complete API specification.
+All design documents are maintained in the [vettid-dev repository](https://github.com/mesmerverse/vettid-dev/tree/main/docs):
+
+- `protean_credential_system_design.md` - Complete API specification
+- `vault-voting-design.md` - Vault-based voting system design
+- `vault_services_architecture.md` - Vault services architecture
+- `NATS-MESSAGING-ARCHITECTURE.md` - NATS messaging patterns
+- `NITRO-ENCLAVE-VAULT-ARCHITECTURE.md` - Nitro Enclave architecture

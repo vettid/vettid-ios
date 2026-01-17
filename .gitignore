@@ -49,10 +49,18 @@ iOSInjectionProject/
 *.pem
 *.p12
 *.key
+*.cer
 *.mobileprovision
 secrets/
+secrets.*
+credentials.*
 .env
 .env.*
+*.xcconfig.local
+# API keys and tokens
+**/GoogleService-Info.plist
+**/google-services.json
+firebase*.json
 
 # Archives
 *.ipa

@@ -165,5 +165,10 @@
 	<!-- Microphone usage for VoIP calls -->
 	<key>NSMicrophoneUsageDescription</key>
 	<string>VettID needs microphone access for voice and video calls.</string>
+	<!-- API Configuration - Override via xcconfig or build settings -->
+	<key>VettIDAPIBaseURL</key>
+	<string>https://api.vettid.dev</string>
+	<key>VettIDEnrollmentAPIURL</key>
+	<string>https://api.vettid.dev</string>
 </dict>
 </plist>
