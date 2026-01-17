@@ -185,6 +185,110 @@ final class CryptoManager {
         return try ChaChaPoly.open(sealedBox, using: symmetricKey)
     }
 
+    // MARK: - Voting Key Derivation
+
+    /// Derive a voting keypair from identity key and proposal ID
+    /// This creates an unlinkable voting key that can only be derived by the user
+    ///
+    /// The derivation ensures:
+    /// - Different voting key for each proposal (unlinkable across proposals)
+    /// - Only the user can derive their voting key (knows identity private key)
+    /// - Deterministic: same identity + proposal = same voting key
+    ///
+    /// - Parameters:
+    ///   - identityPrivateKey: User's Ed25519 identity private key (32 bytes)
+    ///   - proposalId: The proposal ID (used as salt)
+    /// - Returns: Ed25519 signing keypair for this proposal
+    static func deriveVotingKeyPair(
+        identityPrivateKey: Data,
+        proposalId: String
+    ) throws -> (privateKey: Curve25519.Signing.PrivateKey, publicKey: Curve25519.Signing.PublicKey) {
+        // Use HKDF to derive 32 bytes of key material
+        let salt = proposalId.data(using: .utf8)!
+        let info = "vettid-vote-v1".data(using: .utf8)!
+
+        // Create a symmetric key from the identity private key for HKDF
+        let inputKey = SymmetricKey(data: identityPrivateKey)
+
+        // Derive key material using HKDF
+        let derivedKey = HKDF<SHA256>.deriveKey(
+            inputKeyMaterial: inputKey,
+            salt: salt,
+            info: info,
+            outputByteCount: 32
+        )
+
+        // Convert to Ed25519 private key
+        let keyData = derivedKey.withUnsafeBytes { Data($0) }
+        let privateKey = try Curve25519.Signing.PrivateKey(rawRepresentation: keyData)
+
+        return (privateKey, privateKey.publicKey)
+    }
+
+    /// Derive voting public key for finding user's vote in published list
+    /// - Parameters:
+    ///   - identityPrivateKey: User's Ed25519 identity private key
+    ///   - proposalId: The proposal ID
+    /// - Returns: Base64-encoded voting public key
+    static func deriveVotingPublicKey(
+        identityPrivateKey: Data,
+        proposalId: String
+    ) throws -> String {
+        let (_, publicKey) = try deriveVotingKeyPair(
+            identityPrivateKey: identityPrivateKey,
+            proposalId: proposalId
+        )
+        return publicKey.rawRepresentation.base64EncodedString()
+    }
+
+    // MARK: - Merkle Tree Verification
+
+    /// Verify a Merkle proof for a vote
+    /// - Parameters:
+    ///   - voteHash: The hash of the vote being verified
+    ///   - proof: Array of sibling hashes in the proof path
+    ///   - root: The expected Merkle root
+    ///   - index: The index of the vote in the tree
+    /// - Returns: True if the proof is valid
+    static func verifyMerkleProof(
+        voteHash: String,
+        proof: [String],
+        root: String,
+        index: Int
+    ) -> Bool {
+        guard let voteHashData = Data(base64Encoded: voteHash) else {
+            return false
+        }
+
+        var currentHash = voteHashData
+        var currentIndex = index
+
+        for siblingHashBase64 in proof {
+            guard let siblingHash = Data(base64Encoded: siblingHashBase64) else {
+                return false
+            }
+
+            // Determine order based on index (even = left, odd = right)
+            let combined: Data
+            if currentIndex % 2 == 0 {
+                combined = currentHash + siblingHash
+            } else {
+                combined = siblingHash + currentHash
+            }
+
+            // Hash the combined data
+            currentHash = Data(SHA256.hash(data: combined))
+            currentIndex /= 2
+        }
+
+        // Compare with expected root
+        guard let expectedRoot = Data(base64Encoded: root) else {
+            return false
+        }
+
+        return currentHash == expectedRoot
+    }
+
     // MARK: - Secure Random
 
     /// Generate cryptographically secure random bytes

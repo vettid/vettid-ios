@@ -5,12 +5,14 @@ import SwiftUI
 enum VaultNavItem: Int, CaseIterable {
     case connections = 0
     case feed = 1
-    case more = 2
+    case proposals = 2
+    case more = 3
 
     var title: String {
         switch self {
         case .connections: return "Connections"
         case .feed: return "Feed"
+        case .proposals: return "Proposals"
         case .more: return "More"
         }
     }
@@ -19,6 +21,7 @@ enum VaultNavItem: Int, CaseIterable {
         switch self {
         case .connections: return "person.2.fill"
         case .feed: return "list.bullet.rectangle"
+        case .proposals: return "doc.text.fill"
         case .more: return "ellipsis"
         }
     }
@@ -132,6 +135,7 @@ struct VaultNav: View {
         switch item {
         case .connections: return connectionsBadge
         case .feed: return feedBadge
+        case .proposals: return 0
         case .more: return 0
         }
     }
@@ -254,6 +258,13 @@ struct VaultMoreMenuSheet: View {
 
                     MoreMenuItem(icon: "folder.fill", title: "Personal Data") {
                         onSelect("personalData")
+                        dismiss()
+                    }
+                }
+
+                Section("Voting") {
+                    MoreMenuItem(icon: "checkmark.square.fill", title: "My Votes") {
+                        onSelect("myVotes")
                         dismiss()
                     }
                 }

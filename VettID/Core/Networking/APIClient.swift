@@ -591,6 +591,49 @@ actor APIClient {
         )
     }
 
+    // MARK: - Voting (Phase 9)
+
+    /// Fetch proposals for voting
+    func getProposals(
+        status: String? = nil,
+        page: Int = 1,
+        limit: Int = 20,
+        authToken: String
+    ) async throws -> ProposalListResponse {
+        var endpoint = "/member/proposals?page=\(page)&limit=\(limit)"
+        if let status = status {
+            endpoint += "&status=\(status)"
+        }
+        return try await get(endpoint: endpoint, authToken: authToken)
+    }
+
+    /// Get a single proposal by ID
+    func getProposal(proposalId: String, authToken: String) async throws -> Proposal {
+        return try await get(endpoint: "/member/proposals/\(proposalId)", authToken: authToken)
+    }
+
+    /// Get published vote list (after proposal closes)
+    func getPublishedVotes(proposalId: String, authToken: String) async throws -> PublishedVoteList {
+        return try await get(endpoint: "/member/proposals/\(proposalId)/votes", authToken: authToken)
+    }
+
+    /// Get Merkle proof for a specific vote
+    func getVoteMerkleProof(
+        proposalId: String,
+        voteHash: String,
+        authToken: String
+    ) async throws -> MerkleProofResponse {
+        return try await get(
+            endpoint: "/member/proposals/\(proposalId)/votes/\(voteHash)/proof",
+            authToken: authToken
+        )
+    }
+
+    /// Get VettID organization public key for verifying proposal signatures
+    func getOrgSigningKey() async throws -> OrgSigningKeyResponse {
+        return try await get(endpoint: "/public/signing-key")
+    }
+
     // MARK: - HTTP Methods
 
     private func get<T: Decodable>(endpoint: String, authToken: String? = nil) async throws -> T {
@@ -1466,3 +1509,12 @@ struct EmptyRequest: Encodable {}
 
 /// Empty response for endpoints that return no body
 struct EmptyResponse: Decodable {}
+
+// MARK: - Voting Types (Phase 9)
+
+/// Response from GET /public/signing-key
+struct OrgSigningKeyResponse: Decodable {
+    let publicKey: String  // Base64-encoded ECDSA public key
+    let keyId: String
+    let algorithm: String  // "ECDSA_SHA_256"
+}

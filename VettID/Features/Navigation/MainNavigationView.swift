@@ -25,6 +25,7 @@ struct MainNavigationView: View {
     @State private var showPersonalData = false
     @State private var showArchive = false
     @State private var showPreferences = false
+    @State private var showMyVotes = false
 
     // Deep link navigation
     @State private var showConnectSheet = false
@@ -95,6 +96,11 @@ struct MainNavigationView: View {
             NavigationView {
                 VaultPreferencesView()
                     .environmentObject(appState)
+            }
+        }
+        .sheet(isPresented: $showMyVotes) {
+            NavigationView {
+                MyVotesView()
             }
         }
         .sheet(isPresented: $showConnectSheet) {
@@ -179,6 +185,11 @@ struct MainNavigationView: View {
                 title: "Feed",
                 onProfileTap: openDrawer
             )
+        case .proposals:
+            HeaderView(
+                title: "Proposals",
+                onProfileTap: openDrawer
+            )
         case .more:
             HeaderView(
                 title: "Vault",
@@ -256,6 +267,10 @@ struct MainNavigationView: View {
         case .feed:
             NavigationStack {
                 FeedView()
+            }
+        case .proposals:
+            NavigationStack {
+                ProposalsView(authTokenProvider: { nil })
             }
         case .more:
             EmptyView()
@@ -339,7 +354,7 @@ struct MainNavigationView: View {
     private func maxNavItems(for section: AppSection) -> Int {
         switch section {
         case .vault:
-            return VaultNavItem.allCases.count - 1 // Exclude "More"
+            return VaultNavItem.allCases.count - 1 // Exclude "More" (connections, feed, proposals = 3)
         case .vaultServices:
             return VaultServicesNavItem.allCases.count
         case .appSettings:
@@ -374,8 +389,12 @@ struct MainNavigationView: View {
             showArchive = true
         case "preferences":
             showPreferences = true
+        case "myVotes":
+            showMyVotes = true
         default:
+            #if DEBUG
             print("Vault more selection: \(selection)")
+            #endif
         }
     }
 }
