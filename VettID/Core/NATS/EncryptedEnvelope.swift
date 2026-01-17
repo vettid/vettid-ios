@@ -59,11 +59,26 @@ struct BootstrapRequest: Codable {
     /// ISO8601 timestamp
     let timestamp: String
 
+    // MARK: - Device Attestation (Issue #132)
+
+    /// App Attest assertion data (Base64) - binds session to this device
+    /// Generated using DCAppAttestService.generateAssertion with request data as clientDataHash
+    let deviceAttestation: String?
+
+    /// App Attest key identifier used for the assertion
+    let attestKeyId: String?
+
+    /// Platform type for attestation verification
+    let platform: String?
+
     enum CodingKeys: String, CodingKey {
         case requestId = "request_id"
         case appPublicKey = "app_public_key"
         case deviceId = "device_id"
         case timestamp
+        case deviceAttestation = "device_attestation"
+        case attestKeyId = "attest_key_id"
+        case platform
     }
 }
 
@@ -134,6 +149,27 @@ struct BootstrapRotationInfo: Codable {
     enum CodingKeys: String, CodingKey {
         case rotateBeforeHours = "rotate_before_hours"
         case rotationTopic = "rotation_topic"
+    }
+}
+
+// MARK: - Bootstrap Attestation (Issue #132)
+
+/// Client data used for App Attest assertion during bootstrap
+/// This binds the attestation to the specific bootstrap attempt
+struct BootstrapAttestationClientData: Codable {
+    /// Device identifier
+    let deviceId: String
+
+    /// ISO8601 timestamp of the bootstrap attempt
+    let timestamp: String
+
+    /// Purpose identifier for the assertion
+    let purpose: String
+
+    enum CodingKeys: String, CodingKey {
+        case deviceId = "device_id"
+        case timestamp
+        case purpose
     }
 }
 

@@ -16,6 +16,7 @@ final class NatsConnectionManager: ObservableObject {
     private let credentialStore: NatsCredentialStore
     private let apiClient: APIClient
     private let sessionKeyManager: SessionKeyManager
+    private let attestationManager: AttestationManager
 
     // MARK: - Connection State
 
@@ -47,10 +48,12 @@ final class NatsConnectionManager: ObservableObject {
     init(credentialStore: NatsCredentialStore = NatsCredentialStore(),
          apiClient: APIClient = APIClient(),
          sessionKeyManager: SessionKeyManager = SessionKeyManager(),
+         attestationManager: AttestationManager = AttestationManager(),
          userGuidProvider: @escaping () -> String? = { nil }) {
         self.credentialStore = credentialStore
         self.apiClient = apiClient
         self.sessionKeyManager = sessionKeyManager
+        self.attestationManager = attestationManager
         self.userGuidProvider = userGuidProvider
     }
 
@@ -153,6 +156,11 @@ final class NatsConnectionManager: ObservableObject {
 
     /// Perform E2E session bootstrap with the vault
     /// This establishes encrypted communication after NATS connection
+    ///
+    /// Device attestation binding (Issue #132):
+    /// If an App Attest key is available, generates an assertion over the bootstrap
+    /// request data. The server hashes and stores the attestation to bind the session
+    /// to this specific device, preventing session hijacking.
     func performBootstrap() async throws {
         guard connectionState == .connected else {
             throw NatsConnectionError.notConnected
@@ -176,8 +184,14 @@ final class NatsConnectionManager: ObservableObject {
         #endif
 
         do {
-            // Generate bootstrap request
-            let bootstrapRequest = try await sessionKeyManager.initiateBootstrap()
+            // Generate device attestation if available (Issue #132)
+            let (attestation, attestKeyId) = await generateBootstrapAttestation()
+
+            // Generate bootstrap request with attestation
+            let bootstrapRequest = try await sessionKeyManager.initiateBootstrap(
+                attestation: attestation,
+                attestKeyId: attestKeyId
+            )
 
             // Subscribe to bootstrap response topic
             // Subscribe with wildcard to receive response on forApp.app.bootstrap.{requestId}
@@ -267,6 +281,71 @@ final class NatsConnectionManager: ObservableObject {
     func clearSession() async {
         await sessionKeyManager.clearSession()
         isSessionEstablished = false
+    }
+
+    // MARK: - Device Attestation (Issue #132)
+
+    /// Generate device attestation for bootstrap request binding
+    ///
+    /// Uses App Attest to create an assertion that binds the bootstrap request
+    /// to this specific device. The assertion is generated over the request data
+    /// (timestamp + device ID) to prevent replay attacks.
+    ///
+    /// - Returns: Tuple of (attestation base64, key ID) or (nil, nil) if not available
+    private func generateBootstrapAttestation() async -> (String?, String?) {
+        // Check if App Attest is supported
+        guard attestationManager.isSupported else {
+            #if DEBUG
+            print("[NATS] App Attest not supported, skipping device attestation")
+            #endif
+            return (nil, nil)
+        }
+
+        // Check if we have a stored attestation key
+        guard let keyId = attestationManager.getStoredKeyId() else {
+            #if DEBUG
+            print("[NATS] No attestation key stored, skipping device attestation")
+            print("[NATS] Note: Attestation key should be created during enrollment")
+            #endif
+            return (nil, nil)
+        }
+
+        do {
+            // Create client data for the assertion
+            // This binds the assertion to the current time and device
+            let clientData = BootstrapAttestationClientData(
+                deviceId: getDeviceId(),
+                timestamp: ISO8601DateFormatter().string(from: Date()),
+                purpose: "nats_bootstrap"
+            )
+
+            let clientDataJson = try JSONEncoder().encode(clientData)
+
+            // Generate assertion using App Attest
+            let assertion = try await attestationManager.generateAssertion(
+                keyId: keyId,
+                clientData: clientDataJson
+            )
+
+            let attestationBase64 = assertion.base64EncodedString()
+
+            #if DEBUG
+            print("[NATS] Generated device attestation for bootstrap")
+            print("[NATS] Key ID: \(keyId.prefix(20))...")
+            print("[NATS] Assertion size: \(assertion.count) bytes")
+            #endif
+
+            return (attestationBase64, keyId)
+
+        } catch {
+            // Attestation failure is not fatal - we can still bootstrap without it
+            // The server may reject unauthenticated sessions in strict mode
+            #if DEBUG
+            print("[NATS] Warning: Failed to generate attestation: \(error.localizedDescription)")
+            print("[NATS] Continuing bootstrap without device attestation")
+            #endif
+            return (nil, nil)
+        }
     }
 
     // MARK: - NATS Authentication (Issue #8)

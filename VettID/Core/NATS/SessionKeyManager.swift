@@ -91,8 +91,17 @@ actor SessionKeyManager {
     // MARK: - Bootstrap Flow
 
     /// Initiate bootstrap key exchange with vault
+    /// - Parameters:
+    ///   - attestation: Optional App Attest assertion data (base64)
+    ///   - attestKeyId: Optional App Attest key ID used for the assertion
     /// - Returns: BootstrapRequest to send via NATS
-    func initiateBootstrap() throws -> BootstrapRequest {
+    ///
+    /// Note: Attestation binds the session to this specific device (Issue #132).
+    /// The server will hash and store the attestation to prevent session hijacking.
+    func initiateBootstrap(
+        attestation: String? = nil,
+        attestKeyId: String? = nil
+    ) throws -> BootstrapRequest {
         guard pendingBootstrap == nil else {
             throw SessionError.bootstrapInProgress
         }
@@ -110,7 +119,10 @@ actor SessionKeyManager {
             requestId: requestId,
             appPublicKey: publicKey.rawRepresentation.base64EncodedString(),
             deviceId: getDeviceId(),
-            timestamp: ISO8601DateFormatter().string(from: Date())
+            timestamp: ISO8601DateFormatter().string(from: Date()),
+            deviceAttestation: attestation,
+            attestKeyId: attestKeyId,
+            platform: "ios"
         )
     }
 
