@@ -409,10 +409,30 @@ extension VaultBackgroundRefresh {
         }
     }
 
-    /// Call after successful enrollment to start background sync
+    /// Call after successful enrollment to start background sync and trigger initial backup
     func onEnrollmentComplete() {
         scheduleAllTasks()
         Self.logger.info("Scheduled background tasks after enrollment")
+
+        // Trigger automatic credential backup after enrollment
+        Task {
+            await triggerInitialBackup()
+        }
+    }
+
+    /// Trigger initial backup after enrollment
+    /// Backs up the Protean Credential and schedules automatic backups
+    private func triggerInitialBackup() async {
+        Self.logger.info("Triggering initial backup after enrollment")
+
+        // Schedule automatic backups with default settings (enabled by default)
+        let defaultSettings = BackupSettings()
+        BackupBackgroundTask.shared.schedule(settings: defaultSettings)
+        Self.logger.info("Scheduled automatic backups after enrollment")
+
+        // Note: The Protean Credential is already backed up during enrollment
+        // in EnrollmentService.storeAndBackupProteanCredential()
+        // This just ensures automatic backups are scheduled going forward
     }
 
     /// Call on logout to stop background sync
