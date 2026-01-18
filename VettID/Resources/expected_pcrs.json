@@ -1,11 +1,11 @@
 {
   "pcr_sets": [
     {
-      "id": "production-v1",
-      "pcr0": "c4fbe85714ce8e31e8568edf0bd0022f3341a18b3060b2ebafcb4b706bc8c7870b9d2353b9eba1c0b4dd94b80238a208",
+      "id": "2026-01-18-v1",
+      "pcr0": "9b03797f32414ba67d3fd6dee843b45c8324069b658c5812917b727b3959cfd78f46f1ef69c35668034871b86c929a3b",
       "pcr1": "4b4d5b3661b3efc12920900c80e126e4ce783c522de6c02a2a5bf7af3a2b9327b86776f188e4be1c1c404a129dbda493",
-      "pcr2": "3f37ae4b5a503d457cf198ac15010f595383796bfdd4c779eb255acb9cdec61fce3dc430368561807a32d483faeed5dc",
-      "valid_from": "2026-01-03T00:00:00Z",
+      "pcr2": "9875f4b83a151162c03dd37c8b023828cd15aa12f6c3d115556c8e036cbdcf2302f1a27e7576c017e3a084060399d189",
+      "valid_from": "2026-01-18T02:09:48Z",
       "valid_until": null,
       "is_current": true
     }
