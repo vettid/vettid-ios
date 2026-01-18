@@ -11,6 +11,7 @@ struct ProposalDetailView: View {
     @State private var isSubmittingVote = false
     @State private var voteError: String?
     @State private var showResults = false
+    @State private var password = ""
 
     private var hasVoted: Bool {
         viewModel.hasVoted(on: proposal)
@@ -73,6 +74,52 @@ struct ProposalDetailView: View {
         .sheet(isPresented: $showResults) {
             NavigationView {
                 VoteResultsView(proposal: proposal, viewModel: viewModel)
+            }
+        }
+        .sheet(isPresented: $showPasswordPrompt) {
+            VotePasswordPromptView(
+                choice: selectedChoice ?? .yes,
+                proposalTitle: proposal.proposalTitle,
+                isSubmitting: $isSubmittingVote,
+                onSubmit: { enteredPassword in
+                    submitVote(with: enteredPassword)
+                },
+                onCancel: {
+                    selectedChoice = nil
+                    showPasswordPrompt = false
+                }
+            )
+        }
+        .onChange(of: viewModel.voteCastingState) { newState in
+            switch newState {
+            case .sendingToVault, .waitingForSignature, .submittingToBackend:
+                isSubmittingVote = true
+            case .complete:
+                isSubmittingVote = false
+                showPasswordPrompt = false
+                selectedChoice = nil
+                viewModel.resetVoteCastingState()
+            case .error(let message):
+                isSubmittingVote = false
+                showPasswordPrompt = false
+                voteError = message
+                viewModel.resetVoteCastingState()
+            case .idle:
+                isSubmittingVote = false
+            }
+        }
+    }
+
+    // MARK: - Vote Submission
+
+    private func submitVote(with password: String) {
+        guard let choice = selectedChoice else { return }
+
+        Task {
+            do {
+                try await viewModel.castVote(on: proposal, choice: choice, password: password)
+            } catch {
+                voteError = error.localizedDescription
             }
         }
     }
@@ -461,5 +508,132 @@ struct ResultBar: View {
             ),
             viewModel: ProposalsViewModel(authTokenProvider: { nil })
         )
+    }
+}
+
+// MARK: - Vote Password Prompt
+
+struct VotePasswordPromptView: View {
+    let choice: VoteChoice
+    let proposalTitle: String
+    @Binding var isSubmitting: Bool
+    let onSubmit: (String) -> Void
+    let onCancel: () -> Void
+
+    @State private var password = ""
+    @State private var isPasswordVisible = false
+    @FocusState private var isPasswordFocused: Bool
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 24) {
+                // Vote summary
+                VStack(spacing: 12) {
+                    Image(systemName: choice.systemImage)
+                        .font(.system(size: 50))
+                        .foregroundColor(choiceColor)
+
+                    Text("Vote: \(choice.displayName)")
+                        .font(.title2)
+                        .fontWeight(.bold)
+
+                    Text(proposalTitle)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                }
+                .padding(.top, 20)
+
+                // Password field
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Enter your vault password to authorize this vote")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+
+                    HStack {
+                        Group {
+                            if isPasswordVisible {
+                                TextField("Password", text: $password)
+                            } else {
+                                SecureField("Password", text: $password)
+                            }
+                        }
+                        .textContentType(.password)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                        .focused($isPasswordFocused)
+
+                        Button {
+                            isPasswordVisible.toggle()
+                        } label: {
+                            Image(systemName: isPasswordVisible ? "eye.slash" : "eye")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(10)
+                }
+                .padding(.horizontal)
+
+                Spacer()
+
+                // Submit button
+                VStack(spacing: 12) {
+                    Button {
+                        onSubmit(password)
+                    } label: {
+                        HStack {
+                            if isSubmitting {
+                                ProgressView()
+                                    .tint(.white)
+                                    .padding(.trailing, 4)
+                            }
+                            Text(isSubmitting ? "Casting Vote..." : "Cast Vote")
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(password.isEmpty || isSubmitting ? Color.gray : choiceColor)
+                        .foregroundColor(.white)
+                        .cornerRadius(12)
+                    }
+                    .disabled(password.isEmpty || isSubmitting)
+
+                    Button("Cancel") {
+                        onCancel()
+                        dismiss()
+                    }
+                    .foregroundColor(.secondary)
+                    .disabled(isSubmitting)
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 20)
+            }
+            .navigationTitle("Confirm Vote")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        onCancel()
+                        dismiss()
+                    }
+                    .disabled(isSubmitting)
+                }
+            }
+        }
+        .onAppear {
+            isPasswordFocused = true
+        }
+        .interactiveDismissDisabled(isSubmitting)
+    }
+
+    private var choiceColor: Color {
+        switch choice {
+        case .yes: return .green
+        case .no: return .red
+        case .abstain: return .gray
+        }
     }
 }

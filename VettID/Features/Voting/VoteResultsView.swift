@@ -1,9 +1,12 @@
 import SwiftUI
+import CryptoKit
 
 /// View for displaying vote results and verification options
 struct VoteResultsView: View {
     let proposal: Proposal
     @ObservedObject var viewModel: ProposalsViewModel
+    let apiClient: APIClient
+    let authTokenProvider: @Sendable () -> String?
     @Environment(\.dismiss) private var dismiss
 
     @State private var publishedVotes: PublishedVoteList?
@@ -12,6 +15,18 @@ struct VoteResultsView: View {
     @State private var verificationResult: VoteVerificationResult?
     @State private var isVerifying = false
     @State private var showDownloadOptions = false
+
+    init(
+        proposal: Proposal,
+        viewModel: ProposalsViewModel,
+        apiClient: APIClient = APIClient(),
+        authTokenProvider: @escaping @Sendable () -> String? = { nil }
+    ) {
+        self.proposal = proposal
+        self.viewModel = viewModel
+        self.apiClient = apiClient
+        self.authTokenProvider = authTokenProvider
+    }
 
     private var voteReceipt: VoteReceipt? {
         viewModel.getVoteReceipt(for: proposal)
@@ -242,39 +257,181 @@ struct VoteResultsView: View {
         isLoading = true
         loadError = nil
 
-        // In a real implementation, this would call the API
-        // For now, just simulate a delay
-        try? await Task.sleep(nanoseconds: 500_000_000)
+        guard let authToken = authTokenProvider() else {
+            loadError = "Not authenticated"
+            isLoading = false
+            return
+        }
 
-        isLoading = false
+        do {
+            publishedVotes = try await apiClient.getPublishedVotes(
+                proposalId: proposal.id,
+                authToken: authToken
+            )
+            isLoading = false
+        } catch {
+            loadError = error.localizedDescription
+            isLoading = false
+        }
     }
 
     private func verifyVote() async {
         guard let receipt = voteReceipt else { return }
+        guard let authToken = authTokenProvider() else {
+            verificationResult = VoteVerificationResult(
+                signatureValid: false,
+                foundInList: false,
+                includedInMerkle: false,
+                merkleRootMatches: false
+            )
+            return
+        }
+
         isVerifying = true
 
-        // Simulate verification process
-        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        var signatureValid = false
+        var foundInList = false
+        var includedInMerkle = false
+        var merkleRootMatches = false
 
-        // In real implementation:
-        // 1. Derive voting public key from identity
-        // 2. Find vote in published list by voting_public_key
-        // 3. Verify Ed25519 signature
-        // 4. Request and verify Merkle proof
+        do {
+            // 1. Load published votes if not already loaded
+            if publishedVotes == nil {
+                publishedVotes = try await apiClient.getPublishedVotes(
+                    proposalId: proposal.id,
+                    authToken: authToken
+                )
+            }
 
-        // For now, return mock result
-        verificationResult = VoteVerificationResult(
-            signatureValid: true,
-            foundInList: true,
-            includedInMerkle: true,
-            merkleRootMatches: true
-        )
+            // 2. Find vote in published list by voting public key
+            if let votes = publishedVotes {
+                if let publishedVote = votes.votes.first(where: { $0.votingPublicKey == receipt.votingPublicKey }) {
+                    foundInList = true
+
+                    // 3. Verify Ed25519 signature
+                    signatureValid = verifyEd25519Signature(
+                        vote: publishedVote,
+                        voteHash: receipt.voteHash
+                    )
+                }
+            }
+
+            // 4. Get and verify Merkle proof
+            if foundInList {
+                let proofResponse = try await apiClient.getVoteMerkleProof(
+                    proposalId: proposal.id,
+                    voteHash: receipt.voteHash,
+                    authToken: authToken
+                )
+
+                includedInMerkle = true
+
+                // Verify Merkle proof
+                merkleRootMatches = verifyMerkleProof(
+                    voteHash: receipt.voteHash,
+                    proof: proofResponse.proof.proof,
+                    expectedRoot: proposal.merkleRoot ?? "",
+                    index: proofResponse.proof.index
+                )
+            }
+
+            verificationResult = VoteVerificationResult(
+                signatureValid: signatureValid,
+                foundInList: foundInList,
+                includedInMerkle: includedInMerkle,
+                merkleRootMatches: merkleRootMatches
+            )
+
+            // Update receipt verification status
+            if let result = verificationResult, result.isFullyVerified {
+                viewModel.updateVoteVerificationStatus(
+                    forProposalId: proposal.id,
+                    isVerified: true
+                )
+            }
+
+        } catch {
+            verificationResult = VoteVerificationResult(
+                signatureValid: signatureValid,
+                foundInList: foundInList,
+                includedInMerkle: false,
+                merkleRootMatches: false
+            )
+        }
 
         isVerifying = false
     }
 
+    /// Verify Ed25519 signature on a published vote
+    private func verifyEd25519Signature(vote: PublishedVote, voteHash: String) -> Bool {
+        guard let publicKeyData = Data(base64Encoded: vote.votingPublicKey),
+              let signatureData = Data(base64Encoded: vote.signature),
+              let messageData = voteHash.data(using: .utf8) else {
+            return false
+        }
+
+        do {
+            let publicKey = try Curve25519.Signing.PublicKey(rawRepresentation: publicKeyData)
+            return publicKey.isValidSignature(signatureData, for: messageData)
+        } catch {
+            #if DEBUG
+            print("[VoteVerification] Ed25519 verification failed: \(error)")
+            #endif
+            return false
+        }
+    }
+
+    /// Verify a Merkle proof for a vote hash
+    private func verifyMerkleProof(voteHash: String, proof: [String], expectedRoot: String, index: Int) -> Bool {
+        guard !proof.isEmpty else { return voteHash == expectedRoot }
+
+        var currentHash = voteHash
+        var currentIndex = index
+
+        for siblingHash in proof {
+            // Determine if current hash is on left or right based on index parity
+            let combined: String
+            if currentIndex % 2 == 0 {
+                // Current is left child
+                combined = currentHash + siblingHash
+            } else {
+                // Current is right child
+                combined = siblingHash + currentHash
+            }
+
+            // Hash the combined string using SHA256
+            if let data = combined.data(using: .utf8) {
+                let digest = SHA256.hash(data: data)
+                currentHash = digest.map { String(format: "%02x", $0) }.joined()
+            } else {
+                return false
+            }
+
+            currentIndex /= 2
+        }
+
+        return currentHash == expectedRoot
+    }
+
     private func verifyAllSignatures() async {
-        // In real implementation, verify all signatures in the vote list
+        guard let votes = publishedVotes else { return }
+
+        // Verify all Ed25519 signatures in the vote list
+        var validCount = 0
+        var invalidCount = 0
+
+        for vote in votes.votes {
+            let isValid = verifyEd25519Signature(vote: vote, voteHash: vote.voteHash)
+            if isValid {
+                validCount += 1
+            } else {
+                invalidCount += 1
+            }
+        }
+
+        #if DEBUG
+        print("[VoteVerification] Verified \(validCount) valid, \(invalidCount) invalid out of \(votes.votes.count) signatures")
+        #endif
     }
 
     private func choiceColor(_ choice: VoteChoice) -> Color {

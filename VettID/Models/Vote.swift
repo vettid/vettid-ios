@@ -90,3 +90,39 @@ struct ProposalSignatureStatus: Equatable {
         ProposalSignatureStatus(isVerified: false, verifiedAt: nil, error: error)
     }
 }
+
+// MARK: - Signed Vote Submission
+
+/// Submission of a vault-signed vote to the backend
+struct SignedVoteSubmission: Encodable {
+    let proposalId: String
+    let choice: String
+    let nonce: String
+    let votingPublicKey: String
+    let signature: String  // Ed25519 signature from vault
+    let voteHash: String
+    let timestamp: String  // ISO8601
+
+    enum CodingKeys: String, CodingKey {
+        case proposalId = "proposal_id"
+        case choice
+        case nonce
+        case votingPublicKey = "voting_public_key"
+        case signature
+        case voteHash = "vote_hash"
+        case timestamp
+    }
+}
+
+/// Response from submitting a signed vote
+struct SignedVoteResponse: Decodable {
+    let success: Bool
+    let message: String?
+    let voteId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case success
+        case message
+        case voteId = "vote_id"
+    }
+}

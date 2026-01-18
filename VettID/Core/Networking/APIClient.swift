@@ -634,6 +634,20 @@ actor APIClient {
         return try await get(endpoint: "/public/signing-key")
     }
 
+    /// Submit a vault-signed vote to the backend
+    /// The vote is signed by the vault using the member's credential
+    func submitSignedVote(
+        proposalId: String,
+        signedVote: SignedVoteSubmission,
+        authToken: String
+    ) async throws -> SignedVoteResponse {
+        return try await post(
+            endpoint: "/member/votes/signed",
+            body: signedVote,
+            authToken: authToken
+        )
+    }
+
     // MARK: - HTTP Methods
 
     private func get<T: Decodable>(endpoint: String, authToken: String? = nil) async throws -> T {
