@@ -260,10 +260,49 @@ class AppState: ObservableObject {
     private let credentialStore = CredentialStore()
     private let profileStore = ProfileStore()
 
+    /// Flag indicating if running in UI test mode
+    static var isUITesting: Bool {
+        ProcessInfo.processInfo.arguments.contains("--uitesting")
+    }
+
+    /// Flag indicating if UI tests should simulate enrolled state
+    static var isUITestingEnrolled: Bool {
+        ProcessInfo.processInfo.arguments.contains("--enrolled")
+    }
+
+    /// Flag indicating if UI tests should simulate authenticated state
+    static var isUITestingAuthenticated: Bool {
+        ProcessInfo.processInfo.arguments.contains("--authenticated")
+    }
+
     init() {
         self.preferences = UserPreferences.load()
-        checkExistingCredential()
-        loadProfile()
+
+        // Handle UI testing mode
+        if Self.isUITesting {
+            setupForUITesting()
+        } else {
+            checkExistingCredential()
+            loadProfile()
+        }
+    }
+
+    /// Configure app state for UI testing
+    private func setupForUITesting() {
+        if Self.isUITestingEnrolled {
+            // Simulate enrolled state - check for real credential or use mock
+            checkExistingCredential()
+            loadProfile()
+            if Self.isUITestingAuthenticated {
+                isAuthenticated = true
+            }
+        } else {
+            // Not enrolled - ensure welcome screen is shown
+            hasCredential = false
+            isAuthenticated = false
+            currentUserGuid = nil
+            vaultStatus = nil
+        }
     }
 
     /// Load stored profile for current user
