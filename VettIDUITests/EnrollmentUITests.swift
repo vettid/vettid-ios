@@ -24,6 +24,11 @@ final class EnrollmentUITests: VettIDUITests {
         let enterCodeButton = app.buttons["Enter code manually"]
         XCTAssertTrue(enterCodeButton.exists, "Enter code button should be visible")
         XCTAssertTrue(enterCodeButton.isEnabled, "Enter code button should be enabled")
+
+        // Verify recovery button (added for Issue #2)
+        let recoverButton = app.buttons["Recover existing account"]
+        XCTAssertTrue(recoverButton.exists, "Recover account button should be visible")
+        XCTAssertTrue(recoverButton.isEnabled, "Recover account button should be enabled")
     }
 
     func testTapScanQRCodeNavigatesToScanner() throws {

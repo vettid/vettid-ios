@@ -51,9 +51,18 @@ struct BackupSettingsView: View {
 
     private var settingsForm: some View {
         Form {
-            // Automatic backup section
-            Section("Automatic Backup") {
-                Toggle("Enable Auto-Backup", isOn: $viewModel.settings.autoBackupEnabled)
+            // Automatic backup section - prominent opt-out toggle
+            Section {
+                Toggle(isOn: $viewModel.settings.autoBackupEnabled) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Automatic Backups")
+                            .font(.body)
+                        Text(viewModel.settings.autoBackupEnabled ? "Enabled" : "Disabled")
+                            .font(.caption)
+                            .foregroundColor(viewModel.settings.autoBackupEnabled ? .green : .secondary)
+                    }
+                }
+                .tint(.green)
 
                 if viewModel.settings.autoBackupEnabled {
                     Picker("Frequency", selection: $viewModel.settings.backupFrequency) {
@@ -70,6 +79,11 @@ struct BackupSettingsView: View {
 
                     Toggle("WiFi Only", isOn: $viewModel.settings.wifiOnly)
                 }
+            } header: {
+                Text("Automatic Backup")
+            } footer: {
+                Text("Backups are enabled by default to protect your credentials. You can disable automatic backups here, but this is not recommended.")
+                    .foregroundColor(viewModel.settings.autoBackupEnabled ? .secondary : .orange)
             }
 
             // Content section
