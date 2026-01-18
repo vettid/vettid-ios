@@ -84,9 +84,88 @@ final class OwnerSpaceClient {
         return try await subscribeToVault(topic: "status", type: StatusResponse.self)
     }
 
-    /// Subscribe to vault events
+    /// Subscribe to vault events (legacy)
     func subscribeToEvents() async throws -> AsyncStream<VaultEvent> {
         return try await subscribeToVault(topic: "events", type: VaultEvent.self)
+    }
+
+    // MARK: - Security Events (Issue #17)
+
+    /// Subscribe to security events from the vault
+    /// Topics: forApp.recovery.>, forApp.transfer.>, forApp.security.>
+    func subscribeToSecurityEvents() async throws -> AsyncStream<VaultSecurityEvent> {
+        // Subscribe to all security-related topics using wildcards
+        let topics = [
+            "\(forAppPrefix).recovery.>",
+            "\(forAppPrefix).transfer.>",
+            "\(forAppPrefix).security.>"
+        ]
+
+        return AsyncStream { continuation in
+            Task {
+                // Create a task group to handle multiple subscriptions
+                await withTaskGroup(of: Void.self) { group in
+                    for topic in topics {
+                        group.addTask { [weak self] in
+                            guard let self = self else { return }
+
+                            do {
+                                let stream = try await self.connectionManager.subscribe(
+                                    to: topic,
+                                    type: SecurityEventMessage.self
+                                )
+
+                                for await message in stream {
+                                    if let event = VaultSecurityEvent.parse(from: message) {
+                                        continuation.yield(event)
+                                    }
+                                }
+                            } catch {
+                                #if DEBUG
+                                print("[OwnerSpaceClient] Failed to subscribe to \(topic): \(error)")
+                                #endif
+                            }
+                        }
+                    }
+                }
+
+                continuation.finish()
+            }
+        }
+    }
+
+    /// Subscribe to recovery events only
+    func subscribeToRecoveryEvents() async throws -> AsyncStream<VaultSecurityEvent> {
+        let topic = "\(forAppPrefix).recovery.>"
+        return try await subscribeToSecurityTopic(topic)
+    }
+
+    /// Subscribe to transfer events only
+    func subscribeToTransferEvents() async throws -> AsyncStream<VaultSecurityEvent> {
+        let topic = "\(forAppPrefix).transfer.>"
+        return try await subscribeToSecurityTopic(topic)
+    }
+
+    /// Subscribe to fraud detection events only
+    func subscribeToFraudEvents() async throws -> AsyncStream<VaultSecurityEvent> {
+        let topic = "\(forAppPrefix).security.>"
+        return try await subscribeToSecurityTopic(topic)
+    }
+
+    /// Helper to subscribe to a single security topic
+    private func subscribeToSecurityTopic(_ topic: String) async throws -> AsyncStream<VaultSecurityEvent> {
+        let stream = try await connectionManager.subscribe(to: topic, type: SecurityEventMessage.self)
+
+        return AsyncStream { continuation in
+            Task {
+                for await message in stream {
+                    if let event = VaultSecurityEvent.parse(from: message) {
+                        continuation.yield(event)
+                    }
+                }
+                continuation.finish()
+            }
+        }
     }
 
     // MARK: - Request/Response Pattern
