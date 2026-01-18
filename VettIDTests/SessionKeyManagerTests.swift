@@ -421,7 +421,10 @@ extension SessionKeyManagerTests {
             requestId: "req-123",
             appPublicKey: "cHVibGljS2V5",
             deviceId: "device-456",
-            timestamp: "2024-01-01T12:00:00Z"
+            timestamp: "2024-01-01T12:00:00Z",
+            deviceAttestation: nil,
+            attestKeyId: nil,
+            platform: "ios"
         )
 
         // When
