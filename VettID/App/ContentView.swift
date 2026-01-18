@@ -523,8 +523,6 @@ struct EnrollmentContainerView: View {
 struct ManualEnrollmentView: View {
     @State private var invitationCode = ""
     @StateObject private var viewModel = EnrollmentViewModel()
-    @EnvironmentObject var appState: AppState
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 24) {
@@ -534,8 +532,8 @@ struct ManualEnrollmentView: View {
 
             TextField("Invitation Code", text: $invitationCode)
                 .textFieldStyle(.roundedBorder)
-                .autocapitalization(.none)
-                .disableAutocorrection(true)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
                 .padding(.horizontal)
                 .accessibilityIdentifier("manualEnrollment.codeTextField")
 
