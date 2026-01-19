@@ -9,10 +9,12 @@ import Sodium
 
 /// Domain separation for HKDF key derivation
 /// Ensures keys derived for different purposes are cryptographically independent
+///
+/// Note: CEK domain (vettid-cek-v1) is vault-side only - app never encrypts credentials
 enum CryptoDomain: String {
-    case utk = "vettid-utk-v1"      // For encrypting to vault (transaction keys)
-    case cek = "vettid-cek-v1"      // For credential encryption
-    case session = "vettid-session-v1"  // For session key derivation
+    case utk = "vettid-utk-v1"           // For encrypting payloads to vault (transaction keys)
+    case pin = "vettid-pin-v1"           // For PIN encryption to enclave
+    case session = "app-vault-session-v1" // For app-vault session encryption
 
     var saltData: Data {
         self.rawValue.data(using: .utf8)!
@@ -273,13 +275,13 @@ final class CryptoManager {
     ///   - plaintext: Data to encrypt
     ///   - publicKey: Raw X25519 public key bytes (32 bytes)
     ///   - additionalData: Optional additional authenticated data (e.g., nonce for replay protection)
-    ///   - domain: Crypto domain for HKDF key derivation (default: .cek)
+    ///   - domain: Crypto domain for HKDF key derivation (default: .pin for enclave encryption)
     /// - Returns: Encrypted payload containing ephemeral public key and ciphertext
     static func encryptToPublicKey(
         plaintext: Data,
         publicKey: Data,
         additionalData: Data? = nil,
-        domain: CryptoDomain = .cek
+        domain: CryptoDomain = .pin
     ) throws -> EncryptedPayload {
         let recipientPublicKey = try Curve25519.KeyAgreement.PublicKey(rawRepresentation: publicKey)
         return try encrypt(plaintext: plaintext, recipientPublicKey: recipientPublicKey, additionalData: additionalData, domain: domain)
@@ -291,12 +293,12 @@ final class CryptoManager {
     ///   - plaintext: Data to encrypt
     ///   - recipientPublicKey: Recipient's X25519 public key
     ///   - additionalData: Optional additional authenticated data
-    ///   - domain: Crypto domain for HKDF key derivation (default: .cek)
+    ///   - domain: Crypto domain for HKDF key derivation (default: .utk for vault encryption)
     /// - Returns: Encrypted payload containing ephemeral public key and ciphertext
     static func encrypt(plaintext: Data,
                         recipientPublicKey: Curve25519.KeyAgreement.PublicKey,
                         additionalData: Data? = nil,
-                        domain: CryptoDomain = .cek) throws -> EncryptedPayload {
+                        domain: CryptoDomain = .utk) throws -> EncryptedPayload {
         // Generate ephemeral key pair
         let ephemeralPrivate = Curve25519.KeyAgreement.PrivateKey()
         let ephemeralPublic = ephemeralPrivate.publicKey
@@ -335,7 +337,7 @@ final class CryptoManager {
     /// Decrypt data using X25519 key exchange + XChaCha20-Poly1305
     static func decrypt(payload: EncryptedPayload,
                         privateKey: Curve25519.KeyAgreement.PrivateKey,
-                        domain: CryptoDomain = .cek) throws -> Data {
+                        domain: CryptoDomain = .utk) throws -> Data {
         // Reconstruct ephemeral public key
         let ephemeralPublicKey = try Curve25519.KeyAgreement.PublicKey(
             rawRepresentation: payload.ephemeralPublicKey
