@@ -1,9 +1,31 @@
 import Foundation
 import CryptoKit
 
+#if canImport(Sodium)
+import Sodium
+#endif
+
+// MARK: - Crypto Domain for HKDF
+
+/// Domain separation for HKDF key derivation
+/// Ensures keys derived for different purposes are cryptographically independent
+enum CryptoDomain: String {
+    case utk = "vettid-utk-v1"      // For encrypting to vault (transaction keys)
+    case cek = "vettid-cek-v1"      // For credential encryption
+    case session = "vettid-session-v1"  // For session key derivation
+
+    var saltData: Data {
+        self.rawValue.data(using: .utf8)!
+    }
+}
+
 /// Manages all cryptographic operations for VettID
-/// Uses X25519 for key exchange and ChaChaPoly for authenticated encryption
+/// Uses X25519 for key exchange and XChaCha20-Poly1305 for authenticated encryption
 final class CryptoManager {
+
+    #if canImport(Sodium)
+    private static let sodium = Sodium()
+    #endif
 
     // MARK: - X25519 Key Generation
 
@@ -35,17 +57,19 @@ final class CryptoManager {
 
     // MARK: - Password Encryption (for UTK flow)
 
-    /// Encrypt a password hash using a UTK public key
+    /// Encrypt a password hash using a UTK public key with XChaCha20-Poly1305
     /// This is used during enrollment and authentication to securely send the password hash to the server
     ///
     /// Flow:
     /// 1. Generate ephemeral X25519 keypair
     /// 2. Compute shared secret with UTK public key
-    /// 3. Derive encryption key using HKDF
-    /// 4. Encrypt password hash with ChaCha20-Poly1305
+    /// 3. Derive encryption key using HKDF with domain separation
+    /// 4. Encrypt password hash with XChaCha20-Poly1305 (24-byte nonce)
+    ///
+    /// Output format: ephemeral_pubkey (32) || nonce (24) || ciphertext
     ///
     /// - Parameters:
-    ///   - passwordHash: The Argon2id hash of the password
+    ///   - passwordHash: The Argon2id hash of the password (or PHC string)
     ///   - utkPublicKeyBase64: The UTK public key (base64 encoded)
     /// - Returns: Encrypted password payload ready for API transmission
     static func encryptPasswordHash(
@@ -66,25 +90,19 @@ final class CryptoManager {
         // Derive shared secret
         let sharedSecret = try ephemeralPrivate.sharedSecretFromKeyAgreement(with: utkPublicKey)
 
-        // Derive symmetric key using HKDF with the specified info string
-        // Salt must match across all platforms (iOS, Android, Lambda) for interoperability
-        let hkdfSalt = "VettID-HKDF-Salt-v1".data(using: .utf8)!
+        // Derive symmetric key using HKDF with domain separation
         let symmetricKey = sharedSecret.hkdfDerivedSymmetricKey(
             using: SHA256.self,
-            salt: hkdfSalt,
-            sharedInfo: "transaction-encryption-v1".data(using: .utf8)!,
+            salt: CryptoDomain.utk.saltData,
+            sharedInfo: Data(),  // Empty info, domain is in salt
             outputByteCount: 32
         )
 
-        // Generate random 96-bit nonce
-        let nonceData = randomBytes(count: 12)
-        let nonce = try ChaChaPoly.Nonce(data: nonceData)
-
-        // Encrypt with ChaCha20-Poly1305
-        let sealedBox = try ChaChaPoly.seal(passwordHash, using: symmetricKey, nonce: nonce)
-
-        // Combine ciphertext and tag for transmission
-        let encryptedData = sealedBox.ciphertext + sealedBox.tag
+        // Encrypt with XChaCha20-Poly1305 (generates 24-byte nonce internally)
+        let (encryptedData, nonceData) = try encryptXChaCha20Poly1305(
+            plaintext: passwordHash,
+            key: symmetricKey
+        )
 
         return EncryptedPasswordPayload(
             encryptedPasswordHash: encryptedData.base64EncodedString(),
@@ -93,7 +111,161 @@ final class CryptoManager {
         )
     }
 
-    // MARK: - Hybrid Encryption (X25519 + ChaChaPoly)
+    // MARK: - XChaCha20-Poly1305
+
+    /// Encrypt data using XChaCha20-Poly1305 (24-byte nonce)
+    /// Returns both the ciphertext and the nonce used
+    /// Falls back to ChaCha20-Poly1305 with derived subkey when Sodium unavailable
+    static func encryptXChaCha20Poly1305(
+        plaintext: Data,
+        key: SymmetricKey
+    ) throws -> (ciphertext: Data, nonce: Data) {
+        #if canImport(Sodium)
+        // Use libsodium's XChaCha20-Poly1305 - it generates the nonce
+        let keyData = key.withUnsafeBytes { Data($0) }
+        // Use the tuple-returning overload explicitly to avoid ambiguity
+        guard let result: (authenticatedCipherText: [UInt8], nonce: [UInt8]) = sodium.aead.xchacha20poly1305ietf.encrypt(
+            message: Array(plaintext),
+            secretKey: Array(keyData),
+            additionalData: nil
+        ) else {
+            throw CryptoError.encryptionFailed
+        }
+        return (Data(result.authenticatedCipherText), Data(result.nonce))
+        #else
+        // Fallback: Generate 24-byte nonce, use HChaCha20 to derive subkey, then ChaCha20-Poly1305
+        let nonce = randomBytes(count: 24)
+        let keyData = key.withUnsafeBytes { Data($0) }
+        let subkey = try hChaCha20(key: keyData, nonce: Data(nonce.prefix(16)))
+        let subNonce = Data(repeating: 0, count: 4) + nonce.suffix(8)  // 4 zeros + last 8 bytes
+
+        let symmetricSubkey = SymmetricKey(data: subkey)
+        let chachaNonce = try ChaChaPoly.Nonce(data: subNonce)
+        let sealedBox = try ChaChaPoly.seal(plaintext, using: symmetricSubkey, nonce: chachaNonce)
+
+        return (sealedBox.ciphertext + sealedBox.tag, nonce)
+        #endif
+    }
+
+    /// Decrypt data using XChaCha20-Poly1305 (24-byte nonce)
+    static func decryptXChaCha20Poly1305(
+        ciphertext: Data,
+        key: SymmetricKey,
+        nonce: Data
+    ) throws -> Data {
+        guard nonce.count == 24 else {
+            throw CryptoError.invalidNonce
+        }
+
+        #if canImport(Sodium)
+        let keyData = key.withUnsafeBytes { Data($0) }
+        guard let plaintext = sodium.aead.xchacha20poly1305ietf.decrypt(
+            authenticatedCipherText: Array(ciphertext),
+            secretKey: Array(keyData),
+            nonce: Array(nonce),
+            additionalData: nil
+        ) else {
+            throw CryptoError.decryptionFailed
+        }
+        return Data(plaintext)
+        #else
+        // Fallback: HChaCha20 subkey derivation
+        let keyData = key.withUnsafeBytes { Data($0) }
+        let subkey = try hChaCha20(key: keyData, nonce: Data(nonce.prefix(16)))
+        let subNonce = Data(repeating: 0, count: 4) + nonce.suffix(8)
+
+        let symmetricSubkey = SymmetricKey(data: subkey)
+        let chachaNonce = try ChaChaPoly.Nonce(data: subNonce)
+
+        // Separate ciphertext and tag (last 16 bytes)
+        guard ciphertext.count >= 16 else {
+            throw CryptoError.decryptionFailed
+        }
+        let tagStart = ciphertext.count - 16
+        let ciphertextOnly = ciphertext.prefix(tagStart)
+        let tag = ciphertext.suffix(16)
+
+        let sealedBox = try ChaChaPoly.SealedBox(nonce: chachaNonce, ciphertext: ciphertextOnly, tag: tag)
+        return try ChaChaPoly.open(sealedBox, using: symmetricSubkey)
+        #endif
+    }
+
+    #if !canImport(Sodium)
+    /// HChaCha20 core function for XChaCha20 construction
+    /// Derives a 32-byte subkey from a 32-byte key and 16-byte nonce
+    private static func hChaCha20(key: Data, nonce: Data) throws -> Data {
+        guard key.count == 32, nonce.count == 16 else {
+            throw CryptoError.encryptionFailed
+        }
+
+        // HChaCha20 constants (same as ChaCha20)
+        var state: [UInt32] = [
+            0x61707865, 0x3320646e, 0x79622d32, 0x6b206574  // "expand 32-byte k"
+        ]
+
+        // Add key (words 4-11)
+        for i in 0..<8 {
+            let offset = i * 4
+            state.append(UInt32(key[offset]) | UInt32(key[offset+1]) << 8 |
+                        UInt32(key[offset+2]) << 16 | UInt32(key[offset+3]) << 24)
+        }
+
+        // Add nonce (words 12-15)
+        for i in 0..<4 {
+            let offset = i * 4
+            state.append(UInt32(nonce[offset]) | UInt32(nonce[offset+1]) << 8 |
+                        UInt32(nonce[offset+2]) << 16 | UInt32(nonce[offset+3]) << 24)
+        }
+
+        // 20 rounds (10 double rounds)
+        for _ in 0..<10 {
+            // Column rounds
+            quarterRound(&state, 0, 4, 8, 12)
+            quarterRound(&state, 1, 5, 9, 13)
+            quarterRound(&state, 2, 6, 10, 14)
+            quarterRound(&state, 3, 7, 11, 15)
+            // Diagonal rounds
+            quarterRound(&state, 0, 5, 10, 15)
+            quarterRound(&state, 1, 6, 11, 12)
+            quarterRound(&state, 2, 7, 8, 13)
+            quarterRound(&state, 3, 4, 9, 14)
+        }
+
+        // Output: words 0-3 and 12-15 form the 32-byte subkey
+        var subkey = Data(count: 32)
+        for i in 0..<4 {
+            let word = state[i]
+            subkey[i*4] = UInt8(word & 0xFF)
+            subkey[i*4+1] = UInt8((word >> 8) & 0xFF)
+            subkey[i*4+2] = UInt8((word >> 16) & 0xFF)
+            subkey[i*4+3] = UInt8((word >> 24) & 0xFF)
+        }
+        for i in 0..<4 {
+            let word = state[12 + i]
+            subkey[16 + i*4] = UInt8(word & 0xFF)
+            subkey[16 + i*4+1] = UInt8((word >> 8) & 0xFF)
+            subkey[16 + i*4+2] = UInt8((word >> 16) & 0xFF)
+            subkey[16 + i*4+3] = UInt8((word >> 24) & 0xFF)
+        }
+
+        return subkey
+    }
+
+    /// ChaCha20 quarter round
+    private static func quarterRound(_ state: inout [UInt32], _ a: Int, _ b: Int, _ c: Int, _ d: Int) {
+        state[a] = state[a] &+ state[b]; state[d] ^= state[a]; state[d] = rotl(state[d], 16)
+        state[c] = state[c] &+ state[d]; state[b] ^= state[c]; state[b] = rotl(state[b], 12)
+        state[a] = state[a] &+ state[b]; state[d] ^= state[a]; state[d] = rotl(state[d], 8)
+        state[c] = state[c] &+ state[d]; state[b] ^= state[c]; state[b] = rotl(state[b], 7)
+    }
+
+    /// Left rotate
+    private static func rotl(_ x: UInt32, _ n: Int) -> UInt32 {
+        return (x << n) | (x >> (32 - n))
+    }
+    #endif
+
+    // MARK: - Hybrid Encryption (X25519 + XChaCha20-Poly1305)
 
     /// Encrypt data to a raw X25519 public key (convenience method)
     /// Used for encrypting PIN to enclave's attestation-bound public key
@@ -101,25 +273,30 @@ final class CryptoManager {
     ///   - plaintext: Data to encrypt
     ///   - publicKey: Raw X25519 public key bytes (32 bytes)
     ///   - additionalData: Optional additional authenticated data (e.g., nonce for replay protection)
+    ///   - domain: Crypto domain for HKDF key derivation (default: .cek)
     /// - Returns: Encrypted payload containing ephemeral public key and ciphertext
     static func encryptToPublicKey(
         plaintext: Data,
         publicKey: Data,
-        additionalData: Data? = nil
+        additionalData: Data? = nil,
+        domain: CryptoDomain = .cek
     ) throws -> EncryptedPayload {
         let recipientPublicKey = try Curve25519.KeyAgreement.PublicKey(rawRepresentation: publicKey)
-        return try encrypt(plaintext: plaintext, recipientPublicKey: recipientPublicKey, additionalData: additionalData)
+        return try encrypt(plaintext: plaintext, recipientPublicKey: recipientPublicKey, additionalData: additionalData, domain: domain)
     }
 
-    /// Encrypt data using X25519 key exchange + ChaCha20-Poly1305
+    /// Encrypt data using X25519 key exchange + XChaCha20-Poly1305 (24-byte nonce)
+    /// Output format: ephemeral_pubkey (32) || nonce (24) || ciphertext+tag
     /// - Parameters:
     ///   - plaintext: Data to encrypt
     ///   - recipientPublicKey: Recipient's X25519 public key
     ///   - additionalData: Optional additional authenticated data
+    ///   - domain: Crypto domain for HKDF key derivation (default: .cek)
     /// - Returns: Encrypted payload containing ephemeral public key and ciphertext
     static func encrypt(plaintext: Data,
                         recipientPublicKey: Curve25519.KeyAgreement.PublicKey,
-                        additionalData: Data? = nil) throws -> EncryptedPayload {
+                        additionalData: Data? = nil,
+                        domain: CryptoDomain = .cek) throws -> EncryptedPayload {
         // Generate ephemeral key pair
         let ephemeralPrivate = Curve25519.KeyAgreement.PrivateKey()
         let ephemeralPublic = ephemeralPrivate.publicKey
@@ -127,34 +304,38 @@ final class CryptoManager {
         // Derive shared secret
         let sharedSecret = try ephemeralPrivate.sharedSecretFromKeyAgreement(with: recipientPublicKey)
 
-        // Derive symmetric key using HKDF
-        // Salt must match across all platforms (iOS, Android, Lambda) for interoperability
-        let hkdfSalt = "VettID-HKDF-Salt-v1".data(using: .utf8)!
+        // Derive symmetric key using HKDF with domain separation
         let symmetricKey = sharedSecret.hkdfDerivedSymmetricKey(
             using: SHA256.self,
-            salt: hkdfSalt,
-            sharedInfo: "credential-encryption-v1".data(using: .utf8)!,
+            salt: domain.saltData,
+            sharedInfo: Data(),  // Empty info, domain is in salt
             outputByteCount: 32
         )
 
-        // Generate explicit random 96-bit nonce for auditability
-        let nonceData = randomBytes(count: 12)
-        let nonce = try ChaChaPoly.Nonce(data: nonceData)
+        // Encrypt with XChaCha20-Poly1305 (generates 24-byte nonce internally)
+        let (ciphertextWithTag, nonceData) = try encryptXChaCha20Poly1305(
+            plaintext: plaintext,
+            key: symmetricKey
+        )
 
-        // Encrypt with ChaCha20-Poly1305
-        let sealedBox = try ChaChaPoly.seal(plaintext, using: symmetricKey, nonce: nonce)
+        // Separate ciphertext and tag for the payload struct
+        // XChaCha20-Poly1305 tag is always 16 bytes
+        let tagStart = ciphertextWithTag.count - 16
+        let ciphertext = ciphertextWithTag.prefix(tagStart)
+        let tag = ciphertextWithTag.suffix(16)
 
         return EncryptedPayload(
             ephemeralPublicKey: ephemeralPublic.rawRepresentation,
             nonce: nonceData,
-            ciphertext: sealedBox.ciphertext,
-            tag: sealedBox.tag
+            ciphertext: Data(ciphertext),
+            tag: Data(tag)
         )
     }
 
-    /// Decrypt data using X25519 key exchange + ChaCha20-Poly1305
+    /// Decrypt data using X25519 key exchange + XChaCha20-Poly1305
     static func decrypt(payload: EncryptedPayload,
-                        privateKey: Curve25519.KeyAgreement.PrivateKey) throws -> Data {
+                        privateKey: Curve25519.KeyAgreement.PrivateKey,
+                        domain: CryptoDomain = .cek) throws -> Data {
         // Reconstruct ephemeral public key
         let ephemeralPublicKey = try Curve25519.KeyAgreement.PublicKey(
             rawRepresentation: payload.ephemeralPublicKey
@@ -163,26 +344,23 @@ final class CryptoManager {
         // Derive shared secret
         let sharedSecret = try privateKey.sharedSecretFromKeyAgreement(with: ephemeralPublicKey)
 
-        // Derive symmetric key
-        // Salt must match across all platforms (iOS, Android, Lambda) for interoperability
-        let hkdfSalt = "VettID-HKDF-Salt-v1".data(using: .utf8)!
+        // Derive symmetric key with domain separation
         let symmetricKey = sharedSecret.hkdfDerivedSymmetricKey(
             using: SHA256.self,
-            salt: hkdfSalt,
-            sharedInfo: "credential-encryption-v1".data(using: .utf8)!,
+            salt: domain.saltData,
+            sharedInfo: Data(),
             outputByteCount: 32
         )
 
-        // Reconstruct sealed box
-        let nonce = try ChaChaPoly.Nonce(data: payload.nonce)
-        let sealedBox = try ChaChaPoly.SealedBox(
-            nonce: nonce,
-            ciphertext: payload.ciphertext,
-            tag: payload.tag
-        )
+        // Combine ciphertext and tag for decryption
+        let ciphertextWithTag = payload.ciphertext + payload.tag
 
-        // Decrypt
-        return try ChaChaPoly.open(sealedBox, using: symmetricKey)
+        // Decrypt with XChaCha20-Poly1305
+        return try decryptXChaCha20Poly1305(
+            ciphertext: ciphertextWithTag,
+            key: symmetricKey,
+            nonce: payload.nonce
+        )
     }
 
     // MARK: - Voting Key Derivation
@@ -315,12 +493,12 @@ final class CryptoManager {
 struct EncryptedPasswordPayload {
     let encryptedPasswordHash: String  // Base64: ciphertext + tag
     let ephemeralPublicKey: String     // Base64: 32-byte X25519 public key
-    let nonce: String                  // Base64: 12-byte nonce
+    let nonce: String                  // Base64: 24-byte nonce (XChaCha20-Poly1305)
 }
 
 struct EncryptedPayload: Codable {
     let ephemeralPublicKey: Data  // 32 bytes
-    let nonce: Data               // 12 bytes
+    let nonce: Data               // 24 bytes (XChaCha20-Poly1305)
     let ciphertext: Data
     let tag: Data                 // 16 bytes
 
@@ -334,6 +512,7 @@ struct EncryptedPayload: Codable {
 
 enum CryptoError: Error, LocalizedError {
     case invalidPublicKey
+    case invalidNonce
     case encryptionFailed
     case decryptionFailed
     case hashingFailed
@@ -342,6 +521,8 @@ enum CryptoError: Error, LocalizedError {
         switch self {
         case .invalidPublicKey:
             return "Invalid public key format"
+        case .invalidNonce:
+            return "Invalid nonce size"
         case .encryptionFailed:
             return "Encryption failed"
         case .decryptionFailed:

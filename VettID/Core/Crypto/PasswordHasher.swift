@@ -21,6 +21,12 @@ final class PasswordHasher {
     private static let hashLength = 32
     private static let saltLength = 16
 
+    // Argon2id parameters matching backend/enclave expectations
+    static let argon2Memory: Int = 65536     // 64 MB in KB
+    static let argon2Time: Int = 3           // iterations
+    static let argon2Parallelism: Int = 4    // parallelism lanes
+    static let argon2Version: Int = 19       // 0x13
+
     #if canImport(Sodium)
     private static let sodium = Sodium()
     private static let opsLimit = sodium.pwHash.OpsLimitModerate  // ~3 iterations equivalent
@@ -121,6 +127,94 @@ final class PasswordHasher {
         let hashB64 = result.hash.base64EncodedString()
         return "$pbkdf2-sha256$i=100000$\(saltB64)$\(hashB64)"
         #endif
+    }
+
+    /// Create a hash in exact PHC string format for credential.create message
+    /// Format: $argon2id$v=19$m=65536,t=3,p=4$<salt_base64_nopad>$<hash_base64_nopad>
+    ///
+    /// This format is used when sending to the enclave for credential creation.
+    /// The enclave will verify the hash parameters match its expectations.
+    ///
+    /// - Parameters:
+    ///   - password: The password to hash
+    ///   - salt: Optional salt (generated if not provided)
+    /// - Returns: PHCHashResult containing the PHC string and separate components
+    static func hashToPHC(password: String, salt: Data? = nil) throws -> PHCHashResult {
+        let result = try hash(password: password, salt: salt)
+
+        // PHC format uses base64 without padding
+        let saltB64 = result.salt.base64EncodedString().trimmingCharacters(in: CharacterSet(charactersIn: "="))
+        let hashB64 = result.hash.base64EncodedString().trimmingCharacters(in: CharacterSet(charactersIn: "="))
+
+        let phcString = "$argon2id$v=\(argon2Version)$m=\(argon2Memory),t=\(argon2Time),p=\(argon2Parallelism)$\(saltB64)$\(hashB64)"
+
+        return PHCHashResult(
+            phcString: phcString,
+            hash: result.hash,
+            salt: result.salt,
+            memory: argon2Memory,
+            time: argon2Time,
+            parallelism: argon2Parallelism
+        )
+    }
+
+    /// Parse a PHC string to extract components
+    /// Returns nil if the string is not a valid Argon2id PHC format
+    static func parsePHC(_ phcString: String) -> PHCHashResult? {
+        // Format: $argon2id$v=19$m=65536,t=3,p=4$<salt>$<hash>
+        let components = phcString.split(separator: "$")
+        guard components.count == 5,
+              components[0] == "argon2id",
+              components[1].hasPrefix("v=") else {
+            return nil
+        }
+
+        // Parse version
+        guard let _ = Int(components[1].dropFirst(2)) else {
+            return nil
+        }
+
+        // Parse parameters (m=X,t=Y,p=Z)
+        let params = components[2].split(separator: ",")
+        var memory = 0, time = 0, parallelism = 0
+        for param in params {
+            if param.hasPrefix("m="), let val = Int(param.dropFirst(2)) {
+                memory = val
+            } else if param.hasPrefix("t="), let val = Int(param.dropFirst(2)) {
+                time = val
+            } else if param.hasPrefix("p="), let val = Int(param.dropFirst(2)) {
+                parallelism = val
+            }
+        }
+
+        // Decode salt and hash (add padding if needed for base64)
+        let saltB64 = String(components[3])
+        let hashB64 = String(components[4])
+
+        guard let salt = base64DecodeWithoutPadding(saltB64),
+              let hash = base64DecodeWithoutPadding(hashB64) else {
+            return nil
+        }
+
+        return PHCHashResult(
+            phcString: phcString,
+            hash: hash,
+            salt: salt,
+            memory: memory,
+            time: time,
+            parallelism: parallelism
+        )
+    }
+
+    /// Decode base64 string that may be missing padding
+    private static func base64DecodeWithoutPadding(_ string: String) -> Data? {
+        var base64 = string
+        // Add padding if needed
+        let remainder = base64.count % 4
+        if remainder > 0 {
+            base64 += String(repeating: "=", count: 4 - remainder)
+        }
+        return Data(base64Encoded: base64)
     }
 
     /// Verify a password against a storable hash string
@@ -241,6 +335,32 @@ struct PasswordHashResult {
     /// Base64 encoded salt for API transmission
     var saltBase64: String {
         salt.base64EncodedString()
+    }
+}
+
+/// Result of hashing a password in PHC string format
+struct PHCHashResult {
+    /// Complete PHC string: $argon2id$v=19$m=65536,t=3,p=4$<salt>$<hash>
+    let phcString: String
+
+    /// Raw 32-byte hash
+    let hash: Data
+
+    /// 16-byte salt
+    let salt: Data
+
+    /// Memory parameter in KB (65536 = 64MB)
+    let memory: Int
+
+    /// Time/iterations parameter
+    let time: Int
+
+    /// Parallelism lanes
+    let parallelism: Int
+
+    /// Convert to Data for encryption
+    var phcData: Data {
+        phcString.data(using: .utf8)!
     }
 }
 

@@ -340,6 +340,7 @@ struct StoredCredential: Codable {
     let createdAt: Date
     var lastUsedAt: Date
     var vaultStatus: String?
+    var localData: VaultLocalData?    // Password salt/params for offline re-hashing
 
     /// Get an unused transaction key
     func getUnusedKey() -> StoredUTK? {
@@ -374,7 +375,8 @@ struct StoredCredential: Codable {
             transactionKeys: updatedKeys,
             createdAt: createdAt,
             lastUsedAt: Date(),
-            vaultStatus: vaultStatus
+            vaultStatus: vaultStatus,
+            localData: localData
         )
     }
 
@@ -413,7 +415,24 @@ struct StoredCredential: Codable {
             transactionKeys: updatedKeys,
             createdAt: createdAt,
             lastUsedAt: Date(),
-            vaultStatus: vaultStatus
+            vaultStatus: vaultStatus,
+            localData: localData
+        )
+    }
+
+    /// Create a credential with local data attached
+    func withLocalData(_ localData: VaultLocalData) -> StoredCredential {
+        return StoredCredential(
+            userGuid: userGuid,
+            sealedCredential: sealedCredential,
+            enclavePublicKey: enclavePublicKey,
+            backupKey: backupKey,
+            ledgerAuthToken: ledgerAuthToken,
+            transactionKeys: transactionKeys,
+            createdAt: createdAt,
+            lastUsedAt: lastUsedAt,
+            vaultStatus: vaultStatus,
+            localData: localData
         )
     }
 }
@@ -443,6 +462,48 @@ struct StoredUTK: Codable {
     /// Decode the public key bytes
     func publicKeyData() -> Data? {
         return Data(base64Encoded: publicKey)
+    }
+}
+
+/// Argon2id parameters for password hashing
+/// Stored locally to allow re-deriving the same key without server round-trip
+struct Argon2Params: Codable, Equatable {
+    let memory: Int       // Memory cost in KB (e.g., 65536 = 64MB)
+    let time: Int         // Iterations (e.g., 3)
+    let parallelism: Int  // Parallel lanes (e.g., 4)
+
+    /// Default OWASP-recommended parameters
+    static let `default` = Argon2Params(memory: 65536, time: 3, parallelism: 4)
+
+    /// Check if these params match the current defaults
+    var isDefault: Bool {
+        self == Argon2Params.default
+    }
+}
+
+/// Local data extracted from credential creation
+/// Stored in Keychain alongside the credential for offline password verification
+struct VaultLocalData: Codable {
+    /// The user's password salt (extracted from PHC string during credential creation)
+    let passwordSalt: Data
+
+    /// Argon2id parameters used during credential creation
+    let argon2Params: Argon2Params
+
+    /// Timestamp when these params were stored
+    let createdAt: Date
+
+    /// Create from a PHC hash result
+    static func from(phcResult: PHCHashResult) -> VaultLocalData {
+        VaultLocalData(
+            passwordSalt: phcResult.salt,
+            argon2Params: Argon2Params(
+                memory: phcResult.memory,
+                time: phcResult.time,
+                parallelism: phcResult.parallelism
+            ),
+            createdAt: Date()
+        )
     }
 }
 

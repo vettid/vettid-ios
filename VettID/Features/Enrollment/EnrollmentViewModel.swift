@@ -557,16 +557,24 @@ final class EnrollmentViewModel: ObservableObject {
             #endif
             state = .creatingCredential
 
-            let credentialResponse = try await handler.submitPassword(password, utkPublicKey: utk.publicKey)
+            // Submit password with PHC format and get back both response and hash result
+            let (credentialResponse, phcResult) = try await handler.submitPassword(
+                password,
+                utkId: utk.id,
+                utkPublicKey: utk.publicKey
+            )
+
+            // Create local data from PHC result for offline password re-hashing
+            let localData = VaultLocalData.from(phcResult: phcResult)
 
             // Store new UTKs if returned
             if let newUTKs = credentialResponse.utks {
                 vaultUTKs = newUTKs
             }
 
-            // Store the encrypted credential
+            // Store the encrypted credential with local data
             if let encryptedCred = credentialResponse.encryptedCredential {
-                try storeNatsCredential(encryptedCredential: encryptedCred)
+                try storeNatsCredential(encryptedCredential: encryptedCred, localData: localData)
             }
 
             // Step 9: Verify enrollment
@@ -595,7 +603,10 @@ final class EnrollmentViewModel: ObservableObject {
     }
 
     /// Store credential received via NATS
-    private func storeNatsCredential(encryptedCredential: String) throws {
+    /// - Parameters:
+    ///   - encryptedCredential: The sealed credential blob from the vault
+    ///   - localData: Password salt and Argon2id params for offline re-hashing
+    private func storeNatsCredential(encryptedCredential: String, localData: VaultLocalData? = nil) throws {
         // Build stored credential from NATS response
         let storedKeys = vaultUTKs.map { utk in
             StoredUTK(
@@ -619,7 +630,8 @@ final class EnrollmentViewModel: ObservableObject {
             transactionKeys: storedKeys,
             createdAt: Date(),
             lastUsedAt: Date(),
-            vaultStatus: "running"
+            vaultStatus: "running",
+            localData: localData
         )
 
         try credentialStore.store(credential: credential)

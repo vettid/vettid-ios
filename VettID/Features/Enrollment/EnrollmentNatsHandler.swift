@@ -309,32 +309,37 @@ actor EnrollmentNatsHandler {
 
     /// Submit password to vault-manager for credential creation
     ///
+    /// Uses PHC string format ($argon2id$v=19$m=65536,t=3,p=4$<salt>$<hash>)
+    /// for interoperability with enclave. The PHC string is encrypted using
+    /// XChaCha20-Poly1305 (24-byte nonce) with domain-separated HKDF key derivation.
+    ///
     /// - Parameters:
     ///   - password: User's credential password
+    ///   - utkId: UTK ID being used for this operation
     ///   - utkPublicKey: UTK public key for encrypting password hash
-    /// - Returns: Encrypted credential and new UTKs
-    func submitPassword(_ password: String, utkPublicKey: String) async throws -> CredentialCreationResponse {
+    /// - Returns: Tuple of (credential response, PHC result for local storage)
+    func submitPassword(_ password: String, utkId: String, utkPublicKey: String) async throws -> (CredentialCreationResponse, PHCHashResult) {
         guard let ownerSpace = ownerSpace else {
             throw EnrollmentNatsError.notConnected
         }
 
-        // Hash password with Argon2id
-        let hashResult = try PasswordHasher.hash(password: password)
+        // Hash password with Argon2id in PHC format
+        let phcResult = try PasswordHasher.hashToPHC(password: password)
 
-        // Encrypt password hash with UTK
+        // Encrypt PHC string (not just raw hash) with UTK using XChaCha20-Poly1305
         let encryptedPayload = try CryptoManager.encryptPasswordHash(
-            passwordHash: hashResult.hash,
+            passwordHash: phcResult.phcData,  // PHC string as Data
             utkPublicKeyBase64: utkPublicKey
         )
 
-        // Build request
+        // Build request with new format
         let requestId = UUID().uuidString
         let request = NatsCredentialCreateRequest(
             id: requestId,
-            encryptedPasswordHash: encryptedPayload.encryptedPasswordHash,
+            utkId: utkId,
+            encryptedPayload: encryptedPayload.encryptedPasswordHash,
             ephemeralPublicKey: encryptedPayload.ephemeralPublicKey,
             nonce: encryptedPayload.nonce,
-            salt: hashResult.salt.base64EncodedString(),
             timestamp: ISO8601DateFormatter().string(from: Date())
         )
 
@@ -387,7 +392,7 @@ actor EnrollmentNatsHandler {
         print("[EnrollmentNats] Credential created successfully")
         #endif
 
-        return response
+        return (response, phcResult)
     }
 
     // MARK: - Phase 7: Verify Enrollment
@@ -528,18 +533,18 @@ struct VaultReadyResponse: Decodable {
 
 struct NatsCredentialCreateRequest: Encodable {
     let id: String
-    let encryptedPasswordHash: String  // Base64
-    let ephemeralPublicKey: String  // Base64
-    let nonce: String  // Base64
-    let salt: String  // Base64
+    let utkId: String                  // UTK ID used for encryption
+    let encryptedPayload: String       // Base64: XChaCha20-Poly1305 encrypted PHC string
+    let ephemeralPublicKey: String     // Base64: 32-byte X25519 ephemeral public key
+    let nonce: String                  // Base64: 24-byte XChaCha20 nonce
     let timestamp: String
 
     enum CodingKeys: String, CodingKey {
         case id
-        case encryptedPasswordHash = "encrypted_password_hash"
+        case utkId = "utk_id"
+        case encryptedPayload = "encrypted_payload"
         case ephemeralPublicKey = "ephemeral_public_key"
         case nonce
-        case salt
         case timestamp
     }
 }
