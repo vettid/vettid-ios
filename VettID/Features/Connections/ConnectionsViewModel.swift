@@ -22,6 +22,8 @@ final class ConnectionsViewModel: ObservableObject {
     // MARK: - Published State
 
     @Published private(set) var state: ConnectionsListState = .loading
+    @Published private(set) var serviceConnections: [ServiceConnectionRecord] = []
+    @Published private(set) var isLoadingServices = false
     @Published var searchQuery = ""
     @Published var errorMessage: String?
 
@@ -29,6 +31,8 @@ final class ConnectionsViewModel: ObservableObject {
 
     private let apiClient: APIClient
     private let authTokenProvider: @Sendable () -> String?
+    private let serviceConnectionHandler: ServiceConnectionHandler?
+    private let serviceConnectionStore: ServiceConnectionStore
 
     // MARK: - Private State
 
@@ -39,10 +43,30 @@ final class ConnectionsViewModel: ObservableObject {
 
     init(
         apiClient: APIClient = APIClient(),
-        authTokenProvider: @escaping @Sendable () -> String?
+        authTokenProvider: @escaping @Sendable () -> String?,
+        serviceConnectionHandler: ServiceConnectionHandler? = nil,
+        serviceConnectionStore: ServiceConnectionStore = ServiceConnectionStore()
     ) {
         self.apiClient = apiClient
         self.authTokenProvider = authTokenProvider
+        self.serviceConnectionHandler = serviceConnectionHandler
+        self.serviceConnectionStore = serviceConnectionStore
+    }
+
+    // MARK: - Service Connections
+
+    /// Filtered service connections based on search query
+    var filteredServiceConnections: [ServiceConnectionRecord] {
+        guard !searchQuery.isEmpty else { return serviceConnections }
+        return serviceConnections.filter { connection in
+            connection.serviceProfile.serviceName.localizedCaseInsensitiveContains(searchQuery) ||
+            connection.serviceProfile.organization.name.localizedCaseInsensitiveContains(searchQuery)
+        }
+    }
+
+    /// Count of pending contract updates
+    var pendingServiceUpdatesCount: Int {
+        serviceConnections.filter { $0.pendingContractVersion != nil }.count
     }
 
     // MARK: - Computed Properties
@@ -66,25 +90,92 @@ final class ConnectionsViewModel: ObservableObject {
 
         state = .loading
 
+        // Load peer connections and service connections in parallel
+        async let peerConnectionsTask: () = loadPeerConnections(authToken: authToken)
+        async let serviceConnectionsTask: () = loadServiceConnections()
+
+        _ = await (peerConnectionsTask, serviceConnectionsTask)
+    }
+
+    private func loadPeerConnections(authToken: String) async {
         do {
             let connections = try await apiClient.listConnections(authToken: authToken)
             allConnections = connections.sorted {
                 ($0.lastMessageAt ?? $0.createdAt) > ($1.lastMessageAt ?? $1.createdAt)
             }
 
-            if allConnections.isEmpty {
+            if allConnections.isEmpty && serviceConnections.isEmpty {
                 state = .empty
             } else {
                 state = .loaded(filteredConnections)
             }
         } catch {
-            state = .error(error.localizedDescription)
+            if serviceConnections.isEmpty {
+                state = .error(error.localizedDescription)
+            }
+        }
+    }
+
+    private func loadServiceConnections() async {
+        isLoadingServices = true
+
+        // Try local cache first
+        if let cached = try? serviceConnectionStore.listConnections() {
+            serviceConnections = cached.filter { $0.status == .active && !$0.isArchived }
+        }
+
+        // Load from network if handler available
+        if let handler = serviceConnectionHandler {
+            do {
+                let connections = try await handler.listConnections()
+                serviceConnections = connections.filter { $0.status == .active && !$0.isArchived }
+                // Update cache
+                for connection in connections {
+                    try? serviceConnectionStore.update(connection: connection)
+                }
+            } catch {
+                // Keep cached data on network error
+            }
+        }
+
+        isLoadingServices = false
+
+        // Update state if we have data now
+        if !allConnections.isEmpty || !serviceConnections.isEmpty {
+            state = .loaded(filteredConnections)
         }
     }
 
     /// Refresh connections
     func refresh() async {
         await loadConnections()
+    }
+
+    /// Toggle favorite status for a service connection
+    func toggleServiceFavorite(_ connectionId: String) async {
+        guard var connection = serviceConnections.first(where: { $0.id == connectionId }) else { return }
+        connection.isFavorite.toggle()
+
+        // Update local state immediately
+        if let index = serviceConnections.firstIndex(where: { $0.id == connectionId }) {
+            serviceConnections[index] = connection
+        }
+
+        if let handler = serviceConnectionHandler {
+            do {
+                _ = try await handler.updateConnection(
+                    connectionId: connectionId,
+                    isFavorite: connection.isFavorite
+                )
+                try? serviceConnectionStore.update(connection: connection)
+            } catch {
+                // Revert on error
+                connection.isFavorite.toggle()
+                if let index = serviceConnections.firstIndex(where: { $0.id == connectionId }) {
+                    serviceConnections[index] = connection
+                }
+            }
+        }
     }
 
     // MARK: - Last Message

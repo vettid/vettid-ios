@@ -3,14 +3,23 @@ import SwiftUI
 /// Main connections list view
 struct ConnectionsListView: View {
     let authTokenProvider: @Sendable () -> String?
+    let serviceConnectionHandler: ServiceConnectionHandler?
 
     @StateObject private var viewModel: ConnectionsViewModel
     @State private var showCreateInvitation = false
     @State private var showScanInvitation = false
+    @State private var showServiceDiscovery = false
 
-    init(authTokenProvider: @escaping @Sendable () -> String?) {
+    init(
+        authTokenProvider: @escaping @Sendable () -> String?,
+        serviceConnectionHandler: ServiceConnectionHandler? = nil
+    ) {
         self.authTokenProvider = authTokenProvider
-        self._viewModel = StateObject(wrappedValue: ConnectionsViewModel(authTokenProvider: authTokenProvider))
+        self.serviceConnectionHandler = serviceConnectionHandler
+        self._viewModel = StateObject(wrappedValue: ConnectionsViewModel(
+            authTokenProvider: authTokenProvider,
+            serviceConnectionHandler: serviceConnectionHandler
+        ))
     }
 
     var body: some View {
@@ -34,11 +43,19 @@ struct ConnectionsListView: View {
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
-                        Button(action: { showCreateInvitation = true }) {
-                            Label("Create Invitation", systemImage: "qrcode")
+                        Section("People") {
+                            Button(action: { showCreateInvitation = true }) {
+                                Label("Create Invitation", systemImage: "qrcode")
+                            }
+                            Button(action: { showScanInvitation = true }) {
+                                Label("Scan Invitation", systemImage: "qrcode.viewfinder")
+                            }
                         }
-                        Button(action: { showScanInvitation = true }) {
-                            Label("Scan Invitation", systemImage: "qrcode.viewfinder")
+
+                        Section("Services") {
+                            Button(action: { showServiceDiscovery = true }) {
+                                Label("Connect to Service", systemImage: "building.2")
+                            }
                         }
                     } label: {
                         Image(systemName: "plus")
@@ -55,6 +72,11 @@ struct ConnectionsListView: View {
         }
         .sheet(isPresented: $showScanInvitation) {
             ScanInvitationView(authTokenProvider: authTokenProvider)
+        }
+        .sheet(isPresented: $showServiceDiscovery) {
+            if let handler = serviceConnectionHandler {
+                ServiceDiscoveryView(serviceConnectionHandler: handler)
+            }
         }
         .task {
             await viewModel.loadConnections()
@@ -84,18 +106,74 @@ struct ConnectionsListView: View {
     // MARK: - Connections List
 
     private func connectionsList(_ connections: [Connection]) -> some View {
-        List(connections) { connection in
-            NavigationLink(destination: ConnectionDetailView(
-                connectionId: connection.id,
-                authTokenProvider: authTokenProvider
-            )) {
-                ConnectionListRow(
-                    connection: connection,
-                    lastMessage: viewModel.lastMessage(for: connection.id)
-                )
+        List {
+            // Services Section
+            if !viewModel.filteredServiceConnections.isEmpty {
+                Section {
+                    // Pending Updates Banner
+                    if viewModel.pendingServiceUpdatesCount > 0 {
+                        HStack {
+                            Image(systemName: "exclamationmark.circle.fill")
+                                .foregroundColor(.orange)
+                            Text("\(viewModel.pendingServiceUpdatesCount) contract update\(viewModel.pendingServiceUpdatesCount == 1 ? "" : "s") available")
+                                .font(.caption)
+                            Spacer()
+                        }
+                        .padding(.vertical, 4)
+                    }
+
+                    ForEach(viewModel.filteredServiceConnections) { serviceConnection in
+                        if let handler = serviceConnectionHandler {
+                            NavigationLink(destination: ServiceConnectionDetailView(
+                                connectionId: serviceConnection.id,
+                                serviceConnectionHandler: handler
+                            )) {
+                                ServiceConnectionListRow(connection: serviceConnection)
+                            }
+                            .swipeActions(edge: .leading) {
+                                Button {
+                                    Task { await viewModel.toggleServiceFavorite(serviceConnection.id) }
+                                } label: {
+                                    Label(
+                                        serviceConnection.isFavorite ? "Unfavorite" : "Favorite",
+                                        systemImage: serviceConnection.isFavorite ? "star.slash" : "star"
+                                    )
+                                }
+                                .tint(.yellow)
+                            }
+                        }
+                    }
+                } header: {
+                    HStack {
+                        Image(systemName: "building.2")
+                        Text("Services")
+                    }
+                }
+            }
+
+            // People Section
+            if !connections.isEmpty {
+                Section {
+                    ForEach(connections) { connection in
+                        NavigationLink(destination: ConnectionDetailView(
+                            connectionId: connection.id,
+                            authTokenProvider: authTokenProvider
+                        )) {
+                            ConnectionListRow(
+                                connection: connection,
+                                lastMessage: viewModel.lastMessage(for: connection.id)
+                            )
+                        }
+                    }
+                } header: {
+                    HStack {
+                        Image(systemName: "person.2")
+                        Text("People")
+                    }
+                }
             }
         }
-        .listStyle(.plain)
+        .listStyle(.insetGrouped)
         .refreshable {
             await viewModel.refresh()
         }
@@ -247,6 +325,57 @@ struct ConnectionListRow: View {
     }
 }
 
+// MARK: - Service Connection List Row
+
+struct ServiceConnectionListRow: View {
+    let connection: ServiceConnectionRecord
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Service Logo
+            ServiceLogoView(url: connection.serviceProfile.serviceLogoUrl, size: 50)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(connection.serviceProfile.serviceName)
+                        .font(.headline)
+                        .lineLimit(1)
+
+                    if connection.serviceProfile.organization.verified {
+                        VerificationBadge(type: connection.serviceProfile.organization.verificationType)
+                    }
+
+                    if connection.isFavorite {
+                        Image(systemName: "star.fill")
+                            .foregroundColor(.yellow)
+                            .font(.caption)
+                    }
+
+                    Spacer()
+
+                    if connection.pendingContractVersion != nil {
+                        Image(systemName: "exclamationmark.circle.fill")
+                            .foregroundColor(.orange)
+                            .font(.caption)
+                    }
+                }
+
+                HStack {
+                    Text(connection.serviceProfile.organization.name)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+
+                    Spacer()
+
+                    ServiceConnectionStatusBadge(status: connection.status)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
 // MARK: - Connection Status Badge
 
 struct ConnectionStatusBadge: View {
@@ -283,7 +412,10 @@ struct ConnectionStatusBadge: View {
 #if DEBUG
 struct ConnectionsListView_Previews: PreviewProvider {
     static var previews: some View {
-        ConnectionsListView(authTokenProvider: { "test-token" })
+        ConnectionsListView(
+            authTokenProvider: { "test-token" },
+            serviceConnectionHandler: nil
+        )
     }
 }
 #endif
