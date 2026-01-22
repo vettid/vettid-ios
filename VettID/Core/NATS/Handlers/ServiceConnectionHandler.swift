@@ -113,6 +113,75 @@ actor ServiceConnectionHandler {
         return try parseConnectionRecord(from: result)
     }
 
+    /// Sign a service contract by sending it to the vault
+    /// - Parameter request: Contract sign request with keypair and selected fields
+    /// - Returns: Signed contract response with credentials
+    func signContract(request: ContractSignRequest) async throws -> ContractSignResponse {
+        let requestData = try JSONEncoder().encode(request)
+        let requestJson = String(data: requestData, encoding: .utf8) ?? "{}"
+
+        let payload: [String: AnyCodableValue] = [
+            "request": AnyCodableValue(requestJson)
+        ]
+
+        let response = try await vaultResponseHandler.submitRawAndAwait(
+            type: "service.contract.sign",
+            payload: payload,
+            timeout: defaultTimeout
+        )
+
+        guard response.isSuccess else {
+            return ContractSignResponse(
+                eventId: request.eventId,
+                success: false,
+                error: response.error ?? "Signing failed",
+                result: nil
+            )
+        }
+
+        guard let result = response.result else {
+            return ContractSignResponse(
+                eventId: request.eventId,
+                success: false,
+                error: "Invalid response from vault",
+                result: nil
+            )
+        }
+
+        return try parseContractSignResponse(request.eventId, from: result)
+    }
+
+    /// Parse contract sign response from vault result
+    private func parseContractSignResponse(_ eventId: String, from result: [String: AnyCodableValue]) throws -> ContractSignResponse {
+        // Extract the JSON response from the result
+        guard let responseJson = result["response"]?.value as? String,
+              let responseData = responseJson.data(using: .utf8) else {
+            return ContractSignResponse(
+                eventId: eventId,
+                success: false,
+                error: "Invalid response format",
+                result: nil
+            )
+        }
+
+        do {
+            let signResult = try JSONDecoder().decode(SignedContractResult.self, from: responseData)
+            return ContractSignResponse(
+                eventId: eventId,
+                success: true,
+                error: nil,
+                result: signResult
+            )
+        } catch {
+            return ContractSignResponse(
+                eventId: eventId,
+                success: false,
+                error: "Failed to parse sign result: \(error.localizedDescription)",
+                result: nil
+            )
+        }
+    }
+
     /// List all service connections
     /// - Parameters:
     ///   - includeArchived: Include archived connections

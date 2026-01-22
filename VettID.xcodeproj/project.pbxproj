@@ -227,6 +227,11 @@
 		FDA99EEB7505FD7031F2B26C /* EnrollmentUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38A823EDB04F986924B6CC2D /* EnrollmentUITests.swift */; };
 		FF34ED9B850293575D36749D /* ContractReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DD1AEECC2A7E097C1F7ADA5 /* ContractReviewView.swift */; };
 		FFEC75DD850E79B5ED665914 /* VaultPreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8285A14EAFF8FCF54C60C6E2 /* VaultPreferencesView.swift */; };
+		D545C686724841B09C9B78D1 /* ServiceMessageCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A4F29E9177C40349CF780D0 /* ServiceMessageCrypto.swift */; };
+		542B48D537BF4318967F48D8 /* ContractStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03FBFA40639942CDB6AC3473 /* ContractStore.swift */; };
+		B69ECFDF39C64BFF85F29F07 /* ServiceNATSManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 816EEA59016441498134BC23 /* ServiceNATSManager.swift */; };
+		5F617885446040A4A2238FE4 /* AuthRequestSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91604169C493427F95131443 /* AuthRequestSheet.swift */; };
+		B73004F8F4574D7C80BFCE66 /* AuthzRequestSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69934F0452AF48B2B2E213FB /* AuthzRequestSheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -472,6 +477,11 @@
 		FBABDAFB67C4C9CBAF4C02FF /* WebRTCClientTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WebRTCClientTests.swift; sourceTree = "<group>"; };
 		FC77A44439FC6A4671047F51 /* VettIDUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VettIDUITests.swift; sourceTree = "<group>"; };
 		FC7BF0CF4752D4662BF250D7 /* ServiceNotificationSettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ServiceNotificationSettingsView.swift; sourceTree = "<group>"; };
+		1A4F29E9177C40349CF780D0 /* ServiceMessageCrypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceMessageCrypto.swift; sourceTree = "<group>"; };
+		03FBFA40639942CDB6AC3473 /* ContractStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContractStore.swift; sourceTree = "<group>"; };
+		816EEA59016441498134BC23 /* ServiceNATSManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceNATSManager.swift; sourceTree = "<group>"; };
+		91604169C493427F95131443 /* AuthRequestSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthRequestSheet.swift; sourceTree = "<group>"; };
+		69934F0452AF48B2B2E213FB /* AuthzRequestSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthzRequestSheet.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -540,6 +550,8 @@
 				FC7BF0CF4752D4662BF250D7 /* ServiceNotificationSettingsView.swift */,
 				014C486516762BF3F8C3781D /* ServiceRequestCard.swift */,
 				9EA6E441E89C361E27D3CE4B /* TrustedResourcesView.swift */,
+				91604169C493427F95131443 /* AuthRequestSheet.swift */,
+				69934F0452AF48B2B2E213FB /* AuthzRequestSheet.swift */,
 			);
 			name = Components;
 			path = Components;
@@ -561,14 +573,6 @@
 			);
 			name = Notifications;
 			path = Notifications;
-			sourceTree = "<group>";
-		};
-		341818B073416A6FE8FB639C /* Storage */ = {
-			isa = PBXGroup;
-			children = (
-				A106CB6BCC4D395709C86F52 /* VoteReceiptStore.swift */,
-			);
-			name = Storage;
 			sourceTree = "<group>";
 		};
 		36D2210366B16F30CF6DF4B1 /* Secrets */ = {
@@ -684,6 +688,7 @@
 				1000002D /* ConnectionCryptoManager.swift */,
 				10000003 /* CryptoManager.swift */,
 				1000000E /* PasswordHasher.swift */,
+				1A4F29E9177C40349CF780D0 /* ServiceMessageCrypto.swift */,
 			);
 			path = Crypto;
 			sourceTree = "<group>";
@@ -697,6 +702,7 @@
 				10000005 /* SecureKeyStore.swift */,
 				398233EFE1A4530AB4A978BB /* ProteanCredentialStore.swift */,
 				5DE26675563F832D185B42D2 /* ServiceConnectionStore.swift */,
+				03FBFA40639942CDB6AC3473 /* ContractStore.swift */,
 			);
 			path = Storage;
 			sourceTree = "<group>";
@@ -779,6 +785,7 @@
 				17AB82EB05818922B0E2A9C1 /* Handlers */,
 				C8185E10A8FE9EB78C272A3B /* VaultEvent.swift */,
 				667E3A492F1E02FDCFC33F18 /* VaultSecurityService.swift */,
+				816EEA59016441498134BC23 /* ServiceNATSManager.swift */,
 			);
 			path = NATS;
 			sourceTree = "<group>";
@@ -943,7 +950,6 @@
 		90F817601C8B63DB3991EE9D /* Core */ = {
 			isa = PBXGroup;
 			children = (
-				341818B073416A6FE8FB639C /* Storage */,
 				26FA911923ACABB1C1CEFF43 /* Configuration */,
 			);
 			name = Core;
@@ -1424,6 +1430,11 @@
 				45CFB98F4618C19E449ACDED /* ServiceNotificationSettingsView.swift in Sources */,
 				E13DEDF8C40A1819D92418E5 /* ServiceRequestCard.swift in Sources */,
 				C7EFB087ADE289EA0174CBD4 /* TrustedResourcesView.swift in Sources */,
+				D545C686724841B09C9B78D1 /* ServiceMessageCrypto.swift in Sources */,
+				542B48D537BF4318967F48D8 /* ContractStore.swift in Sources */,
+				B69ECFDF39C64BFF85F29F07 /* ServiceNATSManager.swift in Sources */,
+				5F617885446040A4A2238FE4 /* AuthRequestSheet.swift in Sources */,
+				B73004F8F4574D7C80BFCE66 /* AuthzRequestSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

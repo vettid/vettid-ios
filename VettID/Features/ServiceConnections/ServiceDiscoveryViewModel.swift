@@ -1,4 +1,5 @@
 import Foundation
+import LocalAuthentication
 
 /// State for service discovery flow
 enum ServiceDiscoveryState: Equatable {
@@ -51,15 +52,24 @@ final class ServiceDiscoveryViewModel: ObservableObject {
 
     private let serviceConnectionHandler: ServiceConnectionHandler
     private let serviceConnectionStore: ServiceConnectionStore
+    private let contractStore: ContractStore
+
+    // MARK: - Signing State
+
+    @Published var showingBiometricPrompt = false
+    @Published var signingError: String?
+    private var pendingSignRequest: (request: ContractSignRequest, privateKey: Data)?
 
     // MARK: - Initialization
 
     init(
         serviceConnectionHandler: ServiceConnectionHandler,
-        serviceConnectionStore: ServiceConnectionStore = ServiceConnectionStore()
+        serviceConnectionStore: ServiceConnectionStore = ServiceConnectionStore(),
+        contractStore: ContractStore = ContractStore()
     ) {
         self.serviceConnectionHandler = serviceConnectionHandler
         self.serviceConnectionStore = serviceConnectionStore
+        self.contractStore = contractStore
     }
 
     // MARK: - Discovery
@@ -158,17 +168,51 @@ final class ServiceDiscoveryViewModel: ObservableObject {
     // MARK: - Connection
 
     /// Accept the contract and connect to the service
+    /// This triggers biometric authentication before signing
     func acceptContract() async {
         guard let result = discoveryResult else { return }
 
-        state = .connecting
+        // Build field mappings from required and selected optional fields
+        let fieldMappings = buildFieldMappings(from: result)
 
+        // Create contract sign request with new connection keypair
         do {
-            // Build field mappings from required and selected optional fields
-            var fieldMappings: [SharedFieldMapping] = []
+            let (signRequest, privateKey) = try ServiceMessageCrypto.createContractSignRequest(
+                serviceId: result.serviceProfile.id,
+                offeringId: result.proposedContract.id,
+                offeringSnapshot: result.proposedContract,
+                selectedFields: fieldMappings
+            )
 
-            // Add required fields
-            for field in result.proposedContract.requiredFields {
+            // Store pending request for after biometric auth
+            pendingSignRequest = (signRequest, privateKey)
+
+            // Request biometric authentication
+            await requestBiometricAuth()
+
+        } catch {
+            state = .error("Failed to create sign request: \(error.localizedDescription)")
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Build field mappings from discovery result and selected optional fields
+    private func buildFieldMappings(from result: ServiceDiscoveryResult) -> [SharedFieldMapping] {
+        var fieldMappings: [SharedFieldMapping] = []
+
+        // Add required fields
+        for field in result.proposedContract.requiredFields {
+            fieldMappings.append(SharedFieldMapping(
+                fieldSpec: field,
+                localFieldKey: field.field,
+                sharedAt: Date(),
+                lastUpdatedAt: nil
+            ))
+        }
+
+        // Add selected optional fields
+        for field in result.proposedContract.optionalFields {
+            if selectedOptionalFields.contains(field.field) {
                 fieldMappings.append(SharedFieldMapping(
                     fieldSpec: field,
                     localFieldKey: field.field,
@@ -176,38 +220,180 @@ final class ServiceDiscoveryViewModel: ObservableObject {
                     lastUpdatedAt: nil
                 ))
             }
+        }
 
-            // Add selected optional fields
-            for field in result.proposedContract.optionalFields {
-                if selectedOptionalFields.contains(field.field) {
-                    fieldMappings.append(SharedFieldMapping(
-                        fieldSpec: field,
-                        localFieldKey: field.field,
-                        sharedAt: Date(),
-                        lastUpdatedAt: nil
-                    ))
-                }
+        return fieldMappings
+    }
+
+    /// Request biometric authentication before signing
+    private func requestBiometricAuth() async {
+        let context = LAContext()
+        var authError: NSError?
+
+        // Check if biometrics are available
+        let canUseBiometrics = context.canEvaluatePolicy(
+            .deviceOwnerAuthenticationWithBiometrics,
+            error: &authError
+        )
+
+        let policy: LAPolicy = canUseBiometrics ?
+            .deviceOwnerAuthenticationWithBiometrics :
+            .deviceOwnerAuthentication
+
+        let reason = "Authenticate to sign the service contract"
+
+        do {
+            let success = try await context.evaluatePolicy(policy, localizedReason: reason)
+
+            if success {
+                await completeContractSigning()
+            } else {
+                signingError = "Authentication failed"
+                state = .error("Authentication failed")
             }
+        } catch let error as LAError {
+            switch error.code {
+            case .userCancel:
+                signingError = "Authentication cancelled"
+                // Stay on reviewing state
+                if case .connecting = state {
+                    state = .reviewing
+                }
+            case .userFallback:
+                // User chose to enter passcode
+                await requestPasscodeAuth()
+            default:
+                signingError = error.localizedDescription
+                state = .error(error.localizedDescription)
+            }
+        } catch {
+            signingError = error.localizedDescription
+            state = .error(error.localizedDescription)
+        }
+    }
 
-            // Initiate connection
-            let connection = try await serviceConnectionHandler.initiateConnection(
-                serviceId: result.serviceProfile.id,
-                contractId: result.proposedContract.id,
-                fieldMappings: fieldMappings
+    /// Request passcode authentication as fallback
+    private func requestPasscodeAuth() async {
+        let context = LAContext()
+
+        do {
+            let success = try await context.evaluatePolicy(
+                .deviceOwnerAuthentication,
+                localizedReason: "Enter your passcode to sign the service contract"
             )
 
-            // Store locally
+            if success {
+                await completeContractSigning()
+            } else {
+                signingError = "Authentication failed"
+                state = .error("Authentication failed")
+            }
+        } catch {
+            signingError = error.localizedDescription
+            state = .error(error.localizedDescription)
+        }
+    }
+
+    /// Complete contract signing after successful authentication
+    private func completeContractSigning() async {
+        guard let result = discoveryResult,
+              let pending = pendingSignRequest else {
+            state = .error("No pending sign request")
+            return
+        }
+
+        state = .connecting
+        signingError = nil
+
+        do {
+            // Send sign request to vault via NATS
+            let signResponse = try await sendContractSignRequest(pending.request)
+
+            guard signResponse.success, let signResult = signResponse.result else {
+                throw ContractSigningError.signingFailed(signResponse.error ?? "Unknown error")
+            }
+
+            // Store the signed contract and keys
+            let storedContract = StoredContract(
+                contractId: signResult.contractId,
+                serviceId: result.serviceProfile.id,
+                serviceName: result.serviceProfile.serviceName,
+                serviceLogoUrl: result.serviceProfile.serviceLogoUrl,
+                offeringId: result.proposedContract.id,
+                offeringSnapshot: result.proposedContract,
+                capabilities: buildCapabilities(from: result.proposedContract),
+                sharedFields: buildFieldMappings(from: result),
+                userConnectionKeyId: signResult.contractId, // Use contract ID as key reference
+                serviceConnectionKey: signResult.serviceConnectionKey,
+                serviceSigningKey: signResult.serviceSigningKey,
+                userSignature: signResult.signedContract.userSignature,
+                serviceSignature: signResult.signedContract.serviceSignature,
+                status: .active,
+                createdAt: Date(),
+                activatedAt: signResult.signedContract.activatedAt,
+                revokedAt: nil
+            )
+
+            // Store contract with keys
+            try contractStore.store(
+                contract: storedContract,
+                connectionPrivateKey: pending.privateKey,
+                natsCredentials: signResult.natsCredentials
+            )
+
+            // Also create legacy ServiceConnectionRecord for UI compatibility
+            let connection = ServiceConnectionRecord(
+                id: signResult.contractId,
+                serviceGuid: result.serviceProfile.id,
+                serviceProfile: result.serviceProfile,
+                contractId: signResult.contractId,
+                contractVersion: result.proposedContract.version,
+                contractAcceptedAt: Date(),
+                pendingContractVersion: nil,
+                status: .active,
+                sharedFields: buildFieldMappings(from: result),
+                createdAt: Date(),
+                lastActivityAt: nil,
+                tags: [],
+                isFavorite: false,
+                isArchived: false,
+                isMuted: false
+            )
+
+            // Store in service connection store for UI
             try serviceConnectionStore.store(connection: connection)
 
-            // Cache service profile for offline viewing
+            // Cache service profile
             try serviceConnectionStore.cacheServiceProfile(result.serviceProfile)
+
+            // Clear pending request
+            pendingSignRequest = nil
 
             state = .connected(connection)
             showingContractReview = false
+
         } catch {
+            pendingSignRequest = nil
             state = .error(error.localizedDescription)
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// Send contract sign request to vault via service connection handler
+    private func sendContractSignRequest(_ request: ContractSignRequest) async throws -> ContractSignResponse {
+        // Use service connection handler to sign the contract
+        // The handler routes this through NATS internally
+        return try await serviceConnectionHandler.signContract(request: request)
+    }
+
+    /// Build capabilities list from contract
+    private func buildCapabilities(from contract: ServiceDataContract) -> [String] {
+        var capabilities: [String] = []
+        if contract.canStoreData { capabilities.append("store_data") }
+        if contract.canSendMessages { capabilities.append("send_messages") }
+        if contract.canRequestAuth { capabilities.append("request_auth") }
+        if contract.canRequestPayment { capabilities.append("request_payment") }
+        return capabilities
     }
 
     /// Decline the contract
@@ -242,6 +428,28 @@ final class ServiceDiscoveryViewModel: ObservableObject {
         errorMessage = nil
         if case .error = state {
             state = .idle
+        }
+    }
+}
+
+// MARK: - Contract Signing Error
+
+enum ContractSigningError: Error, LocalizedError {
+    case signingFailed(String)
+    case noPendingRequest
+    case authenticationFailed
+    case authenticationCancelled
+
+    var errorDescription: String? {
+        switch self {
+        case .signingFailed(let reason):
+            return "Contract signing failed: \(reason)"
+        case .noPendingRequest:
+            return "No pending sign request found"
+        case .authenticationFailed:
+            return "Authentication failed"
+        case .authenticationCancelled:
+            return "Authentication was cancelled"
         }
     }
 }
