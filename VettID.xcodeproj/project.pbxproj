@@ -240,6 +240,10 @@
 		42B84FD916114CD19346692F /* ContractUpdateSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCF92894EE404AE5BD0AD472 /* ContractUpdateSheet.swift */; };
 		3D20203723F04703ACB22418 /* ContractCancellationSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 450369E581D447D2887F655F /* ContractCancellationSheet.swift */; };
 		C4963029CEC64D1F9A4EDADF /* ServiceActivityHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 276A748FA18E40238015322D /* ServiceActivityHistoryView.swift */; };
+		1F059D4CE7F744719DCC6450 /* PaymentRequestSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E879165E4D7140B0A9CF8D8D /* PaymentRequestSheet.swift */; };
+		81A4EA1A55CF48328F723705 /* ServiceCallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88FBBD1C0CA5414DB51DB3BE /* ServiceCallView.swift */; };
+		BD2A5DC74A8F442595FF0148 /* AuditLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7256E4668D454C07B16E5039 /* AuditLogView.swift */; };
+		BD72D00001034E88830A3355 /* CapabilityManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AB1CA62FFB4444590E09F2A /* CapabilityManagementView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -498,6 +502,10 @@
 		BCF92894EE404AE5BD0AD472 /* ContractUpdateSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContractUpdateSheet.swift; sourceTree = "<group>"; };
 		450369E581D447D2887F655F /* ContractCancellationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContractCancellationSheet.swift; sourceTree = "<group>"; };
 		276A748FA18E40238015322D /* ServiceActivityHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceActivityHistoryView.swift; sourceTree = "<group>"; };
+		E879165E4D7140B0A9CF8D8D /* PaymentRequestSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentRequestSheet.swift; sourceTree = "<group>"; };
+		88FBBD1C0CA5414DB51DB3BE /* ServiceCallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceCallView.swift; sourceTree = "<group>"; };
+		7256E4668D454C07B16E5039 /* AuditLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuditLogView.swift; sourceTree = "<group>"; };
+		2AB1CA62FFB4444590E09F2A /* CapabilityManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapabilityManagementView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -573,7 +581,11 @@
 				E9F32FE9CB2649168D2187DD /* ServiceNotificationBanner.swift */,
 				BCF92894EE404AE5BD0AD472 /* ContractUpdateSheet.swift */,
 				450369E581D447D2887F655F /* ContractCancellationSheet.swift */,
-				276A748FA18E40238015322D /* ServiceActivityHistoryView.swift */,);
+				276A748FA18E40238015322D /* ServiceActivityHistoryView.swift */,
+				E879165E4D7140B0A9CF8D8D /* PaymentRequestSheet.swift */,
+				88FBBD1C0CA5414DB51DB3BE /* ServiceCallView.swift */,
+				7256E4668D454C07B16E5039 /* AuditLogView.swift */,
+				2AB1CA62FFB4444590E09F2A /* CapabilityManagementView.swift */,);
 			name = Components;
 			path = Components;
 			sourceTree = "<group>";
@@ -1478,7 +1490,11 @@
 				0BED4519757D4BB88D7A9705 /* ServiceNotificationBanner.swift in Sources */,
 				42B84FD916114CD19346692F /* ContractUpdateSheet.swift in Sources */,
 				3D20203723F04703ACB22418 /* ContractCancellationSheet.swift in Sources */,
-				C4963029CEC64D1F9A4EDADF /* ServiceActivityHistoryView.swift in Sources */,);
+				C4963029CEC64D1F9A4EDADF /* ServiceActivityHistoryView.swift in Sources */,
+				1F059D4CE7F744719DCC6450 /* PaymentRequestSheet.swift in Sources */,
+				81A4EA1A55CF48328F723705 /* ServiceCallView.swift in Sources */,
+				BD2A5DC74A8F442595FF0148 /* AuditLogView.swift in Sources */,
+				BD72D00001034E88830A3355 /* CapabilityManagementView.swift in Sources */,);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		FA135006B2933D907A7383DA /* Sources */ = {
