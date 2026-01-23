@@ -232,6 +232,14 @@
 		B69ECFDF39C64BFF85F29F07 /* ServiceNATSManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 816EEA59016441498134BC23 /* ServiceNATSManager.swift */; };
 		5F617885446040A4A2238FE4 /* AuthRequestSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91604169C493427F95131443 /* AuthRequestSheet.swift */; };
 		B73004F8F4574D7C80BFCE66 /* AuthzRequestSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69934F0452AF48B2B2E213FB /* AuthzRequestSheet.swift */; };
+		796E4EE85164401A96BCA082 /* ServiceDirectoryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B27915860E341A99865246A /* ServiceDirectoryViewModel.swift */; };
+		4D131C9342254023A4852D86 /* ServiceDirectoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D96AA201E70D4387A3E994C0 /* ServiceDirectoryView.swift */; };
+		59137C29960840798D44CA9A /* ServiceDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A00A5B974EB475684B76DF8 /* ServiceDetailView.swift */; };
+		1E1D4AF38C714AA1A0D645AD /* DataRequestSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD000368D20F4D86A91D50FD /* DataRequestSheet.swift */; };
+		0BED4519757D4BB88D7A9705 /* ServiceNotificationBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9F32FE9CB2649168D2187DD /* ServiceNotificationBanner.swift */; };
+		42B84FD916114CD19346692F /* ContractUpdateSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCF92894EE404AE5BD0AD472 /* ContractUpdateSheet.swift */; };
+		3D20203723F04703ACB22418 /* ContractCancellationSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 450369E581D447D2887F655F /* ContractCancellationSheet.swift */; };
+		C4963029CEC64D1F9A4EDADF /* ServiceActivityHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 276A748FA18E40238015322D /* ServiceActivityHistoryView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -482,6 +490,14 @@
 		816EEA59016441498134BC23 /* ServiceNATSManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceNATSManager.swift; sourceTree = "<group>"; };
 		91604169C493427F95131443 /* AuthRequestSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthRequestSheet.swift; sourceTree = "<group>"; };
 		69934F0452AF48B2B2E213FB /* AuthzRequestSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthzRequestSheet.swift; sourceTree = "<group>"; };
+		1B27915860E341A99865246A /* ServiceDirectoryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceDirectoryViewModel.swift; sourceTree = "<group>"; };
+		D96AA201E70D4387A3E994C0 /* ServiceDirectoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceDirectoryView.swift; sourceTree = "<group>"; };
+		1A00A5B974EB475684B76DF8 /* ServiceDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceDetailView.swift; sourceTree = "<group>"; };
+		FD000368D20F4D86A91D50FD /* DataRequestSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataRequestSheet.swift; sourceTree = "<group>"; };
+		E9F32FE9CB2649168D2187DD /* ServiceNotificationBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceNotificationBanner.swift; sourceTree = "<group>"; };
+		BCF92894EE404AE5BD0AD472 /* ContractUpdateSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContractUpdateSheet.swift; sourceTree = "<group>"; };
+		450369E581D447D2887F655F /* ContractCancellationSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContractCancellationSheet.swift; sourceTree = "<group>"; };
+		276A748FA18E40238015322D /* ServiceActivityHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceActivityHistoryView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -552,7 +568,12 @@
 				9EA6E441E89C361E27D3CE4B /* TrustedResourcesView.swift */,
 				91604169C493427F95131443 /* AuthRequestSheet.swift */,
 				69934F0452AF48B2B2E213FB /* AuthzRequestSheet.swift */,
-			);
+			
+				FD000368D20F4D86A91D50FD /* DataRequestSheet.swift */,
+				E9F32FE9CB2649168D2187DD /* ServiceNotificationBanner.swift */,
+				BCF92894EE404AE5BD0AD472 /* ContractUpdateSheet.swift */,
+				450369E581D447D2887F655F /* ContractCancellationSheet.swift */,
+				276A748FA18E40238015322D /* ServiceActivityHistoryView.swift */,);
 			name = Components;
 			path = Components;
 			sourceTree = "<group>";
@@ -900,7 +921,10 @@
 				C3E8F57F7C04F0DA01A5E92B /* ServiceConnectionDetailView.swift */,
 				CF5EFD65980CCED29B10ECF1 /* ServiceConnectionDetailViewModel.swift */,
 				269858E7169E806E8EA0F625 /* Components */,
-			);
+			
+				1B27915860E341A99865246A /* ServiceDirectoryViewModel.swift */,
+				D96AA201E70D4387A3E994C0 /* ServiceDirectoryView.swift */,
+				1A00A5B974EB475684B76DF8 /* ServiceDetailView.swift */,);
 			name = ServiceConnections;
 			path = ServiceConnections;
 			sourceTree = "<group>";
@@ -1446,7 +1470,15 @@
 				FDA99EEB7505FD7031F2B26C /* EnrollmentUITests.swift in Sources */,
 				C2864EC95B4B060ACE9D9C58 /* AuthenticationUITests.swift in Sources */,
 				7B46109C39D7AEF81970BD2E /* VaultUITests.swift in Sources */,
-			);
+			
+				796E4EE85164401A96BCA082 /* ServiceDirectoryViewModel.swift in Sources */,
+				4D131C9342254023A4852D86 /* ServiceDirectoryView.swift in Sources */,
+				59137C29960840798D44CA9A /* ServiceDetailView.swift in Sources */,
+				1E1D4AF38C714AA1A0D645AD /* DataRequestSheet.swift in Sources */,
+				0BED4519757D4BB88D7A9705 /* ServiceNotificationBanner.swift in Sources */,
+				42B84FD916114CD19346692F /* ContractUpdateSheet.swift in Sources */,
+				3D20203723F04703ACB22418 /* ContractCancellationSheet.swift in Sources */,
+				C4963029CEC64D1F9A4EDADF /* ServiceActivityHistoryView.swift in Sources */,);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		FA135006B2933D907A7383DA /* Sources */ = {
