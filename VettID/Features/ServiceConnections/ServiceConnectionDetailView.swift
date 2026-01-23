@@ -4,6 +4,7 @@ import SwiftUI
 struct ServiceConnectionDetailView: View {
     @StateObject private var viewModel: ServiceConnectionDetailViewModel
     @Environment(\.dismiss) private var dismiss
+    @State private var showingPasswordPrompt = false
 
     init(connectionId: String, serviceConnectionHandler: ServiceConnectionHandler) {
         self._viewModel = StateObject(wrappedValue: ServiceConnectionDetailViewModel(
@@ -68,14 +69,28 @@ struct ServiceConnectionDetailView: View {
         }
         .alert("Revoke Connection?", isPresented: $viewModel.showingRevokeConfirmation) {
             Button("Cancel", role: .cancel) {}
-            Button("Revoke", role: .destructive) {
-                Task {
-                    await viewModel.revokeConnection()
-                    dismiss()
-                }
+            Button("Continue", role: .destructive) {
+                showingPasswordPrompt = true
             }
         } message: {
             Text("This will immediately terminate your connection with this service. You will need to reconnect to use this service again.")
+        }
+        .sheet(isPresented: $showingPasswordPrompt) {
+            RevokeConnectionPasswordPrompt(
+                serviceName: viewModel.connection?.serviceProfile.serviceName ?? "this service",
+                isRevoking: viewModel.isRevoking,
+                onAuthorize: { password in
+                    await viewModel.revokeConnectionWithPassword(password)
+                    if viewModel.errorMessage == nil {
+                        showingPasswordPrompt = false
+                        dismiss()
+                    }
+                },
+                onCancel: {
+                    showingPasswordPrompt = false
+                }
+            )
+            .interactiveDismissDisabled(viewModel.isRevoking)
         }
         .alert("Error", isPresented: .constant(viewModel.errorMessage != nil)) {
             Button("OK") { viewModel.clearError() }
@@ -632,6 +647,149 @@ struct FlowLayout: Layout {
             }
 
             self.size = CGSize(width: maxWidth, height: y + maxHeight)
+        }
+    }
+}
+
+// MARK: - Revoke Connection Password Prompt
+
+/// Password prompt for revoking a service connection
+struct RevokeConnectionPasswordPrompt: View {
+    let serviceName: String
+    let isRevoking: Bool
+    let onAuthorize: (String) async -> Void
+    let onCancel: () -> Void
+
+    @State private var password = ""
+    @State private var errorMessage: String?
+    @State private var showPassword = false
+    @FocusState private var isPasswordFocused: Bool
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                // Warning icon and info
+                VStack(spacing: 16) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 48))
+                        .foregroundStyle(.red)
+
+                    Text("Revoke Connection")
+                        .font(.title2)
+                        .fontWeight(.bold)
+
+                    Text("Enter your password to permanently disconnect from \(serviceName)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.top)
+
+                // Warning box
+                HStack {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .foregroundStyle(.orange)
+                    Text("This action cannot be undone. You will need to reconnect to use this service again.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding()
+                .background(Color.orange.opacity(0.1))
+                .cornerRadius(12)
+
+                // Password field
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Password")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+
+                    HStack {
+                        if showPassword {
+                            TextField("Enter password", text: $password)
+                                .textContentType(.password)
+                                .focused($isPasswordFocused)
+                        } else {
+                            SecureField("Enter password", text: $password)
+                                .textContentType(.password)
+                                .focused($isPasswordFocused)
+                        }
+
+                        Button {
+                            showPassword.toggle()
+                        } label: {
+                            Image(systemName: showPassword ? "eye.slash" : "eye")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(10)
+                }
+
+                // Error message
+                if let error = errorMessage {
+                    HStack {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.red)
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                }
+
+                Spacer()
+
+                // Action buttons
+                VStack(spacing: 12) {
+                    Button {
+                        attemptRevoke()
+                    } label: {
+                        HStack {
+                            if isRevoking {
+                                ProgressView()
+                                    .tint(.white)
+                            } else {
+                                Image(systemName: "xmark.circle")
+                                Text("Revoke Connection")
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(password.isEmpty ? Color.gray : Color.red)
+                        .foregroundColor(.white)
+                        .cornerRadius(12)
+                    }
+                    .disabled(password.isEmpty || isRevoking)
+
+                    Button("Cancel") {
+                        onCancel()
+                    }
+                    .foregroundStyle(.secondary)
+                }
+            }
+            .padding()
+            .navigationTitle("Confirm Revocation")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        onCancel()
+                    }
+                }
+            }
+            .onAppear {
+                isPasswordFocused = true
+            }
+        }
+    }
+
+    private func attemptRevoke() {
+        guard !password.isEmpty else { return }
+
+        errorMessage = nil
+
+        Task {
+            await onAuthorize(password)
         }
     }
 }

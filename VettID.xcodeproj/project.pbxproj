@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		961698D828BA4D5BA674D611 /* ContractSigningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81C8FD8744741BE993E3532 /* ContractSigningView.swift */; };
+		2A9F825B4E714C62BE2F217E /* ServiceConnectionInitiationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18B934338B954F2B9CB77A6F /* ServiceConnectionInitiationView.swift */; };
 		00000001 /* VettIDApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000001 /* VettIDApp.swift */; };
 		00000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000002 /* ContentView.swift */; };
 		00000003 /* CryptoManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000003 /* CryptoManager.swift */; };
@@ -264,6 +266,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		B81C8FD8744741BE993E3532 /* ContractSigningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContractSigningView.swift; sourceTree = "<group>"; };
+		18B934338B954F2B9CB77A6F /* ServiceConnectionInitiationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceConnectionInitiationView.swift; sourceTree = "<group>"; };
 		003A6313C942B5D9E98B959D /* SecureKeyStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SecureKeyStoreTests.swift; sourceTree = "<group>"; };
 		01412CA00318E3E9E4C7B286 /* ServiceConnectionsListView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ServiceConnectionsListView.swift; sourceTree = "<group>"; };
 		014C486516762BF3F8C3781D /* ServiceRequestCard.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ServiceRequestCard.swift; sourceTree = "<group>"; };
@@ -566,6 +570,8 @@
 		269858E7169E806E8EA0F625 /* Components */ = {
 			isa = PBXGroup;
 			children = (
+				B81C8FD8744741BE993E3532 /* ContractSigningView.swift */,
+				18B934338B954F2B9CB77A6F /* ServiceConnectionInitiationView.swift */,
 				449B2C4CED5DA29E0FA8DDA0 /* ServiceProfileCard.swift */,
 				3DD1AEECC2A7E097C1F7ADA5 /* ContractReviewView.swift */,
 				614717BCA145924E77C2463D /* ContractDiffView.swift */,
@@ -1304,6 +1310,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				961698D828BA4D5BA674D611 /* ContractSigningView.swift in Sources */,
+				2A9F825B4E714C62BE2F217E /* ServiceConnectionInitiationView.swift in Sources */,
 				00000001 /* VettIDApp.swift in Sources */,
 				00000002 /* ContentView.swift in Sources */,
 				00000003 /* CryptoManager.swift in Sources */,

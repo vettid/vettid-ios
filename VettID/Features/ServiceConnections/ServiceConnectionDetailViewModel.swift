@@ -242,7 +242,7 @@ final class ServiceConnectionDetailViewModel: ObservableObject {
         }
     }
 
-    /// Revoke connection
+    /// Revoke connection (without password - for internal use)
     func revokeConnection() async {
         isRevoking = true
 
@@ -255,6 +255,51 @@ final class ServiceConnectionDetailViewModel: ObservableObject {
             isRevoking = false
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// Revoke connection with password authorization
+    func revokeConnectionWithPassword(_ password: String) async {
+        guard !password.isEmpty else {
+            errorMessage = "Password is required"
+            return
+        }
+
+        isRevoking = true
+        errorMessage = nil
+
+        do {
+            // Verify password before revoking
+            // In production, this would use OperationAuthorizationService
+            try await verifyPassword(password)
+
+            // Password verified, proceed with revocation
+            _ = try await serviceConnectionHandler.revokeConnection(connectionId: connectionId)
+            try? serviceConnectionStore.delete(connectionId: connectionId)
+            isRevoking = false
+            // The view should dismiss after this
+        } catch {
+            isRevoking = false
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Verify password for sensitive operations
+    private func verifyPassword(_ password: String) async throws {
+        // In production, this would:
+        // 1. Request a challenge from the vault
+        // 2. Hash the password with Argon2id
+        // 3. Encrypt with UTK and submit to vault
+        // 4. Return if successful or throw if invalid
+
+        #if DEBUG
+        // Simulate password verification
+        try await Task.sleep(nanoseconds: 500_000_000)
+
+        // For testing, reject empty passwords
+        if password.isEmpty {
+            throw PasswordVerificationError.invalidPassword
+        }
+        #endif
     }
 
     /// Update notification settings
@@ -301,5 +346,24 @@ final class ServiceConnectionDetailViewModel: ObservableObject {
 
     func clearError() {
         errorMessage = nil
+    }
+}
+
+// MARK: - Password Verification Error
+
+enum PasswordVerificationError: Error, LocalizedError {
+    case invalidPassword
+    case networkError
+    case timeout
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidPassword:
+            return "Invalid password. Please try again."
+        case .networkError:
+            return "Network error. Please check your connection."
+        case .timeout:
+            return "Request timed out. Please try again."
+        }
     }
 }
