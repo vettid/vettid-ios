@@ -12,6 +12,7 @@ struct EditProfileView: View {
     @State private var location: String = ""
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var avatarImage: Image?
+    @State private var newPhotoData: Data?
 
     var body: some View {
         NavigationView {
@@ -68,6 +69,8 @@ struct EditProfileView: View {
                 if let data = try? await newItem?.loadTransferable(type: Data.self),
                    let uiImage = UIImage(data: data) {
                     avatarImage = Image(uiImage: uiImage)
+                    // Process photo for storage
+                    newPhotoData = ProfilePhotoHelper.processProfilePhoto(uiImage)
                 }
             }
         }
@@ -79,6 +82,14 @@ struct EditProfileView: View {
         PhotosPicker(selection: $selectedPhoto, matching: .images) {
             if let avatarImage = avatarImage {
                 avatarImage
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 100, height: 100)
+                    .clipShape(Circle())
+                    .overlay(editOverlay)
+            } else if let photoData = profile.photoData,
+                      let uiImage = UIImage(data: photoData) {
+                Image(uiImage: uiImage)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
                     .frame(width: 100, height: 100)
@@ -129,9 +140,12 @@ struct EditProfileView: View {
         let updated = Profile(
             guid: profile.guid,
             displayName: trimmedName,
-            avatarUrl: profile.avatarUrl,  // Avatar upload handled separately
+            avatarUrl: profile.avatarUrl,
             bio: trimmedBio.isEmpty ? nil : trimmedBio,
             location: trimmedLocation.isEmpty ? nil : trimmedLocation,
+            email: profile.email,
+            photoData: newPhotoData ?? profile.photoData,
+            syncedAt: profile.syncedAt,
             lastUpdated: Date()
         )
 
@@ -150,6 +164,9 @@ struct EditProfileView_Previews: PreviewProvider {
                 avatarUrl: nil,
                 bio: "Hello world",
                 location: "San Francisco",
+                email: nil,
+                photoData: nil,
+                syncedAt: nil,
                 lastUpdated: Date()
             ),
             onSave: { _ in }

@@ -6,6 +6,7 @@ struct ProfileView: View {
 
     @StateObject private var viewModel: ProfileViewModel
     @State private var showEditProfile = false
+    @State private var showPhotoPicker = false
 
     init(authTokenProvider: @escaping @Sendable () -> String?) {
         self.authTokenProvider = authTokenProvider
@@ -46,6 +47,26 @@ struct ProfileView: View {
                 Text(error)
             }
         }
+        .sheet(isPresented: $showPhotoPicker) {
+            ProfilePhotoPickerSheet { image in
+                if let photoData = ProfilePhotoHelper.processProfilePhoto(image) {
+                    if var profile = viewModel.profile {
+                        profile = Profile(
+                            guid: profile.guid,
+                            displayName: profile.displayName,
+                            avatarUrl: profile.avatarUrl,
+                            bio: profile.bio,
+                            location: profile.location,
+                            email: profile.email,
+                            photoData: photoData,
+                            syncedAt: profile.syncedAt,
+                            lastUpdated: Date()
+                        )
+                        Task { await viewModel.updateProfile(profile) }
+                    }
+                }
+            }
+        }
         .task {
             await viewModel.loadProfile()
         }
@@ -66,21 +87,48 @@ struct ProfileView: View {
 
     private func profileContent(_ profile: Profile) -> some View {
         VStack(spacing: 24) {
-            // Avatar
-            AsyncImage(url: URL(string: profile.avatarUrl ?? "")) { image in
-                image.resizable().aspectRatio(contentMode: .fill)
-            } placeholder: {
-                Image(systemName: "person.circle.fill")
-                    .resizable()
-                    .foregroundColor(.secondary)
+            // Avatar - show photo data if available, fallback to URL, then placeholder
+            ZStack {
+                if let photoData = profile.photoData,
+                   let uiImage = UIImage(data: photoData) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } else {
+                    AsyncImage(url: URL(string: profile.avatarUrl ?? "")) { image in
+                        image.resizable().aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Image(systemName: "person.circle.fill")
+                            .resizable()
+                            .foregroundColor(.secondary)
+                    }
+                }
             }
             .frame(width: 120, height: 120)
             .clipShape(Circle())
+            .onTapGesture {
+                showPhotoPicker = true
+            }
+            .overlay(alignment: .bottomTrailing) {
+                Image(systemName: "camera.fill")
+                    .font(.caption)
+                    .foregroundStyle(.white)
+                    .padding(6)
+                    .background(Color.blue)
+                    .clipShape(Circle())
+            }
 
             // Display name
             Text(profile.displayName)
                 .font(.title)
                 .fontWeight(.bold)
+
+            // Email
+            if let email = profile.email, !email.isEmpty {
+                Label(email, systemImage: "envelope")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
 
             // Bio
             if let bio = profile.bio, !bio.isEmpty {
@@ -122,6 +170,13 @@ struct ProfileView: View {
                 .disabled(viewModel.isPublishing)
             }
             .padding(.horizontal)
+
+            // Sync status
+            if let syncedAt = profile.syncedAt {
+                Text("Synced \(syncedAt, style: .relative)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
 
             // Last updated
             Text("Last updated \(profile.lastUpdated, style: .relative)")

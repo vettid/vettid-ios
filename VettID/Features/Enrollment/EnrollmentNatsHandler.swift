@@ -453,9 +453,37 @@ actor EnrollmentNatsHandler {
         print("[EnrollmentNats] Enrollment verified successfully")
         #endif
     }
+
+    // MARK: - Identity Mismatch Report
+
+    /// Report an identity mismatch during enrollment
+    /// Sends a notification to the supervisor that the user rejected the shown identity
+    func reportIdentityMismatch() {
+        guard let ownerSpace = ownerSpace else { return }
+
+        let requestTopic = "\(ownerSpace).forVault.enrollment.identityMismatch"
+        let request = NatsIdentityMismatchReport(
+            id: UUID().uuidString,
+            reason: "user_rejected",
+            timestamp: ISO8601DateFormatter().string(from: Date())
+        )
+
+        Task {
+            try? await natsConnectionManager.publish(request, to: requestTopic)
+            #if DEBUG
+            print("[EnrollmentNats] Identity mismatch reported")
+            #endif
+        }
+    }
 }
 
 // MARK: - NATS Request/Response Types
+
+struct NatsIdentityMismatchReport: Encodable {
+    let id: String
+    let reason: String
+    let timestamp: String
+}
 
 struct NatsAttestationRequest: Encodable {
     let id: String

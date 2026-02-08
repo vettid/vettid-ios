@@ -36,6 +36,9 @@ final class ProfileViewModelTests: XCTestCase {
             avatarUrl: nil,
             bio: nil,
             location: nil,
+            email: nil,
+            photoData: nil,
+            syncedAt: nil,
             lastUpdated: Date()
         )
 

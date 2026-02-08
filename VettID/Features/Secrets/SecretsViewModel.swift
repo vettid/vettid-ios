@@ -9,7 +9,7 @@ final class SecretsViewModel: ObservableObject {
     enum State {
         case loading
         case empty
-        case loaded([Secret])
+        case loaded([MinorSecret])
         case error(String)
     }
 
@@ -20,7 +20,7 @@ final class SecretsViewModel: ObservableObject {
     @Published var passwordError: String? = nil
     @Published var autoHideCountdown: Int = 30
 
-    private var secrets: [Secret] = []
+    private var secrets: [MinorSecret] = []
     private var autoHideTask: Task<Void, Never>?
     private var pendingRevealSecretId: String?
     private var cachedPassword: String?
@@ -47,7 +47,7 @@ final class SecretsViewModel: ObservableObject {
 
     // MARK: - Search/Filter
 
-    func filteredSecrets(searchText: String) -> [Secret] {
+    func filteredSecrets(searchText: String) -> [MinorSecret] {
         if searchText.isEmpty {
             return secrets
         }
@@ -56,6 +56,18 @@ final class SecretsViewModel: ObservableObject {
             secret.category.displayName.localizedCaseInsensitiveContains(searchText) ||
             (secret.notes?.localizedCaseInsensitiveContains(searchText) ?? false)
         }
+    }
+
+    // MARK: - Grouped Secrets
+
+    func groupedSecrets(searchText: String) -> [(category: SecretCategory, secrets: [MinorSecret])] {
+        let filtered = filteredSecrets(searchText: searchText)
+        let grouped = Dictionary(grouping: filtered) { $0.category }
+        return SecretCategory.allCases
+            .compactMap { category in
+                guard let items = grouped[category], !items.isEmpty else { return nil }
+                return (category: category, secrets: items.sorted { $0.sortOrder < $1.sortOrder })
+            }
     }
 
     // MARK: - Reveal Secret (Password Required)
@@ -69,7 +81,6 @@ final class SecretsViewModel: ObservableObject {
     func verifyPasswordAndReveal(_ password: String) async {
         guard let secretId = pendingRevealSecretId else { return }
 
-        // Verify password against stored hash
         let isValid = await verifyPassword(password)
 
         if !isValid {
@@ -77,11 +88,9 @@ final class SecretsViewModel: ObservableObject {
             return
         }
 
-        // Password verified - decrypt and reveal secret
         showPasswordPrompt = false
         passwordError = nil
 
-        // Decrypt the secret value
         if let value = await decryptSecret(secretId, password: password) {
             revealedSecretId = secretId
             revealedValue = value
@@ -117,7 +126,7 @@ final class SecretsViewModel: ObservableObject {
 
         autoHideTask = Task {
             while autoHideCountdown > 0 {
-                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
                 if Task.isCancelled { return }
                 autoHideCountdown -= 1
             }
@@ -131,10 +140,7 @@ final class SecretsViewModel: ObservableObject {
     // MARK: - Password Verification
 
     private func verifyPassword(_ password: String) async -> Bool {
-        // Check if password hash is set up
         guard secretsStore.hasPasswordHash() else {
-            // No password hash set - accept any non-empty password for first-time setup
-            // In production, this should be tied to vault password
             return !password.isEmpty
         }
 
@@ -149,8 +155,7 @@ final class SecretsViewModel: ObservableObject {
         }
 
         do {
-            let decrypted = try secretsStore.decryptValue(secret.encryptedValue, password: password)
-            // Cache password for subsequent operations in this session
+            let decrypted = try secretsStore.decryptValue(secret.value, password: password)
             cachedPassword = password
             return decrypted
         } catch {
@@ -163,22 +168,20 @@ final class SecretsViewModel: ObservableObject {
 
     // MARK: - Add Secret
 
-    func addSecret(name: String, value: String, category: Secret.SecretCategory, notes: String?, password: String) async {
+    func addSecret(name: String, value: String, category: SecretCategory, notes: String?, password: String) async {
         do {
-            // Encrypt the secret value
             let encryptedValue = try secretsStore.encryptValue(value, password: password)
 
-            let newSecret = Secret(
-                id: UUID().uuidString,
+            let newSecret = MinorSecret(
                 name: name,
-                encryptedValue: encryptedValue,
+                value: encryptedValue,
                 category: category,
+                type: .text,
                 notes: notes,
-                createdAt: Date(),
-                updatedAt: Date()
+                sortOrder: secrets.filter({ $0.category == category }).count,
+                syncStatus: .pending
             )
 
-            // Store in keychain
             try secretsStore.store(secret: newSecret)
 
             secrets.insert(newSecret, at: 0)
@@ -188,8 +191,7 @@ final class SecretsViewModel: ObservableObject {
         }
     }
 
-    /// Add secret using cached password (from recent verification)
-    func addSecret(name: String, value: String, category: Secret.SecretCategory, notes: String?) async {
+    func addSecret(name: String, value: String, category: SecretCategory, notes: String?) async {
         guard let password = cachedPassword else {
             state = .error("Password required to add secret")
             return

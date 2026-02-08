@@ -7,6 +7,9 @@ struct Profile: Codable, Equatable {
     var avatarUrl: String?
     var bio: String?
     var location: String?
+    var email: String?
+    var photoData: Data?
+    var syncedAt: Date?
     let lastUpdated: Date
 }
 

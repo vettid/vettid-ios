@@ -1,18 +1,53 @@
 import SwiftUI
 
-// MARK: - App Section
+// MARK: - Drawer Item (Navigation Destination)
 
-enum AppSection: String, CaseIterable {
-    case vault = "Vault"
-    case vaultServices = "Vault Services"
-    case appSettings = "App Settings"
+enum DrawerItem: String, CaseIterable, Identifiable {
+    case feed
+    case connections
+    case personalData
+    case secrets
+    case archive
+    case voting
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .feed: return "Feed"
+        case .connections: return "Connections"
+        case .personalData: return "Personal Data"
+        case .secrets: return "Secrets"
+        case .archive: return "Archive"
+        case .voting: return "Voting"
+        }
+    }
 
     var icon: String {
         switch self {
-        case .vault: return "building.2.fill"
-        case .vaultServices: return "cloud.fill"
-        case .appSettings: return "gearshape.fill"
+        case .feed: return "list.bullet.rectangle"
+        case .connections: return "person.2.fill"
+        case .personalData: return "folder.fill"
+        case .secrets: return "lock.fill"
+        case .archive: return "archivebox.fill"
+        case .voting: return "checkmark.square.fill"
         }
+    }
+
+    /// Maps drawer items to bottom nav tab index (nil = "More" tab)
+    var bottomNavIndex: Int? {
+        switch self {
+        case .feed: return 0
+        case .connections: return 1
+        case .voting: return 2
+        case .secrets: return 3
+        case .personalData, .archive: return nil
+        }
+    }
+
+    /// Whether this item appears in the bottom nav directly
+    var isInBottomNav: Bool {
+        bottomNavIndex != nil
     }
 }
 
@@ -20,10 +55,11 @@ enum AppSection: String, CaseIterable {
 
 struct DrawerView: View {
     @Binding var isOpen: Bool
-    @Binding var currentSection: AppSection
+    @Binding var currentItem: DrawerItem
     let onSignOut: () -> Void
 
     @EnvironmentObject var appState: AppState
+    @ObservedObject var badgeCounts: BadgeCountsViewModel
     @State private var showSignOutSheet = false
 
     private let drawerWidth = UIScreen.main.bounds.width * 0.75
@@ -49,44 +85,26 @@ struct DrawerView: View {
 
                     Divider()
 
-                    // Section navigation
-                    VStack(spacing: 0) {
-                        DrawerItem(
-                            icon: AppSection.vault.icon,
-                            title: AppSection.vault.rawValue,
-                            isSelected: currentSection == .vault
-                        ) {
-                            currentSection = .vault
-                            withAnimation(.spring(response: 0.3)) {
-                                isOpen = false
-                            }
-                        }
-
-                        DrawerItem(
-                            icon: AppSection.vaultServices.icon,
-                            title: AppSection.vaultServices.rawValue,
-                            isSelected: currentSection == .vaultServices
-                        ) {
-                            currentSection = .vaultServices
-                            withAnimation(.spring(response: 0.3)) {
-                                isOpen = false
-                            }
-                        }
-
-                        DrawerItem(
-                            icon: AppSection.appSettings.icon,
-                            title: AppSection.appSettings.rawValue,
-                            isSelected: currentSection == .appSettings
-                        ) {
-                            currentSection = .appSettings
-                            withAnimation(.spring(response: 0.3)) {
-                                isOpen = false
+                    // Navigation items
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            ForEach(DrawerItem.allCases) { item in
+                                DrawerRow(
+                                    icon: item.icon,
+                                    title: item.title,
+                                    isSelected: currentItem == item,
+                                    badge: badgeCounts.badgeCount(for: item)
+                                ) {
+                                    currentItem = item
+                                    withAnimation(.spring(response: 0.3)) {
+                                        isOpen = false
+                                    }
+                                }
                             }
                         }
                     }
 
                     Divider()
-                        .padding(.vertical, 8)
 
                     // Quick Toggles
                     QuickTogglesSection()
@@ -96,7 +114,7 @@ struct DrawerView: View {
                     Divider()
 
                     // Sign out
-                    DrawerItem(
+                    DrawerRow(
                         icon: "rectangle.portrait.and.arrow.right",
                         title: "Sign Out",
                         isDestructive: true
@@ -240,13 +258,11 @@ struct SignOutSheet: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 24) {
-                // Icon
                 Image(systemName: "rectangle.portrait.and.arrow.right")
                     .font(.system(size: 50))
                     .foregroundStyle(.orange)
                     .padding(.top, 32)
 
-                // Title
                 Text("Sign Out")
                     .font(.title2)
                     .fontWeight(.bold)
@@ -255,7 +271,6 @@ struct SignOutSheet: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
-                // Options
                 VStack(spacing: 12) {
                     if hasActiveVault {
                         SignOutOptionButton(
@@ -351,16 +366,25 @@ struct DrawerHeader: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Avatar
-            Image(systemName: "person.circle.fill")
-                .font(.system(size: 60))
-                .foregroundStyle(.blue)
+            // Avatar — show profile photo if available
+            if let photoData = appState.currentProfile?.photoData,
+               let uiImage = UIImage(data: photoData) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 60, height: 60)
+                    .clipShape(Circle())
+            } else {
+                Image(systemName: "person.circle.fill")
+                    .font(.system(size: 60))
+                    .foregroundStyle(.blue)
+            }
 
             // User info
             Text(userName)
                 .font(.headline)
 
-            if let email = userEmail {
+            if let email = userEmail, !email.isEmpty {
                 Text(email)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -385,8 +409,7 @@ struct DrawerHeader: View {
     }
 
     private var userEmail: String? {
-        // Email is not stored in Profile model, use bio or nil
-        appState.currentProfile?.bio
+        appState.currentProfile?.email
     }
 
     private var vaultStatusIcon: String {
@@ -402,13 +425,14 @@ struct DrawerHeader: View {
     }
 }
 
-// MARK: - Drawer Item
+// MARK: - Drawer Row
 
-struct DrawerItem: View {
+struct DrawerRow: View {
     let icon: String
     let title: String
     var isSelected: Bool = false
     var isDestructive: Bool = false
+    var badge: Int = 0
     let action: () -> Void
 
     var body: some View {
@@ -422,6 +446,10 @@ struct DrawerItem: View {
                     .font(.body)
 
                 Spacer()
+
+                if badge > 0 {
+                    BadgeView(count: badge)
+                }
 
                 if isSelected {
                     Image(systemName: "checkmark")
@@ -452,7 +480,7 @@ struct DrawerItem: View {
 #Preview {
     struct PreviewWrapper: View {
         @State private var isOpen = true
-        @State private var section = AppSection.vault
+        @State private var item = DrawerItem.feed
 
         var body: some View {
             ZStack {
@@ -461,8 +489,9 @@ struct DrawerItem: View {
 
                 DrawerView(
                     isOpen: $isOpen,
-                    currentSection: $section,
-                    onSignOut: {}
+                    currentItem: $item,
+                    onSignOut: {},
+                    badgeCounts: BadgeCountsViewModel()
                 )
             }
             .environmentObject(AppState())

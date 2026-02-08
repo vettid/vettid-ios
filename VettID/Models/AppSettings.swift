@@ -175,11 +175,137 @@ struct AppLockSettings: Codable, Equatable {
     }
 }
 
+// MARK: - Location Precision
+
+enum LocationPrecision: String, CaseIterable, Codable {
+    case exact = "exact"
+    case approximate = "approximate"
+
+    var decimalPlaces: Int {
+        switch self {
+        case .exact: return 4
+        case .approximate: return 2
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .exact: return "Exact (~11m)"
+        case .approximate: return "Approximate (~1.1km)"
+        }
+    }
+}
+
+// MARK: - Location Update Frequency
+
+enum LocationUpdateFrequency: String, CaseIterable, Codable {
+    case fifteenMinutes = "fifteen_minutes"
+    case thirtyMinutes = "thirty_minutes"
+    case oneHour = "one_hour"
+    case fourHours = "four_hours"
+
+    var minutes: Int {
+        switch self {
+        case .fifteenMinutes: return 15
+        case .thirtyMinutes: return 30
+        case .oneHour: return 60
+        case .fourHours: return 240
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .fifteenMinutes: return "Every 15 minutes"
+        case .thirtyMinutes: return "Every 30 minutes"
+        case .oneHour: return "Every hour"
+        case .fourHours: return "Every 4 hours"
+        }
+    }
+}
+
+// MARK: - Displacement Threshold
+
+enum DisplacementThreshold: String, CaseIterable, Codable {
+    case oneHundred = "one_hundred"
+    case fiveHundred = "five_hundred"
+    case oneThousand = "one_thousand"
+
+    var meters: Int {
+        switch self {
+        case .oneHundred: return 100
+        case .fiveHundred: return 500
+        case .oneThousand: return 1000
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .oneHundred: return "100 meters"
+        case .fiveHundred: return "500 meters"
+        case .oneThousand: return "1 kilometer"
+        }
+    }
+}
+
+// MARK: - Location Retention
+
+enum LocationRetention: String, CaseIterable, Codable {
+    case sevenDays = "seven_days"
+    case thirtyDays = "thirty_days"
+    case ninetyDays = "ninety_days"
+    case oneYear = "one_year"
+
+    var days: Int {
+        switch self {
+        case .sevenDays: return 7
+        case .thirtyDays: return 30
+        case .ninetyDays: return 90
+        case .oneYear: return 365
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .sevenDays: return "7 days"
+        case .thirtyDays: return "30 days"
+        case .ninetyDays: return "90 days"
+        case .oneYear: return "1 year"
+        }
+    }
+}
+
+// MARK: - Credential Settings
+
+struct CredentialSettings: Codable, Equatable {
+    var sessionTTLMinutes: Int = 15
+    var archiveAfterDays: Int = 7
+    var deleteAfterDays: Int = 30
+
+    static let `default` = CredentialSettings()
+}
+
+// MARK: - Location Settings
+
+struct LocationSettings: Codable, Equatable {
+    var trackingEnabled: Bool = false
+    var precision: LocationPrecision = .exact
+    var updateFrequency: LocationUpdateFrequency = .thirtyMinutes
+    var displacementThreshold: DisplacementThreshold = .oneHundred
+    var retention: LocationRetention = .thirtyDays
+    var lastKnownLatitude: Double? = nil
+    var lastKnownLongitude: Double? = nil
+    var lastCaptureTime: Date? = nil
+
+    static let `default` = LocationSettings()
+}
+
 // MARK: - User Preferences
 
 struct UserPreferences: Codable {
     var theme: AppTheme = .auto
     var appLock: AppLockSettings = .default
+    var credentials: CredentialSettings = .default
+    var location: LocationSettings = .default
     var notificationsEnabled: Bool = true
     var hapticFeedbackEnabled: Bool = true
 

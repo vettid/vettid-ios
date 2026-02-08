@@ -1,159 +1,294 @@
 import Foundation
 
-// MARK: - Personal Data Model
+// MARK: - Data Category (6 categories)
 
-struct PersonalData: Identifiable, Codable {
-    let id: String
-    var fieldName: String
-    var value: String
-    var category: DataCategory
-    var visibility: DataVisibility
-    let createdAt: Date
-    var updatedAt: Date
+enum DataCategory: String, Codable, CaseIterable {
+    case identity = "identity"
+    case contact = "contact"
+    case address = "address"
+    case financial = "financial"
+    case medical = "medical"
+    case other = "other"
 
-    enum DataCategory: String, Codable, CaseIterable {
-        case publicInfo = "public"
-        case privateInfo = "private"
-        case keys = "keys"
-        case minorSecrets = "minor_secrets"
-
-        var displayName: String {
-            switch self {
-            case .publicInfo: return "Public"
-            case .privateInfo: return "Private"
-            case .keys: return "Keys"
-            case .minorSecrets: return "Minor Secrets"
-            }
-        }
-
-        var icon: String {
-            switch self {
-            case .publicInfo: return "globe"
-            case .privateInfo: return "lock.fill"
-            case .keys: return "key.fill"
-            case .minorSecrets: return "eye.slash.fill"
-            }
-        }
-
-        var description: String {
-            switch self {
-            case .publicInfo: return "Information visible to your connections"
-            case .privateInfo: return "Private data only you can access"
-            case .keys: return "Cryptographic keys and certificates"
-            case .minorSecrets: return "Less sensitive secrets"
-            }
+    var displayName: String {
+        switch self {
+        case .identity: return "Identity"
+        case .contact: return "Contact"
+        case .address: return "Address"
+        case .financial: return "Financial"
+        case .medical: return "Medical"
+        case .other: return "Other"
         }
     }
 
-    enum DataVisibility: String, Codable {
-        case everyone = "everyone"
-        case connections = "connections"
-        case selfOnly = "self_only"
-
-        var displayName: String {
-            switch self {
-            case .everyone: return "Everyone"
-            case .connections: return "Connections Only"
-            case .selfOnly: return "Only Me"
-            }
+    var icon: String {
+        switch self {
+        case .identity: return "person.fill"
+        case .contact: return "phone.fill"
+        case .address: return "location.fill"
+        case .financial: return "building.columns.fill"
+        case .medical: return "cross.case.fill"
+        case .other: return "square.grid.2x2.fill"
         }
+    }
 
-        var icon: String {
-            switch self {
-            case .everyone: return "globe"
-            case .connections: return "person.2"
-            case .selfOnly: return "lock"
-            }
+    var description: String {
+        switch self {
+        case .identity: return "Personal identification information"
+        case .contact: return "Phone, email, and social accounts"
+        case .address: return "Physical and mailing addresses"
+        case .financial: return "Banking and financial details"
+        case .medical: return "Health and medical information"
+        case .other: return "Miscellaneous personal data"
+        }
+    }
+
+    /// Display order for grouped views
+    var sortIndex: Int {
+        switch self {
+        case .identity: return 0
+        case .contact: return 1
+        case .address: return 2
+        case .financial: return 3
+        case .medical: return 4
+        case .other: return 5
         }
     }
 }
 
-// MARK: - Common Data Fields
+// MARK: - Data Type
 
-struct CommonDataField {
-    let fieldName: String
-    let placeholder: String
-    let icon: String
-    let category: PersonalData.DataCategory
+enum DataType: String, Codable {
+    case `public` = "public"
+    case `private` = "private"
+    case key = "key"
+    case minorSecret = "minor_secret"
 
-    static let publicFields: [CommonDataField] = [
-        CommonDataField(fieldName: "Display Name", placeholder: "Your name", icon: "person.fill", category: .publicInfo),
-        CommonDataField(fieldName: "Email", placeholder: "email@example.com", icon: "envelope.fill", category: .publicInfo),
-        CommonDataField(fieldName: "Phone", placeholder: "+1 (555) 123-4567", icon: "phone.fill", category: .publicInfo),
-        CommonDataField(fieldName: "Bio", placeholder: "Tell others about yourself", icon: "text.alignleft", category: .publicInfo)
-    ]
+    var displayName: String {
+        switch self {
+        case .public: return "Public"
+        case .private: return "Private"
+        case .key: return "Key"
+        case .minorSecret: return "Minor Secret"
+        }
+    }
 
-    static let privateFields: [CommonDataField] = [
-        CommonDataField(fieldName: "Date of Birth", placeholder: "MM/DD/YYYY", icon: "calendar", category: .privateInfo),
-        CommonDataField(fieldName: "Address", placeholder: "Your address", icon: "house.fill", category: .privateInfo),
-        CommonDataField(fieldName: "SSN", placeholder: "XXX-XX-XXXX", icon: "number", category: .privateInfo),
-        CommonDataField(fieldName: "Passport Number", placeholder: "Passport #", icon: "doc.text.fill", category: .privateInfo)
-    ]
+    var description: String {
+        switch self {
+        case .public: return "Shared with all connections"
+        case .private: return "Shared only with consent"
+        case .key: return "Cryptographic keys"
+        case .minorSecret: return "Never shared"
+        }
+    }
+}
+
+// MARK: - Field Type
+
+enum FieldType: String, Codable, CaseIterable {
+    case text = "text"
+    case password = "password"
+    case number = "number"
+    case date = "date"
+    case email = "email"
+    case phone = "phone"
+    case url = "url"
+    case note = "note"
+
+    var displayName: String {
+        switch self {
+        case .text: return "Text"
+        case .password: return "Password"
+        case .number: return "Number"
+        case .date: return "Date"
+        case .email: return "Email"
+        case .phone: return "Phone"
+        case .url: return "URL"
+        case .note: return "Note"
+        }
+    }
+}
+
+// MARK: - Personal Data Item
+
+struct PersonalDataItem: Identifiable, Codable, Equatable {
+    let id: String
+    var name: String
+    var type: DataType
+    var value: String
+    var category: DataCategory
+    var fieldType: FieldType
+    var isSystemField: Bool
+    var isInPublicProfile: Bool
+    var isSensitive: Bool
+    var sortOrder: Int
+    let createdAt: Date
+    var updatedAt: Date
+
+    init(
+        id: String = UUID().uuidString,
+        name: String,
+        type: DataType = .private,
+        value: String = "",
+        category: DataCategory = .other,
+        fieldType: FieldType = .text,
+        isSystemField: Bool = false,
+        isInPublicProfile: Bool = false,
+        isSensitive: Bool = false,
+        sortOrder: Int = 0,
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.name = name
+        self.type = type
+        self.value = value
+        self.category = category
+        self.fieldType = fieldType
+        self.isSystemField = isSystemField
+        self.isInPublicProfile = isInPublicProfile
+        self.isSensitive = isSensitive
+        self.sortOrder = sortOrder
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
+// MARK: - Grouped By Category Helper
+
+extension Array where Element == PersonalDataItem {
+    /// Returns items grouped by category in display order
+    func groupedByCategory() -> [(category: DataCategory, items: [PersonalDataItem])] {
+        let grouped = Dictionary(grouping: self) { $0.category }
+        return DataCategory.allCases
+            .compactMap { category in
+                guard let items = grouped[category], !items.isEmpty else { return nil }
+                return (category: category, items: items.sorted { $0.sortOrder < $1.sortOrder })
+            }
+    }
+}
+
+// MARK: - PersonalData View Model Events/Effects
+
+enum PersonalDataEvent {
+    case loadData
+    case addItem(PersonalDataItem)
+    case updateItem(PersonalDataItem)
+    case deleteItem(String)
+    case togglePublicProfile(String)
+    case moveUp(String)
+    case moveDown(String)
+    case search(String)
+    case syncToVault
+}
+
+enum PersonalDataEffect {
+    case dataLoaded([PersonalDataItem])
+    case itemAdded(PersonalDataItem)
+    case itemUpdated(PersonalDataItem)
+    case itemDeleted(String)
+    case error(String)
+    case syncComplete
+}
+
+// MARK: - Personal Data Field Input Hint
+
+enum PersonalDataFieldInputHint: String, Codable {
+    case text = "text"
+    case date = "date"
+    case expiryDate = "expiry_date"
+    case country = "country"
+    case state = "state"
+    case number = "number"
+    case phone = "phone"
+    case email = "email"
 }
 
 // MARK: - Mock Data
 
-extension PersonalData {
-    static func mockData() -> [PersonalData] {
+extension PersonalDataItem {
+    static func mockData() -> [PersonalDataItem] {
         [
-            // Public info
-            PersonalData(
-                id: UUID().uuidString,
-                fieldName: "Display Name",
-                value: "John Doe",
-                category: .publicInfo,
-                visibility: .everyone,
+            PersonalDataItem(
+                name: "First Name",
+                type: .public,
+                value: "John",
+                category: .identity,
+                isSystemField: true,
+                isInPublicProfile: true,
+                sortOrder: 0,
                 createdAt: Date().addingTimeInterval(-86400 * 60),
                 updatedAt: Date().addingTimeInterval(-86400 * 7)
             ),
-            PersonalData(
-                id: UUID().uuidString,
-                fieldName: "Email",
+            PersonalDataItem(
+                name: "Last Name",
+                type: .public,
+                value: "Doe",
+                category: .identity,
+                isSystemField: true,
+                isInPublicProfile: true,
+                sortOrder: 1,
+                createdAt: Date().addingTimeInterval(-86400 * 60),
+                updatedAt: Date().addingTimeInterval(-86400 * 7)
+            ),
+            PersonalDataItem(
+                name: "Email",
+                type: .public,
                 value: "john.doe@example.com",
-                category: .publicInfo,
-                visibility: .connections,
+                category: .contact,
+                fieldType: .email,
+                isSystemField: true,
+                isInPublicProfile: true,
+                sortOrder: 0,
                 createdAt: Date().addingTimeInterval(-86400 * 60),
                 updatedAt: Date().addingTimeInterval(-86400 * 30)
             ),
-
-            // Private info
-            PersonalData(
-                id: UUID().uuidString,
-                fieldName: "Date of Birth",
-                value: "01/15/1990",
-                category: .privateInfo,
-                visibility: .selfOnly,
-                createdAt: Date().addingTimeInterval(-86400 * 60),
-                updatedAt: Date().addingTimeInterval(-86400 * 60)
-            ),
-            PersonalData(
-                id: UUID().uuidString,
-                fieldName: "Address",
-                value: "123 Main St, City, ST 12345",
-                category: .privateInfo,
-                visibility: .selfOnly,
+            PersonalDataItem(
+                name: "Phone",
+                type: .private,
+                value: "+1 (555) 123-4567",
+                category: .contact,
+                fieldType: .phone,
+                sortOrder: 1,
                 createdAt: Date().addingTimeInterval(-86400 * 30),
                 updatedAt: Date().addingTimeInterval(-86400 * 14)
             ),
-
-            // Keys
-            PersonalData(
-                id: UUID().uuidString,
-                fieldName: "SSH Public Key",
-                value: "ssh-ed25519 AAAA...",
-                category: .keys,
-                visibility: .selfOnly,
-                createdAt: Date().addingTimeInterval(-86400 * 14),
+            PersonalDataItem(
+                name: "Date of Birth",
+                type: .private,
+                value: "01/15/1990",
+                category: .identity,
+                fieldType: .date,
+                isSensitive: true,
+                sortOrder: 2,
+                createdAt: Date().addingTimeInterval(-86400 * 60),
+                updatedAt: Date().addingTimeInterval(-86400 * 60)
+            ),
+            PersonalDataItem(
+                name: "Street Address",
+                type: .private,
+                value: "123 Main St",
+                category: .address,
+                sortOrder: 0,
+                createdAt: Date().addingTimeInterval(-86400 * 30),
                 updatedAt: Date().addingTimeInterval(-86400 * 14)
             ),
-
-            // Minor secrets
-            PersonalData(
-                id: UUID().uuidString,
-                fieldName: "Loyalty Card Number",
-                value: "1234-5678-9012",
-                category: .minorSecrets,
-                visibility: .selfOnly,
+            PersonalDataItem(
+                name: "City",
+                type: .private,
+                value: "Springfield",
+                category: .address,
+                sortOrder: 1,
+                createdAt: Date().addingTimeInterval(-86400 * 30),
+                updatedAt: Date().addingTimeInterval(-86400 * 14)
+            ),
+            PersonalDataItem(
+                name: "Health Insurance ID",
+                type: .private,
+                value: "INS-12345",
+                category: .medical,
+                isSensitive: true,
+                sortOrder: 0,
                 createdAt: Date().addingTimeInterval(-86400 * 7),
                 updatedAt: Date().addingTimeInterval(-86400 * 7)
             )

@@ -73,6 +73,15 @@ final class EnrollmentViewModel: ObservableObject {
     private var vaultUTKs: [VaultReadyResponse.UTKInfo] = []
     private var useNatsFlow: Bool = true  // Enable NATS-based enrollment by default
 
+    // MARK: - Enrollment Identity Data
+
+    /// Identity information from enrollment response for confirmation
+    struct EnrollmentIdentity: Equatable {
+        let firstName: String
+        let lastName: String
+        let email: String
+    }
+
     // MARK: - Enrollment State
 
     enum EnrollmentState: Equatable {
@@ -84,12 +93,15 @@ final class EnrollmentViewModel: ObservableObject {
         case attestationRequired(challenge: String)
         case attesting(progress: Double)
         case attestationComplete
+        case confirmIdentity(EnrollmentIdentity)  // Confirm identity from enrollment response
+        case identityRejected        // User rejected identity — mismatch reported
         case settingPIN              // PIN setup step (before password in NATS flow)
         case processingPIN           // Sending PIN to supervisor
         case waitingForVault         // NATS flow: waiting for vault ready + UTKs
         case settingPassword
         case processingPassword
         case creatingCredential      // NATS flow: credential being created
+        case confirmProfile          // Confirm public profile before finishing
         case finalizing
         case settingUpNats
         case verifyingEnrollment     // NATS flow: final verification
@@ -108,6 +120,10 @@ final class EnrollmentViewModel: ObservableObject {
                 return "Device Verification"
             case .attestationComplete:
                 return "Verified"
+            case .confirmIdentity:
+                return "Confirm Identity"
+            case .identityRejected:
+                return "Identity Mismatch"
             case .settingPIN, .processingPIN:
                 return "Create Vault PIN"
             case .waitingForVault:
@@ -116,6 +132,8 @@ final class EnrollmentViewModel: ObservableObject {
                 return "Create Password"
             case .creatingCredential:
                 return "Creating Credential"
+            case .confirmProfile:
+                return "Your Profile"
             case .finalizing:
                 return "Completing Setup"
             case .settingUpNats:
@@ -1009,6 +1027,43 @@ final class EnrollmentViewModel: ObservableObject {
             #endif
         }
     }
+
+    // MARK: - Identity Confirmation
+
+    /// Confirm the identity shown to the user
+    func confirmIdentity() {
+        // After identity is confirmed, proceed to PIN setup
+        state = .settingPIN
+    }
+
+    /// Reject identity — report mismatch and cancel enrollment
+    func rejectIdentity() {
+        state = .identityRejected
+        // Report mismatch to supervisor via NATS
+        Task {
+            await enrollmentNatsHandler?.reportIdentityMismatch()
+        }
+    }
+
+    // MARK: - Profile Confirmation
+
+    /// Confirm and publish the default public profile
+    func confirmProfile() async {
+        // In production: publish profile via NATS
+        // For now, proceed to completion
+        if let guid = userGuid {
+            state = .complete(userGuid: guid)
+        }
+    }
+
+    /// Skip profile publishing
+    func skipProfile() {
+        if let guid = userGuid {
+            state = .complete(userGuid: guid)
+        }
+    }
+
+    // MARK: - Retry
 
     func retry() {
         switch state {

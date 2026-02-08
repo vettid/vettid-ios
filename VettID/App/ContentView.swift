@@ -478,60 +478,90 @@ struct EnrollmentContainerView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        ZStack {
-            switch viewModel.state {
-            case .initial, .scanningQR:
-                QRScannerView { code in
-                    Task {
-                        await viewModel.handleScannedCode(code)
+        VStack(spacing: 0) {
+            // Step indicator (hidden on initial/scanning and completion states)
+            if shouldShowStepIndicator {
+                EnrollmentStepIndicator(currentPhase: viewModel.state.wizardPhase)
+            }
+
+            // Main content
+            ZStack {
+                switch viewModel.state {
+                case .initial, .scanningQR:
+                    QRScannerView { code in
+                        Task {
+                            await viewModel.handleScannedCode(code)
+                        }
                     }
+
+                case .processingInvitation:
+                    processingView
+
+                case .connectingToNats:
+                    connectingToNatsView
+
+                case .requestingAttestation:
+                    requestingAttestationView
+
+                case .attestationRequired, .attesting, .attestationComplete:
+                    AttestationView(viewModel: viewModel) {
+                        // Attestation complete callback
+                    }
+
+                case .confirmIdentity(let identity):
+                    ConfirmIdentityView(
+                        firstName: identity.firstName,
+                        lastName: identity.lastName,
+                        email: identity.email,
+                        onConfirm: { viewModel.confirmIdentity() },
+                        onReject: { viewModel.rejectIdentity() }
+                    )
+
+                case .identityRejected:
+                    identityRejectedView
+
+                case .settingPIN, .processingPIN:
+                    EnrollmentPINSetupView(viewModel: viewModel)
+
+                case .waitingForVault:
+                    waitingForVaultView
+
+                case .settingPassword, .processingPassword:
+                    PasswordSetupView(viewModel: viewModel)
+
+                case .creatingCredential:
+                    creatingCredentialView
+
+                case .confirmProfile:
+                    ConfirmProfileView(
+                        displayName: viewModel.scannedCode ?? "User",
+                        email: nil,
+                        onConfirm: {
+                            Task { await viewModel.confirmProfile() }
+                        },
+                        onSkip: { viewModel.skipProfile() }
+                    )
+
+                case .finalizing:
+                    finalizingView
+
+                case .settingUpNats:
+                    settingUpNatsView
+
+                case .verifyingEnrollment:
+                    verifyingEnrollmentView
+
+                case .complete(let userGuid):
+                    EnrollmentCompleteView(userGuid: userGuid) {
+                        appState.refreshCredentialState()
+                        // Start background sync after successful enrollment
+                        VaultBackgroundRefresh.shared.onEnrollmentComplete()
+                        dismiss()
+                    }
+
+                case .error(let message, let retryable):
+                    errorView(message: message, retryable: retryable)
                 }
-
-            case .processingInvitation:
-                processingView
-
-            case .connectingToNats:
-                connectingToNatsView
-
-            case .requestingAttestation:
-                requestingAttestationView
-
-            case .attestationRequired, .attesting, .attestationComplete:
-                AttestationView(viewModel: viewModel) {
-                    // Attestation complete callback
-                }
-
-            case .settingPIN, .processingPIN:
-                EnrollmentPINSetupView(viewModel: viewModel)
-
-            case .waitingForVault:
-                waitingForVaultView
-
-            case .settingPassword, .processingPassword:
-                PasswordSetupView(viewModel: viewModel)
-
-            case .creatingCredential:
-                creatingCredentialView
-
-            case .finalizing:
-                finalizingView
-
-            case .settingUpNats:
-                settingUpNatsView
-
-            case .verifyingEnrollment:
-                verifyingEnrollmentView
-
-            case .complete(let userGuid):
-                EnrollmentCompleteView(userGuid: userGuid) {
-                    appState.refreshCredentialState()
-                    // Start background sync after successful enrollment
-                    VaultBackgroundRefresh.shared.onEnrollmentComplete()
-                    dismiss()
-                }
-
-            case .error(let message, let retryable):
-                errorView(message: message, retryable: retryable)
             }
         }
         .navigationTitle(viewModel.state.title)
@@ -546,6 +576,42 @@ struct EnrollmentContainerView: View {
                 }
             }
         }
+    }
+
+    private var shouldShowStepIndicator: Bool {
+        switch viewModel.state {
+        case .initial, .scanningQR, .complete, .error:
+            return false
+        default:
+            return true
+        }
+    }
+
+    // MARK: - Identity Rejected View
+
+    private var identityRejectedView: some View {
+        VStack(spacing: 24) {
+            Image(systemName: "exclamationmark.shield.fill")
+                .font(.system(size: 60))
+                .foregroundStyle(.red)
+
+            Text("Identity Mismatch Reported")
+                .font(.title2)
+                .fontWeight(.bold)
+
+            Text("This enrollment has been cancelled. A mismatch report has been sent for investigation.")
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+
+            Button("Done") {
+                viewModel.reset()
+                dismiss()
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding()
     }
 
     // MARK: - Processing View

@@ -46,6 +46,10 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>VettID needs camera access to scan enrollment QR codes.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>VettID uses your location to record location history in your secure vault.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>VettID uses your location in the background to record location history in your secure vault.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>VettID uses Face ID to securely unlock your credentials.</string>
 	<!-- URL Schemes for deep linking -->
@@ -161,6 +165,7 @@
 		<string>voip</string>
 		<string>remote-notification</string>
 		<string>fetch</string>
+		<string>location</string>
 	</array>
 	<!-- Microphone usage for VoIP calls -->
 	<key>NSMicrophoneUsageDescription</key>

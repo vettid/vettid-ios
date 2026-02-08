@@ -1205,6 +1205,18 @@ struct VaultWarmResponse: Decodable {
     let requestId: String?
     let sessionTtl: Int?  // How long the vault will stay warm (seconds)
     let remainingAttempts: Int?  // PIN attempts remaining before lockout
+    let utks: [UTKInfo]?  // New UTKs returned after successful warming
+
+    /// UTK info returned in vault warming response
+    struct UTKInfo: Decodable {
+        let id: String
+        let publicKey: String
+
+        enum CodingKeys: String, CodingKey {
+            case id
+            case publicKey = "public_key"
+        }
+    }
 
     enum CodingKeys: String, CodingKey {
         case success
@@ -1212,6 +1224,7 @@ struct VaultWarmResponse: Decodable {
         case requestId = "request_id"
         case sessionTtl = "session_ttl"
         case remainingAttempts = "remaining_attempts"
+        case utks
     }
 }
 

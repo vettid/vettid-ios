@@ -4,9 +4,9 @@ import SwiftUI
 
 struct PersonalDataView: View {
     @StateObject private var viewModel = PersonalDataViewModel()
-    @State private var expandedSections: Set<PersonalData.DataCategory> = [.publicInfo, .privateInfo]
+    @State private var expandedSections: Set<DataCategory> = Set(DataCategory.allCases)
     @State private var showAddData = false
-    @State private var selectedCategory: PersonalData.DataCategory = .publicInfo
+    @State private var selectedCategory: DataCategory = .identity
 
     var body: some View {
         Group {
@@ -49,43 +49,26 @@ struct PersonalDataView: View {
 
     private var dataContent: some View {
         List {
-            // Public Section
-            dataSection(
-                category: .publicInfo,
-                data: viewModel.publicData
-            )
-
-            // Private Section
-            dataSection(
-                category: .privateInfo,
-                data: viewModel.privateData
-            )
-
-            // Keys Section
-            dataSection(
-                category: .keys,
-                data: viewModel.keysData
-            )
-
-            // Minor Secrets Section
-            dataSection(
-                category: .minorSecrets,
-                data: viewModel.minorSecretsData
-            )
+            ForEach(DataCategory.allCases, id: \.self) { category in
+                dataSection(
+                    category: category,
+                    data: viewModel.items(for: category)
+                )
+            }
         }
         .listStyle(.insetGrouped)
     }
 
     // MARK: - Data Section
 
-    private func dataSection(category: PersonalData.DataCategory, data: [PersonalData]) -> some View {
+    private func dataSection(category: DataCategory, data: [PersonalDataItem]) -> some View {
         Section {
             if expandedSections.contains(category) {
                 if data.isEmpty {
                     emptyCategory(category)
                 } else {
                     ForEach(data) { item in
-                        PersonalDataRowView(data: item)
+                        PersonalDataRowView(item: item)
                     }
                     .onDelete { indexSet in
                         deleteItems(at: indexSet, in: category)
@@ -97,7 +80,7 @@ struct PersonalDataView: View {
         }
     }
 
-    private func sectionHeader(category: PersonalData.DataCategory, count: Int) -> some View {
+    private func sectionHeader(category: DataCategory, count: Int) -> some View {
         Button(action: {
             withAnimation {
                 if expandedSections.contains(category) {
@@ -134,7 +117,7 @@ struct PersonalDataView: View {
         }
     }
 
-    private func emptyCategory(_ category: PersonalData.DataCategory) -> some View {
+    private func emptyCategory(_ category: DataCategory) -> some View {
         VStack(spacing: 8) {
             Text("No \(category.displayName.lowercased()) data")
                 .font(.subheadline)
@@ -186,12 +169,10 @@ struct PersonalDataView: View {
 
     // MARK: - Actions
 
-    private func deleteItems(at indexSet: IndexSet, in category: PersonalData.DataCategory) {
-        let data = viewModel.dataForCategory(category)
+    private func deleteItems(at indexSet: IndexSet, in category: DataCategory) {
+        let data = viewModel.items(for: category)
         for index in indexSet {
-            Task {
-                await viewModel.deleteData(data[index])
-            }
+            viewModel.deleteItem(data[index].id)
         }
     }
 }
@@ -199,13 +180,13 @@ struct PersonalDataView: View {
 // MARK: - Personal Data Row View
 
 struct PersonalDataRowView: View {
-    let data: PersonalData
+    let item: PersonalDataItem
 
     var body: some View {
-        NavigationLink(destination: PersonalDataDetailView(data: data)) {
+        NavigationLink(destination: PersonalDataDetailView(item: item)) {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(data.fieldName)
+                    Text(item.name)
                         .font(.subheadline)
                         .fontWeight(.medium)
 
@@ -216,34 +197,41 @@ struct PersonalDataRowView: View {
 
                 Spacer()
 
-                // Visibility badge
-                HStack(spacing: 4) {
-                    Image(systemName: data.visibility.icon)
-                        .font(.caption2)
-                    Text(data.visibility.displayName)
-                        .font(.caption2)
+                if item.isInPublicProfile {
+                    HStack(spacing: 4) {
+                        Image(systemName: "globe")
+                            .font(.caption2)
+                        Text("Public")
+                            .font(.caption2)
+                    }
+                    .foregroundStyle(.blue)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(4)
                 }
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color(.systemGray6))
-                .cornerRadius(4)
+
+                if item.isSystemField {
+                    Image(systemName: "lock.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }
 
     private var maskedValue: String {
-        if data.category == .keys || data.category == .minorSecrets {
-            return "••••••••"
+        if item.isSensitive {
+            return String(repeating: "\u{2022}", count: 8)
         }
-        return data.value
+        return item.value
     }
 }
 
 // MARK: - Personal Data Detail View
 
 struct PersonalDataDetailView: View {
-    let data: PersonalData
+    let item: PersonalDataItem
 
     @State private var isEditing = false
     @State private var editedValue: String = ""
@@ -255,44 +243,54 @@ struct PersonalDataDetailView: View {
                 if isEditing {
                     TextField("Value", text: $editedValue)
                 } else {
-                    Text(data.value)
+                    Text(item.value)
                         .font(.body)
                 }
             }
 
-            Section("Visibility") {
-                HStack {
-                    Image(systemName: data.visibility.icon)
-                    Text(data.visibility.displayName)
+            Section("Details") {
+                LabeledContent("Category", value: item.category.displayName)
+                LabeledContent("Type", value: item.type.displayName)
+                LabeledContent("Field Type", value: item.fieldType.displayName)
+                if item.isInPublicProfile {
+                    Label("In Public Profile", systemImage: "globe")
+                        .foregroundStyle(.blue)
+                }
+                if item.isSystemField {
+                    Label("System Field", systemImage: "lock.fill")
+                        .foregroundStyle(.secondary)
                 }
             }
 
             Section("Information") {
-                LabeledContent("Category", value: data.category.displayName)
-                LabeledContent("Created", value: data.createdAt.formatted(date: .abbreviated, time: .omitted))
-                LabeledContent("Updated", value: data.updatedAt.formatted(date: .abbreviated, time: .omitted))
+                LabeledContent("Created", value: item.createdAt.formatted(date: .abbreviated, time: .omitted))
+                LabeledContent("Updated", value: item.updatedAt.formatted(date: .abbreviated, time: .omitted))
             }
 
-            Section {
-                Button("Delete", role: .destructive) {
-                    showDeleteConfirmation = true
+            if !item.isSystemField {
+                Section {
+                    Button("Delete", role: .destructive) {
+                        showDeleteConfirmation = true
+                    }
                 }
             }
         }
-        .navigationTitle(data.fieldName)
+        .navigationTitle(item.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button(isEditing ? "Save" : "Edit") {
-                    if isEditing {
-                        // Save changes
+            if !item.isSystemField {
+                ToolbarItem(placement: .primaryAction) {
+                    Button(isEditing ? "Save" : "Edit") {
+                        if isEditing {
+                            // Save changes
+                        }
+                        isEditing.toggle()
                     }
-                    isEditing.toggle()
                 }
             }
         }
         .onAppear {
-            editedValue = data.value
+            editedValue = item.value
         }
         .confirmationDialog("Delete this data?", isPresented: $showDeleteConfirmation) {
             Button("Delete", role: .destructive) {
@@ -308,14 +306,15 @@ struct AddPersonalDataView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var viewModel: PersonalDataViewModel
 
-    let initialCategory: PersonalData.DataCategory
+    let initialCategory: DataCategory
 
-    @State private var fieldName = ""
+    @State private var name = ""
     @State private var value = ""
-    @State private var category: PersonalData.DataCategory
-    @State private var visibility: PersonalData.DataVisibility = .selfOnly
+    @State private var category: DataCategory
+    @State private var fieldType: FieldType = .text
+    @State private var isInPublicProfile = false
 
-    init(viewModel: PersonalDataViewModel, initialCategory: PersonalData.DataCategory) {
+    init(viewModel: PersonalDataViewModel, initialCategory: DataCategory) {
         self.viewModel = viewModel
         self.initialCategory = initialCategory
         self._category = State(initialValue: initialCategory)
@@ -325,23 +324,25 @@ struct AddPersonalDataView: View {
         NavigationView {
             Form {
                 Section("Field Details") {
-                    TextField("Field Name", text: $fieldName)
+                    TextField("Field Name", text: $name)
 
                     TextField("Value", text: $value)
 
                     Picker("Category", selection: $category) {
-                        ForEach(PersonalData.DataCategory.allCases, id: \.self) { cat in
+                        ForEach(DataCategory.allCases, id: \.self) { cat in
                             Label(cat.displayName, systemImage: cat.icon)
                                 .tag(cat)
                         }
                     }
 
-                    Picker("Visibility", selection: $visibility) {
-                        ForEach([PersonalData.DataVisibility.everyone, .connections, .selfOnly], id: \.self) { vis in
-                            Label(vis.displayName, systemImage: vis.icon)
-                                .tag(vis)
+                    Picker("Field Type", selection: $fieldType) {
+                        ForEach(FieldType.allCases, id: \.self) { ft in
+                            Text(ft.displayName)
+                                .tag(ft)
                         }
                     }
+
+                    Toggle("Include in Public Profile", isOn: $isInPublicProfile)
                 }
 
                 Section {
@@ -361,22 +362,21 @@ struct AddPersonalDataView: View {
                     Button("Save") {
                         saveData()
                     }
-                    .disabled(fieldName.isEmpty || value.isEmpty)
+                    .disabled(name.isEmpty || value.isEmpty)
                 }
             }
         }
     }
 
     private func saveData() {
-        Task {
-            await viewModel.addData(
-                fieldName: fieldName,
-                value: value,
-                category: category,
-                visibility: visibility
-            )
-            dismiss()
-        }
+        viewModel.addItem(
+            name: name,
+            value: value,
+            category: category,
+            fieldType: fieldType,
+            isInPublicProfile: isInPublicProfile
+        )
+        dismiss()
     }
 }
 

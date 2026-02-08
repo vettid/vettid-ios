@@ -246,6 +246,31 @@
 		81A4EA1A55CF48328F723705 /* ServiceCallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88FBBD1C0CA5414DB51DB3BE /* ServiceCallView.swift */; };
 		BD2A5DC74A8F442595FF0148 /* AuditLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7256E4668D454C07B16E5039 /* AuditLogView.swift */; };
 		BD72D00001034E88830A3355 /* CapabilityManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AB1CA62FFB4444590E09F2A /* CapabilityManagementView.swift */; };
+		6310F3B424CABEA877A93C3B /* ConfirmIdentityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A3E6E41F62B89806961D284 /* ConfirmIdentityView.swift */; };
+		FEADABD29AE0323BCAFA9FDA /* ConfirmProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AC8ADAF55E643299E94EE16 /* ConfirmProfileView.swift */; };
+		54B7794EFD62AC60DC959616 /* EnrollmentStepIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D5BED562F90CB0FDD0644D8 /* EnrollmentStepIndicator.swift */; };
+		A99C0BA0A820F87849ED2E14 /* CriticalSecretsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E225BD5C73D7230704FAB876 /* CriticalSecretsModels.swift */; };
+		CE20069F67BEE04AD97A58F0 /* CriticalSecretsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 887CA344BFDF1AB2F5962696 /* CriticalSecretsViewModel.swift */; };
+		DEE3D9B0EE3791B354526EAA /* CriticalSecretsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69583E3C41218CAC1AE2CB36 /* CriticalSecretsView.swift */; };
+		5FBFE89B623ECDDACD5F1B6E /* AddSecretView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AAB42C18B14C6E76906390 /* AddSecretView.swift */; };
+		EDBBEC3DCEE796C63045A6F6 /* ProfilePhotoCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28BD2140A42BBFBB014962C9 /* ProfilePhotoCapture.swift */; };
+		BD2FEE9B47FF1B13477CCE9F /* SecretTemplate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B56CABD598DBD913B5339F0 /* SecretTemplate.swift */; };
+		7EBC134B0224FAC3512A6826 /* PersonalDataTemplate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1BE7BA069CB4B176CB688BD /* PersonalDataTemplate.swift */; };
+		9B5AF6D980D2481DA32EDDB3 /* DatePickerInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B4424C107B353DF67958D31 /* DatePickerInput.swift */; };
+		5F3A22B65A7FA3F3541548DE /* PhoneNumberInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 554E7F78EC526CCF2D03A49E /* PhoneNumberInput.swift */; };
+		6379C885550BDD43D78A0404 /* DropdownPickerField.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0A3504F6C07651A52A1F518 /* DropdownPickerField.swift */; };
+		6D3B4683896AF39E27CBC343 /* BadgeCountsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5897F1C4D114B467DABB540 /* BadgeCountsViewModel.swift */; };
+		C3289F25F89BA07DE3457907 /* GuideCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 117FF88E6F69FCF8379A38E4 /* GuideCatalog.swift */; };
+		A422ED4F81E1AD58F92BF064 /* GuideContentProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C3BEE0569A98758AD1A82E4 /* GuideContentProvider.swift */; };
+		B93737E3FF5AA6C68B31F7F4 /* GuideDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4BB2A0D8141826A33EB7A38 /* GuideDetailView.swift */; };
+		DFCD63CCA2FF2DB6C3A08065 /* LocationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1022807D6878693ABC68B3A /* LocationModels.swift */; };
+		C25F4570B7E414696265B865 /* LocationCollectionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EC5A355C3E2ED1DCABEADE4 /* LocationCollectionService.swift */; };
+		8934C39324B1AB736FA23E9E /* LocationHistoryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A311CB46DD0C77E3156F2FA /* LocationHistoryViewModel.swift */; };
+		DCC3C95EBC2BA5A17BF01502 /* LocationHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F2D93B2CED7D43A85E4D73D /* LocationHistoryView.swift */; };
+		630449904B4E48AA48C5CD72 /* SharedLocationsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50110171590A5159B6AC95DA /* SharedLocationsViewModel.swift */; };
+		B89D4CD7F7B830FAD74D5670 /* SharedLocationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F3FAB193CD3CD31501CE0F1 /* SharedLocationsView.swift */; };
+		AC38BE1D10B3EA15EB2D9E03 /* LocationSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3F3BD5849E735408532CB14 /* LocationSettingsView.swift */; };
+		C6F8E05EB3E080D34708680B /* ProfileClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 334364038B642505DD7426C5 /* ProfileClient.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -510,6 +535,31 @@
 		88FBBD1C0CA5414DB51DB3BE /* ServiceCallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceCallView.swift; sourceTree = "<group>"; };
 		7256E4668D454C07B16E5039 /* AuditLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuditLogView.swift; sourceTree = "<group>"; };
 		2AB1CA62FFB4444590E09F2A /* CapabilityManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapabilityManagementView.swift; sourceTree = "<group>"; };
+		3A3E6E41F62B89806961D284 /* ConfirmIdentityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfirmIdentityView.swift; sourceTree = "<group>"; };
+		4AC8ADAF55E643299E94EE16 /* ConfirmProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfirmProfileView.swift; sourceTree = "<group>"; };
+		4D5BED562F90CB0FDD0644D8 /* EnrollmentStepIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnrollmentStepIndicator.swift; sourceTree = "<group>"; };
+		E225BD5C73D7230704FAB876 /* CriticalSecretsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CriticalSecretsModels.swift; sourceTree = "<group>"; };
+		887CA344BFDF1AB2F5962696 /* CriticalSecretsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CriticalSecretsViewModel.swift; sourceTree = "<group>"; };
+		69583E3C41218CAC1AE2CB36 /* CriticalSecretsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CriticalSecretsView.swift; sourceTree = "<group>"; };
+		F0AAB42C18B14C6E76906390 /* AddSecretView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddSecretView.swift; sourceTree = "<group>"; };
+		28BD2140A42BBFBB014962C9 /* ProfilePhotoCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilePhotoCapture.swift; sourceTree = "<group>"; };
+		7B56CABD598DBD913B5339F0 /* SecretTemplate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecretTemplate.swift; sourceTree = "<group>"; };
+		B1BE7BA069CB4B176CB688BD /* PersonalDataTemplate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalDataTemplate.swift; sourceTree = "<group>"; };
+		8B4424C107B353DF67958D31 /* DatePickerInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatePickerInput.swift; sourceTree = "<group>"; };
+		554E7F78EC526CCF2D03A49E /* PhoneNumberInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneNumberInput.swift; sourceTree = "<group>"; };
+		B0A3504F6C07651A52A1F518 /* DropdownPickerField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DropdownPickerField.swift; sourceTree = "<group>"; };
+		B5897F1C4D114B467DABB540 /* BadgeCountsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BadgeCountsViewModel.swift; sourceTree = "<group>"; };
+		117FF88E6F69FCF8379A38E4 /* GuideCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuideCatalog.swift; sourceTree = "<group>"; };
+		0C3BEE0569A98758AD1A82E4 /* GuideContentProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuideContentProvider.swift; sourceTree = "<group>"; };
+		A4BB2A0D8141826A33EB7A38 /* GuideDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuideDetailView.swift; sourceTree = "<group>"; };
+		C1022807D6878693ABC68B3A /* LocationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationModels.swift; sourceTree = "<group>"; };
+		1EC5A355C3E2ED1DCABEADE4 /* LocationCollectionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationCollectionService.swift; sourceTree = "<group>"; };
+		9A311CB46DD0C77E3156F2FA /* LocationHistoryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationHistoryViewModel.swift; sourceTree = "<group>"; };
+		5F2D93B2CED7D43A85E4D73D /* LocationHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationHistoryView.swift; sourceTree = "<group>"; };
+		50110171590A5159B6AC95DA /* SharedLocationsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedLocationsViewModel.swift; sourceTree = "<group>"; };
+		9F3FAB193CD3CD31501CE0F1 /* SharedLocationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedLocationsView.swift; sourceTree = "<group>"; };
+		E3F3BD5849E735408532CB14 /* LocationSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationSettingsView.swift; sourceTree = "<group>"; };
+		334364038B642505DD7426C5 /* ProfileClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileClient.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -620,7 +670,12 @@
 				688F0CE3AE28533DD0235DF8 /* Secret.swift */,
 				CAF3A0B1092FFB0A652C013F /* SecretsViewModel.swift */,
 				7AF9A63734413646BB7E375A /* SecretsView.swift */,
-			);
+			
+				E225BD5C73D7230704FAB876 /* CriticalSecretsModels.swift */,
+				887CA344BFDF1AB2F5962696 /* CriticalSecretsViewModel.swift */,
+				69583E3C41218CAC1AE2CB36 /* CriticalSecretsView.swift */,
+				F0AAB42C18B14C6E76906390 /* AddSecretView.swift */,
+				7B56CABD598DBD913B5339F0 /* SecretTemplate.swift */,);
 			name = Secrets;
 			path = Secrets;
 			sourceTree = "<group>";
@@ -647,7 +702,8 @@
 				40000007 /* Resources */,
 				1000000D /* Info.plist */,
 				392F1BEBBE9997250A75C74A /* VettID.entitlements */,
-			);
+			
+				5B79F21BA22207B673AFA879 /* UI */,);
 			path = VettID;
 			sourceTree = "<group>";
 		};
@@ -708,6 +764,8 @@
 				C630FC7C1B2D94D996195FFC /* Authorization */,
 				FCCB07EFCC00ABA792AE3598 /* Transfer */,
 				59CC603588EA41EF459C4BB1 /* ServiceConnections */,
+				4D2441A5D57C73F0129C9030 /* Guide */,
+				A0363F3AEE393DBEAB779E3E /* Location */,
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -776,7 +834,10 @@
 				10000013 /* EnrollmentCompleteView.swift */,
 				067A374FCD331C52F728DDF6 /* EnrollmentPINSetupView.swift */,
 				78032CC009E0FAFFA9613FF4 /* EnrollmentNatsHandler.swift */,
-			);
+			
+				3A3E6E41F62B89806961D284 /* ConfirmIdentityView.swift */,
+				4AC8ADAF55E643299E94EE16 /* ConfirmProfileView.swift */,
+				4D5BED562F90CB0FDD0644D8 /* EnrollmentStepIndicator.swift */,);
 			path = Enrollment;
 			sourceTree = "<group>";
 		};
@@ -825,6 +886,7 @@
 				C8185E10A8FE9EB78C272A3B /* VaultEvent.swift */,
 				667E3A492F1E02FDCFC33F18 /* VaultSecurityService.swift */,
 				816EEA59016441498134BC23 /* ServiceNATSManager.swift */,
+				334364038B642505DD7426C5 /* ProfileClient.swift */,
 			);
 			path = NATS;
 			sourceTree = "<group>";
@@ -887,7 +949,8 @@
 				10000038 /* ProfileViewModel.swift */,
 				10000039 /* ProfileView.swift */,
 				1000003A /* EditProfileView.swift */,
-			);
+			
+				28BD2140A42BBFBB014962C9 /* ProfilePhotoCapture.swift */,);
 			path = Profile;
 			sourceTree = "<group>";
 		};
@@ -954,6 +1017,7 @@
 				B5B59320799245103D92C504 /* HeaderView.swift */,
 				0E26681EB4F44673283A603D /* ContextualBottomNav.swift */,
 				DEA5BE7707CCFC71CBA871B7 /* MainNavigationView.swift */,
+				B5897F1C4D114B467DABB540 /* BadgeCountsViewModel.swift */,
 			);
 			name = Navigation;
 			path = Navigation;
@@ -1025,7 +1089,8 @@
 				DE89C420DEC861CD3FA91B92 /* PersonalData.swift */,
 				208B738362A4D7A093432F99 /* PersonalDataViewModel.swift */,
 				498392EDCF906E22833BD876 /* PersonalDataView.swift */,
-			);
+			
+				B1BE7BA069CB4B176CB688BD /* PersonalDataTemplate.swift */,);
 			name = PersonalData;
 			path = PersonalData;
 			sourceTree = "<group>";
@@ -1178,6 +1243,50 @@
 				FE8BB0F52357B236B075801B /* iOS */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		5B79F21BA22207B673AFA879 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				DD50872DD57AF5FBCE85C6FD /* Components */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+		DD50872DD57AF5FBCE85C6FD /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				8B4424C107B353DF67958D31 /* DatePickerInput.swift */,
+				554E7F78EC526CCF2D03A49E /* PhoneNumberInput.swift */,
+				B0A3504F6C07651A52A1F518 /* DropdownPickerField.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		4D2441A5D57C73F0129C9030 /* Guide */ = {
+			isa = PBXGroup;
+			children = (
+				117FF88E6F69FCF8379A38E4 /* GuideCatalog.swift */,
+				0C3BEE0569A98758AD1A82E4 /* GuideContentProvider.swift */,
+				A4BB2A0D8141826A33EB7A38 /* GuideDetailView.swift */,
+			);
+			name = Guide;
+			path = Guide;
+			sourceTree = "<group>";
+		};
+		A0363F3AEE393DBEAB779E3E /* Location */ = {
+			isa = PBXGroup;
+			children = (
+				C1022807D6878693ABC68B3A /* LocationModels.swift */,
+				1EC5A355C3E2ED1DCABEADE4 /* LocationCollectionService.swift */,
+				9A311CB46DD0C77E3156F2FA /* LocationHistoryViewModel.swift */,
+				5F2D93B2CED7D43A85E4D73D /* LocationHistoryView.swift */,
+				50110171590A5159B6AC95DA /* SharedLocationsViewModel.swift */,
+				9F3FAB193CD3CD31501CE0F1 /* SharedLocationsView.swift */,
+				E3F3BD5849E735408532CB14 /* LocationSettingsView.swift */,
+			);
+			name = Location;
+			path = Location;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -1479,7 +1588,32 @@
 				B69ECFDF39C64BFF85F29F07 /* ServiceNATSManager.swift in Sources */,
 				5F617885446040A4A2238FE4 /* AuthRequestSheet.swift in Sources */,
 				B73004F8F4574D7C80BFCE66 /* AuthzRequestSheet.swift in Sources */,
-			);
+			
+				6310F3B424CABEA877A93C3B /* ConfirmIdentityView.swift in Sources */,
+				FEADABD29AE0323BCAFA9FDA /* ConfirmProfileView.swift in Sources */,
+				54B7794EFD62AC60DC959616 /* EnrollmentStepIndicator.swift in Sources */,
+				A99C0BA0A820F87849ED2E14 /* CriticalSecretsModels.swift in Sources */,
+				CE20069F67BEE04AD97A58F0 /* CriticalSecretsViewModel.swift in Sources */,
+				DEE3D9B0EE3791B354526EAA /* CriticalSecretsView.swift in Sources */,
+				5FBFE89B623ECDDACD5F1B6E /* AddSecretView.swift in Sources */,
+				EDBBEC3DCEE796C63045A6F6 /* ProfilePhotoCapture.swift in Sources */,
+				BD2FEE9B47FF1B13477CCE9F /* SecretTemplate.swift in Sources */,
+				7EBC134B0224FAC3512A6826 /* PersonalDataTemplate.swift in Sources */,
+				9B5AF6D980D2481DA32EDDB3 /* DatePickerInput.swift in Sources */,
+				5F3A22B65A7FA3F3541548DE /* PhoneNumberInput.swift in Sources */,
+				6379C885550BDD43D78A0404 /* DropdownPickerField.swift in Sources */,
+				6D3B4683896AF39E27CBC343 /* BadgeCountsViewModel.swift in Sources */,
+				C3289F25F89BA07DE3457907 /* GuideCatalog.swift in Sources */,
+				A422ED4F81E1AD58F92BF064 /* GuideContentProvider.swift in Sources */,
+				B93737E3FF5AA6C68B31F7F4 /* GuideDetailView.swift in Sources */,
+				DFCD63CCA2FF2DB6C3A08065 /* LocationModels.swift in Sources */,
+				C25F4570B7E414696265B865 /* LocationCollectionService.swift in Sources */,
+				8934C39324B1AB736FA23E9E /* LocationHistoryViewModel.swift in Sources */,
+				DCC3C95EBC2BA5A17BF01502 /* LocationHistoryView.swift in Sources */,
+				630449904B4E48AA48C5CD72 /* SharedLocationsViewModel.swift in Sources */,
+				B89D4CD7F7B830FAD74D5670 /* SharedLocationsView.swift in Sources */,
+				AC38BE1D10B3EA15EB2D9E03 /* LocationSettingsView.swift in Sources */,
+				C6F8E05EB3E080D34708680B /* ProfileClient.swift in Sources */,);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		883FF6CAE2490104B72F2843 /* Sources */ = {

@@ -1,97 +1,239 @@
 import Foundation
 
-// MARK: - Secret Model
+// MARK: - Secret Category
 
-struct Secret: Identifiable, Codable {
-    let id: String
-    var name: String
-    var encryptedValue: String  // Base64 encoded encrypted value
-    var category: SecretCategory
-    var notes: String?
-    let createdAt: Date
-    var updatedAt: Date
+enum SecretCategory: String, Codable, CaseIterable {
+    case identity = "identity"
+    case cryptocurrency = "cryptocurrency"
+    case bankAccount = "bank_account"
+    case creditCard = "credit_card"
+    case insurance = "insurance"
+    case driversLicense = "drivers_license"
+    case passport = "passport"
+    case ssn = "ssn"
+    case apiKey = "api_key"
+    case password = "password"
+    case wifi = "wifi"
+    case certificate = "certificate"
+    case note = "note"
+    case other = "other"
 
-    enum SecretCategory: String, Codable, CaseIterable {
-        case password = "password"
-        case note = "note"
-        case apiKey = "api_key"
-        case recoveryCode = "recovery_code"
-        case pin = "pin"
-        case other = "other"
-
-        var displayName: String {
-            switch self {
-            case .password: return "Password"
-            case .note: return "Secure Note"
-            case .apiKey: return "API Key"
-            case .recoveryCode: return "Recovery Code"
-            case .pin: return "PIN"
-            case .other: return "Other"
-            }
+    var displayName: String {
+        switch self {
+        case .identity: return "Identity"
+        case .cryptocurrency: return "Cryptocurrency"
+        case .bankAccount: return "Bank Account"
+        case .creditCard: return "Credit Card"
+        case .insurance: return "Insurance"
+        case .driversLicense: return "Driver's License"
+        case .passport: return "Passport"
+        case .ssn: return "Social Security"
+        case .apiKey: return "API Key"
+        case .password: return "Password"
+        case .wifi: return "WiFi"
+        case .certificate: return "Certificate"
+        case .note: return "Note"
+        case .other: return "Other"
         }
+    }
 
-        var icon: String {
-            switch self {
-            case .password: return "key.fill"
-            case .note: return "note.text"
-            case .apiKey: return "terminal.fill"
-            case .recoveryCode: return "arrow.uturn.backward.circle.fill"
-            case .pin: return "number.circle.fill"
-            case .other: return "lock.fill"
-            }
+    var icon: String {
+        switch self {
+        case .identity: return "person.text.rectangle"
+        case .cryptocurrency: return "bitcoinsign.circle.fill"
+        case .bankAccount: return "building.columns.fill"
+        case .creditCard: return "creditcard.fill"
+        case .insurance: return "shield.checkered"
+        case .driversLicense: return "car.fill"
+        case .passport: return "airplane"
+        case .ssn: return "number.square.fill"
+        case .apiKey: return "terminal.fill"
+        case .password: return "key.fill"
+        case .wifi: return "wifi"
+        case .certificate: return "doc.badge.ellipsis"
+        case .note: return "note.text"
+        case .other: return "lock.fill"
         }
     }
 }
 
+// MARK: - Secret Type
+
+enum SecretType: String, Codable, CaseIterable {
+    case publicKey = "public_key"
+    case privateKey = "private_key"
+    case token = "token"
+    case password = "password"
+    case pin = "pin"
+    case accountNumber = "account_number"
+    case seedPhrase = "seed_phrase"
+    case text = "text"
+
+    var displayName: String {
+        switch self {
+        case .publicKey: return "Public Key"
+        case .privateKey: return "Private Key"
+        case .token: return "Token"
+        case .password: return "Password"
+        case .pin: return "PIN"
+        case .accountNumber: return "Account Number"
+        case .seedPhrase: return "Seed Phrase"
+        case .text: return "Text"
+        }
+    }
+}
+
+// MARK: - Secret Sync Status
+
+enum SecretSyncStatus: String, Codable {
+    case pending = "pending"
+    case synced = "synced"
+    case conflict = "conflict"
+    case error = "error"
+}
+
+// MARK: - Secret Field (for template-based secrets)
+
+struct SecretField: Identifiable, Codable, Equatable {
+    let id: String
+    var name: String
+    var value: String
+    var type: SecretType
+    var placeholder: String
+    var inputHint: FieldInputHint
+
+    init(id: String = UUID().uuidString, name: String, value: String = "", type: SecretType = .text, placeholder: String = "", inputHint: FieldInputHint = .text) {
+        self.id = id
+        self.name = name
+        self.value = value
+        self.type = type
+        self.placeholder = placeholder
+        self.inputHint = inputHint
+    }
+}
+
+// MARK: - Field Input Hint
+
+enum FieldInputHint: String, Codable {
+    case text = "text"
+    case date = "date"
+    case expiryDate = "expiry_date"
+    case country = "country"
+    case state = "state"
+    case number = "number"
+    case password = "password"
+    case pin = "pin"
+}
+
+// MARK: - Minor Secret (the primary secret model)
+
+struct MinorSecret: Identifiable, Codable, Equatable {
+    let id: String
+    var name: String
+    var value: String
+    var category: SecretCategory
+    var type: SecretType
+    var notes: String?
+    var fields: [SecretField]
+    var isShareable: Bool
+    var isInPublicProfile: Bool
+    var isSystemField: Bool
+    var sortOrder: Int
+    var syncStatus: SecretSyncStatus
+    let createdAt: Date
+    var updatedAt: Date
+
+    init(
+        id: String = UUID().uuidString,
+        name: String,
+        value: String = "",
+        category: SecretCategory = .other,
+        type: SecretType = .text,
+        notes: String? = nil,
+        fields: [SecretField] = [],
+        isShareable: Bool = false,
+        isInPublicProfile: Bool = false,
+        isSystemField: Bool = false,
+        sortOrder: Int = 0,
+        syncStatus: SecretSyncStatus = .pending,
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.name = name
+        self.value = value
+        self.category = category
+        self.type = type
+        self.notes = notes
+        self.fields = fields
+        self.isShareable = isShareable
+        self.isInPublicProfile = isInPublicProfile
+        self.isSystemField = isSystemField
+        self.sortOrder = sortOrder
+        self.syncStatus = syncStatus
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
+// MARK: - Backward Compatibility Alias
+
+typealias Secret = MinorSecret
+
 // MARK: - Mock Data
 
-extension Secret {
-    static func mockSecrets() -> [Secret] {
+extension MinorSecret {
+    static func mockSecrets() -> [MinorSecret] {
         [
-            Secret(
-                id: UUID().uuidString,
+            MinorSecret(
                 name: "Email Account",
-                encryptedValue: "encrypted_placeholder",
+                value: "encrypted_placeholder",
                 category: .password,
+                type: .password,
                 notes: "Main email account",
+                sortOrder: 0,
                 createdAt: Date().addingTimeInterval(-86400 * 30),
                 updatedAt: Date().addingTimeInterval(-86400 * 7)
             ),
-            Secret(
-                id: UUID().uuidString,
+            MinorSecret(
                 name: "GitHub API Token",
-                encryptedValue: "encrypted_placeholder",
+                value: "encrypted_placeholder",
                 category: .apiKey,
-                notes: nil,
+                type: .token,
+                sortOrder: 1,
                 createdAt: Date().addingTimeInterval(-86400 * 14),
                 updatedAt: Date().addingTimeInterval(-86400 * 14)
             ),
-            Secret(
-                id: UUID().uuidString,
-                name: "Backup Recovery Codes",
-                encryptedValue: "encrypted_placeholder",
-                category: .recoveryCode,
-                notes: "2FA recovery codes",
+            MinorSecret(
+                name: "Bitcoin Wallet",
+                value: "encrypted_placeholder",
+                category: .cryptocurrency,
+                type: .seedPhrase,
+                notes: "Hardware wallet backup",
+                sortOrder: 2,
                 createdAt: Date().addingTimeInterval(-86400 * 60),
                 updatedAt: Date().addingTimeInterval(-86400 * 60)
             ),
-            Secret(
-                id: UUID().uuidString,
+            MinorSecret(
                 name: "Banking PIN",
-                encryptedValue: "encrypted_placeholder",
-                category: .pin,
-                notes: nil,
+                value: "encrypted_placeholder",
+                category: .bankAccount,
+                type: .pin,
+                sortOrder: 3,
                 createdAt: Date().addingTimeInterval(-86400 * 90),
                 updatedAt: Date().addingTimeInterval(-86400 * 30)
             ),
-            Secret(
-                id: UUID().uuidString,
-                name: "Private Notes",
-                encryptedValue: "encrypted_placeholder",
-                category: .note,
-                notes: "Personal notes",
-                createdAt: Date().addingTimeInterval(-86400 * 5),
-                updatedAt: Date().addingTimeInterval(-86400)
+            MinorSecret(
+                name: "Identity Public Key",
+                value: "ed25519_public_key_placeholder",
+                category: .identity,
+                type: .publicKey,
+                isInPublicProfile: true,
+                isSystemField: true,
+                sortOrder: 0,
+                syncStatus: .synced,
+                createdAt: Date().addingTimeInterval(-86400 * 90),
+                updatedAt: Date().addingTimeInterval(-86400 * 90)
             )
         ]
     }

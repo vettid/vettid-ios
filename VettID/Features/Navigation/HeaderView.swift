@@ -7,16 +7,25 @@ struct HeaderView: View {
     let onProfileTap: () -> Void
     var actionIcon: String? = nil
     var onActionTap: (() -> Void)? = nil
-    var secondaryActionIcon: String? = nil
-    var onSecondaryActionTap: (() -> Void)? = nil
+    var onSettingsTap: (() -> Void)? = nil
+    var profilePhotoData: Data? = nil
 
     var body: some View {
         HStack(spacing: 16) {
             // Profile avatar (opens drawer)
             Button(action: onProfileTap) {
-                Image(systemName: "person.circle.fill")
-                    .font(.system(size: 32))
-                    .foregroundStyle(.blue)
+                if let photoData = profilePhotoData,
+                   let uiImage = UIImage(data: photoData) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 32, height: 32)
+                        .clipShape(Circle())
+                } else {
+                    Image(systemName: "person.circle.fill")
+                        .font(.system(size: 32))
+                        .foregroundStyle(.blue)
+                }
             }
 
             Spacer()
@@ -30,22 +39,21 @@ struct HeaderView: View {
 
             // Action buttons
             HStack(spacing: 12) {
-                if let secondaryIcon = secondaryActionIcon,
-                   let secondaryAction = onSecondaryActionTap {
-                    Button(action: secondaryAction) {
-                        Image(systemName: secondaryIcon)
-                            .font(.system(size: 18))
-                    }
-                }
-
                 if let icon = actionIcon, let action = onActionTap {
                     Button(action: action) {
                         Image(systemName: icon)
                             .font(.system(size: 18))
                     }
                 }
+
+                if let settingsAction = onSettingsTap {
+                    Button(action: settingsAction) {
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 18))
+                    }
+                }
             }
-            .frame(width: 60, alignment: .trailing)
+            .frame(minWidth: 32, alignment: .trailing)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -62,15 +70,26 @@ struct SearchableHeaderView: View {
     @Binding var isSearching: Bool
     var actionIcon: String? = nil
     var onActionTap: (() -> Void)? = nil
+    var onSettingsTap: (() -> Void)? = nil
+    var profilePhotoData: Data? = nil
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 16) {
                 // Profile avatar (opens drawer)
                 Button(action: onProfileTap) {
-                    Image(systemName: "person.circle.fill")
-                        .font(.system(size: 32))
-                        .foregroundStyle(.blue)
+                    if let photoData = profilePhotoData,
+                       let uiImage = UIImage(data: photoData) {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 32, height: 32)
+                            .clipShape(Circle())
+                    } else {
+                        Image(systemName: "person.circle.fill")
+                            .font(.system(size: 32))
+                            .foregroundStyle(.blue)
+                    }
                 }
 
                 if isSearching {
@@ -120,90 +139,21 @@ struct SearchableHeaderView: View {
                                     .font(.system(size: 18))
                             }
                         }
+
+                        if let settingsAction = onSettingsTap {
+                            Button(action: settingsAction) {
+                                Image(systemName: "gearshape")
+                                    .font(.system(size: 18))
+                            }
+                        }
                     }
-                    .frame(width: 60, alignment: .trailing)
+                    .frame(minWidth: 32, alignment: .trailing)
                 }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .background(Color(.systemBackground))
         }
-    }
-}
-
-// MARK: - Header Configuration
-
-struct HeaderConfiguration {
-    let title: String
-    var actionIcon: String? = nil
-    var onActionTap: (() -> Void)? = nil
-    var secondaryActionIcon: String? = nil
-    var onSecondaryActionTap: (() -> Void)? = nil
-    var showSearch: Bool = false
-
-    // Vault section headers
-    static func connections(onAdd: @escaping () -> Void) -> HeaderConfiguration {
-        HeaderConfiguration(
-            title: "Connections",
-            actionIcon: "plus",
-            onActionTap: onAdd,
-            showSearch: true
-        )
-    }
-
-    static func feed() -> HeaderConfiguration {
-        HeaderConfiguration(title: "Feed")
-    }
-
-    // Vault Services section headers
-    static func services() -> HeaderConfiguration {
-        HeaderConfiguration(title: "Vault Services")
-    }
-
-    static func handlers(onDiscover: @escaping () -> Void) -> HeaderConfiguration {
-        HeaderConfiguration(
-            title: "Handlers",
-            actionIcon: "magnifyingglass",
-            onActionTap: onDiscover
-        )
-    }
-
-    static func backups(onAdd: @escaping () -> Void) -> HeaderConfiguration {
-        HeaderConfiguration(
-            title: "Backups",
-            actionIcon: "plus",
-            onActionTap: onAdd
-        )
-    }
-
-    // App Settings section headers
-    static func settings() -> HeaderConfiguration {
-        HeaderConfiguration(title: "Settings")
-    }
-
-    static func profile(onEdit: @escaping () -> Void) -> HeaderConfiguration {
-        HeaderConfiguration(
-            title: "Profile",
-            actionIcon: "pencil",
-            onActionTap: onEdit
-        )
-    }
-
-    static func secrets(onAdd: @escaping () -> Void) -> HeaderConfiguration {
-        HeaderConfiguration(
-            title: "Secrets",
-            actionIcon: "plus",
-            onActionTap: onAdd,
-            showSearch: true
-        )
-    }
-
-    static func personalData(onAdd: @escaping () -> Void) -> HeaderConfiguration {
-        HeaderConfiguration(
-            title: "Personal Data",
-            actionIcon: "plus",
-            onActionTap: onAdd
-        )
     }
 }
 
@@ -215,14 +165,16 @@ struct HeaderConfiguration {
             title: "Connections",
             onProfileTap: {},
             actionIcon: "plus",
-            onActionTap: {}
+            onActionTap: {},
+            onSettingsTap: {}
         )
 
         Divider()
 
         HeaderView(
             title: "Feed",
-            onProfileTap: {}
+            onProfileTap: {},
+            onSettingsTap: {}
         )
 
         Divider()
@@ -233,7 +185,8 @@ struct HeaderConfiguration {
             searchText: .constant(""),
             isSearching: .constant(false),
             actionIcon: "plus",
-            onActionTap: {}
+            onActionTap: {},
+            onSettingsTap: {}
         )
 
         Spacer()

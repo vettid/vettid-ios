@@ -12,9 +12,24 @@ struct VaultWarmingView: View {
     @State private var errorMessage: String?
     @State private var remainingAttempts: Int?
     @State private var isShaking = false
+    @State private var retryCount = 0
     @FocusState private var isPinFieldFocused: Bool
 
+    /// Maximum number of automatic retries when vault is not ready
+    private let maxAutoRetries = 3
+    /// Delay between automatic retries in seconds
+    private let retryDelay: UInt64 = 2_000_000_000
+
     let onSuccess: () -> Void
+
+    /// Welcome message using the user's first name if available
+    private var welcomeMessage: String {
+        if let profile = appState.currentProfile {
+            let firstName = profile.displayName.split(separator: " ").first.map(String.init) ?? profile.displayName
+            return "Welcome back, \(firstName)"
+        }
+        return "Unlock Vault"
+    }
 
     var body: some View {
         VStack(spacing: 32) {
@@ -28,7 +43,7 @@ struct VaultWarmingView: View {
                     .frame(width: 80, height: 80)
                     .clipShape(RoundedRectangle(cornerRadius: 18))
 
-                Text("Unlock Vault")
+                Text(welcomeMessage)
                     .font(.title)
                     .fontWeight(.bold)
 
@@ -158,20 +173,38 @@ struct VaultWarmingView: View {
 
         isWarming = true
         errorMessage = nil
+        retryCount = 0
 
         Task {
-            do {
-                try await appState.warmVault(pin: pin)
-                // Success - call completion handler
-                await MainActor.run {
-                    isWarming = false
-                    onSuccess()
-                }
-            } catch let error as VaultWarmingError {
-                await MainActor.run {
-                    handleWarmingError(error)
-                }
-            } catch {
+            await warmVaultWithRetry()
+        }
+    }
+
+    /// Attempt to warm vault with automatic retry for vault-not-ready scenarios
+    private func warmVaultWithRetry() async {
+        do {
+            try await appState.warmVault(pin: pin)
+            // Success — load profile and call completion
+            appState.loadProfile()
+            await MainActor.run {
+                isWarming = false
+                onSuccess()
+            }
+        } catch let error as VaultWarmingError {
+            await MainActor.run {
+                handleWarmingError(error)
+            }
+        } catch {
+            // Check if this is a vault-not-ready situation (retry automatically)
+            if retryCount < maxAutoRetries && isVaultNotReady(error) {
+                retryCount += 1
+                #if DEBUG
+                print("[VaultWarming] Vault not ready, retry \(retryCount)/\(maxAutoRetries) in 2s...")
+                #endif
+                errorMessage = "Vault initializing... (attempt \(retryCount)/\(maxAutoRetries))"
+                try? await Task.sleep(nanoseconds: retryDelay)
+                await warmVaultWithRetry()
+            } else {
                 await MainActor.run {
                     errorMessage = error.localizedDescription
                     isWarming = false
@@ -179,6 +212,15 @@ struct VaultWarmingView: View {
                 }
             }
         }
+    }
+
+    /// Detect if an error indicates the vault is not ready yet
+    private func isVaultNotReady(_ error: Error) -> Bool {
+        let message = error.localizedDescription.lowercased()
+        return message.contains("not ready") ||
+               message.contains("initializing") ||
+               message.contains("starting") ||
+               message.contains("unavailable")
     }
 
     private func handleWarmingError(_ error: VaultWarmingError) {

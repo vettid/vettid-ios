@@ -6,26 +6,25 @@ struct MainNavigationView: View {
     @EnvironmentObject var appState: AppState
 
     @State private var isDrawerOpen = false
-    @State private var currentSection: AppSection = .vault
-    @State private var selectedNavItem = 0
+    @State private var currentItem: DrawerItem = .feed
 
-    // More menu sheet (only Vault section has More)
-    @State private var showVaultMoreMenu = false
+    // Badge counts
+    @StateObject private var badgeCounts = BadgeCountsViewModel()
+
+    // More menu
+    @State private var showMoreMenu = false
 
     // Search state
     @State private var searchText = ""
     @State private var isSearching = false
 
+    // Settings sheet
+    @State private var showSettings = false
+
     // Action sheets
     @State private var showAddConnection = false
-
-    // Navigation for Vault More menu items
     @State private var showProfile = false
-    @State private var showSecrets = false
-    @State private var showPersonalData = false
-    @State private var showArchive = false
-    @State private var showPreferences = false
-    @State private var showMyVotes = false
+    @State private var showGuides = false
 
     // Deep link navigation
     @State private var showConnectSheet = false
@@ -40,34 +39,36 @@ struct MainNavigationView: View {
                 currentHeader
 
                 // Content
-                currentSectionContent
+                currentContent
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .contentShape(Rectangle())
-                    .gesture(tabSwipeGesture)
+                    .gesture(contentSwipeGesture)
 
                 // Bottom Nav
-                ContextualBottomNav(
-                    section: currentSection,
-                    selectedItem: $selectedNavItem,
-                    onMoreTap: handleMoreTap
+                BottomNavBar(
+                    currentItem: $currentItem,
+                    badgeCounts: badgeCounts,
+                    onMoreTap: { showMoreMenu = true }
                 )
             }
 
             // Drawer overlay
             DrawerView(
                 isOpen: $isDrawerOpen,
-                currentSection: $currentSection,
-                onSignOut: { } // Sign out is handled by drawer's sheet
+                currentItem: $currentItem,
+                onSignOut: {},
+                badgeCounts: badgeCounts
             )
         }
         .gesture(edgeSwipeGesture)
-        .onChange(of: currentSection) { _ in
-            selectedNavItem = 0
+        .onChange(of: currentItem) { _ in
             searchText = ""
             isSearching = false
         }
-        .sheet(isPresented: $showVaultMoreMenu) {
-            VaultMoreMenuSheet(onSelect: handleVaultMoreSelection)
+        .sheet(isPresented: $showMoreMenu) {
+            MoreMenuSheet { item in
+                currentItem = item
+            }
         }
         .sheet(isPresented: $showAddConnection) {
             AddConnectionSheet()
@@ -77,30 +78,15 @@ struct MainNavigationView: View {
                 ProfileView(authTokenProvider: { nil })
             }
         }
-        .sheet(isPresented: $showSecrets) {
+        .sheet(isPresented: $showSettings) {
             NavigationView {
-                SecretsView(searchText: "")
-            }
-        }
-        .sheet(isPresented: $showPersonalData) {
-            NavigationView {
-                PersonalDataView()
-            }
-        }
-        .sheet(isPresented: $showArchive) {
-            NavigationView {
-                ArchiveView()
-            }
-        }
-        .sheet(isPresented: $showPreferences) {
-            NavigationView {
-                VaultPreferencesView()
+                SettingsListView()
                     .environmentObject(appState)
             }
         }
-        .sheet(isPresented: $showMyVotes) {
+        .sheet(isPresented: $showGuides) {
             NavigationView {
-                MyVotesView()
+                GuideListView()
             }
         }
         .sheet(isPresented: $showConnectSheet) {
@@ -124,53 +110,46 @@ struct MainNavigationView: View {
         .onChange(of: appState.pendingNavigation) { navigation in
             handlePendingNavigation(navigation)
         }
+        .onAppear {
+            badgeCounts.startObserving()
+        }
+        .onDisappear {
+            badgeCounts.stopObserving()
+        }
     }
 
     // MARK: - Deep Link Navigation Handler
 
     private func handlePendingNavigation(_ navigation: PendingNavigation?) {
         guard let navigation = navigation else { return }
-
-        // Clear the pending navigation
         appState.clearPendingNavigation()
 
         switch navigation {
         case .message(let connectionId):
-            // Navigate to conversation
             deepLinkConnectionId = connectionId
             showConversation = true
 
         case .connect(let code):
-            // Navigate to connection flow with pre-filled code
             deepLinkConnectCode = code
             showConnectSheet = true
 
         case .vaultStatus:
-            // Navigate to vault services section
+            // Navigate to feed (closest equivalent in flat nav)
             withAnimation(.easeInOut(duration: 0.2)) {
-                currentSection = .vaultServices
-                selectedNavItem = 0  // Status tab
+                currentItem = .feed
             }
         }
     }
 
     // MARK: - Header
 
-    @ViewBuilder
-    private var currentHeader: some View {
-        switch currentSection {
-        case .vault:
-            vaultHeader
-        case .vaultServices:
-            vaultServicesHeader
-        case .appSettings:
-            appSettingsHeader
-        }
+    private var profilePhotoData: Data? {
+        appState.currentProfile?.photoData
     }
 
     @ViewBuilder
-    private var vaultHeader: some View {
-        switch VaultNavItem(rawValue: selectedNavItem) ?? .connections {
+    private var currentHeader: some View {
+        switch currentItem {
         case .connections:
             SearchableHeaderView(
                 title: "Connections",
@@ -178,64 +157,25 @@ struct MainNavigationView: View {
                 searchText: $searchText,
                 isSearching: $isSearching,
                 actionIcon: "plus",
-                onActionTap: { showAddConnection = true }
+                onActionTap: { showAddConnection = true },
+                onSettingsTap: { showSettings = true },
+                profilePhotoData: profilePhotoData
             )
-        case .feed:
-            HeaderView(
-                title: "Feed",
-                onProfileTap: openDrawer
+        case .secrets:
+            SearchableHeaderView(
+                title: "Secrets",
+                onProfileTap: openDrawer,
+                searchText: $searchText,
+                isSearching: $isSearching,
+                onSettingsTap: { showSettings = true },
+                profilePhotoData: profilePhotoData
             )
-        case .proposals:
+        default:
             HeaderView(
-                title: "Proposals",
-                onProfileTap: openDrawer
-            )
-        case .more:
-            HeaderView(
-                title: "Vault",
-                onProfileTap: openDrawer
-            )
-        }
-    }
-
-    @ViewBuilder
-    private var vaultServicesHeader: some View {
-        switch VaultServicesNavItem(rawValue: selectedNavItem) ?? .status {
-        case .status:
-            HeaderView(
-                title: "Status",
-                onProfileTap: openDrawer
-            )
-        case .backups:
-            HeaderView(
-                title: "Backups",
-                onProfileTap: openDrawer
-            )
-        case .manage:
-            HeaderView(
-                title: "Manage",
-                onProfileTap: openDrawer
-            )
-        }
-    }
-
-    @ViewBuilder
-    private var appSettingsHeader: some View {
-        switch AppSettingsNavItem(rawValue: selectedNavItem) ?? .theme {
-        case .theme:
-            HeaderView(
-                title: "Theme",
-                onProfileTap: openDrawer
-            )
-        case .security:
-            HeaderView(
-                title: "Security",
-                onProfileTap: openDrawer
-            )
-        case .about:
-            HeaderView(
-                title: "About",
-                onProfileTap: openDrawer
+                title: currentItem.title,
+                onProfileTap: openDrawer,
+                onSettingsTap: { showSettings = true },
+                profilePhotoData: profilePhotoData
             )
         }
     }
@@ -243,20 +183,12 @@ struct MainNavigationView: View {
     // MARK: - Content
 
     @ViewBuilder
-    private var currentSectionContent: some View {
-        switch currentSection {
-        case .vault:
-            vaultContent
-        case .vaultServices:
-            vaultServicesContent
-        case .appSettings:
-            appSettingsContent
-        }
-    }
-
-    @ViewBuilder
-    private var vaultContent: some View {
-        switch VaultNavItem(rawValue: selectedNavItem) ?? .connections {
+    private var currentContent: some View {
+        switch currentItem {
+        case .feed:
+            NavigationStack {
+                FeedView()
+            }
         case .connections:
             NavigationStack {
                 ConnectionsContentView(
@@ -264,51 +196,21 @@ struct MainNavigationView: View {
                     authTokenProvider: { nil }
                 )
             }
-        case .feed:
-            NavigationStack {
-                FeedView()
-            }
-        case .proposals:
+        case .voting:
             NavigationStack {
                 ProposalsView(authTokenProvider: { nil })
             }
-        case .more:
-            EmptyView()
-        }
-    }
-
-    @ViewBuilder
-    private var vaultServicesContent: some View {
-        switch VaultServicesNavItem(rawValue: selectedNavItem) ?? .status {
-        case .status:
+        case .secrets:
             NavigationStack {
-                VaultServicesStatusView()
+                SecretsView(searchText: searchText)
             }
-        case .backups:
+        case .personalData:
             NavigationStack {
-                BackupListView(authTokenProvider: { nil })
+                PersonalDataView()
             }
-        case .manage:
+        case .archive:
             NavigationStack {
-                ManageVaultView()
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var appSettingsContent: some View {
-        switch AppSettingsNavItem(rawValue: selectedNavItem) ?? .theme {
-        case .theme:
-            NavigationStack {
-                ThemeSettingsView()
-            }
-        case .security:
-            NavigationStack {
-                SecuritySettingsView()
-            }
-        case .about:
-            NavigationStack {
-                AboutView()
+                ArchiveView()
             }
         }
     }
@@ -318,7 +220,6 @@ struct MainNavigationView: View {
     private var edgeSwipeGesture: some Gesture {
         DragGesture()
             .onEnded { value in
-                // Only trigger if swipe started near left edge and moved right
                 if value.startLocation.x < 50 && value.translation.width > 100 {
                     withAnimation(.spring(response: 0.3)) {
                         isDrawerOpen = true
@@ -327,39 +228,26 @@ struct MainNavigationView: View {
             }
     }
 
-    private var tabSwipeGesture: some Gesture {
+    private var contentSwipeGesture: some Gesture {
         DragGesture(minimumDistance: 50)
             .onEnded { value in
-                // Don't handle if this is an edge swipe for drawer
                 guard value.startLocation.x >= 50 else { return }
 
                 let horizontalAmount = value.translation.width
-                let maxItems = maxNavItems(for: currentSection)
+                let bottomNavItems: [DrawerItem] = [.feed, .connections, .voting, .secrets]
 
-                // Swipe left = next tab
-                if horizontalAmount < -50 && selectedNavItem < maxItems - 1 {
+                guard let currentIndex = bottomNavItems.firstIndex(of: currentItem) else { return }
+
+                if horizontalAmount < -50 && currentIndex < bottomNavItems.count - 1 {
                     withAnimation(.easeInOut(duration: 0.2)) {
-                        selectedNavItem += 1
+                        currentItem = bottomNavItems[currentIndex + 1]
                     }
-                }
-                // Swipe right = previous tab
-                else if horizontalAmount > 50 && selectedNavItem > 0 {
+                } else if horizontalAmount > 50 && currentIndex > 0 {
                     withAnimation(.easeInOut(duration: 0.2)) {
-                        selectedNavItem -= 1
+                        currentItem = bottomNavItems[currentIndex - 1]
                     }
                 }
             }
-    }
-
-    private func maxNavItems(for section: AppSection) -> Int {
-        switch section {
-        case .vault:
-            return VaultNavItem.allCases.count - 1 // Exclude "More" (connections, feed, proposals = 3)
-        case .vaultServices:
-            return VaultServicesNavItem.allCases.count
-        case .appSettings:
-            return AppSettingsNavItem.allCases.count
-        }
     }
 
     // MARK: - Actions
@@ -369,32 +257,62 @@ struct MainNavigationView: View {
             isDrawerOpen = true
         }
     }
+}
 
-    private func handleMoreTap() {
-        // Only Vault section has More now
-        if currentSection == .vault {
-            showVaultMoreMenu = true
+// MARK: - Settings List View
+
+struct SettingsListView: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var appState: AppState
+
+    var body: some View {
+        List {
+            Section("Appearance") {
+                NavigationLink(destination: ThemeSettingsView()) {
+                    Label("Theme", systemImage: "paintbrush.fill")
+                }
+            }
+
+            Section("Security") {
+                NavigationLink(destination: SecuritySettingsView()) {
+                    Label("Security", systemImage: "lock.shield.fill")
+                }
+            }
+
+            Section("Vault") {
+                NavigationLink(destination: LocationSettingsView().environmentObject(appState)) {
+                    Label("Location", systemImage: "location.fill")
+                }
+
+                NavigationLink(destination: VaultPreferencesView().environmentObject(appState)) {
+                    Label("Vault Preferences", systemImage: "gearshape.fill")
+                }
+
+                NavigationLink(destination: VaultServicesStatusView()) {
+                    Label("Vault Status", systemImage: "chart.bar.fill")
+                }
+
+                NavigationLink(destination: BackupListView(authTokenProvider: { nil })) {
+                    Label("Backups", systemImage: "externaldrive.fill")
+                }
+            }
+
+            Section("Help") {
+                NavigationLink(destination: GuideListView()) {
+                    Label("Guides", systemImage: "questionmark.circle.fill")
+                }
+
+                NavigationLink(destination: AboutView()) {
+                    Label("About", systemImage: "info.circle.fill")
+                }
+            }
         }
-    }
-
-    private func handleVaultMoreSelection(_ selection: String) {
-        switch selection {
-        case "profile":
-            showProfile = true
-        case "secrets":
-            showSecrets = true
-        case "personalData":
-            showPersonalData = true
-        case "archive":
-            showArchive = true
-        case "preferences":
-            showPreferences = true
-        case "myVotes":
-            showMyVotes = true
-        default:
-            #if DEBUG
-            print("Vault more selection: \(selection)")
-            #endif
+        .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Done") { dismiss() }
+            }
         }
     }
 }
@@ -574,23 +492,6 @@ struct AddConnectionSheet: View {
                     Button("Cancel") { dismiss() }
                 }
             }
-        }
-    }
-}
-
-struct AddSecretSheet: View {
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationView {
-            Text("Add Secret - Coming Soon")
-                .navigationTitle("Add Secret")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { dismiss() }
-                    }
-                }
         }
     }
 }

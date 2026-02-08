@@ -376,6 +376,7 @@ class AppState: ObservableObject {
     ///
     /// Sends the PIN to the supervisor via NATS to derive DEK and load it into memory.
     /// Must be called on app open before vault operations can proceed.
+    /// On success, stores new UTKs and triggers profile sync.
     ///
     /// - Parameter pin: User's 6-digit PIN
     /// - Throws: NatsConnectionError on failure
@@ -387,6 +388,14 @@ class AppState: ObservableObject {
 
             if response.success {
                 vaultTemperature = .warm(ttlSeconds: response.sessionTtl)
+
+                // Store new UTKs from vault response
+                if let utks = response.utks, !utks.isEmpty {
+                    storeUTKsFromWarmResponse(utks)
+                }
+
+                // Sync profile data from vault after successful warming
+                syncProfileFromVault()
             } else {
                 vaultWarmingError = response.message ?? "Failed to warm vault"
                 if let remaining = response.remainingAttempts, remaining <= 0 {
@@ -402,6 +411,52 @@ class AppState: ObservableObject {
             vaultWarmingError = error.localizedDescription
             throw VaultWarmingError.warmingFailed(error.localizedDescription)
         }
+    }
+
+    /// Store UTKs returned from vault warming response
+    private func storeUTKsFromWarmResponse(_ utks: [VaultWarmResponse.UTKInfo]) {
+        guard let credential = try? credentialStore.retrieveFirst() else { return }
+
+        let storedUTKs = utks.map { utk in
+            StoredUTK(
+                keyId: utk.id,
+                publicKey: utk.publicKey,
+                algorithm: "X25519",
+                isUsed: false
+            )
+        }
+
+        // Update credential with new UTKs
+        let updated = StoredCredential(
+            userGuid: credential.userGuid,
+            sealedCredential: credential.sealedCredential,
+            enclavePublicKey: credential.enclavePublicKey,
+            backupKey: credential.backupKey,
+            ledgerAuthToken: credential.ledgerAuthToken,
+            transactionKeys: storedUTKs,
+            createdAt: credential.createdAt,
+            lastUsedAt: Date(),
+            vaultStatus: credential.vaultStatus,
+            localData: credential.localData
+        )
+
+        try? credentialStore.store(credential: updated)
+
+        #if DEBUG
+        print("[AppState] Stored \(utks.count) UTKs from vault warming")
+        #endif
+    }
+
+    /// Sync profile data from vault after warming
+    private func syncProfileFromVault() {
+        // Load profile from local store first
+        loadProfile()
+
+        // In production: fetch system fields (firstName, lastName, email)
+        // from vault via NATS and update profile
+        #if DEBUG
+        print("[AppState] Profile sync triggered after vault warming")
+        #endif
     }
 
     /// Mark vault as cold (e.g., after background timeout)

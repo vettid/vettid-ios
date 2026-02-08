@@ -1,189 +1,94 @@
 import SwiftUI
 
-// MARK: - Nav Item Definitions
+// MARK: - Bottom Nav Item
 
-enum VaultNavItem: Int, CaseIterable {
-    case connections = 0
-    case feed = 1
-    case proposals = 2
-    case more = 3
+enum BottomNavItem: Int, CaseIterable {
+    case feed = 0
+    case connections = 1
+    case voting = 2
+    case secrets = 3
+    case more = 4
 
     var title: String {
         switch self {
-        case .connections: return "Connections"
         case .feed: return "Feed"
-        case .proposals: return "Proposals"
+        case .connections: return "Connections"
+        case .voting: return "Voting"
+        case .secrets: return "Secrets"
         case .more: return "More"
         }
     }
 
     var icon: String {
         switch self {
-        case .connections: return "person.2.fill"
         case .feed: return "list.bullet.rectangle"
-        case .proposals: return "doc.text.fill"
+        case .connections: return "person.2.fill"
+        case .voting: return "checkmark.square.fill"
+        case .secrets: return "lock.fill"
         case .more: return "ellipsis"
         }
     }
-}
 
-enum VaultServicesNavItem: Int, CaseIterable {
-    case status = 0
-    case backups = 1
-    case manage = 2
-
-    var title: String {
+    /// Corresponding DrawerItem (nil for "More")
+    var drawerItem: DrawerItem? {
         switch self {
-        case .status: return "Status"
-        case .backups: return "Backups"
-        case .manage: return "Manage"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .status: return "chart.bar.fill"
-        case .backups: return "externaldrive.fill"
-        case .manage: return "slider.horizontal.3"
+        case .feed: return .feed
+        case .connections: return .connections
+        case .voting: return .voting
+        case .secrets: return .secrets
+        case .more: return nil
         }
     }
 }
 
-enum AppSettingsNavItem: Int, CaseIterable {
-    case theme = 0
-    case security = 1
-    case about = 2
+// MARK: - Bottom Navigation Bar
 
-    var title: String {
-        switch self {
-        case .theme: return "Theme"
-        case .security: return "Security"
-        case .about: return "About"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .theme: return "paintbrush.fill"
-        case .security: return "lock.shield.fill"
-        case .about: return "info.circle.fill"
-        }
-    }
-}
-
-// MARK: - Contextual Bottom Nav
-
-struct ContextualBottomNav: View {
-    let section: AppSection
-    @Binding var selectedItem: Int
-    var onMoreTap: (() -> Void)? = nil
-    var unreadFeedCount: Int = 0
-    var pendingConnectionsCount: Int = 0
+struct BottomNavBar: View {
+    @Binding var currentItem: DrawerItem
+    @ObservedObject var badgeCounts: BadgeCountsViewModel
+    var onMoreTap: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
             Divider()
 
-            switch section {
-            case .vault:
-                VaultNav(
-                    selectedItem: $selectedItem,
-                    onMoreTap: onMoreTap,
-                    feedBadge: unreadFeedCount,
-                    connectionsBadge: pendingConnectionsCount
-                )
-            case .vaultServices:
-                VaultServicesNav(selectedItem: $selectedItem, onMoreTap: onMoreTap)
-            case .appSettings:
-                AppSettingsNav(selectedItem: $selectedItem, onMoreTap: onMoreTap)
-            }
-        }
-        .background(Color(.systemBackground))
-    }
-}
-
-// MARK: - Vault Nav
-
-struct VaultNav: View {
-    @Binding var selectedItem: Int
-    var onMoreTap: (() -> Void)?
-    var feedBadge: Int = 0
-    var connectionsBadge: Int = 0
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(VaultNavItem.allCases, id: \.rawValue) { item in
-                NavItem(
-                    icon: item.icon,
-                    title: item.title,
-                    isSelected: selectedItem == item.rawValue,
-                    badge: badgeCount(for: item)
-                ) {
-                    if item == .more {
-                        onMoreTap?()
-                    } else {
-                        selectedItem = item.rawValue
+            HStack(spacing: 0) {
+                ForEach(BottomNavItem.allCases, id: \.rawValue) { tab in
+                    NavItem(
+                        icon: tab.icon,
+                        title: tab.title,
+                        isSelected: isTabSelected(tab),
+                        badge: badgeForTab(tab)
+                    ) {
+                        if tab == .more {
+                            onMoreTap()
+                        } else if let drawerItem = tab.drawerItem {
+                            currentItem = drawerItem
+                        }
                     }
                 }
             }
+            .padding(.vertical, 8)
+            .padding(.bottom, 4)
         }
-        .padding(.vertical, 8)
-        .padding(.bottom, 4)
+        .background(Color(.systemBackground))
     }
 
-    private func badgeCount(for item: VaultNavItem) -> Int {
-        switch item {
-        case .connections: return connectionsBadge
-        case .feed: return feedBadge
-        case .proposals: return 0
-        case .more: return 0
+    private func isTabSelected(_ tab: BottomNavItem) -> Bool {
+        if let drawerItem = tab.drawerItem {
+            return currentItem == drawerItem
         }
+        // "More" is selected when viewing personalData or archive
+        return !currentItem.isInBottomNav
     }
-}
 
-// MARK: - Vault Services Nav
-
-struct VaultServicesNav: View {
-    @Binding var selectedItem: Int
-    var onMoreTap: (() -> Void)?
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(VaultServicesNavItem.allCases, id: \.rawValue) { item in
-                NavItem(
-                    icon: item.icon,
-                    title: item.title,
-                    isSelected: selectedItem == item.rawValue
-                ) {
-                    selectedItem = item.rawValue
-                }
-            }
+    private func badgeForTab(_ tab: BottomNavItem) -> Int {
+        switch tab {
+        case .feed: return badgeCounts.unreadFeedCount
+        case .connections: return badgeCounts.pendingConnectionsCount
+        case .voting: return badgeCounts.unvotedProposalsCount
+        case .secrets, .more: return 0
         }
-        .padding(.vertical, 8)
-        .padding(.bottom, 4)
-    }
-}
-
-// MARK: - App Settings Nav
-
-struct AppSettingsNav: View {
-    @Binding var selectedItem: Int
-    var onMoreTap: (() -> Void)?
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(AppSettingsNavItem.allCases, id: \.rawValue) { item in
-                NavItem(
-                    icon: item.icon,
-                    title: item.title,
-                    isSelected: selectedItem == item.rawValue
-                ) {
-                    selectedItem = item.rawValue
-                }
-            }
-        }
-        .padding(.vertical, 8)
-        .padding(.bottom, 4)
     }
 }
 
@@ -203,7 +108,6 @@ struct NavItem: View {
                     Image(systemName: icon)
                         .font(.system(size: 22))
 
-                    // Badge
                     if badge > 0 {
                         BadgeView(count: badge)
                             .offset(x: 8, y: -4)
@@ -238,55 +142,47 @@ struct BadgeView: View {
 
 // MARK: - More Menu Sheet
 
-struct VaultMoreMenuSheet: View {
+struct MoreMenuSheet: View {
     @Environment(\.dismiss) private var dismiss
-    let onSelect: (String) -> Void
+    let onSelect: (DrawerItem) -> Void
 
     var body: some View {
         NavigationView {
             List {
-                Section("Personal") {
-                    MoreMenuItem(icon: "person.fill", title: "Profile") {
-                        onSelect("profile")
+                Section("Features") {
+                    MoreMenuItem(icon: DrawerItem.personalData.icon, title: DrawerItem.personalData.title) {
+                        onSelect(.personalData)
                         dismiss()
                     }
 
-                    MoreMenuItem(icon: "lock.fill", title: "Secrets") {
-                        onSelect("secrets")
-                        dismiss()
-                    }
-
-                    MoreMenuItem(icon: "folder.fill", title: "Personal Data") {
-                        onSelect("personalData")
+                    MoreMenuItem(icon: DrawerItem.archive.icon, title: DrawerItem.archive.title) {
+                        onSelect(.archive)
                         dismiss()
                     }
                 }
 
-                Section("Voting") {
-                    MoreMenuItem(icon: "checkmark.square.fill", title: "My Votes") {
-                        onSelect("myVotes")
+                Section("Account") {
+                    MoreMenuItem(icon: "person.fill", title: "Profile") {
+                        onSelect(.connections) // Triggers profile sheet via MainNavigationView
+                        dismiss()
+                    }
+
+                    MoreMenuItem(icon: "questionmark.circle.fill", title: "Guides") {
+                        // Handled by MainNavigationView
                         dismiss()
                     }
                 }
 
                 Section("Vault") {
                     MoreMenuItem(icon: "key.fill", title: "Credentials") {
-                        onSelect("credentials")
                         dismiss()
                     }
 
-                    MoreMenuItem(icon: "clock.fill", title: "Activity Log") {
-                        onSelect("activity")
+                    MoreMenuItem(icon: "chart.bar.fill", title: "Vault Status") {
                         dismiss()
                     }
 
-                    MoreMenuItem(icon: "archivebox.fill", title: "Archive") {
-                        onSelect("archive")
-                        dismiss()
-                    }
-
-                    MoreMenuItem(icon: "gearshape.fill", title: "Preferences") {
-                        onSelect("preferences")
+                    MoreMenuItem(icon: "externaldrive.fill", title: "Backups") {
                         dismiss()
                     }
                 }
@@ -300,95 +196,6 @@ struct VaultMoreMenuSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
-    }
-}
-
-struct VaultServicesMoreMenuSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    let onSelect: (String) -> Void
-
-    var body: some View {
-        NavigationView {
-            List {
-                Section("Services") {
-                    MoreMenuItem(icon: "puzzlepiece.fill", title: "Handlers") {
-                        onSelect("handlers")
-                        dismiss()
-                    }
-
-                    MoreMenuItem(icon: "message.fill", title: "Messaging") {
-                        onSelect("messaging")
-                        dismiss()
-                    }
-
-                    MoreMenuItem(icon: "network", title: "NATS Connection") {
-                        onSelect("nats")
-                        dismiss()
-                    }
-
-                    MoreMenuItem(icon: "heart.fill", title: "Vault Health") {
-                        onSelect("health")
-                        dismiss()
-                    }
-                }
-            }
-            .navigationTitle("More")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
-                }
-            }
-        }
-        .presentationDetents([.medium])
-    }
-}
-
-struct AppSettingsMoreMenuSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    let onSelect: (String) -> Void
-
-    var body: some View {
-        NavigationView {
-            List {
-                Section("Settings") {
-                    MoreMenuItem(icon: "bell.fill", title: "Notifications") {
-                        onSelect("notifications")
-                        dismiss()
-                    }
-
-                    MoreMenuItem(icon: "paintbrush.fill", title: "Appearance") {
-                        onSelect("appearance")
-                        dismiss()
-                    }
-
-                    MoreMenuItem(icon: "lock.shield.fill", title: "Security") {
-                        onSelect("security")
-                        dismiss()
-                    }
-                }
-
-                Section("About") {
-                    MoreMenuItem(icon: "questionmark.circle.fill", title: "Help & Support") {
-                        onSelect("help")
-                        dismiss()
-                    }
-
-                    MoreMenuItem(icon: "hand.raised.fill", title: "Privacy Policy") {
-                        onSelect("privacy")
-                        dismiss()
-                    }
-                }
-            }
-            .navigationTitle("More")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
-                }
-            }
-        }
-        .presentationDetents([.medium])
     }
 }
 
@@ -410,23 +217,10 @@ struct MoreMenuItem: View {
     VStack {
         Spacer()
 
-        ContextualBottomNav(
-            section: .vault,
-            selectedItem: .constant(0)
-        )
-
-        Spacer()
-
-        ContextualBottomNav(
-            section: .vaultServices,
-            selectedItem: .constant(0)
-        )
-
-        Spacer()
-
-        ContextualBottomNav(
-            section: .appSettings,
-            selectedItem: .constant(0)
+        BottomNavBar(
+            currentItem: .constant(.feed),
+            badgeCounts: BadgeCountsViewModel(),
+            onMoreTap: {}
         )
     }
 }
