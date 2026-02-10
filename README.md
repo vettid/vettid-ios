@@ -69,6 +69,7 @@ xcodebuild -scheme VettID test
 
 - [vettid-dev](https://github.com/vettid/vettid-dev) - Backend infrastructure
 - [vettid-android](https://github.com/vettid/vettid-android) - Android app
+- [vettid-desktop](https://github.com/vettid/vettid-desktop) - Desktop app (Tauri/Rust/Svelte)
 - [vettid.org](https://github.com/vettid/vettid.org) - Website
 
 ## License
