@@ -174,6 +174,16 @@ struct MoreMenuSheet: View {
                 }
 
                 Section("Vault") {
+                    MoreMenuItem(icon: DrawerItem.devices.icon, title: DrawerItem.devices.title) {
+                        onSelect(.devices)
+                        dismiss()
+                    }
+
+                    MoreMenuItem(icon: DrawerItem.auditLog.icon, title: DrawerItem.auditLog.title) {
+                        onSelect(.auditLog)
+                        dismiss()
+                    }
+
                     MoreMenuItem(icon: "key.fill", title: "Credentials") {
                         dismiss()
                     }

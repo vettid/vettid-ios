@@ -35,11 +35,13 @@ final class CreateInvitationViewModel: ObservableObject {
     private let apiClient: APIClient
     private let cryptoManager: ConnectionCryptoManager
     private let authTokenProvider: @Sendable () -> String?
+    var connectionsClient: ConnectionsClient?
 
     // MARK: - Private State
 
     private var generatedKeyPair: (publicKey: Data, privateKey: Data)?
     private var currentInvitation: ConnectionInvitation?
+    private var natsInvitation: NatsConnectionInvitation?
 
     // MARK: - Expiration Options
 
@@ -55,23 +57,63 @@ final class CreateInvitationViewModel: ObservableObject {
     init(
         apiClient: APIClient = APIClient(),
         cryptoManager: ConnectionCryptoManager = ConnectionCryptoManager(),
-        authTokenProvider: @escaping @Sendable () -> String?
+        authTokenProvider: @escaping @Sendable () -> String?,
+        connectionsClient: ConnectionsClient? = nil
     ) {
         self.apiClient = apiClient
         self.cryptoManager = cryptoManager
         self.authTokenProvider = authTokenProvider
+        self.connectionsClient = connectionsClient
     }
 
     // MARK: - Actions
 
-    /// Create a new connection invitation
+    /// Create a new connection invitation, trying NATS first with HTTP fallback
     func createInvitation() async {
+        state = .creating
+
+        // Try NATS-based creation first
+        if let client = connectionsClient {
+            do {
+                let natsInvite = try await client.createInvite(
+                    peerGuid: "",  // Empty for open invitations
+                    label: "Connection Invitation",
+                    expiresInMinutes: expirationMinutes
+                )
+                self.natsInvitation = natsInvite
+
+                // Generate compact QR format with invite code
+                let compactQR = Self.compactQRData(inviteCode: natsInvite.inviteCode)
+
+                // Convert to ConnectionInvitation for existing UI
+                let isoFormatter = ISO8601DateFormatter()
+                let expiresDate = isoFormatter.date(from: natsInvite.expiresAt) ?? Date().addingTimeInterval(TimeInterval(expirationMinutes * 60))
+
+                let invitation = ConnectionInvitation(
+                    invitationId: natsInvite.connectionId,
+                    invitationCode: natsInvite.inviteCode,
+                    qrCodeData: compactQR,
+                    deepLinkUrl: "vettid://invite/\(natsInvite.inviteCode)",
+                    expiresAt: expiresDate,
+                    creatorDisplayName: natsInvite.inviterProfile["display_name"] ?? ""
+                )
+
+                currentInvitation = invitation
+                state = .created(invitation)
+                return
+            } catch {
+                #if DEBUG
+                print("[CreateInvitationViewModel] NATS createInvite failed, falling back to HTTP: \(error)")
+                #endif
+                // Fall through to HTTP
+            }
+        }
+
+        // HTTP fallback
         guard let authToken = authTokenProvider() else {
             state = .error("Not authenticated")
             return
         }
-
-        state = .creating
 
         do {
             // Generate key pair for this invitation
@@ -90,6 +132,12 @@ final class CreateInvitationViewModel: ObservableObject {
         } catch {
             state = .error(error.localizedDescription)
         }
+    }
+
+    /// Generate compact QR code JSON with invite code
+    /// Format: {"c":"<code>","e":"<endpoint>"}
+    static func compactQRData(inviteCode: String, endpoint: String = "vettid.com") -> String {
+        return "{\"c\":\"\(inviteCode)\",\"e\":\"\(endpoint)\"}"
     }
 
     /// Reset to idle state

@@ -7,6 +7,15 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AG0001B1 /* AgentModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = AG0001F1 /* AgentModels.swift */; };
+		AG0002B2 /* AgentManagementViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AG0002F2 /* AgentManagementViewModel.swift */; };
+		AG0003B3 /* AgentApprovalViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AG0003F3 /* AgentApprovalViewModel.swift */; };
+		AG0004B4 /* CreateAgentInvitationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AG0004F4 /* CreateAgentInvitationViewModel.swift */; };
+		AG0005B5 /* AgentManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AG0005F5 /* AgentManagementView.swift */; };
+		AG0006B6 /* AgentApprovalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AG0006F6 /* AgentApprovalView.swift */; };
+		AG0007B7 /* CreateAgentInvitationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AG0007F7 /* CreateAgentInvitationView.swift */; };
+		B2E3F4A5D6C7B8091E2F3A4D /* AuditLogViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F2E3D4C5B6A7980F1E2D3C /* AuditLogViewModel.swift */; };
+		D4E5F6A7B8C9D0213A4B5C6F /* AuditLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3D4E5F6A7B8C9102F3A4B5E /* AuditLogView.swift */; };
 		961698D828BA4D5BA674D611 /* ContractSigningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81C8FD8744741BE993E3532 /* ContractSigningView.swift */; };
 		2A9F825B4E714C62BE2F217E /* ServiceConnectionInitiationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18B934338B954F2B9CB77A6F /* ServiceConnectionInitiationView.swift */; };
 		00000001 /* VettIDApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000001 /* VettIDApp.swift */; };
@@ -271,6 +280,28 @@
 		B89D4CD7F7B830FAD74D5670 /* SharedLocationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F3FAB193CD3CD31501CE0F1 /* SharedLocationsView.swift */; };
 		AC38BE1D10B3EA15EB2D9E03 /* LocationSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3F3BD5849E735408532CB14 /* LocationSettingsView.swift */; };
 		C6F8E05EB3E080D34708680B /* ProfileClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 334364038B642505DD7426C5 /* ProfileClient.swift */; };
+		A1B2C3D4E5F60718091A2B3C /* JetStreamHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4E5F6071809A1B2C3D4E5F6 /* JetStreamHelper.swift */; };
+		6DC55D92AC29E6330F9B7EEE /* ConnectionsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B0234C00C5FE0172E248C5E /* ConnectionsClient.swift */; };
+		412179B17AAB489644156E0A /* MessagingClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00D7C808D92C74E1D24F4D8 /* MessagingClient.swift */; };
+		2294DFB7FF39D879FCB64EF7 /* FeedClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB79DA9F64EB46A77DDD98E4 /* FeedClient.swift */; };
+		38489BADD2184FCE9171E72C /* AgentModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 268BF9C3C06C47C6A3F55452 /* AgentModels.swift */; };
+		A20F1BB90636434D8A6C1B1F /* AgentManagementViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9E8562654A04FE5B0A51AF3 /* AgentManagementViewModel.swift */; };
+		E8C1542B3AEF4A16AE69957B /* AgentApprovalViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8262E49C26F34DD9AC80C979 /* AgentApprovalViewModel.swift */; };
+		2CDFF9E792E04BAEB0131010 /* CreateAgentInvitationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3161116EF69E42939707CF54 /* CreateAgentInvitationViewModel.swift */; };
+		D939ED04CC0A4F4AA26865AA /* AgentManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 835FD46334F14325A9605057 /* AgentManagementView.swift */; };
+		59384EC4FB9241AB9932C57C /* AgentApprovalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE88639454A54B66B331A847 /* AgentApprovalView.swift */; };
+		FEAA5D36471B4839986ED854 /* CreateAgentInvitationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B99FA6C415A4E2A8329FE71 /* CreateAgentInvitationView.swift */; };
+		6FF98ECD988F4B0F84EF704D /* DeviceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE16327EB86641DCA62EDC24 /* DeviceModels.swift */; };
+		C2713156EC074C2CAC491342 /* DeviceManagementViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A8469B0FB5B45AFB92FD8AB /* DeviceManagementViewModel.swift */; };
+		3D81E9A883AD4B5C8407C28A /* DevicePairingViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D1B2D59A354DD2BB819BC0 /* DevicePairingViewModel.swift */; };
+		6179D5955B974FEABB42EBCE /* DeviceApprovalViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CE1ACF29E164605AB1E151B /* DeviceApprovalViewModel.swift */; };
+		67BB4F5AD04C47FE9DF14062 /* DeviceManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 414782E7178A44F9A72D51C0 /* DeviceManagementView.swift */; };
+		DE4FB874C8A64FADBBDD6C15 /* DevicePairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B3C002C39A546F3BF126024 /* DevicePairingView.swift */; };
+		AC8B264BA6E24EB8ADC19786 /* DeviceApprovalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A39D3949EE547B0A71D3866 /* DeviceApprovalView.swift */; };
+		CCB9C8D263924FCEB8D0696D /* AuditLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35BB9882D72447C5A58818D4 /* AuditLogView.swift */; };
+		8232B27B5A3F482396B6980E /* AuditLogViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F933A47471FB417FBAE38C5B /* AuditLogViewModel.swift */; };
+		EFDD21120E654E6CB1A758F8 /* OfflineQueueManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 394919A7D70E43798470243C /* OfflineQueueManager.swift */; };
+		69B745AFCF344052B96D0C93 /* SyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 301E518698C34D1480B715DA /* SyncCoordinator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -291,6 +322,15 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		AG0001F1 /* AgentModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentModels.swift; sourceTree = "<group>"; };
+		AG0002F2 /* AgentManagementViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentManagementViewModel.swift; sourceTree = "<group>"; };
+		AG0003F3 /* AgentApprovalViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentApprovalViewModel.swift; sourceTree = "<group>"; };
+		AG0004F4 /* CreateAgentInvitationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateAgentInvitationViewModel.swift; sourceTree = "<group>"; };
+		AG0005F5 /* AgentManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentManagementView.swift; sourceTree = "<group>"; };
+		AG0006F6 /* AgentApprovalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentApprovalView.swift; sourceTree = "<group>"; };
+		AG0007F7 /* CreateAgentInvitationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateAgentInvitationView.swift; sourceTree = "<group>"; };
+		A1F2E3D4C5B6A7980F1E2D3C /* AuditLogViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AuditLogViewModel.swift; sourceTree = "<group>"; };
+		C3D4E5F6A7B8C9102F3A4B5E /* AuditLogView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AuditLogView.swift; sourceTree = "<group>"; };
 		B81C8FD8744741BE993E3532 /* ContractSigningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContractSigningView.swift; sourceTree = "<group>"; };
 		18B934338B954F2B9CB77A6F /* ServiceConnectionInitiationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceConnectionInitiationView.swift; sourceTree = "<group>"; };
 		003A6313C942B5D9E98B959D /* SecureKeyStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SecureKeyStoreTests.swift; sourceTree = "<group>"; };
@@ -560,6 +600,28 @@
 		9F3FAB193CD3CD31501CE0F1 /* SharedLocationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedLocationsView.swift; sourceTree = "<group>"; };
 		E3F3BD5849E735408532CB14 /* LocationSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationSettingsView.swift; sourceTree = "<group>"; };
 		334364038B642505DD7426C5 /* ProfileClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileClient.swift; sourceTree = "<group>"; };
+		D4E5F6071809A1B2C3D4E5F6 /* JetStreamHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JetStreamHelper.swift; sourceTree = "<group>"; };
+		7B0234C00C5FE0172E248C5E /* ConnectionsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionsClient.swift; sourceTree = "<group>"; };
+		A00D7C808D92C74E1D24F4D8 /* MessagingClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessagingClient.swift; sourceTree = "<group>"; };
+		FB79DA9F64EB46A77DDD98E4 /* FeedClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedClient.swift; sourceTree = "<group>"; };
+		268BF9C3C06C47C6A3F55452 /* AgentModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentModels.swift; sourceTree = "<group>"; };
+		F9E8562654A04FE5B0A51AF3 /* AgentManagementViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentManagementViewModel.swift; sourceTree = "<group>"; };
+		8262E49C26F34DD9AC80C979 /* AgentApprovalViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentApprovalViewModel.swift; sourceTree = "<group>"; };
+		3161116EF69E42939707CF54 /* CreateAgentInvitationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateAgentInvitationViewModel.swift; sourceTree = "<group>"; };
+		835FD46334F14325A9605057 /* AgentManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentManagementView.swift; sourceTree = "<group>"; };
+		EE88639454A54B66B331A847 /* AgentApprovalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentApprovalView.swift; sourceTree = "<group>"; };
+		9B99FA6C415A4E2A8329FE71 /* CreateAgentInvitationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateAgentInvitationView.swift; sourceTree = "<group>"; };
+		FE16327EB86641DCA62EDC24 /* DeviceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceModels.swift; sourceTree = "<group>"; };
+		8A8469B0FB5B45AFB92FD8AB /* DeviceManagementViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceManagementViewModel.swift; sourceTree = "<group>"; };
+		D4D1B2D59A354DD2BB819BC0 /* DevicePairingViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevicePairingViewModel.swift; sourceTree = "<group>"; };
+		5CE1ACF29E164605AB1E151B /* DeviceApprovalViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceApprovalViewModel.swift; sourceTree = "<group>"; };
+		414782E7178A44F9A72D51C0 /* DeviceManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceManagementView.swift; sourceTree = "<group>"; };
+		3B3C002C39A546F3BF126024 /* DevicePairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevicePairingView.swift; sourceTree = "<group>"; };
+		9A39D3949EE547B0A71D3866 /* DeviceApprovalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceApprovalView.swift; sourceTree = "<group>"; };
+		35BB9882D72447C5A58818D4 /* AuditLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuditLogView.swift; sourceTree = "<group>"; };
+		F933A47471FB417FBAE38C5B /* AuditLogViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuditLogViewModel.swift; sourceTree = "<group>"; };
+		394919A7D70E43798470243C /* OfflineQueueManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineQueueManager.swift; sourceTree = "<group>"; };
+		301E518698C34D1480B715DA /* SyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncCoordinator.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -729,6 +791,7 @@
 		40000005 /* Core */ = {
 			isa = PBXGroup;
 			children = (
+				96ADACB071DD4D44BC5A1F71 /* Offline */,
 				40000008 /* Crypto */,
 				40000009 /* Storage */,
 				4000000A /* Networking */,
@@ -744,6 +807,8 @@
 		40000006 /* Features */ = {
 			isa = PBXGroup;
 			children = (
+				9F234E51BC134B36BA90F54F /* Agents */,
+				9AE0B48CEE97441E924F1755 /* Devices */,
 				4000000C /* Enrollment */,
 				4000000D /* Authentication */,
 				4000000E /* Vault */,
@@ -766,6 +831,8 @@
 				59CC603588EA41EF459C4BB1 /* ServiceConnections */,
 				4D2441A5D57C73F0129C9030 /* Guide */,
 				A0363F3AEE393DBEAB779E3E /* Location */,
+				AG00GRP0 /* Agents */,
+			
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -887,6 +954,10 @@
 				667E3A492F1E02FDCFC33F18 /* VaultSecurityService.swift */,
 				816EEA59016441498134BC23 /* ServiceNATSManager.swift */,
 				334364038B642505DD7426C5 /* ProfileClient.swift */,
+				D4E5F6071809A1B2C3D4E5F6 /* JetStreamHelper.swift */,
+				7B0234C00C5FE0172E248C5E /* ConnectionsClient.swift */,
+				A00D7C808D92C74E1D24F4D8 /* MessagingClient.swift */,
+				FB79DA9F64EB46A77DDD98E4 /* FeedClient.swift */,
 			);
 			path = NATS;
 			sourceTree = "<group>";
@@ -1045,9 +1116,13 @@
 		88C7A2A2A500BEF6A164573B /* Feed */ = {
 			isa = PBXGroup;
 			children = (
+				35BB9882D72447C5A58818D4 /* AuditLogView.swift */,
+				F933A47471FB417FBAE38C5B /* AuditLogViewModel.swift */,
 				93A86BE60A75794075747370 /* FeedEvent.swift */,
 				DDAE474EE81CD7EDDE12ABF5 /* FeedViewModel.swift */,
 				A55B8A854B6DF21A3197B1A0 /* FeedView.swift */,
+				A1F2E3D4C5B6A7980F1E2D3C /* AuditLogViewModel.swift */,
+				C3D4E5F6A7B8C9102F3A4B5E /* AuditLogView.swift */,
 			);
 			name = Feed;
 			path = Feed;
@@ -1289,6 +1364,155 @@
 			path = Location;
 			sourceTree = "<group>";
 		};
+		9CC50BB6BED6174A445B9232 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		F96108AF25B947E0CBF5F4F5 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		7A218E33927A3963DC35E810 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+
+		AG00GRP0 /* Agents */ = {
+			isa = PBXGroup;
+			children = (
+				AG00GRP1 /* Models */,
+				AG00GRP2 /* ViewModels */,
+				AG00GRP3 /* Views */,
+			);
+			name = Agents;
+			path = Agents;
+			sourceTree = "<group>";
+		};
+		AG00GRP1 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				AG0001F1 /* AgentModels.swift */,
+			);
+			name = Models;
+			path = Models;
+			sourceTree = "<group>";
+		};
+		AG00GRP2 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				AG0002F2 /* AgentManagementViewModel.swift */,
+				AG0003F3 /* AgentApprovalViewModel.swift */,
+				AG0004F4 /* CreateAgentInvitationViewModel.swift */,
+			);
+			name = ViewModels;
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		AG00GRP3 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				AG0005F5 /* AgentManagementView.swift */,
+				AG0006F6 /* AgentApprovalView.swift */,
+				AG0007F7 /* CreateAgentInvitationView.swift */,
+			);
+			name = Views;
+			path = Views;
+			sourceTree = "<group>";
+		};
+		7AEAAAC6E9D14B959D7034F1 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				268BF9C3C06C47C6A3F55452 /* AgentModels.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		6B90A33701984BDE96418502 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				F9E8562654A04FE5B0A51AF3 /* AgentManagementViewModel.swift */,
+				8262E49C26F34DD9AC80C979 /* AgentApprovalViewModel.swift */,
+				3161116EF69E42939707CF54 /* CreateAgentInvitationViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		A2ACB3D2D00746C28BD77BDA /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				835FD46334F14325A9605057 /* AgentManagementView.swift */,
+				EE88639454A54B66B331A847 /* AgentApprovalView.swift */,
+				9B99FA6C415A4E2A8329FE71 /* CreateAgentInvitationView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		9F234E51BC134B36BA90F54F /* Agents */ = {
+			isa = PBXGroup;
+			children = (
+				7AEAAAC6E9D14B959D7034F1 /* Models */,
+				6B90A33701984BDE96418502 /* ViewModels */,
+				A2ACB3D2D00746C28BD77BDA /* Views */,
+			);
+			path = Agents;
+			sourceTree = "<group>";
+		};
+		9D45FA1399844C3EB1571406 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				FE16327EB86641DCA62EDC24 /* DeviceModels.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		D58D996B1D8E492FADE117EB /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				8A8469B0FB5B45AFB92FD8AB /* DeviceManagementViewModel.swift */,
+				D4D1B2D59A354DD2BB819BC0 /* DevicePairingViewModel.swift */,
+				5CE1ACF29E164605AB1E151B /* DeviceApprovalViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		C651B8DBB76949C685D17665 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				414782E7178A44F9A72D51C0 /* DeviceManagementView.swift */,
+				3B3C002C39A546F3BF126024 /* DevicePairingView.swift */,
+				9A39D3949EE547B0A71D3866 /* DeviceApprovalView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		9AE0B48CEE97441E924F1755 /* Devices */ = {
+			isa = PBXGroup;
+			children = (
+				9D45FA1399844C3EB1571406 /* Models */,
+				D58D996B1D8E492FADE117EB /* ViewModels */,
+				C651B8DBB76949C685D17665 /* Views */,
+			);
+			path = Devices;
+			sourceTree = "<group>";
+		};
+		96ADACB071DD4D44BC5A1F71 /* Offline */ = {
+			isa = PBXGroup;
+			children = (
+				394919A7D70E43798470243C /* OfflineQueueManager.swift */,
+				301E518698C34D1480B715DA /* SyncCoordinator.swift */,
+			);
+			path = Offline;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -1419,6 +1643,24 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				38489BADD2184FCE9171E72C /* AgentModels.swift in Sources */,
+				A20F1BB90636434D8A6C1B1F /* AgentManagementViewModel.swift in Sources */,
+				E8C1542B3AEF4A16AE69957B /* AgentApprovalViewModel.swift in Sources */,
+				2CDFF9E792E04BAEB0131010 /* CreateAgentInvitationViewModel.swift in Sources */,
+				D939ED04CC0A4F4AA26865AA /* AgentManagementView.swift in Sources */,
+				59384EC4FB9241AB9932C57C /* AgentApprovalView.swift in Sources */,
+				FEAA5D36471B4839986ED854 /* CreateAgentInvitationView.swift in Sources */,
+				6FF98ECD988F4B0F84EF704D /* DeviceModels.swift in Sources */,
+				C2713156EC074C2CAC491342 /* DeviceManagementViewModel.swift in Sources */,
+				3D81E9A883AD4B5C8407C28A /* DevicePairingViewModel.swift in Sources */,
+				6179D5955B974FEABB42EBCE /* DeviceApprovalViewModel.swift in Sources */,
+				67BB4F5AD04C47FE9DF14062 /* DeviceManagementView.swift in Sources */,
+				DE4FB874C8A64FADBBDD6C15 /* DevicePairingView.swift in Sources */,
+				AC8B264BA6E24EB8ADC19786 /* DeviceApprovalView.swift in Sources */,
+				CCB9C8D263924FCEB8D0696D /* AuditLogView.swift in Sources */,
+				8232B27B5A3F482396B6980E /* AuditLogViewModel.swift in Sources */,
+				EFDD21120E654E6CB1A758F8 /* OfflineQueueManager.swift in Sources */,
+				69B745AFCF344052B96D0C93 /* SyncCoordinator.swift in Sources */,
 				961698D828BA4D5BA674D611 /* ContractSigningView.swift in Sources */,
 				2A9F825B4E714C62BE2F217E /* ServiceConnectionInitiationView.swift in Sources */,
 				00000001 /* VettIDApp.swift in Sources */,
@@ -1613,7 +1855,13 @@
 				630449904B4E48AA48C5CD72 /* SharedLocationsViewModel.swift in Sources */,
 				B89D4CD7F7B830FAD74D5670 /* SharedLocationsView.swift in Sources */,
 				AC38BE1D10B3EA15EB2D9E03 /* LocationSettingsView.swift in Sources */,
-				C6F8E05EB3E080D34708680B /* ProfileClient.swift in Sources */,);
+				C6F8E05EB3E080D34708680B /* ProfileClient.swift in Sources */,
+				A1B2C3D4E5F60718091A2B3C /* JetStreamHelper.swift in Sources */,
+				6DC55D92AC29E6330F9B7EEE /* ConnectionsClient.swift in Sources */,
+				412179B17AAB489644156E0A /* MessagingClient.swift in Sources */,
+				2294DFB7FF39D879FCB64EF7 /* FeedClient.swift in Sources */,
+			
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		883FF6CAE2490104B72F2843 /* Sources */ = {

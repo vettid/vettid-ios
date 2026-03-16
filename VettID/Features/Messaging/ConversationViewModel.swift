@@ -27,17 +27,25 @@ final class ConversationViewModel: ObservableObject {
     private let cryptoManager: ConnectionCryptoManager
     private let authTokenProvider: @Sendable () -> String?
     private var messageHandler: MessageHandler?
+    var messagingClient: MessagingClient?
+
+    // MARK: - Transport Key
+
+    /// Transport key for app-vault encrypted messaging (loaded via messagingClient)
+    @Published private(set) var transportKey: Data?
 
     // MARK: - Initialization
 
     init(
         apiClient: APIClient = APIClient(),
         cryptoManager: ConnectionCryptoManager = ConnectionCryptoManager(),
-        authTokenProvider: @escaping @Sendable () -> String?
+        authTokenProvider: @escaping @Sendable () -> String?,
+        messagingClient: MessagingClient? = nil
     ) {
         self.apiClient = apiClient
         self.cryptoManager = cryptoManager
         self.authTokenProvider = authTokenProvider
+        self.messagingClient = messagingClient
     }
 
     /// Configure the NATS message handler for vault-to-vault messaging
@@ -60,14 +68,8 @@ final class ConversationViewModel: ObservableObject {
 
     // MARK: - Loading
 
-    /// Load messages for the connection
+    /// Load messages for the connection, trying NATS first with HTTP fallback
     func loadMessages() async {
-        guard let authToken = authTokenProvider() else {
-            errorMessage = "Not authenticated"
-            isLoading = false
-            return
-        }
-
         guard !connectionId.isEmpty else {
             errorMessage = "No connection specified"
             isLoading = false
@@ -76,6 +78,22 @@ final class ConversationViewModel: ObservableObject {
 
         isLoading = true
         errorMessage = nil
+
+        // Try NATS-based loading first
+        if messagingClient != nil {
+            let natsSuccess = await loadFromNats()
+            if natsSuccess {
+                isLoading = false
+                return
+            }
+            // Fall through to HTTP on NATS failure
+        }
+
+        guard let authToken = authTokenProvider() else {
+            errorMessage = "Not authenticated"
+            isLoading = false
+            return
+        }
 
         do {
             // Load connection details for name
@@ -97,6 +115,68 @@ final class ConversationViewModel: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
             isLoading = false
+        }
+    }
+
+    /// Load messages from vault via NATS MessagingClient
+    /// - Returns: true if NATS loading succeeded
+    @discardableResult
+    func loadFromNats() async -> Bool {
+        guard let client = messagingClient else { return false }
+
+        do {
+            // Load transport key for this connection
+            transportKey = try await client.getTransportKey(connectionId: connectionId)
+
+            // Load message history from vault
+            let storedMessages = try await client.listMessages(connectionId: connectionId, limit: 50)
+            let isoFormatter = ISO8601DateFormatter()
+
+            messages = storedMessages.map { stored -> Message in
+                let sentDate = isoFormatter.date(from: stored.sentAt) ?? Date()
+                let senderId = stored.senderGuid.isEmpty ? (stored.direction == "outbound" ? currentUserId : "") : stored.senderGuid
+
+                let status: MessageStatus
+                switch stored.status {
+                case "read": status = .read
+                case "delivered": status = .delivered
+                case "sent": status = .sent
+                case "failed": status = .failed
+                default: status = .sent
+                }
+
+                return Message(
+                    id: stored.messageId,
+                    connectionId: stored.connectionId,
+                    senderId: senderId,
+                    content: stored.content,
+                    contentType: MessageContentType(rawValue: stored.contentType) ?? .text,
+                    sentAt: sentDate,
+                    receivedAt: stored.direction == "inbound" ? sentDate : nil,
+                    readAt: stored.status == "read" ? sentDate : nil,
+                    status: status
+                )
+            }
+
+            hasMoreMessages = storedMessages.count >= 50
+            return true
+        } catch {
+            #if DEBUG
+            print("[ConversationViewModel] NATS loadFromNats failed, falling back to HTTP: \(error)")
+            #endif
+            return false
+        }
+    }
+
+    /// Load the transport key for this connection from the vault
+    func loadTransportKey() async {
+        guard let client = messagingClient else { return }
+        do {
+            transportKey = try await client.getTransportKey(connectionId: connectionId)
+        } catch {
+            #if DEBUG
+            print("[ConversationViewModel] Failed to load transport key: \(error)")
+            #endif
         }
     }
 
@@ -131,8 +211,8 @@ final class ConversationViewModel: ObservableObject {
         let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedContent.isEmpty else { return }
 
-        // Check auth early if no message handler configured (will need API fallback)
-        if messageHandler == nil && authTokenProvider() == nil {
+        // Check auth early if no messaging client or handler configured (will need API fallback)
+        if messagingClient == nil && messageHandler == nil && authTokenProvider() == nil {
             errorMessage = "Not authenticated"
             return
         }
@@ -141,47 +221,60 @@ final class ConversationViewModel: ObservableObject {
         errorMessage = nil
 
         do {
-            // Encrypt the message for the connection
-            let encrypted = try cryptoManager.encryptForConnection(
-                plaintext: trimmedContent,
-                connectionId: connectionId
-            )
+            let sentTimestamp: String
+            let sentMessageId: String
 
-            // Send via NATS MessageHandler (preferred) or fallback to API
-            let sentMessage: SentMessage
-            if let handler = messageHandler {
-                sentMessage = try await handler.sendMessage(
+            // Priority 1: Send plaintext to vault via MessagingClient (vault handles encryption)
+            if let client = messagingClient {
+                let result = try await client.sendMessage(
+                    connectionId: connectionId,
+                    content: trimmedContent,
+                    contentType: "text"
+                )
+                sentMessageId = result.messageId
+                sentTimestamp = result.timestamp
+            }
+            // Priority 2: Send via NATS MessageHandler (app-side encryption)
+            else if let handler = messageHandler {
+                let encrypted = try cryptoManager.encryptForConnection(
+                    plaintext: trimmedContent,
+                    connectionId: connectionId
+                )
+                let sentMessage = try await handler.sendMessage(
                     connectionId: connectionId,
                     encryptedContent: encrypted.ciphertext.base64EncodedString(),
                     nonce: encrypted.nonce.base64EncodedString(),
                     contentType: "text"
                 )
-            } else if let authToken = authTokenProvider() {
-                // Fallback to API if NATS handler not configured
+                sentMessageId = sentMessage.messageId
+                sentTimestamp = sentMessage.timestamp
+            }
+            // Priority 3: Fallback to HTTP API
+            else if let authToken = authTokenProvider() {
+                let encrypted = try cryptoManager.encryptForConnection(
+                    plaintext: trimmedContent,
+                    connectionId: connectionId
+                )
                 let apiMessage = try await apiClient.sendMessage(
                     connectionId: connectionId,
                     encryptedContent: encrypted.ciphertext,
                     nonce: encrypted.nonce,
                     authToken: authToken
                 )
-                sentMessage = SentMessage(
-                    messageId: apiMessage.id,
-                    connectionId: connectionId,
-                    timestamp: ISO8601DateFormatter().string(from: apiMessage.sentAt),
-                    status: "sent"
-                )
+                sentMessageId = apiMessage.id
+                sentTimestamp = ISO8601DateFormatter().string(from: apiMessage.sentAt)
             } else {
                 throw ConversationError.notAuthenticated
             }
 
             // Create local message with decrypted content
             let localMessage = Message(
-                id: sentMessage.messageId,
+                id: sentMessageId,
                 connectionId: connectionId,
                 senderId: currentUserId,
                 content: trimmedContent,
                 contentType: .text,
-                sentAt: ISO8601DateFormatter().date(from: sentMessage.timestamp) ?? Date(),
+                sentAt: ISO8601DateFormatter().date(from: sentTimestamp) ?? Date(),
                 receivedAt: nil,
                 readAt: nil,
                 status: .sent

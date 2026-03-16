@@ -136,16 +136,34 @@ struct VaultActivityEvent: Identifiable {
         case vaultStarted = "vault_started"
         case vaultStopped = "vault_stopped"
         case backupCreated = "backup_created"
+        case backupRestored = "backup_restored"
         case credentialAdded = "credential_added"
         case keysRefreshed = "keys_refreshed"
+        case agentConnected = "agent_connected"
+        case agentDisconnected = "agent_disconnected"
+        case devicePaired = "device_paired"
+        case deviceRevoked = "device_revoked"
+        case handlerRegistered = "handler_registered"
+        case handlerRemoved = "handler_removed"
+        case transferInitiated = "transfer_initiated"
+        case transferCompleted = "transfer_completed"
 
         var icon: String {
             switch self {
             case .vaultStarted: return "play.circle.fill"
             case .vaultStopped: return "stop.circle.fill"
             case .backupCreated: return "externaldrive.fill"
+            case .backupRestored: return "arrow.down.circle.fill"
             case .credentialAdded: return "key.fill"
             case .keysRefreshed: return "arrow.triangle.2.circlepath"
+            case .agentConnected: return "cpu.fill"
+            case .agentDisconnected: return "cpu"
+            case .devicePaired: return "desktopcomputer"
+            case .deviceRevoked: return "xmark.rectangle.fill"
+            case .handlerRegistered: return "puzzlepiece.fill"
+            case .handlerRemoved: return "puzzlepiece"
+            case .transferInitiated: return "arrow.right.arrow.left.circle.fill"
+            case .transferCompleted: return "checkmark.circle.fill"
             }
         }
 
@@ -154,8 +172,17 @@ struct VaultActivityEvent: Identifiable {
             case .vaultStarted: return "green"
             case .vaultStopped: return "orange"
             case .backupCreated: return "blue"
+            case .backupRestored: return "blue"
             case .credentialAdded: return "purple"
             case .keysRefreshed: return "teal"
+            case .agentConnected: return "purple"
+            case .agentDisconnected: return "orange"
+            case .devicePaired: return "green"
+            case .deviceRevoked: return "orange"
+            case .handlerRegistered: return "teal"
+            case .handlerRemoved: return "orange"
+            case .transferInitiated: return "blue"
+            case .transferCompleted: return "green"
             }
         }
     }

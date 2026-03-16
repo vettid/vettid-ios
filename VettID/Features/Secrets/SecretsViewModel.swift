@@ -70,6 +70,65 @@ final class SecretsViewModel: ObservableObject {
             }
     }
 
+    // MARK: - Sort with Groups
+
+    /// Sort secrets keeping grouped items together by groupId
+    func sortWithGroups(_ secrets: [MinorSecret]) -> [MinorSecret] {
+        // Separate grouped and ungrouped secrets
+        var groupedMap: [String: [MinorSecret]] = [:]
+        var ungrouped: [MinorSecret] = []
+
+        for secret in secrets {
+            if let groupId = secret.groupId {
+                groupedMap[groupId, default: []].append(secret)
+            } else {
+                ungrouped.append(secret)
+            }
+        }
+
+        // Sort within each group by sortOrder
+        for key in groupedMap.keys {
+            groupedMap[key]?.sort { $0.sortOrder < $1.sortOrder }
+        }
+
+        // Sort groups by the first item's sortOrder, then by name as tiebreaker
+        let sortedGroups = groupedMap.sorted { lhs, rhs in
+            let lhsOrder = lhs.value.first?.sortOrder ?? 0
+            let rhsOrder = rhs.value.first?.sortOrder ?? 0
+            if lhsOrder != rhsOrder { return lhsOrder < rhsOrder }
+            let lhsName = lhs.value.first?.name ?? ""
+            let rhsName = rhs.value.first?.name ?? ""
+            return lhsName < rhsName
+        }
+
+        // Sort ungrouped by sortOrder
+        ungrouped.sort { $0.sortOrder < $1.sortOrder }
+
+        // Interleave: place groups at the position of their first item's sortOrder
+        var result: [MinorSecret] = []
+        var groupIndex = 0
+        var ungroupedIndex = 0
+
+        while groupIndex < sortedGroups.count || ungroupedIndex < ungrouped.count {
+            let nextGroupOrder = groupIndex < sortedGroups.count
+                ? (sortedGroups[groupIndex].value.first?.sortOrder ?? Int.max)
+                : Int.max
+            let nextUngroupedOrder = ungroupedIndex < ungrouped.count
+                ? ungrouped[ungroupedIndex].sortOrder
+                : Int.max
+
+            if nextGroupOrder <= nextUngroupedOrder {
+                result.append(contentsOf: sortedGroups[groupIndex].value)
+                groupIndex += 1
+            } else {
+                result.append(ungrouped[ungroupedIndex])
+                ungroupedIndex += 1
+            }
+        }
+
+        return result
+    }
+
     // MARK: - Reveal Secret (Password Required)
 
     func requestRevealSecret(_ secretId: String) {

@@ -212,6 +212,14 @@ struct MainNavigationView: View {
             NavigationStack {
                 ArchiveView()
             }
+        case .devices:
+            NavigationStack {
+                DeviceManagementView()
+            }
+        case .auditLog:
+            NavigationStack {
+                FeedAuditLogView()
+            }
         }
     }
 

@@ -33,11 +33,14 @@ final class ConnectionsViewModel: ObservableObject {
     private let authTokenProvider: @Sendable () -> String?
     private let serviceConnectionHandler: ServiceConnectionHandler?
     private let serviceConnectionStore: ServiceConnectionStore
+    var connectionsClient: ConnectionsClient?
+    var ownerSpaceClient: OwnerSpaceClient?
 
     // MARK: - Private State
 
     private var allConnections: [Connection] = []
     private var lastMessages: [String: Message] = [:]
+    private var realtimeTask: Task<Void, Never>?
 
     // MARK: - Initialization
 
@@ -45,12 +48,16 @@ final class ConnectionsViewModel: ObservableObject {
         apiClient: APIClient = APIClient(),
         authTokenProvider: @escaping @Sendable () -> String?,
         serviceConnectionHandler: ServiceConnectionHandler? = nil,
-        serviceConnectionStore: ServiceConnectionStore = ServiceConnectionStore()
+        serviceConnectionStore: ServiceConnectionStore = ServiceConnectionStore(),
+        connectionsClient: ConnectionsClient? = nil,
+        ownerSpaceClient: OwnerSpaceClient? = nil
     ) {
         self.apiClient = apiClient
         self.authTokenProvider = authTokenProvider
         self.serviceConnectionHandler = serviceConnectionHandler
         self.serviceConnectionStore = serviceConnectionStore
+        self.connectionsClient = connectionsClient
+        self.ownerSpaceClient = ownerSpaceClient
     }
 
     // MARK: - Service Connections
@@ -81,20 +88,150 @@ final class ConnectionsViewModel: ObservableObject {
 
     // MARK: - Loading
 
-    /// Load connections from API
+    /// Load connections, trying NATS first with HTTP fallback
     func loadConnections() async {
+        state = .loading
+
+        // Try NATS-based loading first
+        if connectionsClient != nil {
+            let natsSuccess = await loadFromNats()
+            if natsSuccess {
+                // Still load service connections in parallel
+                await loadServiceConnections()
+                return
+            }
+            // Fall through to HTTP on NATS failure
+        }
+
         guard let authToken = authTokenProvider() else {
             state = .error("Not authenticated")
             return
         }
-
-        state = .loading
 
         // Load peer connections and service connections in parallel
         async let peerConnectionsTask: () = loadPeerConnections(authToken: authToken)
         async let serviceConnectionsTask: () = loadServiceConnections()
 
         _ = await (peerConnectionsTask, serviceConnectionsTask)
+    }
+
+    /// Load connections from vault via NATS
+    /// - Returns: true if NATS loading succeeded
+    @discardableResult
+    func loadFromNats() async -> Bool {
+        guard let client = connectionsClient else { return false }
+
+        do {
+            let listResult = try await client.list(status: "active")
+            let isoFormatter = ISO8601DateFormatter()
+
+            let connections = listResult.items.map { record -> Connection in
+                let displayName = record.peerProfile?.displayName ?? record.label
+                let createdDate = isoFormatter.date(from: record.createdAt) ?? Date()
+                let expiresDate = record.expiresAt.flatMap { isoFormatter.date(from: $0) }
+                let rotatedDate = record.lastRotatedAt.flatMap { isoFormatter.date(from: $0) }
+
+                let status: ConnectionStatus
+                switch record.status {
+                case "active": status = .active
+                case "revoked": status = .revoked
+                default: status = .pending
+                }
+
+                return Connection(
+                    id: record.connectionId,
+                    peerGuid: record.peerGuid,
+                    peerDisplayName: displayName,
+                    peerAvatarUrl: record.peerProfile?.photo,
+                    status: status,
+                    createdAt: createdDate,
+                    direction: record.direction,
+                    e2ePublicKey: record.e2ePublicKey,
+                    peerProfile: record.peerProfile,
+                    lastRotatedAt: rotatedDate,
+                    expiresAt: expiresDate
+                )
+            }
+
+            allConnections = connections.sorted {
+                ($0.lastMessageAt ?? $0.createdAt) > ($1.lastMessageAt ?? $1.createdAt)
+            }
+
+            if allConnections.isEmpty && serviceConnections.isEmpty {
+                state = .empty
+            } else {
+                state = .loaded(filteredConnections)
+            }
+
+            return true
+        } catch {
+            #if DEBUG
+            print("[ConnectionsViewModel] NATS loadFromNats failed, falling back to HTTP: \(error)")
+            #endif
+            return false
+        }
+    }
+
+    /// Start listening for real-time connection status updates via OwnerSpaceClient
+    func startRealtimeUpdates() {
+        guard let ownerSpace = ownerSpaceClient else { return }
+        realtimeTask?.cancel()
+
+        realtimeTask = Task { [weak self] in
+            // Listen for connection acceptances
+            let acceptanceTask = Task {
+                for await acceptance in ownerSpace.connectionAcceptances {
+                    guard let self = self, !Task.isCancelled else { break }
+                    await MainActor.run {
+                        let displayName = acceptance.peerAlias ?? acceptance.peerGuid
+                        let newConnection = Connection(
+                            id: acceptance.connectionId,
+                            peerGuid: acceptance.peerGuid,
+                            peerDisplayName: displayName,
+                            status: .active,
+                            createdAt: Date()
+                        )
+                        if !self.allConnections.contains(where: { $0.id == acceptance.connectionId }) {
+                            self.allConnections.insert(newConnection, at: 0)
+                            self.state = .loaded(self.filteredConnections)
+                        }
+                    }
+                }
+            }
+
+            // Listen for connection status updates (revocations, etc.)
+            let statusTask = Task {
+                for await update in ownerSpace.connectionStatusUpdates {
+                    guard let self = self, !Task.isCancelled else { break }
+                    await MainActor.run {
+                        if let index = self.allConnections.firstIndex(where: { $0.id == update.connectionId }) {
+                            let existing = self.allConnections[index]
+                            let newStatus: ConnectionStatus = update.type == "revoked" ? .revoked : existing.status
+                            self.allConnections[index] = Connection(
+                                id: existing.id,
+                                peerGuid: existing.peerGuid,
+                                peerDisplayName: update.peerAlias ?? existing.peerDisplayName,
+                                peerAvatarUrl: existing.peerAvatarUrl,
+                                status: newStatus,
+                                createdAt: existing.createdAt,
+                                lastMessageAt: existing.lastMessageAt,
+                                unreadCount: existing.unreadCount
+                            )
+                            self.state = .loaded(self.filteredConnections)
+                        }
+                    }
+                }
+            }
+
+            // Wait for cancellation
+            _ = await (acceptanceTask.value, statusTask.value)
+        }
+    }
+
+    /// Stop real-time updates
+    func stopRealtimeUpdates() {
+        realtimeTask?.cancel()
+        realtimeTask = nil
     }
 
     private func loadPeerConnections(authToken: String) async {

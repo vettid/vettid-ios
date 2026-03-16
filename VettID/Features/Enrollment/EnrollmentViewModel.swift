@@ -379,6 +379,30 @@ final class EnrollmentViewModel: ObservableObject {
         }
     }
 
+    /// Resolve a short enrollment/invitation code (e.g. broker-issued short codes)
+    func resolveShortCode(_ code: String) async {
+        #if DEBUG
+        print("[Enrollment] resolveShortCode called with: \(code)")
+        #endif
+        state = .processingInvitation
+
+        do {
+            // Use default enrollment API URL for short code resolution
+            let url = AppConfiguration.enrollmentAPIURL
+            apiClient = APIClient(baseURL: url)
+
+            // Short codes are resolved through the invitation code flow
+            // The vault/API handles mapping from short code to full invitation credentials
+            await startInvitationCodeFlow(invitationCode: code)
+
+        } catch {
+            #if DEBUG
+            print("[Enrollment] Error resolving short code: \(error)")
+            #endif
+            handleError(error, retryable: true)
+        }
+    }
+
     /// QR Code Flow: Authenticate with session_token to get enrollment JWT
     private func startQRCodeFlow(sessionToken: String) async {
         do {

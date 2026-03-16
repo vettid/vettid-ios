@@ -170,7 +170,7 @@ final class OwnerSpaceClient {
 
     // MARK: - Request/Response Pattern
 
-    /// Send a request and wait for a response with timeout
+    /// Send a request and wait for a response with timeout (legacy subscription-based)
     func request<Request: Encodable, Response: Decodable>(
         _ request: Request,
         topic: String,
@@ -210,13 +210,313 @@ final class OwnerSpaceClient {
         }
     }
 
+    // MARK: - JetStream Request/Response (event_id correlation)
+
+    /// Send a message to the vault and await the response via JetStream.
+    ///
+    /// Uses JetStreamHelper to create an ephemeral consumer for reliable
+    /// response delivery with event_id correlation. This avoids race conditions
+    /// that occur with regular NATS subscriptions.
+    ///
+    /// - Parameters:
+    ///   - messageType: The message type/action (e.g., "profile.get", "feed.sync")
+    ///   - payload: The message payload as dictionary
+    ///   - timeout: Timeout in seconds (default 30)
+    /// - Returns: The parsed vault response, or nil if timeout
+    func sendAndAwaitResponse(
+        _ messageType: String,
+        payload: [String: AnyCodableValue] = [:],
+        timeout: TimeInterval = 30
+    ) async throws -> VaultHandlerResponse {
+        let requestId = UUID().uuidString
+        let requestSubject = "\(forVaultPrefix).\(messageType)"
+        let responseSubject = "\(forAppPrefix).\(messageType).response"
+
+        let message = VaultEventMessage(
+            id: requestId,
+            type: messageType,
+            payload: payload,
+            timestamp: ISO8601DateFormatter().string(from: Date())
+        )
+
+        let requestPayload = try JSONEncoder().encode(message)
+
+        let responseData = try await JetStreamHelper.sendAndFetchResponse(
+            connectionManager: connectionManager,
+            requestSubject: requestSubject,
+            responseSubject: responseSubject,
+            requestPayload: requestPayload,
+            expectedEventId: requestId,
+            timeoutSeconds: timeout
+        )
+
+        // Parse response
+        return try parseVaultResponse(requestId: requestId, data: responseData)
+    }
+
+    /// Parse vault response data into a VaultHandlerResponse
+    private func parseVaultResponse(requestId: String, data: Data) throws -> VaultHandlerResponse {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw OwnerSpaceError.invalidResponse
+        }
+
+        let success = json["success"] as? Bool ?? (json["error"] == nil)
+        let error = json["error"] as? String
+        let errorCode = json["error_code"] as? String
+
+        // Extract result object
+        var result: [String: Any]?
+        if let resultDict = json["result"] as? [String: Any] {
+            result = resultDict
+        } else if success {
+            // Some responses put data at the top level
+            result = json
+        }
+
+        return VaultHandlerResponse(
+            requestId: json["event_id"] as? String ?? json["id"] as? String ?? requestId,
+            success: success,
+            result: result,
+            error: error,
+            errorCode: errorCode
+        )
+    }
+
+    // MARK: - Agent Events
+
+    /// Publisher for agent approval requests
+    private var agentApprovalContinuation: AsyncStream<AgentApprovalRequest>.Continuation?
+    private var _agentApprovalStream: AsyncStream<AgentApprovalRequest>?
+
+    /// Stream of agent approval requests from vault
+    var agentApprovalRequests: AsyncStream<AgentApprovalRequest> {
+        if let stream = _agentApprovalStream {
+            return stream
+        }
+        let stream = AsyncStream<AgentApprovalRequest> { continuation in
+            self.agentApprovalContinuation = continuation
+        }
+        _agentApprovalStream = stream
+        return stream
+    }
+
+    /// Emit an agent approval request (called from message handler)
+    func emitAgentApprovalRequest(_ request: AgentApprovalRequest) {
+        agentApprovalContinuation?.yield(request)
+    }
+
+    // MARK: - Device Events
+
+    /// Publisher for device approval requests
+    private var deviceApprovalContinuation: AsyncStream<DeviceApprovalRequest>.Continuation?
+    private var _deviceApprovalStream: AsyncStream<DeviceApprovalRequest>?
+
+    /// Stream of device approval requests from vault
+    var deviceApprovalRequests: AsyncStream<DeviceApprovalRequest> {
+        if let stream = _deviceApprovalStream {
+            return stream
+        }
+        let stream = AsyncStream<DeviceApprovalRequest> { continuation in
+            self.deviceApprovalContinuation = continuation
+        }
+        _deviceApprovalStream = stream
+        return stream
+    }
+
+    /// Emit a device approval request (called from message handler)
+    func emitDeviceApprovalRequest(_ request: DeviceApprovalRequest) {
+        deviceApprovalContinuation?.yield(request)
+    }
+
+    // MARK: - Connection Events
+
+    /// Publisher for connection acceptance notifications
+    private var connectionAcceptanceContinuation: AsyncStream<ConnectionPeerAccepted>.Continuation?
+    private var _connectionAcceptanceStream: AsyncStream<ConnectionPeerAccepted>?
+
+    var connectionAcceptances: AsyncStream<ConnectionPeerAccepted> {
+        if let stream = _connectionAcceptanceStream {
+            return stream
+        }
+        let stream = AsyncStream<ConnectionPeerAccepted> { continuation in
+            self.connectionAcceptanceContinuation = continuation
+        }
+        _connectionAcceptanceStream = stream
+        return stream
+    }
+
+    func emitConnectionAcceptance(_ acceptance: ConnectionPeerAccepted) {
+        connectionAcceptanceContinuation?.yield(acceptance)
+    }
+
+    /// Publisher for connection status updates
+    private var connectionStatusContinuation: AsyncStream<ConnectionStatusUpdate>.Continuation?
+    private var _connectionStatusStream: AsyncStream<ConnectionStatusUpdate>?
+
+    var connectionStatusUpdates: AsyncStream<ConnectionStatusUpdate> {
+        if let stream = _connectionStatusStream {
+            return stream
+        }
+        let stream = AsyncStream<ConnectionStatusUpdate> { continuation in
+            self.connectionStatusContinuation = continuation
+        }
+        _connectionStatusStream = stream
+        return stream
+    }
+
+    func emitConnectionStatusUpdate(_ update: ConnectionStatusUpdate) {
+        connectionStatusContinuation?.yield(update)
+    }
+
+    // MARK: - Feed Events
+
+    /// Publisher for feed notifications
+    private var feedNotificationContinuation: AsyncStream<FeedNotification>.Continuation?
+    private var _feedNotificationStream: AsyncStream<FeedNotification>?
+
+    var feedNotifications: AsyncStream<FeedNotification> {
+        if let stream = _feedNotificationStream {
+            return stream
+        }
+        let stream = AsyncStream<FeedNotification> { continuation in
+            self.feedNotificationContinuation = continuation
+        }
+        _feedNotificationStream = stream
+        return stream
+    }
+
+    func emitFeedNotification(_ notification: FeedNotification) {
+        feedNotificationContinuation?.yield(notification)
+    }
+
     // MARK: - Event Types
 
     /// Get available event types from the vault
     func getEventTypes() async throws -> [EventTypeInfo] {
-        // This would typically use request/reply or fetch from a stream
-        // For now, return empty array
         return []
+    }
+}
+
+// MARK: - Vault Handler Response
+
+/// Parsed response from a vault handler via sendAndAwaitResponse
+struct VaultHandlerResponse {
+    let requestId: String
+    let success: Bool
+    let result: [String: Any]?
+    let error: String?
+    let errorCode: String?
+
+    /// Get a string value from the result
+    func getString(_ key: String) -> String? {
+        result?[key] as? String
+    }
+
+    /// Get an int value from the result
+    func getInt(_ key: String) -> Int? {
+        result?[key] as? Int
+    }
+
+    /// Get a bool value from the result
+    func getBool(_ key: String) -> Bool? {
+        result?[key] as? Bool
+    }
+
+    /// Get a dictionary from the result
+    func getObject(_ key: String) -> [String: Any]? {
+        result?[key] as? [String: Any]
+    }
+
+    /// Get an array from the result
+    func getArray(_ key: String) -> [[String: Any]]? {
+        result?[key] as? [[String: Any]]
+    }
+}
+
+// MARK: - Event Models
+
+/// Agent approval request from vault
+struct AgentApprovalRequest: Codable {
+    let requestId: String
+    let agentName: String
+    let agentType: String?
+    let operation: String?
+    let secretCategory: String?
+    let timestamp: String?
+
+    enum CodingKeys: String, CodingKey {
+        case requestId = "request_id"
+        case agentName = "agent_name"
+        case agentType = "agent_type"
+        case operation
+        case secretCategory = "secret_category"
+        case timestamp
+    }
+}
+
+/// Device approval request from vault
+struct DeviceApprovalRequest: Codable {
+    let requestId: String
+    let connectionId: String
+    let deviceName: String
+    let operation: String?
+    let secretCategory: String?
+    let timestamp: String?
+
+    enum CodingKeys: String, CodingKey {
+        case requestId = "request_id"
+        case connectionId = "connection_id"
+        case deviceName = "device_name"
+        case operation
+        case secretCategory = "secret_category"
+        case timestamp
+    }
+}
+
+/// Connection peer accepted notification
+struct ConnectionPeerAccepted: Codable {
+    let connectionId: String
+    let peerGuid: String
+    let peerAlias: String?
+    let peerProfile: [String: String]?
+
+    enum CodingKeys: String, CodingKey {
+        case connectionId = "connection_id"
+        case peerGuid = "peer_guid"
+        case peerAlias = "peer_alias"
+        case peerProfile = "peer_profile"
+    }
+}
+
+/// Connection status update from vault
+struct ConnectionStatusUpdate: Codable {
+    let type: String
+    let connectionId: String
+    let peerGuid: String?
+    let peerAlias: String?
+
+    enum CodingKeys: String, CodingKey {
+        case type
+        case connectionId = "connection_id"
+        case peerGuid = "peer_guid"
+        case peerAlias = "peer_alias"
+    }
+}
+
+/// Feed notification from vault
+struct FeedNotification: Codable {
+    let type: String
+    let eventId: String?
+    let eventType: String?
+    let title: String?
+    let message: String?
+
+    enum CodingKeys: String, CodingKey {
+        case type
+        case eventId = "event_id"
+        case eventType = "event_type"
+        case title
+        case message
     }
 }
 

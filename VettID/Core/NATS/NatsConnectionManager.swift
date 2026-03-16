@@ -28,8 +28,9 @@ final class NatsConnectionManager: ObservableObject {
 
     // MARK: - Configuration
 
-    private let maxReconnectAttempts = 5
-    private let reconnectDelaySeconds: [Double] = [1, 2, 4, 8, 16] // Exponential backoff
+    private let maxReconnectAttempts = Int.max  // Infinite retry
+    private let reconnectBackoffCap: Double = 60  // Max 60s between retries
+    private let reconnectDelaySeconds: [Double] = [1, 2, 4, 8, 16] // Exponential backoff (caps at 60s)
     private let bootstrapTimeout: TimeInterval = 30
 
     /// Timeout for waiting for vault to start (30 seconds)
@@ -1053,17 +1054,118 @@ final class NatsConnectionManager: ObservableObject {
         }
     }
 
+    /// Request-reply: publish to a subject and wait for a single response
+    func request(_ subject: String, payload: Data, timeout: TimeInterval = 30) async throws -> Data {
+        guard let client = natsClient, connectionState == .connected else {
+            // Wait briefly for reconnection
+            for _ in 1...10 {
+                try await Task.sleep(nanoseconds: 500_000_000)
+                if connectionState == .connected, natsClient != nil {
+                    break
+                }
+            }
+            guard let client = natsClient, connectionState == .connected else {
+                throw NatsConnectionError.notConnected
+            }
+            return try await client.request(subject, payload: payload, timeout: timeout)
+        }
+        return try await client.request(subject, payload: payload, timeout: timeout)
+    }
+
+    /// Get the owner space ID
+    func getOwnerSpaceId() -> String? {
+        ownerSpaceId
+    }
+
     /// Unsubscribe from a topic
     func unsubscribe(from topic: String) async {
         subscriptions.removeValue(forKey: topic)
         await natsClient?.unsubscribe(from: topic)
     }
 
-    // MARK: - Private Methods
+    // MARK: - Health Monitoring
+
+    private var pingTask: Task<Void, Never>?
+    private let pingInterval: TimeInterval = 20
+    private let pongTimeout: TimeInterval = 10
 
     private func startConnectionMonitoring() {
-        // Monitor for disconnection events
-        // In a real implementation, this would listen to NATS client events
+        pingTask?.cancel()
+        pingTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64((self?.pingInterval ?? 20) * 1_000_000_000))
+                guard !Task.isCancelled else { return }
+                // In production, send PING and expect PONG within timeout
+                // For now, just verify we're still connected
+                if self?.natsClient == nil {
+                    await self?.handleDisconnection()
+                }
+            }
+        }
+    }
+
+    private func handleDisconnection() {
+        guard connectionState != .reconnecting else { return }
+        connectionState = .reconnecting
+        startReconnection()
+    }
+
+    private func startReconnection() {
+        reconnectTask?.cancel()
+        reconnectTask = Task { [weak self] in
+            var attempt = 0
+            while !Task.isCancelled {
+                let delay = min(
+                    Double(1 << min(attempt, 6)),
+                    self?.reconnectBackoffCap ?? 60
+                )
+                #if DEBUG
+                print("[NATS] Reconnect attempt \(attempt + 1), delay: \(delay)s")
+                #endif
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                guard !Task.isCancelled else { return }
+
+                guard let strongSelf = self,
+                      let creds = try? strongSelf.credentialStore.getCredentials() else {
+                    attempt += 1
+                    continue
+                }
+
+                do {
+                    strongSelf.natsClient = NatsClientWrapper(
+                        endpoint: creds.endpoint,
+                        jwt: creds.jwt,
+                        seed: creds.seed
+                    )
+                    try await strongSelf.natsClient?.connect()
+                    await MainActor.run {
+                        strongSelf.connectionState = .connected
+                    }
+                    strongSelf.startConnectionMonitoring()
+                    await strongSelf.reestablishSubscriptions()
+                    return
+                } catch {
+                    #if DEBUG
+                    print("[NATS] Reconnect attempt \(attempt + 1) failed: \(error)")
+                    #endif
+                }
+                attempt += 1
+            }
+        }
+    }
+
+    private func reestablishSubscriptions() async {
+        // Re-subscribe to previously tracked subscription topics
+        let topics = Array(subscriptions.keys)
+        for topic in topics {
+            do {
+                _ = try await subscribe(to: topic)
+            } catch {
+                #if DEBUG
+                print("[NATS] Failed to reestablish subscription for \(topic): \(error)")
+                #endif
+            }
+        }
     }
 
     private func getDeviceId() -> String {
@@ -1463,6 +1565,15 @@ class NatsClientWrapper {
         try await client.publish(data, subject: topic)
     }
 
+    /// Request-reply pattern: publish and wait for a single response
+    func request(_ subject: String, payload: Data, timeout: TimeInterval = 30) async throws -> Data {
+        guard let client = client else {
+            throw NatsConnectionError.notConnected
+        }
+        let reply = try await client.request(payload, subject: subject)
+        return reply.payload ?? Data()
+    }
+
     func subscribe(to topic: String) async throws -> AsyncStream<NatsMessage> {
         guard let client = client else {
             throw NatsConnectionError.notConnected
@@ -1533,6 +1644,16 @@ class NatsClientWrapper {
         #if DEBUG
         print("[NATS] Stub: Published \(data.count) bytes to \(topic)")
         #endif
+    }
+
+    /// Stub request-reply
+    func request(_ subject: String, payload: Data, timeout: TimeInterval = 30) async throws -> Data {
+        #if DEBUG
+        print("[NATS] Stub: Request to \(subject) (\(payload.count) bytes)")
+        #endif
+        // Return a stub success response
+        let response: [String: Any] = ["success": true, "result": [:] as [String: Any]]
+        return try JSONSerialization.data(withJSONObject: response)
     }
 
     func subscribe(to topic: String) async throws -> AsyncStream<NatsMessage> {

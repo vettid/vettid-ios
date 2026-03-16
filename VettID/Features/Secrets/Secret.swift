@@ -16,6 +16,12 @@ enum SecretCategory: String, Codable, CaseIterable {
     case wifi = "wifi"
     case certificate = "certificate"
     case note = "note"
+    case totp = "totp"
+    case vpn = "vpn"
+    case ssh = "ssh"
+    case vehicle = "vehicle"
+    case loyalty = "loyalty"
+    case tax = "tax"
     case other = "other"
 
     var displayName: String {
@@ -33,6 +39,12 @@ enum SecretCategory: String, Codable, CaseIterable {
         case .wifi: return "WiFi"
         case .certificate: return "Certificate"
         case .note: return "Note"
+        case .totp: return "TOTP Token"
+        case .vpn: return "VPN"
+        case .ssh: return "SSH Key"
+        case .vehicle: return "Vehicle"
+        case .loyalty: return "Loyalty Card"
+        case .tax: return "Tax ID"
         case .other: return "Other"
         }
     }
@@ -52,6 +64,12 @@ enum SecretCategory: String, Codable, CaseIterable {
         case .wifi: return "wifi"
         case .certificate: return "doc.badge.ellipsis"
         case .note: return "note.text"
+        case .totp: return "clock.badge.checkmark"
+        case .vpn: return "network.badge.shield.half.filled"
+        case .ssh: return "terminal"
+        case .vehicle: return "car.side"
+        case .loyalty: return "giftcard"
+        case .tax: return "doc.text.fill"
         case .other: return "lock.fill"
         }
     }
@@ -140,6 +158,8 @@ struct MinorSecret: Identifiable, Codable, Equatable {
     var isSystemField: Bool
     var sortOrder: Int
     var syncStatus: SecretSyncStatus
+    var groupId: String?
+    var groupLabel: String?
     let createdAt: Date
     var updatedAt: Date
 
@@ -156,6 +176,8 @@ struct MinorSecret: Identifiable, Codable, Equatable {
         isSystemField: Bool = false,
         sortOrder: Int = 0,
         syncStatus: SecretSyncStatus = .pending,
+        groupId: String? = nil,
+        groupLabel: String? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -171,6 +193,8 @@ struct MinorSecret: Identifiable, Codable, Equatable {
         self.isSystemField = isSystemField
         self.sortOrder = sortOrder
         self.syncStatus = syncStatus
+        self.groupId = groupId
+        self.groupLabel = groupLabel
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }

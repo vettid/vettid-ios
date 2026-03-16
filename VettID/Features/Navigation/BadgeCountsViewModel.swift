@@ -18,7 +18,7 @@ class BadgeCountsViewModel: ObservableObject {
         case .feed: return unreadFeedCount
         case .connections: return pendingConnectionsCount
         case .voting: return unvotedProposalsCount
-        case .personalData, .secrets, .archive: return 0
+        case .personalData, .secrets, .archive, .devices, .auditLog: return 0
         }
     }
 

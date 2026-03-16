@@ -1,5 +1,14 @@
 import SwiftUI
 
+// MARK: - Connection Type Filter
+
+enum ConnectionTypeFilter: String, CaseIterable {
+    case all = "All"
+    case people = "People"
+    case agents = "Agents"
+    case services = "Services"
+}
+
 /// Main connections list view
 struct ConnectionsListView: View {
     let authTokenProvider: @Sendable () -> String?
@@ -9,6 +18,7 @@ struct ConnectionsListView: View {
     @State private var showCreateInvitation = false
     @State private var showScanInvitation = false
     @State private var showServiceDiscovery = false
+    @State private var selectedTypeFilter: ConnectionTypeFilter = .all
 
     init(
         authTokenProvider: @escaping @Sendable () -> String?,
@@ -24,19 +34,59 @@ struct ConnectionsListView: View {
 
     var body: some View {
         NavigationView {
-            Group {
-                switch viewModel.state {
-                case .loading:
-                    loadingView
+            VStack(spacing: 0) {
+                // Connection type filter
+                Picker("Filter", selection: $selectedTypeFilter) {
+                    ForEach(ConnectionTypeFilter.allCases, id: \.self) { filter in
+                        Text(filter.rawValue).tag(filter)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
 
-                case .empty:
-                    emptyView
+                // Content based on filter
+                if selectedTypeFilter == .agents {
+                    NavigationLink(destination: AgentManagementView()) {
+                        HStack {
+                            Image(systemName: "cpu")
+                                .font(.title2)
+                                .foregroundStyle(.purple)
+                                .frame(width: 40)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Manage Agents")
+                                    .font(.headline)
+                                Text("View and manage connected AI agents")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding()
+                        .background(Color(.systemGray6))
+                        .cornerRadius(12)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
+                    }
+                    Spacer()
+                } else {
+                    Group {
+                        switch viewModel.state {
+                        case .loading:
+                            loadingView
 
-                case .loaded(let connections):
-                    connectionsList(connections)
+                        case .empty:
+                            emptyView
 
-                case .error(let message):
-                    errorView(message)
+                        case .loaded(let connections):
+                            connectionsList(filterByType(connections))
+
+                        case .error(let message):
+                            errorView(message)
+                        }
+                    }
                 }
             }
             .navigationTitle("Connections")
@@ -83,6 +133,19 @@ struct ConnectionsListView: View {
         }
     }
 
+    /// Filter connections list based on the selected type filter.
+    /// "All" shows everything, "People" hides services, "Services" shows only service section.
+    private func filterByType(_ connections: [Connection]) -> [Connection] {
+        switch selectedTypeFilter {
+        case .all, .agents:
+            return connections
+        case .people:
+            return connections // People connections only (service section hidden in connectionsList)
+        case .services:
+            return [] // Show only service connections section
+        }
+    }
+
     // MARK: - Loading View
 
     private var loadingView: some View {
@@ -107,8 +170,8 @@ struct ConnectionsListView: View {
 
     private func connectionsList(_ connections: [Connection]) -> some View {
         List {
-            // Services Section
-            if !viewModel.filteredServiceConnections.isEmpty {
+            // Services Section (hidden when filtering to People only)
+            if selectedTypeFilter != .people && !viewModel.filteredServiceConnections.isEmpty {
                 Section {
                     // Pending Updates Banner
                     if viewModel.pendingServiceUpdatesCount > 0 {
@@ -151,8 +214,8 @@ struct ConnectionsListView: View {
                 }
             }
 
-            // People Section
-            if !connections.isEmpty {
+            // People Section (hidden when filtering to Services only)
+            if selectedTypeFilter != .services && !connections.isEmpty {
                 Section {
                     ForEach(connections) { connection in
                         NavigationLink(destination: ConnectionDetailView(

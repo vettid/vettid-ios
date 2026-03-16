@@ -4,11 +4,54 @@ import SwiftUI
 
 struct FeedView: View {
     @StateObject private var viewModel = FeedViewModel()
+    @State private var isSearching = false
 
     var body: some View {
         VStack(spacing: 0) {
+            // Search bar
+            if isSearching {
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                    TextField("Search events...", text: $viewModel.searchQuery)
+                        .textFieldStyle(.plain)
+                        .onChange(of: viewModel.searchQuery) { newValue in
+                            viewModel.searchEvents(query: newValue)
+                        }
+                    if !viewModel.searchQuery.isEmpty {
+                        Button {
+                            viewModel.searchQuery = ""
+                            viewModel.searchEvents(query: "")
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Button("Cancel") {
+                        viewModel.searchQuery = ""
+                        viewModel.searchEvents(query: "")
+                        isSearching = false
+                    }
+                    .font(.subheadline)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(Color(.systemBackground))
+            }
+
             // Filter chips
-            filterBar
+            HStack {
+                if !isSearching {
+                    Button {
+                        isSearching = true
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundStyle(.secondary)
+                            .padding(.leading, 16)
+                    }
+                }
+                filterBar
+            }
 
             // Content
             switch viewModel.state {
@@ -25,8 +68,25 @@ struct FeedView: View {
                 errorView(message)
             }
         }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Button {
+                        viewModel.markAllAsRead()
+                    } label: {
+                        Label("Mark All as Read", systemImage: "checkmark.circle")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+            }
+        }
         .task {
             await viewModel.loadEvents()
+            viewModel.startPeriodicRefresh()
+        }
+        .onDisappear {
+            viewModel.stopPeriodicRefresh()
         }
     }
 
@@ -99,6 +159,10 @@ struct FeedView: View {
             return "No authentication requests. Services you authorize will appear here."
         case .activity:
             return "No vault activity recorded yet."
+        case .agents:
+            return "No agent activity. Connected agents will appear here."
+        case .devices:
+            return "No device activity. Paired devices will appear here."
         }
     }
 
@@ -125,6 +189,28 @@ struct FeedView: View {
                 )
                 .onTapGesture {
                     handleEventTap(event)
+                }
+                .swipeActions(edge: .leading) {
+                    Button {
+                        viewModel.archiveEvent(eventId: event.id)
+                    } label: {
+                        Label("Archive", systemImage: "archivebox")
+                    }
+                    .tint(.blue)
+
+                    Button {
+                        viewModel.pinEvent(eventId: event.id)
+                    } label: {
+                        Label("Pin", systemImage: "star")
+                    }
+                    .tint(.yellow)
+                }
+                .swipeActions(edge: .trailing) {
+                    Button(role: .destructive) {
+                        viewModel.deleteEvent(eventId: event.id)
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
                 }
             }
         }
@@ -222,6 +308,23 @@ struct EventCardView: View {
     let onApproveAuth: (String) -> Void
     let onDenyAuth: (String) -> Void
 
+    /// Whether this event is pinned (high priority).
+    /// Checks vault activity type or can be extended for other event types.
+    private var isPinned: Bool {
+        switch event {
+        case .vaultActivity(let e):
+            // Treat certain activity types as high priority
+            switch e.activityType {
+            case .vaultStopped: return true
+            default: return false
+            }
+        case .authRequest(let e):
+            return e.status == .pending
+        default:
+            return false
+        }
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             // Icon/Avatar
@@ -230,6 +333,13 @@ struct EventCardView: View {
             // Content
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
+                    // Pin/priority indicator
+                    if isPinned {
+                        Image(systemName: "star.fill")
+                            .font(.caption)
+                            .foregroundStyle(.yellow)
+                    }
+
                     Text(eventTitle)
                         .font(.subheadline)
                         .fontWeight(.semibold)

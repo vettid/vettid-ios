@@ -14,6 +14,11 @@ struct Connection: Codable, Identifiable, Equatable {
     let isFavorite: Bool
     let tags: [String]
     let mutualConnectionCount: Int
+    let direction: String                    // "outbound" (we invited) or "inbound" (they invited us)
+    let e2ePublicKey: String?                // Peer's E2E public key (hex)
+    let peerProfile: PeerProfileData?        // Cached peer profile from vault
+    let lastRotatedAt: Date?                 // Last credential rotation timestamp
+    let expiresAt: Date?                     // Connection expiration timestamp
 
     // Default initializer for backward compatibility
     init(
@@ -28,7 +33,12 @@ struct Connection: Codable, Identifiable, Equatable {
         unreadCount: Int = 0,
         isFavorite: Bool = false,
         tags: [String] = [],
-        mutualConnectionCount: Int = 0
+        mutualConnectionCount: Int = 0,
+        direction: String = "unknown",
+        e2ePublicKey: String? = nil,
+        peerProfile: PeerProfileData? = nil,
+        lastRotatedAt: Date? = nil,
+        expiresAt: Date? = nil
     ) {
         self.id = id
         self.peerGuid = peerGuid
@@ -42,6 +52,11 @@ struct Connection: Codable, Identifiable, Equatable {
         self.isFavorite = isFavorite
         self.tags = tags
         self.mutualConnectionCount = mutualConnectionCount
+        self.direction = direction
+        self.e2ePublicKey = e2ePublicKey
+        self.peerProfile = peerProfile
+        self.lastRotatedAt = lastRotatedAt
+        self.expiresAt = expiresAt
     }
 }
 
