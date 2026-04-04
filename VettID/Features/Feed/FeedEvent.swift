@@ -7,6 +7,7 @@ enum FeedEvent: Identifiable {
     case connectionRequest(ConnectionRequestEvent)
     case authRequest(AuthRequestEvent)
     case vaultActivity(VaultActivityEvent)
+    case transferRequest(TransferRequestEvent)
 
     var id: String {
         switch self {
@@ -14,6 +15,7 @@ enum FeedEvent: Identifiable {
         case .connectionRequest(let e): return e.id
         case .authRequest(let e): return e.id
         case .vaultActivity(let e): return e.id
+        case .transferRequest(let e): return e.id
         }
     }
 
@@ -23,6 +25,7 @@ enum FeedEvent: Identifiable {
         case .connectionRequest(let e): return e.timestamp
         case .authRequest(let e): return e.timestamp
         case .vaultActivity(let e): return e.timestamp
+        case .transferRequest(let e): return e.timestamp
         }
     }
 
@@ -32,7 +35,24 @@ enum FeedEvent: Identifiable {
         case .connectionRequest(let e): return e.isRead
         case .authRequest(let e): return e.isRead
         case .vaultActivity(let e): return e.isRead
+        case .transferRequest(let e): return e.isRead
         }
+    }
+}
+
+// MARK: - Transfer Request Event
+
+struct TransferRequestEvent: Identifiable {
+    let id: String
+    let senderName: String
+    let amountSats: Int64
+    let walletId: String?
+    let connectionId: String
+    let timestamp: Date
+    var isRead: Bool
+
+    var amountBtc: Double {
+        Double(amountSats) / 100_000_000.0
     }
 }
 

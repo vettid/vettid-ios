@@ -251,7 +251,17 @@ final class OwnerSpaceClient {
         )
 
         // Parse response
-        return try parseVaultResponse(requestId: requestId, data: responseData)
+        let response = try parseVaultResponse(requestId: requestId, data: responseData)
+
+        // Detect vault_locked error and emit event for PIN re-entry
+        if !response.success && response.errorCode == "vault_locked" {
+            emitVaultLockedEvent(VaultLockedEvent(
+                reason: response.error ?? "DEK unavailable",
+                messageType: messageType
+            ))
+        }
+
+        return response
     }
 
     /// Parse vault response data into a VaultHandlerResponse
@@ -295,6 +305,10 @@ final class OwnerSpaceClient {
         }
         let stream = AsyncStream<AgentApprovalRequest> { continuation in
             self.agentApprovalContinuation = continuation
+            continuation.onTermination = { [weak self] _ in
+                self?.agentApprovalContinuation = nil
+                self?._agentApprovalStream = nil
+            }
         }
         _agentApprovalStream = stream
         return stream
@@ -318,6 +332,10 @@ final class OwnerSpaceClient {
         }
         let stream = AsyncStream<DeviceApprovalRequest> { continuation in
             self.deviceApprovalContinuation = continuation
+            continuation.onTermination = { [weak self] _ in
+                self?.deviceApprovalContinuation = nil
+                self?._deviceApprovalStream = nil
+            }
         }
         _deviceApprovalStream = stream
         return stream
@@ -340,6 +358,10 @@ final class OwnerSpaceClient {
         }
         let stream = AsyncStream<ConnectionPeerAccepted> { continuation in
             self.connectionAcceptanceContinuation = continuation
+            continuation.onTermination = { [weak self] _ in
+                self?.connectionAcceptanceContinuation = nil
+                self?._connectionAcceptanceStream = nil
+            }
         }
         _connectionAcceptanceStream = stream
         return stream
@@ -359,6 +381,10 @@ final class OwnerSpaceClient {
         }
         let stream = AsyncStream<ConnectionStatusUpdate> { continuation in
             self.connectionStatusContinuation = continuation
+            continuation.onTermination = { [weak self] _ in
+                self?.connectionStatusContinuation = nil
+                self?._connectionStatusStream = nil
+            }
         }
         _connectionStatusStream = stream
         return stream
@@ -380,6 +406,10 @@ final class OwnerSpaceClient {
         }
         let stream = AsyncStream<FeedNotification> { continuation in
             self.feedNotificationContinuation = continuation
+            continuation.onTermination = { [weak self] _ in
+                self?.feedNotificationContinuation = nil
+                self?._feedNotificationStream = nil
+            }
         }
         _feedNotificationStream = stream
         return stream
@@ -387,6 +417,82 @@ final class OwnerSpaceClient {
 
     func emitFeedNotification(_ notification: FeedNotification) {
         feedNotificationContinuation?.yield(notification)
+    }
+
+    // MARK: - Vault Locked Events
+
+    /// Publisher for vault locked events (DEK unavailable after enclave refresh)
+    private var vaultLockedContinuation: AsyncStream<VaultLockedEvent>.Continuation?
+    private var _vaultLockedStream: AsyncStream<VaultLockedEvent>?
+
+    /// Stream of vault locked events — triggers PIN re-entry
+    var vaultLockedEvents: AsyncStream<VaultLockedEvent> {
+        if let stream = _vaultLockedStream {
+            return stream
+        }
+        let stream = AsyncStream<VaultLockedEvent> { continuation in
+            self.vaultLockedContinuation = continuation
+            continuation.onTermination = { [weak self] _ in
+                self?.vaultLockedContinuation = nil
+                self?._vaultLockedStream = nil
+            }
+        }
+        _vaultLockedStream = stream
+        return stream
+    }
+
+    func emitVaultLockedEvent(_ event: VaultLockedEvent) {
+        vaultLockedContinuation?.yield(event)
+    }
+
+    // MARK: - Wallet Events
+
+    /// Publisher for wallet notifications (balance changes, incoming payments)
+    private var walletNotificationContinuation: AsyncStream<WalletNotification>.Continuation?
+    private var _walletNotificationStream: AsyncStream<WalletNotification>?
+
+    var walletNotifications: AsyncStream<WalletNotification> {
+        if let stream = _walletNotificationStream {
+            return stream
+        }
+        let stream = AsyncStream<WalletNotification> { continuation in
+            self.walletNotificationContinuation = continuation
+            continuation.onTermination = { [weak self] _ in
+                self?.walletNotificationContinuation = nil
+                self?._walletNotificationStream = nil
+            }
+        }
+        _walletNotificationStream = stream
+        return stream
+    }
+
+    func emitWalletNotification(_ notification: WalletNotification) {
+        walletNotificationContinuation?.yield(notification)
+    }
+
+    // MARK: - Migration Events
+
+    /// Publisher for vault migration events
+    private var migrationEventContinuation: AsyncStream<MigrationEvent>.Continuation?
+    private var _migrationEventStream: AsyncStream<MigrationEvent>?
+
+    var migrationEvents: AsyncStream<MigrationEvent> {
+        if let stream = _migrationEventStream {
+            return stream
+        }
+        let stream = AsyncStream<MigrationEvent> { continuation in
+            self.migrationEventContinuation = continuation
+            continuation.onTermination = { [weak self] _ in
+                self?.migrationEventContinuation = nil
+                self?._migrationEventStream = nil
+            }
+        }
+        _migrationEventStream = stream
+        return stream
+    }
+
+    func emitMigrationEvent(_ event: MigrationEvent) {
+        migrationEventContinuation?.yield(event)
     }
 
     // MARK: - Event Types
@@ -635,6 +741,40 @@ struct EventTypeInfo: Decodable {
     let id: String
     let name: String
     let description: String
+}
+
+// MARK: - Errors
+
+/// Vault locked event — DEK is unavailable, requires PIN re-entry
+struct VaultLockedEvent {
+    let reason: String
+    let messageType: String
+}
+
+/// Wallet notification from vault (balance update, incoming payment, etc.)
+struct WalletNotification: Codable {
+    let type: String
+    let walletId: String?
+    let message: String?
+
+    enum CodingKeys: String, CodingKey {
+        case type
+        case walletId = "wallet_id"
+        case message
+    }
+}
+
+/// Migration event from vault
+struct MigrationEvent: Codable {
+    let type: String
+    let version: String?
+    let message: String?
+
+    enum CodingKeys: String, CodingKey {
+        case type
+        case version
+        case message
+    }
 }
 
 // MARK: - Errors

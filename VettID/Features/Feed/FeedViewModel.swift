@@ -255,6 +255,9 @@ final class FeedViewModel: ObservableObject {
             case .vaultActivity(var e):
                 e.isRead = true
                 allEvents[i] = .vaultActivity(e)
+            case .transferRequest(var e):
+                e.isRead = true
+                allEvents[i] = .transferRequest(e)
             }
         }
         applyFilter()
@@ -332,6 +335,8 @@ final class FeedViewModel: ObservableObject {
                 case .vaultActivity(let e):
                     return e.description.lowercased().contains(query) ||
                            e.activityType.rawValue.lowercased().contains(query)
+                case .transferRequest(let e):
+                    return e.senderName.lowercased().contains(query)
                 }
             }
         }
@@ -361,6 +366,9 @@ final class FeedViewModel: ObservableObject {
         case .vaultActivity(var e):
             e.isRead = true
             allEvents[index] = .vaultActivity(e)
+        case .transferRequest(var e):
+            e.isRead = true
+            allEvents[index] = .transferRequest(e)
         }
 
         applyFilter()

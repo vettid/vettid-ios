@@ -216,6 +216,10 @@ struct MainNavigationView: View {
             NavigationStack {
                 DeviceManagementView()
             }
+        case .wallets:
+            NavigationStack {
+                WalletListView()
+            }
         case .auditLog:
             NavigationStack {
                 FeedAuditLogView()

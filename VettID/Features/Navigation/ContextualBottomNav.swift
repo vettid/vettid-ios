@@ -7,7 +7,8 @@ enum BottomNavItem: Int, CaseIterable {
     case connections = 1
     case voting = 2
     case secrets = 3
-    case more = 4
+    case wallets = 4
+    case more = 5
 
     var title: String {
         switch self {
@@ -15,6 +16,7 @@ enum BottomNavItem: Int, CaseIterable {
         case .connections: return "Connections"
         case .voting: return "Voting"
         case .secrets: return "Secrets"
+        case .wallets: return "Wallets"
         case .more: return "More"
         }
     }
@@ -25,6 +27,7 @@ enum BottomNavItem: Int, CaseIterable {
         case .connections: return "person.2.fill"
         case .voting: return "checkmark.square.fill"
         case .secrets: return "lock.fill"
+        case .wallets: return "bitcoinsign.circle.fill"
         case .more: return "ellipsis"
         }
     }
@@ -36,6 +39,7 @@ enum BottomNavItem: Int, CaseIterable {
         case .connections: return .connections
         case .voting: return .voting
         case .secrets: return .secrets
+        case .wallets: return .wallets
         case .more: return nil
         }
     }
@@ -87,7 +91,7 @@ struct BottomNavBar: View {
         case .feed: return badgeCounts.unreadFeedCount
         case .connections: return badgeCounts.pendingConnectionsCount
         case .voting: return badgeCounts.unvotedProposalsCount
-        case .secrets, .more: return 0
+        case .secrets, .wallets, .more: return 0
         }
     }
 }
@@ -137,6 +141,7 @@ struct BadgeView: View {
             .background(Color.red)
             .clipShape(Capsule())
             .minimumScaleFactor(0.8)
+            .accessibilityLabel("\(count) unread")
     }
 }
 

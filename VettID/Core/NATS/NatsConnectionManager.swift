@@ -26,6 +26,10 @@ final class NatsConnectionManager: ObservableObject {
     private var ownerSpaceId: String?
     private var currentCredentialId: String?
 
+    /// Connection epoch — incremented on each reconnect. In-flight requests can
+    /// compare their captured epoch to detect stale connections and fail fast.
+    private(set) var connectionEpoch: Int = 0
+
     // MARK: - Configuration
 
     private let maxReconnectAttempts = Int.max  // Infinite retry
@@ -1140,6 +1144,7 @@ final class NatsConnectionManager: ObservableObject {
                     try await strongSelf.natsClient?.connect()
                     await MainActor.run {
                         strongSelf.connectionState = .connected
+                        strongSelf.connectionEpoch += 1
                     }
                     strongSelf.startConnectionMonitoring()
                     await strongSelf.reestablishSubscriptions()

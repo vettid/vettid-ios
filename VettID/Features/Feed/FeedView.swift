@@ -273,6 +273,9 @@ struct FeedView: View {
         case .vaultActivity:
             // No navigation needed
             break
+        case .transferRequest(let e):
+            // Navigate to conversation with payment request
+            print("Navigate to transfer request from: \(e.connectionId)")
         }
     }
 }
@@ -384,6 +387,8 @@ struct EventCardView: View {
             serviceIcon(name: e.serviceName, icon: e.serviceIcon)
         case .vaultActivity(let e):
             activityIcon(type: e.activityType)
+        case .transferRequest(let e):
+            avatarView(name: e.senderName, avatarUrl: nil)
         }
     }
 
@@ -461,6 +466,8 @@ struct EventCardView: View {
             return e.serviceName
         case .vaultActivity(let e):
             return e.activityType.rawValue.replacingOccurrences(of: "_", with: " ").capitalized
+        case .transferRequest(let e):
+            return e.senderName
         }
     }
 
@@ -483,6 +490,8 @@ struct EventCardView: View {
             return e.actionType
         case .vaultActivity(let e):
             return e.description
+        case .transferRequest(let e):
+            return "Payment request for \(String(format: "%.8f", e.amountBtc)) BTC"
         }
     }
 

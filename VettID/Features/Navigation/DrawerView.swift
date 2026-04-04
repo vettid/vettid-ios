@@ -7,6 +7,7 @@ enum DrawerItem: String, CaseIterable, Identifiable {
     case connections
     case personalData
     case secrets
+    case wallets
     case archive
     case voting
     case devices
@@ -20,6 +21,7 @@ enum DrawerItem: String, CaseIterable, Identifiable {
         case .connections: return "Connections"
         case .personalData: return "Personal Data"
         case .secrets: return "Secrets"
+        case .wallets: return "Wallets"
         case .archive: return "Archive"
         case .voting: return "Voting"
         case .devices: return "Devices"
@@ -33,6 +35,7 @@ enum DrawerItem: String, CaseIterable, Identifiable {
         case .connections: return "person.2.fill"
         case .personalData: return "folder.fill"
         case .secrets: return "lock.fill"
+        case .wallets: return "bitcoinsign.circle.fill"
         case .archive: return "archivebox.fill"
         case .voting: return "checkmark.square.fill"
         case .devices: return "desktopcomputer"
@@ -47,6 +50,7 @@ enum DrawerItem: String, CaseIterable, Identifiable {
         case .connections: return 1
         case .voting: return 2
         case .secrets: return 3
+        case .wallets: return 4
         case .personalData, .archive, .devices, .auditLog: return nil
         }
     }

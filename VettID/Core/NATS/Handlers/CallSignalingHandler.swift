@@ -320,6 +320,56 @@ actor CallSignalingHandler {
             )
         }
     }
+
+    // MARK: - Call History
+
+    /// Get call history from the vault
+    func getCallHistory(limit: Int = 50) async throws -> [CallHistoryEntry] {
+        let payload: [String: AnyCodableValue] = [
+            "limit": AnyCodableValue(limit)
+        ]
+
+        let response = try await vaultResponseHandler.submitRawAndAwait(
+            type: "call.get-history",
+            payload: payload,
+            timeout: defaultTimeout
+        )
+
+        guard response.isSuccess else {
+            throw CallSignalingError.signalingFailed(response.error ?? "Failed to get call history")
+        }
+
+        guard let callsArray = response.result?["calls"]?.value as? [[String: Any]] else {
+            return []
+        }
+
+        let dateFormatter = ISO8601DateFormatter()
+
+        return callsArray.compactMap { dict in
+            guard let callId = dict["call_id"] as? String,
+                  let peerGuid = dict["peer_guid"] as? String else { return nil }
+
+            let initiatedAt: Date
+            if let timestamp = dict["initiated_at"] as? String {
+                initiatedAt = dateFormatter.date(from: timestamp) ?? Date()
+            } else if let timestamp = dict["initiated_at"] as? Double {
+                initiatedAt = Date(timeIntervalSince1970: timestamp)
+            } else {
+                initiatedAt = Date()
+            }
+
+            return CallHistoryEntry(
+                callId: callId,
+                peerGuid: peerGuid,
+                peerDisplayName: dict["peer_display_name"] as? String,
+                callType: CallType(rawValue: dict["call_type"] as? String ?? "audio") ?? .audio,
+                direction: (dict["direction"] as? String == "outgoing") ? .outgoing : .incoming,
+                endReason: CallEndReason(rawValue: dict["end_reason"] as? String ?? "completed") ?? .completed,
+                initiatedAt: initiatedAt,
+                duration: dict["duration"] as? TimeInterval
+            )
+        }
+    }
 }
 
 // MARK: - Call Types

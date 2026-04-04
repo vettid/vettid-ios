@@ -18,6 +18,9 @@ enum MessageContentType: String, Codable {
     case text
     case image
     case file
+    case btcAddress = "btc_address"
+    case btcPaymentReceipt = "btc_payment_receipt"
+    case paymentRequest = "payment_request"
 }
 
 /// Message delivery status
