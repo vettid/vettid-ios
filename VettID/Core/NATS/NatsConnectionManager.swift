@@ -80,7 +80,18 @@ final class NatsConnectionManager: ObservableObject {
             // Get or refresh credentials
             var credentials = try credentialStore.getCredentials()
 
-            if credentials == nil || credentials!.shouldRefresh {
+            if let creds = credentials, creds.isExpired {
+                // Credentials expired — attempt reissue via public REST endpoint
+                #if DEBUG
+                print("[NATS] Credentials expired — attempting reissue via REST")
+                #endif
+                if let reissued = await reissueExpiredCredentials() {
+                    credentials = reissued
+                } else {
+                    // Reissue failed, try Cognito refresh as fallback
+                    credentials = try await refreshCredentials(authToken: authToken)
+                }
+            } else if credentials == nil || credentials!.shouldRefresh {
                 credentials = try await refreshCredentials(authToken: authToken)
             }
 
@@ -648,6 +659,39 @@ final class NatsConnectionManager: ObservableObject {
             #if DEBUG
             print("[NATS] Vault warmed successfully, TTL: \(response.sessionTtl ?? 0)s")
             #endif
+
+            // Upgrade to vault-issued credentials if provided
+            // The vault is the sole authority for full OwnerSpace/MessageSpace access
+            if let credsContent = response.natsCredentials,
+               let endpoint = response.natsEndpoint ?? natsClient?.endpoint {
+                let os = response.ownerSpace ?? self.ownerSpaceId ?? ""
+                if let newCreds = NatsCredentials(
+                    fromCredsFileContent: credsContent,
+                    endpoint: endpoint,
+                    ownerSpace: os,
+                    messageSpace: response.messageSpace
+                ) {
+                    try credentialStore.saveCredentials(newCreds)
+                    #if DEBUG
+                    print("[NATS] Stored vault-issued credentials, reconnecting...")
+                    #endif
+                    // Disconnect bootstrap connection and reconnect with full credentials
+                    await natsClient?.disconnect()
+                    natsClient = NatsClientWrapper(
+                        endpoint: newCreds.endpoint,
+                        jwt: newCreds.jwt,
+                        seed: newCreds.seed
+                    )
+                    try await natsClient?.connect()
+                    // Re-subscribe to vault topics
+                    if ownerSpaceId != nil {
+                        try await performBootstrap()
+                    }
+                    #if DEBUG
+                    print("[NATS] Reconnected with vault-issued full credentials")
+                    #endif
+                }
+            }
         } else {
             // Check if locked out
             if let remaining = response.remainingAttempts, remaining <= 0 {
@@ -1008,6 +1052,60 @@ final class NatsConnectionManager: ObservableObject {
         return credentials
     }
 
+    /// Reissue expired NATS credentials via the public REST endpoint.
+    /// This does not require Cognito auth — only the user_guid.
+    /// Called when stored credentials have expired (user offline > 7 days).
+    ///
+    /// - Returns: Fresh NatsCredentials on success, nil on failure
+    private func reissueExpiredCredentials() async -> NatsCredentials? {
+        guard let userGuid = userGuidProvider() else {
+            #if DEBUG
+            print("[NATS] Cannot reissue credentials — no user GUID")
+            #endif
+            return nil
+        }
+
+        do {
+            let response: NatsReissueResponse = try await apiClient.reissueNatsCredentials(userGuid: userGuid)
+
+            // Parse the .creds file into NatsCredentials
+            guard let credentials = NatsCredentials(
+                fromCredsFileContent: response.natsCreds,
+                endpoint: response.natsEndpoint,
+                ownerSpace: response.ownerSpace,
+                messageSpace: response.messageSpace
+            ) else {
+                #if DEBUG
+                print("[NATS] Failed to parse reissued credentials")
+                #endif
+                return nil
+            }
+
+            // Store for future use
+            try credentialStore.saveCredentials(credentials)
+
+            // Store account info
+            let accountInfo = NatsAccountInfo(
+                ownerSpaceId: response.ownerSpace,
+                messageSpaceId: response.messageSpace,
+                status: "active",
+                createdAt: ISO8601DateFormatter().string(from: Date())
+            )
+            try credentialStore.saveAccountInfo(accountInfo)
+
+            #if DEBUG
+            print("[NATS] Credentials reissued successfully, expires: \(credentials.expiresAt)")
+            #endif
+
+            return credentials
+        } catch {
+            #if DEBUG
+            print("[NATS] Credential reissue failed: \(error.localizedDescription)")
+            #endif
+            return nil
+        }
+    }
+
     /// Check if credentials need refresh
     func credentialsNeedRefresh() -> Bool {
         guard let credentials = try? credentialStore.getCredentials() else {
@@ -1325,6 +1423,14 @@ struct VaultWarmResponse: Decodable {
         }
     }
 
+    // Vault-issued NATS credentials (full OwnerSpace/MessageSpace access)
+    // Only the vault can issue these — Lambda only issues narrow bootstrap creds
+    let natsCredentials: String?
+    let natsEndpoint: String?
+    let ownerSpace: String?
+    let messageSpace: String?
+    let credentialsTtlSeconds: Int?
+
     enum CodingKeys: String, CodingKey {
         case success
         case message
@@ -1332,6 +1438,11 @@ struct VaultWarmResponse: Decodable {
         case sessionTtl = "session_ttl"
         case remainingAttempts = "remaining_attempts"
         case utks
+        case natsCredentials = "nats_credentials"
+        case natsEndpoint = "nats_endpoint"
+        case ownerSpace = "owner_space"
+        case messageSpace = "message_space"
+        case credentialsTtlSeconds = "credentials_ttl_seconds"
     }
 }
 

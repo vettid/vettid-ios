@@ -316,6 +316,38 @@ struct NatsActiveToken: Codable {
     }
 }
 
+// MARK: - Credential Reissue Types
+
+/// Request body for POST /vault/nats/reissue (public endpoint, no auth required)
+struct NatsReissueRequest: Codable {
+    let userGuid: String
+
+    enum CodingKeys: String, CodingKey {
+        case userGuid = "user_guid"
+    }
+}
+
+/// Response from POST /vault/nats/reissue
+struct NatsReissueResponse: Codable {
+    let natsEndpoint: String
+    let natsCreds: String
+    let ownerSpace: String
+    let messageSpace: String
+    let expiresAt: String
+    let ttlSeconds: Int
+    let tokenId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case natsEndpoint = "nats_endpoint"
+        case natsCreds = "nats_creds"
+        case ownerSpace = "owner_space"
+        case messageSpace = "message_space"
+        case expiresAt = "expires_at"
+        case ttlSeconds = "ttl_seconds"
+        case tokenId = "token_id"
+    }
+}
+
 // MARK: - Request Types
 
 /// Request body for POST /vault/nats/token

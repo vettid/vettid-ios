@@ -273,6 +273,13 @@ actor APIClient {
         return try await get(endpoint: "/vault/nats/status", authToken: authToken)
     }
 
+    /// Reissue expired NATS credentials via public endpoint (no auth required).
+    /// Called when stored credentials have expired and user has no active NATS connection.
+    func reissueNatsCredentials(userGuid: String) async throws -> NatsReissueResponse {
+        let request = NatsReissueRequest(userGuid: userGuid)
+        return try await post(endpoint: "/vault/nats/reissue", body: request)
+    }
+
     // MARK: - Handler Registry (Phase 6)
 
     /// List available handlers from registry
