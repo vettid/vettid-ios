@@ -1562,7 +1562,7 @@ import Nats
 
 /// Production wrapper using nats.swift library
 class NatsClientWrapper {
-    private let endpoint: String
+    let endpoint: String
     private let jwt: String
     private let seed: String
     private var client: NatsClient?

@@ -373,12 +373,27 @@ final class ConnectionsClient {
                 fields = nil
             }
 
+            // Parse wallet previews from profile
+            var wallets: [WalletPreview]?
+            if let walletsArray = profileDict["wallets"] as? [[String: Any]] {
+                wallets = walletsArray.compactMap { w in
+                    guard let address = w["address"] as? String else { return nil }
+                    return WalletPreview(
+                        label: w["label"] as? String ?? "",
+                        address: address,
+                        network: w["network"] as? String ?? "unknown"
+                    )
+                }
+            }
+
             peerProfile = PeerProfileData(
                 firstName: profileDict["_system_first_name"] as? String,
                 lastName: profileDict["_system_last_name"] as? String,
                 email: profileDict["_system_email"] as? String,
                 photo: profileDict["photo"] as? String,
-                fields: fields
+                publicKey: profileDict["public_key"] as? String ?? profileDict["e2e_public_key"] as? String,
+                fields: fields,
+                wallets: wallets
             )
         } else {
             peerProfile = nil
@@ -390,6 +405,7 @@ final class ConnectionsClient {
             label: dict["label"] as? String ?? dict["peer_alias"] as? String ?? "",
             status: dict["status"] as? String ?? "unknown",
             direction: dict["direction"] as? String ?? dict["credentials_type"] as? String ?? "unknown",
+            connectionType: dict["connection_type"] as? String ?? "peer",
             createdAt: dict["created_at"] as? String ?? "",
             expiresAt: dict["expires_at"] as? String,
             lastRotatedAt: dict["last_rotated_at"] as? String,
@@ -421,6 +437,7 @@ struct NatsConnectionRecord {
     let label: String
     let status: String            // "active", "pending", "revoked", "expired"
     let direction: String         // "outbound" (we invited) or "inbound" (they invited us)
+    let connectionType: String    // "peer", "agent", "device"
     let createdAt: String
     let expiresAt: String?
     let lastRotatedAt: String?
@@ -434,11 +451,18 @@ struct PeerProfileData: Codable, Equatable {
     let lastName: String?
     let email: String?
     let photo: String?
+    let publicKey: String?
     let fields: [String: [String: String]]?
+    let wallets: [WalletPreview]?
 
     /// Display name built from first and last name
     var displayName: String {
         [firstName, lastName].compactMap { $0 }.joined(separator: " ")
+    }
+
+    /// Profile fields excluding system-prefixed fields
+    var visibleFields: [String: [String: String]]? {
+        fields?.filter { !$0.key.hasPrefix("_system_") }
     }
 
     enum CodingKeys: String, CodingKey {
@@ -446,7 +470,42 @@ struct PeerProfileData: Codable, Equatable {
         case lastName = "last_name"
         case email
         case photo
+        case publicKey = "public_key"
         case fields
+        case wallets
+    }
+}
+
+/// Preview of a wallet address from a peer's published profile.
+struct WalletPreview: Codable, Equatable, Identifiable {
+    let label: String
+    let address: String
+    let network: String
+
+    var id: String { "\(network):\(address)" }
+
+    var truncatedAddress: String {
+        guard address.count > 12 else { return address }
+        return "\(address.prefix(6))...\(address.suffix(4))"
+    }
+}
+
+/// Rich peer profile preview for connection review screens.
+struct PeerProfilePreview {
+    let displayName: String
+    let email: String?
+    let photoBase64: String?
+    let publicKey: String?
+    let wallets: [WalletPreview]
+    let profileFields: [String: [String: String]]?
+
+    init(from profile: PeerProfileData) {
+        self.displayName = profile.displayName
+        self.email = profile.email
+        self.photoBase64 = profile.photo
+        self.publicKey = profile.publicKey
+        self.wallets = profile.wallets ?? []
+        self.profileFields = profile.visibleFields
     }
 }
 

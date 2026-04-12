@@ -18,6 +18,9 @@ final class FeedViewModel: ObservableObject {
     @Published var isProcessingAction = false
     @Published var actionError: String?
 
+    /// Connection-centric display items (connection cards + standalone events).
+    @Published var displayItems: [FeedDisplayItem] = []
+
     enum FeedFilter: String, CaseIterable {
         case all = "All"
         case messages = "Messages"
@@ -31,8 +34,10 @@ final class FeedViewModel: ObservableObject {
     @Published var searchQuery = ""
 
     private var allEvents: [FeedEvent] = []
+    private var connectionCards: [ConnectionCardData] = []
     private var vaultResponseHandler: VaultResponseHandler?
     private var feedClient: FeedClient?
+    var connectionsClient: ConnectionsClient?
     private var refreshTimer: Timer?
 
     // MARK: - Configuration
@@ -50,20 +55,119 @@ final class FeedViewModel: ObservableObject {
     func loadEvents() async {
         state = .loading
 
-        // Try vault first, fall back to mock data
-        if feedClient != nil {
-            await loadFromVault()
-        } else {
-            // Simulate loading delay for mock data
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            allEvents = FeedEvent.mockFeed()
-        }
+        // Load connections (primary data source) and events (enrichment) in parallel
+        async let connectionsTask: () = loadConnections()
+        async let eventsTask: () = loadEventsFromVault()
+        _ = await (connectionsTask, eventsTask)
 
-        if allEvents.isEmpty {
+        // Build connection-centric display items
+        buildDisplayItems()
+
+        if allEvents.isEmpty && connectionCards.isEmpty {
             state = .empty
         } else {
             applyFilter()
         }
+    }
+
+    /// Load connections as the primary feed data source.
+    private func loadConnections() async {
+        guard let client = connectionsClient else { return }
+        do {
+            let result = try await client.list(status: nil)
+            connectionCards = result.items.map { record in
+                ConnectionCardData.from(record: record)
+            }
+        } catch {
+            #if DEBUG
+            print("[FeedViewModel] Failed to load connections: \(error)")
+            #endif
+        }
+    }
+
+    /// Load events from the vault (used for enrichment and standalone events).
+    private func loadEventsFromVault() async {
+        if feedClient != nil {
+            await loadFromVault()
+        } else {
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            allEvents = FeedEvent.mockFeed()
+        }
+    }
+
+    /// Build connection-centric display items from connections + events.
+    private func buildDisplayItems() {
+        var items: [FeedDisplayItem] = []
+
+        // Add connection cards (enriched with event data)
+        for var card in connectionCards {
+            // Find the latest activity event for this connection
+            let connEvents = allEvents.filter { event in
+                switch event {
+                case .message(let e): return e.connectionId == card.connectionId
+                case .transferRequest(let e): return e.connectionId == card.connectionId
+                default: return false
+                }
+            }
+
+            if let latestEvent = connEvents.sorted(by: { $0.timestamp > $1.timestamp }).first {
+                let preview: String
+                let activityType: String
+                switch latestEvent {
+                case .message(let e):
+                    preview = e.preview
+                    activityType = "message"
+                case .transferRequest(let e):
+                    preview = "Payment request: \(String(format: "%.8f", e.amountBtc)) BTC"
+                    activityType = "transfer"
+                default:
+                    preview = ""
+                    activityType = "other"
+                }
+
+                let unread = connEvents.filter { !$0.isRead }.count
+                card = ConnectionCardData(
+                    connectionId: card.connectionId,
+                    peerName: card.peerName,
+                    peerPhotoBase64: card.peerPhotoBase64,
+                    peerEmail: card.peerEmail,
+                    connectionStatus: card.connectionStatus,
+                    direction: card.direction,
+                    needsReview: card.needsReview,
+                    connectionType: card.connectionType,
+                    e2eReady: card.e2eReady,
+                    lastActivityPreview: preview.isEmpty ? nil : preview,
+                    lastActivityType: activityType,
+                    unreadCount: unread,
+                    sortTimestamp: latestEvent.timestamp,
+                    isUnread: unread > 0 || card.needsReview
+                )
+            }
+
+            items.append(.connectionCard(card))
+        }
+
+        // Add standalone events (not connection lifecycle or activity)
+        for event in allEvents {
+            let eventType: String
+            switch event {
+            case .message: eventType = "MESSAGE_RECEIVED"
+            case .connectionRequest: eventType = "CONNECTION_REQUEST"
+            case .authRequest: eventType = "auth.request"
+            case .vaultActivity: eventType = "vault.activity"
+            case .transferRequest: eventType = "TRANSFER_REQUEST"
+            }
+
+            // Skip connection activity/lifecycle events (handled by cards)
+            if FeedEvent.connectionActivityTypes.contains(eventType) { continue }
+            if FeedEvent.connectionLifecycleTypes.contains(eventType) { continue }
+
+            items.append(.eventItem(event))
+        }
+
+        // Sort by timestamp descending
+        items.sort { $0.sortTimestamp > $1.sortTimestamp }
+        displayItems = items
     }
 
     /// Load events from the vault via FeedClient.

@@ -7,10 +7,11 @@ struct MigrationConfig: Codable {
     let version: String
     let summary: String
     let detailsUrl: String?
+    let changelogUrl: String?
     let publishedAt: String?
     let mandatoryAfter: String?
 
-    /// Whether this update is now mandatory (past the mandatory deadline).
+    /// Whether this update is now mandatory (past the mandatory deadline or deferred > 72h).
     var isMandatory: Bool {
         guard let mandatoryAfter = mandatoryAfter else { return false }
         guard let date = ISO8601DateFormatter().date(from: mandatoryAfter) else { return false }
@@ -21,6 +22,7 @@ struct MigrationConfig: Codable {
         case version
         case summary
         case detailsUrl = "details_url"
+        case changelogUrl = "changelog_url"
         case publishedAt = "published_at"
         case mandatoryAfter = "mandatory_after"
     }

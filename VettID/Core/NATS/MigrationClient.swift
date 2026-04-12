@@ -51,6 +51,7 @@ final class MigrationClient {
             version: version,
             summary: result["summary"] as? String ?? "",
             detailsUrl: result["details_url"] as? String,
+            changelogUrl: result["changelog_url"] as? String,
             publishedAt: result["published_at"] as? String,
             mandatoryAfter: result["mandatory_after"] as? String
         )

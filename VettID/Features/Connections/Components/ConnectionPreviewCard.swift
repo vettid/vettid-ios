@@ -382,3 +382,131 @@ struct ConnectionPreviewCard_Previews: PreviewProvider {
     }
 }
 #endif
+
+// MARK: - Rich Peer Profile Card
+
+/// Enhanced peer profile card showing identity key, wallet addresses, and custom fields.
+/// Used in ConnectionReviewView and ConnectionDetailView.
+struct PeerProfileCard: View {
+    let profile: PeerProfilePreview
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Avatar + Name + Email
+            HStack(spacing: 12) {
+                peerAvatar
+                    .frame(width: 56, height: 56)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(profile.displayName)
+                        .font(.headline)
+                    if let email = profile.email {
+                        HStack(spacing: 4) {
+                            Text(email)
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.caption2)
+                                .foregroundColor(.green)
+                        }
+                    }
+                }
+            }
+
+            // Public Key
+            if let key = profile.publicKey, !key.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("Identity Key", systemImage: "key")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(.secondary)
+                    HStack {
+                        Text(key)
+                            .font(.system(.caption2, design: .monospaced))
+                            .lineLimit(2)
+                            .truncationMode(.middle)
+                        Spacer()
+                        Button(action: { SecurePasteboard.copySecure(key, expiresIn: 30) }) {
+                            Image(systemName: "doc.on.doc")
+                                .font(.caption)
+                        }
+                    }
+                    .padding(8)
+                    .background(Color(.secondarySystemBackground))
+                    .cornerRadius(6)
+                }
+            }
+
+            // Wallet Addresses
+            if !profile.wallets.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("Wallets", systemImage: "bitcoinsign.circle")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(.secondary)
+                    ForEach(profile.wallets) { wallet in
+                        Button(action: { SecurePasteboard.copySecure(wallet.address, expiresIn: 30) }) {
+                            HStack(spacing: 8) {
+                                Text(wallet.network.capitalized)
+                                    .font(.caption2.weight(.medium))
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.orange.opacity(0.15))
+                                    .foregroundColor(.orange)
+                                    .cornerRadius(4)
+                                Text(wallet.truncatedAddress)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .foregroundColor(.primary)
+                                Spacer()
+                                Image(systemName: "doc.on.doc")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            // Profile Fields
+            if let fields = profile.profileFields, !fields.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("Profile", systemImage: "person.text.rectangle")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(.secondary)
+                    ForEach(Array(fields.keys.sorted()), id: \.self) { key in
+                        if let field = fields[key] {
+                            HStack {
+                                Text(field["display_name"] ?? key)
+                                    .font(.subheadline)
+                                Spacer()
+                                Text(field["value"] ?? "")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .padding()
+    }
+
+    @ViewBuilder
+    private var peerAvatar: some View {
+        if let photoBase64 = profile.photoBase64,
+           let data = Data(base64Encoded: photoBase64),
+           let uiImage = UIImage(data: data) {
+            Image(uiImage: uiImage)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .clipShape(Circle())
+        } else {
+            Circle()
+                .fill(Color.accentColor.opacity(0.15))
+                .overlay(
+                    Text(String(profile.displayName.prefix(1)).uppercased())
+                        .font(.title3.weight(.semibold))
+                        .foregroundColor(.accentColor)
+                )
+        }
+    }
+}

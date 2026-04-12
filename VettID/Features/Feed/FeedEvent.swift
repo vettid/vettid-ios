@@ -56,6 +56,18 @@ struct TransferRequestEvent: Identifiable {
     }
 }
 
+// MARK: - Agent Event (for feed enrichment)
+
+struct AgentEvent: Identifiable {
+    let id: String
+    let agentName: String
+    let eventType: String  // agent_secret_request, agent_action_request, agent_message, etc.
+    let message: String?
+    let connectionId: String
+    let timestamp: Date
+    var isRead: Bool
+}
+
 // MARK: - Message Event
 
 struct MessageEvent: Identifiable {

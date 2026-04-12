@@ -46,8 +46,19 @@ final class VaultUpdateViewModel: ObservableObject {
                 return
             }
 
-            // Skip if reminded recently (within last session) and not mandatory
-            let isMandatory = config.isMandatory
+            // Check if mandatory: either past mandatoryAfter or deferred > 72 hours
+            var isMandatory = config.isMandatory
+            if !isMandatory {
+                let remindedAt = UserDefaults.standard.double(forKey: Self.remindedAtKey)
+                if remindedAt > 0 {
+                    let hoursSinceDeferred = (Date().timeIntervalSince1970 - remindedAt) / 3600
+                    if hoursSinceDeferred > 72 {
+                        isMandatory = true // Becomes mandatory after 72 hours of deferral
+                    }
+                }
+            }
+
+            // Skip if recently dismissed and not mandatory
             if !isMandatory && UserDefaults.standard.bool(forKey: Self.dismissedKey) {
                 state = .noUpdate
                 return

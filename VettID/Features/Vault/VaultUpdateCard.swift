@@ -25,36 +25,50 @@ struct VaultUpdateCard: View {
     // MARK: - Update Available
 
     private func updateAvailableCard(config: MigrationConfig, isMandatory: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Image(systemName: "lock.rotation")
-                    .font(.title3)
-                    .foregroundColor(.blue)
-                Text("Vault Update Available")
-                    .font(.headline)
-            }
-
-            Text(config.summary)
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-
-            if let url = config.detailsUrl, let link = URL(string: url) {
-                Link("Review Details", destination: link)
-                    .font(.caption)
-            }
-
-            HStack(spacing: 12) {
-                Button("Update Now") {
-                    Task { await viewModel.startUpdate() }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
+                    Image(systemName: "lock.rotation")
+                        .font(.title3)
+                        .foregroundColor(.blue)
+                    Text("Vault Update Available")
+                        .font(.headline)
                 }
-                .buttonStyle(.borderedProminent)
 
-                if !isMandatory {
-                    Button("Remind Me Later") {
-                        viewModel.remindLater()
-                    }
-                    .buttonStyle(.bordered)
+                Text(config.summary)
+                    .font(.subheadline)
                     .foregroundColor(.secondary)
+
+                // Links
+                HStack(spacing: 16) {
+                    if let url = config.detailsUrl, let link = URL(string: url) {
+                        Link("Review Details", destination: link)
+                            .font(.caption)
+                    }
+                    if let url = config.changelogUrl, let link = URL(string: url) {
+                        Link("Changelog", destination: link)
+                            .font(.caption)
+                    }
+                }
+
+                HStack(spacing: 12) {
+                    Button("Update Now") {
+                        Task { await viewModel.startUpdate() }
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    if !isMandatory {
+                        Button("Not Now") {
+                            viewModel.remindLater()
+                        }
+                        .buttonStyle(.bordered)
+                        .foregroundColor(.secondary)
+                    } else {
+                        if let url = config.changelogUrl, let link = URL(string: url) {
+                            Link("Learn More", destination: link)
+                                .font(.caption)
+                        }
+                    }
                 }
             }
         }
