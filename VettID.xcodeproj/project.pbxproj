@@ -355,6 +355,13 @@
 		56618B8A7FEFFCFEA45B7612 /* CriticalUseApprovalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24436FA9384E73976BE24D0B /* CriticalUseApprovalView.swift */; };
 		A9DE3B3AA544D577499E6C40 /* IdentityVerifyApprovalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C762E03B8FCD0181DC70096 /* IdentityVerifyApprovalView.swift */; };
 		22D7C5402A0DE65B1D9BBF58 /* RequestAccessSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D56BBF1B4A4F3ABB59C2A76F /* RequestAccessSheet.swift */; };
+		8980FA26E14EF096450C1E93 /* SharingModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B2E3FAF38C55AA384FE8839 /* SharingModels.swift */; };
+		ED16D6137EFFDFB6ED6E6807 /* MySharingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4774CA383A075081B2F321E /* MySharingView.swift */; };
+		7F034211D715E564C39AD696 /* PeerCatalogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0500D80E494E11B5C2B06398 /* PeerCatalogView.swift */; };
+		D66C1EE541B8FB5EDB48069B /* ActionsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7BAC8ACB0BCEE0C246C3E60 /* ActionsModels.swift */; };
+		4E57E977A15725A35C89116B /* ActionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8ED306D368F7F027636A594 /* ActionsView.swift */; };
+		7F53FC955A39B89851D42ED4 /* ActionsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93C22C19B5A8E224B492DDC1 /* ActionsViewModel.swift */; };
+		2CCA03F47D5FA5B9E13A9248 /* ActionsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA972338A09C08FFC87CE7A5 /* ActionsClient.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -737,6 +744,13 @@
 		24436FA9384E73976BE24D0B /* CriticalUseApprovalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CriticalUseApprovalView.swift; sourceTree = "<group>"; };
 		4C762E03B8FCD0181DC70096 /* IdentityVerifyApprovalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentityVerifyApprovalView.swift; sourceTree = "<group>"; };
 		D56BBF1B4A4F3ABB59C2A76F /* RequestAccessSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RequestAccessSheet.swift; sourceTree = "<group>"; };
+		9B2E3FAF38C55AA384FE8839 /* SharingModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharingModels.swift; sourceTree = "<group>"; };
+		D4774CA383A075081B2F321E /* MySharingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MySharingView.swift; sourceTree = "<group>"; };
+		0500D80E494E11B5C2B06398 /* PeerCatalogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerCatalogView.swift; sourceTree = "<group>"; };
+		D7BAC8ACB0BCEE0C246C3E60 /* ActionsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionsModels.swift; sourceTree = "<group>"; };
+		E8ED306D368F7F027636A594 /* ActionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionsView.swift; sourceTree = "<group>"; };
+		93C22C19B5A8E224B492DDC1 /* ActionsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionsViewModel.swift; sourceTree = "<group>"; };
+		DA972338A09C08FFC87CE7A5 /* ActionsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionsClient.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -974,6 +988,8 @@
 				AG00GRP0 /* Agents */,
 				516D1C3D244747FEA96F760C /* Wallet */,
 				286784441FA915A44D966ABC /* Grants */,
+				DB9B70AFB2851133E4B29A22 /* Sharing */,
+				AA4F3A63DE7E5E38E6AACE3F /* Actions */,
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -1112,6 +1128,7 @@
 				DE324B03C22C1EC7D4213EC5 /* MigrationClient.swift */,
 				63A1F2CAA115F5BCD8014C95 /* VaultClientProtocol.swift */,
 				2C3B06F55F2562689A7BB80E /* GrantsClient.swift */,
+				DA972338A09C08FFC87CE7A5 /* ActionsClient.swift */,
 			);
 			path = NATS;
 			sourceTree = "<group>";
@@ -1775,6 +1792,28 @@
 			path = Models;
 			sourceTree = "<group>";
 		};
+		DB9B70AFB2851133E4B29A22 /* Sharing */ = {
+			isa = PBXGroup;
+			children = (
+				9B2E3FAF38C55AA384FE8839 /* SharingModels.swift */,
+				D4774CA383A075081B2F321E /* MySharingView.swift */,
+				0500D80E494E11B5C2B06398 /* PeerCatalogView.swift */,
+			);
+			name = Sharing;
+			path = Sharing;
+			sourceTree = "<group>";
+		};
+		AA4F3A63DE7E5E38E6AACE3F /* Actions */ = {
+			isa = PBXGroup;
+			children = (
+				D7BAC8ACB0BCEE0C246C3E60 /* ActionsModels.swift */,
+				E8ED306D368F7F027636A594 /* ActionsView.swift */,
+				93C22C19B5A8E224B492DDC1 /* ActionsViewModel.swift */,
+			);
+			name = Actions;
+			path = Actions;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -2101,6 +2140,13 @@
 				D545C686724841B09C9B78D1 /* ServiceMessageCrypto.swift in Sources */,
 				542B48D537BF4318967F48D8 /* ContractStore.swift in Sources */,
 				0B5701895223925F4DAB680C /* PersonalDataStore.swift in Sources */,
+				D66C1EE541B8FB5EDB48069B /* ActionsModels.swift in Sources */,
+				4E57E977A15725A35C89116B /* ActionsView.swift in Sources */,
+				7F53FC955A39B89851D42ED4 /* ActionsViewModel.swift in Sources */,
+				2CCA03F47D5FA5B9E13A9248 /* ActionsClient.swift in Sources */,
+				8980FA26E14EF096450C1E93 /* SharingModels.swift in Sources */,
+				ED16D6137EFFDFB6ED6E6807 /* MySharingView.swift in Sources */,
+				7F034211D715E564C39AD696 /* PeerCatalogView.swift in Sources */,
 				0DB660D072F240E75018453A /* GrantsClient.swift in Sources */,
 				22D7C5402A0DE65B1D9BBF58 /* RequestAccessSheet.swift in Sources */,
 				A9DE3B3AA544D577499E6C40 /* IdentityVerifyApprovalView.swift in Sources */,

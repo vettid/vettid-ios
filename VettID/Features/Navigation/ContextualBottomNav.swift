@@ -177,6 +177,13 @@ struct MoreMenuSheet: View {
                         dismiss()
                     }
 
+                    // Phase 3.11: Actions inbox — my published actions
+                    // + pending invocations from peers.
+                    MoreMenuItem(icon: DrawerItem.actions.icon, title: DrawerItem.actions.title) {
+                        onSelect(.actions)
+                        dismiss()
+                    }
+
                     MoreMenuItem(icon: DrawerItem.archive.icon, title: DrawerItem.archive.title) {
                         onSelect(.archive)
                         dismiss()

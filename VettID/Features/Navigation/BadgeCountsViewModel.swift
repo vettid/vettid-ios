@@ -23,6 +23,10 @@ class BadgeCountsViewModel: ObservableObject {
         // Phase 3.4: grants drawer row gets the count of inbound
         // pending requests so users see "you've got things to triage".
         case .grants:      return GrantsRepository.shared.pending.count
+        // Phase 3.11: actions drawer row carries no badge yet — the
+        // pending count would need ActionsRepository to surface it
+        // globally, and the inbox is empty in most flows. Stub at 0.
+        case .actions:     return 0
         case .vault, .personalData, .secrets, .wallets,
              .archive, .devices, .auditLog: return 0
         }

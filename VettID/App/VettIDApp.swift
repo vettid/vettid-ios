@@ -272,6 +272,7 @@ class AppState: ObservableObject {
     private(set) var personalDataClient: PersonalDataClient?
     private(set) var secretsClient: SecretsClient?
     private(set) var grantsClient: GrantsClient?
+    private(set) var actionsClient: ActionsClient?
 
     /// Flag indicating if running in UI test mode
     static var isUITesting: Bool {
@@ -570,6 +571,7 @@ class AppState: ObservableObject {
             self.personalDataClient = PersonalDataClient(ownerSpaceClient: osc)
             self.secretsClient = SecretsClient(ownerSpaceClient: osc)
             self.grantsClient = GrantsClient(ownerSpaceClient: osc)
+            self.actionsClient = ActionsClient(ownerSpaceClient: osc)
         }
 
         guard let osc = ownerSpaceClient,

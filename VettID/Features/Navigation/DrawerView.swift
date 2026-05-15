@@ -29,6 +29,9 @@ enum DrawerItem: String, CaseIterable, Identifiable {
     /// Reachable from the More menu and from connection-card pending
     /// rows; not surfaced as a primary destination.
     case grants
+    /// Phase 3.11: drawer-only entry for the shared-action layer
+    /// (my published actions + pending invocations from peers).
+    case actions
 
     var id: String { rawValue }
 
@@ -44,6 +47,7 @@ enum DrawerItem: String, CaseIterable, Identifiable {
         case .devices:      return "Devices"
         case .auditLog:     return "Audit Log"
         case .grants:       return "Grants"
+        case .actions:      return "Actions"
         }
     }
 
@@ -59,6 +63,7 @@ enum DrawerItem: String, CaseIterable, Identifiable {
         case .devices:      return "desktopcomputer"
         case .auditLog:     return "list.clipboard"
         case .grants:       return "lock.shield"
+        case .actions:      return "wand.and.stars"
         }
     }
 
@@ -77,7 +82,7 @@ enum DrawerItem: String, CaseIterable, Identifiable {
     /// Top-level destination this drawer item resolves to.
     var topLevel: BottomNavItem {
         switch self {
-        case .connections, .archive, .voting, .devices, .auditLog, .grants:
+        case .connections, .archive, .voting, .devices, .auditLog, .grants, .actions:
             return .activity      // drawer-only items still anchor here
         case .vault, .personalData, .secrets, .wallets:
             return .vault
