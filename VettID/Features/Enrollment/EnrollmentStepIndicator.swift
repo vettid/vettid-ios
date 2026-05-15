@@ -2,39 +2,43 @@ import SwiftUI
 
 // MARK: - Wizard Phase
 
+/// Phase 5.5 — collapsed from 8 to 7 phases to match Android's
+/// wizard. The old `verify`/`identity` pair merges into a single
+/// REVIEW step (attestation + identity confirmation belong together),
+/// `confirm`/`profile` collapse into a single VERIFY-CREDENTIAL step
+/// (the profile publish runs silently while the screen shows the
+/// verify-success checkmark), and a new PERMISSIONS step lands between
+/// verify and done.
 enum WizardPhase: Int, CaseIterable {
-    case start = 0
-    case verify = 1
-    case identity = 2
-    case pin = 3
-    case password = 4
-    case confirm = 5
-    case profile = 6
-    case done = 7
+    case start       = 0
+    case review      = 1
+    case pin         = 2
+    case password    = 3
+    case verify      = 4
+    case permissions = 5
+    case done        = 6
 
     var label: String {
         switch self {
-        case .start: return "Start"
-        case .verify: return "Verify"
-        case .identity: return "Identity"
-        case .pin: return "PIN"
-        case .password: return "Password"
-        case .confirm: return "Confirm"
-        case .profile: return "Profile"
-        case .done: return "Done"
+        case .start:       return "Start"
+        case .review:      return "Review"
+        case .pin:         return "PIN"
+        case .password:    return "Password"
+        case .verify:      return "Verify"
+        case .permissions: return "Permissions"
+        case .done:        return "Done"
         }
     }
 
     var icon: String {
         switch self {
-        case .start: return "qrcode.viewfinder"
-        case .verify: return "checkmark.shield"
-        case .identity: return "person.text.rectangle"
-        case .pin: return "number.circle"
-        case .password: return "key"
-        case .confirm: return "person.fill.checkmark"
-        case .profile: return "person.crop.circle"
-        case .done: return "checkmark.circle.fill"
+        case .start:       return "qrcode.viewfinder"
+        case .review:      return "person.text.rectangle"
+        case .pin:         return "number.circle"
+        case .password:    return "key"
+        case .verify:      return "checkmark.shield"
+        case .permissions: return "bell.badge"
+        case .done:        return "checkmark.circle.fill"
         }
     }
 
@@ -118,25 +122,28 @@ struct EnrollmentStepIndicator: View {
 // MARK: - Enrollment State to Wizard Phase Mapping
 
 extension EnrollmentViewModel.EnrollmentState {
+    /// Phase 5.5 mapping: matches Android's 7-phase wizard. Attestation
+    /// states live under `start` (the device is still being introduced
+    /// to the supervisor); identity confirmation + rejection both fold
+    /// into `review`; credential creation + the silent profile publish
+    /// share the `verify` step so the indicator doesn't lurch back to
+    /// a "Profile" stop after the user has already entered their
+    /// password.
     var wizardPhase: WizardPhase {
         switch self {
-        case .initial, .scanningQR:
+        case .initial, .scanningQR,
+             .processingInvitation, .connectingToNats,
+             .requestingAttestation, .attestationRequired,
+             .attesting, .attestationComplete:
             return .start
-        case .processingInvitation, .connectingToNats, .requestingAttestation,
-             .attestationRequired, .attesting, .attestationComplete:
-            return .verify
         case .confirmIdentity, .identityRejected:
-            return .identity
-        case .settingPIN, .processingPIN:
+            return .review
+        case .settingPIN, .processingPIN, .waitingForVault:
             return .pin
-        case .waitingForVault:
-            return .identity
-        case .settingPassword, .processingPassword:
+        case .settingPassword, .processingPassword, .creatingCredential:
             return .password
-        case .creatingCredential, .finalizing, .settingUpNats, .verifyingEnrollment:
-            return .confirm
-        case .confirmProfile:
-            return .profile
+        case .finalizing, .settingUpNats, .verifyingEnrollment, .confirmProfile:
+            return .verify
         case .complete:
             return .done
         case .error:
@@ -150,9 +157,11 @@ extension EnrollmentViewModel.EnrollmentState {
 #Preview {
     VStack(spacing: 40) {
         EnrollmentStepIndicator(currentPhase: .start)
-        EnrollmentStepIndicator(currentPhase: .verify)
+        EnrollmentStepIndicator(currentPhase: .review)
         EnrollmentStepIndicator(currentPhase: .pin)
         EnrollmentStepIndicator(currentPhase: .password)
+        EnrollmentStepIndicator(currentPhase: .verify)
+        EnrollmentStepIndicator(currentPhase: .permissions)
         EnrollmentStepIndicator(currentPhase: .done)
     }
     .padding()
