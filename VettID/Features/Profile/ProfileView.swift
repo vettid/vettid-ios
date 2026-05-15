@@ -146,7 +146,12 @@ struct ProfileView: View {
                     .foregroundColor(.secondary)
             }
 
-            // Actions
+            // Actions — Phase 2.9: the manual "Publish to Connections"
+            // button is gone. Every mutator (Edit Profile save, photo
+            // change, visibility toggle, sort reorder) auto-fans-out a
+            // publish under the hood, so there's nothing for the user
+            // to do explicitly. The status line below relabels "Synced"
+            // to "Last updated" to match.
             VStack(spacing: 12) {
                 Button(action: { showEditProfile = true }) {
                     Label("Edit Profile", systemImage: "pencil")
@@ -154,26 +159,13 @@ struct ProfileView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(viewModel.isUpdating)
-
-                Button(action: {
-                    Task { await viewModel.publishProfile() }
-                }) {
-                    if viewModel.isPublishing {
-                        ProgressView()
-                            .frame(maxWidth: .infinity)
-                    } else {
-                        Label("Publish to Connections", systemImage: "arrow.up.circle")
-                            .frame(maxWidth: .infinity)
-                    }
-                }
-                .buttonStyle(.bordered)
-                .disabled(viewModel.isPublishing)
             }
             .padding(.horizontal)
 
-            // Sync status
+            // Status — "Last updated" replaces "Synced". The vault
+            // owns publish state now; we just surface the freshness.
             if let syncedAt = profile.syncedAt {
-                Text("Synced \(syncedAt, style: .relative)")
+                Text("Last updated \(syncedAt, style: .relative)")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }

@@ -19,6 +19,10 @@ struct AddSecretView: View {
     /// alias on save (e.g. "BTC · Trading") so peers see the chain at
     /// a glance.
     @State private var cryptoNetwork: CryptoNetwork? = nil
+    /// Phase 2.4: visibility tier. Defaults to `.private` per Android's
+    /// "default new secrets to hidden" change — users opt secrets into
+    /// the profile / catalog rather than accidentally publishing them.
+    @State private var visibility: SecretVisibility = .private
     @State private var value = ""
     @State private var category: SecretCategory = .password
     @State private var notes = ""
@@ -105,6 +109,20 @@ struct AddSecretView: View {
                     TextField("Notes (optional)", text: $notes, axis: .vertical)
                         .lineLimit(3...6)
                 }
+
+                // Phase 2.4: visibility tier. Minor secrets get
+                // PROFILE / CATALOG / PRIVATE — USE_ONLY is reserved
+                // for critical secrets (the value never leaves the
+                // vault, so a `secret.get` reveal can't honor it).
+                Section("Visibility") {
+                    VisibilitySegmented(
+                        selection: $visibility,
+                        allowedTiers: [.profile, .catalog, .private]
+                    )
+                    Text(visibility.explainer)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             .navigationTitle("Add Secret")
             .navigationBarTitleDisplayMode(.inline)
@@ -153,7 +171,8 @@ struct AddSecretView: View {
                 value: value,
                 category: category,
                 notes: notes.isEmpty ? nil : notes,
-                alias: composed
+                alias: composed,
+                visibility: visibility
             )
             dismiss()
         }

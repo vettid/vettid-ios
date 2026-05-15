@@ -161,6 +161,12 @@ struct MinorSecret: Identifiable, Codable, Equatable {
     var fields: [SecretField]
     var isShareable: Bool
     var isInPublicProfile: Bool
+    /// Phase 2.4: four-tier visibility (PROFILE / CATALOG / USE_ONLY /
+    /// PRIVATE). Authoritative when set; `isInPublicProfile` is the
+    /// legacy bool that callers still pass around — true iff visibility
+    /// == `.profile`. New records default to `.private` per Android's
+    /// "default new secrets to hidden" behavior (commit 8880f95).
+    var visibility: SecretVisibility
     var isSystemField: Bool
     var sortOrder: Int
     /// DEPRECATED (Phase 2.1): the vault is authoritative now, so a
@@ -185,6 +191,7 @@ struct MinorSecret: Identifiable, Codable, Equatable {
         fields: [SecretField] = [],
         isShareable: Bool = false,
         isInPublicProfile: Bool = false,
+        visibility: SecretVisibility? = nil,
         isSystemField: Bool = false,
         sortOrder: Int = 0,
         syncStatus: SecretSyncStatus = .synced,
@@ -203,6 +210,18 @@ struct MinorSecret: Identifiable, Codable, Equatable {
         self.fields = fields
         self.isShareable = isShareable
         self.isInPublicProfile = isInPublicProfile
+        // Resolve visibility: explicit value wins; otherwise infer from
+        // legacy bools so existing call sites stay correct without
+        // having to touch them.
+        if let v = visibility {
+            self.visibility = v
+        } else if isInPublicProfile {
+            self.visibility = .profile
+        } else if isShareable {
+            self.visibility = .catalog
+        } else {
+            self.visibility = .private
+        }
         self.isSystemField = isSystemField
         self.sortOrder = sortOrder
         self.syncStatus = syncStatus
@@ -223,7 +242,15 @@ struct MinorSecret: Identifiable, Codable, Equatable {
         let category = SecretCategory(rawValue: categoryRaw) ?? .other
         let typeRaw = (dict["type"] as? String) ?? "text"
         let type = SecretType(rawValue: typeRaw) ?? .text
-        let visibility = (dict["visibility"] as? String) ?? "PRIVATE"
+        let visibilityRaw = (dict["visibility"] as? String) ?? "PRIVATE"
+        let visibility: SecretVisibility = {
+            switch visibilityRaw.uppercased() {
+            case "PROFILE":   return .profile
+            case "CATALOG":   return .catalog
+            case "USE_ONLY":  return .useOnly
+            default:           return .private
+            }
+        }()
         let createdAtSeconds = (dict["created_at"] as? Double)
             ?? (dict["created_at"] as? Int).map(Double.init)
             ?? 0
@@ -242,8 +269,9 @@ struct MinorSecret: Identifiable, Codable, Equatable {
             type: type,
             notes: dict["notes"] as? String,
             fields: [],
-            isShareable: visibility == "PROFILE" || visibility == "CATALOG",
-            isInPublicProfile: visibility == "PROFILE",
+            isShareable: visibility == .profile || visibility == .catalog,
+            isInPublicProfile: visibility == .profile,
+            visibility: visibility,
             isSystemField: false,
             sortOrder: (dict["sort_order"] as? Int) ?? 0,
             syncStatus: .synced,

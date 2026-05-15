@@ -52,7 +52,11 @@ final class ProfileViewModel: ObservableObject {
 
     // MARK: - Update Profile
 
-    /// Update profile with new values
+    /// Update profile with new values, then auto-publish to connections
+    /// (Phase 2.9). The vault is the single source of truth — every
+    /// mutator funnels through here, and a successful update implicitly
+    /// re-publishes the public snapshot. No more separate "Publish"
+    /// button to forget about.
     func updateProfile(_ updatedProfile: Profile) async {
         guard let authToken = authTokenProvider() else {
             errorMessage = "Not authenticated"
@@ -64,34 +68,37 @@ final class ProfileViewModel: ObservableObject {
 
         do {
             profile = try await apiClient.updateProfile(updatedProfile, authToken: authToken)
-            successMessage = "Profile updated"
             isUpdating = false
+            // Auto-publish — fan-out happens in the background so the
+            // save UI doesn't block on the broadcast. We surface
+            // failure quietly via errorMessage rather than rolling back
+            // the local update; on retry the vault re-broadcasts.
+            await autoPublish()
         } catch {
             errorMessage = error.localizedDescription
             isUpdating = false
         }
     }
 
-    // MARK: - Publish Profile
+    // MARK: - Auto-Publish (Phase 2.9)
 
-    /// Publish profile to all connections
-    func publishProfile() async {
-        guard let authToken = authTokenProvider() else {
-            errorMessage = "Not authenticated"
-            return
-        }
-
+    /// Fan-out the published-profile snapshot. Called automatically
+    /// after every successful update; the manual "Publish to
+    /// Connections" button on `ProfileView` is gone.
+    ///
+    /// Errors are surfaced through `errorMessage` but don't reset the
+    /// local profile — the vault will re-broadcast the latest state on
+    /// its next opportunity, and the user can pull-to-refresh to see
+    /// the result.
+    private func autoPublish() async {
+        guard let authToken = authTokenProvider() else { return }
         isPublishing = true
-        errorMessage = nil
-
         do {
             try await apiClient.publishProfile(authToken: authToken)
-            successMessage = "Profile published to connections"
-            isPublishing = false
         } catch {
             errorMessage = error.localizedDescription
-            isPublishing = false
         }
+        isPublishing = false
     }
 
     // MARK: - Error Handling

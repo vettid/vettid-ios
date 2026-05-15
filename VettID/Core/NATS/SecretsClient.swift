@@ -315,8 +315,10 @@ final class SecretsClient {
 // MARK: - Supporting Types
 
 /// Visibility tier for secrets. Matches Android `FieldVisibility` and the
-/// vault's `discoverability` field on critical secrets.
-enum SecretVisibility: String {
+/// vault's `discoverability` field on critical secrets. Codable + Hashable
+/// so it can ride along on `MinorSecret`'s Codable conformance and feed
+/// `Picker` selections directly (Phase 2.4).
+enum SecretVisibility: String, Codable, Hashable {
     /// Visible in the user's published profile (peers see the value).
     case profile
     /// Listed in the data catalog so peers know it exists (no value).

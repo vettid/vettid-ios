@@ -341,6 +341,7 @@
 		2967B711835BC35C9BAA46F9 /* BusinessCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 482A967EEBF92DA861EEC680 /* BusinessCardView.swift */; };
 		71AB4E30BC56C5338B985EF1 /* ShortCode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5675F254C0FAC6EFECC77F41 /* ShortCode.swift */; };
 		B3F743E7AACA12930F2C993C /* CryptoNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CA8D2EE303D37CF83794AC3 /* CryptoNetwork.swift */; };
+		BD8897915F32AD666035F32E /* VisibilitySegmented.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1B9B0FC2C999DB338CED90 /* VisibilitySegmented.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -709,6 +710,7 @@
 		482A967EEBF92DA861EEC680 /* BusinessCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BusinessCardView.swift; sourceTree = "<group>"; };
 		5675F254C0FAC6EFECC77F41 /* ShortCode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortCode.swift; sourceTree = "<group>"; };
 		7CA8D2EE303D37CF83794AC3 /* CryptoNetwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CryptoNetwork.swift; sourceTree = "<group>"; };
+		BC1B9B0FC2C999DB338CED90 /* VisibilitySegmented.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisibilitySegmented.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1577,6 +1579,7 @@
 		DD50872DD57AF5FBCE85C6FD /* Components */ = {
 			isa = PBXGroup;
 			children = (
+				BC1B9B0FC2C999DB338CED90 /* VisibilitySegmented.swift */,
 				8B4424C107B353DF67958D31 /* DatePickerInput.swift */,
 				554E7F78EC526CCF2D03A49E /* PhoneNumberInput.swift */,
 				B0A3504F6C07651A52A1F518 /* DropdownPickerField.swift */,
@@ -1937,6 +1940,7 @@
 				0000004E /* CertificatePinning.swift in Sources */,
 				FFD8FF11AF5D4845B612D689 /* SecurePassword.swift in Sources */,
 				CDECFCF1A353CB2263187C84 /* UnlockRateLimiter.swift in Sources */,
+				BD8897915F32AD666035F32E /* VisibilitySegmented.swift in Sources */,
 				71AB4E30BC56C5338B985EF1 /* ShortCode.swift in Sources */,
 				B3F743E7AACA12930F2C993C /* CryptoNetwork.swift in Sources */,
 				0000004F /* RequestSigning.swift in Sources */,

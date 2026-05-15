@@ -212,7 +212,8 @@ final class SecretsViewModel: ObservableObject {
                    value: String,
                    category: SecretCategory,
                    notes: String?,
-                   alias: String? = nil) async {
+                   alias: String? = nil,
+                   visibility: SecretVisibility = .private) async {
         guard let client = client else {
             state = .error("Not connected")
             return
@@ -225,11 +226,27 @@ final class SecretsViewModel: ObservableObject {
                 alias: (trimmedAlias?.isEmpty == false) ? trimmedAlias : nil,
                 value: value,
                 fields: nil,
-                visibility: .private
+                visibility: visibility
             )
             await loadSecrets()
         } catch {
             state = .error("Failed to save secret: \(error.localizedDescription)")
+        }
+    }
+
+    /// Update a single minor secret's visibility tier (Phase 2.4). Fans
+    /// out `secret.set-visibility` and refreshes the list so the new
+    /// tier is reflected on the row.
+    func setVisibility(_ visibility: SecretVisibility, for secretId: String) async {
+        guard let client = client else {
+            state = .error("Not connected")
+            return
+        }
+        do {
+            try await client.setMinorVisibility(id: secretId, visibility: visibility)
+            await loadSecrets()
+        } catch {
+            state = .error("Failed to update visibility: \(error.localizedDescription)")
         }
     }
 
