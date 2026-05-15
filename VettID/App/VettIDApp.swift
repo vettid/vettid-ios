@@ -317,25 +317,107 @@ class AppState: ObservableObject {
         }
     }
 
-    /// Load stored profile for current user
+    /// Load the profile snapshot for the current user (Phase 2.2).
+    ///
+    /// Vault is the single source of truth — `Profile` is now synthesized
+    /// from `PersonalDataStore` (system fields, vault-published photo)
+    /// rather than read from the on-device `ProfileStore`. We don't
+    /// persist user-facing profile data on-device anymore.
+    ///
+    /// Until the store has hydrated (early launch, before warm-up),
+    /// `currentProfile` is nil. Once hydrate completes, the
+    /// `syncCurrentProfileFromStore()` subscription wires a fresh value
+    /// in; this entry point is now mostly a no-op preserved for the
+    /// call sites that still reference it.
     func loadProfile() {
-        if let guid = currentUserGuid {
-            currentProfile = try? profileStore.retrieve(userGuid: guid)
-        } else {
-            currentProfile = try? profileStore.retrieveFirst()
+        syncCurrentProfileFromStore()
+    }
+
+    /// Update profile fields via the vault (Phase 2.2). Maps the legacy
+    /// `Profile` struct back to vault namespaces and routes through
+    /// `PersonalDataStore.updateField(...)` for each field that changed.
+    /// Photo goes through the dedicated profile.photo.update RPC. No
+    /// data writes to Keychain.
+    ///
+    /// Fields without a vault home (`bio`, `location`) are accepted but
+    /// silently dropped — Android doesn't carry them either; they were
+    /// iOS-local-only. A polish pass on `EditProfileView` will remove
+    /// those inputs.
+    func updateProfile(_ profile: Profile) {
+        let prior = currentProfile
+        // Optimistic in-memory update so the UI reflects immediately.
+        currentProfile = profile
+
+        Task { @MainActor in
+            let store = PersonalDataStore.shared
+
+            // Split displayName into first/last for the system-field
+            // namespaces. Falls back to a single token in first_name.
+            let nameParts = profile.displayName
+                .trimmingCharacters(in: .whitespaces)
+                .split(separator: " ", maxSplits: 1)
+            let firstName = nameParts.first.map(String.init) ?? profile.displayName
+            let lastName  = nameParts.count > 1 ? String(nameParts[1]) : ""
+
+            do {
+                if firstName != (prior?.displayName.split(separator: " ").first.map(String.init) ?? "") {
+                    try await store.updateField(namespace: "_system_first_name", value: firstName)
+                }
+                if !lastName.isEmpty,
+                   lastName != (prior?.displayName.split(separator: " ").dropFirst().joined(separator: " ") ?? "") {
+                    try await store.updateField(namespace: "_system_last_name", value: lastName)
+                }
+                if let email = profile.email, email != prior?.email {
+                    try await store.updateField(namespace: "_system_email", value: email)
+                }
+                if let photoData = profile.photoData, photoData != prior?.photoData {
+                    try await store.updatePhoto(base64: photoData.base64EncodedString())
+                } else if profile.photoData == nil && prior?.photoData != nil {
+                    try await store.updatePhoto(base64: nil)
+                }
+            } catch {
+                #if DEBUG
+                print("[AppState] Failed to push profile to vault: \(error)")
+                #endif
+                // Roll back the optimistic update on failure.
+                currentProfile = prior
+            }
         }
     }
 
-    /// Update and save profile
-    func updateProfile(_ profile: Profile) {
-        do {
-            try profileStore.store(profile: profile)
-            currentProfile = profile
-        } catch {
-            #if DEBUG
-            print("Failed to save profile: \(error)")
-            #endif
+    /// Phase 2.2: synthesize `currentProfile` from `PersonalDataStore`.
+    /// Called once after configure() and again on every snapshot tick;
+    /// keeps the legacy `Profile` view-model in sync without backing it
+    /// with on-device persistence.
+    func syncCurrentProfileFromStore() {
+        let store = PersonalDataStore.shared
+        let first = store.items.first { $0.id == "_system_first_name" }?.value ?? ""
+        let last  = store.items.first { $0.id == "_system_last_name"  }?.value ?? ""
+        let email = store.items.first { $0.id == "_system_email"      }?.value
+        let displayName = [first, last]
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        let photoData: Data? = store.photoBase64.flatMap { Data(base64Encoded: $0) }
+
+        // Preserve the user's GUID / lastUpdated / syncedAt from the
+        // existing currentProfile when present; otherwise stub them.
+        let guid = currentProfile?.guid ?? currentUserGuid ?? ""
+        guard !displayName.isEmpty || email != nil || photoData != nil else {
+            // Vault not hydrated yet — leave currentProfile as-is so
+            // the UI doesn't blank.
+            return
         }
+        currentProfile = Profile(
+            guid: guid,
+            displayName: displayName.isEmpty ? "VettID User" : displayName,
+            avatarUrl: nil,
+            bio: nil,
+            location: nil,
+            email: email,
+            photoData: photoData,
+            syncedAt: Date(),
+            lastUpdated: Date()
+        )
     }
 
     func checkExistingCredential() {
@@ -512,6 +594,9 @@ class AppState: ObservableObject {
                 print("[AppState] hydrate failed: \(error)")
                 #endif
             }
+            // Phase 2.2: synthesize currentProfile from the vault-
+            // hydrated store now that the data is in memory.
+            await MainActor.run { self.syncCurrentProfileFromStore() }
             // Start the presence aggregator (Phase 1.6). Idempotent.
             await PresenceAggregator.shared.attach(to: osc)
         }

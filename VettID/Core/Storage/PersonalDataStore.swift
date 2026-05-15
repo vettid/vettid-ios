@@ -48,6 +48,11 @@ final class PersonalDataStore: ObservableObject {
     /// surfaces fall back to `PersonalDataItem.sortOrder` in that case.
     @Published private(set) var fieldOrder: [String] = []
 
+    /// Vault-published profile photo as base64. Phase 2.2: AppState
+    /// synthesizes the legacy `Profile.photoData` from this so the
+    /// on-device `ProfileStore` doesn't have to persist photos.
+    @Published private(set) var photoBase64: String?
+
     // MARK: - Dependencies (wired by configure())
 
     private var profileClient: ProfileClient?
@@ -154,6 +159,8 @@ final class PersonalDataStore: ObservableObject {
             // individual items.
             self.publicFieldNamespaces = publicFields
             self.fieldOrder = vaultFieldOrder
+            self.photoBase64 = (published["photo"] as? String)
+                ?? (canonical["photo"] as? String)
 
             // Sort: if the vault gave us a field_order, prefer it.
             // Otherwise fall back to PersonalDataItem.sortOrder.
@@ -209,6 +216,17 @@ final class PersonalDataStore: ObservableObject {
     /// is in flight.
     func isFieldPublic(_ namespace: String) -> Bool {
         publicFieldNamespaces.contains(namespace)
+    }
+
+    /// Push a new profile photo (base64-encoded JPEG/PNG) to the vault.
+    /// Pass `nil` to clear. Vault re-broadcasts on success and our
+    /// snapshot-tick collector re-hydrates the cache.
+    func updatePhoto(base64: String?) async throws {
+        guard let client = profileClient else {
+            throw PersonalDataStoreError.notConfigured
+        }
+        try await client.syncPhoto(base64Data: base64)
+        try await hydrate()
     }
 
     /// Toggle public-profile membership for a single field.

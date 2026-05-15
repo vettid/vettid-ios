@@ -39,6 +39,18 @@ struct BusinessCardView: View {
             if !card.orderedFieldEntries.isEmpty {
                 profileFieldsSection
             }
+            // Phase 2.10: peer-published catalog sections. Only render
+            // for peer cards — the user's own card has dedicated
+            // "Available Personal Data" / "Available Secrets" sheets
+            // (Phase 2.7) and doesn't need the inline summary.
+            if !card.isOwnProfile {
+                if !card.dataCatalog.isEmpty {
+                    catalogSection(title: "Available data", entries: card.dataCatalog)
+                }
+                if !card.secretsCatalog.isEmpty {
+                    catalogSection(title: "Available secrets", entries: card.secretsCatalog)
+                }
+            }
         }
         .frame(maxWidth: .infinity)
     }
@@ -199,6 +211,59 @@ struct BusinessCardView: View {
             Text(entry.value)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: - Peer catalog sections (Phase 2.10)
+
+    private func catalogSection(title: String, entries: [PeerCatalogEntry]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            ForEach(entries) { entry in
+                catalogRow(entry)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal)
+    }
+
+    private func catalogRow(_ entry: PeerCatalogEntry) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: entry.icon ?? glyphForVisibility(entry.visibility))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 18)
+            VStack(alignment: .leading, spacing: 1) {
+                if let alias = entry.alias, !alias.isEmpty {
+                    Text("\(entry.label) — \(alias)").font(.subheadline)
+                } else {
+                    Text(entry.label).font(.subheadline)
+                }
+                Text(visibilityLabel(entry.visibility))
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            Spacer()
+        }
+    }
+
+    private func glyphForVisibility(_ wire: String) -> String {
+        switch wire.uppercased() {
+        case "PROFILE":  return "eye.fill"
+        case "CATALOG":  return "doc.text"
+        case "USE_ONLY": return "wand.and.stars"
+        default:          return "circle"
+        }
+    }
+
+    private func visibilityLabel(_ wire: String) -> String {
+        switch wire.uppercased() {
+        case "PROFILE":  return "Shown publicly"
+        case "CATALOG":  return "Available to request"
+        case "USE_ONLY": return "Available for operations"
+        default:          return wire.capitalized
         }
     }
 }

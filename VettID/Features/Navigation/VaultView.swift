@@ -43,6 +43,11 @@ struct VaultView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Phase 2.10: persistent profile strip — avatar + name +
+            // "Available data" affordance — stays visible across all
+            // three segments. Parity with Android VaultProfileSection.
+            VaultProfileSection(segment: $segment)
+
             segmentPicker
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)

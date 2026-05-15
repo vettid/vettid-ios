@@ -1,5 +1,28 @@
 import Foundation
 
+// MARK: - Peer Catalog Entry
+
+/// One row in a peer's published data or secret catalog. The value is
+/// never carried — the catalog advertises *what exists*; values flow via
+/// the Grants subsystem (Phase 3) when the owner approves a request.
+/// Mirrors Android's `PeerDataCatalogEntry` / `PeerPublicSecretMetadata`.
+struct PeerCatalogEntry: Identifiable, Equatable {
+    /// Namespace (data) or vault id (secret).
+    let id: String
+    /// Display label — e.g. "Mobile Phone", "Trading Wallet — BTC".
+    let label: String
+    /// Optional alias (secrets) for grouped display.
+    let alias: String?
+    /// Optional category tag for grouping / glyph selection.
+    let category: String?
+    /// SF Symbol or category icon name.
+    let icon: String?
+    /// Discoverability tier — drives the row's affordance.
+    /// "PROFILE" → "Shown publicly", "CATALOG" → "Available to request",
+    /// "USE_ONLY" → "Available for operations only" (critical secrets).
+    let visibility: String
+}
+
 // MARK: - Business Card Data
 
 /// Unified peer-profile view-model for `BusinessCardView`.
@@ -42,6 +65,17 @@ struct BusinessCardData: Equatable {
     /// means "fall back to sorted key order".
     let fieldOrder: [String]
 
+    /// Phase 2.10: peer-published data catalog rows — what the peer
+    /// has made available for request. Each entry is the namespace +
+    /// display name; values are NOT carried (held in trust until the
+    /// owner approves a Grants request).
+    let dataCatalog: [PeerCatalogEntry]
+
+    /// Phase 2.10: peer-published secret catalog rows — same shape as
+    /// `dataCatalog` but for `MinorSecret`s the peer has marked
+    /// PROFILE / CATALOG / USE_ONLY.
+    let secretsCatalog: [PeerCatalogEntry]
+
     /// True when the card represents the local user's own profile —
     /// renderers use this to drop peer-only affordances (e.g. the
     /// identity-key block doesn't show on the own card).
@@ -63,6 +97,8 @@ struct BusinessCardData: Equatable {
         self.wallets = preview.wallets
         self.profileFields = preview.profileFields
         self.fieldOrder = []
+        self.dataCatalog = []
+        self.secretsCatalog = []
         self.isOwnProfile = isOwnProfile
     }
 
@@ -81,6 +117,8 @@ struct BusinessCardData: Equatable {
         self.wallets = []
         self.profileFields = nil
         self.fieldOrder = []
+        self.dataCatalog = []
+        self.secretsCatalog = []
         self.isOwnProfile = isOwnProfile
     }
 
@@ -97,6 +135,8 @@ struct BusinessCardData: Equatable {
         wallets: [WalletPreview] = [],
         profileFields: [String: [String: String]]? = nil,
         fieldOrder: [String] = [],
+        dataCatalog: [PeerCatalogEntry] = [],
+        secretsCatalog: [PeerCatalogEntry] = [],
         isOwnProfile: Bool = false
     ) {
         self.displayName = displayName
@@ -110,6 +150,8 @@ struct BusinessCardData: Equatable {
         self.wallets = wallets
         self.profileFields = profileFields
         self.fieldOrder = fieldOrder
+        self.dataCatalog = dataCatalog
+        self.secretsCatalog = secretsCatalog
         self.isOwnProfile = isOwnProfile
     }
 
