@@ -5,6 +5,7 @@ import SwiftUI
 struct SecretsView: View {
     let searchText: String
 
+    @EnvironmentObject private var appState: AppState
     @StateObject private var viewModel = SecretsViewModel()
 
     var body: some View {
@@ -24,6 +25,10 @@ struct SecretsView: View {
             }
         }
         .task {
+            // Phase 2.1: VM now talks to the vault via SecretsClient.
+            // Wire the client from AppState on first appearance, then
+            // refresh the list.
+            viewModel.client = appState.secretsClient
             await viewModel.loadSecrets()
         }
         .sheet(isPresented: $viewModel.showPasswordPrompt) {
@@ -175,10 +180,31 @@ struct SecretRowView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(secret.name)
-                        .font(.headline)
+                    // Phase 2.3: "Name — Alias" when an alias is set,
+                    // otherwise just the name. The alias is the
+                    // user-visible disambiguator (e.g. "Wife", "Trading").
+                    if let alias = secret.alias, !alias.isEmpty {
+                        HStack(spacing: 6) {
+                            Text(secret.name)
+                                .font(.headline)
+                            Text("—")
+                                .font(.subheadline)
+                                .foregroundStyle(.tertiary)
+                            Text(alias)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Text(secret.name)
+                            .font(.headline)
+                    }
 
-                    Text(secret.category.displayName)
+                    // Subtitle now leads with the secret type and falls
+                    // back to the category — matches Android's
+                    // "Alias under category" layout when alias is set.
+                    Text(secret.alias != nil
+                         ? secret.category.displayName
+                         : secret.category.displayName)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

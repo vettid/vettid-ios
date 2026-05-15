@@ -168,10 +168,27 @@ final class SecretsClient {
 
     /// `credential.secret.list` — metadata for the secrets stored inside
     /// the credential blob (e.g. wallet seeds). No values returned.
-    /// Includes `encrypted_credential` (Phase D) so the vault can decrypt
-    /// in-flight.
-    func listCritical() async throws -> [[String: Any]] {
-        var payload: [String: AnyCodableValue] = [:]
+    /// Password-gated: callers must supply the encrypted-password
+    /// payload that proves they have the credential password (same
+    /// envelope shape as `credential.secret.get`). The vault verifies
+    /// the password by decrypting in-flight rather than reading
+    /// vaultState (Phase D).
+    func listCritical(
+        encryptedPasswordHash: String,
+        ephemeralPublicKey: String,
+        nonce: String,
+        salt: String,
+        utkKeyId: String? = nil
+    ) async throws -> [[String: Any]] {
+        var payload: [String: AnyCodableValue] = [
+            "encrypted_password_hash": AnyCodableValue(encryptedPasswordHash),
+            "ephemeral_public_key": AnyCodableValue(ephemeralPublicKey),
+            "nonce": AnyCodableValue(nonce),
+            "salt": AnyCodableValue(salt)
+        ]
+        if let utkKeyId = utkKeyId {
+            payload["key_id"] = AnyCodableValue(utkKeyId)
+        }
         if let blob = try? credentialStore.encryptedBlobBase64() {
             payload["encrypted_credential"] = AnyCodableValue(blob)
         }

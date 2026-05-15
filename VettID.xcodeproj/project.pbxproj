@@ -340,6 +340,7 @@
 		0CBBA924AE9587FAE4DFD43A /* BusinessCardData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45A159004642D14E8301CDCE /* BusinessCardData.swift */; };
 		2967B711835BC35C9BAA46F9 /* BusinessCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 482A967EEBF92DA861EEC680 /* BusinessCardView.swift */; };
 		71AB4E30BC56C5338B985EF1 /* ShortCode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5675F254C0FAC6EFECC77F41 /* ShortCode.swift */; };
+		B3F743E7AACA12930F2C993C /* CryptoNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CA8D2EE303D37CF83794AC3 /* CryptoNetwork.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -707,6 +708,7 @@
 		45A159004642D14E8301CDCE /* BusinessCardData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BusinessCardData.swift; sourceTree = "<group>"; };
 		482A967EEBF92DA861EEC680 /* BusinessCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BusinessCardView.swift; sourceTree = "<group>"; };
 		5675F254C0FAC6EFECC77F41 /* ShortCode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortCode.swift; sourceTree = "<group>"; };
+		7CA8D2EE303D37CF83794AC3 /* CryptoNetwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CryptoNetwork.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1706,6 +1708,7 @@
 		E3F5EC1D4B48E6E9133EFB57 /* Util */ = {
 			isa = PBXGroup;
 			children = (
+				7CA8D2EE303D37CF83794AC3 /* CryptoNetwork.swift */,
 				5675F254C0FAC6EFECC77F41 /* ShortCode.swift */,
 			);
 			name = Util;
@@ -1935,6 +1938,7 @@
 				FFD8FF11AF5D4845B612D689 /* SecurePassword.swift in Sources */,
 				CDECFCF1A353CB2263187C84 /* UnlockRateLimiter.swift in Sources */,
 				71AB4E30BC56C5338B985EF1 /* ShortCode.swift in Sources */,
+				B3F743E7AACA12930F2C993C /* CryptoNetwork.swift in Sources */,
 				0000004F /* RequestSigning.swift in Sources */,
 				00000050 /* SecurePasteboard.swift in Sources */,
 				00000051 /* ScreenProtection.swift in Sources */,
