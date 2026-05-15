@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Main view for displaying and voting on proposals
 struct ProposalsView: View {
+    @EnvironmentObject private var appState: AppState
     @StateObject private var viewModel: ProposalsViewModel
 
     init(authTokenProvider: @escaping @Sendable () -> String?) {
@@ -18,6 +19,10 @@ struct ProposalsView: View {
         }
         .navigationTitle("Proposals")
         .task {
+            // Phase 5.1: vault-mediated vote.cast routes through
+            // AppState.ownerSpaceClient — wire it before any votes
+            // happen.
+            viewModel.ownerSpaceClient = appState.ownerSpaceClient
             await viewModel.loadProposals()
         }
     }
