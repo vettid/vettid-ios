@@ -73,7 +73,15 @@ final class RuntimeProtection {
         #endif
     }
 
-    /// Check for common jailbreak file paths
+    /// Check for common jailbreak file paths.
+    ///
+    /// Path list curated to strong indicators only — paths like `/bin/sh`,
+    /// `/bin/bash`, `/var/log/syslog`, `/etc/ssh/sshd_config`, `/usr/bin/sshd`
+    /// can be visible to a sandboxed app via `FileManager.fileExists` on
+    /// modern iOS (sandbox semantics shifted ~iOS 15/16); they false-positive
+    /// on stock devices. Keep the jailbreak-only artifacts: Cydia/Sileo/Zebra
+    /// app bundles, MobileSubstrate / CydiaSubstrate frameworks, jailbreakd
+    /// payloads, and apt/lib directories that exist only on jailbroken roots.
     private func checkJailbreakPaths() -> Bool {
         let paths = [
             "/Applications/Cydia.app",
@@ -99,18 +107,9 @@ final class RuntimeProtection {
             "/private/var/tmp/cydia.log",
             "/System/Library/LaunchDaemons/com.ikey.bbot.plist",
             "/System/Library/LaunchDaemons/com.saurik.Cydia.Startup.plist",
-            "/usr/bin/sshd",
-            "/usr/libexec/sftp-server",
-            "/usr/libexec/ssh-keysign",
-            "/usr/sbin/sshd",
-            "/bin/bash",
-            "/bin/sh",
-            "/etc/apt",
-            "/etc/ssh/sshd_config",
             "/var/cache/apt",
             "/var/lib/apt",
             "/var/lib/cydia",
-            "/var/log/syslog",
             "/var/tmp/cydia.log",
             "/.bootstrapped_electra",
             "/usr/lib/libjailbreak.dylib",
@@ -127,6 +126,9 @@ final class RuntimeProtection {
 
         for path in paths {
             if FileManager.default.fileExists(atPath: path) {
+                #if DEBUG
+                print("[Security] Jailbreak path hit: \(path)")
+                #endif
                 return true
             }
         }
@@ -184,21 +186,26 @@ final class RuntimeProtection {
         return false
     }
 
-    /// Check for suspicious environment variables
+    /// Check for suspicious environment variables.
+    ///
+    /// `DYLD_INSERT_LIBRARIES` is the canonical jailbreak signal but
+    /// Xcode sets it in DEBUG builds for sanitizers (ASAN/TSAN/UBSAN)
+    /// and other instrumentation. To avoid false-positives we only
+    /// inspect this var in Release. The Substrate-specific vars are
+    /// safe to check in both configurations — Xcode doesn't set them.
     private func checkSuspiciousEnvironmentVariables() -> Bool {
-        let suspiciousVars = [
-            "DYLD_INSERT_LIBRARIES",
-            "_MSSafeMode",
-            "MobileSubstrate",
-            "SubstrateSafeMode"
-        ]
-
-        for varName in suspiciousVars {
-            if ProcessInfo.processInfo.environment[varName] != nil {
-                return true
-            }
+        let substrateVars = ["_MSSafeMode", "MobileSubstrate", "SubstrateSafeMode"]
+        for varName in substrateVars where ProcessInfo.processInfo.environment[varName] != nil {
+            #if DEBUG
+            print("[Security] Jailbreak env hit: \(varName)")
+            #endif
+            return true
         }
-
+        #if !DEBUG
+        if ProcessInfo.processInfo.environment["DYLD_INSERT_LIBRARIES"] != nil {
+            return true
+        }
+        #endif
         return false
     }
 
@@ -314,30 +321,42 @@ final class RuntimeProtection {
         return false
     }
 
-    /// Check for suspicious dynamic libraries
+    /// Check for suspicious dynamic libraries by basename only.
+    ///
+    /// The previous version used `localizedCaseInsensitiveContains` on the
+    /// full dylib path, so legitimate frameworks whose path contained any
+    /// substring like `"Flex"` (e.g. `Flexibility` framework variants),
+    /// `"substrate"`, or `"frida"` produced false positives. Switched to
+    /// last-path-component matching against exact dylib names — the same
+    /// shape the hooking-frameworks check uses below.
     private func checkDynamicLibraries() -> Bool {
-        let suspiciousLibs = [
-            "FridaGadget",
-            "frida",
+        // Use the dylib *file name*, not the full path. Each entry must
+        // match a real attacker-loaded image; broad terms like "substrate"
+        // alone are gone because they hit framework paths in normal apps.
+        let suspiciousLibs: Set<String> = [
+            "FridaGadget.dylib",
+            "frida-agent.dylib",
+            "libfrida-gadget.dylib",
             "cynject",
-            "libcycript",
-            "substrate",
-            "MobileSubstrate",
-            "TweakInject",
-            "libblackjack",
-            "SSLKillSwitch",
-            "Flex"
+            "libcycript.dylib",
+            "MobileSubstrate.dylib",
+            "CydiaSubstrate",
+            "TweakInject.dylib",
+            "libblackjack.dylib",
+            "SSLKillSwitch.dylib",
+            "SSLKillSwitch2.dylib"
         ]
 
         let count = _dyld_image_count()
         for i in 0..<count {
-            if let imageName = _dyld_get_image_name(i) {
-                let name = String(cString: imageName)
-                for lib in suspiciousLibs {
-                    if name.localizedCaseInsensitiveContains(lib) {
-                        return true
-                    }
-                }
+            guard let imageName = _dyld_get_image_name(i) else { continue }
+            let path = String(cString: imageName)
+            let basename = (path as NSString).lastPathComponent
+            if suspiciousLibs.contains(basename) {
+                #if DEBUG
+                print("[Security] Tamper dylib hit: \(basename)")
+                #endif
+                return true
             }
         }
 
@@ -366,7 +385,18 @@ final class RuntimeProtection {
         return false
     }
 
-    /// Check if can connect to a local port
+    /// Check if can connect to a local port.
+    ///
+    /// Uses a *blocking* connect so we get a definitive yes/no answer.
+    /// The previous version returned `true` on `errno == EINPROGRESS`,
+    /// which only means the connect is pending — it then almost always
+    /// fails with ECONNREFUSED a microsecond later. That false-positive
+    /// was firing the "Frida detected" warning on every launch.
+    ///
+    /// We're connecting to localhost, so a synchronous connect resolves
+    /// in microseconds (no DNS, no network round-trip). The fail-closed
+    /// behavior is to return `false` — i.e. "port is closed, no Frida"
+    /// — on any error other than a successful connect.
     private func canConnectToPort(_ port: UInt16) -> Bool {
         var addr = sockaddr_in()
         addr.sin_family = sa_family_t(AF_INET)
@@ -377,17 +407,15 @@ final class RuntimeProtection {
         guard sock != -1 else { return false }
         defer { close(sock) }
 
-        // Set non-blocking
-        let flags = fcntl(sock, F_GETFL, 0)
-        _ = fcntl(sock, F_SETFL, flags | O_NONBLOCK)
-
         let result = withUnsafePointer(to: &addr) { ptr in
             ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddr_ptr in
                 connect(sock, sockaddr_ptr, socklen_t(MemoryLayout<sockaddr_in>.size))
             }
         }
 
-        return result == 0 || errno == EINPROGRESS
+        // Only `result == 0` indicates a real listener. Anything else
+        // (ECONNREFUSED, ETIMEDOUT, etc.) means nothing on the wire.
+        return result == 0
     }
 
     /// Check for Frida-related libraries in memory
@@ -415,23 +443,15 @@ final class RuntimeProtection {
         return false
     }
 
-    /// Check for suspicious threads (Frida creates threads)
+    /// Thread-count heuristic was retired. A modest iOS app today (NATS
+    /// subscriptions + URLSession + AVAudioSession + Combine + WebRTC's
+    /// audio/video/ICE/DTLS workers) routinely runs 60-100+ threads on
+    /// a real device. The 50-thread ceiling fired on every cold start
+    /// after we wired WebRTC, with zero correlation to actual Frida
+    /// presence. Real Frida detection lives in `checkFridaPorts` (now
+    /// that `canConnectToPort` is correct) and `checkFridaLibraries`.
     private func checkFridaThreads() -> Bool {
-        var threadList: thread_act_array_t?
-        var threadCount: mach_msg_type_number_t = 0
-
-        let result = task_threads(mach_task_self_, &threadList, &threadCount)
-        guard result == KERN_SUCCESS else { return false }
-
-        defer {
-            if let list = threadList {
-                vm_deallocate(mach_task_self_, vm_address_t(bitPattern: list), vm_size_t(threadCount) * vm_size_t(MemoryLayout<thread_act_t>.size))
-            }
-        }
-
-        // Frida typically creates multiple threads with specific patterns
-        // This is a heuristic check - high thread count might indicate instrumentation
-        return threadCount > 50  // Normal apps rarely have this many threads
+        return false
     }
 
     // MARK: - Reverse Engineering Tools Detection
