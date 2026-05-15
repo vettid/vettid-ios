@@ -241,7 +241,13 @@ struct MainNavigationView: View {
         case .devices:
             NavigationStack { DeviceManagementView() }
         case .auditLog:
-            NavigationStack { FeedAuditLogView() }
+            NavigationStack {
+                // Phase 5.3: thread the AppState FeedClient through so
+                // the verifier runs against real `audit.query` responses
+                // (anchor + per-row hashes). Without it, the view falls
+                // back to its mock data path.
+                FeedAuditLogView(feedClient: appState.feedClient)
+            }
         case .grants:
             NavigationStack { GrantsView() }
         case .actions:

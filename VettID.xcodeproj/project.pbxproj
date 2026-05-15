@@ -362,6 +362,7 @@
 		4E57E977A15725A35C89116B /* ActionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8ED306D368F7F027636A594 /* ActionsView.swift */; };
 		7F53FC955A39B89851D42ED4 /* ActionsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93C22C19B5A8E224B492DDC1 /* ActionsViewModel.swift */; };
 		2CCA03F47D5FA5B9E13A9248 /* ActionsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA972338A09C08FFC87CE7A5 /* ActionsClient.swift */; };
+		543DAC5D60258688EE7BD1E1 /* AuditChainVerifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1CC488D7E7D7E981C0A5EDC /* AuditChainVerifier.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -751,6 +752,7 @@
 		E8ED306D368F7F027636A594 /* ActionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionsView.swift; sourceTree = "<group>"; };
 		93C22C19B5A8E224B492DDC1 /* ActionsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionsViewModel.swift; sourceTree = "<group>"; };
 		DA972338A09C08FFC87CE7A5 /* ActionsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionsClient.swift; sourceTree = "<group>"; };
+		C1CC488D7E7D7E981C0A5EDC /* AuditChainVerifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuditChainVerifier.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -954,6 +956,7 @@
 				66594A3F2DF3A04E9C493290 /* DeepLink */,
 				32E3082AE5B97E5558C41A1E /* Notifications */,
 				E3F5EC1D4B48E6E9133EFB57 /* Util */,
+							E02F5D4AD0B9751F8F4E8684 /* Audit */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -1814,6 +1817,14 @@
 			path = Actions;
 			sourceTree = "<group>";
 		};
+		E02F5D4AD0B9751F8F4E8684 /* Audit */ = {
+			isa = PBXGroup;
+			children = (
+				C1CC488D7E7D7E981C0A5EDC /* AuditChainVerifier.swift */,
+			);
+			path = Audit;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -2229,6 +2240,7 @@
 				0CBBA924AE9587FAE4DFD43A /* BusinessCardData.swift in Sources */,
 				2967B711835BC35C9BAA46F9 /* BusinessCardView.swift in Sources */,
 				7FD14FBAD1C36D6BFAD4DCB3 /* ConnectionReviewViewModel.swift in Sources */,
+							543DAC5D60258688EE7BD1E1 /* AuditChainVerifier.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

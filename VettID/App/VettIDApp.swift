@@ -273,6 +273,9 @@ class AppState: ObservableObject {
     private(set) var secretsClient: SecretsClient?
     private(set) var grantsClient: GrantsClient?
     private(set) var actionsClient: ActionsClient?
+    /// Used by the Security Audit Log surface to call `audit.query`
+    /// and run the Ed25519 chain verifier on the response.
+    private(set) var feedClient: FeedClient?
 
     /// Flag indicating if running in UI test mode
     static var isUITesting: Bool {
@@ -572,6 +575,7 @@ class AppState: ObservableObject {
             self.secretsClient = SecretsClient(ownerSpaceClient: osc)
             self.grantsClient = GrantsClient(ownerSpaceClient: osc)
             self.actionsClient = ActionsClient(ownerSpaceClient: osc)
+            self.feedClient = FeedClient(ownerSpaceClient: osc)
         }
 
         guard let osc = ownerSpaceClient,

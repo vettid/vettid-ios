@@ -137,6 +137,11 @@ struct FeedAuditLogView: View {
             .background(Color(.systemGray6))
             .cornerRadius(10)
 
+            // Verification-state chips (Phase 5.3). All / Verified /
+            // Tampered / Unsigned — narrows the list to one row state
+            // so a user can answer "any tampered rows?" at a glance.
+            verificationChips
+
             // Event type filter
             HStack(spacing: 8) {
                 // Event type dropdown
@@ -199,6 +204,80 @@ struct FeedAuditLogView: View {
         .background(Color(.secondarySystemBackground))
     }
 
+    // MARK: - Verification Chips (Phase 5.3)
+
+    @ViewBuilder
+    private var verificationChips: some View {
+        HStack(spacing: 8) {
+            ForEach(AuditVerificationFilter.allCases, id: \.self) { state in
+                let selected = viewModel.verificationFilter == state
+                Button {
+                    viewModel.verificationFilter = state
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: chipIcon(for: state))
+                            .font(.caption2)
+                        Text(state.displayName)
+                            .font(.caption)
+                            .fontWeight(selected ? .semibold : .regular)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(selected ? chipColor(for: state) : Color(.systemGray6))
+                    .foregroundStyle(selected ? .white : .primary)
+                    .clipShape(Capsule())
+                }
+            }
+            Spacer(minLength: 0)
+            // Chain pill — surfaces the response-level chain status.
+            chainStatusPill
+        }
+    }
+
+    private func chipIcon(for state: AuditVerificationFilter) -> String {
+        switch state {
+        case .all:       return "list.bullet"
+        case .verified:  return "checkmark.shield.fill"
+        case .tampered:  return "exclamationmark.shield.fill"
+        case .unsigned:  return "minus.circle"
+        }
+    }
+
+    private func chipColor(for state: AuditVerificationFilter) -> Color {
+        switch state {
+        case .all:       return .blue
+        case .verified:  return .green
+        case .tampered:  return .red
+        case .unsigned:  return .gray
+        }
+    }
+
+    @ViewBuilder
+    private var chainStatusPill: some View {
+        let status = viewModel.chainStatus
+        let (label, icon, color): (String, String, Color) = {
+            switch status {
+            case .empty:
+                return ("No chain", "questionmark.circle", .secondary)
+            case .verified:
+                return (status.pillTitle, "checkmark.shield.fill", .green)
+            case .unsigned:
+                return (status.pillTitle, "minus.circle", .orange)
+            case .tampered:
+                return (status.pillTitle, "exclamationmark.shield.fill", .red)
+            }
+        }()
+        HStack(spacing: 4) {
+            Image(systemName: icon).font(.caption2)
+            Text(label).font(.caption2).fontWeight(.medium)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(color.opacity(0.15))
+        .foregroundStyle(color)
+        .clipShape(Capsule())
+    }
+
     // MARK: - Integrity Badge
 
     private func integrityBadge(verified: Bool) -> some View {
@@ -221,7 +300,10 @@ struct FeedAuditLogView: View {
     private var auditEventsList: some View {
         List {
             ForEach(viewModel.filteredEvents) { event in
-                AuditEventRow(event: event)
+                AuditEventRow(
+                    event: event,
+                    verificationState: viewModel.verificationState(for: event)
+                )
             }
         }
         .listStyle(.plain)
@@ -296,6 +378,10 @@ struct FeedAuditLogView: View {
 
 struct AuditEventRow: View {
     let event: VaultFeedEvent
+    /// Phase 5.3: result of the Ed25519 chain check for this row.
+    /// Defaults to `.unsigned` so previews and call sites that don't
+    /// know about verification still render a sensible row.
+    var verificationState: AuditChainVerifier.RowState = .unsigned
     @State private var isExpanded = false
 
     var body: some View {
@@ -314,6 +400,12 @@ struct AuditEventRow: View {
                             .lineLimit(1)
 
                         Spacer()
+
+                        // Verification badge (Phase 5.3) — shown beside
+                        // the priority indicator. Hidden in the
+                        // `.unsigned` case unless explicitly tampered to
+                        // avoid badge-clutter on pre-anchor pages.
+                        verificationBadge
 
                         // Priority indicator
                         if event.priorityLevel != .normal {
@@ -424,6 +516,40 @@ struct AuditEventRow: View {
         }
     }
 
+    // MARK: - Verification Badge (Phase 5.3)
+
+    @ViewBuilder
+    private var verificationBadge: some View {
+        switch verificationState {
+        case .verified:
+            badgePill(
+                title: "Verified",
+                systemImage: "checkmark.shield.fill",
+                tint: .green
+            )
+        case .tampered:
+            badgePill(
+                title: "Tampered",
+                systemImage: "exclamationmark.shield.fill",
+                tint: .red
+            )
+        case .unsigned:
+            EmptyView()
+        }
+    }
+
+    private func badgePill(title: String, systemImage: String, tint: Color) -> some View {
+        HStack(spacing: 2) {
+            Image(systemName: systemImage).font(.caption2)
+            Text(title).font(.caption2).fontWeight(.medium)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(tint.opacity(0.15))
+        .foregroundStyle(tint)
+        .cornerRadius(4)
+    }
+
     // MARK: - Priority Badge
 
     private var priorityBadge: some View {
@@ -499,6 +625,30 @@ struct AuditEventRow: View {
                 .padding(.top, 4)
             }
 
+            // Audit chain (Phase 5.3) — entry hash + signature for the
+            // hash-chain crosscheck. Compact and monospaced; only shown
+            // when the row actually carries chain fields.
+            if event.entryHash != nil || event.entrySig != nil {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Audit Chain")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fontWeight(.medium)
+
+                    if let entryHash = event.entryHash {
+                        detailRow(label: "Entry Hash", value: shortHex(entryHash))
+                    }
+                    if let prev = event.previousHash {
+                        detailRow(label: "Prev Hash", value: shortHex(prev))
+                    }
+                    if let sig = event.entrySig {
+                        detailRow(label: "Signature", value: shortHex(sig))
+                    }
+                    detailRow(label: "Status", value: verificationStateLabel)
+                }
+                .padding(.top, 4)
+            }
+
             // Timestamps
             VStack(alignment: .leading, spacing: 2) {
                 Text("Timestamps")
@@ -540,6 +690,24 @@ struct AuditEventRow: View {
         formatter.dateStyle = .medium
         formatter.timeStyle = .medium
         return formatter.string(from: date)
+    }
+
+    /// Trim a long hex/base64 string to the head + tail for compact
+    /// row display: "abcd1234…ef98" — enough to compare visually but
+    /// not enough to dominate the row.
+    private func shortHex(_ s: String) -> String {
+        guard s.count > 20 else { return s }
+        let head = s.prefix(12)
+        let tail = s.suffix(8)
+        return "\(head)…\(tail)"
+    }
+
+    private var verificationStateLabel: String {
+        switch verificationState {
+        case .verified: return "Verified"
+        case .tampered: return "Tampered"
+        case .unsigned: return "Unsigned"
+        }
     }
 }
 
