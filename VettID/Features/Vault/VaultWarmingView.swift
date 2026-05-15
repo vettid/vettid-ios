@@ -15,6 +15,15 @@ struct VaultWarmingView: View {
     @State private var retryCount = 0
     @FocusState private var isPinFieldFocused: Bool
 
+    // #56 — pre-PIN PCR0 trust check. When the current enclave PCR0 is
+    // not in the user's trusted set, we hold the typed PIN and show
+    // the enclave-update prompt. Approval rides as `migrate_consent=true`
+    // on the resubmit; Not Now sets `skipPcr0Check` for this session.
+    @State private var showEnclaveUpdate = false
+    @State private var pendingUntrustedPcr0: String?
+    @State private var skipPcr0Check: Bool = false
+    @State private var migrateConsentPending: Bool = false
+
     /// Maximum number of automatic retries when vault is not ready
     private let maxAutoRetries = 3
     /// Delay between automatic retries in seconds
@@ -130,6 +139,31 @@ struct VaultWarmingView: View {
         .onAppear {
             isPinFieldFocused = true
         }
+        // #56 — Enclave Update Required sheet. Fires when the running
+        // PCR0 isn't in the user's trusted set; Approve adds it and
+        // resubmits with migrate_consent=true, Not Now skips PCR0 check
+        // for this session and resubmits against the current enclave.
+        .sheet(isPresented: $showEnclaveUpdate) {
+            EnclaveUpdatePromptView(
+                pcr0: pendingUntrustedPcr0 ?? "",
+                onApprove: {
+                    if let guid = appState.currentUserGuid,
+                       let pcr0 = pendingUntrustedPcr0 {
+                        TrustedPCRStore.shared.add(pcr0: pcr0, for: guid)
+                    }
+                    migrateConsentPending = true
+                    pendingUntrustedPcr0 = nil
+                    showEnclaveUpdate = false
+                    attemptWarmVault()
+                },
+                onSkip: {
+                    skipPcr0Check = true
+                    pendingUntrustedPcr0 = nil
+                    showEnclaveUpdate = false
+                    attemptWarmVault()
+                }
+            )
+        }
     }
 
     // MARK: - Lockout View
@@ -171,12 +205,30 @@ struct VaultWarmingView: View {
         guard pin.count == 6 else { return }
         guard !isWarming else { return }
 
+        // #56 — pre-PIN PCR0 trust check. Skip when the user already
+        // tapped "Not Now" this session, or when there's no user GUID
+        // yet (pre-warm state). On bootstrap (no recorded trusted set)
+        // we silently add the current PCR0 — the user enrolled before
+        // this surface existed and we'd otherwise gate them forever.
+        if !skipPcr0Check, let guid = appState.currentUserGuid,
+           let currentPcr0 = ExpectedPCRStore.shared.getCurrentPCRSet()?.pcr0,
+           !currentPcr0.isEmpty {
+            let store = TrustedPCRStore.shared
+            if store.isBootstrap(for: guid) {
+                store.add(pcr0: currentPcr0, for: guid)
+            } else if !store.isTrusted(pcr0: currentPcr0, for: guid) {
+                pendingUntrustedPcr0 = currentPcr0
+                showEnclaveUpdate = true
+                return
+            }
+        }
+
         isWarming = true
         errorMessage = nil
         retryCount = 0
 
         Task {
-            await warmVaultWithRetry()
+            await warmVaultWithRetry(migrateConsent: migrateConsentPending)
         }
     }
 

@@ -365,6 +365,8 @@
 		96395BF58A5429F9FEB275FB /* MigrationCompletionRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A755F00D28D2B2B462CBC52A /* MigrationCompletionRecorder.swift */; };
 		9914E634A736E509265D0A73 /* PostEnrollmentNextStepsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 507CE46C4C6C7289C47FE61F /* PostEnrollmentNextStepsView.swift */; };
 		A78912DB6AFF08C658627CAE /* CallScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34F6C7439F85919E6B253A7F /* CallScreens.swift */; };
+		27A0738ACBC28521326D3B89 /* TrustedPCRStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EE32D61F7604C05BAFC294F /* TrustedPCRStore.swift */; };
+		E483F66A5C2888C27DAD8A2B /* EnclaveUpdatePromptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 270951CD2FB26598A163EFA3 /* EnclaveUpdatePromptView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -757,6 +759,8 @@
 		A755F00D28D2B2B462CBC52A /* MigrationCompletionRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MigrationCompletionRecorder.swift; sourceTree = "<group>"; };
 		507CE46C4C6C7289C47FE61F /* PostEnrollmentNextStepsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostEnrollmentNextStepsView.swift; sourceTree = "<group>"; };
 		34F6C7439F85919E6B253A7F /* CallScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallScreens.swift; sourceTree = "<group>"; };
+		9EE32D61F7604C05BAFC294F /* TrustedPCRStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustedPCRStore.swift; sourceTree = "<group>"; };
+		270951CD2FB26598A163EFA3 /* EnclaveUpdatePromptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnclaveUpdatePromptView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1050,6 +1054,7 @@
 				2508C629676886E946486AC6 /* ExpectedPCRStore.swift */,
 				80D6C81AAEA975F5D4A6FD84 /* NitroAttestationVerifier.swift */,
 				8AEF55837C33201737405887 /* PCRUpdateService.swift */,
+							9EE32D61F7604C05BAFC294F /* TrustedPCRStore.swift */,
 			);
 			path = Attestation;
 			sourceTree = "<group>";
@@ -1102,6 +1107,7 @@
 				01882C936F86D42B0FB2A8D6 /* Models */,
 				BCE1324EE023C574B068F988 /* VaultUpdateViewModel.swift */,
 				5A5B084EB9F15075BFFC8C24 /* VaultUpdateCard.swift */,
+							270951CD2FB26598A163EFA3 /* EnclaveUpdatePromptView.swift */,
 			);
 			path = Vault;
 			sourceTree = "<group>";
@@ -2257,6 +2263,8 @@
 							96395BF58A5429F9FEB275FB /* MigrationCompletionRecorder.swift in Sources */,
 							9914E634A736E509265D0A73 /* PostEnrollmentNextStepsView.swift in Sources */,
 							A78912DB6AFF08C658627CAE /* CallScreens.swift in Sources */,
+							27A0738ACBC28521326D3B89 /* TrustedPCRStore.swift in Sources */,
+							E483F66A5C2888C27DAD8A2B /* EnclaveUpdatePromptView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
