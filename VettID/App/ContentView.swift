@@ -509,6 +509,9 @@ struct EnrollmentContainerView: View {
     @StateObject private var viewModel = EnrollmentViewModel()
     @EnvironmentObject var appState: AppState
     @Environment(\.dismiss) private var dismiss
+    /// Phase 5.8 — flips on EnrollmentCompleteView's Continue tap so
+    /// the .complete case renders the post-enrollment next-steps panel.
+    @State private var showNextSteps = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -585,11 +588,21 @@ struct EnrollmentContainerView: View {
                     verifyingEnrollmentView
 
                 case .complete(let userGuid):
-                    EnrollmentCompleteView(userGuid: userGuid) {
-                        appState.refreshCredentialState()
-                        // Start background sync after successful enrollment
-                        VaultBackgroundRefresh.shared.onEnrollmentComplete()
-                        dismiss()
+                    // Phase 5.8: chain EnrollmentCompleteView (success
+                    // animation) → PostEnrollmentNextStepsView (three
+                    // optional deep-links). `showNextSteps` flips on
+                    // EnrollmentCompleteView's Continue tap; dismiss
+                    // happens from PostEnrollmentNextStepsView.
+                    if showNextSteps {
+                        PostEnrollmentNextStepsView {
+                            appState.refreshCredentialState()
+                            VaultBackgroundRefresh.shared.onEnrollmentComplete()
+                            dismiss()
+                        }
+                    } else {
+                        EnrollmentCompleteView(userGuid: userGuid) {
+                            showNextSteps = true
+                        }
                     }
 
                 case .error(let message, let retryable):

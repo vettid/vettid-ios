@@ -365,6 +365,7 @@
 		543DAC5D60258688EE7BD1E1 /* AuditChainVerifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1CC488D7E7D7E981C0A5EDC /* AuditChainVerifier.swift */; };
 		CE76C83575708DD84D24B7B1 /* PeerLocationRequestPromptViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65926138EE8E3D137D1DC028 /* PeerLocationRequestPromptViewModel.swift */; };
 		96395BF58A5429F9FEB275FB /* MigrationCompletionRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A755F00D28D2B2B462CBC52A /* MigrationCompletionRecorder.swift */; };
+		9914E634A736E509265D0A73 /* PostEnrollmentNextStepsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 507CE46C4C6C7289C47FE61F /* PostEnrollmentNextStepsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -757,6 +758,7 @@
 		C1CC488D7E7D7E981C0A5EDC /* AuditChainVerifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuditChainVerifier.swift; sourceTree = "<group>"; };
 		65926138EE8E3D137D1DC028 /* PeerLocationRequestPromptViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerLocationRequestPromptViewModel.swift; sourceTree = "<group>"; };
 		A755F00D28D2B2B462CBC52A /* MigrationCompletionRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MigrationCompletionRecorder.swift; sourceTree = "<group>"; };
+		507CE46C4C6C7289C47FE61F /* PostEnrollmentNextStepsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostEnrollmentNextStepsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1071,6 +1073,7 @@
 				4AC8ADAF55E643299E94EE16 /* ConfirmProfileView.swift */,
 				4D5BED562F90CB0FDD0644D8 /* EnrollmentStepIndicator.swift */,
 				B70A2335B3A2BC260426D995 /* PermissionsPhaseView.swift */,
+							507CE46C4C6C7289C47FE61F /* PostEnrollmentNextStepsView.swift */,
 			);
 			path = Enrollment;
 			sourceTree = "<group>";
@@ -2257,6 +2260,7 @@
 							543DAC5D60258688EE7BD1E1 /* AuditChainVerifier.swift in Sources */,
 							CE76C83575708DD84D24B7B1 /* PeerLocationRequestPromptViewModel.swift in Sources */,
 							96395BF58A5429F9FEB275FB /* MigrationCompletionRecorder.swift in Sources */,
+							9914E634A736E509265D0A73 /* PostEnrollmentNextStepsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
