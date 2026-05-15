@@ -231,6 +231,7 @@ struct PendingRowView: View {
         case .proposalUnvoted:       return "checkmark.bubble"
         case .peerLocationShare:     return "location.fill"
         case .incomingGrantRequest:  return "lock.shield"
+        case .outboundInvitationPending: return "hourglass"
         case .lastActivity(_, _, let k, _):
             switch k {
             case .message:    return "text.bubble"
@@ -248,6 +249,7 @@ struct PendingRowView: View {
         case .missedCall:                                              return .red
         case .unreadMessages, .peerLocationShare:                      return .accentColor
         case .guideUnread, .proposalUnvoted:                           return .purple
+        case .outboundInvitationPending:                               return .secondary
         case .lastActivity:                                            return .secondary
         }
     }
@@ -276,6 +278,15 @@ struct PendingRowView: View {
             case .criticalUse:    return "Wants to use a critical secret"
             case .verifyIdentity: return "Wants to verify your identity"
             }
+        case .outboundInvitationPending(_, let expiresAt):
+            if let expiresAt = expiresAt, expiresAt > Date() {
+                let minutes = Int(expiresAt.timeIntervalSinceNow / 60)
+                if minutes > 60 {
+                    return "Invitation pending — tap to cancel"
+                }
+                return "Invitation pending (\(max(minutes, 1))m left) — tap to cancel"
+            }
+            return "Invitation pending — tap to cancel"
         case .lastActivity(let text, _, _, _):
             return text
         }

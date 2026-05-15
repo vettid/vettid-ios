@@ -58,20 +58,24 @@ enum PendingRow: Identifiable, Equatable {
     /// subsystem — Phase 3 — but the row type is defined so the card
     /// renderer doesn't have to grow when grants land).
     case incomingGrantRequest(requestId: String, kind: GrantKind)
+    /// Outbound invitation the user sent that's still waiting on the
+    /// other side. Tap → cancel (vault `connection.revoke`).
+    case outboundInvitationPending(connectionId: String, expiresAt: Date?)
     /// Generic "last activity" line — kept as a row so cards never carry
     /// inline buttons that swap with action affordances.
     case lastActivity(text: String, direction: ActivityDirection, kind: ActivityKind, at: Date)
 
     var id: String {
         switch self {
-        case .unreadMessages:                return "unread-messages"
-        case .missedCall(_, let kind, _):    return "missed-call-\(kind.rawValue)"
-        case .pendingReview:                 return "pending-review"
-        case .pendingMigration:              return "pending-migration"
-        case .guideUnread(let gid, _):       return "guide-\(gid)"
-        case .proposalUnvoted(let pid, _):   return "proposal-\(pid)"
-        case .peerLocationShare:             return "peer-location"
+        case .unreadMessages:                   return "unread-messages"
+        case .missedCall(_, let kind, _):       return "missed-call-\(kind.rawValue)"
+        case .pendingReview:                    return "pending-review"
+        case .pendingMigration:                 return "pending-migration"
+        case .guideUnread(let gid, _):          return "guide-\(gid)"
+        case .proposalUnvoted(let pid, _):      return "proposal-\(pid)"
+        case .peerLocationShare:                return "peer-location"
         case .incomingGrantRequest(let rid, _): return "grant-\(rid)"
+        case .outboundInvitationPending(let cid, _): return "outbound-invitation-\(cid)"
         case .lastActivity(_, _, let kind, let at):
             return "last-activity-\(kind.rawValue)-\(Int(at.timeIntervalSince1970))"
         }

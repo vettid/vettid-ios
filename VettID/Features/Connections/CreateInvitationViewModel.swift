@@ -89,11 +89,19 @@ final class CreateInvitationViewModel: ObservableObject {
                 let isoFormatter = ISO8601DateFormatter()
                 let expiresDate = isoFormatter.date(from: natsInvite.expiresAt) ?? Date().addingTimeInterval(TimeInterval(expirationMinutes * 60))
 
+                // Phase 1.8: switch the share URL to https://vettid.dev/
+                // connect?c=<code>. Custom vettid:// URLs don't auto-
+                // linkify in email clients, so recipients couldn't tap
+                // them. HTTPS linkifies everywhere and the universal-
+                // link / Associated Domains entitlement opens the app
+                // directly on devices where it's installed. Just the
+                // short broker code in the URL — the scanner's vault
+                // resolves it via the INVITATIONS NATS stream.
                 let invitation = ConnectionInvitation(
                     invitationId: natsInvite.connectionId,
                     invitationCode: natsInvite.inviteCode,
                     qrCodeData: compactQR,
-                    deepLinkUrl: "vettid://invite/\(natsInvite.inviteCode)",
+                    deepLinkUrl: "https://vettid.dev/connect?c=\(natsInvite.inviteCode)",
                     expiresAt: expiresDate,
                     creatorDisplayName: natsInvite.inviterProfile["display_name"] ?? ""
                 )

@@ -294,6 +294,11 @@ struct FeedView: View {
             }
         case .proposalUnvoted:
             showProposals = true
+        case .outboundInvitationPending(let connectionId, _):
+            // Phase 1.8: tap the row → cancel the invitation. Vault
+            // tears down the broker entry and the card drops out of
+            // the live list on the next refresh.
+            Task { await viewModel.cancelOutboundInvitation(connectionId: connectionId) }
         case .pendingReview, .unreadMessages, .missedCall:
             #if DEBUG
             print("[FeedView] Row tap → \(row.id) on \(card.connectionId)")

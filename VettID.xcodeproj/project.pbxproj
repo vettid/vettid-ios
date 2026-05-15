@@ -339,6 +339,7 @@
 		6964068FE83A8B8920C80402 /* ConnectionHistoryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64A8AB123A7308554C60B53D /* ConnectionHistoryViewModel.swift */; };
 		0CBBA924AE9587FAE4DFD43A /* BusinessCardData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45A159004642D14E8301CDCE /* BusinessCardData.swift */; };
 		2967B711835BC35C9BAA46F9 /* BusinessCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 482A967EEBF92DA861EEC680 /* BusinessCardView.swift */; };
+		71AB4E30BC56C5338B985EF1 /* ShortCode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5675F254C0FAC6EFECC77F41 /* ShortCode.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -705,6 +706,7 @@
 		64A8AB123A7308554C60B53D /* ConnectionHistoryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionHistoryViewModel.swift; sourceTree = "<group>"; };
 		45A159004642D14E8301CDCE /* BusinessCardData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BusinessCardData.swift; sourceTree = "<group>"; };
 		482A967EEBF92DA861EEC680 /* BusinessCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BusinessCardView.swift; sourceTree = "<group>"; };
+		5675F254C0FAC6EFECC77F41 /* ShortCode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortCode.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -906,6 +908,7 @@
 				40000017 /* Security */,
 				66594A3F2DF3A04E9C493290 /* DeepLink */,
 				32E3082AE5B97E5558C41A1E /* Notifications */,
+				E3F5EC1D4B48E6E9133EFB57 /* Util */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -1700,6 +1703,15 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
+		E3F5EC1D4B48E6E9133EFB57 /* Util */ = {
+			isa = PBXGroup;
+			children = (
+				5675F254C0FAC6EFECC77F41 /* ShortCode.swift */,
+			);
+			name = Util;
+			path = Util;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -1922,6 +1934,7 @@
 				0000004E /* CertificatePinning.swift in Sources */,
 				FFD8FF11AF5D4845B612D689 /* SecurePassword.swift in Sources */,
 				CDECFCF1A353CB2263187C84 /* UnlockRateLimiter.swift in Sources */,
+				71AB4E30BC56C5338B985EF1 /* ShortCode.swift in Sources */,
 				0000004F /* RequestSigning.swift in Sources */,
 				00000050 /* SecurePasteboard.swift in Sources */,
 				00000051 /* ScreenProtection.swift in Sources */,

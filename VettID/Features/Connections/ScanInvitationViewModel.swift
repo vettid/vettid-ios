@@ -86,41 +86,91 @@ final class ScanInvitationViewModel: ObservableObject {
         processCode(code)
     }
 
-    /// Handle manual code entry
+    /// Handle manual code entry. Tries the canonical 12-character
+    /// `ShortCode` form first (strips hyphens / spaces, uppercases),
+    /// then falls back to the looser legacy parse for older invite
+    /// formats.
     func onManualCodeEntered(_ code: String) {
-        let trimmedCode = code.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedCode.isEmpty else {
+        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
             state = .error("Please enter an invitation code")
             return
         }
 
-        processCode(trimmedCode)
+        // Canonical short-code path first — handles `ABCD-EFGH-JKLM`,
+        // `abcd efgh jklm`, `abcdefghjklm`, etc.
+        let canonical = ShortCode.normalize(trimmed)
+        if ShortCode.isValid(canonical) {
+            processCode(canonical)
+            return
+        }
+
+        // Legacy fallback — let the resolver decide if it's a known
+        // older format. `processCode` will surface a friendly error
+        // if the broker doesn't recognize it.
+        processCode(trimmed)
     }
 
-    /// Parse invitation code from various formats
+    /// Parse invitation code from various formats. Accepts:
+    ///   - Short-code only (`ABCD-EFGH-JKLM` or `ABCDEFGHJKLM`)
+    ///   - `https://vettid.dev/connect?c=<code>` (Phase 1.8 share URL)
+    ///   - `https://vettid.dev/connect?code=<code>` (legacy)
+    ///   - `https://vettid.dev/connect/<code>` (path-segment)
+    ///   - `vettid://connect?code=<code>` (custom-scheme deep link)
+    ///   - `vettid://invite/<code>` (legacy custom-scheme)
+    ///   - Compact broker JSON `{"c":"<code>","e":"<endpoint>"}`
+    /// Returns the bare normalized code or empty string when nothing
+    /// matched.
     private func parseInvitationCode(from data: String) -> String {
-        // Try compact broker format: {"c":"<code>","e":"<endpoint>"}
+        // Compact broker format.
         if data.hasPrefix("{"),
            let jsonData = data.data(using: .utf8),
            let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: String],
            let code = json["c"] {
-            return code
+            return ShortCode.normalize(code)
         }
 
-        // Try deep link format
+        // Custom-scheme deep links.
         if data.hasPrefix("vettid://invite/") {
-            return String(data.dropFirst("vettid://invite/".count))
+            return ShortCode.normalize(String(data.dropFirst("vettid://invite/".count)))
         }
-
-        // Try web URL format
         if let url = URL(string: data),
-           url.pathComponents.count >= 2,
-           url.pathComponents[url.pathComponents.count - 2] == "invite" {
-            return url.lastPathComponent
+           url.scheme == "vettid",
+           url.host == "connect" {
+            let q = parseQuery(url)
+            if let code = q["c"] ?? q["code"] {
+                return ShortCode.normalize(code)
+            }
         }
 
-        // Assume it's just the code
-        return data.trimmingCharacters(in: .whitespacesAndNewlines)
+        // HTTPS share / universal links.
+        if let url = URL(string: data),
+           let scheme = url.scheme, scheme.hasPrefix("http") {
+            let q = parseQuery(url)
+            if let code = q["c"] ?? q["code"] {
+                return ShortCode.normalize(code)
+            }
+            // Path-segment form: /connect/<code>  or  /invite/<code>.
+            let segments = url.pathComponents.filter { $0 != "/" }
+            if segments.count >= 2,
+               ["connect", "invite"].contains(segments[segments.count - 2].lowercased()) {
+                return ShortCode.normalize(segments[segments.count - 1])
+            }
+        }
+
+        // Otherwise treat it as a bare code (also covers raw QR
+        // payloads containing just the 12 chars).
+        return ShortCode.normalize(data.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    /// Pull `URL.queryItems` into a flat dict; URLComponents tolerates
+    /// our custom `vettid://` scheme and HTTPS uniformly.
+    private func parseQuery(_ url: URL) -> [String: String] {
+        guard let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let items = comps.queryItems else { return [:] }
+        var out: [String: String] = [:]
+        for item in items { if let v = item.value { out[item.name] = v } }
+        return out
     }
 
     /// Check if QR data is compact broker format

@@ -256,6 +256,17 @@ final class FeedViewModel: ObservableObject {
         if record.status == "pending" && record.direction == "inbound" {
             rows.append(.pendingReview)
         }
+        if record.status == "pending" && record.direction == "outbound" {
+            // Phase 1.8: outbound invitations get a tappable "Cancel"
+            // row, with the expiry countdown when the vault gave us
+            // one. Tapping calls connection.revoke via the FeedView's
+            // handler (Phase 1.8 wiring).
+            let expires = record.expiresAt.flatMap { ISO8601DateFormatter().date(from: $0) }
+            rows.append(.outboundInvitationPending(
+                connectionId: record.connectionId,
+                expiresAt: expires
+            ))
+        }
         let unread = connEvents.filter { !$0.isRead }.count
         if unread > 0 {
             rows.append(.unreadMessages(count: unread, preview: preview))
@@ -505,6 +516,31 @@ final class FeedViewModel: ObservableObject {
         await runConnectionAction("deny auth", requestId: requestId) { handler in
             try await handler.submitAndAwait(.denyAuth(requestId: requestId))
         }
+    }
+
+    /// Cancel an outbound pending invitation. Backed by
+    /// `ConnectionsClient.cancelInvitation` which is itself a
+    /// thin wrapper over `connection.revoke`. On success the card
+    /// drops out of the live list on the next `connection.list`
+    /// refresh.
+    func cancelOutboundInvitation(connectionId: String) async {
+        guard let client = connectionsClient else {
+            actionError = "Not connected"
+            return
+        }
+        isProcessingAction = true
+        actionError = nil
+        do {
+            _ = try await client.cancelInvitation(connectionId: connectionId)
+            // Drop the card from the in-memory list immediately so the
+            // UI updates without waiting for a server refresh; the
+            // periodic refresh + status broadcast will reconcile.
+            connectionRecords.removeAll { $0.connectionId == connectionId }
+            rebuildDisplayItems()
+        } catch {
+            actionError = "Failed to cancel invitation: \(error.localizedDescription)"
+        }
+        isProcessingAction = false
     }
 
     private func runConnectionAction(

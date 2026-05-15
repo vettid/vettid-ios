@@ -158,7 +158,9 @@ class DeepLinkHandler: ObservableObject {
                 }
             }
         case "connect":
-            if let code = queryParams["code"] {
+            // Phase 1.8: accept `?c=` (the short HTTPS share URL the
+            // CreateInvitationViewModel emits today) AND legacy `?code=`.
+            if let code = queryParams["c"] ?? queryParams["code"] {
                 if let validatedCode = validateCode(code, url: url) {
                     return .connect(code: validatedCode)
                 }
@@ -194,7 +196,9 @@ class DeepLinkHandler: ObservableObject {
                 }
             }
         case "connect":
-            if let code = queryParams["code"] {
+            // Phase 1.8: accept `?c=` (the short HTTPS share URL the
+            // CreateInvitationViewModel emits today) AND legacy `?code=`.
+            if let code = queryParams["c"] ?? queryParams["code"] {
                 if let validatedCode = validateCode(code, url: url) {
                     return .connect(code: validatedCode)
                 }
