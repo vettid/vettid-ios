@@ -350,6 +350,10 @@
 		3FEB77FFDFBFB0C6301BDB15 /* GrantsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DF3EFDA82685C1629EA33DC /* GrantsRepository.swift */; };
 		FB3503E9AD16F0498AC34B15 /* GrantsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2126932C3B5F12AE47E924E /* GrantsView.swift */; };
 		24212BECEAE8882570DB9DD5 /* GrantsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 163B23A294EEA5C01F202497 /* GrantsViewModel.swift */; };
+		7AE011332501DFF933E92AB5 /* PasswordApprovalEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DD79FD7EC98CBE986034068 /* PasswordApprovalEnvelope.swift */; };
+		AF5D37C76476D8D0DF71D273 /* DataGrantApprovalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FB4437B32FE9C6FBF22473D /* DataGrantApprovalView.swift */; };
+		56618B8A7FEFFCFEA45B7612 /* CriticalUseApprovalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24436FA9384E73976BE24D0B /* CriticalUseApprovalView.swift */; };
+		A9DE3B3AA544D577499E6C40 /* IdentityVerifyApprovalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C762E03B8FCD0181DC70096 /* IdentityVerifyApprovalView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -727,6 +731,10 @@
 		9DF3EFDA82685C1629EA33DC /* GrantsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrantsRepository.swift; sourceTree = "<group>"; };
 		E2126932C3B5F12AE47E924E /* GrantsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrantsView.swift; sourceTree = "<group>"; };
 		163B23A294EEA5C01F202497 /* GrantsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrantsViewModel.swift; sourceTree = "<group>"; };
+		2DD79FD7EC98CBE986034068 /* PasswordApprovalEnvelope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasswordApprovalEnvelope.swift; sourceTree = "<group>"; };
+		8FB4437B32FE9C6FBF22473D /* DataGrantApprovalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataGrantApprovalView.swift; sourceTree = "<group>"; };
+		24436FA9384E73976BE24D0B /* CriticalUseApprovalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CriticalUseApprovalView.swift; sourceTree = "<group>"; };
+		4C762E03B8FCD0181DC70096 /* IdentityVerifyApprovalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentityVerifyApprovalView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1742,6 +1750,10 @@
 		286784441FA915A44D966ABC /* Grants */ = {
 			isa = PBXGroup;
 			children = (
+				4C762E03B8FCD0181DC70096 /* IdentityVerifyApprovalView.swift */,
+				24436FA9384E73976BE24D0B /* CriticalUseApprovalView.swift */,
+				8FB4437B32FE9C6FBF22473D /* DataGrantApprovalView.swift */,
+				2DD79FD7EC98CBE986034068 /* PasswordApprovalEnvelope.swift */,
 				163B23A294EEA5C01F202497 /* GrantsViewModel.swift */,
 				E2126932C3B5F12AE47E924E /* GrantsView.swift */,
 				9DF3EFDA82685C1629EA33DC /* GrantsRepository.swift */,
@@ -2087,6 +2099,10 @@
 				542B48D537BF4318967F48D8 /* ContractStore.swift in Sources */,
 				0B5701895223925F4DAB680C /* PersonalDataStore.swift in Sources */,
 				0DB660D072F240E75018453A /* GrantsClient.swift in Sources */,
+				A9DE3B3AA544D577499E6C40 /* IdentityVerifyApprovalView.swift in Sources */,
+				56618B8A7FEFFCFEA45B7612 /* CriticalUseApprovalView.swift in Sources */,
+				AF5D37C76476D8D0DF71D273 /* DataGrantApprovalView.swift in Sources */,
+				7AE011332501DFF933E92AB5 /* PasswordApprovalEnvelope.swift in Sources */,
 				24212BECEAE8882570DB9DD5 /* GrantsViewModel.swift in Sources */,
 				FB3503E9AD16F0498AC34B15 /* GrantsView.swift in Sources */,
 				3FEB77FFDFBFB0C6301BDB15 /* GrantsRepository.swift in Sources */,

@@ -130,7 +130,7 @@ struct GrantSummary: Identifiable, Equatable {
 /// Inbound request still awaiting an approve/deny decision. Owner-side
 /// only; the user surfaces these in the GrantsView "Pending" tab and on
 /// the connection card via `PendingRow.incomingGrantRequest`.
-struct PendingRequestSummary: Identifiable, Equatable {
+struct PendingRequestSummary: Identifiable, Equatable, Hashable {
     let requestId: String
     let connectionId: String
     let peerLabel: String

@@ -20,8 +20,15 @@ import SwiftUI
 ///     trust until I fetch).
 struct GrantsView: View {
 
+    @EnvironmentObject private var appState: AppState
     @StateObject private var viewModel = GrantsViewModel()
     @State private var selectedTab: GrantsTab = .pending
+    /// Phase 3.6-3.8: which pending request to present an approval
+    /// screen for. The destination view differs by kind; navigation
+    /// pushes onto the NavigationStack the parent already owns.
+    @State private var presentedDataRequest: PendingRequestSummary?
+    @State private var presentedCriticalUse: CriticalUseApprovalView.Input?
+    @State private var presentedVerify: IdentityVerifyApprovalView.Input?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -40,6 +47,23 @@ struct GrantsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await viewModel.load() }
         .refreshable { await viewModel.load() }
+        // Push approval destinations onto the stack. Three navigation
+        // destinations because each kind of pending request has its own
+        // screen — DataGrantApproval doesn't need to know about the
+        // critical-use payload shape and vice versa.
+        // Each kind of pending request has its own approval screen
+        // because the privacy disclosure and the wire-level approve
+        // verb differ. Presented as sheets — approval is a modal
+        // commitment, not a side-trip on the navigation stack.
+        .sheet(item: $presentedDataRequest) { req in
+            NavigationView { DataGrantApprovalView(request: req) }
+        }
+        .sheet(item: $presentedCriticalUse) { input in
+            NavigationView { CriticalUseApprovalView(request: input) }
+        }
+        .sheet(item: $presentedVerify) { input in
+            NavigationView { IdentityVerifyApprovalView(request: input) }
+        }
     }
 
     @ViewBuilder
@@ -77,8 +101,36 @@ struct GrantsView: View {
         switch row {
         case .pending(let req):
             PendingRequestRow(request: req)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    handlePendingTap(req)
+                }
         case .grant(let grant, let dir):
             GrantSummaryRow(grant: grant, direction: dir)
+        }
+    }
+
+    /// Route a pending-request tap to the right approval surface. Each
+    /// `GrantItemKind` has its own view because the privacy disclosure
+    /// and the wire-level approve verb differ.
+    private func handlePendingTap(_ req: PendingRequestSummary) {
+        switch req.kind {
+        case .data, .minorSecret, .criticalSecretValue:
+            presentedDataRequest = req
+        case .criticalSecretUse:
+            presentedCriticalUse = CriticalUseApprovalView.Input(
+                requestId: req.requestId,
+                peerLabel: req.peerLabel,
+                itemLabel: req.itemLabel,
+                operation: req.kind.displayName,
+                context: req.reason
+            )
+        case .identityVerify:
+            presentedVerify = IdentityVerifyApprovalView.Input(
+                requestId: req.requestId,
+                peerLabel: req.peerLabel,
+                challenge: req.reason
+            )
         }
     }
 
