@@ -65,6 +65,13 @@ final class GrantsRepository: ObservableObject {
         // and the vault is authoritative anyway.
         Task { await self.hydrate() }
 
+        // Phase 1.9: verify approve/deny lands on the same grant
+        // event stream (forApp.verify.*); broadcast a notification so
+        // the persistent verify row on ConnectionDetailView refreshes
+        // without re-mounting. Tolerate over-firing — the row's
+        // refresh is cheap (one connection.get-verify-state call).
+        NotificationCenter.default.post(name: .verifyStateChanged, object: event)
+
         #if DEBUG
         print("[GrantsRepository] grant event: \(event)")
         #endif
