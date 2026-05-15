@@ -288,6 +288,71 @@ final class ConversationViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Payment Decline (Phase 5.6)
+
+    /// Phase 5.6 — decline an inbound payment request. Encodes a
+    /// `BtcPaymentDecline { request_id, reason }` as the message
+    /// content and sends with `content_type = btc_payment_decline`.
+    /// The peer's wallet UI sees a structured decline rather than a
+    /// generic "no thanks" text bubble. Mirrors Android
+    /// `ConversationViewModel.sendPaymentDecline`.
+    func sendPaymentDecline(requestId: String, reason: String) async {
+        let payload = BtcPaymentDecline(requestId: requestId, reason: reason)
+        guard let body = try? JSONEncoder().encode(payload),
+              let json = String(data: body, encoding: .utf8) else {
+            errorMessage = "Failed to encode decline"
+            return
+        }
+
+        isSending = true
+        defer { isSending = false }
+
+        do {
+            let sentMessageId: String
+            let sentTimestamp: String
+
+            if let client = messagingClient {
+                let result = try await client.sendMessage(
+                    connectionId: connectionId,
+                    content: json,
+                    contentType: MessageContentType.btcPaymentDecline.rawValue
+                )
+                sentMessageId = result.messageId
+                sentTimestamp = result.timestamp
+            } else if let handler = messageHandler {
+                // App-side encryption — same code path as plaintext send.
+                let encrypted = try cryptoManager.encryptForConnection(
+                    plaintext: json,
+                    connectionId: connectionId
+                )
+                let sentMessage = try await handler.sendMessage(
+                    connectionId: connectionId,
+                    encryptedContent: encrypted.ciphertext.base64EncodedString(),
+                    nonce: encrypted.nonce.base64EncodedString(),
+                    contentType: MessageContentType.btcPaymentDecline.rawValue
+                )
+                sentMessageId = sentMessage.messageId
+                sentTimestamp = sentMessage.timestamp
+            } else {
+                throw ConversationError.notAuthenticated
+            }
+
+            messages.append(Message(
+                id: sentMessageId,
+                connectionId: connectionId,
+                senderId: currentUserId,
+                content: json,
+                contentType: .btcPaymentDecline,
+                sentAt: ISO8601DateFormatter().date(from: sentTimestamp) ?? Date(),
+                receivedAt: nil,
+                readAt: nil,
+                status: .sent
+            ))
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     // MARK: - Mark as Read
 
     /// Mark a message as read and send read receipt via NATS

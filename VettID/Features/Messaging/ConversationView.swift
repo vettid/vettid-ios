@@ -193,13 +193,16 @@ struct DateDivider: View {
 struct MessageBubble: View {
     let message: Message
     let isSent: Bool
+    /// Phase 5.6 — invoked when a recipient taps "Pay" on an inbound
+    /// payment request. Optional so legacy callers still compile.
+    var onPayRequest: ((PaymentRequest) -> Void)? = nil
 
     var body: some View {
         HStack {
             if isSent { Spacer(minLength: 60) }
 
             VStack(alignment: isSent ? .trailing : .leading, spacing: 4) {
-                Text(message.content)
+                bubbleBody
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                     .background(isSent ? Color.blue : Color(.systemGray5))
@@ -219,6 +222,65 @@ struct MessageBubble: View {
 
             if !isSent { Spacer(minLength: 60) }
         }
+    }
+
+    // MARK: - Bubble content dispatch (Phase 5.6)
+
+    @ViewBuilder
+    private var bubbleBody: some View {
+        switch message.contentType {
+        case .btcAddress, .paymentRequest, .btcPaymentReceipt, .btcPaymentDecline:
+            // Structured BTC payloads route to the dedicated bubble so
+            // the receipt / decline / request / address renders with
+            // its own affordances instead of dumping raw JSON.
+            PaymentMessageBubble(
+                contentType: message.contentType,
+                content: message.content,
+                isFromMe: isSent,
+                onPayRequest: onPayRequest
+            )
+        case .text, .image, .file:
+            // Plain text — render through AttributedString so http(s)
+            // links auto-detect and become tappable. Falls back to a
+            // plain Text on parse failure (e.g. unusual unicode runs).
+            if let attributed = try? AttributedString(
+                markdown: linkifyMarkdown(message.content),
+                options: AttributedString.MarkdownParsingOptions(
+                    interpretedSyntax: .inlineOnlyPreservingWhitespace
+                )
+            ) {
+                Text(attributed)
+            } else {
+                Text(message.content)
+            }
+        }
+    }
+
+    /// Wrap bare URLs in markdown so `AttributedString(markdown:)` will
+    /// produce tappable links. Pre-existing markdown links (`[label](url)`)
+    /// pass through unchanged. Conservative regex — only matches
+    /// `http://`/`https://` at word boundaries to avoid eating
+    /// substrings of paths or pseudo-URLs.
+    private func linkifyMarkdown(_ raw: String) -> String {
+        let pattern = #"(?<![[(])\bhttps?://[^\s<>"']+"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return raw }
+        let range = NSRange(raw.startIndex..<raw.endIndex, in: raw)
+        let matches = regex.matches(in: raw, range: range).reversed()
+        var result = raw
+        for match in matches {
+            guard let r = Range(match.range, in: result) else { continue }
+            let url = String(result[r])
+            // Strip a trailing period/comma so sentence-final URLs read
+            // naturally without dragging punctuation into the link.
+            var trimmedURL = url
+            var trailing = ""
+            while let last = trimmedURL.last, ".,;:!?".contains(last) {
+                trailing = String(last) + trailing
+                trimmedURL.removeLast()
+            }
+            result.replaceSubrange(r, with: "[\(trimmedURL)](\(trimmedURL))\(trailing)")
+        }
+        return result
     }
 }
 

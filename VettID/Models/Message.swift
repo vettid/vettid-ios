@@ -20,6 +20,9 @@ enum MessageContentType: String, Codable {
     case file
     case btcAddress = "btc_address"
     case btcPaymentReceipt = "btc_payment_receipt"
+    /// Phase 5.6 — recipient declined a payment request. Content is a
+    /// JSON-encoded `BtcPaymentDecline` (request_id + free-text reason).
+    case btcPaymentDecline = "btc_payment_decline"
     case paymentRequest = "payment_request"
 }
 

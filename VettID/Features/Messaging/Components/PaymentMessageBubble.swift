@@ -16,6 +16,8 @@ struct PaymentMessageBubble: View {
             paymentRequestBubble
         case .btcPaymentReceipt:
             paymentReceiptBubble
+        case .btcPaymentDecline:
+            paymentDeclineBubble
         default:
             EmptyView()
         }
@@ -129,6 +131,34 @@ struct PaymentMessageBubble: View {
         .padding(8)
     }
 
+    // MARK: - Payment Decline (Phase 5.6)
+
+    private var paymentDeclineBubble: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let decline = parsePaymentDecline() {
+                Label("Payment Declined", systemImage: "xmark.circle.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.red)
+
+                if !decline.reason.isEmpty {
+                    Text(decline.reason)
+                        .font(.subheadline)
+                        .foregroundColor(.primary)
+                }
+
+                Text("Request \(String(decline.requestId.prefix(8)))")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .monospaced()
+            } else {
+                Text("Payment declined")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(8)
+    }
+
     // MARK: - Parsing
 
     private func parseBtcAddress() -> BtcAddress? {
@@ -144,5 +174,10 @@ struct PaymentMessageBubble: View {
     private func parsePaymentReceipt() -> BtcPaymentReceipt? {
         guard let data = content.data(using: .utf8) else { return nil }
         return try? JSONDecoder().decode(BtcPaymentReceipt.self, from: data)
+    }
+
+    private func parsePaymentDecline() -> BtcPaymentDecline? {
+        guard let data = content.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(BtcPaymentDecline.self, from: data)
     }
 }
