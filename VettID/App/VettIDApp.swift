@@ -260,6 +260,18 @@ class AppState: ObservableObject {
     private let credentialStore = CredentialStore()
     private let profileStore = ProfileStore()
 
+    // MARK: - Vault clients
+    //
+    // These wrap NATS RPC calls to the user's vault. They're built lazily
+    // after `warmVault` succeeds, when both `natsConnectionManager` has an
+    // ownerSpaceId and the vault is reachable. AppState owns them so any
+    // feature reachable from the SwiftUI tree can pick them up via
+    // `appState.ownerSpaceClient` / `.profileClient` / etc.
+    private(set) var ownerSpaceClient: OwnerSpaceClient?
+    private(set) var profileClient: ProfileClient?
+    private(set) var personalDataClient: PersonalDataClient?
+    private(set) var secretsClient: SecretsClient?
+
     /// Flag indicating if running in UI test mode
     static var isUITesting: Bool {
         ProcessInfo.processInfo.arguments.contains("--uitesting")
@@ -447,16 +459,59 @@ class AppState: ObservableObject {
         #endif
     }
 
-    /// Sync profile data from vault after warming
+    /// Build (or re-use) the vault-RPC clients now that `natsConnectionManager`
+    /// has an ownerSpaceId, then hydrate `PersonalDataStore` from the vault.
+    /// Triggered after `warmVault` succeeds. (Phase 0.10 — vault SSOT.)
     private func syncProfileFromVault() {
-        // Load profile from local store first
+        // Keep the legacy local-profile path alive for now so anything still
+        // reading `currentProfile` doesn't go blank during the migration.
+        // The on-device ProfileStore is dropped in a later cleanup pass.
         loadProfile()
 
-        // In production: fetch system fields (firstName, lastName, email)
-        // from vault via NATS and update profile
-        #if DEBUG
-        print("[AppState] Profile sync triggered after vault warming")
-        #endif
+        guard let ownerSpaceId = natsConnectionManager.getOwnerSpaceId() else {
+            #if DEBUG
+            print("[AppState] syncProfileFromVault: no ownerSpaceId yet")
+            #endif
+            return
+        }
+
+        // (Re-)build the vault clients. Always rebuild when the space changed
+        // (e.g. after credential rotation issued a new ownerSpace).
+        if ownerSpaceClient?.ownerSpaceId != ownerSpaceId {
+            let osc = OwnerSpaceClient(
+                connectionManager: natsConnectionManager,
+                ownerSpaceId: ownerSpaceId
+            )
+            self.ownerSpaceClient = osc
+            self.profileClient = ProfileClient(ownerSpaceClient: osc)
+            self.personalDataClient = PersonalDataClient(ownerSpaceClient: osc)
+            self.secretsClient = SecretsClient(ownerSpaceClient: osc)
+        }
+
+        guard let osc = ownerSpaceClient,
+              let pc = profileClient,
+              let pdc = personalDataClient else { return }
+
+        // Configure the cache, then fan out the hydrate reads. `configure`
+        // also starts the `forApp.profile.public` subscription so multi-
+        // device edits land in the cache without manual refresh.
+        PersonalDataStore.shared.configure(
+            profileClient: pc,
+            personalDataClient: pdc,
+            ownerSpaceClient: osc
+        )
+        Task {
+            do {
+                try await PersonalDataStore.shared.hydrate()
+                #if DEBUG
+                print("[AppState] PersonalDataStore hydrated (\(PersonalDataStore.shared.items.count) items)")
+                #endif
+            } catch {
+                #if DEBUG
+                print("[AppState] hydrate failed: \(error)")
+                #endif
+            }
+        }
     }
 
     /// Mark vault as cold (e.g., after background timeout)

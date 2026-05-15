@@ -75,6 +75,22 @@ final class NitroAttestationVerifier {
     /// Expected AWS Nitro root CA common name
     private static let awsNitroRootCN = "aws.nitro-enclaves"
 
+    /// SECURITY (crypto-H4): SHA-384 of the AWS Nitro Enclaves Root CA's
+    /// SubjectPublicKeyInfo — the AWS-published canonical pin. A rogue CA that
+    /// merely issues a certificate with CN="aws.nitro-enclaves" would pass the
+    /// CN check above; pinning the SPKI binds trust to the actual AWS root key.
+    /// Source: https://aws-nitro-enclaves.amazonaws.com/AWS_NitroEnclaves_Root-G1.zip
+    private static let awsNitroRootCASPKISHA384Hex =
+        "4b9304ae9024d81ad3990fd7d143025dd72b15aba91961d0259d757cb6295c2b4c3f101eb8e5d266e6c9b32aa56eb439"
+
+    /// EC secp384r1 SubjectPublicKeyInfo ASN.1 header. `SecKeyCopyExternalRepresentation`
+    /// returns the raw X9.63 EC point, not the DER-encoded SPKI that AWS hashes,
+    /// so we prepend this fixed header to reconstruct the canonical encoding.
+    private static let ecP384SPKIHeader: [UInt8] = [
+        0x30, 0x76, 0x30, 0x10, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02,
+        0x01, 0x06, 0x05, 0x2b, 0x81, 0x04, 0x00, 0x22, 0x03, 0x62, 0x00
+    ]
+
     /// Result of PCR validation against cached values
     struct PCRValidationResult {
         /// Whether the PCRs are valid (match a known version)
@@ -499,6 +515,11 @@ final class NitroAttestationVerifier {
             )
         }
 
+        // SECURITY (crypto-H4): pin the root CA by SHA-384 of its SPKI, not
+        // just the CN — the CN check alone trusts any CA that issues a cert
+        // with the right common name.
+        try verifyRootCASPKIPin(rootCert)
+
         // Verify root is self-signed by checking if it can verify itself
         try verifySelfSigned(rootCert)
 
@@ -531,6 +552,37 @@ final class NitroAttestationVerifier {
             let errorDesc = error.map { CFErrorCopyDescription($0) as String? } ?? nil
             throw NitroAttestationError.certificateChainInvalid(
                 errorDesc ?? "Certificate chain verification failed"
+            )
+        }
+    }
+
+    /// Pin the root CA to the AWS-published SHA-384 SPKI hash (crypto-H4).
+    private func verifyRootCASPKIPin(_ rootCert: SecCertificate) throws {
+        guard let publicKey = SecCertificateCopyKey(rootCert),
+              let attributes = SecKeyCopyAttributes(publicKey) as? [CFString: Any],
+              let keyType = attributes[kSecAttrKeyType] as? String,
+              keyType == (kSecAttrKeyTypeECSECPrimeRandom as String),
+              let keySize = (attributes[kSecAttrKeySizeInBits] as? NSNumber)?.intValue,
+              keySize == 384 else {
+            throw NitroAttestationError.certificateChainInvalid(
+                "Root CA public key is not EC P-384 as expected for the AWS Nitro root"
+            )
+        }
+
+        var error: Unmanaged<CFError>?
+        guard let rawKey = SecKeyCopyExternalRepresentation(publicKey, &error) as Data? else {
+            throw NitroAttestationError.certificateChainInvalid(
+                "Could not extract root CA public key"
+            )
+        }
+
+        var spki = Data(Self.ecP384SPKIHeader)
+        spki.append(rawKey)
+        let spkiHex = SHA384.hash(data: spki).map { String(format: "%02x", $0) }.joined()
+
+        guard spkiHex == Self.awsNitroRootCASPKISHA384Hex else {
+            throw NitroAttestationError.certificateChainInvalid(
+                "Root CA SPKI hash mismatch: expected \(Self.awsNitroRootCASPKISHA384Hex), got \(spkiHex)"
             )
         }
     }

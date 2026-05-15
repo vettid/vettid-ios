@@ -82,6 +82,10 @@ final class PCRManifestManager {
         case signatureVerificationFailed
         case noValidPCRSets
         case cacheCorrupted
+        /// Manifest version is older than the highest version ever seen (attestation-F4).
+        case versionRollback(found: Int, expected: Int)
+        /// The manifest's designated-current PCR set has already expired (attestation-F4).
+        case currentSetExpired(setId: String)
 
         var errorDescription: String? {
             switch self {
@@ -95,6 +99,10 @@ final class PCRManifestManager {
                 return "No valid PCR sets available"
             case .cacheCorrupted:
                 return "Cached PCR manifest is corrupted"
+            case .versionRollback(let found, let expected):
+                return "PCR manifest version \(found) is older than the highest version seen (\(expected)); refusing to roll back"
+            case .currentSetExpired(let setId):
+                return "Current PCR set \(setId) has expired; refusing to adopt the manifest"
             }
         }
     }
@@ -117,6 +125,9 @@ final class PCRManifestManager {
     /// Bundled PCRs file name
     private static let bundledPCRsFileName = "expected_pcrs"
 
+    /// UserDefaults key for the persisted monotonic manifest-version high-water mark.
+    private static let maxVersionDefaultsKey = "pcr_max_manifest_version"
+
     // MARK: - Properties
 
     /// Shared instance
@@ -128,6 +139,9 @@ final class PCRManifestManager {
 
     /// URL session for network requests
     private let session: URLSession
+
+    /// SPKI pinning delegate — pins pcr-manifest.vettid.dev to the Amazon CA chain.
+    private let pinningDelegate: CertificatePinningDelegate
 
     /// File manager for cache persistence
     private let fileManager = FileManager.default
@@ -144,7 +158,12 @@ final class PCRManifestManager {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 10
         config.timeoutIntervalForResource = 15
-        self.session = URLSession(configuration: config)
+        self.pinningDelegate = CertificatePinningDelegate()
+        self.session = URLSession(
+            configuration: config,
+            delegate: pinningDelegate,
+            delegateQueue: nil
+        )
 
         // Load cached manifest on init
         loadCachedManifest()
@@ -273,7 +292,39 @@ final class PCRManifestManager {
 
         // Parse manifest
         let manifest = try parseAndVerifyManifest(data)
+        try enforceManifestSecurityChecks(manifest)
         return manifest
+    }
+
+    /// Persisted monotonic high-water mark of the highest manifest version
+    /// ever adopted. Survives launches; resets only on app uninstall.
+    private var storedMaxManifestVersion: Int {
+        get { UserDefaults.standard.integer(forKey: Self.maxVersionDefaultsKey) }
+        set { UserDefaults.standard.set(newValue, forKey: Self.maxVersionDefaultsKey) }
+    }
+
+    /// SECURITY (attestation-F4): enforce manifest-level monotonic version +
+    /// per-set `valid_until`. The signature check alone is insufficient — a
+    /// previously-valid manifest stays cryptographically valid forever, so an
+    /// attacker who can substitute the signed-but-stale manifest the client
+    /// fetches from the CDN could otherwise roll us back to a retired PCR
+    /// baseline. Not applied to the bundled-defaults fallback.
+    private func enforceManifestSecurityChecks(_ manifest: PCRManifest) throws {
+        let seenVersion = storedMaxManifestVersion
+        if manifest.version < seenVersion {
+            throw PCRManifestError.versionRollback(found: manifest.version, expected: seenVersion)
+        }
+
+        if let currentSet = manifest.pcrSets.first(where: { $0.isCurrent }),
+           let until = currentSet.validUntil,
+           Date() > until {
+            throw PCRManifestError.currentSetExpired(setId: currentSet.id)
+        }
+
+        // Pin the new high-water mark only after the rollback check passes.
+        if manifest.version > seenVersion {
+            storedMaxManifestVersion = manifest.version
+        }
     }
 
     /// Parse manifest JSON and verify signature
@@ -355,6 +406,11 @@ final class PCRManifestManager {
             // Verify signature before using
             let manifestData = try JSONEncoder().encode(cached.manifest)
             try verifySignature(cached.manifest.signature, for: manifestData)
+
+            // SECURITY (attestation-F4): a disk-cached manifest can be stale —
+            // reject it if it's below the version high-water mark or its
+            // current set has expired, rather than trusting it indefinitely.
+            try enforceManifestSecurityChecks(cached.manifest)
 
             cachedManifest = cached.manifest
             cacheTimestamp = cached.timestamp

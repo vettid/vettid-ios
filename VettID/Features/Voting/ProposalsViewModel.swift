@@ -231,14 +231,18 @@ final class ProposalsViewModel: ObservableObject {
             // 2. Generate a unique request ID
             let requestId = UUID().uuidString
 
-            // 3. Create the vote request for the vault
+            // 3. Create the vote request for the vault. Phase D: include
+            //    the encrypted credential blob so the vault decrypts
+            //    in-flight rather than reading vaultState.credential.
+            let encryptedCredential = try? ProteanCredentialStore().encryptedBlobBase64()
             let voteRequest = VaultVoteRequest(
                 id: requestId,
                 proposalId: proposal.id,
                 choice: choice.rawValue,
                 passwordHash: passwordHashBase64,
                 salt: passwordHashResult.salt.base64EncodedString(),
-                timestamp: ISO8601DateFormatter().string(from: Date())
+                timestamp: ISO8601DateFormatter().string(from: Date()),
+                encryptedCredential: encryptedCredential ?? nil
             )
 
             // 4. Subscribe to the response topic
@@ -412,6 +416,11 @@ struct VaultVoteRequest: Encodable {
     let passwordHash: String
     let salt: String
     let timestamp: String
+    /// Phase D: encrypted credential blob; vault decrypts in-flight rather
+    /// than reading `vaultState.credential`. Omitted only when the device
+    /// has no credential stored (pre-enrollment), which can't reach vote.cast
+    /// anyway.
+    let encryptedCredential: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -420,6 +429,7 @@ struct VaultVoteRequest: Encodable {
         case passwordHash = "password_hash"
         case salt
         case timestamp
+        case encryptedCredential = "encrypted_credential"
     }
 }
 

@@ -54,8 +54,7 @@ final class VaultEventClient {
         let message = VaultEventMessage(
             id: id,
             type: event.type,
-            payload: event.payload,
-            timestamp: ISO8601DateFormatter().string(from: Date())
+            payload: event.payload
         )
 
         // Encrypt if session is active and encryption is enabled
@@ -79,8 +78,7 @@ final class VaultEventClient {
         let message = VaultEventMessage(
             id: id,
             type: type,
-            payload: payload,
-            timestamp: ISO8601DateFormatter().string(from: Date())
+            payload: payload
         )
 
         // Encrypt if session is active and encryption is enabled
@@ -203,13 +201,49 @@ enum VaultEventType {
 
 // MARK: - Message Types
 
+/// Message sent TO the vault.
+///
+/// `timestamp_ms` and `nonce` exist to defeat the parent's replay-detection
+/// cache, which hashes (subject + raw bytes) and drops repeats within a 10
+/// minute window. Routine read polls (connection.list, wallet.list,
+/// feed.sync, profile.get) send byte-stable payloads and were otherwise
+/// silently dropped as "replay attacks" after the first call. The fresh
+/// nonce keeps the outer JSON byte-unique per call; `timestamp_ms` (int64)
+/// lets the parent's freshness gate fire — the string `timestamp` field
+/// failed open because the parent struct types it as int64.
 struct VaultEventMessage: Encodable {
     let id: String
     let type: String
     let payload: [String: AnyCodableValue]
     let timestamp: String
+    let timestampMs: Int64
+    let nonce: String
 
-    // No CodingKeys needed - field names match JSON directly
+    enum CodingKeys: String, CodingKey {
+        case id
+        case type
+        case payload
+        case timestamp
+        case timestampMs = "timestamp_ms"
+        case nonce
+    }
+
+    init(id: String, type: String, payload: [String: AnyCodableValue]) {
+        self.id = id
+        self.type = type
+        self.payload = payload
+        let now = Date()
+        self.timestamp = ISO8601DateFormatter().string(from: now)
+        self.timestampMs = Int64(now.timeIntervalSince1970 * 1000)
+        self.nonce = VaultEventMessage.freshNonce()
+    }
+
+    /// Fresh 8-byte random nonce as 16-char lowercase hex. Uses
+    /// `SystemRandomNumberGenerator`, which is cryptographically secure on
+    /// Apple platforms. Matches Android's `addReplayHeaders()` format.
+    static func freshNonce() -> String {
+        String(format: "%016llx", UInt64.random(in: UInt64.min...UInt64.max))
+    }
 }
 
 struct VaultEventResponse: Decodable {

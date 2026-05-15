@@ -596,6 +596,13 @@ final class NatsConnectionManager: ObservableObject {
             throw NatsConnectionError.connectionFailed("No owner space ID for vault warming")
         }
 
+        // SECURITY (auth-H2): throttle online password guessing. Suspends for
+        // the backoff window; refuses outright once the hard cap is hit.
+        guard await UnlockRateLimiter.shared.beforeAttempt() else {
+            vaultTemperature = .lockedOut(retryAfter: Date().addingTimeInterval(300))
+            throw NatsConnectionError.rateLimited
+        }
+
         vaultTemperature = .warming
 
         let requestId = UUID().uuidString
@@ -655,6 +662,7 @@ final class NatsConnectionManager: ObservableObject {
 
         // Update vault temperature based on response
         if response.success {
+            await UnlockRateLimiter.shared.recordSuccess()
             vaultTemperature = .warm(ttlSeconds: response.sessionTtl)
             #if DEBUG
             print("[NATS] Vault warmed successfully, TTL: \(response.sessionTtl ?? 0)s")
@@ -693,6 +701,7 @@ final class NatsConnectionManager: ObservableObject {
                 }
             }
         } else {
+            await UnlockRateLimiter.shared.recordFailure()
             // Check if locked out
             if let remaining = response.remainingAttempts, remaining <= 0 {
                 // Supervisor locks out for a period after too many failed attempts
@@ -1348,6 +1357,8 @@ enum NatsConnectionError: LocalizedError {
     case connectionFailed(String)
     case publishFailed(String)
     case subscribeFailed(String)
+    /// Too many consecutive failed unlock attempts this app session (auth-H2).
+    case rateLimited
 
     var errorDescription: String? {
         switch self {
@@ -1361,6 +1372,8 @@ enum NatsConnectionError: LocalizedError {
             return "Publish failed: \(reason)"
         case .subscribeFailed(let reason):
             return "Subscribe failed: \(reason)"
+        case .rateLimited:
+            return "Too many unlock attempts. Please relaunch the app to try again."
         }
     }
 }
@@ -1618,9 +1631,25 @@ class NatsClientWrapper {
 
         credentialsFileURL = credsFile
 
+        // SECURITY (crypto-H1): TLS is required for all NATS connections. The
+        // server endpoint advertises a `tls://` URL but `.requireTls()` is set
+        // explicitly so a misconfigured `nats://` URL cannot silently
+        // downgrade to plaintext. nats.swift's NIOSSL defaults enforce TLS
+        // 1.2+; we cannot tighten further without forking the library.
+        //
+        // PARITY GAP vs Android's crypto-H1: Android additionally pins the
+        // NATS TLS chain to the same SPKI set used by the HTTPS clients
+        // (Amazon RSA 2048 M04 + Amazon Root CA 1). nats.swift's
+        // `NatsClientOptions` exposes no TLS-verification hook — only
+        // `rootCertificates(URL)`, `clientCertificate(...)`, `requireTls()`,
+        // `withTlsFirst()` — so pin verification would require forking
+        // nats.swift to plumb a custom `NIOSSL.TLSConfiguration` with a
+        // `verifySignature` callback into `ConnectionHandler`. Tracked
+        // separately; for now we rely on system-trust validation + ATS.
         let options = NatsClientOptions()
             .url(url)
             .credentialsFile(credsFile)
+            .requireTls()
 
         client = options.build()
         try await client?.connect()

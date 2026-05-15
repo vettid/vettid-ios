@@ -11,19 +11,27 @@ import Foundation
 final class WalletClient {
 
     private let ownerSpaceClient: OwnerSpaceClient
+    private let credentialStore: ProteanCredentialStore
 
-    init(ownerSpaceClient: OwnerSpaceClient) {
+    init(ownerSpaceClient: OwnerSpaceClient,
+         credentialStore: ProteanCredentialStore = ProteanCredentialStore()) {
         self.ownerSpaceClient = ownerSpaceClient
+        self.credentialStore = credentialStore
     }
 
     // MARK: - Wallet Management
 
     /// Create a new HD wallet. Key generation happens in the enclave.
     func createWallet(label: String, network: BitcoinNetwork) async throws -> WalletInfo {
-        let payload: [String: AnyCodableValue] = [
+        var payload: [String: AnyCodableValue] = [
             "label": AnyCodableValue(label),
             "network": AnyCodableValue(network.rawValue)
         ]
+        // Phase D: include the encrypted credential blob so the vault
+        // decrypts in-flight rather than reading vaultState.credential.
+        if let blob = try? credentialStore.encryptedBlobBase64() {
+            payload["encrypted_credential"] = AnyCodableValue(blob)
+        }
 
         let response = try await sendAndAwait("wallet.create", payload: payload)
 

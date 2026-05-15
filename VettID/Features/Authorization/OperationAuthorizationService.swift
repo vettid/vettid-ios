@@ -214,6 +214,9 @@ final class OperationAuthorizationService: ObservableObject {
         let requestId = UUID().uuidString
         let timestamp = ISO8601DateFormatter().string(from: Date())
 
+        // Phase D: include the encrypted credential blob so the vault
+        // decrypts in-flight rather than reading vaultState.credential.
+        let encryptedCredential = try? ProteanCredentialStore().encryptedBlobBase64()
         let request = AuthorizationRequest(
             id: requestId,
             challengeId: challenge.challengeId,
@@ -223,7 +226,8 @@ final class OperationAuthorizationService: ObservableObject {
             ephemeralPublicKey: encryptedPayload.ephemeralPublicKey,
             nonce: encryptedPayload.nonce,
             salt: salt,
-            timestamp: timestamp
+            timestamp: timestamp,
+            encryptedCredential: encryptedCredential ?? nil
         )
 
         // Send authorization
@@ -473,6 +477,9 @@ struct AuthorizationRequest: Encodable {
     let nonce: String  // Base64
     let salt: String  // Base64
     let timestamp: String
+    /// Phase D: encrypted credential blob; vault decrypts in-flight rather
+    /// than reading `vaultState.credential`.
+    let encryptedCredential: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -484,6 +491,7 @@ struct AuthorizationRequest: Encodable {
         case nonce
         case salt
         case timestamp
+        case encryptedCredential = "encrypted_credential"
     }
 }
 

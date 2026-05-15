@@ -171,8 +171,11 @@ struct PersonalDataView: View {
 
     private func deleteItems(at indexSet: IndexSet, in category: DataCategory) {
         let data = viewModel.items(for: category)
-        for index in indexSet {
-            viewModel.deleteItem(data[index].id)
+        let ids = indexSet.map { data[$0].id }
+        Task {
+            for id in ids {
+                await viewModel.deleteItem(id)
+            }
         }
     }
 }
@@ -369,14 +372,16 @@ struct AddPersonalDataView: View {
     }
 
     private func saveData() {
-        viewModel.addItem(
-            name: name,
-            value: value,
-            category: category,
-            fieldType: fieldType,
-            isInPublicProfile: isInPublicProfile
-        )
-        dismiss()
+        Task {
+            await viewModel.addItem(
+                name: name,
+                value: value,
+                category: category,
+                fieldType: fieldType,
+                isInPublicProfile: isInPublicProfile
+            )
+            await MainActor.run { dismiss() }
+        }
     }
 }
 

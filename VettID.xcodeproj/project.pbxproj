@@ -324,6 +324,11 @@
 		FEADABD29AE0323BCAFA9FDA /* ConfirmProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AC8ADAF55E643299E94EE16 /* ConfirmProfileView.swift */; };
 		FF34ED9B850293575D36749D /* ContractReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DD1AEECC2A7E097C1F7ADA5 /* ContractReviewView.swift */; };
 		FFEC75DD850E79B5ED665914 /* VaultPreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8285A14EAFF8FCF54C60C6E2 /* VaultPreferencesView.swift */; };
+		CDECFCF1A353CB2263187C84 /* UnlockRateLimiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBA11E3796008A1795D6DAD4 /* UnlockRateLimiter.swift */; };
+		FFD8FF11AF5D4845B612D689 /* SecurePassword.swift in Sources */ = {isa = PBXBuildFile; fileRef = 860FD375BD04E1AAE645B5C0 /* SecurePassword.swift */; };
+		B0875706448885014E77B71B /* PersonalDataClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B150D56712865302FACF415 /* PersonalDataClient.swift */; };
+		76F93A99D6296DA331EC8652 /* SecretsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7AE3B279A81103E7400BA22 /* SecretsClient.swift */; };
+		0B5701895223925F4DAB680C /* PersonalDataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02F11E424E935CC2EB9183DF /* PersonalDataStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -675,6 +680,11 @@
 		FC7BF0CF4752D4662BF250D7 /* ServiceNotificationSettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ServiceNotificationSettingsView.swift; sourceTree = "<group>"; };
 		FD000368D20F4D86A91D50FD /* DataRequestSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataRequestSheet.swift; sourceTree = "<group>"; };
 		FE16327EB86641DCA62EDC24 /* DeviceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceModels.swift; sourceTree = "<group>"; };
+		BBA11E3796008A1795D6DAD4 /* UnlockRateLimiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnlockRateLimiter.swift; sourceTree = "<group>"; };
+		860FD375BD04E1AAE645B5C0 /* SecurePassword.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurePassword.swift; sourceTree = "<group>"; };
+		1B150D56712865302FACF415 /* PersonalDataClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalDataClient.swift; sourceTree = "<group>"; };
+		E7AE3B279A81103E7400BA22 /* SecretsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecretsClient.swift; sourceTree = "<group>"; };
+		02F11E424E935CC2EB9183DF /* PersonalDataStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalDataStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -936,6 +946,7 @@
 		40000009 /* Storage */ = {
 			isa = PBXGroup;
 			children = (
+				02F11E424E935CC2EB9183DF /* PersonalDataStore.swift */,
 				10000004 /* CredentialStore.swift */,
 				10000052 /* ProfileStore.swift */,
 				10000053 /* SecretsStore.swift */,
@@ -1020,6 +1031,8 @@
 		4000000F /* NATS */ = {
 			isa = PBXGroup;
 			children = (
+				E7AE3B279A81103E7400BA22 /* SecretsClient.swift */,
+				1B150D56712865302FACF415 /* PersonalDataClient.swift */,
 				10000019 /* NatsCredentials.swift */,
 				1000001A /* NatsCredentialStore.swift */,
 				1000001B /* NatsConnectionManager.swift */,
@@ -1138,6 +1151,8 @@
 		40000017 /* Security */ = {
 			isa = PBXGroup;
 			children = (
+				860FD375BD04E1AAE645B5C0 /* SecurePassword.swift */,
+				BBA11E3796008A1795D6DAD4 /* UnlockRateLimiter.swift */,
 				1000004C /* RuntimeProtection.swift */,
 				1000004D /* SecureMemory.swift */,
 				1000004E /* CertificatePinning.swift */,
@@ -1857,6 +1872,8 @@
 				0000004C /* RuntimeProtection.swift in Sources */,
 				0000004D /* SecureMemory.swift in Sources */,
 				0000004E /* CertificatePinning.swift in Sources */,
+				FFD8FF11AF5D4845B612D689 /* SecurePassword.swift in Sources */,
+				CDECFCF1A353CB2263187C84 /* UnlockRateLimiter.swift in Sources */,
 				0000004F /* RequestSigning.swift in Sources */,
 				00000050 /* SecurePasteboard.swift in Sources */,
 				00000051 /* ScreenProtection.swift in Sources */,
@@ -1951,6 +1968,7 @@
 				C7EFB087ADE289EA0174CBD4 /* TrustedResourcesView.swift in Sources */,
 				D545C686724841B09C9B78D1 /* ServiceMessageCrypto.swift in Sources */,
 				542B48D537BF4318967F48D8 /* ContractStore.swift in Sources */,
+				0B5701895223925F4DAB680C /* PersonalDataStore.swift in Sources */,
 				B69ECFDF39C64BFF85F29F07 /* ServiceNATSManager.swift in Sources */,
 				5F617885446040A4A2238FE4 /* AuthRequestSheet.swift in Sources */,
 				B73004F8F4574D7C80BFCE66 /* AuthzRequestSheet.swift in Sources */,
@@ -1979,6 +1997,8 @@
 				B89D4CD7F7B830FAD74D5670 /* SharedLocationsView.swift in Sources */,
 				AC38BE1D10B3EA15EB2D9E03 /* LocationSettingsView.swift in Sources */,
 				C6F8E05EB3E080D34708680B /* ProfileClient.swift in Sources */,
+				76F93A99D6296DA331EC8652 /* SecretsClient.swift in Sources */,
+				B0875706448885014E77B71B /* PersonalDataClient.swift in Sources */,
 				A1B2C3D4E5F60718091A2B3C /* JetStreamHelper.swift in Sources */,
 				6DC55D92AC29E6330F9B7EEE /* ConnectionsClient.swift in Sources */,
 				412179B17AAB489644156E0A /* MessagingClient.swift in Sources */,

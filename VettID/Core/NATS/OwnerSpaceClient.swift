@@ -10,7 +10,10 @@ final class OwnerSpaceClient {
     // MARK: - Properties
 
     private let connectionManager: NatsConnectionManager
-    private let ownerSpaceId: String
+    /// The owner-space identifier (UUID) this client routes through. Exposed
+    /// so callers like `AppState` can decide whether to rebuild clients
+    /// after credential rotation.
+    let ownerSpaceId: String
 
     // Topic prefixes
     private var forVaultPrefix: String { "\(ownerSpaceId).forVault" }
@@ -235,8 +238,7 @@ final class OwnerSpaceClient {
         let message = VaultEventMessage(
             id: requestId,
             type: messageType,
-            payload: payload,
-            timestamp: ISO8601DateFormatter().string(from: Date())
+            payload: payload
         )
 
         let requestPayload = try JSONEncoder().encode(message)
@@ -417,6 +419,59 @@ final class OwnerSpaceClient {
 
     func emitFeedNotification(_ notification: FeedNotification) {
         feedNotificationContinuation?.yield(notification)
+    }
+
+    // MARK: - Own-profile snapshot ticks (forApp.profile.public.>)
+
+    /// Tick stream for "the vault just published a fresh snapshot of *my*
+    /// profile" — fires on every `forApp.profile.public.*` message so the
+    /// data-cache layer can re-hydrate after a multi-device edit or any
+    /// out-of-band catalog change the local ViewModels didn't drive.
+    /// Mirrors Android `OwnerSpaceClient.ownProfileSnapshotTick`. Payload
+    /// is deliberately not surfaced — re-hydrate is the only sensible
+    /// reaction, and consumers should always go back to `profile.get-
+    /// published` for the authoritative state.
+    private var ownProfileSnapshotContinuation: AsyncStream<Void>.Continuation?
+    private var _ownProfileSnapshotStream: AsyncStream<Void>?
+    private var ownProfileSnapshotTask: Task<Void, Never>?
+
+    var ownProfileSnapshotTicks: AsyncStream<Void> {
+        if let stream = _ownProfileSnapshotStream { return stream }
+        let stream = AsyncStream<Void> { continuation in
+            self.ownProfileSnapshotContinuation = continuation
+            continuation.onTermination = { [weak self] _ in
+                self?.ownProfileSnapshotContinuation = nil
+                self?._ownProfileSnapshotStream = nil
+            }
+        }
+        _ownProfileSnapshotStream = stream
+        return stream
+    }
+
+    /// Start the `forApp.profile.public.>` subscription that drives
+    /// `ownProfileSnapshotTicks`. Idempotent; the first call wires the
+    /// subscription, subsequent calls are no-ops. Call this once after
+    /// PIN unlock (after `OwnerSpaceClient` has its space configured).
+    func startOwnProfileSnapshotSubscription() {
+        guard ownProfileSnapshotTask == nil else { return }
+        let prefix = forAppPrefix
+        ownProfileSnapshotTask = Task { [weak self] in
+            guard let self = self else { return }
+            do {
+                let stream = try await self.connectionManager.subscribe(
+                    to: "\(prefix).profile.public.>",
+                    type: ProfilePublicSnapshotMessage.self
+                )
+                for await _ in stream {
+                    if Task.isCancelled { return }
+                    self.ownProfileSnapshotContinuation?.yield(())
+                }
+            } catch {
+                #if DEBUG
+                print("[OwnerSpaceClient] profile.public subscription failed: \(error)")
+                #endif
+            }
+        }
     }
 
     // MARK: - Vault Locked Events
@@ -750,6 +805,12 @@ struct VaultLockedEvent {
     let reason: String
     let messageType: String
 }
+
+/// Catch-all for `forApp.profile.public.*` snapshot messages. We don't
+/// consume the payload — the only sensible reaction is to re-fetch
+/// `profile.get-published` for the authoritative state — so the message
+/// type stays empty; receiving any decodable JSON ticks the stream.
+struct ProfilePublicSnapshotMessage: Decodable {}
 
 /// Wallet notification from vault (balance update, incoming payment, etc.)
 struct WalletNotification: Codable {
