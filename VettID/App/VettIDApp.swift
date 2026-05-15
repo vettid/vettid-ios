@@ -501,6 +501,7 @@ class AppState: ObservableObject {
             ownerSpaceClient: osc
         )
         Task {
+            // Hydrate the in-memory data cache.
             do {
                 try await PersonalDataStore.shared.hydrate()
                 #if DEBUG
@@ -511,6 +512,8 @@ class AppState: ObservableObject {
                 print("[AppState] hydrate failed: \(error)")
                 #endif
             }
+            // Start the presence aggregator (Phase 1.6). Idempotent.
+            await PresenceAggregator.shared.attach(to: osc)
         }
     }
 

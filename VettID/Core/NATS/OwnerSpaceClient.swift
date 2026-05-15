@@ -474,6 +474,65 @@ final class OwnerSpaceClient {
         }
     }
 
+    // MARK: - Presence heartbeats (forApp.presence.heartbeat.>)
+
+    /// Peer presence heartbeats re-emitted by our vault. Each beat
+    /// carries `connection_id`, `status`, and an `at` unix-seconds
+    /// timestamp. Consumers (`PresenceAggregator`) own the retention
+    /// logic — this stream is fire-and-forget. Mirrors Android
+    /// `OwnerSpaceClient.presenceHeartbeats`.
+    private var presenceHeartbeatContinuation: AsyncStream<PresenceHeartbeat>.Continuation?
+    private var _presenceHeartbeatStream: AsyncStream<PresenceHeartbeat>?
+    private var presenceTask: Task<Void, Never>?
+
+    var presenceHeartbeats: AsyncStream<PresenceHeartbeat> {
+        if let stream = _presenceHeartbeatStream { return stream }
+        let stream = AsyncStream<PresenceHeartbeat> { continuation in
+            self.presenceHeartbeatContinuation = continuation
+            continuation.onTermination = { [weak self] _ in
+                self?.presenceHeartbeatContinuation = nil
+                self?._presenceHeartbeatStream = nil
+            }
+        }
+        _presenceHeartbeatStream = stream
+        return stream
+    }
+
+    /// Start the `forApp.presence.heartbeat.>` subscription that drives
+    /// `presenceHeartbeats`. Idempotent. Call from `PresenceAggregator.
+    /// attach` after the vault is warm.
+    func startPresenceHeartbeatSubscription() {
+        guard presenceTask == nil else { return }
+        let prefix = forAppPrefix
+        presenceTask = Task { [weak self] in
+            guard let self = self else { return }
+            do {
+                let stream = try await self.connectionManager.subscribe(
+                    to: "\(prefix).presence.heartbeat.>",
+                    type: PresenceHeartbeatMessage.self
+                )
+                for await msg in stream {
+                    if Task.isCancelled { return }
+                    // Wire layout: { payload: { connection_id, status, at } }
+                    // but some vaults flatten the payload at the top level.
+                    let cid = msg.payload?.connectionId ?? msg.connectionId ?? ""
+                    if cid.isEmpty { continue }
+                    let status = msg.payload?.status ?? msg.status ?? "online"
+                    let at: TimeInterval = msg.payload?.at
+                        ?? msg.at
+                        ?? Date().timeIntervalSince1970
+                    self.presenceHeartbeatContinuation?.yield(
+                        PresenceHeartbeat(connectionId: cid, status: status, at: at)
+                    )
+                }
+            } catch {
+                #if DEBUG
+                print("[OwnerSpaceClient] presence.heartbeat subscription failed: \(error)")
+                #endif
+            }
+        }
+    }
+
     // MARK: - Vault Locked Events
 
     /// Publisher for vault locked events (DEK unavailable after enclave refresh)
@@ -811,6 +870,35 @@ struct VaultLockedEvent {
 /// `profile.get-published` for the authoritative state — so the message
 /// type stays empty; receiving any decodable JSON ticks the stream.
 struct ProfilePublicSnapshotMessage: Decodable {}
+
+/// On-wire payload of `forApp.presence.heartbeat.*`. Some vaults nest the
+/// fields under `payload`; others put them at the top level. We accept
+/// both via two sets of CodingKeys.
+struct PresenceHeartbeatMessage: Decodable {
+    let connectionId: String?
+    let status: String?
+    let at: TimeInterval?
+    let payload: Inner?
+
+    struct Inner: Decodable {
+        let connectionId: String?
+        let status: String?
+        let at: TimeInterval?
+
+        enum CodingKeys: String, CodingKey {
+            case connectionId = "connection_id"
+            case status
+            case at
+        }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case connectionId = "connection_id"
+        case status
+        case at
+        case payload
+    }
+}
 
 /// Wallet notification from vault (balance update, incoming payment, etc.)
 struct WalletNotification: Codable {

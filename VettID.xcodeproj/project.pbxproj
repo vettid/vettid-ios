@@ -329,6 +329,8 @@
 		B0875706448885014E77B71B /* PersonalDataClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B150D56712865302FACF415 /* PersonalDataClient.swift */; };
 		76F93A99D6296DA331EC8652 /* SecretsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7AE3B279A81103E7400BA22 /* SecretsClient.swift */; };
 		0B5701895223925F4DAB680C /* PersonalDataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02F11E424E935CC2EB9183DF /* PersonalDataStore.swift */; };
+		47883F7989776E1BDB1EBF5C /* PresenceAggregator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09D85BFCC008F5BB3FD536B7 /* PresenceAggregator.swift */; };
+		83A0158DF91FD694FFCC47CE /* ArchivedConnectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9687BD04267CDF69D7AE189D /* ArchivedConnectionsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -685,6 +687,8 @@
 		1B150D56712865302FACF415 /* PersonalDataClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalDataClient.swift; sourceTree = "<group>"; };
 		E7AE3B279A81103E7400BA22 /* SecretsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecretsClient.swift; sourceTree = "<group>"; };
 		02F11E424E935CC2EB9183DF /* PersonalDataStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalDataStore.swift; sourceTree = "<group>"; };
+		09D85BFCC008F5BB3FD536B7 /* PresenceAggregator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresenceAggregator.swift; sourceTree = "<group>"; };
+		9687BD04267CDF69D7AE189D /* ArchivedConnectionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchivedConnectionsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1031,6 +1035,7 @@
 		4000000F /* NATS */ = {
 			isa = PBXGroup;
 			children = (
+				09D85BFCC008F5BB3FD536B7 /* PresenceAggregator.swift */,
 				E7AE3B279A81103E7400BA22 /* SecretsClient.swift */,
 				1B150D56712865302FACF415 /* PersonalDataClient.swift */,
 				10000019 /* NatsCredentials.swift */,
@@ -1290,6 +1295,7 @@
 		88C7A2A2A500BEF6A164573B /* Feed */ = {
 			isa = PBXGroup;
 			children = (
+				9687BD04267CDF69D7AE189D /* ArchivedConnectionsView.swift */,
 				35BB9882D72447C5A58818D4 /* AuditLogView.swift */,
 				F933A47471FB417FBAE38C5B /* AuditLogViewModel.swift */,
 				93A86BE60A75794075747370 /* FeedEvent.swift */,
@@ -1886,6 +1892,7 @@
 				824239CA1C86ECBB99591287 /* FeedEvent.swift in Sources */,
 				D302C18A23D884DD51D9F532 /* FeedViewModel.swift in Sources */,
 				E0856AA3F832860B0D0EC949 /* FeedView.swift in Sources */,
+				83A0158DF91FD694FFCC47CE /* ArchivedConnectionsView.swift in Sources */,
 				A62391E4CF05D59BEBA013D4 /* Secret.swift in Sources */,
 				6AAF4B7C9510C0DBDC732FD9 /* SecretsViewModel.swift in Sources */,
 				8C9CBF9173DD16DF29F45476 /* SecretsView.swift in Sources */,
@@ -1997,6 +2004,7 @@
 				B89D4CD7F7B830FAD74D5670 /* SharedLocationsView.swift in Sources */,
 				AC38BE1D10B3EA15EB2D9E03 /* LocationSettingsView.swift in Sources */,
 				C6F8E05EB3E080D34708680B /* ProfileClient.swift in Sources */,
+				47883F7989776E1BDB1EBF5C /* PresenceAggregator.swift in Sources */,
 				76F93A99D6296DA331EC8652 /* SecretsClient.swift in Sources */,
 				B0875706448885014E77B71B /* PersonalDataClient.swift in Sources */,
 				A1B2C3D4E5F60718091A2B3C /* JetStreamHelper.swift in Sources */,

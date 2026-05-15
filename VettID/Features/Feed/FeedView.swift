@@ -39,18 +39,20 @@ struct FeedView: View {
                 .background(Color(.systemBackground))
             }
 
-            // Filter chips
-            HStack {
-                if !isSearching {
+            // Search affordance (no filter chips in the connection-centric model).
+            if !isSearching {
+                HStack {
+                    Spacer()
                     Button {
                         isSearching = true
                     } label: {
                         Image(systemName: "magnifyingglass")
                             .foregroundStyle(.secondary)
-                            .padding(.leading, 16)
+                            .padding(.trailing, 16)
+                            .padding(.vertical, 8)
                     }
                 }
-                filterBar
+                .background(Color(.systemBackground))
             }
 
             // Content
@@ -61,8 +63,8 @@ struct FeedView: View {
             case .empty:
                 emptyView
 
-            case .loaded(let events):
-                eventsList(events)
+            case .loaded:
+                displayItemsList(viewModel.displayItems)
 
             case .error(let message):
                 errorView(message)
@@ -88,26 +90,6 @@ struct FeedView: View {
         .onDisappear {
             viewModel.stopPeriodicRefresh()
         }
-    }
-
-    // MARK: - Filter Bar
-
-    private var filterBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(FeedViewModel.FeedFilter.allCases, id: \.rawValue) { filter in
-                    FilterChip(
-                        title: filter.rawValue,
-                        isSelected: viewModel.filter == filter
-                    ) {
-                        viewModel.setFilter(filter)
-                    }
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-        }
-        .background(Color(.systemBackground))
     }
 
     // MARK: - Loading View
@@ -148,69 +130,68 @@ struct FeedView: View {
     }
 
     private var emptyMessage: String {
-        switch viewModel.filter {
-        case .all:
-            return "Your feed is empty. New messages, connection requests, and activity will appear here."
-        case .messages:
-            return "No messages yet. Start a conversation with one of your connections."
-        case .connections:
-            return "No connection requests. Share your invitation to connect with others."
-        case .auth:
-            return "No authentication requests. Services you authorize will appear here."
-        case .activity:
-            return "No vault activity recorded yet."
-        case .agents:
-            return "No agent activity. Connected agents will appear here."
-        case .devices:
-            return "No device activity. Paired devices will appear here."
+        if !viewModel.searchQuery.isEmpty {
+            return "No results for \"\(viewModel.searchQuery)\"."
         }
+        return "Your connections will appear here. Share your invitation to connect with someone."
     }
 
-    // MARK: - Events List
+    // MARK: - Display Items List
 
-    private func eventsList(_ events: [FeedEvent]) -> some View {
+    /// Render the connection-centric list. Connection cards are the
+    /// primary surface; standalone events fall through to `EventCardView`
+    /// for things like auth requests and vault lifecycle that aren't
+    /// attached to a connection. An archived-connections footer row
+    /// surfaces terminal-status connections.
+    private func displayItemsList(_ items: [FeedDisplayItem]) -> some View {
         List {
-            ForEach(events) { event in
-                EventCardView(
-                    event: event,
-                    isProcessing: viewModel.isProcessingAction,
-                    onAcceptConnection: { requestId in
-                        Task { await viewModel.acceptConnection(requestId: requestId) }
-                    },
-                    onDeclineConnection: { requestId in
-                        Task { await viewModel.declineConnection(requestId: requestId) }
-                    },
-                    onApproveAuth: { requestId in
-                        Task { await viewModel.approveAuth(requestId: requestId) }
-                    },
-                    onDenyAuth: { requestId in
-                        Task { await viewModel.denyAuth(requestId: requestId) }
-                    }
-                )
-                .onTapGesture {
-                    handleEventTap(event)
-                }
-                .swipeActions(edge: .leading) {
-                    Button {
-                        viewModel.archiveEvent(eventId: event.id)
-                    } label: {
-                        Label("Archive", systemImage: "archivebox")
-                    }
-                    .tint(.blue)
+            ForEach(items) { item in
+                switch item {
+                case .connectionCard(let card):
+                    ConnectionCard(card: card)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            handleCardTap(card)
+                        }
 
-                    Button {
-                        viewModel.pinEvent(eventId: event.id)
-                    } label: {
-                        Label("Pin", systemImage: "star")
+                case .eventItem(let event):
+                    EventCardView(
+                        event: event,
+                        isProcessing: viewModel.isProcessingAction,
+                        onAcceptConnection: { rid in
+                            Task { await viewModel.acceptConnection(requestId: rid) }
+                        },
+                        onDeclineConnection: { rid in
+                            Task { await viewModel.declineConnection(requestId: rid) }
+                        },
+                        onApproveAuth: { rid in
+                            Task { await viewModel.approveAuth(requestId: rid) }
+                        },
+                        onDenyAuth: { rid in
+                            Task { await viewModel.denyAuth(requestId: rid) }
+                        }
+                    )
+                    .onTapGesture {
+                        handleEventTap(event)
                     }
-                    .tint(.yellow)
-                }
-                .swipeActions(edge: .trailing) {
-                    Button(role: .destructive) {
-                        viewModel.deleteEvent(eventId: event.id)
-                    } label: {
-                        Label("Delete", systemImage: "trash")
+                    .swipeActions(edge: .leading) {
+                        Button {
+                            viewModel.archiveEvent(eventId: event.id)
+                        } label: {
+                            Label("Archive", systemImage: "archivebox")
+                        }
+                        .tint(.blue)
                     }
+                    .swipeActions(edge: .trailing) {
+                        Button(role: .destructive) {
+                            viewModel.deleteEvent(eventId: event.id)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+
+                case .archivedConnections(let count):
+                    archivedFooterRow(count: count)
                 }
             }
         }
@@ -256,6 +237,50 @@ struct FeedView: View {
     }
 
     // MARK: - Actions
+
+    private func handleCardTap(_ card: ConnectionCardData) {
+        // Routing is owned by the navigation stack in MainNavigationView;
+        // for now this is a navigation-target log. The connection-centric
+        // feed surfaces the card; tapping the card opens ConnectionDetail
+        // (or ConnectionReview if the card is in needsReview).
+        let dest = card.needsReview ? "review" : (card.isSystem ? "system" : "detail")
+        #if DEBUG
+        print("[FeedView] Card tap → \(dest) — \(card.connectionId)")
+        #endif
+    }
+
+    /// Footer row that surfaces the archived (terminal-status) connection
+    /// count and routes to `ArchivedConnectionsView` (Phase 1.7). Until
+    /// that screen lands, the row is informational.
+    private func archivedFooterRow(count: Int) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "archivebox")
+                .foregroundStyle(.secondary)
+                .frame(width: 24, height: 24)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Archived connections")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                Text("\(count) archived (declined, revoked, or expired)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            #if DEBUG
+            print("[FeedView] Archived footer tap (\(count) connections)")
+            #endif
+        }
+    }
 
     private func handleEventTap(_ event: FeedEvent) {
         viewModel.markAsRead(event)
