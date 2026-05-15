@@ -15,10 +15,13 @@ class BadgeCountsViewModel: ObservableObject {
 
     func badgeCount(for item: DrawerItem) -> Int {
         switch item {
-        case .feed: return unreadFeedCount
-        case .connections: return pendingConnectionsCount
-        case .voting: return unvotedProposalsCount
-        case .personalData, .secrets, .wallets, .archive, .devices, .auditLog: return 0
+        // Phase 1.3: feed merged into connections (the connection-centric
+        // feed IS the connections list now); unread-feed + pending-conn
+        // counts fold together on the .connections drawer row.
+        case .connections: return unreadFeedCount + pendingConnectionsCount
+        case .voting:      return unvotedProposalsCount
+        case .vault, .personalData, .secrets, .wallets,
+             .archive, .devices, .auditLog: return 0
         }
     }
 

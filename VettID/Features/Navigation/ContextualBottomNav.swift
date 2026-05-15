@@ -2,45 +2,46 @@ import SwiftUI
 
 // MARK: - Bottom Nav Item
 
+/// Top-level destination tabs. Phase 1.3 (Android parity, commit 904452f
+/// "nav: rename Activity → Connections, remove Feed/Voting/Archive tabs")
+/// collapses the bottom nav to just two destinations: ACTIVITY (the
+/// connection-centric feed, titled "Connections") + VAULT
+/// (Data/Secrets/Wallets segmented). Voting / Guides / Archive are no
+/// longer tabs — they're reached through the VettID system card and the
+/// archived-connections footer respectively.
+///
+/// `.more` stays as a third button for everything else (Personal Data
+/// detail surfaces, Devices, Audit Log, …). It opens `MoreMenuSheet`.
 enum BottomNavItem: Int, CaseIterable {
-    case feed = 0
-    case connections = 1
-    case voting = 2
-    case secrets = 3
-    case wallets = 4
-    case more = 5
+    case activity = 0
+    case vault = 1
+    case more = 2
 
     var title: String {
         switch self {
-        case .feed: return "Feed"
-        case .connections: return "Connections"
-        case .voting: return "Voting"
-        case .secrets: return "Secrets"
-        case .wallets: return "Wallets"
-        case .more: return "More"
+        case .activity: return "Connections"
+        case .vault:    return "Vault"
+        case .more:     return "More"
         }
     }
 
     var icon: String {
         switch self {
-        case .feed: return "list.bullet.rectangle"
-        case .connections: return "person.2.fill"
-        case .voting: return "checkmark.square.fill"
-        case .secrets: return "lock.fill"
-        case .wallets: return "bitcoinsign.circle.fill"
-        case .more: return "ellipsis"
+        case .activity: return "person.2.fill"
+        case .vault:    return "lock.shield.fill"
+        case .more:     return "ellipsis"
         }
     }
 
-    /// Corresponding DrawerItem (nil for "More")
+    /// Corresponding DrawerItem (nil for "More"). ACTIVITY maps to
+    /// `connections` — the connection-centric feed is THE connections
+    /// list now. VAULT maps to a synthetic `vault` item that
+    /// MainNavigationView resolves to the segmented Vault scaffold.
     var drawerItem: DrawerItem? {
         switch self {
-        case .feed: return .feed
-        case .connections: return .connections
-        case .voting: return .voting
-        case .secrets: return .secrets
-        case .wallets: return .wallets
-        case .more: return nil
+        case .activity: return .connections
+        case .vault:    return .vault
+        case .more:     return nil
         }
     }
 }
@@ -88,10 +89,16 @@ struct BottomNavBar: View {
 
     private func badgeForTab(_ tab: BottomNavItem) -> Int {
         switch tab {
-        case .feed: return badgeCounts.unreadFeedCount
-        case .connections: return badgeCounts.pendingConnectionsCount
-        case .voting: return badgeCounts.unvotedProposalsCount
-        case .secrets, .wallets, .more: return 0
+        case .activity:
+            // Activity badge folds together the things that used to be
+            // separate tabs: unread feed, pending connections, and
+            // unvoted proposals (which now surface on the VettID
+            // system card inside the feed).
+            return badgeCounts.unreadFeedCount
+                 + badgeCounts.pendingConnectionsCount
+                 + badgeCounts.unvotedProposalsCount
+        case .vault, .more:
+            return 0
         }
     }
 }
@@ -233,7 +240,7 @@ struct MoreMenuItem: View {
         Spacer()
 
         BottomNavBar(
-            currentItem: .constant(.feed),
+            currentItem: .constant(.connections),
             badgeCounts: BadgeCountsViewModel(),
             onMoreTap: {}
         )

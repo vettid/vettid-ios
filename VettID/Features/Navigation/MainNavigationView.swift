@@ -6,7 +6,17 @@ struct MainNavigationView: View {
     @EnvironmentObject var appState: AppState
 
     @State private var isDrawerOpen = false
-    @State private var currentItem: DrawerItem = .feed
+    /// Phase 1.3: the bottom nav now has only ACTIVITY and VAULT (plus a
+    /// More menu). `currentItem` still anchors deep-link routing into
+    /// `DrawerItem` — `.connections` for activity, `.vault` (or a
+    /// segmented shortcut) for vault. The drawer's voting / archive /
+    /// devices / auditLog entries open from the More menu or from cards.
+    @State private var currentItem: DrawerItem = .connections
+    /// Phase 1.3: which segment is showing when the Vault destination is
+    /// active. Drawer shortcuts (`.personalData`, `.secrets`, `.wallets`)
+    /// flip the segment via the binding instead of pointing currentItem
+    /// at a separate top-level destination.
+    @State private var vaultSegment: VaultSegment = .data
 
     // Badge counts
     @StateObject private var badgeCounts = BadgeCountsViewModel()
@@ -61,9 +71,18 @@ struct MainNavigationView: View {
             )
         }
         .gesture(edgeSwipeGesture)
-        .onChange(of: currentItem) { _ in
+        .onChange(of: currentItem) { newValue in
             searchText = ""
             isSearching = false
+            // Drawer shortcuts to a specific Vault segment: flip the
+            // segment binding then collapse back to the canonical
+            // `.vault` item so the body switch resolves correctly.
+            if let seg = newValue.vaultSegment {
+                vaultSegment = seg
+                // Defer the re-assignment so the onChange handler
+                // doesn't immediately re-fire.
+                Task { @MainActor in currentItem = .vault }
+            }
         }
         .sheet(isPresented: $showMoreMenu) {
             MoreMenuSheet { item in
@@ -134,9 +153,9 @@ struct MainNavigationView: View {
             showConnectSheet = true
 
         case .vaultStatus:
-            // Navigate to feed (closest equivalent in flat nav)
+            // Connection-centric feed is the activity destination.
             withAnimation(.easeInOut(duration: 0.2)) {
-                currentItem = .feed
+                currentItem = .connections
             }
         }
     }
@@ -161,15 +180,27 @@ struct MainNavigationView: View {
                 onSettingsTap: { showSettings = true },
                 profilePhotoData: profilePhotoData
             )
-        case .secrets:
-            SearchableHeaderView(
-                title: "Secrets",
-                onProfileTap: openDrawer,
-                searchText: $searchText,
-                isSearching: $isSearching,
-                onSettingsTap: { showSettings = true },
-                profilePhotoData: profilePhotoData
-            )
+        case .vault:
+            // The Vault destination shows a segmented Data/Secrets/Wallets
+            // picker; only Secrets and Personal Data benefit from the
+            // searchable header (the others have their own surfaces).
+            if vaultSegment == .secrets || vaultSegment == .data {
+                SearchableHeaderView(
+                    title: "Vault",
+                    onProfileTap: openDrawer,
+                    searchText: $searchText,
+                    isSearching: $isSearching,
+                    onSettingsTap: { showSettings = true },
+                    profilePhotoData: profilePhotoData
+                )
+            } else {
+                HeaderView(
+                    title: "Vault",
+                    onProfileTap: openDrawer,
+                    onSettingsTap: { showSettings = true },
+                    profilePhotoData: profilePhotoData
+                )
+            }
         default:
             HeaderView(
                 title: currentItem.title,
@@ -185,45 +216,32 @@ struct MainNavigationView: View {
     @ViewBuilder
     private var currentContent: some View {
         switch currentItem {
-        case .feed:
-            NavigationStack {
-                FeedView()
-            }
         case .connections:
+            // ACTIVITY destination — the connection-centric feed. The
+            // separate "feed" tab is gone; the feed IS the connections
+            // list now.
+            NavigationStack { FeedView() }
+        case .vault:
+            // VAULT destination — segmented Data / Secrets / Wallets.
             NavigationStack {
-                ConnectionsContentView(
-                    searchText: searchText,
-                    authTokenProvider: { nil }
-                )
+                VaultView(segment: $vaultSegment, searchText: searchText)
+            }
+        case .personalData, .secrets, .wallets:
+            // Drawer-shortcut targets — funnel back through the VAULT
+            // destination with the appropriate segment. (Pre-emptively
+            // handled by onChange(currentItem); this branch covers the
+            // transient frame before the onChange flips it.)
+            NavigationStack {
+                VaultView(segment: $vaultSegment, searchText: searchText)
             }
         case .voting:
-            NavigationStack {
-                ProposalsView(authTokenProvider: { nil })
-            }
-        case .secrets:
-            NavigationStack {
-                SecretsView(searchText: searchText)
-            }
-        case .personalData:
-            NavigationStack {
-                PersonalDataView()
-            }
+            NavigationStack { ProposalsView(authTokenProvider: { nil }) }
         case .archive:
-            NavigationStack {
-                ArchiveView()
-            }
+            NavigationStack { ArchivedConnectionsView() }
         case .devices:
-            NavigationStack {
-                DeviceManagementView()
-            }
-        case .wallets:
-            NavigationStack {
-                WalletListView()
-            }
+            NavigationStack { DeviceManagementView() }
         case .auditLog:
-            NavigationStack {
-                FeedAuditLogView()
-            }
+            NavigationStack { FeedAuditLogView() }
         }
     }
 
@@ -241,22 +259,21 @@ struct MainNavigationView: View {
     }
 
     private var contentSwipeGesture: some Gesture {
+        // Phase 1.3: horizontal swipe now toggles between the two
+        // top-level destinations only — ACTIVITY (connections) and VAULT.
         DragGesture(minimumDistance: 50)
             .onEnded { value in
                 guard value.startLocation.x >= 50 else { return }
-
                 let horizontalAmount = value.translation.width
-                let bottomNavItems: [DrawerItem] = [.feed, .connections, .voting, .secrets]
+                let isVaultActive = currentItem == .vault || currentItem.vaultSegment != nil
 
-                guard let currentIndex = bottomNavItems.firstIndex(of: currentItem) else { return }
-
-                if horizontalAmount < -50 && currentIndex < bottomNavItems.count - 1 {
+                if horizontalAmount < -50 && !isVaultActive {
                     withAnimation(.easeInOut(duration: 0.2)) {
-                        currentItem = bottomNavItems[currentIndex + 1]
+                        currentItem = .vault
                     }
-                } else if horizontalAmount > 50 && currentIndex > 0 {
+                } else if horizontalAmount > 50 && isVaultActive {
                     withAnimation(.easeInOut(duration: 0.2)) {
-                        currentItem = bottomNavItems[currentIndex - 1]
+                        currentItem = .connections
                     }
                 }
             }

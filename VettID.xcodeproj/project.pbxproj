@@ -331,6 +331,9 @@
 		0B5701895223925F4DAB680C /* PersonalDataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02F11E424E935CC2EB9183DF /* PersonalDataStore.swift */; };
 		47883F7989776E1BDB1EBF5C /* PresenceAggregator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09D85BFCC008F5BB3FD536B7 /* PresenceAggregator.swift */; };
 		83A0158DF91FD694FFCC47CE /* ArchivedConnectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9687BD04267CDF69D7AE189D /* ArchivedConnectionsView.swift */; };
+		E74F6C16625515271972B56E /* GuideReadTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A2AD5B0C6CF3230F2ECC21D /* GuideReadTracker.swift */; };
+		4C78C3563B302F8722BC58CC /* VaultMessagesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D552DF9FC2071B3E2CC13E97 /* VaultMessagesView.swift */; };
+		D8459E2A9C5A891CA2336124 /* VaultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BD6E93401682BD4E57605F6 /* VaultView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -689,6 +692,9 @@
 		02F11E424E935CC2EB9183DF /* PersonalDataStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalDataStore.swift; sourceTree = "<group>"; };
 		09D85BFCC008F5BB3FD536B7 /* PresenceAggregator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresenceAggregator.swift; sourceTree = "<group>"; };
 		9687BD04267CDF69D7AE189D /* ArchivedConnectionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchivedConnectionsView.swift; sourceTree = "<group>"; };
+		9A2AD5B0C6CF3230F2ECC21D /* GuideReadTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuideReadTracker.swift; sourceTree = "<group>"; };
+		D552DF9FC2071B3E2CC13E97 /* VaultMessagesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultMessagesView.swift; sourceTree = "<group>"; };
+		7BD6E93401682BD4E57605F6 /* VaultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1172,6 +1178,7 @@
 		4D2441A5D57C73F0129C9030 /* Guide */ = {
 			isa = PBXGroup;
 			children = (
+				9A2AD5B0C6CF3230F2ECC21D /* GuideReadTracker.swift */,
 				117FF88E6F69FCF8379A38E4 /* GuideCatalog.swift */,
 				0C3BEE0569A98758AD1A82E4 /* GuideContentProvider.swift */,
 				A4BB2A0D8141826A33EB7A38 /* GuideDetailView.swift */,
@@ -1235,6 +1242,7 @@
 		605081853DB1FB640E991FA4 /* Navigation */ = {
 			isa = PBXGroup;
 			children = (
+				7BD6E93401682BD4E57605F6 /* VaultView.swift */,
 				157809425BFB22E6896C0225 /* DrawerView.swift */,
 				B5B59320799245103D92C504 /* HeaderView.swift */,
 				0E26681EB4F44673283A603D /* ContextualBottomNav.swift */,
@@ -1295,6 +1303,7 @@
 		88C7A2A2A500BEF6A164573B /* Feed */ = {
 			isa = PBXGroup;
 			children = (
+				D552DF9FC2071B3E2CC13E97 /* VaultMessagesView.swift */,
 				9687BD04267CDF69D7AE189D /* ArchivedConnectionsView.swift */,
 				35BB9882D72447C5A58818D4 /* AuditLogView.swift */,
 				F933A47471FB417FBAE38C5B /* AuditLogViewModel.swift */,
@@ -1892,6 +1901,9 @@
 				824239CA1C86ECBB99591287 /* FeedEvent.swift in Sources */,
 				D302C18A23D884DD51D9F532 /* FeedViewModel.swift in Sources */,
 				E0856AA3F832860B0D0EC949 /* FeedView.swift in Sources */,
+				D8459E2A9C5A891CA2336124 /* VaultView.swift in Sources */,
+				4C78C3563B302F8722BC58CC /* VaultMessagesView.swift in Sources */,
+				E74F6C16625515271972B56E /* GuideReadTracker.swift in Sources */,
 				83A0158DF91FD694FFCC47CE /* ArchivedConnectionsView.swift in Sources */,
 				A62391E4CF05D59BEBA013D4 /* Secret.swift in Sources */,
 				6AAF4B7C9510C0DBDC732FD9 /* SecretsViewModel.swift in Sources */,

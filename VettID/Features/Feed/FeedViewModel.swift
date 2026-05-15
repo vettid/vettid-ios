@@ -126,6 +126,11 @@ final class FeedViewModel: ObservableObject {
         var items: [FeedDisplayItem] = []
         var archivedCount = 0
 
+        // VettID system connection card — synthesized, not from
+        // `connection.list`. Sits at the top of the feed and owns
+        // Guides / Votes / VaultMessages routing (Phase 1.2).
+        items.append(.connectionCard(buildSystemCard()))
+
         // Snapshot presence once per rebuild so all cards see a coherent
         // map. Re-builds run on every refresh and on event arrival, so a
         // stale snapshot would only persist for that one tick.
@@ -178,6 +183,34 @@ final class FeedViewModel: ObservableObject {
         displayItems = items
         state = items.isEmpty ? .empty : .loaded
     }
+
+    /// Synthesize the VettID system card. Pulls unread guides from
+    /// `GuideReadTracker` and open-unvoted proposals from the injected
+    /// digest. Lives at the top of the feed and routes Guides / Votes /
+    /// VaultMessages.
+    private func buildSystemCard() -> ConnectionCardData {
+        let unread = GuideReadTracker.shared.unreadGuides().map {
+            (guideId: $0.rawValue, title: $0.title)
+        }
+        let votes = unvotedOpenProposals.map {
+            (proposalId: $0.id, title: $0.title)
+        }
+        return ConnectionCardData.systemCard(
+            guidesUnread: unread,
+            votesOpen: votes,
+            vaultMessagesUnread: vaultMessagesUnreadCount,
+            latestAt: Date()
+        )
+    }
+
+    /// Open proposals the user hasn't voted on, supplied externally
+    /// (e.g. by the screen wrapper). Defaults to empty until wired.
+    var unvotedOpenProposals: [(id: String, title: String)] = []
+
+    /// Unread count for deferred vault-update messages (the
+    /// VaultMessagesView surface — Phase 1.2). Defaults to zero until
+    /// the underlying queue exists.
+    var vaultMessagesUnreadCount: Int = 0
 
     /// Build a single connection card by joining the record with events
     /// targeting it. Synthesizes `PendingRow`s from both event state and

@@ -6,6 +6,12 @@ struct FeedView: View {
     @StateObject private var viewModel = FeedViewModel()
     @State private var isSearching = false
 
+    // System-card destinations (Phase 1.2). Guide sheets bind to the
+    // tapped guide id; presenting a non-nil id opens GuideDetailView.
+    @State private var presentedGuideId: GuideId?
+    @State private var showProposals: Bool = false
+    @State private var showVaultMessages: Bool = false
+
     var body: some View {
         VStack(spacing: 0) {
             // Search bar
@@ -90,6 +96,30 @@ struct FeedView: View {
         .onDisappear {
             viewModel.stopPeriodicRefresh()
         }
+        // System-card destinations (Phase 1.2).
+        .sheet(item: $presentedGuideId) { guideId in
+            NavigationView {
+                GuideDetailView(
+                    guide: GuideCatalog.guide(for: guideId),
+                    onDismiss: { presentedGuideId = nil }
+                )
+                .onAppear {
+                    // Mark read as soon as the user opens the guide —
+                    // matches Android `GuideReadTracker` behavior.
+                    GuideReadTracker.shared.markRead(guideId)
+                }
+            }
+        }
+        .sheet(isPresented: $showProposals) {
+            NavigationView {
+                ProposalsView(authTokenProvider: { nil })
+            }
+        }
+        .sheet(isPresented: $showVaultMessages) {
+            NavigationView {
+                VaultMessagesView()
+            }
+        }
     }
 
     // MARK: - Loading View
@@ -148,11 +178,13 @@ struct FeedView: View {
             ForEach(items) { item in
                 switch item {
                 case .connectionCard(let card):
-                    ConnectionCard(card: card)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            handleCardTap(card)
-                        }
+                    ConnectionCard(card: card, onPendingRowTap: { row in
+                        handlePendingRowTap(row, on: card)
+                    })
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        handleCardTap(card)
+                    }
 
                 case .eventItem(let event):
                     EventCardView(
@@ -239,14 +271,38 @@ struct FeedView: View {
     // MARK: - Actions
 
     private func handleCardTap(_ card: ConnectionCardData) {
-        // Routing is owned by the navigation stack in MainNavigationView;
-        // for now this is a navigation-target log. The connection-centric
-        // feed surfaces the card; tapping the card opens ConnectionDetail
-        // (or ConnectionReview if the card is in needsReview).
-        let dest = card.needsReview ? "review" : (card.isSystem ? "system" : "detail")
+        // Tapping the system card body opens the deferred-vault-messages
+        // surface; peer cards route to detail (or review when pending).
+        if card.isSystem {
+            showVaultMessages = true
+            return
+        }
+        let dest = card.needsReview ? "review" : "detail"
         #if DEBUG
         print("[FeedView] Card tap → \(dest) — \(card.connectionId)")
         #endif
+    }
+
+    /// Route a tap on a `PendingRow` to the right screen. Each row type
+    /// owns its own destination; the system card surfaces guides + votes,
+    /// peer cards mostly route to conversation / review.
+    private func handlePendingRowTap(_ row: PendingRow, on card: ConnectionCardData) {
+        switch row {
+        case .guideUnread(let guideId, _):
+            if let id = GuideId(rawValue: guideId) {
+                presentedGuideId = id
+            }
+        case .proposalUnvoted:
+            showProposals = true
+        case .pendingReview, .unreadMessages, .missedCall:
+            #if DEBUG
+            print("[FeedView] Row tap → \(row.id) on \(card.connectionId)")
+            #endif
+        case .pendingMigration, .peerLocationShare, .incomingGrantRequest, .lastActivity:
+            #if DEBUG
+            print("[FeedView] Row tap (no destination yet) → \(row.id)")
+            #endif
+        }
     }
 
     /// Footer row that surfaces the archived (terminal-status) connection

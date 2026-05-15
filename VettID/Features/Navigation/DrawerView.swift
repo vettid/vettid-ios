@@ -3,12 +3,25 @@ import SwiftUI
 // MARK: - Drawer Item (Navigation Destination)
 
 enum DrawerItem: String, CaseIterable, Identifiable {
-    case feed
+    /// ACTIVITY destination — the connection-centric feed (Phase 1.3).
     case connections
+    /// VAULT destination — segmented Data/Secrets/Wallets (Phase 1.3).
+    /// Inside this destination, `MainNavigationView` keeps a separate
+    /// `VaultSegment` binding so `.personalData` / `.secrets` /
+    /// `.wallets` drawer rows can deep-link to a specific segment.
+    case vault
+    /// Drawer-only shortcut for the Data segment of Vault. Selecting
+    /// this from the drawer routes to `.vault` + segment=`.data`.
     case personalData
+    /// Drawer-only shortcut for the Secrets segment.
     case secrets
+    /// Drawer-only shortcut for the Wallets segment.
     case wallets
+    /// Drawer-only entry — archived (terminal-status) connections.
+    /// Reached from the feed via the archived-connections footer.
     case archive
+    /// Drawer-only entry — voting. Reached from the feed via the VettID
+    /// system card's `proposalUnvoted` rows.
     case voting
     case devices
     case auditLog
@@ -17,47 +30,57 @@ enum DrawerItem: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .feed: return "Feed"
-        case .connections: return "Connections"
+        case .connections:  return "Connections"
+        case .vault:        return "Vault"
         case .personalData: return "Personal Data"
-        case .secrets: return "Secrets"
-        case .wallets: return "Wallets"
-        case .archive: return "Archive"
-        case .voting: return "Voting"
-        case .devices: return "Devices"
-        case .auditLog: return "Audit Log"
+        case .secrets:      return "Secrets"
+        case .wallets:      return "Wallets"
+        case .archive:      return "Archive"
+        case .voting:       return "Voting"
+        case .devices:      return "Devices"
+        case .auditLog:     return "Audit Log"
         }
     }
 
     var icon: String {
         switch self {
-        case .feed: return "list.bullet.rectangle"
-        case .connections: return "person.2.fill"
+        case .connections:  return "person.2.fill"
+        case .vault:        return "lock.shield.fill"
         case .personalData: return "folder.fill"
-        case .secrets: return "lock.fill"
-        case .wallets: return "bitcoinsign.circle.fill"
-        case .archive: return "archivebox.fill"
-        case .voting: return "checkmark.square.fill"
-        case .devices: return "desktopcomputer"
-        case .auditLog: return "list.clipboard"
+        case .secrets:      return "lock.fill"
+        case .wallets:      return "bitcoinsign.circle.fill"
+        case .archive:      return "archivebox.fill"
+        case .voting:       return "checkmark.square.fill"
+        case .devices:      return "desktopcomputer"
+        case .auditLog:     return "list.clipboard"
         }
     }
 
-    /// Maps drawer items to bottom nav tab index (nil = "More" tab)
-    var bottomNavIndex: Int? {
+    /// If this drawer item targets a sub-segment of the Vault destination,
+    /// return it. Used by `MainNavigationView` to deep-link from a drawer
+    /// tap into the right segmented picker position.
+    var vaultSegment: VaultSegment? {
         switch self {
-        case .feed: return 0
-        case .connections: return 1
-        case .voting: return 2
-        case .secrets: return 3
-        case .wallets: return 4
-        case .personalData, .archive, .devices, .auditLog: return nil
+        case .personalData: return .data
+        case .secrets:      return .secrets
+        case .wallets:      return .wallets
+        default:            return nil
         }
     }
 
-    /// Whether this item appears in the bottom nav directly
+    /// Top-level destination this drawer item resolves to.
+    var topLevel: BottomNavItem {
+        switch self {
+        case .connections, .archive, .voting, .devices, .auditLog:
+            return .activity      // drawer-only items still anchor here
+        case .vault, .personalData, .secrets, .wallets:
+            return .vault
+        }
+    }
+
+    /// Whether this item is one of the two primary destinations.
     var isInBottomNav: Bool {
-        bottomNavIndex != nil
+        self == .connections || self == .vault
     }
 }
 
@@ -490,7 +513,7 @@ struct DrawerRow: View {
 #Preview {
     struct PreviewWrapper: View {
         @State private var isOpen = true
-        @State private var item = DrawerItem.feed
+        @State private var item = DrawerItem.connections
 
         var body: some View {
             ZStack {
