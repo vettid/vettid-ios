@@ -342,6 +342,8 @@
 		71AB4E30BC56C5338B985EF1 /* ShortCode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5675F254C0FAC6EFECC77F41 /* ShortCode.swift */; };
 		B3F743E7AACA12930F2C993C /* CryptoNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CA8D2EE303D37CF83794AC3 /* CryptoNetwork.swift */; };
 		BD8897915F32AD666035F32E /* VisibilitySegmented.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1B9B0FC2C999DB338CED90 /* VisibilitySegmented.swift */; };
+		0A5E74947EB8BF1D24417F0F /* AvailableDataCatalogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10D9BC53990EC34239DDADD /* AvailableDataCatalogView.swift */; };
+		879730898412DBDA88DEB521 /* AvailableSecretsCatalogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76FD2DB645CBEC5AABA699BD /* AvailableSecretsCatalogView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -711,6 +713,8 @@
 		5675F254C0FAC6EFECC77F41 /* ShortCode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortCode.swift; sourceTree = "<group>"; };
 		7CA8D2EE303D37CF83794AC3 /* CryptoNetwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CryptoNetwork.swift; sourceTree = "<group>"; };
 		BC1B9B0FC2C999DB338CED90 /* VisibilitySegmented.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisibilitySegmented.swift; sourceTree = "<group>"; };
+		E10D9BC53990EC34239DDADD /* AvailableDataCatalogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvailableDataCatalogView.swift; sourceTree = "<group>"; };
+		76FD2DB645CBEC5AABA699BD /* AvailableSecretsCatalogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvailableSecretsCatalogView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -841,6 +845,7 @@
 		36D2210366B16F30CF6DF4B1 /* Secrets */ = {
 			isa = PBXGroup;
 			children = (
+				76FD2DB645CBEC5AABA699BD /* AvailableSecretsCatalogView.swift */,
 				688F0CE3AE28533DD0235DF8 /* Secret.swift */,
 				CAF3A0B1092FFB0A652C013F /* SecretsViewModel.swift */,
 				7AF9A63734413646BB7E375A /* SecretsView.swift */,
@@ -1454,6 +1459,7 @@
 		ADEFB19163EC12C63F133244 /* PersonalData */ = {
 			isa = PBXGroup;
 			children = (
+				E10D9BC53990EC34239DDADD /* AvailableDataCatalogView.swift */,
 				DE89C420DEC861CD3FA91B92 /* PersonalData.swift */,
 				208B738362A4D7A093432F99 /* PersonalDataViewModel.swift */,
 				498392EDCF906E22833BD876 /* PersonalDataView.swift */,
@@ -2044,6 +2050,8 @@
 				D545C686724841B09C9B78D1 /* ServiceMessageCrypto.swift in Sources */,
 				542B48D537BF4318967F48D8 /* ContractStore.swift in Sources */,
 				0B5701895223925F4DAB680C /* PersonalDataStore.swift in Sources */,
+				879730898412DBDA88DEB521 /* AvailableSecretsCatalogView.swift in Sources */,
+				0A5E74947EB8BF1D24417F0F /* AvailableDataCatalogView.swift in Sources */,
 				B69ECFDF39C64BFF85F29F07 /* ServiceNATSManager.swift in Sources */,
 				5F617885446040A4A2238FE4 /* AuthRequestSheet.swift in Sources */,
 				B73004F8F4574D7C80BFCE66 /* AuthzRequestSheet.swift in Sources */,

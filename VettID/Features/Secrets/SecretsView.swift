@@ -7,6 +7,10 @@ struct SecretsView: View {
 
     @EnvironmentObject private var appState: AppState
     @StateObject private var viewModel = SecretsViewModel()
+    /// Phase 2.7: when set, surfaces the "Available Secrets" catalog
+    /// dialog — what a connection sees when they browse what they can
+    /// request from this account.
+    @State private var showAvailableCatalog = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -31,8 +35,21 @@ struct SecretsView: View {
             viewModel.client = appState.secretsClient
             await viewModel.loadSecrets()
         }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showAvailableCatalog = true
+                } label: {
+                    Image(systemName: "doc.text.magnifyingglass")
+                }
+                .accessibilityLabel("Available secrets")
+            }
+        }
         .sheet(isPresented: $viewModel.showPasswordPrompt) {
             PasswordPromptSheet(viewModel: viewModel)
+        }
+        .sheet(isPresented: $showAvailableCatalog) {
+            AvailableSecretsCatalogView(viewModel: viewModel)
         }
     }
 

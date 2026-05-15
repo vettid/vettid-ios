@@ -35,6 +35,19 @@ final class PersonalDataStore: ObservableObject {
     @Published private(set) var isHydrated: Bool = false
     @Published private(set) var lastError: String?
 
+    /// Authoritative set of namespaces the vault has marked public
+    /// (Phase 2.11). Sourced from `profile.get`'s `public_fields` —
+    /// the canonical view — falling back to `profile.get-published`'s
+    /// `public_profile_fields` when `profile.get` is unavailable.
+    /// Surfaces (catalog dialog, profile editor) should consult this
+    /// rather than a per-item bool that could drift from vault truth.
+    @Published private(set) var publicFieldNamespaces: Set<String> = []
+
+    /// Vault-supplied display order for personal-data fields
+    /// (Phase 2.8 prerequisite). Empty when the vault hasn't sent one;
+    /// surfaces fall back to `PersonalDataItem.sortOrder` in that case.
+    @Published private(set) var fieldOrder: [String] = []
+
     // MARK: - Dependencies (wired by configure())
 
     private var profileClient: ProfileClient?
@@ -92,7 +105,21 @@ final class PersonalDataStore: ObservableObject {
             let firstName = published["first_name"] as? String ?? ""
             let lastName = published["last_name"] as? String ?? ""
             let email = published["email"] as? String ?? ""
-            let publicFields = Set((published["public_profile_fields"] as? [String]) ?? [])
+
+            // 1b) Authoritative public_fields source (Phase 2.11): prefer
+            //     `profile.get` (the canonical full profile) over
+            //     `profile.get-published`'s `public_profile_fields`. The
+            //     latter is what peers see today, but it may lag a
+            //     just-flipped toggle by a vault tick; `profile.get`
+            //     reflects the very-latest local state. Fall back if
+            //     `profile.get` doesn't return the field.
+            let canonical = (try? await profileClient.getProfile()) ?? [:]
+            let canonicalPublic: [String]? = canonical["public_fields"] as? [String]
+            let publishedPublic: [String]? = published["public_profile_fields"] as? [String]
+            let publicFields: Set<String> = Set(canonicalPublic ?? publishedPublic ?? [])
+            let canonicalOrder: [String]? = canonical["field_order"] as? [String]
+            let publishedOrder: [String]? = published["field_order"] as? [String]
+            let vaultFieldOrder: [String] = canonicalOrder ?? publishedOrder ?? []
 
             if !firstName.isEmpty {
                 built.append(systemField("_system_first_name", "First Name", firstName, publicFields))
@@ -122,7 +149,29 @@ final class PersonalDataStore: ObservableObject {
                 }
             }
 
-            self.items = built.sorted { $0.sortOrder < $1.sortOrder }
+            // Publish the auxiliary view-models — consumers can react
+            // to public_fields / field_order changes without poking at
+            // individual items.
+            self.publicFieldNamespaces = publicFields
+            self.fieldOrder = vaultFieldOrder
+
+            // Sort: if the vault gave us a field_order, prefer it.
+            // Otherwise fall back to PersonalDataItem.sortOrder.
+            if !vaultFieldOrder.isEmpty {
+                let rank: [String: Int] = Dictionary(
+                    uniqueKeysWithValues: vaultFieldOrder.enumerated().map { ($1, $0) }
+                )
+                built.sort { lhs, rhs in
+                    let lr = rank[lhs.id] ?? Int.max
+                    let rr = rank[rhs.id] ?? Int.max
+                    if lr != rr { return lr < rr }
+                    return lhs.sortOrder < rhs.sortOrder
+                }
+            } else {
+                built.sort { $0.sortOrder < $1.sortOrder }
+            }
+
+            self.items = built
             self.isHydrated = true
             self.lastError = nil
         } catch {
@@ -151,6 +200,15 @@ final class PersonalDataStore: ObservableObject {
         }
         try await client.deleteField(namespace: namespace)
         try await hydrate()
+    }
+
+    /// Source-of-truth check: is this namespace in the vault's
+    /// `public_fields` set? Phase 2.11 — consumers should call this
+    /// rather than reading `PersonalDataItem.isInPublicProfile`, which
+    /// is a snapshot taken at hydrate time and can drift if a write
+    /// is in flight.
+    func isFieldPublic(_ namespace: String) -> Bool {
+        publicFieldNamespaces.contains(namespace)
     }
 
     /// Toggle public-profile membership for a single field.
