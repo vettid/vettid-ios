@@ -20,7 +20,31 @@ final class NatsConnectionManager: ObservableObject {
 
     // MARK: - Connection State
 
-    private var natsClient: NatsClientWrapper?
+    private var natsClient: (any NatsTransport)?
+
+    /// #11 — UserDefaults toggle: when true, every new NATS connection
+    /// uses `AppleNatsClient` (Network.framework + SPKI pinning) instead
+    /// of `NatsClientWrapper` (nats.swift, no pin hook). Default is
+    /// false so existing builds behave identically until the user opts in.
+    /// Flip via `UserDefaults.standard.set(true, forKey: "vettid.nats.useAppleClient")`.
+    static var preferAppleNatsClient: Bool {
+        UserDefaults.standard.bool(forKey: "vettid.nats.useAppleClient")
+    }
+
+    /// Build the NATS transport. Centralized so the four instantiation
+    /// sites (connect, connectWithEnrollmentCredentials, vault-issued
+    /// reconnect after warm, auto-connect monitor restart) all pick
+    /// the same implementation.
+    private static func makeTransport(endpoint: String, jwt: String, seed: String) -> any NatsTransport {
+        if preferAppleNatsClient {
+            #if DEBUG
+            print("[NATS] Using AppleNatsClient (Network.framework + SPKI pinning)")
+            #endif
+            return AppleNatsClient(endpoint: endpoint, jwt: jwt, seed: seed)
+        } else {
+            return NatsClientWrapper(endpoint: endpoint, jwt: jwt, seed: seed)
+        }
+    }
     private var reconnectTask: Task<Void, Never>?
     private var subscriptions: [String: NatsSubscription] = [:]
     private var ownerSpaceId: String?
@@ -99,8 +123,8 @@ final class NatsConnectionManager: ObservableObject {
                 throw NatsConnectionError.noCredentials
             }
 
-            // Create and connect NATS client
-            natsClient = NatsClientWrapper(
+            // Create and connect NATS client (transport chosen by preferAppleNatsClient).
+            natsClient = Self.makeTransport(
                 endpoint: creds.endpoint,
                 jwt: creds.jwt,
                 seed: creds.seed
@@ -135,8 +159,8 @@ final class NatsConnectionManager: ObservableObject {
             // Store owner space ID for bootstrap
             self.ownerSpaceId = ownerSpace ?? credentials.ownerSpace
 
-            // Create and connect NATS client
-            natsClient = NatsClientWrapper(
+            // Create and connect NATS client (transport chosen by preferAppleNatsClient).
+            natsClient = Self.makeTransport(
                 endpoint: credentials.endpoint,
                 jwt: credentials.jwt,
                 seed: credentials.seed
@@ -684,9 +708,9 @@ final class NatsConnectionManager: ObservableObject {
                     #if DEBUG
                     print("[NATS] Stored vault-issued credentials, reconnecting...")
                     #endif
-                    // Disconnect bootstrap connection and reconnect with full credentials
+                    // Disconnect bootstrap connection and reconnect with full credentials.
                     await natsClient?.disconnect()
-                    natsClient = NatsClientWrapper(
+                    natsClient = Self.makeTransport(
                         endpoint: newCreds.endpoint,
                         jwt: newCreds.jwt,
                         seed: newCreds.seed
@@ -1244,7 +1268,7 @@ final class NatsConnectionManager: ObservableObject {
                 }
 
                 do {
-                    strongSelf.natsClient = NatsClientWrapper(
+                    strongSelf.natsClient = NatsConnectionManager.makeTransport(
                         endpoint: creds.endpoint,
                         jwt: creds.jwt,
                         seed: creds.seed
@@ -1592,8 +1616,12 @@ struct NatsSessionInfo: Decodable {
 #if canImport(Nats)
 import Nats
 
-/// Production wrapper using nats.swift library
-class NatsClientWrapper {
+/// Production wrapper using nats.swift library.
+///
+/// Conforms to `NatsTransport` so callers can swap in `AppleNatsClient`
+/// (the homegrown Network.framework + SPKI-pinning implementation) at
+/// runtime — see `NatsConnectionManager.preferAppleNatsClient`.
+class NatsClientWrapper: NatsTransport {
     let endpoint: String
     private let jwt: String
     private let seed: String

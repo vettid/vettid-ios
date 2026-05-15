@@ -183,7 +183,10 @@ final class CertificatePinningDelegate: NSObject, URLSessionDelegate {
     /// SubjectPublicKeyInfo that okhttp / OpenSSL hash. To produce a pin that
     /// matches the Android pin set we must prepend the fixed ASN.1 SPKI
     /// header for the key's type and size before hashing.
-    private static func spkiSHA256Base64(for publicKey: SecKey) -> String? {
+    ///
+    /// Exposed as `internal static` so `AppleNatsClient`'s TLS verify block
+    /// can reuse the same SPKI-pin computation as the HTTPS surface.
+    static func spkiSHA256Base64(for publicKey: SecKey) -> String? {
         var error: Unmanaged<CFError>?
         guard let rawKey = SecKeyCopyExternalRepresentation(publicKey, &error) as Data?,
               let attributes = SecKeyCopyAttributes(publicKey) as? [CFString: Any],
@@ -201,7 +204,8 @@ final class CertificatePinningDelegate: NSObject, URLSessionDelegate {
 
     /// Fixed ASN.1 SubjectPublicKeyInfo headers, keyed by algorithm + key size.
     /// These prefix the raw key bytes to reconstruct the full DER SPKI.
-    private static func asn1SPKIHeader(keyType: String, keySizeInBits: Int) -> [UInt8]? {
+    /// Internal so `AppleNatsClient` can share the table.
+    static func asn1SPKIHeader(keyType: String, keySizeInBits: Int) -> [UInt8]? {
         switch (keyType, keySizeInBits) {
         case (String(kSecAttrKeyTypeRSA), 2048):
             return [

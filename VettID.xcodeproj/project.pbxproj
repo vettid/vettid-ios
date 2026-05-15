@@ -370,6 +370,7 @@
 		FF34ED9B850293575D36749D /* ContractReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DD1AEECC2A7E097C1F7ADA5 /* ContractReviewView.swift */; };
 		FFD8FF11AF5D4845B612D689 /* SecurePassword.swift in Sources */ = {isa = PBXBuildFile; fileRef = 860FD375BD04E1AAE645B5C0 /* SecurePassword.swift */; };
 		FFEC75DD850E79B5ED665914 /* VaultPreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8285A14EAFF8FCF54C60C6E2 /* VaultPreferencesView.swift */; };
+		1310CA520E3A8F4E6A5DA5A1 /* AppleNatsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE971FCB35D943C78FBDE794 /* AppleNatsClient.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -764,6 +765,7 @@
 		FC7BF0CF4752D4662BF250D7 /* ServiceNotificationSettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ServiceNotificationSettingsView.swift; sourceTree = "<group>"; };
 		FD000368D20F4D86A91D50FD /* DataRequestSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataRequestSheet.swift; sourceTree = "<group>"; };
 		FE16327EB86641DCA62EDC24 /* DeviceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceModels.swift; sourceTree = "<group>"; };
+		AE971FCB35D943C78FBDE794 /* AppleNatsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleNatsClient.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1158,6 +1160,7 @@
 				63A1F2CAA115F5BCD8014C95 /* VaultClientProtocol.swift */,
 				2C3B06F55F2562689A7BB80E /* GrantsClient.swift */,
 				DA972338A09C08FFC87CE7A5 /* ActionsClient.swift */,
+							AE971FCB35D943C78FBDE794 /* AppleNatsClient.swift */,
 			);
 			path = NATS;
 			sourceTree = "<group>";
@@ -2247,6 +2250,7 @@
 				A78912DB6AFF08C658627CAE /* CallScreens.swift in Sources */,
 				27A0738ACBC28521326D3B89 /* TrustedPCRStore.swift in Sources */,
 				E483F66A5C2888C27DAD8A2B /* EnclaveUpdatePromptView.swift in Sources */,
+							1310CA520E3A8F4E6A5DA5A1 /* AppleNatsClient.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
