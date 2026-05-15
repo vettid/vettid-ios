@@ -84,30 +84,18 @@ struct ConnectionDetailView: View {
 
     private func connectionContent(_ connection: Connection) -> some View {
         VStack(spacing: 24) {
-            // Avatar and name
+            // Phase 1.5: avatar + name + bio + location + identity key +
+            // wallets + custom fields all rendered through the shared
+            // `BusinessCardView`. The status badge stays separate — it's
+            // connection-state metadata, not part of the peer's card.
             VStack(spacing: 12) {
-                AsyncImage(url: URL(string: connection.peerAvatarUrl ?? "")) { image in
-                    image.resizable().aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Image(systemName: "person.circle.fill")
-                        .resizable()
-                        .foregroundColor(.secondary)
-                }
-                .frame(width: 100, height: 100)
-                .clipShape(Circle())
-
-                Text(connection.peerDisplayName)
-                    .font(.title)
-                    .fontWeight(.bold)
-
+                BusinessCardView(
+                    card: businessCardData(for: connection),
+                    avatarSize: 100
+                )
                 ConnectionStatusBadge(status: connection.status)
             }
             .padding(.top)
-
-            // Profile info
-            if let profile = viewModel.peerProfile {
-                ProfileInfoSection(profile: profile)
-            }
 
             // Shared data section
             SharedDataSection()
@@ -121,6 +109,26 @@ struct ConnectionDetailView: View {
             }
         }
         .padding()
+    }
+
+    // MARK: - Business card adapter
+
+    /// Pick the richest peer-profile source available and convert it
+    /// into a `BusinessCardData`. Preference order: vault-published
+    /// `peerProfileData` (has identity key + wallets + fields) →
+    /// legacy `Profile` (just bio/location) → fall back to the bare
+    /// connection record (display name + avatar URL only).
+    private func businessCardData(for connection: Connection) -> BusinessCardData {
+        if let preview = viewModel.peerProfileData {
+            return BusinessCardData(from: PeerProfilePreview(from: preview))
+        }
+        if let profile = viewModel.peerProfile {
+            return BusinessCardData(from: profile, isOwnProfile: false)
+        }
+        return BusinessCardData(
+            displayName: connection.peerDisplayName,
+            avatarUrl: connection.peerAvatarUrl
+        )
     }
 
     // MARK: - Action Buttons
@@ -233,39 +241,12 @@ struct ConnectionDetailView: View {
     }
 }
 
-// MARK: - Profile Info Section
-
-struct ProfileInfoSection: View {
-    let profile: Profile
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            if let bio = profile.bio, !bio.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Bio")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Text(bio)
-                        .font(.body)
-                }
-            }
-
-            if let location = profile.location, !location.isEmpty {
-                HStack {
-                    Image(systemName: "location")
-                        .foregroundColor(.secondary)
-                    Text(location)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
-    }
-}
+// MARK: - Profile Info Section (retired in Phase 1.5)
+//
+// Replaced by `BusinessCardView` which renders bio + location alongside
+// the rest of the business card. Left a stub here briefly in case any
+// preview/test re-introduces it; can be deleted once no references
+// remain in any branch.
 
 // MARK: - Shared Data Section
 

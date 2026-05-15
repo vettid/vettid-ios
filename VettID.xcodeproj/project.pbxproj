@@ -334,6 +334,11 @@
 		E74F6C16625515271972B56E /* GuideReadTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A2AD5B0C6CF3230F2ECC21D /* GuideReadTracker.swift */; };
 		4C78C3563B302F8722BC58CC /* VaultMessagesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D552DF9FC2071B3E2CC13E97 /* VaultMessagesView.swift */; };
 		D8459E2A9C5A891CA2336124 /* VaultView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BD6E93401682BD4E57605F6 /* VaultView.swift */; };
+		8455F01954A3FA220C0E608A /* ConnectionAuditClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7E945F1404D43F4BE8563EE /* ConnectionAuditClient.swift */; };
+		031534BA22A8C1E3F6DF00E1 /* ConnectionHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9C12B98152C77C53CDCED20 /* ConnectionHistoryView.swift */; };
+		6964068FE83A8B8920C80402 /* ConnectionHistoryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64A8AB123A7308554C60B53D /* ConnectionHistoryViewModel.swift */; };
+		0CBBA924AE9587FAE4DFD43A /* BusinessCardData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45A159004642D14E8301CDCE /* BusinessCardData.swift */; };
+		2967B711835BC35C9BAA46F9 /* BusinessCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 482A967EEBF92DA861EEC680 /* BusinessCardView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -695,6 +700,11 @@
 		9A2AD5B0C6CF3230F2ECC21D /* GuideReadTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuideReadTracker.swift; sourceTree = "<group>"; };
 		D552DF9FC2071B3E2CC13E97 /* VaultMessagesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultMessagesView.swift; sourceTree = "<group>"; };
 		7BD6E93401682BD4E57605F6 /* VaultView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultView.swift; sourceTree = "<group>"; };
+		A7E945F1404D43F4BE8563EE /* ConnectionAuditClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionAuditClient.swift; sourceTree = "<group>"; };
+		A9C12B98152C77C53CDCED20 /* ConnectionHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionHistoryView.swift; sourceTree = "<group>"; };
+		64A8AB123A7308554C60B53D /* ConnectionHistoryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionHistoryViewModel.swift; sourceTree = "<group>"; };
+		45A159004642D14E8301CDCE /* BusinessCardData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BusinessCardData.swift; sourceTree = "<group>"; };
+		482A967EEBF92DA861EEC680 /* BusinessCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BusinessCardView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1041,6 +1051,7 @@
 		4000000F /* NATS */ = {
 			isa = PBXGroup;
 			children = (
+				A7E945F1404D43F4BE8563EE /* ConnectionAuditClient.swift */,
 				09D85BFCC008F5BB3FD536B7 /* PresenceAggregator.swift */,
 				E7AE3B279A81103E7400BA22 /* SecretsClient.swift */,
 				1B150D56712865302FACF415 /* PersonalDataClient.swift */,
@@ -1119,8 +1130,28 @@
 				10000037 /* ConnectionDetailView.swift */,
 				A2366284EFC2FA141A74850B /* ConnectionReviewView.swift */,
 				7C1C8208277178C5A59B0B13 /* ConnectionReviewViewModel.swift */,
+				78D53229FB03DA5D577C6EF1 /* Models */,
+				809A036866E950BAB7E6589F /* Components */,
 			);
 			path = Connections;
+			sourceTree = "<group>";
+		};
+		78D53229FB03DA5D577C6EF1 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				45A159004642D14E8301CDCE /* BusinessCardData.swift */,
+			);
+			name = Models;
+			path = Models;
+			sourceTree = "<group>";
+		};
+		809A036866E950BAB7E6589F /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				482A967EEBF92DA861EEC680 /* BusinessCardView.swift */,
+			);
+			name = Components;
+			path = Components;
 			sourceTree = "<group>";
 		};
 		40000014 /* Profile */ = {
@@ -1303,6 +1334,8 @@
 		88C7A2A2A500BEF6A164573B /* Feed */ = {
 			isa = PBXGroup;
 			children = (
+				64A8AB123A7308554C60B53D /* ConnectionHistoryViewModel.swift */,
+				A9C12B98152C77C53CDCED20 /* ConnectionHistoryView.swift */,
 				D552DF9FC2071B3E2CC13E97 /* VaultMessagesView.swift */,
 				9687BD04267CDF69D7AE189D /* ArchivedConnectionsView.swift */,
 				35BB9882D72447C5A58818D4 /* AuditLogView.swift */,
@@ -1901,6 +1934,8 @@
 				824239CA1C86ECBB99591287 /* FeedEvent.swift in Sources */,
 				D302C18A23D884DD51D9F532 /* FeedViewModel.swift in Sources */,
 				E0856AA3F832860B0D0EC949 /* FeedView.swift in Sources */,
+				6964068FE83A8B8920C80402 /* ConnectionHistoryViewModel.swift in Sources */,
+				031534BA22A8C1E3F6DF00E1 /* ConnectionHistoryView.swift in Sources */,
 				D8459E2A9C5A891CA2336124 /* VaultView.swift in Sources */,
 				4C78C3563B302F8722BC58CC /* VaultMessagesView.swift in Sources */,
 				E74F6C16625515271972B56E /* GuideReadTracker.swift in Sources */,
@@ -2016,6 +2051,7 @@
 				B89D4CD7F7B830FAD74D5670 /* SharedLocationsView.swift in Sources */,
 				AC38BE1D10B3EA15EB2D9E03 /* LocationSettingsView.swift in Sources */,
 				C6F8E05EB3E080D34708680B /* ProfileClient.swift in Sources */,
+				8455F01954A3FA220C0E608A /* ConnectionAuditClient.swift in Sources */,
 				47883F7989776E1BDB1EBF5C /* PresenceAggregator.swift in Sources */,
 				76F93A99D6296DA331EC8652 /* SecretsClient.swift in Sources */,
 				B0875706448885014E77B71B /* PersonalDataClient.swift in Sources */,
@@ -2053,6 +2089,8 @@
 				22BE0333F6D78296883162F1 /* FeedDisplayItem.swift in Sources */,
 				760C445FAEE023F7763D76C3 /* ConnectionCard.swift in Sources */,
 				B25AA574A4A1280CE4074A59 /* ConnectionReviewView.swift in Sources */,
+				0CBBA924AE9587FAE4DFD43A /* BusinessCardData.swift in Sources */,
+				2967B711835BC35C9BAA46F9 /* BusinessCardView.swift in Sources */,
 				7FD14FBAD1C36D6BFAD4DCB3 /* ConnectionReviewViewModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
