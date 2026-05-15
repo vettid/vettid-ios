@@ -12,6 +12,14 @@ struct FeedView: View {
     @State private var showProposals: Bool = false
     @State private var showVaultMessages: Bool = false
 
+    // Phase 3.9: route incoming-grant-request taps. The request kind
+    // determines which approval sheet pops; we resolve the kind by
+    // looking up the pending request in GrantsRepository when the row
+    // is tapped, since the PendingRow carries only the request id.
+    @State private var presentedGrantApproval: PendingRequestSummary?
+    @State private var presentedCriticalUseApproval: CriticalUseApprovalView.Input?
+    @State private var presentedVerifyApproval: IdentityVerifyApprovalView.Input?
+
     var body: some View {
         VStack(spacing: 0) {
             // Search bar
@@ -119,6 +127,18 @@ struct FeedView: View {
             NavigationView {
                 VaultMessagesView()
             }
+        }
+        // Phase 3.9: incoming-grant approval surfaces. Tapping a
+        // `PendingRow.incomingGrantRequest` on a connection card opens
+        // the matching approval sheet (data / critical-use / verify).
+        .sheet(item: $presentedGrantApproval) { req in
+            NavigationView { DataGrantApprovalView(request: req) }
+        }
+        .sheet(item: $presentedCriticalUseApproval) { input in
+            NavigationView { CriticalUseApprovalView(request: input) }
+        }
+        .sheet(item: $presentedVerifyApproval) { input in
+            NavigationView { IdentityVerifyApprovalView(request: input) }
         }
     }
 
@@ -299,11 +319,37 @@ struct FeedView: View {
             // tears down the broker entry and the card drops out of
             // the live list on the next refresh.
             Task { await viewModel.cancelOutboundInvitation(connectionId: connectionId) }
+        case .incomingGrantRequest(let requestId, _):
+            // Phase 3.9: look up the pending request and route to the
+            // matching approval sheet. The row's kind drives the
+            // approval surface — data/secret value, critical-use, or
+            // identity-verify — and matches GrantsView's routing.
+            guard let req = GrantsRepository.shared.pending.first(where: {
+                $0.requestId == requestId
+            }) else { return }
+            switch req.kind {
+            case .data, .minorSecret, .criticalSecretValue:
+                presentedGrantApproval = req
+            case .criticalSecretUse:
+                presentedCriticalUseApproval = CriticalUseApprovalView.Input(
+                    requestId: req.requestId,
+                    peerLabel: req.peerLabel,
+                    itemLabel: req.itemLabel,
+                    operation: req.kind.displayName,
+                    context: req.reason
+                )
+            case .identityVerify:
+                presentedVerifyApproval = IdentityVerifyApprovalView.Input(
+                    requestId: req.requestId,
+                    peerLabel: req.peerLabel,
+                    challenge: req.reason
+                )
+            }
         case .pendingReview, .unreadMessages, .missedCall:
             #if DEBUG
             print("[FeedView] Row tap → \(row.id) on \(card.connectionId)")
             #endif
-        case .pendingMigration, .peerLocationShare, .incomingGrantRequest, .lastActivity:
+        case .pendingMigration, .peerLocationShare, .lastActivity:
             #if DEBUG
             print("[FeedView] Row tap (no destination yet) → \(row.id)")
             #endif

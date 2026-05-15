@@ -601,11 +601,15 @@ class AppState: ObservableObject {
             await MainActor.run { self.syncCurrentProfileFromStore() }
             // Start the presence aggregator (Phase 1.6). Idempotent.
             await PresenceAggregator.shared.attach(to: osc)
-            // Phase 3.3: configure + hydrate the Grants repository.
-            // Outbound / inbound / pending lists land in memory; the
-            // GrantsView pulls from there.
+            // Phase 3.3 + 3.9: configure + hydrate the Grants
+            // repository, and wire the live event stream. The repo
+            // re-hydrates on every grant.* / critical-secret-use.* /
+            // verify.* event so the inbox stays current without
+            // pull-to-refresh.
             if let gc = self.grantsClient {
-                await MainActor.run { GrantsRepository.shared.configure(client: gc) }
+                await MainActor.run {
+                    GrantsRepository.shared.configure(client: gc, ownerSpace: osc)
+                }
                 await GrantsRepository.shared.hydrate()
             }
         }

@@ -91,7 +91,8 @@ struct ConnectionDetailView: View {
             VStack(spacing: 12) {
                 BusinessCardView(
                     card: businessCardData(for: connection),
-                    avatarSize: 100
+                    avatarSize: 100,
+                    connectionId: connection.id
                 )
                 ConnectionStatusBadge(status: connection.status)
             }

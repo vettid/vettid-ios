@@ -32,14 +32,42 @@ final class GrantsRepository: ObservableObject {
     // MARK: - Dependencies
 
     private var client: GrantsClient?
+    private var eventTask: Task<Void, Never>?
 
     private init() {}
 
-    /// Wire the repository to a live `GrantsClient`. Call after vault
-    /// warm-up (alongside the other `configure()`s on AppState).
-    /// Idempotent — passing the same client twice is a no-op.
-    func configure(client: GrantsClient) {
+    /// Wire the repository to a live `GrantsClient` plus the
+    /// `OwnerSpaceClient`'s grant event stream (Phase 3.9). Call after
+    /// vault warm-up. Idempotent — re-configuring just swaps the
+    /// client; the event subscription is started once.
+    func configure(client: GrantsClient, ownerSpace: OwnerSpaceClient? = nil) {
         self.client = client
+        if let os = ownerSpace, eventTask == nil {
+            // Kick the underlying NATS subscriptions and consume the
+            // resulting stream. Each event re-hydrates (cheap — three
+            // parallel list calls) rather than trying to patch the
+            // collection in-place; the vault is the source of truth.
+            os.startGrantEventSubscription()
+            eventTask = Task { [weak self] in
+                guard let self = self else { return }
+                for await event in os.grantEvents {
+                    if Task.isCancelled { return }
+                    self.handleEvent(event)
+                }
+            }
+        }
+    }
+
+    private func handleEvent(_ event: GrantEvent) {
+        // Always refresh — the events tell us *which* collection changed
+        // but the cheapest correct path is to re-hydrate all three since
+        // a single user action can move a row between pending/granted
+        // and the vault is authoritative anyway.
+        Task { await self.hydrate() }
+
+        #if DEBUG
+        print("[GrantsRepository] grant event: \(event)")
+        #endif
     }
 
     // MARK: - Hydrate

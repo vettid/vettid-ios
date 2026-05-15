@@ -21,6 +21,17 @@ struct BusinessCardView: View {
     /// Avatar diameter — callers can shrink it for compact row layouts.
     var avatarSize: CGFloat = 80
 
+    /// Connection id to attach catalog-row "Request access" sheets to.
+    /// Only relevant on peer cards; nil for own-card surfaces. When nil,
+    /// catalog rows render but don't surface the request affordance.
+    var connectionId: String? = nil
+
+    /// Phase 3.5: tracks the peer-catalog entry the user tapped — drives
+    /// the `RequestAccessSheet` presentation. Owned here so every peer
+    /// surface that embeds a BusinessCardView gets the request flow for
+    /// free.
+    @State private var requestingEntry: PeerCatalogEntry? = nil
+
     var body: some View {
         VStack(spacing: 16) {
             header
@@ -53,6 +64,19 @@ struct BusinessCardView: View {
             }
         }
         .frame(maxWidth: .infinity)
+        // Phase 3.5: present the RequestAccessSheet when a catalog row
+        // is tapped. Only fires when a peer connectionId is configured;
+        // own-card embeds (which suppress the catalog anyway) don't.
+        .sheet(item: $requestingEntry) { entry in
+            if let connectionId = connectionId {
+                NavigationView {
+                    RequestAccessSheet(
+                        peer: .init(connectionId: connectionId, label: card.displayName),
+                        entry: entry
+                    )
+                }
+            }
+        }
     }
 
     // MARK: - Header (avatar + name + email)
@@ -246,6 +270,18 @@ struct BusinessCardView: View {
                     .foregroundStyle(.tertiary)
             }
             Spacer()
+            if connectionId != nil {
+                // Phase 3.5: tap the row to open the RequestAccessSheet
+                // (or Ask-to-Use for USE_ONLY entries). The chevron is
+                // a visual affordance; the whole row is tappable.
+                Image(systemName: "chevron.right")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if connectionId != nil { requestingEntry = entry }
         }
     }
 

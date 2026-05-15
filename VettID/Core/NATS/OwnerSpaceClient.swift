@@ -533,6 +533,107 @@ final class OwnerSpaceClient {
         }
     }
 
+    // MARK: - Grant events (forApp.grant.* / .critical-secret-use.* / .verify.*)
+
+    /// Live stream of Grants-subsystem events. Feeds `GrantsRepository`'s
+    /// hydrate-on-event path so the inbox stays current without the
+    /// user pulling-to-refresh, and feeds `FeedViewModel`'s pending-row
+    /// synthesis so a fresh inbound request shows up on the requester's
+    /// connection card the moment it lands.
+    ///
+    /// Phase 3.9 — backs all three approval flows
+    /// (DataGrant / CriticalUseApproval / IdentityVerifyApproval) plus
+    /// the receiver-side `forApp.grant.fetch-result` notification when
+    /// the owner approves a value request.
+    private var grantEventContinuation: AsyncStream<GrantEvent>.Continuation?
+    private var _grantEventStream: AsyncStream<GrantEvent>?
+    private var grantSubscriptionTask: Task<Void, Never>?
+
+    var grantEvents: AsyncStream<GrantEvent> {
+        if let s = _grantEventStream { return s }
+        let stream = AsyncStream<GrantEvent> { continuation in
+            self.grantEventContinuation = continuation
+            continuation.onTermination = { [weak self] _ in
+                self?.grantEventContinuation = nil
+                self?._grantEventStream = nil
+            }
+        }
+        _grantEventStream = stream
+        return stream
+    }
+
+    /// Subscribe to the three Grants-subsystem topic families and pump
+    /// decoded `GrantEvent`s into `grantEvents`. Idempotent — call from
+    /// AppState.syncProfileFromVault alongside the other warm-up wires.
+    ///
+    /// Uses the raw `NatsMessage` subscription (rather than the typed
+    /// overload) so we keep access to the topic — the subject suffix
+    /// drives event routing (`request-arrived` vs `approved` etc.).
+    func startGrantEventSubscription() {
+        guard grantSubscriptionTask == nil else { return }
+        let prefix = forAppPrefix
+        grantSubscriptionTask = Task { [weak self] in
+            guard let self = self else { return }
+            for family in ["grant", "critical-secret-use", "verify"] {
+                Task { [weak self] in
+                    guard let self = self else { return }
+                    do {
+                        let stream = try await self.connectionManager.subscribe(
+                            to: "\(prefix).\(family).>"
+                        )
+                        for await raw in stream {
+                            if Task.isCancelled { return }
+                            if let event = Self.parseGrantEvent(rawMessage: raw) {
+                                self.grantEventContinuation?.yield(event)
+                            }
+                        }
+                    } catch {
+                        #if DEBUG
+                        print("[OwnerSpaceClient] \(family) subscription failed: \(error)")
+                        #endif
+                    }
+                }
+            }
+        }
+    }
+
+    /// Parse a `forApp.{grant,critical-secret-use,verify}.*` message
+    /// into a domain event. Subject suffix drives case selection;
+    /// payload fields fill in the data. Tolerates both hyphen and
+    /// underscore separators in the suffix.
+    private static func parseGrantEvent(rawMessage: NatsMessage) -> GrantEvent? {
+        let subject = rawMessage.topic
+        let suffix = subject.split(separator: ".").last.map(String.init) ?? ""
+
+        // Permissive JSON decode — payload shape varies by event type.
+        let json = (try? JSONSerialization.jsonObject(with: rawMessage.data)) as? [String: Any] ?? [:]
+        let inner = (json["payload"] as? [String: Any]) ?? json
+        let connectionId = (inner["connection_id"] as? String) ?? ""
+        let requestId    = inner["request_id"] as? String
+        let grantId      = inner["grant_id"] as? String
+        let value        = inner["value"] as? String
+
+        switch suffix {
+        case "request-arrived", "request_arrived":
+            guard let rid = requestId else { return nil }
+            return .requestArrived(connectionId: connectionId, requestId: rid)
+        case "approved":
+            guard let gid = grantId else { return nil }
+            return .approved(grantId: gid, connectionId: connectionId)
+        case "denied":
+            guard let rid = requestId else { return nil }
+            return .denied(requestId: rid)
+        case "revoked":
+            guard let gid = grantId else { return nil }
+            return .revoked(grantId: gid)
+        case "fetch-result", "fetch_result":
+            guard let gid = grantId else { return nil }
+            return .fetchResult(grantId: gid, valueBase64: value)
+        default:
+            return nil
+        }
+    }
+
     // MARK: - Vault Locked Events
 
     /// Publisher for vault locked events (DEK unavailable after enclave refresh)
@@ -870,6 +971,19 @@ struct VaultLockedEvent {
 /// `profile.get-published` for the authoritative state — so the message
 /// type stays empty; receiving any decodable JSON ticks the stream.
 struct ProfilePublicSnapshotMessage: Decodable {}
+
+/// Domain event for the Grants subsystem (Phase 3.9). Decoded from
+/// `forApp.grant.*` topic messages; consumers (`GrantsRepository`,
+/// `FeedViewModel`) react by re-hydrating or synthesizing pending rows.
+enum GrantEvent {
+    case requestArrived(connectionId: String, requestId: String)
+    case approved(grantId: String, connectionId: String)
+    case denied(requestId: String)
+    case revoked(grantId: String)
+    /// Value-grant fetch result landed (receiver-side). `valueBase64` is
+    /// nil for non-value grants (e.g. critical-use / verify).
+    case fetchResult(grantId: String, valueBase64: String?)
+}
 
 /// On-wire payload of `forApp.presence.heartbeat.*`. Some vaults nest the
 /// fields under `payload`; others put them at the top level. We accept

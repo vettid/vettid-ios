@@ -251,10 +251,29 @@ final class FeedViewModel: ObservableObject {
             activityAt = nil
         }
 
-        // Pending rows — order matters; review/migration float to the top.
+        // Pending rows — order matters; review/migration float to the
+        // top, then incoming grant requests (orange tint draws the eye),
+        // then per-message rows, then last-activity.
         var rows: [PendingRow] = []
         if record.status == "pending" && record.direction == "inbound" {
             rows.append(.pendingReview)
+        }
+        // Phase 3.9: surface inbound Grants requests as a card row so
+        // the user can triage from the feed without opening the Grants
+        // inbox. Pulls from GrantsRepository's published collection.
+        let grantsForThisConnection = GrantsRepository.shared.pending
+            .filter { $0.connectionId == record.connectionId }
+        for req in grantsForThisConnection {
+            let kind: PendingRow.GrantKind
+            switch req.kind {
+            case .data, .minorSecret, .criticalSecretValue: kind = .data
+            case .criticalSecretUse:                         kind = .criticalUse
+            case .identityVerify:                            kind = .verifyIdentity
+            }
+            rows.append(.incomingGrantRequest(
+                requestId: req.requestId,
+                kind: kind
+            ))
         }
         if record.status == "pending" && record.direction == "outbound" {
             // Phase 1.8: outbound invitations get a tappable "Cancel"
