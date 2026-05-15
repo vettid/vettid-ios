@@ -345,6 +345,11 @@
 		0A5E74947EB8BF1D24417F0F /* AvailableDataCatalogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10D9BC53990EC34239DDADD /* AvailableDataCatalogView.swift */; };
 		879730898412DBDA88DEB521 /* AvailableSecretsCatalogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76FD2DB645CBEC5AABA699BD /* AvailableSecretsCatalogView.swift */; };
 		DEE57B9733F2DABD8F075608 /* VaultProfileSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 905FEB1C2D449B24EB4B5F83 /* VaultProfileSection.swift */; };
+		0DB660D072F240E75018453A /* GrantsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C3B06F55F2562689A7BB80E /* GrantsClient.swift */; };
+		F74E07CC76B2B0AE3C9BD662 /* GrantsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED19DC6080F78B04F9543278 /* GrantsModels.swift */; };
+		3FEB77FFDFBFB0C6301BDB15 /* GrantsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DF3EFDA82685C1629EA33DC /* GrantsRepository.swift */; };
+		FB3503E9AD16F0498AC34B15 /* GrantsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2126932C3B5F12AE47E924E /* GrantsView.swift */; };
+		24212BECEAE8882570DB9DD5 /* GrantsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 163B23A294EEA5C01F202497 /* GrantsViewModel.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -717,6 +722,11 @@
 		E10D9BC53990EC34239DDADD /* AvailableDataCatalogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvailableDataCatalogView.swift; sourceTree = "<group>"; };
 		76FD2DB645CBEC5AABA699BD /* AvailableSecretsCatalogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvailableSecretsCatalogView.swift; sourceTree = "<group>"; };
 		905FEB1C2D449B24EB4B5F83 /* VaultProfileSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultProfileSection.swift; sourceTree = "<group>"; };
+		2C3B06F55F2562689A7BB80E /* GrantsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrantsClient.swift; sourceTree = "<group>"; };
+		ED19DC6080F78B04F9543278 /* GrantsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrantsModels.swift; sourceTree = "<group>"; };
+		9DF3EFDA82685C1629EA33DC /* GrantsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrantsRepository.swift; sourceTree = "<group>"; };
+		E2126932C3B5F12AE47E924E /* GrantsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrantsView.swift; sourceTree = "<group>"; };
+		163B23A294EEA5C01F202497 /* GrantsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrantsViewModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -953,6 +963,7 @@
 				A0363F3AEE393DBEAB779E3E /* Location */,
 				AG00GRP0 /* Agents */,
 				516D1C3D244747FEA96F760C /* Wallet */,
+				286784441FA915A44D966ABC /* Grants */,
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -1090,6 +1101,7 @@
 				5E414C23DCF8060D277E0FD2 /* WalletClient.swift */,
 				DE324B03C22C1EC7D4213EC5 /* MigrationClient.swift */,
 				63A1F2CAA115F5BCD8014C95 /* VaultClientProtocol.swift */,
+				2C3B06F55F2562689A7BB80E /* GrantsClient.swift */,
 			);
 			path = NATS;
 			sourceTree = "<group>";
@@ -1727,6 +1739,27 @@
 			path = Util;
 			sourceTree = "<group>";
 		};
+		286784441FA915A44D966ABC /* Grants */ = {
+			isa = PBXGroup;
+			children = (
+				163B23A294EEA5C01F202497 /* GrantsViewModel.swift */,
+				E2126932C3B5F12AE47E924E /* GrantsView.swift */,
+				9DF3EFDA82685C1629EA33DC /* GrantsRepository.swift */,
+				A723FFBCE6D7CD5D53F88237 /* Models */,
+			);
+			name = Grants;
+			path = Grants;
+			sourceTree = "<group>";
+		};
+		A723FFBCE6D7CD5D53F88237 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				ED19DC6080F78B04F9543278 /* GrantsModels.swift */,
+			);
+			name = Models;
+			path = Models;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -2053,6 +2086,11 @@
 				D545C686724841B09C9B78D1 /* ServiceMessageCrypto.swift in Sources */,
 				542B48D537BF4318967F48D8 /* ContractStore.swift in Sources */,
 				0B5701895223925F4DAB680C /* PersonalDataStore.swift in Sources */,
+				0DB660D072F240E75018453A /* GrantsClient.swift in Sources */,
+				24212BECEAE8882570DB9DD5 /* GrantsViewModel.swift in Sources */,
+				FB3503E9AD16F0498AC34B15 /* GrantsView.swift in Sources */,
+				3FEB77FFDFBFB0C6301BDB15 /* GrantsRepository.swift in Sources */,
+				F74E07CC76B2B0AE3C9BD662 /* GrantsModels.swift in Sources */,
 				DEE57B9733F2DABD8F075608 /* VaultProfileSection.swift in Sources */,
 				879730898412DBDA88DEB521 /* AvailableSecretsCatalogView.swift in Sources */,
 				0A5E74947EB8BF1D24417F0F /* AvailableDataCatalogView.swift in Sources */,

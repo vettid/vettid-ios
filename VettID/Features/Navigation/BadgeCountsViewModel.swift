@@ -20,6 +20,9 @@ class BadgeCountsViewModel: ObservableObject {
         // counts fold together on the .connections drawer row.
         case .connections: return unreadFeedCount + pendingConnectionsCount
         case .voting:      return unvotedProposalsCount
+        // Phase 3.4: grants drawer row gets the count of inbound
+        // pending requests so users see "you've got things to triage".
+        case .grants:      return GrantsRepository.shared.pending.count
         case .vault, .personalData, .secrets, .wallets,
              .archive, .devices, .auditLog: return 0
         }

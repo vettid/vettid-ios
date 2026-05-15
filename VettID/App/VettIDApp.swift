@@ -271,6 +271,7 @@ class AppState: ObservableObject {
     private(set) var profileClient: ProfileClient?
     private(set) var personalDataClient: PersonalDataClient?
     private(set) var secretsClient: SecretsClient?
+    private(set) var grantsClient: GrantsClient?
 
     /// Flag indicating if running in UI test mode
     static var isUITesting: Bool {
@@ -568,6 +569,7 @@ class AppState: ObservableObject {
             self.profileClient = ProfileClient(ownerSpaceClient: osc)
             self.personalDataClient = PersonalDataClient(ownerSpaceClient: osc)
             self.secretsClient = SecretsClient(ownerSpaceClient: osc)
+            self.grantsClient = GrantsClient(ownerSpaceClient: osc)
         }
 
         guard let osc = ownerSpaceClient,
@@ -599,6 +601,13 @@ class AppState: ObservableObject {
             await MainActor.run { self.syncCurrentProfileFromStore() }
             // Start the presence aggregator (Phase 1.6). Idempotent.
             await PresenceAggregator.shared.attach(to: osc)
+            // Phase 3.3: configure + hydrate the Grants repository.
+            // Outbound / inbound / pending lists land in memory; the
+            // GrantsView pulls from there.
+            if let gc = self.grantsClient {
+                await MainActor.run { GrantsRepository.shared.configure(client: gc) }
+                await GrantsRepository.shared.hydrate()
+            }
         }
     }
 

@@ -242,6 +242,8 @@ struct MainNavigationView: View {
             NavigationStack { DeviceManagementView() }
         case .auditLog:
             NavigationStack { FeedAuditLogView() }
+        case .grants:
+            NavigationStack { GrantsView() }
         }
     }
 

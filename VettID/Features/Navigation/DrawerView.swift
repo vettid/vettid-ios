@@ -25,6 +25,10 @@ enum DrawerItem: String, CaseIterable, Identifiable {
     case voting
     case devices
     case auditLog
+    /// Phase 3.4: drawer-only entry for the Grants subsystem inbox.
+    /// Reachable from the More menu and from connection-card pending
+    /// rows; not surfaced as a primary destination.
+    case grants
 
     var id: String { rawValue }
 
@@ -39,6 +43,7 @@ enum DrawerItem: String, CaseIterable, Identifiable {
         case .voting:       return "Voting"
         case .devices:      return "Devices"
         case .auditLog:     return "Audit Log"
+        case .grants:       return "Grants"
         }
     }
 
@@ -53,6 +58,7 @@ enum DrawerItem: String, CaseIterable, Identifiable {
         case .voting:       return "checkmark.square.fill"
         case .devices:      return "desktopcomputer"
         case .auditLog:     return "list.clipboard"
+        case .grants:       return "lock.shield"
         }
     }
 
@@ -71,7 +77,7 @@ enum DrawerItem: String, CaseIterable, Identifiable {
     /// Top-level destination this drawer item resolves to.
     var topLevel: BottomNavItem {
         switch self {
-        case .connections, .archive, .voting, .devices, .auditLog:
+        case .connections, .archive, .voting, .devices, .auditLog, .grants:
             return .activity      // drawer-only items still anchor here
         case .vault, .personalData, .secrets, .wallets:
             return .vault

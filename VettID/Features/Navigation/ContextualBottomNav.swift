@@ -167,6 +167,16 @@ struct MoreMenuSheet: View {
                         dismiss()
                     }
 
+                    // Phase 3.4: Grants inbox — pending requests +
+                    // outbound/inbound grants. Reachable here for users
+                    // who want to triage from one screen rather than
+                    // tapping pending rows on individual connection
+                    // cards.
+                    MoreMenuItem(icon: DrawerItem.grants.icon, title: DrawerItem.grants.title) {
+                        onSelect(.grants)
+                        dismiss()
+                    }
+
                     MoreMenuItem(icon: DrawerItem.archive.icon, title: DrawerItem.archive.title) {
                         onSelect(.archive)
                         dismiss()
