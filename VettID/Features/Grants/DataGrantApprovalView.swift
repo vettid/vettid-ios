@@ -144,8 +144,13 @@ struct DataGrantApprovalView: View {
             .disabled(viewModel.isProcessing)
 
             Button {
+                // #12 — wrap the SwiftUI @State String into a SecurePassword
+                // at the boundary, then immediately clear the @State so
+                // ARC can release the immutable String backing.
+                let secure = SecurePassword(string: password)
+                password = ""
                 Task {
-                    let ok = await viewModel.approve(request: request, password: password)
+                    let ok = await viewModel.approve(request: request, password: secure)
                     if ok { dismiss() }
                 }
             } label: {
@@ -179,8 +184,10 @@ final class DataGrantApprovalViewModel: ObservableObject {
     }
 
     /// Build the password envelope and call `grant.approve` via the
-    /// repository. Returns true on success so the caller can dismiss.
-    func approve(request: PendingRequestSummary, password: String) async -> Bool {
+    /// repository. The SecurePassword is consumed (wiped) inside
+    /// PasswordApprovalEnvelope.build. Returns true on success so the
+    /// caller can dismiss.
+    func approve(request: PendingRequestSummary, password: SecurePassword) async -> Bool {
         isProcessing = true
         errorMessage = nil
         defer { isProcessing = false }

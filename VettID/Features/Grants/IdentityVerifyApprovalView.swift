@@ -111,8 +111,10 @@ struct IdentityVerifyApprovalView: View {
             .disabled(viewModel.isProcessing)
 
             Button {
+                let secure = SecurePassword(string: password)
+                password = ""
                 Task {
-                    let ok = await viewModel.approve(requestId: request.requestId, password: password)
+                    let ok = await viewModel.approve(requestId: request.requestId, password: secure)
                     if ok { dismiss() }
                 }
             } label: {
@@ -141,7 +143,7 @@ final class IdentityVerifyApprovalViewModel: ObservableObject {
 
     var client: GrantsClient?
 
-    func approve(requestId: String, password: String) async -> Bool {
+    func approve(requestId: String, password: SecurePassword) async -> Bool {
         isProcessing = true
         errorMessage = nil
         defer { isProcessing = false }

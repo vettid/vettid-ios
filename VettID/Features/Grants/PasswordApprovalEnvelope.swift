@@ -26,6 +26,20 @@ struct PasswordApprovalEnvelope {
     /// we fail fast and surface as `.notReady`.
     static func build(password: String,
                       credentialStore: CredentialStore = CredentialStore()) throws -> PasswordApprovalEnvelope {
+        // Route the String through SecurePassword so the byte copy is
+        // wiped before this scope exits. Approval-screen call sites
+        // can switch to `build(password: SecurePassword, ...)` directly
+        // when they want explicit ownership.
+        return try build(password: SecurePassword(string: password),
+                         credentialStore: credentialStore)
+    }
+
+    /// SecurePassword overload (#12). The password is consumed —
+    /// the SecurePassword is wiped before this method returns,
+    /// regardless of outcome.
+    static func build(password: SecurePassword,
+                      credentialStore: CredentialStore = CredentialStore()) throws -> PasswordApprovalEnvelope {
+        defer { password.wipe() }
         let hashResult = try PasswordHasher.hash(password: password)
         guard let credential = try credentialStore.retrieveFirst(),
               let utk = credential.getUnusedKey() else {
