@@ -1,28 +1,43 @@
 import Foundation
 import AVFoundation
 
-// MARK: - WebRTC Framework Import
-// To use WebRTC, add the package via Xcode:
-// 1. File → Add Package Dependencies
-// 2. Add: https://github.com/nickkjordan/WebRTC.git (or official Google WebRTC)
-// 3. Import WebRTC in this file
+// MARK: - WebRTC Framework Import (Phase 4.1 — pending)
+//
+// The signaling pipeline, CallCoordinator state machine, and call UI
+// (CallScreens.swift) are wired and shippable; only the media side
+// is stubbed. To enable real media:
+//
+// 1. Xcode → File → Add Package Dependencies…
+//    URL: https://github.com/stasel/WebRTC.git
+//    Product: WebRTC (prebuilt Google WebRTC binary framework, ~140 MB,
+//    M-stable releases). The alternative `nickkjordan/WebRTC` package
+//    is older and may lag the iOS SDK target.
+//
+// 2. Replace the stub markers below with the real imports:
+//      import WebRTC
+//    and uncomment the `peerConnection`, `peerConnectionFactory`,
+//    audio/video track + capturer properties, then swap each "simulate"
+//    helper for its RTC counterpart (offer/answer/SDP/ICE/track wiring).
+//
+// 3. Info.plist permissions (already present in Phase 5.4 commit for
+//    location; confirm camera + mic strings exist):
+//      • NSCameraUsageDescription
+//      • NSMicrophoneUsageDescription
+//
+// 4. Test on a real device — the iOS Simulator can't render WebRTC
+//    video tracks and audio capture is limited.
+//
+// The Android side ships the @stream-io WebRTC artifact; iOS picks
+// stasel/WebRTC because it's the only widely-maintained SPM-native
+// distribution of the Google WebRTC binary. CocoaPods alternative is
+// `GoogleWebRTC` but requires migrating the project off pure SPM.
 
-// For now, we define protocols and types that mirror WebRTC's API
-// Replace with actual WebRTC imports when framework is added
-
-/// WebRTC client for managing peer-to-peer audio/video connections
+/// WebRTC client for managing peer-to-peer audio/video connections.
 ///
-/// ## Setup Requirements
-///
-/// 1. Add WebRTC framework via Swift Package Manager:
-///    - URL: https://github.com/nickkjordan/WebRTC.git
-///    - Or use CocoaPods: pod 'GoogleWebRTC'
-///
-/// 2. Add required permissions to Info.plist:
-///    - NSCameraUsageDescription
-///    - NSMicrophoneUsageDescription
-///
-/// 3. Configure audio session for VoIP (handled by CallKitManager)
+/// Phase 4.1 status: stub implementation. The full method shapes,
+/// callback wiring, and state surfaces all match the real WebRTC API
+/// so swapping the framework in is a contained edit (see header
+/// comment for the exact steps).
 @MainActor
 final class WebRTCClient: NSObject, ObservableObject {
 
