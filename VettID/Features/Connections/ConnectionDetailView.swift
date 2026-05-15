@@ -56,6 +56,9 @@ struct ConnectionDetailView: View {
             // Phase 1.9: wire the Grants client so the Them tab's
             // verify row can initiate challenges via GrantsClient.
             viewModel.grantsClient = appState.grantsClient
+            // Phase 5.4: wire the OwnerSpaceClient so the "Request
+            // Location" button can call location.request.
+            viewModel.ownerSpaceClient = appState.ownerSpaceClient
             await viewModel.loadConnection(connectionId)
         }
         .sheet(isPresented: $showShareSheet) {
@@ -243,6 +246,25 @@ struct ConnectionDetailView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.regular)
             }
+
+            // Phase 5.4 — peer location-request ping. Vault routes the
+            // request to the peer's app as a `peer-location-requested`
+            // event; their prompt VM surfaces the alert. We just fire
+            // and forget here.
+            Button {
+                Task { await viewModel.requestPeerLocation() }
+            } label: {
+                if viewModel.isRequestingLocation {
+                    ProgressView().frame(maxWidth: .infinity)
+                } else {
+                    Label("Request Location", systemImage: "location.circle")
+                        .font(.subheadline)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.regular)
+            .disabled(viewModel.isRequestingLocation)
 
             // Danger zone
             Button(role: .destructive) {

@@ -634,6 +634,113 @@ final class OwnerSpaceClient {
         }
     }
 
+    // MARK: - Peer-location transitions (forApp.connection.peer-location-*)
+
+    /// V6: events emitted when a peer starts sharing their location with
+    /// us, stops sharing, or pings us with a one-shot
+    /// `peer-location-requested`. The prompt VM observes this stream so
+    /// the UX is global — a request that arrives while the user is on
+    /// the feed still surfaces a dialog. Mirrors Android
+    /// `OwnerSpaceClient.peerLocationTransitions`.
+    private var peerLocationContinuation: AsyncStream<PeerLocationShareTransition>.Continuation?
+    private var _peerLocationStream: AsyncStream<PeerLocationShareTransition>?
+    private var peerLocationTask: Task<Void, Never>?
+
+    var peerLocationTransitions: AsyncStream<PeerLocationShareTransition> {
+        if let s = _peerLocationStream { return s }
+        let stream = AsyncStream<PeerLocationShareTransition> { continuation in
+            self.peerLocationContinuation = continuation
+            continuation.onTermination = { [weak self] _ in
+                self?.peerLocationContinuation = nil
+                self?._peerLocationStream = nil
+            }
+        }
+        _peerLocationStream = stream
+        return stream
+    }
+
+    /// Subscribe to the three `forApp.connection.peer-location-*` subject
+    /// suffixes and pump decoded `PeerLocationShareTransition`s into
+    /// `peerLocationTransitions`. Idempotent — call once per warm-up.
+    func startPeerLocationSubscription() {
+        guard peerLocationTask == nil else { return }
+        let prefix = forAppPrefix
+        peerLocationTask = Task { [weak self] in
+            guard let self = self else { return }
+            let suffixes: [(String, PeerLocationShareTransition.Transition)] = [
+                ("connection.peer-location-shared-started", .started),
+                ("connection.peer-location-shared-stopped", .stopped),
+                ("connection.peer-location-requested",      .requested),
+            ]
+            for (suffix, transition) in suffixes {
+                Task { [weak self] in
+                    guard let self = self else { return }
+                    do {
+                        let stream = try await self.connectionManager.subscribe(
+                            to: "\(prefix).\(suffix)"
+                        )
+                        for await raw in stream {
+                            if Task.isCancelled { return }
+                            if let event = Self.parsePeerLocation(raw: raw, transition: transition) {
+                                self.peerLocationContinuation?.yield(event)
+                            }
+                        }
+                    } catch {
+                        #if DEBUG
+                        print("[OwnerSpaceClient] peer-location \(suffix) subscription failed: \(error)")
+                        #endif
+                    }
+                }
+            }
+        }
+    }
+
+    private static func parsePeerLocation(
+        raw: NatsMessage,
+        transition: PeerLocationShareTransition.Transition
+    ) -> PeerLocationShareTransition? {
+        let json = (try? JSONSerialization.jsonObject(with: raw.data)) as? [String: Any] ?? [:]
+        let payload = (json["payload"] as? [String: Any]) ?? json
+        guard let connectionId = payload["connection_id"] as? String, !connectionId.isEmpty else {
+            return nil
+        }
+        let fromOwnerSpace = payload["from_owner_space"] as? String ?? ""
+        let at: String = {
+            switch transition {
+            case .started:   return payload["started_at"]   as? String ?? ""
+            case .stopped:   return payload["stopped_at"]   as? String ?? ""
+            case .requested: return payload["requested_at"] as? String ?? ""
+            }
+        }()
+        return PeerLocationShareTransition(
+            connectionId: connectionId,
+            fromOwnerSpace: fromOwnerSpace,
+            transition: transition,
+            at: at
+        )
+    }
+
+    /// V6: send a one-shot location-request ping to a peer. The peer's
+    /// app sees a `forApp.connection.peer-location-requested` event and
+    /// may respond by calling `sendLocationOnce` from the prompt.
+    func requestPeerLocation(connectionId: String) async throws {
+        _ = try await sendAndAwaitResponse(
+            "location.request",
+            payload: ["connection_id": AnyCodableValue(connectionId)],
+            timeout: 10
+        )
+    }
+
+    /// V6: fulfill a peer's request by sending the owner's latest cached
+    /// location once, without touching the sharing index.
+    func sendLocationOnce(connectionId: String) async throws {
+        _ = try await sendAndAwaitResponse(
+            "location.send-once",
+            payload: ["connection_id": AnyCodableValue(connectionId)],
+            timeout: 10
+        )
+    }
+
     // MARK: - Vault Locked Events
 
     /// Publisher for vault locked events (DEK unavailable after enclave refresh)

@@ -363,6 +363,7 @@
 		7F53FC955A39B89851D42ED4 /* ActionsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93C22C19B5A8E224B492DDC1 /* ActionsViewModel.swift */; };
 		2CCA03F47D5FA5B9E13A9248 /* ActionsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA972338A09C08FFC87CE7A5 /* ActionsClient.swift */; };
 		543DAC5D60258688EE7BD1E1 /* AuditChainVerifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1CC488D7E7D7E981C0A5EDC /* AuditChainVerifier.swift */; };
+		CE76C83575708DD84D24B7B1 /* PeerLocationRequestPromptViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65926138EE8E3D137D1DC028 /* PeerLocationRequestPromptViewModel.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -753,6 +754,7 @@
 		93C22C19B5A8E224B492DDC1 /* ActionsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionsViewModel.swift; sourceTree = "<group>"; };
 		DA972338A09C08FFC87CE7A5 /* ActionsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionsClient.swift; sourceTree = "<group>"; };
 		C1CC488D7E7D7E981C0A5EDC /* AuditChainVerifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuditChainVerifier.swift; sourceTree = "<group>"; };
+		65926138EE8E3D137D1DC028 /* PeerLocationRequestPromptViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerLocationRequestPromptViewModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1473,6 +1475,7 @@
 				50110171590A5159B6AC95DA /* SharedLocationsViewModel.swift */,
 				9F3FAB193CD3CD31501CE0F1 /* SharedLocationsView.swift */,
 				E3F3BD5849E735408532CB14 /* LocationSettingsView.swift */,
+							65926138EE8E3D137D1DC028 /* PeerLocationRequestPromptViewModel.swift */,
 			);
 			name = Location;
 			path = Location;
@@ -2241,6 +2244,7 @@
 				2967B711835BC35C9BAA46F9 /* BusinessCardView.swift in Sources */,
 				7FD14FBAD1C36D6BFAD4DCB3 /* ConnectionReviewViewModel.swift in Sources */,
 							543DAC5D60258688EE7BD1E1 /* AuditChainVerifier.swift in Sources */,
+							CE76C83575708DD84D24B7B1 /* PeerLocationRequestPromptViewModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

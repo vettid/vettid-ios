@@ -4,6 +4,10 @@ struct ContentView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var deepLinkHandler: DeepLinkHandler
     @StateObject private var lockService = AppLockService.shared
+    /// Phase 5.4 — owns the queue of incoming peer location-request
+    /// pings so the alert surfaces regardless of which screen the user
+    /// is on. Wires up the OwnerSpaceClient subscription after warm.
+    @StateObject private var peerLocationPrompt = PeerLocationRequestPromptViewModel()
     @Environment(\.scenePhase) private var scenePhase
 
     // Deep link navigation state
@@ -68,11 +72,40 @@ struct ContentView: View {
         .onChange(of: deepLinkHandler.pendingDeepLink) { deepLink in
             handleDeepLink(deepLink)
         }
+        .onChange(of: appState.isAuthenticated) { _ in
+            // After warm, AppState builds the OwnerSpaceClient. Attach
+            // the prompt VM once available so peer location-request
+            // pings have somewhere to land.
+            if let osc = appState.ownerSpaceClient {
+                peerLocationPrompt.attach(ownerSpaceClient: osc) { _ in nil }
+            }
+        }
         .sheet(isPresented: $showEnrollmentFromDeepLink) {
             if let token = deepLinkEnrollToken {
                 DeepLinkEnrollmentView(token: token)
                     .environmentObject(appState)
             }
+        }
+        // Phase 5.4 — peer location-request prompt. Surfaces at app
+        // root so a ping that arrives while the user is on the feed
+        // (or any other screen) still produces a visible dialog.
+        .alert(
+            "Location requested",
+            isPresented: Binding(
+                get: { peerLocationPrompt.pendingRequest != nil },
+                set: { newValue in if !newValue { peerLocationPrompt.dismiss() } }
+            ),
+            presenting: peerLocationPrompt.pendingRequest
+        ) { request in
+            Button("Send") {
+                Task { await peerLocationPrompt.fulfill() }
+            }
+            .disabled(peerLocationPrompt.isSending)
+            Button("Ignore", role: .cancel) {
+                peerLocationPrompt.dismiss()
+            }
+        } message: { request in
+            Text("\(request.peerLabel ?? "A connection") asked for your current location. Sending shares it once — they won't see your future location unless you turn on sharing.")
         }
     }
 

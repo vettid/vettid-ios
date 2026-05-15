@@ -13,6 +13,9 @@ final class ConnectionDetailViewModel: ObservableObject {
     @Published private(set) var isLoading = true
     @Published private(set) var isRevoking = false
     @Published private(set) var isRotatingKeys = false
+    /// Phase 5.4: gates the "Request Location" action button so the
+    /// user can't ping the same peer in a tight loop.
+    @Published private(set) var isRequestingLocation = false
     @Published var errorMessage: String?
 
     // MARK: - Dependencies
@@ -26,6 +29,9 @@ final class ConnectionDetailViewModel: ObservableObject {
     /// row in the Them tab. Optional so the screen still works if the
     /// vault isn't warm yet.
     var grantsClient: GrantsClient?
+    /// Phase 5.4: used by `requestPeerLocation` to ping the vault.
+    /// Same injection lifecycle as `grantsClient` — set from the view.
+    var ownerSpaceClient: OwnerSpaceClient?
 
     // MARK: - Initialization
 
@@ -168,6 +174,25 @@ final class ConnectionDetailViewModel: ObservableObject {
                 connectionId: connectionId,
                 challenge: "" // routine periodic verify — no custom message
             )
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Phase 5.4 — send a one-shot location-request ping to this peer.
+    /// The vault forwards it as `forApp.connection.peer-location-requested`
+    /// on the peer's side; the peer's `PeerLocationRequestPromptViewModel`
+    /// surfaces an alert and may fulfill via `location.send-once`.
+    func requestPeerLocation() async {
+        guard let connectionId = connection?.id else { return }
+        guard let osc = ownerSpaceClient else {
+            errorMessage = "Vault not warm yet — try again after unlocking."
+            return
+        }
+        isRequestingLocation = true
+        defer { isRequestingLocation = false }
+        do {
+            try await osc.requestPeerLocation(connectionId: connectionId)
         } catch {
             errorMessage = error.localizedDescription
         }
