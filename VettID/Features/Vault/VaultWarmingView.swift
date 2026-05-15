@@ -180,11 +180,45 @@ struct VaultWarmingView: View {
         }
     }
 
-    /// Attempt to warm vault with automatic retry for vault-not-ready scenarios
-    private func warmVaultWithRetry() async {
+    /// Attempt to warm vault with automatic retry for vault-not-ready scenarios.
+    /// Phase 5.7 — also retries the `pending_new_enclave` migration race
+    /// reported by the vault when Phase 4.6 routing reclaim hasn't
+    /// settled yet, with the same calm "Updating vault…" UX as Android.
+    private func warmVaultWithRetry(migrateConsent: Bool = false) async {
         do {
-            try await appState.warmVault(pin: pin)
-            // Success — load profile and call completion
+            try await appState.warmVault(pin: pin, migrateConsent: migrateConsent)
+
+            // Phase 5.7 — react to the M1 migration verdict.
+            switch appState.lastMigrationStatus {
+            case "pending_new_enclave":
+                // Routing race — the vault answered against OLD even
+                // though Phase 4.6 reclaim should have brought NEW up.
+                // Retry with the same migrateConsent flag a bounded
+                // number of times. UX stays calm — no red error.
+                if retryCount < maxAutoRetries {
+                    retryCount += 1
+                    await MainActor.run {
+                        errorMessage = "Finishing vault update… (attempt \(retryCount)/\(maxAutoRetries))"
+                    }
+                    try? await Task.sleep(nanoseconds: retryDelay)
+                    await warmVaultWithRetry(migrateConsent: migrateConsent)
+                } else {
+                    await MainActor.run {
+                        errorMessage = "Vault update is taking longer than usual. Please try unlocking again in a minute."
+                        isWarming = false
+                    }
+                }
+                return
+            case "failed":
+                await MainActor.run {
+                    errorMessage = "Vault update failed. Please try again or contact support."
+                    isWarming = false
+                }
+                return
+            default:
+                break // "completed", "not_requested", "" / nil — all proceed.
+            }
+
             appState.loadProfile()
             await MainActor.run {
                 isWarming = false
@@ -203,7 +237,7 @@ struct VaultWarmingView: View {
                 #endif
                 errorMessage = "Vault initializing... (attempt \(retryCount)/\(maxAutoRetries))"
                 try? await Task.sleep(nanoseconds: retryDelay)
-                await warmVaultWithRetry()
+                await warmVaultWithRetry(migrateConsent: migrateConsent)
             } else {
                 await MainActor.run {
                     errorMessage = error.localizedDescription

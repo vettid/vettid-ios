@@ -364,6 +364,7 @@
 		2CCA03F47D5FA5B9E13A9248 /* ActionsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA972338A09C08FFC87CE7A5 /* ActionsClient.swift */; };
 		543DAC5D60258688EE7BD1E1 /* AuditChainVerifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1CC488D7E7D7E981C0A5EDC /* AuditChainVerifier.swift */; };
 		CE76C83575708DD84D24B7B1 /* PeerLocationRequestPromptViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65926138EE8E3D137D1DC028 /* PeerLocationRequestPromptViewModel.swift */; };
+		96395BF58A5429F9FEB275FB /* MigrationCompletionRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A755F00D28D2B2B462CBC52A /* MigrationCompletionRecorder.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -755,6 +756,7 @@
 		DA972338A09C08FFC87CE7A5 /* ActionsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionsClient.swift; sourceTree = "<group>"; };
 		C1CC488D7E7D7E981C0A5EDC /* AuditChainVerifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuditChainVerifier.swift; sourceTree = "<group>"; };
 		65926138EE8E3D137D1DC028 /* PeerLocationRequestPromptViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerLocationRequestPromptViewModel.swift; sourceTree = "<group>"; };
+		A755F00D28D2B2B462CBC52A /* MigrationCompletionRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MigrationCompletionRecorder.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -995,6 +997,7 @@
 				286784441FA915A44D966ABC /* Grants */,
 				DB9B70AFB2851133E4B29A22 /* Sharing */,
 				AA4F3A63DE7E5E38E6AACE3F /* Actions */,
+							F49EE0EF39784D46374DFBCF /* Migration */,
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -1828,6 +1831,14 @@
 			path = Audit;
 			sourceTree = "<group>";
 		};
+		F49EE0EF39784D46374DFBCF /* Migration */ = {
+			isa = PBXGroup;
+			children = (
+				A755F00D28D2B2B462CBC52A /* MigrationCompletionRecorder.swift */,
+			);
+			path = Migration;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -2245,6 +2256,7 @@
 				7FD14FBAD1C36D6BFAD4DCB3 /* ConnectionReviewViewModel.swift in Sources */,
 							543DAC5D60258688EE7BD1E1 /* AuditChainVerifier.swift in Sources */,
 							CE76C83575708DD84D24B7B1 /* PeerLocationRequestPromptViewModel.swift in Sources */,
+							96395BF58A5429F9FEB275FB /* MigrationCompletionRecorder.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

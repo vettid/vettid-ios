@@ -222,6 +222,11 @@ class AppState: ObservableObject {
     // cold = DEK not loaded (need PIN to warm)
     @Published var vaultTemperature: VaultTemperature = .unknown
     @Published var vaultWarmingError: String?
+    /// Phase 5.7 — M1 migration_status from the last warmVault response.
+    /// Drives the PIN unlock screen's calm "Updating vault…" state when
+    /// the value is `pending_new_enclave`, and surfaces errors when it's
+    /// `failed`. Cleared on the next warm.
+    @Published var lastMigrationStatus: String?
 
     // NATS connection manager for vault operations
     lazy var natsConnectionManager: NatsConnectionManager = {
@@ -479,11 +484,14 @@ class AppState: ObservableObject {
     ///
     /// - Parameter pin: User's 6-digit PIN
     /// - Throws: NatsConnectionError on failure
-    func warmVault(pin: String) async throws {
+    func warmVault(pin: String, migrateConsent: Bool = false) async throws {
         vaultWarmingError = nil
 
         do {
-            let response = try await natsConnectionManager.warmVault(pin: pin)
+            let response = try await natsConnectionManager.warmVault(
+                pin: pin,
+                migrateConsent: migrateConsent
+            )
 
             if response.success {
                 vaultTemperature = .warm(ttlSeconds: response.sessionTtl)
@@ -491,6 +499,19 @@ class AppState: ObservableObject {
                 // Store new UTKs from vault response
                 if let utks = response.utks, !utks.isEmpty {
                     storeUTKsFromWarmResponse(utks)
+                }
+
+                // Phase 5.7 — surface the M1 migration verdict to the
+                // PIN unlock screen. When migrate_consent was set and
+                // the vault returns `pending_new_enclave`, the screen
+                // shows the calm "Updating vault…" state and re-tries;
+                // `completed` records the migrated version locally so
+                // we don't re-prompt; `failed` surfaces a user-facing
+                // error. Empty/nil means there was nothing to migrate.
+                lastMigrationStatus = response.migrationStatus
+                if response.migrationStatus == "completed",
+                   let version = response.migrationVersion, !version.isEmpty {
+                    MigrationCompletionRecorder.shared.record(version: version)
                 }
 
                 // Sync profile data from vault after successful warming

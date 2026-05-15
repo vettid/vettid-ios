@@ -587,7 +587,7 @@ final class NatsConnectionManager: ObservableObject {
     ///
     /// - Parameter pin: The user's 6-digit PIN
     /// - Returns: VaultWarmResponse with success status and session TTL
-    func warmVault(pin: String) async throws -> VaultWarmResponse {
+    func warmVault(pin: String, migrateConsent: Bool = false) async throws -> VaultWarmResponse {
         guard connectionState == .connected else {
             throw NatsConnectionError.notConnected
         }
@@ -612,7 +612,8 @@ final class NatsConnectionManager: ObservableObject {
             id: requestId,
             pin: pin,
             deviceId: getDeviceId(),
-            timestamp: timestamp
+            timestamp: timestamp,
+            migrateConsent: migrateConsent ? true : nil
         )
 
         // Subscribe to response topic
@@ -1407,12 +1408,19 @@ struct VaultWarmRequest: Encodable {
     let pin: String
     let deviceId: String
     let timestamp: String
+    /// Phase 5.7 — when set, the vault re-seals sealed_material.bin
+    /// against the running PCR0 in the same transaction. Routes per
+    /// the M1 model: the request lands on NEW if Phase 4.6 reclaim has
+    /// settled, else the vault returns `migration_status =
+    /// pending_new_enclave` and the client retries.
+    let migrateConsent: Bool?
 
     enum CodingKeys: String, CodingKey {
         case id
         case pin
         case deviceId = "device_id"
         case timestamp
+        case migrateConsent = "migrate_consent"
     }
 }
 
@@ -1424,6 +1432,15 @@ struct VaultWarmResponse: Decodable {
     let sessionTtl: Int?  // How long the vault will stay warm (seconds)
     let remainingAttempts: Int?  // PIN attempts remaining before lockout
     let utks: [UTKInfo]?  // New UTKs returned after successful warming
+
+    /// Phase 5.7 — M1 migration status echoed by the vault when
+    /// `migrate_consent=true` rides on the request. Possible values:
+    /// "completed", "pending_new_enclave", "failed", "not_requested",
+    /// or "" / nil when the vault didn't process a migration.
+    /// Drives the WarmingUp / Success / Error transitions on the PIN
+    /// unlock screen.
+    let migrationStatus: String?
+    let migrationVersion: String?
 
     /// UTK info returned in vault warming response
     struct UTKInfo: Decodable {
@@ -1456,6 +1473,8 @@ struct VaultWarmResponse: Decodable {
         case ownerSpace = "owner_space"
         case messageSpace = "message_space"
         case credentialsTtlSeconds = "credentials_ttl_seconds"
+        case migrationStatus = "migration_status"
+        case migrationVersion = "migration_version"
     }
 }
 
