@@ -83,7 +83,6 @@
 		00000051 /* ScreenProtection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000051 /* ScreenProtection.swift */; };
 		00000052 /* ProfileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000052 /* ProfileStore.swift */; };
 		00000053 /* SecretsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000053 /* SecretsStore.swift */; };
-		0070F8E8A708ED9903FFDB28 /* ProfileHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A802F262C8E724624EE83387 /* ProfileHandler.swift */; };
 		00C5B7482359B21C1B209D37 /* EnrollmentNatsHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78032CC009E0FAFFA9613FF4 /* EnrollmentNatsHandler.swift */; };
 		03A46385170E73DB133402C7 /* TransferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C8F6246035AB9898E63F90A /* TransferTests.swift */; };
 		0A8A714766B1CBF27A4F71D7 /* ConnectionTypesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D394BF5857A8C321E286295 /* ConnectionTypesTests.swift */; };
@@ -205,7 +204,6 @@
 		9178B120C0122606F1ECAF51 /* CallKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E3E9B78635C6EAF5E223808 /* CallKitManager.swift */; };
 		93D37A96F65B94561B6FD3C3 /* ServiceConnectionsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01412CA00318E3E9E4C7B286 /* ServiceConnectionsListView.swift */; };
 		961698D828BA4D5BA674D611 /* ContractSigningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81C8FD8744741BE993E3532 /* ContractSigningView.swift */; };
-		98DD4E5D5DC4F6A70092712E /* SecretsHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEA2A69DEB72B748BED4DA14 /* SecretsHandler.swift */; };
 		991BCE25C8226316E8F3949B /* PatternAuthenticatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B14631A6DCDC4E9897C16D1A /* PatternAuthenticatorTests.swift */; };
 		9A1E96B12D10B6334D55C377 /* QrRecoveryClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A301267E016BC28447A8F73 /* QrRecoveryClient.swift */; };
 		9B5AF6D980D2481DA32EDDB3 /* DatePickerInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B4424C107B353DF67958D31 /* DatePickerInput.swift */; };
@@ -631,7 +629,6 @@
 		A4BB2A0D8141826A33EB7A38 /* GuideDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuideDetailView.swift; sourceTree = "<group>"; };
 		A55B8A854B6DF21A3197B1A0 /* FeedView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FeedView.swift; sourceTree = "<group>"; };
 		A76C59FC4B0D65040C1B3BC2 /* ConnectionsViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConnectionsViewModelTests.swift; sourceTree = "<group>"; };
-		A802F262C8E724624EE83387 /* ProfileHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProfileHandler.swift; sourceTree = "<group>"; };
 		A84C9D858511724C0C0031E4 /* CallSignalingHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CallSignalingHandler.swift; sourceTree = "<group>"; };
 		A9907E4ADEC32ED97F95D4E9 /* CreateInvitationViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CreateInvitationViewModelTests.swift; sourceTree = "<group>"; };
 		AA6F4E8A08AC05BC1E9981C6 /* AppLockService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppLockService.swift; sourceTree = "<group>"; };
@@ -703,7 +700,6 @@
 		E9F32FE9CB2649168D2187DD /* ServiceNotificationBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceNotificationBanner.swift; sourceTree = "<group>"; };
 		EAA0F660A117A14D3FC3585C /* ServiceConnection.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ServiceConnection.swift; sourceTree = "<group>"; };
 		EE88639454A54B66B331A847 /* AgentApprovalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentApprovalView.swift; sourceTree = "<group>"; };
-		EEA2A69DEB72B748BED4DA14 /* SecretsHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SecretsHandler.swift; sourceTree = "<group>"; };
 		F0AAB42C18B14C6E76906390 /* AddSecretView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddSecretView.swift; sourceTree = "<group>"; };
 		F2BE3C5AC6A5049A191F87E5 /* EnrollmentViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EnrollmentViewModelTests.swift; sourceTree = "<group>"; };
 		F4641732442B1D8C05FB8598 /* ProteanCredentialStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProteanCredentialStoreTests.swift; sourceTree = "<group>"; };
@@ -802,8 +798,6 @@
 		17AB82EB05818922B0E2A9C1 /* Handlers */ = {
 			isa = PBXGroup;
 			children = (
-				EEA2A69DEB72B748BED4DA14 /* SecretsHandler.swift */,
-				A802F262C8E724624EE83387 /* ProfileHandler.swift */,
 				131DE8422D0A3B6CE2B321DB /* CredentialsHandler.swift */,
 				131DE8422D0A3B6CE2B321DC /* CredentialRotationHandler.swift */,
 				1AA0D8823160098FDD1BEDED /* ConnectionHandler.swift */,
@@ -2108,8 +2102,6 @@
 				4F867A959C49C7208A76ED50 /* DeepLinkHandler.swift in Sources */,
 				DF3E299D763958D6155FB562 /* SessionKeyManager.swift in Sources */,
 				CBB42EE77AAC0795CA3EE203 /* EncryptedEnvelope.swift in Sources */,
-				98DD4E5D5DC4F6A70092712E /* SecretsHandler.swift in Sources */,
-				0070F8E8A708ED9903FFDB28 /* ProfileHandler.swift in Sources */,
 				F602E4DC3720696C53E18F93 /* CredentialsHandler.swift in Sources */,
 				F602E4DC3720696C53E18F94 /* CredentialRotationHandler.swift in Sources */,
 				54AE200B5260828DFDDF54CF /* ConnectionHandler.swift in Sources */,
