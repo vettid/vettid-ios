@@ -597,6 +597,26 @@ class AppState: ObservableObject {
             self.grantsClient = GrantsClient(ownerSpaceClient: osc)
             self.actionsClient = ActionsClient(ownerSpaceClient: osc)
             self.feedClient = FeedClient(ownerSpaceClient: osc)
+
+            // Phase 4.3 — wire the calling subsystem. CallCoordinator
+            // is a singleton (CallKit integration requires app-wide
+            // ownership), so configure once per warmed-up space.
+            // Building VaultResponseHandler here gives it the same
+            // OwnerSpaceClient lifetime as the rest of the vault wire.
+            if let guid = currentUserGuid {
+                let eventClient = VaultEventClient(ownerSpaceClient: osc)
+                let responseHandler = VaultResponseHandler(vaultEventClient: eventClient)
+                CallCoordinator.shared.configure(
+                    connectionManager: natsConnectionManager,
+                    vaultResponseHandler: responseHandler,
+                    ownUserGuid: guid,
+                    ownerSpaceId: ownerSpaceId
+                )
+                Task {
+                    await responseHandler.startListening()
+                    await CallCoordinator.shared.startListening()
+                }
+            }
         }
 
         guard let osc = ownerSpaceClient,

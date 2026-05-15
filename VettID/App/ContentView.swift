@@ -8,6 +8,10 @@ struct ContentView: View {
     /// pings so the alert surfaces regardless of which screen the user
     /// is on. Wires up the OwnerSpaceClient subscription after warm.
     @StateObject private var peerLocationPrompt = PeerLocationRequestPromptViewModel()
+    /// Phase 4.3 — calling singleton observed for full-screen cover
+    /// routing (Outgoing / Incoming / Active). Configured by AppState
+    /// after warmVault so the wire is live when an event arrives.
+    @ObservedObject private var callCoordinator = CallCoordinator.shared
     @Environment(\.scenePhase) private var scenePhase
 
     // Deep link navigation state
@@ -85,6 +89,16 @@ struct ContentView: View {
                 DeepLinkEnrollmentView(token: token)
                     .environmentObject(appState)
             }
+        }
+        // Phase 4.3 — call screens cover the app whenever there's an
+        // active call (outbound dialing, inbound ringing, or in-call).
+        // Coordinator's currentCall identity drives the binding so
+        // the cover dismisses cleanly when the call ends.
+        .fullScreenCover(item: Binding<CurrentCall?>(
+            get: { callCoordinator.currentCall },
+            set: { _ in /* dismissal is driven by callState, not by user gesture */ }
+        )) { call in
+            currentCallScreen(for: call)
         }
         // Phase 5.4 — peer location-request prompt. Surfaces at app
         // root so a ping that arrives while the user is on the feed
@@ -177,6 +191,31 @@ struct ContentView: View {
 
         case .unknown:
             break
+        }
+    }
+
+    // MARK: - Call screen routing (Phase 4.3)
+
+    @ViewBuilder
+    private func currentCallScreen(for call: CurrentCall) -> some View {
+        let state = callCoordinator.callState
+        if state == .connected || state == .reconnecting {
+            ActiveCallView(coordinator: callCoordinator, onEnded: { })
+        } else if state == .failed {
+            // Brief failure surface — the coordinator clears
+            // currentCall shortly, dismissing the cover.
+            CallFailedView(coordinator: callCoordinator)
+        } else if state == .idle {
+            EmptyView()
+        } else if call.direction == .incoming {
+            IncomingCallView(
+                coordinator: callCoordinator,
+                onAnswered: { /* state will advance into .connected */ },
+                onDeclined: { /* coordinator clears currentCall */ }
+            )
+        } else {
+            // Outgoing in any pre-connected state — show the dialing UI.
+            OutgoingCallView(coordinator: callCoordinator, onCancel: { })
         }
     }
 

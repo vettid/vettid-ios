@@ -224,6 +224,32 @@ struct ConnectionDetailView: View {
                 .controlSize(.large)
             }
 
+            // Phase 4.3 — audio / video call buttons. Route through
+            // CallCoordinator.startCall; the full-screen cover at
+            // ContentView observes callState and surfaces the right
+            // outgoing screen.
+            HStack(spacing: 12) {
+                Button {
+                    Task { await placeCall(type: .audio) }
+                } label: {
+                    Label("Audio Call", systemImage: "phone.fill")
+                        .font(.subheadline)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+
+                Button {
+                    Task { await placeCall(type: .video) }
+                } label: {
+                    Label("Video Call", systemImage: "video.fill")
+                        .font(.subheadline)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+            }
+
             // Secondary actions
             HStack(spacing: 12) {
                 Button {
@@ -280,6 +306,25 @@ struct ConnectionDetailView: View {
             }
             .buttonStyle(.bordered)
             .disabled(viewModel.isRevoking)
+        }
+    }
+
+    // MARK: - Place Call (Phase 4.3)
+
+    /// Initiate an outgoing call to this connection's peer. Routes
+    /// through CallCoordinator.shared; the full-screen cover at
+    /// ContentView's root observes callState and surfaces the right
+    /// outgoing/active screen.
+    private func placeCall(type: CallType) async {
+        guard let connection = viewModel.connection else { return }
+        do {
+            try await CallCoordinator.shared.startCall(
+                to: connection.peerGuid,
+                displayName: connection.peerDisplayName,
+                callType: type
+            )
+        } catch {
+            viewModel.errorMessage = error.localizedDescription
         }
     }
 

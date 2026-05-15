@@ -366,6 +366,7 @@
 		CE76C83575708DD84D24B7B1 /* PeerLocationRequestPromptViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65926138EE8E3D137D1DC028 /* PeerLocationRequestPromptViewModel.swift */; };
 		96395BF58A5429F9FEB275FB /* MigrationCompletionRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A755F00D28D2B2B462CBC52A /* MigrationCompletionRecorder.swift */; };
 		9914E634A736E509265D0A73 /* PostEnrollmentNextStepsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 507CE46C4C6C7289C47FE61F /* PostEnrollmentNextStepsView.swift */; };
+		A78912DB6AFF08C658627CAE /* CallScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34F6C7439F85919E6B253A7F /* CallScreens.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -759,6 +760,7 @@
 		65926138EE8E3D137D1DC028 /* PeerLocationRequestPromptViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeerLocationRequestPromptViewModel.swift; sourceTree = "<group>"; };
 		A755F00D28D2B2B462CBC52A /* MigrationCompletionRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MigrationCompletionRecorder.swift; sourceTree = "<group>"; };
 		507CE46C4C6C7289C47FE61F /* PostEnrollmentNextStepsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostEnrollmentNextStepsView.swift; sourceTree = "<group>"; };
+		34F6C7439F85919E6B253A7F /* CallScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallScreens.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1659,6 +1661,7 @@
 				B54BED395EA7CA3337B933E9 /* CallHistoryViewModel.swift */,
 				5C1B6AF646336C0410668488 /* CallHistoryView.swift */,
 				6A24E7C98C8C76E28F8E6DA7 /* CallFrameCryptor.swift */,
+							34F6C7439F85919E6B253A7F /* CallScreens.swift */,
 			);
 			name = Calling;
 			path = Calling;
@@ -2261,6 +2264,7 @@
 							CE76C83575708DD84D24B7B1 /* PeerLocationRequestPromptViewModel.swift in Sources */,
 							96395BF58A5429F9FEB275FB /* MigrationCompletionRecorder.swift in Sources */,
 							9914E634A736E509265D0A73 /* PostEnrollmentNextStepsView.swift in Sources */,
+							A78912DB6AFF08C658627CAE /* CallScreens.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
