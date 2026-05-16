@@ -174,7 +174,6 @@
 		5FBFE89B623ECDDACD5F1B6E /* AddSecretView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AAB42C18B14C6E76906390 /* AddSecretView.swift */; };
 		60D3A2B3A0E1910DD4414A45 /* ServiceDiscoveryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26A82AC974F62B0BF0D91417 /* ServiceDiscoveryViewModel.swift */; };
 		612B210F2FB7CD2B00EEC651 /* Sodium in Frameworks */ = {isa = PBXBuildFile; productRef = SPM00001 /* Sodium */; };
-		612B21102FB7CD2B00EEC651 /* Nats in Frameworks */ = {isa = PBXBuildFile; productRef = SPM00002 /* Nats */; };
 		612B21142FB7CDC000EEC651 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 612B21132FB7CDC000EEC651 /* WebRTC */; };
 		615FE23B95C6133464EE1F14 /* ExpectedPCRStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2508C629676886E946486AC6 /* ExpectedPCRStore.swift */; };
 		6179D5955B974FEABB42EBCE /* DeviceApprovalViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CE1ACF29E164605AB1E151B /* DeviceApprovalViewModel.swift */; };
@@ -370,6 +369,7 @@
 		FFD8FF11AF5D4845B612D689 /* SecurePassword.swift in Sources */ = {isa = PBXBuildFile; fileRef = 860FD375BD04E1AAE645B5C0 /* SecurePassword.swift */; };
 		FFEC75DD850E79B5ED665914 /* VaultPreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8285A14EAFF8FCF54C60C6E2 /* VaultPreferencesView.swift */; };
 		1310CA520E3A8F4E6A5DA5A1 /* AppleNatsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE971FCB35D943C78FBDE794 /* AppleNatsClient.swift */; };
+		0499DC9B10E3448E0C9002D0 /* NKeys in Frameworks */ = {isa = PBXBuildFile; productRef = A453624F6AB64C8C0C5C5658 /* NKeys */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -771,7 +771,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				612B21102FB7CD2B00EEC651 /* Nats in Frameworks */,
+				0499DC9B10E3448E0C9002D0 /* NKeys in Frameworks */,
 				612B21142FB7CDC000EEC651 /* WebRTC in Frameworks */,
 				612B210F2FB7CD2B00EEC651 /* Sodium in Frameworks */,
 			);
@@ -1879,7 +1879,7 @@
 			name = VettID;
 			packageProductDependencies = (
 				SPM00001 /* Sodium */,
-				SPM00002 /* Nats */,
+				A453624F6AB64C8C0C5C5658 /* NKeys */,
 				612B21132FB7CDC000EEC651 /* WebRTC */,
 			);
 			productName = VettID;
@@ -1912,7 +1912,7 @@
 			mainGroup = 40000001;
 			packageReferences = (
 				PKG00001 /* XCRemoteSwiftPackageReference "swift-sodium" */,
-				PKG00002 /* XCRemoteSwiftPackageReference "nats.swift" */,
+				DF74AEA5F02DB0EBBBC1CEBF /* XCRemoteSwiftPackageReference "nkeys.swift" */,
 				612B21122FB7CDC000EEC651 /* XCRemoteSwiftPackageReference "WebRTC" */,
 			);
 			productRefGroup = 40000003 /* Products */;
@@ -2680,12 +2680,12 @@
 				minimumVersion = 0.9.1;
 			};
 		};
-		PKG00002 /* XCRemoteSwiftPackageReference "nats.swift" */ = {
+		DF74AEA5F02DB0EBBBC1CEBF /* XCRemoteSwiftPackageReference "nkeys.swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/nats-io/nats.swift.git";
+			repositoryURL = "https://github.com/nats-io/nkeys.swift.git";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 0.4.0;
+				minimumVersion = 0.2.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -2701,10 +2701,10 @@
 			package = PKG00001 /* XCRemoteSwiftPackageReference "swift-sodium" */;
 			productName = Sodium;
 		};
-		SPM00002 /* Nats */ = {
+		A453624F6AB64C8C0C5C5658 /* NKeys */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = PKG00002 /* XCRemoteSwiftPackageReference "nats.swift" */;
-			productName = Nats;
+			package = DF74AEA5F02DB0EBBBC1CEBF /* XCRemoteSwiftPackageReference "nkeys.swift" */;
+			productName = NKeys;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
