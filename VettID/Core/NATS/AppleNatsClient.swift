@@ -3,22 +3,6 @@ import Network
 import CryptoKit
 import NKeys
 
-// MARK: - NatsTransport protocol
-
-/// Common shape both `NatsClientWrapper` (nats.swift-backed) and
-/// `AppleNatsClient` (Network.framework + SPKI pinning) conform to.
-/// Lets `NatsConnectionManager` swap implementations behind a flag
-/// during burn-in.
-protocol NatsTransport: AnyObject {
-    var endpoint: String { get }
-    func connect() async throws
-    func disconnect() async
-    func publish(_ data: Data, to topic: String) async throws
-    func request(_ subject: String, payload: Data, timeout: TimeInterval) async throws -> Data
-    func subscribe(to topic: String) async throws -> AsyncStream<NatsMessage>
-    func unsubscribe(from topic: String) async
-}
-
 // MARK: - Apple NATS Client (#11)
 
 /// Homegrown NATS client built on `Network.framework`'s `NWConnection`.
@@ -36,9 +20,10 @@ protocol NatsTransport: AnyObject {
 /// SPKI hash matches a pinned value — same algorithm
 /// (`SHA-256(DER SubjectPublicKeyInfo)` → base64) as the HTTPS pins.
 ///
-/// Conforms to the same public shape as `NatsClientWrapper` (the old
-/// `nats.swift`-backed wrapper) so the surrounding code can swap one for
-/// the other behind a feature flag while we burn in.
+/// This is the only NATS client in the app. The previous
+/// `nats.swift`-backed wrapper was retired once this one matched the
+/// surface end-to-end — same approach Android takes (see
+/// `AndroidNatsClient.kt`, ~600 lines on raw SSLSocket).
 ///
 /// **Protocol surface implemented**
 ///   • CONNECT — NKey auth: sign the server's nonce with the user's seed
@@ -57,9 +42,9 @@ protocol NatsTransport: AnyObject {
 /// behind a `DispatchQueue` so we don't need actor isolation for the
 /// protocol layer. Public methods are `async` so callers feel like they're
 /// talking to an actor anyway.
-final class AppleNatsClient: NatsTransport {
+final class AppleNatsClient {
 
-    // MARK: - Public surface (parity with NatsClientWrapper)
+    // MARK: - Public surface
 
     let endpoint: String
     private let jwt: String

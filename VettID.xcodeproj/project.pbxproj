@@ -280,7 +280,6 @@
 		B3F743E7AACA12930F2C993C /* CryptoNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CA8D2EE303D37CF83794AC3 /* CryptoNetwork.swift */; };
 		B42DFE54DFC64BD92494BE34 /* HandlerTypesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD26F7972848FCE5C4EE6520 /* HandlerTypesTests.swift */; };
 		B5DBEE4860FD519556F4DFF0 /* ServiceConnectionDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF5EFD65980CCED29B10ECF1 /* ServiceConnectionDetailViewModel.swift */; };
-		B69ECFDF39C64BFF85F29F07 /* ServiceNATSManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 816EEA59016441498134BC23 /* ServiceNATSManager.swift */; };
 		B73004F8F4574D7C80BFCE66 /* AuthzRequestSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69934F0452AF48B2B2E213FB /* AuthzRequestSheet.swift */; };
 		B89D4CD7F7B830FAD74D5670 /* SharedLocationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F3FAB193CD3CD31501CE0F1 /* SharedLocationsView.swift */; };
 		B927C1ABE7F81F99EF610AC0 /* OperationAuthorizationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 810D66ACCD7B07A31EAC2D7B /* OperationAuthorizationService.swift */; };
@@ -614,7 +613,6 @@
 		7FF1655C5807ED3BA6C9E834 /* ConnectionCard.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ConnectionCard.swift; sourceTree = "<group>"; };
 		80D6C81AAEA975F5D4A6FD84 /* NitroAttestationVerifier.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NitroAttestationVerifier.swift; sourceTree = "<group>"; };
 		810D66ACCD7B07A31EAC2D7B /* OperationAuthorizationService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OperationAuthorizationService.swift; path = Authorization/OperationAuthorizationService.swift; sourceTree = "<group>"; };
-		816EEA59016441498134BC23 /* ServiceNATSManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceNATSManager.swift; sourceTree = "<group>"; };
 		81B532EAD3AF6F465A36A01A /* ProposalsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ProposalsView.swift; path = VettID/Features/Voting/ProposalsView.swift; sourceTree = "<group>"; };
 		81DB56C55B5B70F6A7CECFA3 /* CredentialStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CredentialStoreTests.swift; sourceTree = "<group>"; };
 		8262E49C26F34DD9AC80C979 /* AgentApprovalViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentApprovalViewModel.swift; sourceTree = "<group>"; };
@@ -1149,7 +1147,6 @@
 				17AB82EB05818922B0E2A9C1 /* Handlers */,
 				C8185E10A8FE9EB78C272A3B /* VaultEvent.swift */,
 				667E3A492F1E02FDCFC33F18 /* VaultSecurityService.swift */,
-				816EEA59016441498134BC23 /* ServiceNATSManager.swift */,
 				334364038B642505DD7426C5 /* ProfileClient.swift */,
 				D4E5F6071809A1B2C3D4E5F6 /* JetStreamHelper.swift */,
 				7B0234C00C5FE0172E248C5E /* ConnectionsClient.swift */,
@@ -2174,7 +2171,6 @@
 				DEE57B9733F2DABD8F075608 /* VaultProfileSection.swift in Sources */,
 				879730898412DBDA88DEB521 /* AvailableSecretsCatalogView.swift in Sources */,
 				0A5E74947EB8BF1D24417F0F /* AvailableDataCatalogView.swift in Sources */,
-				B69ECFDF39C64BFF85F29F07 /* ServiceNATSManager.swift in Sources */,
 				5F617885446040A4A2238FE4 /* AuthRequestSheet.swift in Sources */,
 				B73004F8F4574D7C80BFCE66 /* AuthzRequestSheet.swift in Sources */,
 				6310F3B424CABEA877A93C3B /* ConfirmIdentityView.swift in Sources */,
