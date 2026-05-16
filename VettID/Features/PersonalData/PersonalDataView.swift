@@ -7,6 +7,10 @@ struct PersonalDataView: View {
     @State private var expandedSections: Set<DataCategory> = Set(DataCategory.allCases)
     @State private var showAddData = false
     @State private var selectedCategory: DataCategory = .identity
+    /// Phase 2.7: when set, surfaces the "Available Personal Data"
+    /// catalog dialog — the same grouped view a connection sees when
+    /// browsing what they can request.
+    @State private var showAvailableCatalog = false
 
     var body: some View {
         Group {
@@ -24,11 +28,24 @@ struct PersonalDataView: View {
         .task {
             await viewModel.loadData()
         }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showAvailableCatalog = true
+                } label: {
+                    Image(systemName: "doc.text.magnifyingglass")
+                }
+                .accessibilityLabel("Available personal data")
+            }
+        }
         .sheet(isPresented: $showAddData) {
             AddPersonalDataView(
                 viewModel: viewModel,
                 initialCategory: selectedCategory
             )
+        }
+        .sheet(isPresented: $showAvailableCatalog) {
+            AvailableDataCatalogView()
         }
     }
 
@@ -171,8 +188,11 @@ struct PersonalDataView: View {
 
     private func deleteItems(at indexSet: IndexSet, in category: DataCategory) {
         let data = viewModel.items(for: category)
-        for index in indexSet {
-            viewModel.deleteItem(data[index].id)
+        let ids = indexSet.map { data[$0].id }
+        Task {
+            for id in ids {
+                await viewModel.deleteItem(id)
+            }
         }
     }
 }
@@ -369,14 +389,16 @@ struct AddPersonalDataView: View {
     }
 
     private func saveData() {
-        viewModel.addItem(
-            name: name,
-            value: value,
-            category: category,
-            fieldType: fieldType,
-            isInPublicProfile: isInPublicProfile
-        )
-        dismiss()
+        Task {
+            await viewModel.addItem(
+                name: name,
+                value: value,
+                category: category,
+                fieldType: fieldType,
+                isInPublicProfile: isInPublicProfile
+            )
+            await MainActor.run { dismiss() }
+        }
     }
 }
 

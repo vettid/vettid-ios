@@ -6,6 +6,20 @@ struct FeedView: View {
     @StateObject private var viewModel = FeedViewModel()
     @State private var isSearching = false
 
+    // System-card destinations (Phase 1.2). Guide sheets bind to the
+    // tapped guide id; presenting a non-nil id opens GuideDetailView.
+    @State private var presentedGuideId: GuideId?
+    @State private var showProposals: Bool = false
+    @State private var showVaultMessages: Bool = false
+
+    // Phase 3.9: route incoming-grant-request taps. The request kind
+    // determines which approval sheet pops; we resolve the kind by
+    // looking up the pending request in GrantsRepository when the row
+    // is tapped, since the PendingRow carries only the request id.
+    @State private var presentedGrantApproval: PendingRequestSummary?
+    @State private var presentedCriticalUseApproval: CriticalUseApprovalView.Input?
+    @State private var presentedVerifyApproval: IdentityVerifyApprovalView.Input?
+
     var body: some View {
         VStack(spacing: 0) {
             // Search bar
@@ -39,18 +53,20 @@ struct FeedView: View {
                 .background(Color(.systemBackground))
             }
 
-            // Filter chips
-            HStack {
-                if !isSearching {
+            // Search affordance (no filter chips in the connection-centric model).
+            if !isSearching {
+                HStack {
+                    Spacer()
                     Button {
                         isSearching = true
                     } label: {
                         Image(systemName: "magnifyingglass")
                             .foregroundStyle(.secondary)
-                            .padding(.leading, 16)
+                            .padding(.trailing, 16)
+                            .padding(.vertical, 8)
                     }
                 }
-                filterBar
+                .background(Color(.systemBackground))
             }
 
             // Content
@@ -61,8 +77,8 @@ struct FeedView: View {
             case .empty:
                 emptyView
 
-            case .loaded(let events):
-                eventsList(events)
+            case .loaded:
+                displayItemsList(viewModel.displayItems)
 
             case .error(let message):
                 errorView(message)
@@ -88,26 +104,42 @@ struct FeedView: View {
         .onDisappear {
             viewModel.stopPeriodicRefresh()
         }
-    }
-
-    // MARK: - Filter Bar
-
-    private var filterBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(FeedViewModel.FeedFilter.allCases, id: \.rawValue) { filter in
-                    FilterChip(
-                        title: filter.rawValue,
-                        isSelected: viewModel.filter == filter
-                    ) {
-                        viewModel.setFilter(filter)
-                    }
+        // System-card destinations (Phase 1.2).
+        .sheet(item: $presentedGuideId) { guideId in
+            NavigationView {
+                GuideDetailView(
+                    guide: GuideCatalog.guide(for: guideId),
+                    onDismiss: { presentedGuideId = nil }
+                )
+                .onAppear {
+                    // Mark read as soon as the user opens the guide —
+                    // matches Android `GuideReadTracker` behavior.
+                    GuideReadTracker.shared.markRead(guideId)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
         }
-        .background(Color(.systemBackground))
+        .sheet(isPresented: $showProposals) {
+            NavigationView {
+                ProposalsView(authTokenProvider: { nil })
+            }
+        }
+        .sheet(isPresented: $showVaultMessages) {
+            NavigationView {
+                VaultMessagesView()
+            }
+        }
+        // Phase 3.9: incoming-grant approval surfaces. Tapping a
+        // `PendingRow.incomingGrantRequest` on a connection card opens
+        // the matching approval sheet (data / critical-use / verify).
+        .sheet(item: $presentedGrantApproval) { req in
+            NavigationView { DataGrantApprovalView(request: req) }
+        }
+        .sheet(item: $presentedCriticalUseApproval) { input in
+            NavigationView { CriticalUseApprovalView(request: input) }
+        }
+        .sheet(item: $presentedVerifyApproval) { input in
+            NavigationView { IdentityVerifyApprovalView(request: input) }
+        }
     }
 
     // MARK: - Loading View
@@ -148,69 +180,70 @@ struct FeedView: View {
     }
 
     private var emptyMessage: String {
-        switch viewModel.filter {
-        case .all:
-            return "Your feed is empty. New messages, connection requests, and activity will appear here."
-        case .messages:
-            return "No messages yet. Start a conversation with one of your connections."
-        case .connections:
-            return "No connection requests. Share your invitation to connect with others."
-        case .auth:
-            return "No authentication requests. Services you authorize will appear here."
-        case .activity:
-            return "No vault activity recorded yet."
-        case .agents:
-            return "No agent activity. Connected agents will appear here."
-        case .devices:
-            return "No device activity. Paired devices will appear here."
+        if !viewModel.searchQuery.isEmpty {
+            return "No results for \"\(viewModel.searchQuery)\"."
         }
+        return "Your connections will appear here. Share your invitation to connect with someone."
     }
 
-    // MARK: - Events List
+    // MARK: - Display Items List
 
-    private func eventsList(_ events: [FeedEvent]) -> some View {
+    /// Render the connection-centric list. Connection cards are the
+    /// primary surface; standalone events fall through to `EventCardView`
+    /// for things like auth requests and vault lifecycle that aren't
+    /// attached to a connection. An archived-connections footer row
+    /// surfaces terminal-status connections.
+    private func displayItemsList(_ items: [FeedDisplayItem]) -> some View {
         List {
-            ForEach(events) { event in
-                EventCardView(
-                    event: event,
-                    isProcessing: viewModel.isProcessingAction,
-                    onAcceptConnection: { requestId in
-                        Task { await viewModel.acceptConnection(requestId: requestId) }
-                    },
-                    onDeclineConnection: { requestId in
-                        Task { await viewModel.declineConnection(requestId: requestId) }
-                    },
-                    onApproveAuth: { requestId in
-                        Task { await viewModel.approveAuth(requestId: requestId) }
-                    },
-                    onDenyAuth: { requestId in
-                        Task { await viewModel.denyAuth(requestId: requestId) }
+            ForEach(items) { item in
+                switch item {
+                case .connectionCard(let card):
+                    ConnectionCard(card: card, onPendingRowTap: { row in
+                        handlePendingRowTap(row, on: card)
+                    })
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        handleCardTap(card)
                     }
-                )
-                .onTapGesture {
-                    handleEventTap(event)
-                }
-                .swipeActions(edge: .leading) {
-                    Button {
-                        viewModel.archiveEvent(eventId: event.id)
-                    } label: {
-                        Label("Archive", systemImage: "archivebox")
-                    }
-                    .tint(.blue)
 
-                    Button {
-                        viewModel.pinEvent(eventId: event.id)
-                    } label: {
-                        Label("Pin", systemImage: "star")
+                case .eventItem(let event):
+                    EventCardView(
+                        event: event,
+                        isProcessing: viewModel.isProcessingAction,
+                        onAcceptConnection: { rid in
+                            Task { await viewModel.acceptConnection(requestId: rid) }
+                        },
+                        onDeclineConnection: { rid in
+                            Task { await viewModel.declineConnection(requestId: rid) }
+                        },
+                        onApproveAuth: { rid in
+                            Task { await viewModel.approveAuth(requestId: rid) }
+                        },
+                        onDenyAuth: { rid in
+                            Task { await viewModel.denyAuth(requestId: rid) }
+                        }
+                    )
+                    .onTapGesture {
+                        handleEventTap(event)
                     }
-                    .tint(.yellow)
-                }
-                .swipeActions(edge: .trailing) {
-                    Button(role: .destructive) {
-                        viewModel.deleteEvent(eventId: event.id)
-                    } label: {
-                        Label("Delete", systemImage: "trash")
+                    .swipeActions(edge: .leading) {
+                        Button {
+                            viewModel.archiveEvent(eventId: event.id)
+                        } label: {
+                            Label("Archive", systemImage: "archivebox")
+                        }
+                        .tint(.blue)
                     }
+                    .swipeActions(edge: .trailing) {
+                        Button(role: .destructive) {
+                            viewModel.deleteEvent(eventId: event.id)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+
+                case .archivedConnections(let count):
+                    archivedFooterRow(count: count)
                 }
             }
         }
@@ -256,6 +289,105 @@ struct FeedView: View {
     }
 
     // MARK: - Actions
+
+    private func handleCardTap(_ card: ConnectionCardData) {
+        // Tapping the system card body opens the deferred-vault-messages
+        // surface; peer cards route to detail (or review when pending).
+        if card.isSystem {
+            showVaultMessages = true
+            return
+        }
+        let dest = card.needsReview ? "review" : "detail"
+        #if DEBUG
+        print("[FeedView] Card tap → \(dest) — \(card.connectionId)")
+        #endif
+    }
+
+    /// Route a tap on a `PendingRow` to the right screen. Each row type
+    /// owns its own destination; the system card surfaces guides + votes,
+    /// peer cards mostly route to conversation / review.
+    private func handlePendingRowTap(_ row: PendingRow, on card: ConnectionCardData) {
+        switch row {
+        case .guideUnread(let guideId, _):
+            if let id = GuideId(rawValue: guideId) {
+                presentedGuideId = id
+            }
+        case .proposalUnvoted:
+            showProposals = true
+        case .outboundInvitationPending(let connectionId, _):
+            // Phase 1.8: tap the row → cancel the invitation. Vault
+            // tears down the broker entry and the card drops out of
+            // the live list on the next refresh.
+            Task { await viewModel.cancelOutboundInvitation(connectionId: connectionId) }
+        case .incomingGrantRequest(let requestId, _):
+            // Phase 3.9: look up the pending request and route to the
+            // matching approval sheet. The row's kind drives the
+            // approval surface — data/secret value, critical-use, or
+            // identity-verify — and matches GrantsView's routing.
+            guard let req = GrantsRepository.shared.pending.first(where: {
+                $0.requestId == requestId
+            }) else { return }
+            switch req.kind {
+            case .data, .minorSecret, .criticalSecretValue:
+                presentedGrantApproval = req
+            case .criticalSecretUse:
+                presentedCriticalUseApproval = CriticalUseApprovalView.Input(
+                    requestId: req.requestId,
+                    peerLabel: req.peerLabel,
+                    itemLabel: req.itemLabel,
+                    operation: req.kind.displayName,
+                    context: req.reason
+                )
+            case .identityVerify:
+                presentedVerifyApproval = IdentityVerifyApprovalView.Input(
+                    requestId: req.requestId,
+                    peerLabel: req.peerLabel,
+                    challenge: req.reason
+                )
+            }
+        case .pendingReview, .unreadMessages, .missedCall:
+            #if DEBUG
+            print("[FeedView] Row tap → \(row.id) on \(card.connectionId)")
+            #endif
+        case .pendingMigration, .peerLocationShare, .lastActivity:
+            #if DEBUG
+            print("[FeedView] Row tap (no destination yet) → \(row.id)")
+            #endif
+        }
+    }
+
+    /// Footer row that surfaces the archived (terminal-status) connection
+    /// count and routes to `ArchivedConnectionsView` (Phase 1.7). Until
+    /// that screen lands, the row is informational.
+    private func archivedFooterRow(count: Int) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "archivebox")
+                .foregroundStyle(.secondary)
+                .frame(width: 24, height: 24)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Archived connections")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                Text("\(count) archived (declined, revoked, or expired)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            #if DEBUG
+            print("[FeedView] Archived footer tap (\(count) connections)")
+            #endif
+        }
+    }
 
     private func handleEventTap(_ event: FeedEvent) {
         viewModel.markAsRead(event)

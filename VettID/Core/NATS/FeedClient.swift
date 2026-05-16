@@ -239,7 +239,18 @@ final class FeedClient {
         let events = parseEventArray(from: response, key: "events")
         let total = response.getInt("total") ?? events.count
 
-        return AuditQueryResult(events: events, total: total)
+        // Chain anchor — present once the vault has shipped the
+        // per-session audit key. Absent before the first PIN unlock of
+        // this session; downstream verifier will treat every row as
+        // `unsigned` in that case.
+        let result = response.result ?? [:]
+        let anchor = AuditChainVerifier.ChainAnchor(
+            auditPubB64: result["audit_pub"]   as? String,
+            bindingSigB64: result["binding_sig"] as? String,
+            identityPubB64: result["identity_pub"] as? String
+        )
+
+        return AuditQueryResult(events: events, total: total, chainAnchor: anchor)
     }
 
     /// Export audit events (max 1000).
@@ -339,7 +350,10 @@ final class FeedClient {
             archivedAt: parseOptionalTimeInterval(dict["archived_at"]),
             expiresAt: parseOptionalTimeInterval(dict["expires_at"]),
             syncSequence: parseInt64(dict["sync_sequence"]),
-            retentionClass: dict["retention_class"] as? String ?? "standard"
+            retentionClass: dict["retention_class"] as? String ?? "standard",
+            previousHash: (dict["previous_hash"] as? String).flatMap { $0.isEmpty ? nil : $0 },
+            entryHash:    (dict["entry_hash"]    as? String).flatMap { $0.isEmpty ? nil : $0 },
+            entrySig:     (dict["entry_sig"]     as? String).flatMap { $0.isEmpty ? nil : $0 }
         )
     }
 
@@ -403,6 +417,13 @@ struct VaultFeedEvent: Codable, Identifiable {
     let syncSequence: Int64
     let retentionClass: String
 
+    // Audit chain — populated by the vault for security-relevant rows
+    // since the audit-key shipment. nil for legacy / pre-chain events.
+    // Verification logic lives in AuditChainVerifier.
+    let previousHash: String?
+    let entryHash: String?
+    let entrySig: String?
+
     var id: String { eventId }
 
     /// Whether this event is unread
@@ -440,6 +461,9 @@ struct VaultFeedEvent: Codable, Identifiable {
         case expiresAt = "expires_at"
         case syncSequence = "sync_sequence"
         case retentionClass = "retention_class"
+        case previousHash = "previous_hash"
+        case entryHash = "entry_hash"
+        case entrySig = "entry_sig"
     }
 }
 
@@ -484,6 +508,15 @@ struct VaultFeedSettings: Codable {
 struct AuditQueryResult {
     let events: [VaultFeedEvent]
     let total: Int
+    /// Response-level chain anchor. Empty when the vault hasn't shipped
+    /// the per-session audit key yet (pre-unlock or pre-rollout).
+    let chainAnchor: AuditChainVerifier.ChainAnchor
+
+    init(events: [VaultFeedEvent], total: Int, chainAnchor: AuditChainVerifier.ChainAnchor = .empty) {
+        self.events = events
+        self.total = total
+        self.chainAnchor = chainAnchor
+    }
 }
 
 struct AuditExportResult {

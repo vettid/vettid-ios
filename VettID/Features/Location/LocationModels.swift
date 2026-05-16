@@ -128,6 +128,30 @@ enum LocationTimeFilter: String, CaseIterable {
     }
 }
 
+// MARK: - Peer-Location Share Transition (V6 / Phase 5.4)
+
+/// Notification emitted when a peer's location-sharing state changes:
+///   - started:   peer just turned on continuous sharing with us
+///   - stopped:   peer just turned it off
+///   - requested: peer pinged us asking for a one-shot location
+///
+/// `at` is an RFC3339 UTC timestamp string from the vault. The receiver-
+/// side `connectionId` is what the UI uses to route the notification —
+/// the peer's own connection id stays hidden inside `fromOwnerSpace`.
+/// Mirrors Android `PeerLocationShareTransition`.
+struct PeerLocationShareTransition: Equatable {
+    let connectionId: String
+    let fromOwnerSpace: String
+    let transition: Transition
+    let at: String
+
+    enum Transition: String, Equatable {
+        case started
+        case stopped
+        case requested
+    }
+}
+
 // MARK: - Shared Location Entry (for UI)
 
 struct SharedLocationEntry: Identifiable {

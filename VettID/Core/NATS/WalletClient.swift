@@ -11,19 +11,52 @@ import Foundation
 final class WalletClient {
 
     private let ownerSpaceClient: OwnerSpaceClient
+    private let credentialStore: ProteanCredentialStore
 
-    init(ownerSpaceClient: OwnerSpaceClient) {
+    init(ownerSpaceClient: OwnerSpaceClient,
+         credentialStore: ProteanCredentialStore = ProteanCredentialStore()) {
         self.ownerSpaceClient = ownerSpaceClient
+        self.credentialStore = credentialStore
     }
 
     // MARK: - Wallet Management
 
-    /// Create a new HD wallet. Key generation happens in the enclave.
-    func createWallet(label: String, network: BitcoinNetwork) async throws -> WalletInfo {
-        let payload: [String: AnyCodableValue] = [
+    /// Create a new HD wallet (Phase 5.2 — password-gated).
+    ///
+    /// Android moved wallet creation behind a password gate so the
+    /// vault re-derives the credential CEK in-flight and rotates UTKs
+    /// on success. The app supplies a password envelope, the vault
+    /// hands back a fresh `encrypted_credential` + a `new_utks` array,
+    /// and the client persists both before returning the wallet info.
+    ///
+    /// Backwards-compat path: when `password` is nil, fall back to the
+    /// pre-5.2 unauthenticated call. Will be removed once every iOS
+    /// call site supplies a password.
+    func createWallet(label: String,
+                      network: BitcoinNetwork,
+                      password: String? = nil) async throws -> WalletInfo {
+        var payload: [String: AnyCodableValue] = [
             "label": AnyCodableValue(label),
             "network": AnyCodableValue(network.rawValue)
         ]
+
+        // Phase D / 0.7: include the encrypted credential blob so the
+        // vault decrypts in-flight rather than reading vaultState.
+        if let blob = try? credentialStore.encryptedBlobBase64() {
+            payload["encrypted_credential"] = AnyCodableValue(blob)
+        }
+
+        // Phase 5.2: password envelope.
+        if let password = password {
+            let envelope = try PasswordApprovalEnvelope.build(password: password)
+            payload["encrypted_password_hash"] = AnyCodableValue(envelope.encryptedPasswordHash)
+            payload["ephemeral_public_key"]    = AnyCodableValue(envelope.ephemeralPublicKey)
+            payload["nonce"]                   = AnyCodableValue(envelope.nonce)
+            payload["salt"]                    = AnyCodableValue(envelope.salt)
+            if let utk = envelope.utkKeyId {
+                payload["key_id"] = AnyCodableValue(utk)
+            }
+        }
 
         let response = try await sendAndAwait("wallet.create", payload: payload)
 
@@ -31,7 +64,39 @@ final class WalletClient {
             throw WalletClientError.invalidResponse("No result in create response")
         }
 
+        // Phase 5.2: persist the fresh credential blob + UTKs the vault
+        // returned on success. Without this the next password-gated op
+        // would try to use the old credential, which the vault already
+        // rotated away from.
+        if let newBlob = result["encrypted_credential"] as? String,
+           let blobData = Data(base64Encoded: newBlob) {
+            try? rotateStoredCredential(blob: blobData, newUtks: result["new_utks"] as? [[String: Any]])
+        }
+
         return Self.parseWalletInfo(from: result)
+    }
+
+    /// Persist a freshly rotated credential blob + UTK pool returned
+    /// from a password-gated vault op. Best-effort; failures here
+    /// leave the wallet usable but a future password-gated op would
+    /// need to recover by re-rotating.
+    private func rotateStoredCredential(blob: Data, newUtks: [[String: Any]]?) throws {
+        guard let prior = try credentialStore.retrieveMetadata() else { return }
+        let metadata = ProteanCredentialMetadata(
+            version: prior.version + 1,
+            createdAt: prior.createdAt,
+            updatedAt: Date(),
+            backedUpAt: prior.backedUpAt,
+            backupId: prior.backupId,
+            sizeBytes: blob.count,
+            userGuid: prior.userGuid
+        )
+        try credentialStore.store(blob: blob, metadata: metadata)
+        // UTK pool persistence lives on the separate CredentialStore
+        // (`StoredUTK` array on `StoredCredential`). Out of scope for
+        // this hop — the warm-up path's storeUTKsFromWarmResponse will
+        // refresh on next warm.
+        _ = newUtks
     }
 
     /// List all wallets.

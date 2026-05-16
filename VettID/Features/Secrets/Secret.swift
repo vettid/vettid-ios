@@ -148,6 +148,12 @@ enum FieldInputHint: String, Codable {
 struct MinorSecret: Identifiable, Codable, Equatable {
     let id: String
     var name: String
+    /// Short user-set label that disambiguates similar secrets (Phase 2.3).
+    /// Matches Android `MinorSecret.alias`. Shown as the second line in
+    /// the catalog/list rows and used by the catalog dialog to group
+    /// secrets that share an alias (e.g. "Trading Wallet" bundling
+    /// several keys). Vault is authoritative.
+    var alias: String?
     var value: String
     var category: SecretCategory
     var type: SecretType
@@ -155,8 +161,19 @@ struct MinorSecret: Identifiable, Codable, Equatable {
     var fields: [SecretField]
     var isShareable: Bool
     var isInPublicProfile: Bool
+    /// Phase 2.4: four-tier visibility (PROFILE / CATALOG / USE_ONLY /
+    /// PRIVATE). Authoritative when set; `isInPublicProfile` is the
+    /// legacy bool that callers still pass around — true iff visibility
+    /// == `.profile`. New records default to `.private` per Android's
+    /// "default new secrets to hidden" behavior (commit 8880f95).
+    var visibility: SecretVisibility
     var isSystemField: Bool
     var sortOrder: Int
+    /// DEPRECATED (Phase 2.1): the vault is authoritative now, so a
+    /// per-record sync status is meaningless. Kept on the model for
+    /// backwards compat with serialized older records — new records
+    /// always set `.synced`. Will be removed in a follow-up pass once
+    /// no consumers read it.
     var syncStatus: SecretSyncStatus
     var groupId: String?
     var groupLabel: String?
@@ -166,6 +183,7 @@ struct MinorSecret: Identifiable, Codable, Equatable {
     init(
         id: String = UUID().uuidString,
         name: String,
+        alias: String? = nil,
         value: String = "",
         category: SecretCategory = .other,
         type: SecretType = .text,
@@ -173,9 +191,10 @@ struct MinorSecret: Identifiable, Codable, Equatable {
         fields: [SecretField] = [],
         isShareable: Bool = false,
         isInPublicProfile: Bool = false,
+        visibility: SecretVisibility? = nil,
         isSystemField: Bool = false,
         sortOrder: Int = 0,
-        syncStatus: SecretSyncStatus = .pending,
+        syncStatus: SecretSyncStatus = .synced,
         groupId: String? = nil,
         groupLabel: String? = nil,
         createdAt: Date = Date(),
@@ -183,6 +202,7 @@ struct MinorSecret: Identifiable, Codable, Equatable {
     ) {
         self.id = id
         self.name = name
+        self.alias = alias
         self.value = value
         self.category = category
         self.type = type
@@ -190,6 +210,18 @@ struct MinorSecret: Identifiable, Codable, Equatable {
         self.fields = fields
         self.isShareable = isShareable
         self.isInPublicProfile = isInPublicProfile
+        // Resolve visibility: explicit value wins; otherwise infer from
+        // legacy bools so existing call sites stay correct without
+        // having to touch them.
+        if let v = visibility {
+            self.visibility = v
+        } else if isInPublicProfile {
+            self.visibility = .profile
+        } else if isShareable {
+            self.visibility = .catalog
+        } else {
+            self.visibility = .private
+        }
         self.isSystemField = isSystemField
         self.sortOrder = sortOrder
         self.syncStatus = syncStatus
@@ -197,6 +229,57 @@ struct MinorSecret: Identifiable, Codable, Equatable {
         self.groupLabel = groupLabel
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+    }
+
+    /// Build a MinorSecret from a `secret.list` row (vault dict shape).
+    /// Returns nil if required keys are missing. Phase 2.1 wire-decoder.
+    static func from(vaultDict dict: [String: Any]) -> MinorSecret? {
+        guard let id = dict["id"] as? String,
+              let name = (dict["label"] ?? dict["name"]) as? String else {
+            return nil
+        }
+        let categoryRaw = (dict["category"] as? String) ?? "other"
+        let category = SecretCategory(rawValue: categoryRaw) ?? .other
+        let typeRaw = (dict["type"] as? String) ?? "text"
+        let type = SecretType(rawValue: typeRaw) ?? .text
+        let visibilityRaw = (dict["visibility"] as? String) ?? "PRIVATE"
+        let visibility: SecretVisibility = {
+            switch visibilityRaw.uppercased() {
+            case "PROFILE":   return .profile
+            case "CATALOG":   return .catalog
+            case "USE_ONLY":  return .useOnly
+            default:           return .private
+            }
+        }()
+        let createdAtSeconds = (dict["created_at"] as? Double)
+            ?? (dict["created_at"] as? Int).map(Double.init)
+            ?? 0
+        let updatedAtSeconds = (dict["updated_at"] as? Double)
+            ?? (dict["updated_at"] as? Int).map(Double.init)
+            ?? createdAtSeconds
+        return MinorSecret(
+            id: id,
+            name: name,
+            alias: dict["alias"] as? String,
+            // `secret.list` returns metadata only; values come on demand
+            // via `secret.get` (vault). Leave value empty so the UI's
+            // reveal path fetches it.
+            value: "",
+            category: category,
+            type: type,
+            notes: dict["notes"] as? String,
+            fields: [],
+            isShareable: visibility == .profile || visibility == .catalog,
+            isInPublicProfile: visibility == .profile,
+            visibility: visibility,
+            isSystemField: false,
+            sortOrder: (dict["sort_order"] as? Int) ?? 0,
+            syncStatus: .synced,
+            groupId: dict["group_id"] as? String,
+            groupLabel: dict["group_label"] as? String,
+            createdAt: createdAtSeconds > 0 ? Date(timeIntervalSince1970: createdAtSeconds) : Date(),
+            updatedAt: updatedAtSeconds > 0 ? Date(timeIntervalSince1970: updatedAtSeconds) : Date()
+        )
     }
 }
 

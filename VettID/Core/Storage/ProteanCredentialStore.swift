@@ -80,6 +80,16 @@ final class ProteanCredentialStore {
         return try JSONDecoder().decode(ProteanCredentialMetadata.self, from: data)
     }
 
+    /// The encrypted credential blob, base64-encoded, for inclusion in
+    /// password-gated vault requests (phase D). The vault decrypts the
+    /// blob in-flight rather than reading `vaultState.credential`, so the
+    /// enclave doesn't have to hold the credential in memory between ops.
+    /// Returns nil if no credential is stored (e.g. pre-enrollment).
+    func encryptedBlobBase64() throws -> String? {
+        guard let blob = try retrieveBlob() else { return nil }
+        return blob.base64EncodedString()
+    }
+
     /// Check if a Protean Credential is stored
     func hasCredential() -> Bool {
         let query: [String: Any] = [

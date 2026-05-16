@@ -21,35 +21,42 @@ final class CertificatePinningDelegate: NSObject, URLSessionDelegate {
         }
     }
 
-    /// Pinned certificates for VettID API domains
-    /// These are SHA-256 hashes of the Subject Public Key Info (SPKI)
+    /// Pinned certificates for VettID API domains.
+    /// Values are base64-encoded SHA-256 hashes of the DER-encoded Subject
+    /// Public Key Info (SPKI) — the same pin set okhttp's `CertificatePinner`
+    /// uses on Android (`sha256/...`), so the two platforms stay in lockstep.
     ///
-    /// SECURITY NOTE: AWS API Gateway uses AWS-managed certificates that rotate automatically.
-    /// Certificate pinning is NOT recommended for API Gateway endpoints without a custom domain
-    /// with stable certificates from ACM.
+    /// SECURITY (manifest-F6): pinned to the Amazon RSA 2048 M04 intermediate
+    /// (the current api.vettid.dev issuer) plus Amazon Root CA 1 as backup.
+    /// We pin CA certs in the chain rather than the leaf because AWS-managed
+    /// leaf certificates rotate automatically; the chain check in
+    /// `validateCertificateChain` matches a pin against ANY cert in the chain.
     ///
-    /// Current configuration:
-    /// - Pinning is effectively disabled (empty configuration)
-    /// - HTTPS is still enforced via ATS (App Transport Security)
-    /// - System CA validation is performed
+    /// Refresh procedure if Amazon publishes a new intermediate:
+    ///   echo | openssl s_client -servername api.vettid.dev \
+    ///       -showcerts -connect api.vettid.dev:443 2>/dev/null \
+    ///     | openssl x509 -pubkey -noout \
+    ///     | openssl pkey -pubin -outform der \
+    ///     | openssl dgst -sha256 -binary | base64
     ///
-    /// To enable certificate pinning:
-    /// 1. Configure a custom domain (e.g., api.vettid.dev) in API Gateway with ACM certificate
-    /// 2. Generate SPKI hashes using:
-    ///    openssl s_client -connect api.vettid.dev:443 </dev/null 2>/dev/null | \
-    ///    openssl x509 -pubkey -noout | openssl pkey -pubin -outform der | \
-    ///    openssl dgst -sha256 -binary | base64
-    /// 3. Add the hash to the configuration below
-    /// 4. Include backup pins from the CA chain for rotation resilience
+    /// Amazon RSA 2048 M04 — intermediate that signs api.vettid.dev today.
+    private static let amazonRSAM04Pin = "G9LNNAql897egYsabashkzUCTEJkWBzgoEtk8X/678c="
+    /// Amazon Root CA 1 — backup; would have to replace M04 entirely if M04 is retired.
+    private static let amazonRootCA1Pin = "++MBgDH5WGvL9Bcn5Be30cRcL0f5O+NyoXuWtQdX1aI="
+
     private static let pinnedConfigurations: [PinConfiguration] = [
-        // Custom domain configuration - uncomment and configure when custom domain is deployed
-        // PinConfiguration(
-        //     domain: "api.vettid.dev",
-        //     publicKeyHashes: [
-        //         "YOUR_PRIMARY_SPKI_HASH_BASE64=",  // Primary certificate hash
-        //         "YOUR_BACKUP_SPKI_HASH_BASE64="    // Backup CA hash for rotation
-        //     ]
-        // )
+        PinConfiguration(
+            domain: "api.vettid.dev",
+            publicKeyHashes: [amazonRSAM04Pin, amazonRootCA1Pin]
+        ),
+        PinConfiguration(
+            domain: "vettid.dev",
+            publicKeyHashes: [amazonRSAM04Pin, amazonRootCA1Pin]
+        ),
+        PinConfiguration(
+            domain: "pcr-manifest.vettid.dev",
+            publicKeyHashes: [amazonRSAM04Pin, amazonRootCA1Pin]
+        )
     ]
 
     /// Callback for pin validation failures
@@ -161,45 +168,89 @@ final class CertificatePinningDelegate: NSObject, URLSessionDelegate {
         return false
     }
 
-    /// Extract SHA-256 hash of the Subject Public Key Info (SPKI)
+    /// Extract base64(SHA-256(DER-encoded SPKI)) for a certificate.
     private func extractPublicKeyHash(from certificate: SecCertificate) -> String? {
-        // Get the public key from the certificate
         guard let publicKey = SecCertificateCopyKey(certificate) else {
             return nil
         }
+        return Self.spkiSHA256Base64(for: publicKey)
+    }
 
-        // Get the external representation (SPKI)
+    /// Compute base64(SHA-256(SubjectPublicKeyInfo)) for a public key.
+    ///
+    /// `SecKeyCopyExternalRepresentation` returns the *raw* key (PKCS#1
+    /// `RSAPublicKey` for RSA, ANSI X9.63 for EC) — NOT the DER-encoded
+    /// SubjectPublicKeyInfo that okhttp / OpenSSL hash. To produce a pin that
+    /// matches the Android pin set we must prepend the fixed ASN.1 SPKI
+    /// header for the key's type and size before hashing.
+    ///
+    /// Exposed as `internal static` so `AppleNatsClient`'s TLS verify block
+    /// can reuse the same SPKI-pin computation as the HTTPS surface.
+    static func spkiSHA256Base64(for publicKey: SecKey) -> String? {
         var error: Unmanaged<CFError>?
-        guard let publicKeyData = SecKeyCopyExternalRepresentation(publicKey, &error) as Data? else {
+        guard let rawKey = SecKeyCopyExternalRepresentation(publicKey, &error) as Data?,
+              let attributes = SecKeyCopyAttributes(publicKey) as? [CFString: Any],
+              let keyType = attributes[kSecAttrKeyType] as? String,
+              let keySize = (attributes[kSecAttrKeySizeInBits] as? NSNumber)?.intValue,
+              let header = asn1SPKIHeader(keyType: keyType, keySizeInBits: keySize) else {
             return nil
         }
 
-        // Hash the public key data with SHA-256
-        let hash = SHA256.hash(data: publicKeyData)
+        var spki = Data(header)
+        spki.append(rawKey)
+        let hash = SHA256.hash(data: spki)
         return Data(hash).base64EncodedString()
+    }
+
+    /// Fixed ASN.1 SubjectPublicKeyInfo headers, keyed by algorithm + key size.
+    /// These prefix the raw key bytes to reconstruct the full DER SPKI.
+    /// Internal so `AppleNatsClient` can share the table.
+    static func asn1SPKIHeader(keyType: String, keySizeInBits: Int) -> [UInt8]? {
+        switch (keyType, keySizeInBits) {
+        case (String(kSecAttrKeyTypeRSA), 2048):
+            return [
+                0x30, 0x82, 0x01, 0x22, 0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
+                0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00, 0x03, 0x82, 0x01, 0x0f, 0x00
+            ]
+        case (String(kSecAttrKeyTypeRSA), 3072):
+            return [
+                0x30, 0x82, 0x01, 0xa2, 0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
+                0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00, 0x03, 0x82, 0x01, 0x8f, 0x00
+            ]
+        case (String(kSecAttrKeyTypeRSA), 4096):
+            return [
+                0x30, 0x82, 0x02, 0x22, 0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
+                0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00, 0x03, 0x82, 0x02, 0x0f, 0x00
+            ]
+        case (String(kSecAttrKeyTypeECSECPrimeRandom), 256):
+            return [
+                0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02,
+                0x01, 0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07, 0x03,
+                0x42, 0x00
+            ]
+        case (String(kSecAttrKeyTypeECSECPrimeRandom), 384):
+            return [
+                0x30, 0x76, 0x30, 0x10, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02,
+                0x01, 0x06, 0x05, 0x2b, 0x81, 0x04, 0x00, 0x22, 0x03, 0x62, 0x00
+            ]
+        default:
+            #if DEBUG
+            print("[CertificatePinning] No ASN.1 SPKI header for keyType=\(keyType) size=\(keySizeInBits)")
+            #endif
+            return nil
+        }
     }
 
     // MARK: - Utility
 
-    /// Generate SPKI hash for a certificate file (for initial setup)
-    /// This is a utility method to help generate the pin hashes
+    /// Generate the SPKI pin for a certificate file (for initial setup / pin refresh).
     static func generateSPKIHash(fromDERFile path: String) -> String? {
         guard let data = FileManager.default.contents(atPath: path),
-              let certificate = SecCertificateCreateWithData(nil, data as CFData) else {
+              let certificate = SecCertificateCreateWithData(nil, data as CFData),
+              let publicKey = SecCertificateCopyKey(certificate) else {
             return nil
         }
-
-        guard let publicKey = SecCertificateCopyKey(certificate) else {
-            return nil
-        }
-
-        var error: Unmanaged<CFError>?
-        guard let publicKeyData = SecKeyCopyExternalRepresentation(publicKey, &error) as Data? else {
-            return nil
-        }
-
-        let hash = SHA256.hash(data: publicKeyData)
-        return Data(hash).base64EncodedString()
+        return spkiSHA256Base64(for: publicKey)
     }
 }
 

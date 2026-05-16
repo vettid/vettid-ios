@@ -240,6 +240,22 @@ struct BtcPaymentReceipt: Codable {
     }
 }
 
+// MARK: - BTC Payment Decline (Phase 5.6)
+
+/// Decline payload sent back when the recipient rejects a payment
+/// request. Carries the original `request_id` and a free-text reason
+/// so the sender knows which request was rejected and why.
+/// Mirrors Android `BtcPaymentDecline`.
+struct BtcPaymentDecline: Codable {
+    let requestId: String
+    let reason: String
+
+    enum CodingKeys: String, CodingKey {
+        case requestId = "request_id"
+        case reason
+    }
+}
+
 // MARK: - BTC Address
 
 struct BtcAddress: Codable {

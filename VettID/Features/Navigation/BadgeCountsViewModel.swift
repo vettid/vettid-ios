@@ -15,10 +15,20 @@ class BadgeCountsViewModel: ObservableObject {
 
     func badgeCount(for item: DrawerItem) -> Int {
         switch item {
-        case .feed: return unreadFeedCount
-        case .connections: return pendingConnectionsCount
-        case .voting: return unvotedProposalsCount
-        case .personalData, .secrets, .wallets, .archive, .devices, .auditLog: return 0
+        // Phase 1.3: feed merged into connections (the connection-centric
+        // feed IS the connections list now); unread-feed + pending-conn
+        // counts fold together on the .connections drawer row.
+        case .connections: return unreadFeedCount + pendingConnectionsCount
+        case .voting:      return unvotedProposalsCount
+        // Phase 3.4: grants drawer row gets the count of inbound
+        // pending requests so users see "you've got things to triage".
+        case .grants:      return GrantsRepository.shared.pending.count
+        // Phase 3.11: actions drawer row carries no badge yet — the
+        // pending count would need ActionsRepository to surface it
+        // globally, and the inbox is empty in most flows. Stub at 0.
+        case .actions:     return 0
+        case .vault, .personalData, .secrets, .wallets,
+             .archive, .devices, .auditLog: return 0
         }
     }
 

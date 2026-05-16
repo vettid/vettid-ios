@@ -222,6 +222,11 @@ class AppState: ObservableObject {
     // cold = DEK not loaded (need PIN to warm)
     @Published var vaultTemperature: VaultTemperature = .unknown
     @Published var vaultWarmingError: String?
+    /// Phase 5.7 — M1 migration_status from the last warmVault response.
+    /// Drives the PIN unlock screen's calm "Updating vault…" state when
+    /// the value is `pending_new_enclave`, and surfaces errors when it's
+    /// `failed`. Cleared on the next warm.
+    @Published var lastMigrationStatus: String?
 
     // NATS connection manager for vault operations
     lazy var natsConnectionManager: NatsConnectionManager = {
@@ -259,6 +264,23 @@ class AppState: ObservableObject {
 
     private let credentialStore = CredentialStore()
     private let profileStore = ProfileStore()
+
+    // MARK: - Vault clients
+    //
+    // These wrap NATS RPC calls to the user's vault. They're built lazily
+    // after `warmVault` succeeds, when both `natsConnectionManager` has an
+    // ownerSpaceId and the vault is reachable. AppState owns them so any
+    // feature reachable from the SwiftUI tree can pick them up via
+    // `appState.ownerSpaceClient` / `.profileClient` / etc.
+    private(set) var ownerSpaceClient: OwnerSpaceClient?
+    private(set) var profileClient: ProfileClient?
+    private(set) var personalDataClient: PersonalDataClient?
+    private(set) var secretsClient: SecretsClient?
+    private(set) var grantsClient: GrantsClient?
+    private(set) var actionsClient: ActionsClient?
+    /// Used by the Security Audit Log surface to call `audit.query`
+    /// and run the Ed25519 chain verifier on the response.
+    private(set) var feedClient: FeedClient?
 
     /// Flag indicating if running in UI test mode
     static var isUITesting: Bool {
@@ -305,25 +327,107 @@ class AppState: ObservableObject {
         }
     }
 
-    /// Load stored profile for current user
+    /// Load the profile snapshot for the current user (Phase 2.2).
+    ///
+    /// Vault is the single source of truth — `Profile` is now synthesized
+    /// from `PersonalDataStore` (system fields, vault-published photo)
+    /// rather than read from the on-device `ProfileStore`. We don't
+    /// persist user-facing profile data on-device anymore.
+    ///
+    /// Until the store has hydrated (early launch, before warm-up),
+    /// `currentProfile` is nil. Once hydrate completes, the
+    /// `syncCurrentProfileFromStore()` subscription wires a fresh value
+    /// in; this entry point is now mostly a no-op preserved for the
+    /// call sites that still reference it.
     func loadProfile() {
-        if let guid = currentUserGuid {
-            currentProfile = try? profileStore.retrieve(userGuid: guid)
-        } else {
-            currentProfile = try? profileStore.retrieveFirst()
+        syncCurrentProfileFromStore()
+    }
+
+    /// Update profile fields via the vault (Phase 2.2). Maps the legacy
+    /// `Profile` struct back to vault namespaces and routes through
+    /// `PersonalDataStore.updateField(...)` for each field that changed.
+    /// Photo goes through the dedicated profile.photo.update RPC. No
+    /// data writes to Keychain.
+    ///
+    /// Fields without a vault home (`bio`, `location`) are accepted but
+    /// silently dropped — Android doesn't carry them either; they were
+    /// iOS-local-only. A polish pass on `EditProfileView` will remove
+    /// those inputs.
+    func updateProfile(_ profile: Profile) {
+        let prior = currentProfile
+        // Optimistic in-memory update so the UI reflects immediately.
+        currentProfile = profile
+
+        Task { @MainActor in
+            let store = PersonalDataStore.shared
+
+            // Split displayName into first/last for the system-field
+            // namespaces. Falls back to a single token in first_name.
+            let nameParts = profile.displayName
+                .trimmingCharacters(in: .whitespaces)
+                .split(separator: " ", maxSplits: 1)
+            let firstName = nameParts.first.map(String.init) ?? profile.displayName
+            let lastName  = nameParts.count > 1 ? String(nameParts[1]) : ""
+
+            do {
+                if firstName != (prior?.displayName.split(separator: " ").first.map(String.init) ?? "") {
+                    try await store.updateField(namespace: "_system_first_name", value: firstName)
+                }
+                if !lastName.isEmpty,
+                   lastName != (prior?.displayName.split(separator: " ").dropFirst().joined(separator: " ") ?? "") {
+                    try await store.updateField(namespace: "_system_last_name", value: lastName)
+                }
+                if let email = profile.email, email != prior?.email {
+                    try await store.updateField(namespace: "_system_email", value: email)
+                }
+                if let photoData = profile.photoData, photoData != prior?.photoData {
+                    try await store.updatePhoto(base64: photoData.base64EncodedString())
+                } else if profile.photoData == nil && prior?.photoData != nil {
+                    try await store.updatePhoto(base64: nil)
+                }
+            } catch {
+                #if DEBUG
+                print("[AppState] Failed to push profile to vault: \(error)")
+                #endif
+                // Roll back the optimistic update on failure.
+                currentProfile = prior
+            }
         }
     }
 
-    /// Update and save profile
-    func updateProfile(_ profile: Profile) {
-        do {
-            try profileStore.store(profile: profile)
-            currentProfile = profile
-        } catch {
-            #if DEBUG
-            print("Failed to save profile: \(error)")
-            #endif
+    /// Phase 2.2: synthesize `currentProfile` from `PersonalDataStore`.
+    /// Called once after configure() and again on every snapshot tick;
+    /// keeps the legacy `Profile` view-model in sync without backing it
+    /// with on-device persistence.
+    func syncCurrentProfileFromStore() {
+        let store = PersonalDataStore.shared
+        let first = store.items.first { $0.id == "_system_first_name" }?.value ?? ""
+        let last  = store.items.first { $0.id == "_system_last_name"  }?.value ?? ""
+        let email = store.items.first { $0.id == "_system_email"      }?.value
+        let displayName = [first, last]
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        let photoData: Data? = store.photoBase64.flatMap { Data(base64Encoded: $0) }
+
+        // Preserve the user's GUID / lastUpdated / syncedAt from the
+        // existing currentProfile when present; otherwise stub them.
+        let guid = currentProfile?.guid ?? currentUserGuid ?? ""
+        guard !displayName.isEmpty || email != nil || photoData != nil else {
+            // Vault not hydrated yet — leave currentProfile as-is so
+            // the UI doesn't blank.
+            return
         }
+        currentProfile = Profile(
+            guid: guid,
+            displayName: displayName.isEmpty ? "VettID User" : displayName,
+            avatarUrl: nil,
+            bio: nil,
+            location: nil,
+            email: email,
+            photoData: photoData,
+            syncedAt: Date(),
+            lastUpdated: Date()
+        )
     }
 
     func checkExistingCredential() {
@@ -380,11 +484,14 @@ class AppState: ObservableObject {
     ///
     /// - Parameter pin: User's 6-digit PIN
     /// - Throws: NatsConnectionError on failure
-    func warmVault(pin: String) async throws {
+    func warmVault(pin: String, migrateConsent: Bool = false) async throws {
         vaultWarmingError = nil
 
         do {
-            let response = try await natsConnectionManager.warmVault(pin: pin)
+            let response = try await natsConnectionManager.warmVault(
+                pin: pin,
+                migrateConsent: migrateConsent
+            )
 
             if response.success {
                 vaultTemperature = .warm(ttlSeconds: response.sessionTtl)
@@ -392,6 +499,19 @@ class AppState: ObservableObject {
                 // Store new UTKs from vault response
                 if let utks = response.utks, !utks.isEmpty {
                     storeUTKsFromWarmResponse(utks)
+                }
+
+                // Phase 5.7 — surface the M1 migration verdict to the
+                // PIN unlock screen. When migrate_consent was set and
+                // the vault returns `pending_new_enclave`, the screen
+                // shows the calm "Updating vault…" state and re-tries;
+                // `completed` records the migrated version locally so
+                // we don't re-prompt; `failed` surfaces a user-facing
+                // error. Empty/nil means there was nothing to migrate.
+                lastMigrationStatus = response.migrationStatus
+                if response.migrationStatus == "completed",
+                   let version = response.migrationVersion, !version.isEmpty {
+                    MigrationCompletionRecorder.shared.record(version: version)
                 }
 
                 // Sync profile data from vault after successful warming
@@ -447,16 +567,99 @@ class AppState: ObservableObject {
         #endif
     }
 
-    /// Sync profile data from vault after warming
+    /// Build (or re-use) the vault-RPC clients now that `natsConnectionManager`
+    /// has an ownerSpaceId, then hydrate `PersonalDataStore` from the vault.
+    /// Triggered after `warmVault` succeeds. (Phase 0.10 — vault SSOT.)
     private func syncProfileFromVault() {
-        // Load profile from local store first
+        // Keep the legacy local-profile path alive for now so anything still
+        // reading `currentProfile` doesn't go blank during the migration.
+        // The on-device ProfileStore is dropped in a later cleanup pass.
         loadProfile()
 
-        // In production: fetch system fields (firstName, lastName, email)
-        // from vault via NATS and update profile
-        #if DEBUG
-        print("[AppState] Profile sync triggered after vault warming")
-        #endif
+        guard let ownerSpaceId = natsConnectionManager.getOwnerSpaceId() else {
+            #if DEBUG
+            print("[AppState] syncProfileFromVault: no ownerSpaceId yet")
+            #endif
+            return
+        }
+
+        // (Re-)build the vault clients. Always rebuild when the space changed
+        // (e.g. after credential rotation issued a new ownerSpace).
+        if ownerSpaceClient?.ownerSpaceId != ownerSpaceId {
+            let osc = OwnerSpaceClient(
+                connectionManager: natsConnectionManager,
+                ownerSpaceId: ownerSpaceId
+            )
+            self.ownerSpaceClient = osc
+            self.profileClient = ProfileClient(ownerSpaceClient: osc)
+            self.personalDataClient = PersonalDataClient(ownerSpaceClient: osc)
+            self.secretsClient = SecretsClient(ownerSpaceClient: osc)
+            self.grantsClient = GrantsClient(ownerSpaceClient: osc)
+            self.actionsClient = ActionsClient(ownerSpaceClient: osc)
+            self.feedClient = FeedClient(ownerSpaceClient: osc)
+
+            // Phase 4.3 — wire the calling subsystem. CallCoordinator
+            // is a singleton (CallKit integration requires app-wide
+            // ownership), so configure once per warmed-up space.
+            // Building VaultResponseHandler here gives it the same
+            // OwnerSpaceClient lifetime as the rest of the vault wire.
+            if let guid = currentUserGuid {
+                let eventClient = VaultEventClient(ownerSpaceClient: osc)
+                let responseHandler = VaultResponseHandler(vaultEventClient: eventClient)
+                CallCoordinator.shared.configure(
+                    connectionManager: natsConnectionManager,
+                    vaultResponseHandler: responseHandler,
+                    ownUserGuid: guid,
+                    ownerSpaceId: ownerSpaceId
+                )
+                Task {
+                    await responseHandler.startListening()
+                    await CallCoordinator.shared.startListening()
+                }
+            }
+        }
+
+        guard let osc = ownerSpaceClient,
+              let pc = profileClient,
+              let pdc = personalDataClient else { return }
+
+        // Configure the cache, then fan out the hydrate reads. `configure`
+        // also starts the `forApp.profile.public` subscription so multi-
+        // device edits land in the cache without manual refresh.
+        PersonalDataStore.shared.configure(
+            profileClient: pc,
+            personalDataClient: pdc,
+            ownerSpaceClient: osc
+        )
+        Task {
+            // Hydrate the in-memory data cache.
+            do {
+                try await PersonalDataStore.shared.hydrate()
+                #if DEBUG
+                print("[AppState] PersonalDataStore hydrated (\(PersonalDataStore.shared.items.count) items)")
+                #endif
+            } catch {
+                #if DEBUG
+                print("[AppState] hydrate failed: \(error)")
+                #endif
+            }
+            // Phase 2.2: synthesize currentProfile from the vault-
+            // hydrated store now that the data is in memory.
+            await MainActor.run { self.syncCurrentProfileFromStore() }
+            // Start the presence aggregator (Phase 1.6). Idempotent.
+            await PresenceAggregator.shared.attach(to: osc)
+            // Phase 3.3 + 3.9: configure + hydrate the Grants
+            // repository, and wire the live event stream. The repo
+            // re-hydrates on every grant.* / critical-secret-use.* /
+            // verify.* event so the inbox stays current without
+            // pull-to-refresh.
+            if let gc = self.grantsClient {
+                await MainActor.run {
+                    GrantsRepository.shared.configure(client: gc, ownerSpace: osc)
+                }
+                await GrantsRepository.shared.hydrate()
+            }
+        }
     }
 
     /// Mark vault as cold (e.g., after background timeout)

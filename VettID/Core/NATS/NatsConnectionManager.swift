@@ -20,7 +20,11 @@ final class NatsConnectionManager: ObservableObject {
 
     // MARK: - Connection State
 
-    private var natsClient: NatsClientWrapper?
+    /// Homegrown NATS client (Network.framework + SPKI pinning). The
+    /// nats.swift-backed wrapper was retired once `AppleNatsClient`
+    /// matched the surface end-to-end — Android does the same with its
+    /// own raw-socket client (see `AndroidNatsClient.kt`).
+    private var natsClient: AppleNatsClient?
     private var reconnectTask: Task<Void, Never>?
     private var subscriptions: [String: NatsSubscription] = [:]
     private var ownerSpaceId: String?
@@ -99,8 +103,8 @@ final class NatsConnectionManager: ObservableObject {
                 throw NatsConnectionError.noCredentials
             }
 
-            // Create and connect NATS client
-            natsClient = NatsClientWrapper(
+            // Create and connect NATS client (homegrown AppleNatsClient with SPKI pinning).
+            natsClient = AppleNatsClient(
                 endpoint: creds.endpoint,
                 jwt: creds.jwt,
                 seed: creds.seed
@@ -135,8 +139,8 @@ final class NatsConnectionManager: ObservableObject {
             // Store owner space ID for bootstrap
             self.ownerSpaceId = ownerSpace ?? credentials.ownerSpace
 
-            // Create and connect NATS client
-            natsClient = NatsClientWrapper(
+            // Create and connect NATS client (homegrown AppleNatsClient with SPKI pinning).
+            natsClient = AppleNatsClient(
                 endpoint: credentials.endpoint,
                 jwt: credentials.jwt,
                 seed: credentials.seed
@@ -587,13 +591,20 @@ final class NatsConnectionManager: ObservableObject {
     ///
     /// - Parameter pin: The user's 6-digit PIN
     /// - Returns: VaultWarmResponse with success status and session TTL
-    func warmVault(pin: String) async throws -> VaultWarmResponse {
+    func warmVault(pin: String, migrateConsent: Bool = false) async throws -> VaultWarmResponse {
         guard connectionState == .connected else {
             throw NatsConnectionError.notConnected
         }
 
         guard let ownerSpace = ownerSpaceId else {
             throw NatsConnectionError.connectionFailed("No owner space ID for vault warming")
+        }
+
+        // SECURITY (auth-H2): throttle online password guessing. Suspends for
+        // the backoff window; refuses outright once the hard cap is hit.
+        guard await UnlockRateLimiter.shared.beforeAttempt() else {
+            vaultTemperature = .lockedOut(retryAfter: Date().addingTimeInterval(300))
+            throw NatsConnectionError.rateLimited
         }
 
         vaultTemperature = .warming
@@ -605,7 +616,8 @@ final class NatsConnectionManager: ObservableObject {
             id: requestId,
             pin: pin,
             deviceId: getDeviceId(),
-            timestamp: timestamp
+            timestamp: timestamp,
+            migrateConsent: migrateConsent ? true : nil
         )
 
         // Subscribe to response topic
@@ -655,6 +667,7 @@ final class NatsConnectionManager: ObservableObject {
 
         // Update vault temperature based on response
         if response.success {
+            await UnlockRateLimiter.shared.recordSuccess()
             vaultTemperature = .warm(ttlSeconds: response.sessionTtl)
             #if DEBUG
             print("[NATS] Vault warmed successfully, TTL: \(response.sessionTtl ?? 0)s")
@@ -675,9 +688,9 @@ final class NatsConnectionManager: ObservableObject {
                     #if DEBUG
                     print("[NATS] Stored vault-issued credentials, reconnecting...")
                     #endif
-                    // Disconnect bootstrap connection and reconnect with full credentials
+                    // Disconnect bootstrap connection and reconnect with full credentials.
                     await natsClient?.disconnect()
-                    natsClient = NatsClientWrapper(
+                    natsClient = AppleNatsClient(
                         endpoint: newCreds.endpoint,
                         jwt: newCreds.jwt,
                         seed: newCreds.seed
@@ -693,6 +706,7 @@ final class NatsConnectionManager: ObservableObject {
                 }
             }
         } else {
+            await UnlockRateLimiter.shared.recordFailure()
             // Check if locked out
             if let remaining = response.remainingAttempts, remaining <= 0 {
                 // Supervisor locks out for a period after too many failed attempts
@@ -1234,7 +1248,7 @@ final class NatsConnectionManager: ObservableObject {
                 }
 
                 do {
-                    strongSelf.natsClient = NatsClientWrapper(
+                    strongSelf.natsClient = AppleNatsClient(
                         endpoint: creds.endpoint,
                         jwt: creds.jwt,
                         seed: creds.seed
@@ -1348,6 +1362,8 @@ enum NatsConnectionError: LocalizedError {
     case connectionFailed(String)
     case publishFailed(String)
     case subscribeFailed(String)
+    /// Too many consecutive failed unlock attempts this app session (auth-H2).
+    case rateLimited
 
     var errorDescription: String? {
         switch self {
@@ -1361,6 +1377,8 @@ enum NatsConnectionError: LocalizedError {
             return "Publish failed: \(reason)"
         case .subscribeFailed(let reason):
             return "Subscribe failed: \(reason)"
+        case .rateLimited:
+            return "Too many unlock attempts. Please relaunch the app to try again."
         }
     }
 }
@@ -1394,12 +1412,19 @@ struct VaultWarmRequest: Encodable {
     let pin: String
     let deviceId: String
     let timestamp: String
+    /// Phase 5.7 — when set, the vault re-seals sealed_material.bin
+    /// against the running PCR0 in the same transaction. Routes per
+    /// the M1 model: the request lands on NEW if Phase 4.6 reclaim has
+    /// settled, else the vault returns `migration_status =
+    /// pending_new_enclave` and the client retries.
+    let migrateConsent: Bool?
 
     enum CodingKeys: String, CodingKey {
         case id
         case pin
         case deviceId = "device_id"
         case timestamp
+        case migrateConsent = "migrate_consent"
     }
 }
 
@@ -1411,6 +1436,15 @@ struct VaultWarmResponse: Decodable {
     let sessionTtl: Int?  // How long the vault will stay warm (seconds)
     let remainingAttempts: Int?  // PIN attempts remaining before lockout
     let utks: [UTKInfo]?  // New UTKs returned after successful warming
+
+    /// Phase 5.7 — M1 migration status echoed by the vault when
+    /// `migrate_consent=true` rides on the request. Possible values:
+    /// "completed", "pending_new_enclave", "failed", "not_requested",
+    /// or "" / nil when the vault didn't process a migration.
+    /// Drives the WarmingUp / Success / Error transitions on the PIN
+    /// unlock screen.
+    let migrationStatus: String?
+    let migrationVersion: String?
 
     /// UTK info returned in vault warming response
     struct UTKInfo: Decodable {
@@ -1443,6 +1477,8 @@ struct VaultWarmResponse: Decodable {
         case ownerSpace = "owner_space"
         case messageSpace = "message_space"
         case credentialsTtlSeconds = "credentials_ttl_seconds"
+        case migrationStatus = "migration_status"
+        case migrationVersion = "migration_version"
     }
 }
 
@@ -1555,238 +1591,3 @@ struct NatsSessionInfo: Decodable {
     }
 }
 
-// MARK: - NATS Client Wrapper
-
-#if canImport(Nats)
-import Nats
-
-/// Production wrapper using nats.swift library
-class NatsClientWrapper {
-    let endpoint: String
-    private let jwt: String
-    private let seed: String
-    private var client: NatsClient?
-    private var credentialsFileURL: URL?
-    private var subscriptionTasks: [String: Task<Void, Never>] = [:]
-
-    init(endpoint: String, jwt: String, seed: String) {
-        self.endpoint = endpoint
-        self.jwt = jwt
-        self.seed = seed
-    }
-
-    func connect() async throws {
-        guard let url = URL(string: endpoint) else {
-            throw NatsConnectionError.connectionFailed("Invalid NATS endpoint URL")
-        }
-
-        // Write credentials to temp file (nats.swift requires file-based credentials)
-        // SECURITY: Use iOS file protection and secure handling
-        let credsContent = """
-        -----BEGIN NATS USER JWT-----
-        \(jwt)
-        ------END NATS USER JWT------
-
-        ************************* IMPORTANT *************************
-        NKEY Seed printed below can be used to sign and prove identity.
-        NKEYs are sensitive and should be treated as secrets.
-
-        -----BEGIN USER NKEY SEED-----
-        \(seed)
-        ------END USER NKEY SEED------
-        """
-
-        // Use app's private container instead of shared temp directory
-        let containerDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
-        let credsDir = containerDir.appendingPathComponent("nats_creds", isDirectory: true)
-
-        // Create directory with protection if needed
-        if !FileManager.default.fileExists(atPath: credsDir.path) {
-            try FileManager.default.createDirectory(at: credsDir, withIntermediateDirectories: true, attributes: [
-                .protectionKey: FileProtectionType.complete
-            ])
-        }
-
-        let credsFile = credsDir.appendingPathComponent("nats_\(UUID().uuidString).creds")
-
-        // Write with complete file protection (encrypted when device locked)
-        try credsContent.write(to: credsFile, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([
-            .protectionKey: FileProtectionType.complete
-        ], ofItemAtPath: credsFile.path)
-
-        credentialsFileURL = credsFile
-
-        let options = NatsClientOptions()
-            .url(url)
-            .credentialsFile(credsFile)
-
-        client = options.build()
-        try await client?.connect()
-    }
-
-    func disconnect() async {
-        // Cancel all subscription tasks
-        for (_, task) in subscriptionTasks {
-            task.cancel()
-        }
-        subscriptionTasks.removeAll()
-
-        // Close client
-        try? await client?.close()
-        client = nil
-
-        // SECURITY: Securely wipe credentials file before deletion
-        if let credsFile = credentialsFileURL {
-            securelyDeleteFile(at: credsFile)
-            credentialsFileURL = nil
-        }
-    }
-
-    /// Securely delete a file by overwriting with random data before removal
-    private func securelyDeleteFile(at url: URL) {
-        do {
-            // Get file size
-            let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
-            guard let fileSize = attributes[.size] as? Int, fileSize > 0 else {
-                try? FileManager.default.removeItem(at: url)
-                return
-            }
-
-            // Overwrite with random data (3 passes for defense-in-depth)
-            let fileHandle = try FileHandle(forWritingTo: url)
-            defer { try? fileHandle.close() }
-
-            for _ in 0..<3 {
-                var randomData = [UInt8](repeating: 0, count: fileSize)
-                _ = SecRandomCopyBytes(kSecRandomDefault, fileSize, &randomData)
-                try fileHandle.seek(toOffset: 0)
-                try fileHandle.write(contentsOf: Data(randomData))
-                try fileHandle.synchronize()
-            }
-
-            try? fileHandle.close()
-            try FileManager.default.removeItem(at: url)
-        } catch {
-            // Best effort - still try to delete even if wiping fails
-            try? FileManager.default.removeItem(at: url)
-        }
-    }
-
-    func publish(_ data: Data, to topic: String) async throws {
-        guard let client = client else {
-            throw NatsConnectionError.notConnected
-        }
-        try await client.publish(data, subject: topic)
-    }
-
-    /// Request-reply pattern: publish and wait for a single response
-    func request(_ subject: String, payload: Data, timeout: TimeInterval = 30) async throws -> Data {
-        guard let client = client else {
-            throw NatsConnectionError.notConnected
-        }
-        let reply = try await client.request(payload, subject: subject)
-        return reply.payload ?? Data()
-    }
-
-    func subscribe(to topic: String) async throws -> AsyncStream<NatsMessage> {
-        guard let client = client else {
-            throw NatsConnectionError.notConnected
-        }
-
-        let subscription = try await client.subscribe(subject: topic)
-
-        return AsyncStream { continuation in
-            let task = Task {
-                do {
-                    for try await msg in subscription {
-                        if Task.isCancelled { break }
-                        let natsMessage = NatsMessage(
-                            topic: msg.subject,
-                            data: msg.payload ?? Data(),
-                            headers: nil  // Headers handled separately if needed
-                        )
-                        continuation.yield(natsMessage)
-                    }
-                } catch {
-                    // Stream ended or error
-                }
-                continuation.finish()
-            }
-            self.subscriptionTasks[topic] = task
-        }
-    }
-
-    func unsubscribe(from topic: String) async {
-        if let task = subscriptionTasks.removeValue(forKey: topic) {
-            task.cancel()
-        }
-    }
-}
-
-#else
-
-/// Stub wrapper for when nats.swift is not available (testing/development)
-class NatsClientWrapper {
-    private let endpoint: String
-    private let jwt: String
-    private let seed: String
-
-    init(endpoint: String, jwt: String, seed: String) {
-        self.endpoint = endpoint
-        self.jwt = jwt
-        self.seed = seed
-        #if DEBUG
-        print("[NATS] Using stub NatsClientWrapper - add nats.swift package for real connectivity")
-        #endif
-    }
-
-    func connect() async throws {
-        // Simulate connection delay
-        try await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
-        #if DEBUG
-        print("[NATS] Stub: Connected to \(endpoint)")
-        #endif
-    }
-
-    func disconnect() async {
-        #if DEBUG
-        print("[NATS] Stub: Disconnected")
-        #endif
-    }
-
-    func publish(_ data: Data, to topic: String) async throws {
-        #if DEBUG
-        print("[NATS] Stub: Published \(data.count) bytes to \(topic)")
-        #endif
-    }
-
-    /// Stub request-reply
-    func request(_ subject: String, payload: Data, timeout: TimeInterval = 30) async throws -> Data {
-        #if DEBUG
-        print("[NATS] Stub: Request to \(subject) (\(payload.count) bytes)")
-        #endif
-        // Return a stub success response
-        let response: [String: Any] = ["success": true, "result": [:] as [String: Any]]
-        return try JSONSerialization.data(withJSONObject: response)
-    }
-
-    func subscribe(to topic: String) async throws -> AsyncStream<NatsMessage> {
-        #if DEBUG
-        print("[NATS] Stub: Subscribed to \(topic)")
-        #endif
-        // Return empty stream for stub
-        return AsyncStream { continuation in
-            continuation.finish()
-        }
-    }
-
-    func unsubscribe(from topic: String) async {
-        #if DEBUG
-        print("[NATS] Stub: Unsubscribed from \(topic)")
-        #endif
-    }
-}
-
-#endif

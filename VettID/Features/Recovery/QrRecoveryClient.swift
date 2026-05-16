@@ -17,7 +17,7 @@ actor QrRecoveryClient {
 
     // MARK: - State
 
-    private var tempNatsClient: NatsClientWrapper?
+    private var tempNatsClient: AppleNatsClient?
 
     // MARK: - Public API
 
@@ -43,7 +43,7 @@ actor QrRecoveryClient {
         }
 
         // 2. Connect with temporary credentials
-        let client = NatsClientWrapper(
+        let client = AppleNatsClient(
             endpoint: recoveryQr.natsEndpoint,
             jwt: credentials.jwt,
             seed: credentials.seed
@@ -126,7 +126,7 @@ actor QrRecoveryClient {
     // MARK: - Private Methods
 
     private func sendAndWaitForResponse(
-        client: NatsClientWrapper,
+        client: AppleNatsClient,
         requestId: String,
         messageData: Data,
         recoveryQr: RecoveryQrCode

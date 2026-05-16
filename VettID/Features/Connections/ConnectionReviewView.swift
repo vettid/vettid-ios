@@ -49,108 +49,14 @@ struct ConnectionReviewView: View {
 
     // MARK: - Profile Content
 
+    /// Phase 1.5: replaced the bespoke avatar/key/wallets/fields stack
+    /// with the shared `BusinessCardView`. Same data, same layout,
+    /// rendered through the single component used everywhere a peer's
+    /// profile shows up.
     private func profileContent(_ profile: PeerProfilePreview) -> some View {
         ScrollView {
             VStack(spacing: 20) {
-                // Avatar + Name
-                VStack(spacing: 8) {
-                    if let photoBase64 = profile.photoBase64,
-                       let data = Data(base64Encoded: photoBase64),
-                       let uiImage = UIImage(data: data) {
-                        Image(uiImage: uiImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 80, height: 80)
-                            .clipShape(Circle())
-                    } else {
-                        Circle()
-                            .fill(Color.accentColor.opacity(0.15))
-                            .frame(width: 80, height: 80)
-                            .overlay(
-                                Text(String(profile.displayName.prefix(1)).uppercased())
-                                    .font(.title.weight(.bold))
-                                    .foregroundColor(.accentColor)
-                            )
-                    }
-
-                    Text(profile.displayName)
-                        .font(.title2.weight(.bold))
-
-                    if let email = profile.email {
-                        Text(email)
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
-                }
-
-                // Public Key
-                if let key = profile.publicKey, !key.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Identity Key")
-                            .font(.caption.weight(.semibold))
-                            .foregroundColor(.secondary)
-                        Text(key)
-                            .font(.system(.caption2, design: .monospaced))
-                            .lineLimit(2)
-                            .truncationMode(.middle)
-                            .padding(8)
-                            .background(Color(.secondarySystemBackground))
-                            .cornerRadius(6)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal)
-                }
-
-                // Wallet Addresses
-                if !profile.wallets.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Wallet Addresses")
-                            .font(.caption.weight(.semibold))
-                            .foregroundColor(.secondary)
-
-                        ForEach(profile.wallets) { wallet in
-                            HStack {
-                                Text(wallet.network.capitalized)
-                                    .font(.caption2)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(Color.orange.opacity(0.15))
-                                    .foregroundColor(.orange)
-                                    .cornerRadius(4)
-                                Text(wallet.truncatedAddress)
-                                    .font(.system(.caption, design: .monospaced))
-                                    .foregroundColor(.secondary)
-                                Spacer()
-                            }
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal)
-                }
-
-                // Profile Fields
-                if let fields = profile.profileFields, !fields.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Profile")
-                            .font(.caption.weight(.semibold))
-                            .foregroundColor(.secondary)
-
-                        ForEach(Array(fields.keys.sorted()), id: \.self) { key in
-                            if let field = fields[key] {
-                                HStack {
-                                    Text(field["display_name"] ?? key)
-                                        .font(.subheadline)
-                                    Spacer()
-                                    Text(field["value"] ?? "")
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal)
-                }
+                BusinessCardView(card: BusinessCardData(from: profile))
 
                 Spacer(minLength: 20)
 

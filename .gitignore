@@ -51,7 +51,10 @@ iOSInjectionProject/
 *.key
 *.cer
 *.mobileprovision
-secrets/
+# Anchor secrets/ to the repo root so it doesn't accidentally exclude
+# the VettID/Features/Secrets/ source directory on case-insensitive
+# filesystems (default on macOS). Same for the other credential paths.
+/secrets/
 secrets.*
 credentials.*
 .env

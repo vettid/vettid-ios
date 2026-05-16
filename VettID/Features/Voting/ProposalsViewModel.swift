@@ -45,6 +45,12 @@ final class ProposalsViewModel: ObservableObject {
     private let voteReceiptStore: VoteReceiptStore
     private let natsManager: NatsConnectionManager?
     private let ownerSpaceProvider: () -> String?
+    /// Phase 5.1: injected by ProposalsView via `.task` from
+    /// AppState.ownerSpaceClient. The vault-mediated `vote.cast` path
+    /// routes through here so the envelope gets the replay headers
+    /// from Phase 0.1 and the encrypted-credential blob from 0.7
+    /// without bespoke wiring.
+    var ownerSpaceClient: OwnerSpaceClient?
 
     // MARK: - Private State
 
@@ -201,147 +207,119 @@ final class ProposalsViewModel: ObservableObject {
 
     // MARK: - Vote Casting
 
-    /// Cast a vote on a proposal via the vault
-    /// - Parameters:
-    ///   - proposal: The proposal to vote on
-    ///   - choice: The vote choice (yes, no, abstain)
-    ///   - password: User's vault password for authorization
-    /// - Returns: The vote receipt on success
+    /// Cast a vote on a proposal via the vault (Phase 5.1 — fully
+    /// vault-mediated).
+    ///
+    /// The flow used to be: app hashes the password, vault signs the
+    /// vote, app POSTs the signed vote to the backend. Android moved
+    /// the submission inside the vault — `vote.cast` now both signs
+    /// AND submits — so the app's job is just to hand the vault the
+    /// password envelope + the choice and trust the vault for the rest.
+    ///
+    /// Routes through `OwnerSpaceClient.sendAndAwaitResponse` so the
+    /// envelope picks up timestamp_ms + nonce (Phase 0.1) and the
+    /// encrypted-credential blob (Phase 0.7) automatically.
     @discardableResult
     func castVote(on proposal: Proposal, choice: VoteChoice, password: String) async throws -> VoteReceipt {
-        guard let authToken = authTokenProvider() else {
-            throw VotingError.notAuthenticated
-        }
-
-        guard let natsManager = natsManager else {
+        guard let osc = ownerSpaceClient else {
             throw VotingError.natsNotConnected
         }
 
-        guard let ownerSpace = ownerSpaceProvider() else {
-            throw VotingError.noOwnerSpace
-        }
-
         voteCastingState = .sendingToVault
-
         do {
-            // 1. Hash the password
-            let passwordHashResult = try PasswordHasher.hash(password: password)
-            let passwordHashBase64 = passwordHashResult.hash.base64EncodedString()
+            // 1. Hash the password with Argon2id and encrypt the hash
+            //    under a fresh UTK — same envelope shape every other
+            //    password-gated call site uses (matches Phase 3's
+            //    PasswordApprovalEnvelope flow).
+            let envelope = try PasswordApprovalEnvelope.build(password: password)
 
-            // 2. Generate a unique request ID
-            let requestId = UUID().uuidString
-
-            // 3. Create the vote request for the vault
-            let voteRequest = VaultVoteRequest(
-                id: requestId,
-                proposalId: proposal.id,
-                choice: choice.rawValue,
-                passwordHash: passwordHashBase64,
-                salt: passwordHashResult.salt.base64EncodedString(),
-                timestamp: ISO8601DateFormatter().string(from: Date())
-            )
-
-            // 4. Subscribe to the response topic
-            let responseTopic = "\(ownerSpace).forApp.vote.result.>"
-            let responseStream = try await natsManager.subscribe(to: responseTopic)
-
-            // 5. Send vote request to vault via NATS
-            let requestTopic = "\(ownerSpace).forVault.vote.cast"
-            try await natsManager.publish(voteRequest, to: requestTopic)
+            // 2. Build the vault payload. `encrypted_credential` is
+            //    added automatically by SecretsClient/GrantsClient via
+            //    Phase 0.7's shared helper, but vote.cast lives on a
+            //    different surface; we attach it here.
+            var payload: [String: AnyCodableValue] = [
+                "proposal_id":            AnyCodableValue(proposal.id),
+                "choice":                 AnyCodableValue(choice.rawValue),
+                "encrypted_password_hash": AnyCodableValue(envelope.encryptedPasswordHash),
+                "ephemeral_public_key":   AnyCodableValue(envelope.ephemeralPublicKey),
+                "nonce":                  AnyCodableValue(envelope.nonce),
+                "salt":                   AnyCodableValue(envelope.salt)
+            ]
+            if let utk = envelope.utkKeyId {
+                payload["key_id"] = AnyCodableValue(utk)
+            }
+            if let blob = try? ProteanCredentialStore().encryptedBlobBase64() {
+                payload["encrypted_credential"] = AnyCodableValue(blob)
+            }
 
             voteCastingState = .waitingForSignature
 
-            #if DEBUG
-            print("[Voting] Sent vote request to \(requestTopic)")
-            #endif
-
-            // 6. Wait for vault response with timeout
-            let voteTimeout: TimeInterval = 30
-            let vaultResponse: VaultVoteResponse = try await withThrowingTaskGroup(of: VaultVoteResponse.self) { group in
-                // Response listener
-                group.addTask {
-                    for await message in responseStream {
-                        if let response = try? JSONDecoder().decode(VaultVoteResponse.self, from: message.data) {
-                            if response.requestId == nil || response.requestId == requestId {
-                                return response
-                            }
-                        }
-                    }
-                    throw VotingError.vaultResponseStreamEnded
-                }
-
-                // Timeout
-                group.addTask {
-                    try await Task.sleep(nanoseconds: UInt64(voteTimeout * 1_000_000_000))
-                    throw VotingError.timeout
-                }
-
-                guard let result = try await group.next() else {
-                    throw VotingError.vaultNoResponse
-                }
-
-                group.cancelAll()
-                return result
-            }
-
-            // 7. Check vault response
-            guard vaultResponse.success else {
-                throw VotingError.vaultError(vaultResponse.message ?? "Vote signing failed")
-            }
-
-            guard let receipt = vaultResponse.receipt else {
-                throw VotingError.noReceipt
-            }
-
-            voteCastingState = .submittingToBackend
-
-            // 8. Submit the signed vote to the backend
-            let signedVote = SignedVoteSubmission(
-                proposalId: proposal.id,
-                choice: choice.rawValue,
-                nonce: receipt.nonce,
-                votingPublicKey: receipt.votingPublicKey,
-                signature: receipt.signature,
-                voteHash: receipt.voteHash,
-                timestamp: receipt.timestamp
+            // 3. Fire vote.cast through OwnerSpaceClient — replay-safe
+            //    envelope, JetStream request-response, single round-trip.
+            let response = try await osc.sendAndAwaitResponse(
+                "vote.cast",
+                payload: payload,
+                timeout: 30
             )
-
-            let submitResponse = try await apiClient.submitSignedVote(
-                proposalId: proposal.id,
-                signedVote: signedVote,
-                authToken: authToken
-            )
-
-            guard submitResponse.success else {
-                throw VotingError.backendError(submitResponse.message ?? "Vote submission failed")
+            guard response.success else {
+                throw VotingError.vaultError(response.error ?? "Vote casting failed")
             }
 
-            // 9. Create and store the vote receipt locally
+            // 4. Read the receipt the vault built. Vault already
+            //    submitted the signed vote to the backend by this
+            //    point, so there's no follow-up POST.
+            let result = response.result ?? [:]
+            let nonce       = result["nonce"]        as? String ?? UUID().uuidString
+            let votingKey   = result["voting_public_key"] as? String ?? ""
+            let voteHash    = result["vote_hash"]    as? String ?? ""
+            let timestampMs = result["timestamp_ms"] as? Double
+                ?? (result["timestamp_ms"] as? Int).map(Double.init)
+                ?? Date().timeIntervalSince1970 * 1000
+
+            // 5. Store the receipt locally so "Verify my vote" can
+            //    re-walk the Merkle proof.
             let localReceipt = VoteReceipt(
                 proposalId: proposal.id,
                 proposalNumber: proposal.proposalNumber,
                 proposalTitle: proposal.proposalTitle,
                 choice: choice,
-                nonce: receipt.nonce,
-                votingPublicKey: receipt.votingPublicKey,
-                voteHash: receipt.voteHash,
-                timestamp: Date()
+                nonce: nonce,
+                votingPublicKey: votingKey,
+                voteHash: voteHash,
+                timestamp: Date(timeIntervalSince1970: timestampMs / 1000)
             )
-
             try voteReceiptStore.store(localReceipt)
 
             voteCastingState = .complete
-
             #if DEBUG
-            print("[Voting] Vote cast successfully, hash: \(receipt.voteHash)")
+            print("[Voting] Vote cast (vault-mediated). hash=\(voteHash)")
             #endif
-
             return localReceipt
-
         } catch {
             voteCastingState = .error(error.localizedDescription)
             throw error
         }
+    }
+
+    /// Ask the vault to re-derive my voting key, fetch the inclusion
+    /// proof, and re-walk the Merkle tree inside the enclave — the
+    /// "Verify my vote" affordance (Phase 5.1). Returns true on success.
+    /// Mirrors Android's `vote.verify`.
+    func verifyVote(proposalId: String, voteHash: String) async throws -> Bool {
+        guard let osc = ownerSpaceClient else {
+            throw VotingError.natsNotConnected
+        }
+        let payload: [String: AnyCodableValue] = [
+            "proposal_id": AnyCodableValue(proposalId),
+            "vote_hash":   AnyCodableValue(voteHash)
+        ]
+        let response = try await osc.sendAndAwaitResponse(
+            "vote.verify", payload: payload, timeout: 15
+        )
+        guard response.success else {
+            throw VotingError.vaultError(response.error ?? "Verify failed")
+        }
+        return (response.result?["verified"] as? Bool) ?? false
     }
 
     /// Reset the vote casting state
@@ -412,6 +390,11 @@ struct VaultVoteRequest: Encodable {
     let passwordHash: String
     let salt: String
     let timestamp: String
+    /// Phase D: encrypted credential blob; vault decrypts in-flight rather
+    /// than reading `vaultState.credential`. Omitted only when the device
+    /// has no credential stored (pre-enrollment), which can't reach vote.cast
+    /// anyway.
+    let encryptedCredential: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -420,6 +403,7 @@ struct VaultVoteRequest: Encodable {
         case passwordHash = "password_hash"
         case salt
         case timestamp
+        case encryptedCredential = "encrypted_credential"
     }
 }
 

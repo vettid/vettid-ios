@@ -88,6 +88,11 @@ final class ExpectedPCRStore {
 
     // MARK: - Initialization
 
+    /// Convenience singleton — the store is otherwise stateless once
+    /// loaded so a single shared instance is fine. Avoids passing it
+    /// through every call site that wants to read the current PCR0.
+    static let shared = ExpectedPCRStore()
+
     init() {
         self.signingPublicKey = Self.loadSigningPublicKey()
         self.bundledPCRSets = Self.loadBundledPCRSets()

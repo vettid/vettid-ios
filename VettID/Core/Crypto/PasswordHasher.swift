@@ -103,6 +103,28 @@ final class PasswordHasher {
         return constantTimeCompare(result.hash, hash)
     }
 
+    // MARK: - SecurePassword overloads (#12 — wipe-able plumbing)
+
+    /// Argon2id over a `SecurePassword`. The transient byte copy passed
+    /// to libsodium is wiped before this method returns, regardless of
+    /// outcome. Prefer this over the `String`-typed variant for any
+    /// path where the password is held longer than the SwiftUI field
+    /// frame.
+    static func hash(password: SecurePassword, salt: Data? = nil) throws -> PasswordHashResult {
+        try password.withUTF8Bytes { bytes in
+            var copy = bytes
+            defer { copy.secureWipe() }
+            // Reconstruct a String only inside the closure scope; ARC
+            // will drop the temporary before the outer wipe runs. The
+            // internal String is unavoidable until libsodium accepts a
+            // raw byte buffer directly.
+            guard let s = String(bytes: copy, encoding: .utf8) else {
+                throw PasswordHashError.invalidPassword
+            }
+            return try self.hash(password: s, salt: salt)
+        }
+    }
+
     /// Create a storable hash string in PHC format (similar to Python's argon2-cffi)
     /// Format: $argon2id$v=19$m=65536,t=3,p=1$<salt>$<hash>
     static func hashToString(password: String) throws -> String {

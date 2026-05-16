@@ -5,11 +5,14 @@ struct ConnectionDetailView: View {
     let connectionId: String
     let authTokenProvider: @Sendable () -> String?
 
+    @EnvironmentObject private var appState: AppState
     @StateObject private var viewModel: ConnectionDetailViewModel
     @State private var showRevokeConfirmation = false
     @State private var showShareSheet = false
     @State private var showRequestDataSheet = false
     @State private var showShareDataSheet = false
+    /// Phase 1.9: Them / You tabs.
+    @State private var selectedTab: ConnectionDetailTab = .them
     @Environment(\.dismiss) private var dismiss
 
     init(connectionId: String, authTokenProvider: @escaping @Sendable () -> String?) {
@@ -50,6 +53,12 @@ struct ConnectionDetailView: View {
             }
         }
         .task {
+            // Phase 1.9: wire the Grants client so the Them tab's
+            // verify row can initiate challenges via GrantsClient.
+            viewModel.grantsClient = appState.grantsClient
+            // Phase 5.4: wire the OwnerSpaceClient so the "Request
+            // Location" button can call location.request.
+            viewModel.ownerSpaceClient = appState.ownerSpaceClient
             await viewModel.loadConnection(connectionId)
         }
         .sheet(isPresented: $showShareSheet) {
@@ -83,44 +92,110 @@ struct ConnectionDetailView: View {
     // MARK: - Connection Content
 
     private func connectionContent(_ connection: Connection) -> some View {
-        VStack(spacing: 24) {
-            // Avatar and name
+        // Phase 1.9: Them / You tabs. "Them" shows peer-sourced content
+        // and peer-targeted actions (verify identity, peer's catalog).
+        // "You" shows what I've shared with this peer (outbound grants).
+        // Matches Android's connection-detail tab layout (commit f5cb9fb).
+        VStack(spacing: 0) {
+            // Avatar + name + status stay above the tabs — they belong
+            // to the connection itself, not to either side of the
+            // relationship.
             VStack(spacing: 12) {
-                AsyncImage(url: URL(string: connection.peerAvatarUrl ?? "")) { image in
-                    image.resizable().aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Image(systemName: "person.circle.fill")
-                        .resizable()
-                        .foregroundColor(.secondary)
-                }
-                .frame(width: 100, height: 100)
-                .clipShape(Circle())
-
-                Text(connection.peerDisplayName)
-                    .font(.title)
-                    .fontWeight(.bold)
-
+                BusinessCardView(
+                    card: businessCardData(for: connection),
+                    avatarSize: 100,
+                    connectionId: connection.id
+                )
                 ConnectionStatusBadge(status: connection.status)
             }
             .padding(.top)
+            .padding(.horizontal)
 
-            // Profile info
-            if let profile = viewModel.peerProfile {
-                ProfileInfoSection(profile: profile)
+            Picker("Section", selection: $selectedTab) {
+                Text("Them").tag(ConnectionDetailTab.them)
+                Text("You").tag(ConnectionDetailTab.you)
             }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
 
-            // Shared data section
-            SharedDataSection()
-
-            // Connection info
-            ConnectionInfoSection(connection: connection)
-
-            // Actions
-            if connection.status == .active {
-                actionButtons
+            switch selectedTab {
+            case .them: themTab(connection)
+            case .you:  youTab(connection)
             }
         }
-        .padding()
+    }
+
+    // MARK: - Them tab
+
+    @ViewBuilder
+    private func themTab(_ connection: Connection) -> some View {
+        VStack(spacing: 16) {
+            // Phase 1.9: persistent verify-identity row. Always present
+            // in the Them tab so the user can check or refresh the
+            // verification state at any time. State sourced from
+            // GrantsClient.getVerifyState(connectionId:); tap → verify
+            // request (initiates a connection-authenticate.request).
+            VerifyIdentityRow(
+                connectionId: connection.id,
+                onChallenge: { Task { await viewModel.startVerifyChallenge() } }
+            )
+            .padding(.horizontal)
+
+            if let profile = viewModel.peerProfileData {
+                PeerCatalogSummaryCard(
+                    peer: .init(connectionId: connection.id,
+                                label: connection.peerDisplayName),
+                    profile: profile
+                )
+                .padding(.horizontal)
+            }
+
+            ConnectionInfoSection(connection: connection)
+                .padding(.horizontal)
+
+            if connection.status == .active {
+                actionButtons.padding(.horizontal)
+            }
+        }
+        .padding(.bottom)
+    }
+
+    // MARK: - You tab
+
+    @ViewBuilder
+    private func youTab(_ connection: Connection) -> some View {
+        VStack(spacing: 16) {
+            // What I've shared with this peer — outbound grants + the
+            // shared-data section (kept for backward compat, still
+            // mostly stubs).
+            OutboundGrantsForConnectionList(connectionId: connection.id)
+                .padding(.horizontal)
+
+            SharedDataSection()
+                .padding(.horizontal)
+        }
+        .padding(.bottom)
+    }
+
+    // MARK: - Business card adapter
+
+    /// Pick the richest peer-profile source available and convert it
+    /// into a `BusinessCardData`. Preference order: vault-published
+    /// `peerProfileData` (has identity key + wallets + fields) →
+    /// legacy `Profile` (just bio/location) → fall back to the bare
+    /// connection record (display name + avatar URL only).
+    private func businessCardData(for connection: Connection) -> BusinessCardData {
+        if let preview = viewModel.peerProfileData {
+            return BusinessCardData(from: PeerProfilePreview(from: preview))
+        }
+        if let profile = viewModel.peerProfile {
+            return BusinessCardData(from: profile, isOwnProfile: false)
+        }
+        return BusinessCardData(
+            displayName: connection.peerDisplayName,
+            avatarUrl: connection.peerAvatarUrl
+        )
     }
 
     // MARK: - Action Buttons
@@ -149,6 +224,32 @@ struct ConnectionDetailView: View {
                 .controlSize(.large)
             }
 
+            // Phase 4.3 — audio / video call buttons. Route through
+            // CallCoordinator.startCall; the full-screen cover at
+            // ContentView observes callState and surfaces the right
+            // outgoing screen.
+            HStack(spacing: 12) {
+                Button {
+                    Task { await placeCall(type: .audio) }
+                } label: {
+                    Label("Audio Call", systemImage: "phone.fill")
+                        .font(.subheadline)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+
+                Button {
+                    Task { await placeCall(type: .video) }
+                } label: {
+                    Label("Video Call", systemImage: "video.fill")
+                        .font(.subheadline)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+            }
+
             // Secondary actions
             HStack(spacing: 12) {
                 Button {
@@ -172,6 +273,25 @@ struct ConnectionDetailView: View {
                 .controlSize(.regular)
             }
 
+            // Phase 5.4 — peer location-request ping. Vault routes the
+            // request to the peer's app as a `peer-location-requested`
+            // event; their prompt VM surfaces the alert. We just fire
+            // and forget here.
+            Button {
+                Task { await viewModel.requestPeerLocation() }
+            } label: {
+                if viewModel.isRequestingLocation {
+                    ProgressView().frame(maxWidth: .infinity)
+                } else {
+                    Label("Request Location", systemImage: "location.circle")
+                        .font(.subheadline)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.regular)
+            .disabled(viewModel.isRequestingLocation)
+
             // Danger zone
             Button(role: .destructive) {
                 showRevokeConfirmation = true
@@ -186,6 +306,25 @@ struct ConnectionDetailView: View {
             }
             .buttonStyle(.bordered)
             .disabled(viewModel.isRevoking)
+        }
+    }
+
+    // MARK: - Place Call (Phase 4.3)
+
+    /// Initiate an outgoing call to this connection's peer. Routes
+    /// through CallCoordinator.shared; the full-screen cover at
+    /// ContentView's root observes callState and surfaces the right
+    /// outgoing/active screen.
+    private func placeCall(type: CallType) async {
+        guard let connection = viewModel.connection else { return }
+        do {
+            try await CallCoordinator.shared.startCall(
+                to: connection.peerGuid,
+                displayName: connection.peerDisplayName,
+                callType: type
+            )
+        } catch {
+            viewModel.errorMessage = error.localizedDescription
         }
     }
 
@@ -233,39 +372,326 @@ struct ConnectionDetailView: View {
     }
 }
 
-// MARK: - Profile Info Section
+// MARK: - Connection Detail Tab (Phase 1.9)
 
-struct ProfileInfoSection: View {
-    let profile: Profile
+enum ConnectionDetailTab: String, CaseIterable, Identifiable {
+    case them, you
+    var id: String { rawValue }
+}
+
+// MARK: - Verify Identity Row (Phase 1.9)
+
+/// Persistent verify-identity row that lives at the top of the "Them"
+/// tab. Pulls per-connection verify state from the vault via
+/// `GrantsClient.getVerifyState(connectionId:)` and surfaces the last
+/// inbound/outbound result. Tap → kicks a fresh challenge via
+/// `connection-authenticate.request`.
+///
+/// Matches Android's persistent verify row (commit `f5cb9fb`).
+struct VerifyIdentityRow: View {
+
+    let connectionId: String
+    let onChallenge: () -> Void
+
+    @EnvironmentObject private var appState: AppState
+    @State private var state: VerifyStatePayload?
+    @State private var isLoading: Bool = true
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            if let bio = profile.bio, !bio.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Bio")
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                Image(systemName: glyph)
+                    .font(.title3)
+                    .foregroundStyle(tint)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(headline).font(.subheadline.weight(.medium))
+                    Text(subtitle)
                         .font(.caption)
-                        .foregroundColor(.secondary)
-                    Text(bio)
-                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                Spacer()
+                Button(action: onChallenge) {
+                    Text("Verify")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        }
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(12)
+        .task { await refresh() }
+        .onReceive(NotificationCenter.default.publisher(for: .verifyStateChanged)) { _ in
+            Task { await refresh() }
+        }
+    }
+
+    private func refresh() async {
+        guard let client = appState.grantsClient else {
+            isLoading = false
+            return
+        }
+        isLoading = true
+        if let dict = try? await client.getVerifyState(connectionId: connectionId) {
+            state = VerifyStatePayload.from(dict: dict)
+        }
+        isLoading = false
+    }
+
+    private var glyph: String {
+        guard let state = state else { return "questionmark.circle" }
+        if state.lastInboundOk == true || state.lastOutboundOk == true {
+            return "checkmark.shield.fill"
+        }
+        if state.lastInboundOk == false || state.lastOutboundOk == false {
+            return "exclamationmark.shield"
+        }
+        return "shield"
+    }
+
+    private var tint: Color {
+        guard let state = state else { return .secondary }
+        if state.lastInboundOk == true || state.lastOutboundOk == true {
+            return .green
+        }
+        if state.lastInboundOk == false || state.lastOutboundOk == false {
+            return .orange
+        }
+        return .secondary
+    }
+
+    private var headline: String {
+        if isLoading { return "Checking identity…" }
+        guard let state = state else { return "Identity verification" }
+        if let last = state.lastOutboundAt,
+           state.lastOutboundOk == true {
+            return "Identity verified \(relative(last))"
+        }
+        if let last = state.lastInboundAt,
+           state.lastInboundOk == true {
+            return "Verified by peer \(relative(last))"
+        }
+        return "Identity not yet verified"
+    }
+
+    private var subtitle: String {
+        guard let state = state else {
+            return "Tap Verify to challenge this connection's identity."
+        }
+        if let reason = state.lastOutboundReason ?? state.lastInboundReason,
+           !reason.isEmpty {
+            return reason
+        }
+        return "Tap Verify to challenge this connection's identity."
+    }
+
+    private func relative(_ date: Date) -> String {
+        let delta = -date.timeIntervalSinceNow
+        if delta < 60       { return "just now" }
+        if delta < 3600     { return "\(Int(delta / 60))m ago" }
+        if delta < 86400    { return "\(Int(delta / 3600))h ago" }
+        return "\(Int(delta / 86400))d ago"
+    }
+}
+
+extension Notification.Name {
+    /// Posted when a verify approve/deny round-trip completes. The
+    /// `VerifyIdentityRow` observes this to refresh its state without
+    /// re-mounting. `GrantsRepository.handleEvent` fires it on the
+    /// verify approve/deny events.
+    static let verifyStateChanged = Notification.Name("vettid.verify.stateChanged")
+}
+
+// MARK: - Peer Catalog Summary Card (Phase 1.9)
+
+/// Compact card linking out to the full `PeerCatalogView`. Sits in the
+/// Them tab so the user has an obvious entry point into the peer's
+/// catalog without having to scroll the BusinessCardView's inline rows.
+struct PeerCatalogSummaryCard: View {
+
+    let peer: MySharingView.Peer
+    let profile: PeerProfileData
+
+    @State private var navigate: Bool = false
+
+    var body: some View {
+        Button {
+            navigate = true
+        } label: {
+            HStack {
+                Image(systemName: "doc.text.magnifyingglass")
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 24)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("What \(peer.label.isEmpty ? "they" : peer.label) shares")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.primary)
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding()
+            .background(Color(.secondarySystemBackground))
+            .cornerRadius(12)
+        }
+        .buttonStyle(.plain)
+        .background(
+            NavigationLink(
+                destination: PeerCatalogView(peer: peer, entries: catalogEntries),
+                isActive: $navigate
+            ) { EmptyView() }
+            .hidden()
+        )
+    }
+
+    private var subtitle: String {
+        let count = catalogEntries.count
+        if count == 0 { return "Nothing published yet" }
+        return "\(count) \(count == 1 ? "item" : "items") available"
+    }
+
+    /// Build catalog entries from the peer's published profile. Data
+    /// fields come straight through; wallets are surfaced as catalog
+    /// rows. Secrets aren't carried in the legacy PeerProfileData
+    /// (would need the vault to publish `secret_catalog` separately).
+    private var catalogEntries: [PeerCatalogEntry] {
+        var out: [PeerCatalogEntry] = []
+        if let fields = profile.visibleFields {
+            for (namespace, info) in fields.sorted(by: { $0.key < $1.key }) {
+                out.append(PeerCatalogEntry(
+                    id: namespace,
+                    label: info["display_name"] ?? namespace,
+                    alias: nil,
+                    category: nil,
+                    icon: nil,
+                    visibility: "PROFILE"
+                ))
+            }
+        }
+        for wallet in profile.wallets ?? [] {
+            out.append(PeerCatalogEntry(
+                id: "wallet:\(wallet.address)",
+                label: wallet.label.isEmpty ? wallet.network.uppercased() : wallet.label,
+                alias: wallet.network.uppercased(),
+                category: "wallet",
+                icon: "bitcoinsign.circle",
+                visibility: "PROFILE"
+            ))
+        }
+        return out
+    }
+}
+
+// MARK: - Outbound Grants For Connection (Phase 1.9)
+
+/// Lists grants the local user has issued to this specific connection.
+/// Pulls from `GrantsRepository.outbound` and filters by connectionId.
+struct OutboundGrantsForConnectionList: View {
+
+    let connectionId: String
+    @ObservedObject private var repo = GrantsRepository.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("What you've shared").font(.headline)
+                Spacer()
+                if !grantsForThisConnection.isEmpty {
+                    Text("\(grantsForThisConnection.count) \(grantsForThisConnection.count == 1 ? "grant" : "grants")")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
-
-            if let location = profile.location, !location.isEmpty {
+            if grantsForThisConnection.isEmpty {
                 HStack {
-                    Image(systemName: "location")
-                        .foregroundColor(.secondary)
-                    Text(location)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                    Spacer()
+                    VStack(spacing: 6) {
+                        Image(systemName: "tray")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                        Text("Nothing shared with this connection yet")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 16)
+                    Spacer()
+                }
+            } else {
+                ForEach(grantsForThisConnection) { grant in
+                    OutboundGrantRow(grant: grant)
                 }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
-        .background(Color(.systemGray6))
+        .background(Color(.secondarySystemBackground))
         .cornerRadius(12)
     }
+
+    private var grantsForThisConnection: [GrantSummary] {
+        repo.outbound.filter { $0.connectionId == connectionId }
+    }
 }
+
+private struct OutboundGrantRow: View {
+    let grant: GrantSummary
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: grant.kind.icon)
+                .foregroundStyle(tint)
+                .frame(width: 22)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(grant.itemLabel.isEmpty ? grant.kind.displayName : grant.itemLabel)
+                    .font(.subheadline)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text(grant.status.capitalized)
+                .font(.caption2)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(tint.opacity(0.15))
+                .foregroundStyle(tint)
+                .cornerRadius(4)
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var subtitle: String {
+        var parts: [String] = [grant.mode.title]
+        if let exp = grant.expiresAt {
+            parts.append("expires \(exp.formatted(.dateTime.day().month().year()))")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private var tint: Color {
+        switch grant.status.lowercased() {
+        case "active":    return .green
+        case "expired":   return .secondary
+        case "revoked":   return .red
+        case "exhausted": return .orange
+        default:           return .secondary
+        }
+    }
+}
+
+// MARK: - Profile Info Section (retired in Phase 1.5)
+//
+// Replaced by `BusinessCardView` which renders bio + location alongside
+// the rest of the business card. Left a stub here briefly in case any
+// preview/test re-introduces it; can be deleted once no references
+// remain in any branch.
 
 // MARK: - Shared Data Section
 

@@ -10,7 +10,10 @@ final class OwnerSpaceClient {
     // MARK: - Properties
 
     private let connectionManager: NatsConnectionManager
-    private let ownerSpaceId: String
+    /// The owner-space identifier (UUID) this client routes through. Exposed
+    /// so callers like `AppState` can decide whether to rebuild clients
+    /// after credential rotation.
+    let ownerSpaceId: String
 
     // Topic prefixes
     private var forVaultPrefix: String { "\(ownerSpaceId).forVault" }
@@ -235,8 +238,7 @@ final class OwnerSpaceClient {
         let message = VaultEventMessage(
             id: requestId,
             type: messageType,
-            payload: payload,
-            timestamp: ISO8601DateFormatter().string(from: Date())
+            payload: payload
         )
 
         let requestPayload = try JSONEncoder().encode(message)
@@ -417,6 +419,326 @@ final class OwnerSpaceClient {
 
     func emitFeedNotification(_ notification: FeedNotification) {
         feedNotificationContinuation?.yield(notification)
+    }
+
+    // MARK: - Own-profile snapshot ticks (forApp.profile.public.>)
+
+    /// Tick stream for "the vault just published a fresh snapshot of *my*
+    /// profile" — fires on every `forApp.profile.public.*` message so the
+    /// data-cache layer can re-hydrate after a multi-device edit or any
+    /// out-of-band catalog change the local ViewModels didn't drive.
+    /// Mirrors Android `OwnerSpaceClient.ownProfileSnapshotTick`. Payload
+    /// is deliberately not surfaced — re-hydrate is the only sensible
+    /// reaction, and consumers should always go back to `profile.get-
+    /// published` for the authoritative state.
+    private var ownProfileSnapshotContinuation: AsyncStream<Void>.Continuation?
+    private var _ownProfileSnapshotStream: AsyncStream<Void>?
+    private var ownProfileSnapshotTask: Task<Void, Never>?
+
+    var ownProfileSnapshotTicks: AsyncStream<Void> {
+        if let stream = _ownProfileSnapshotStream { return stream }
+        let stream = AsyncStream<Void> { continuation in
+            self.ownProfileSnapshotContinuation = continuation
+            continuation.onTermination = { [weak self] _ in
+                self?.ownProfileSnapshotContinuation = nil
+                self?._ownProfileSnapshotStream = nil
+            }
+        }
+        _ownProfileSnapshotStream = stream
+        return stream
+    }
+
+    /// Start the `forApp.profile.public.>` subscription that drives
+    /// `ownProfileSnapshotTicks`. Idempotent; the first call wires the
+    /// subscription, subsequent calls are no-ops. Call this once after
+    /// PIN unlock (after `OwnerSpaceClient` has its space configured).
+    func startOwnProfileSnapshotSubscription() {
+        guard ownProfileSnapshotTask == nil else { return }
+        let prefix = forAppPrefix
+        ownProfileSnapshotTask = Task { [weak self] in
+            guard let self = self else { return }
+            do {
+                let stream = try await self.connectionManager.subscribe(
+                    to: "\(prefix).profile.public.>",
+                    type: ProfilePublicSnapshotMessage.self
+                )
+                for await _ in stream {
+                    if Task.isCancelled { return }
+                    self.ownProfileSnapshotContinuation?.yield(())
+                }
+            } catch {
+                #if DEBUG
+                print("[OwnerSpaceClient] profile.public subscription failed: \(error)")
+                #endif
+            }
+        }
+    }
+
+    // MARK: - Presence heartbeats (forApp.presence.heartbeat.>)
+
+    /// Peer presence heartbeats re-emitted by our vault. Each beat
+    /// carries `connection_id`, `status`, and an `at` unix-seconds
+    /// timestamp. Consumers (`PresenceAggregator`) own the retention
+    /// logic — this stream is fire-and-forget. Mirrors Android
+    /// `OwnerSpaceClient.presenceHeartbeats`.
+    private var presenceHeartbeatContinuation: AsyncStream<PresenceHeartbeat>.Continuation?
+    private var _presenceHeartbeatStream: AsyncStream<PresenceHeartbeat>?
+    private var presenceTask: Task<Void, Never>?
+
+    var presenceHeartbeats: AsyncStream<PresenceHeartbeat> {
+        if let stream = _presenceHeartbeatStream { return stream }
+        let stream = AsyncStream<PresenceHeartbeat> { continuation in
+            self.presenceHeartbeatContinuation = continuation
+            continuation.onTermination = { [weak self] _ in
+                self?.presenceHeartbeatContinuation = nil
+                self?._presenceHeartbeatStream = nil
+            }
+        }
+        _presenceHeartbeatStream = stream
+        return stream
+    }
+
+    /// Start the `forApp.presence.heartbeat.>` subscription that drives
+    /// `presenceHeartbeats`. Idempotent. Call from `PresenceAggregator.
+    /// attach` after the vault is warm.
+    func startPresenceHeartbeatSubscription() {
+        guard presenceTask == nil else { return }
+        let prefix = forAppPrefix
+        presenceTask = Task { [weak self] in
+            guard let self = self else { return }
+            do {
+                let stream = try await self.connectionManager.subscribe(
+                    to: "\(prefix).presence.heartbeat.>",
+                    type: PresenceHeartbeatMessage.self
+                )
+                for await msg in stream {
+                    if Task.isCancelled { return }
+                    // Wire layout: { payload: { connection_id, status, at } }
+                    // but some vaults flatten the payload at the top level.
+                    let cid = msg.payload?.connectionId ?? msg.connectionId ?? ""
+                    if cid.isEmpty { continue }
+                    let status = msg.payload?.status ?? msg.status ?? "online"
+                    let at: TimeInterval = msg.payload?.at
+                        ?? msg.at
+                        ?? Date().timeIntervalSince1970
+                    self.presenceHeartbeatContinuation?.yield(
+                        PresenceHeartbeat(connectionId: cid, status: status, at: at)
+                    )
+                }
+            } catch {
+                #if DEBUG
+                print("[OwnerSpaceClient] presence.heartbeat subscription failed: \(error)")
+                #endif
+            }
+        }
+    }
+
+    // MARK: - Grant events (forApp.grant.* / .critical-secret-use.* / .verify.*)
+
+    /// Live stream of Grants-subsystem events. Feeds `GrantsRepository`'s
+    /// hydrate-on-event path so the inbox stays current without the
+    /// user pulling-to-refresh, and feeds `FeedViewModel`'s pending-row
+    /// synthesis so a fresh inbound request shows up on the requester's
+    /// connection card the moment it lands.
+    ///
+    /// Phase 3.9 — backs all three approval flows
+    /// (DataGrant / CriticalUseApproval / IdentityVerifyApproval) plus
+    /// the receiver-side `forApp.grant.fetch-result` notification when
+    /// the owner approves a value request.
+    private var grantEventContinuation: AsyncStream<GrantEvent>.Continuation?
+    private var _grantEventStream: AsyncStream<GrantEvent>?
+    private var grantSubscriptionTask: Task<Void, Never>?
+
+    var grantEvents: AsyncStream<GrantEvent> {
+        if let s = _grantEventStream { return s }
+        let stream = AsyncStream<GrantEvent> { continuation in
+            self.grantEventContinuation = continuation
+            continuation.onTermination = { [weak self] _ in
+                self?.grantEventContinuation = nil
+                self?._grantEventStream = nil
+            }
+        }
+        _grantEventStream = stream
+        return stream
+    }
+
+    /// Subscribe to the three Grants-subsystem topic families and pump
+    /// decoded `GrantEvent`s into `grantEvents`. Idempotent — call from
+    /// AppState.syncProfileFromVault alongside the other warm-up wires.
+    ///
+    /// Uses the raw `NatsMessage` subscription (rather than the typed
+    /// overload) so we keep access to the topic — the subject suffix
+    /// drives event routing (`request-arrived` vs `approved` etc.).
+    func startGrantEventSubscription() {
+        guard grantSubscriptionTask == nil else { return }
+        let prefix = forAppPrefix
+        grantSubscriptionTask = Task { [weak self] in
+            guard let self = self else { return }
+            for family in ["grant", "critical-secret-use", "verify"] {
+                Task { [weak self] in
+                    guard let self = self else { return }
+                    do {
+                        let stream = try await self.connectionManager.subscribe(
+                            to: "\(prefix).\(family).>"
+                        )
+                        for await raw in stream {
+                            if Task.isCancelled { return }
+                            if let event = Self.parseGrantEvent(rawMessage: raw) {
+                                self.grantEventContinuation?.yield(event)
+                            }
+                        }
+                    } catch {
+                        #if DEBUG
+                        print("[OwnerSpaceClient] \(family) subscription failed: \(error)")
+                        #endif
+                    }
+                }
+            }
+        }
+    }
+
+    /// Parse a `forApp.{grant,critical-secret-use,verify}.*` message
+    /// into a domain event. Subject suffix drives case selection;
+    /// payload fields fill in the data. Tolerates both hyphen and
+    /// underscore separators in the suffix.
+    private static func parseGrantEvent(rawMessage: NatsMessage) -> GrantEvent? {
+        let subject = rawMessage.topic
+        let suffix = subject.split(separator: ".").last.map(String.init) ?? ""
+
+        // Permissive JSON decode — payload shape varies by event type.
+        let json = (try? JSONSerialization.jsonObject(with: rawMessage.data)) as? [String: Any] ?? [:]
+        let inner = (json["payload"] as? [String: Any]) ?? json
+        let connectionId = (inner["connection_id"] as? String) ?? ""
+        let requestId    = inner["request_id"] as? String
+        let grantId      = inner["grant_id"] as? String
+        let value        = inner["value"] as? String
+
+        switch suffix {
+        case "request-arrived", "request_arrived":
+            guard let rid = requestId else { return nil }
+            return .requestArrived(connectionId: connectionId, requestId: rid)
+        case "approved":
+            guard let gid = grantId else { return nil }
+            return .approved(grantId: gid, connectionId: connectionId)
+        case "denied":
+            guard let rid = requestId else { return nil }
+            return .denied(requestId: rid)
+        case "revoked":
+            guard let gid = grantId else { return nil }
+            return .revoked(grantId: gid)
+        case "fetch-result", "fetch_result":
+            guard let gid = grantId else { return nil }
+            return .fetchResult(grantId: gid, valueBase64: value)
+        default:
+            return nil
+        }
+    }
+
+    // MARK: - Peer-location transitions (forApp.connection.peer-location-*)
+
+    /// V6: events emitted when a peer starts sharing their location with
+    /// us, stops sharing, or pings us with a one-shot
+    /// `peer-location-requested`. The prompt VM observes this stream so
+    /// the UX is global — a request that arrives while the user is on
+    /// the feed still surfaces a dialog. Mirrors Android
+    /// `OwnerSpaceClient.peerLocationTransitions`.
+    private var peerLocationContinuation: AsyncStream<PeerLocationShareTransition>.Continuation?
+    private var _peerLocationStream: AsyncStream<PeerLocationShareTransition>?
+    private var peerLocationTask: Task<Void, Never>?
+
+    var peerLocationTransitions: AsyncStream<PeerLocationShareTransition> {
+        if let s = _peerLocationStream { return s }
+        let stream = AsyncStream<PeerLocationShareTransition> { continuation in
+            self.peerLocationContinuation = continuation
+            continuation.onTermination = { [weak self] _ in
+                self?.peerLocationContinuation = nil
+                self?._peerLocationStream = nil
+            }
+        }
+        _peerLocationStream = stream
+        return stream
+    }
+
+    /// Subscribe to the three `forApp.connection.peer-location-*` subject
+    /// suffixes and pump decoded `PeerLocationShareTransition`s into
+    /// `peerLocationTransitions`. Idempotent — call once per warm-up.
+    func startPeerLocationSubscription() {
+        guard peerLocationTask == nil else { return }
+        let prefix = forAppPrefix
+        peerLocationTask = Task { [weak self] in
+            guard let self = self else { return }
+            let suffixes: [(String, PeerLocationShareTransition.Transition)] = [
+                ("connection.peer-location-shared-started", .started),
+                ("connection.peer-location-shared-stopped", .stopped),
+                ("connection.peer-location-requested",      .requested),
+            ]
+            for (suffix, transition) in suffixes {
+                Task { [weak self] in
+                    guard let self = self else { return }
+                    do {
+                        let stream = try await self.connectionManager.subscribe(
+                            to: "\(prefix).\(suffix)"
+                        )
+                        for await raw in stream {
+                            if Task.isCancelled { return }
+                            if let event = Self.parsePeerLocation(raw: raw, transition: transition) {
+                                self.peerLocationContinuation?.yield(event)
+                            }
+                        }
+                    } catch {
+                        #if DEBUG
+                        print("[OwnerSpaceClient] peer-location \(suffix) subscription failed: \(error)")
+                        #endif
+                    }
+                }
+            }
+        }
+    }
+
+    private static func parsePeerLocation(
+        raw: NatsMessage,
+        transition: PeerLocationShareTransition.Transition
+    ) -> PeerLocationShareTransition? {
+        let json = (try? JSONSerialization.jsonObject(with: raw.data)) as? [String: Any] ?? [:]
+        let payload = (json["payload"] as? [String: Any]) ?? json
+        guard let connectionId = payload["connection_id"] as? String, !connectionId.isEmpty else {
+            return nil
+        }
+        let fromOwnerSpace = payload["from_owner_space"] as? String ?? ""
+        let at: String = {
+            switch transition {
+            case .started:   return payload["started_at"]   as? String ?? ""
+            case .stopped:   return payload["stopped_at"]   as? String ?? ""
+            case .requested: return payload["requested_at"] as? String ?? ""
+            }
+        }()
+        return PeerLocationShareTransition(
+            connectionId: connectionId,
+            fromOwnerSpace: fromOwnerSpace,
+            transition: transition,
+            at: at
+        )
+    }
+
+    /// V6: send a one-shot location-request ping to a peer. The peer's
+    /// app sees a `forApp.connection.peer-location-requested` event and
+    /// may respond by calling `sendLocationOnce` from the prompt.
+    func requestPeerLocation(connectionId: String) async throws {
+        _ = try await sendAndAwaitResponse(
+            "location.request",
+            payload: ["connection_id": AnyCodableValue(connectionId)],
+            timeout: 10
+        )
+    }
+
+    /// V6: fulfill a peer's request by sending the owner's latest cached
+    /// location once, without touching the sharing index.
+    func sendLocationOnce(connectionId: String) async throws {
+        _ = try await sendAndAwaitResponse(
+            "location.send-once",
+            payload: ["connection_id": AnyCodableValue(connectionId)],
+            timeout: 10
+        )
     }
 
     // MARK: - Vault Locked Events
@@ -749,6 +1071,54 @@ struct EventTypeInfo: Decodable {
 struct VaultLockedEvent {
     let reason: String
     let messageType: String
+}
+
+/// Catch-all for `forApp.profile.public.*` snapshot messages. We don't
+/// consume the payload — the only sensible reaction is to re-fetch
+/// `profile.get-published` for the authoritative state — so the message
+/// type stays empty; receiving any decodable JSON ticks the stream.
+struct ProfilePublicSnapshotMessage: Decodable {}
+
+/// Domain event for the Grants subsystem (Phase 3.9). Decoded from
+/// `forApp.grant.*` topic messages; consumers (`GrantsRepository`,
+/// `FeedViewModel`) react by re-hydrating or synthesizing pending rows.
+enum GrantEvent {
+    case requestArrived(connectionId: String, requestId: String)
+    case approved(grantId: String, connectionId: String)
+    case denied(requestId: String)
+    case revoked(grantId: String)
+    /// Value-grant fetch result landed (receiver-side). `valueBase64` is
+    /// nil for non-value grants (e.g. critical-use / verify).
+    case fetchResult(grantId: String, valueBase64: String?)
+}
+
+/// On-wire payload of `forApp.presence.heartbeat.*`. Some vaults nest the
+/// fields under `payload`; others put them at the top level. We accept
+/// both via two sets of CodingKeys.
+struct PresenceHeartbeatMessage: Decodable {
+    let connectionId: String?
+    let status: String?
+    let at: TimeInterval?
+    let payload: Inner?
+
+    struct Inner: Decodable {
+        let connectionId: String?
+        let status: String?
+        let at: TimeInterval?
+
+        enum CodingKeys: String, CodingKey {
+            case connectionId = "connection_id"
+            case status
+            case at
+        }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case connectionId = "connection_id"
+        case status
+        case at
+        case payload
+    }
 }
 
 /// Wallet notification from vault (balance update, incoming payment, etc.)

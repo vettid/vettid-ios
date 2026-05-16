@@ -82,6 +82,25 @@ extension VaultFeedEvent {
 
 // MARK: - Audit Log View Model
 
+/// Verification-state filter chip (Phase 5.3). `all` is the default;
+/// the others narrow to one of the AuditChainVerifier RowStates so a
+/// user can quickly answer "are there any tampered rows on this page?"
+enum AuditVerificationFilter: String, CaseIterable, Hashable {
+    case all
+    case verified
+    case tampered
+    case unsigned
+
+    var displayName: String {
+        switch self {
+        case .all:       return "All"
+        case .verified:  return "Verified"
+        case .tampered:  return "Tampered"
+        case .unsigned:  return "Unsigned"
+        }
+    }
+}
+
 @MainActor
 final class FeedAuditLogViewModel: ObservableObject {
 
@@ -92,8 +111,19 @@ final class FeedAuditLogViewModel: ObservableObject {
     @Published var searchText = ""
     @Published var selectedTimeWindow: AuditTimeWindow = .last24Hours
     @Published var selectedEventType: String? = nil
+    @Published var verificationFilter: AuditVerificationFilter = .all
     @Published var integrityVerified: Bool? = nil
     @Published var errorMessage: String?
+
+    /// Per-row verification result, keyed by event_id. Populated by
+    /// `loadAudit()` after parsing the response and running the
+    /// chain verifier. Defaults to `.unsigned` for any row not present
+    /// in the map (e.g. mock data or pre-anchor responses).
+    @Published var verificationByEventId: [String: AuditChainVerifier.RowState] = [:]
+
+    /// Aggregate chain status — drives the top-of-list pill and the
+    /// header-bar `integrityVerified` quick badge.
+    @Published var chainStatus: AuditChainVerifier.ChainStatus = .empty
 
     // MARK: - Dependencies
 
@@ -107,13 +137,26 @@ final class FeedAuditLogViewModel: ObservableObject {
 
     // MARK: - Computed Properties
 
-    /// Events filtered by search text and event type
+    /// Events filtered by search text, event type, and verification state.
     var filteredEvents: [VaultFeedEvent] {
         var result = events
 
         // Filter by event type
         if let eventType = selectedEventType {
             result = result.filter { $0.eventType == eventType }
+        }
+
+        // Filter by verification state (Phase 5.3)
+        if verificationFilter != .all {
+            result = result.filter { event in
+                let state = verificationByEventId[event.eventId] ?? .unsigned
+                switch verificationFilter {
+                case .all:       return true
+                case .verified:  return state == .verified
+                case .tampered:  return state == .tampered
+                case .unsigned:  return state == .unsigned
+                }
+            }
         }
 
         // Filter by search text
@@ -137,7 +180,12 @@ final class FeedAuditLogViewModel: ObservableObject {
 
     /// Whether any filters are active
     var hasActiveFilters: Bool {
-        selectedEventType != nil || !searchText.isEmpty
+        selectedEventType != nil || !searchText.isEmpty || verificationFilter != .all
+    }
+
+    /// Verification verdict for a single row — used by AuditEventRow.
+    func verificationState(for event: VaultFeedEvent) -> AuditChainVerifier.RowState {
+        verificationByEventId[event.eventId] ?? .unsigned
     }
 
     // MARK: - Load Audit
@@ -165,7 +213,9 @@ final class FeedAuditLogViewModel: ObservableObject {
                 endDate: endDate,
                 limit: 500
             )
-            events = result.events.sorted { $0.createdAt > $1.createdAt }
+            let sorted = result.events.sorted { $0.createdAt > $1.createdAt }
+            events = sorted
+            applyChainVerification(events: sorted, anchor: result.chainAnchor)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -175,24 +225,57 @@ final class FeedAuditLogViewModel: ObservableObject {
 
     // MARK: - Verify Integrity
 
-    /// Checks that syncSequence values are monotonically increasing with no gaps
+    /// Phase 5.3: real Ed25519 chain verification. Reads the per-row
+    /// verification map already populated by `loadAudit()` and surfaces
+    /// the top-of-screen pill state.
     func verifyIntegrity() {
         guard !events.isEmpty else {
             integrityVerified = nil
             return
         }
-
-        let sorted = events.sorted { $0.syncSequence < $1.syncSequence }
-
-        var isValid = true
-        for i in 1..<sorted.count {
-            if sorted[i].syncSequence <= sorted[i - 1].syncSequence {
-                isValid = false
+        switch chainStatus {
+        case .verified:
+            integrityVerified = true
+        case .tampered:
+            integrityVerified = false
+        case .unsigned, .empty:
+            // No anchor available — fall back to a sync_sequence
+            // monotonicity check so users still see *some* signal on
+            // pre-anchor servers. This is best-effort, not authoritative.
+            let bySeq = events.sorted { $0.syncSequence < $1.syncSequence }
+            var monotonic = true
+            for i in 1..<bySeq.count where bySeq[i].syncSequence <= bySeq[i - 1].syncSequence {
+                monotonic = false
                 break
             }
+            integrityVerified = monotonic
         }
+    }
 
-        integrityVerified = isValid
+    /// Run the chain verifier and update the per-row map + chain status.
+    /// Rows in `events` must already be in newest-first order — the
+    /// verifier reverses internally to walk oldest → newest.
+    private func applyChainVerification(events: [VaultFeedEvent], anchor: AuditChainVerifier.ChainAnchor) {
+        let (perRow, chain) = AuditChainVerifier.verifyChain(
+            rows: events,
+            anchor: anchor,
+            entryHashOf: { ($0.entryHash, $0.previousHash, $0.entrySig) }
+        )
+        var map: [String: AuditChainVerifier.RowState] = [:]
+        map.reserveCapacity(events.count)
+        for (i, event) in events.enumerated() {
+            map[event.eventId] = perRow[i].state
+        }
+        self.verificationByEventId = map
+        self.chainStatus = chain
+        // Stamp the screen-level "Verified" / "Warning" badge so it
+        // stays in sync with the chain state even without an explicit
+        // Verify Integrity tap.
+        switch chain {
+        case .verified: integrityVerified = true
+        case .tampered: integrityVerified = false
+        case .unsigned, .empty: integrityVerified = nil
+        }
     }
 
     // MARK: - Export JSON
@@ -240,6 +323,7 @@ final class FeedAuditLogViewModel: ObservableObject {
     func clearFilters() {
         selectedEventType = nil
         searchText = ""
+        verificationFilter = .all
     }
 
     // MARK: - Mock Data
@@ -265,7 +349,10 @@ final class FeedAuditLogViewModel: ObservableObject {
                 archivedAt: nil,
                 expiresAt: nil,
                 syncSequence: 42,
-                retentionClass: "audit"
+                retentionClass: "audit",
+                previousHash: nil,
+                entryHash: nil,
+                entrySig: nil
             ),
             VaultFeedEvent(
                 eventId: "audit-002",
@@ -284,7 +371,10 @@ final class FeedAuditLogViewModel: ObservableObject {
                 archivedAt: nil,
                 expiresAt: nil,
                 syncSequence: 41,
-                retentionClass: "audit"
+                retentionClass: "audit",
+                previousHash: nil,
+                entryHash: nil,
+                entrySig: nil
             ),
             VaultFeedEvent(
                 eventId: "audit-003",
@@ -303,7 +393,10 @@ final class FeedAuditLogViewModel: ObservableObject {
                 archivedAt: nil,
                 expiresAt: nil,
                 syncSequence: 40,
-                retentionClass: "audit"
+                retentionClass: "audit",
+                previousHash: nil,
+                entryHash: nil,
+                entrySig: nil
             ),
             VaultFeedEvent(
                 eventId: "audit-004",
@@ -322,7 +415,10 @@ final class FeedAuditLogViewModel: ObservableObject {
                 archivedAt: nil,
                 expiresAt: nil,
                 syncSequence: 39,
-                retentionClass: "audit"
+                retentionClass: "audit",
+                previousHash: nil,
+                entryHash: nil,
+                entrySig: nil
             ),
             VaultFeedEvent(
                 eventId: "audit-005",
@@ -341,7 +437,10 @@ final class FeedAuditLogViewModel: ObservableObject {
                 archivedAt: nil,
                 expiresAt: nil,
                 syncSequence: 38,
-                retentionClass: "audit"
+                retentionClass: "audit",
+                previousHash: nil,
+                entryHash: nil,
+                entrySig: nil
             ),
             VaultFeedEvent(
                 eventId: "audit-006",
@@ -360,8 +459,15 @@ final class FeedAuditLogViewModel: ObservableObject {
                 archivedAt: nil,
                 expiresAt: nil,
                 syncSequence: 43,
-                retentionClass: "security"
+                retentionClass: "security",
+                previousHash: nil,
+                entryHash: nil,
+                entrySig: nil
             )
         ].sorted { $0.createdAt > $1.createdAt }
+        // Run the verifier so the mock data exercises the same code
+        // path as live data. Without an anchor every row becomes
+        // `.unsigned` (the expected pre-anchor display).
+        applyChainVerification(events: events, anchor: .empty)
     }
 }

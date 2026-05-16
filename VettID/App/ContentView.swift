@@ -4,6 +4,14 @@ struct ContentView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var deepLinkHandler: DeepLinkHandler
     @StateObject private var lockService = AppLockService.shared
+    /// Phase 5.4 — owns the queue of incoming peer location-request
+    /// pings so the alert surfaces regardless of which screen the user
+    /// is on. Wires up the OwnerSpaceClient subscription after warm.
+    @StateObject private var peerLocationPrompt = PeerLocationRequestPromptViewModel()
+    /// Phase 4.3 — calling singleton observed for full-screen cover
+    /// routing (Outgoing / Incoming / Active). Configured by AppState
+    /// after warmVault so the wire is live when an event arrives.
+    @ObservedObject private var callCoordinator = CallCoordinator.shared
     @Environment(\.scenePhase) private var scenePhase
 
     // Deep link navigation state
@@ -68,11 +76,50 @@ struct ContentView: View {
         .onChange(of: deepLinkHandler.pendingDeepLink) { deepLink in
             handleDeepLink(deepLink)
         }
+        .onChange(of: appState.isAuthenticated) { _ in
+            // After warm, AppState builds the OwnerSpaceClient. Attach
+            // the prompt VM once available so peer location-request
+            // pings have somewhere to land.
+            if let osc = appState.ownerSpaceClient {
+                peerLocationPrompt.attach(ownerSpaceClient: osc) { _ in nil }
+            }
+        }
         .sheet(isPresented: $showEnrollmentFromDeepLink) {
             if let token = deepLinkEnrollToken {
                 DeepLinkEnrollmentView(token: token)
                     .environmentObject(appState)
             }
+        }
+        // Phase 4.3 — call screens cover the app whenever there's an
+        // active call (outbound dialing, inbound ringing, or in-call).
+        // Coordinator's currentCall identity drives the binding so
+        // the cover dismisses cleanly when the call ends.
+        .fullScreenCover(item: Binding<CurrentCall?>(
+            get: { callCoordinator.currentCall },
+            set: { _ in /* dismissal is driven by callState, not by user gesture */ }
+        )) { call in
+            currentCallScreen(for: call)
+        }
+        // Phase 5.4 — peer location-request prompt. Surfaces at app
+        // root so a ping that arrives while the user is on the feed
+        // (or any other screen) still produces a visible dialog.
+        .alert(
+            "Location requested",
+            isPresented: Binding(
+                get: { peerLocationPrompt.pendingRequest != nil },
+                set: { newValue in if !newValue { peerLocationPrompt.dismiss() } }
+            ),
+            presenting: peerLocationPrompt.pendingRequest
+        ) { request in
+            Button("Send") {
+                Task { await peerLocationPrompt.fulfill() }
+            }
+            .disabled(peerLocationPrompt.isSending)
+            Button("Ignore", role: .cancel) {
+                peerLocationPrompt.dismiss()
+            }
+        } message: { request in
+            Text("\(request.peerLabel ?? "A connection") asked for your current location. Sending shares it once — they won't see your future location unless you turn on sharing.")
         }
     }
 
@@ -144,6 +191,31 @@ struct ContentView: View {
 
         case .unknown:
             break
+        }
+    }
+
+    // MARK: - Call screen routing (Phase 4.3)
+
+    @ViewBuilder
+    private func currentCallScreen(for call: CurrentCall) -> some View {
+        let state = callCoordinator.callState
+        if state == .connected || state == .reconnecting {
+            ActiveCallView(coordinator: callCoordinator, onEnded: { })
+        } else if state == .failed {
+            // Brief failure surface — the coordinator clears
+            // currentCall shortly, dismissing the cover.
+            CallFailedView(coordinator: callCoordinator)
+        } else if state == .idle {
+            EmptyView()
+        } else if call.direction == .incoming {
+            IncomingCallView(
+                coordinator: callCoordinator,
+                onAnswered: { /* state will advance into .connected */ },
+                onDeclined: { /* coordinator clears currentCall */ }
+            )
+        } else {
+            // Outgoing in any pre-connected state — show the dialing UI.
+            OutgoingCallView(coordinator: callCoordinator, onCancel: { })
         }
     }
 
@@ -476,6 +548,9 @@ struct EnrollmentContainerView: View {
     @StateObject private var viewModel = EnrollmentViewModel()
     @EnvironmentObject var appState: AppState
     @Environment(\.dismiss) private var dismiss
+    /// Phase 5.8 — flips on EnrollmentCompleteView's Continue tap so
+    /// the .complete case renders the post-enrollment next-steps panel.
+    @State private var showNextSteps = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -552,11 +627,21 @@ struct EnrollmentContainerView: View {
                     verifyingEnrollmentView
 
                 case .complete(let userGuid):
-                    EnrollmentCompleteView(userGuid: userGuid) {
-                        appState.refreshCredentialState()
-                        // Start background sync after successful enrollment
-                        VaultBackgroundRefresh.shared.onEnrollmentComplete()
-                        dismiss()
+                    // Phase 5.8: chain EnrollmentCompleteView (success
+                    // animation) → PostEnrollmentNextStepsView (three
+                    // optional deep-links). `showNextSteps` flips on
+                    // EnrollmentCompleteView's Continue tap; dismiss
+                    // happens from PostEnrollmentNextStepsView.
+                    if showNextSteps {
+                        PostEnrollmentNextStepsView {
+                            appState.refreshCredentialState()
+                            VaultBackgroundRefresh.shared.onEnrollmentComplete()
+                            dismiss()
+                        }
+                    } else {
+                        EnrollmentCompleteView(userGuid: userGuid) {
+                            showNextSteps = true
+                        }
                     }
 
                 case .error(let message, let retryable):

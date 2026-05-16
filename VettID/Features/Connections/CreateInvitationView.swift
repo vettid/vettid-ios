@@ -106,7 +106,12 @@ struct CreateInvitationView: View {
 
             if let code = viewModel.invitationCode {
                 HStack {
-                    Text(code)
+                    // Phase 1.8: display the 12-char broker code as
+                    // ABCD-EFGH-JKLM so it's readable when shared by
+                    // voice / SMS. Copy still puts the formatted form
+                    // on the pasteboard; the scanner's manual-entry
+                    // path normalizes hyphens away before resolving.
+                    Text(ShortCode.format(code))
                         .font(.system(.body, design: .monospaced))
                         .foregroundColor(.secondary)
 
@@ -169,7 +174,10 @@ struct CreateInvitationView: View {
 
     private func copyCode() {
         if let code = viewModel.invitationCode {
-            UIPasteboard.general.string = code
+            // Copy the hyphenated form so what's on the clipboard
+            // matches what the user sees on screen. The scanner's
+            // manual-entry path normalizes either form.
+            UIPasteboard.general.string = ShortCode.format(code)
         }
     }
 }

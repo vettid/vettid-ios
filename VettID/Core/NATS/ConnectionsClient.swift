@@ -174,6 +174,21 @@ final class ConnectionsClient {
         return response.result?["success"] as? Bool ?? response.success
     }
 
+    /// Cancel an outbound pending invitation (Phase 1.8).
+    ///
+    /// Used when the inviter changes their mind before the recipient
+    /// accepts. The vault tears down the broker entry so the code can
+    /// no longer be resolved, and emits a status update so any device
+    /// holding a stale `pending` card refreshes.
+    ///
+    /// Implemented on top of `connection.revoke` — the vault treats a
+    /// revoke against a pending-outbound connection the same as a
+    /// cancel. Kept as a separate method so the UI can label the
+    /// button "Cancel invitation" rather than "Revoke connection".
+    func cancelInvitation(connectionId: String) async throws -> Bool {
+        return try await revoke(connectionId: connectionId)
+    }
+
     // MARK: - List
 
     /// List all connections.

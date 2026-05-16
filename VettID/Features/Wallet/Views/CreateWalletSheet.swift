@@ -30,6 +30,21 @@ struct CreateWalletSheet: View {
                     Text("Use Testnet for testing. Mainnet is for real Bitcoin.")
                 }
 
+                // Phase 5.2: password gate. The vault rotates the
+                // credential CEK on every wallet.create, so the user
+                // confirms with their password before the request
+                // ships. Wipes from memory the moment the round-trip
+                // completes (CreateWalletViewModel clears it).
+                Section {
+                    SecureField("Password", text: $viewModel.password)
+                        .textContentType(.password)
+                        .submitLabel(.done)
+                } header: {
+                    Text("Confirm with password")
+                } footer: {
+                    Text("Required — wallet creation rotates your credential, so the vault double-checks it's you.")
+                }
+
                 Section {
                     Label {
                         Text("Your private keys are generated and stored securely inside the vault enclave. They never leave the enclave.")

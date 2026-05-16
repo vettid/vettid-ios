@@ -5,7 +5,12 @@ import SwiftUI
 struct SecretsView: View {
     let searchText: String
 
+    @EnvironmentObject private var appState: AppState
     @StateObject private var viewModel = SecretsViewModel()
+    /// Phase 2.7: when set, surfaces the "Available Secrets" catalog
+    /// dialog — what a connection sees when they browse what they can
+    /// request from this account.
+    @State private var showAvailableCatalog = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -24,10 +29,27 @@ struct SecretsView: View {
             }
         }
         .task {
+            // Phase 2.1: VM now talks to the vault via SecretsClient.
+            // Wire the client from AppState on first appearance, then
+            // refresh the list.
+            viewModel.client = appState.secretsClient
             await viewModel.loadSecrets()
+        }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showAvailableCatalog = true
+                } label: {
+                    Image(systemName: "doc.text.magnifyingglass")
+                }
+                .accessibilityLabel("Available secrets")
+            }
         }
         .sheet(isPresented: $viewModel.showPasswordPrompt) {
             PasswordPromptSheet(viewModel: viewModel)
+        }
+        .sheet(isPresented: $showAvailableCatalog) {
+            AvailableSecretsCatalogView(viewModel: viewModel)
         }
     }
 
@@ -175,10 +197,31 @@ struct SecretRowView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(secret.name)
-                        .font(.headline)
+                    // Phase 2.3: "Name — Alias" when an alias is set,
+                    // otherwise just the name. The alias is the
+                    // user-visible disambiguator (e.g. "Wife", "Trading").
+                    if let alias = secret.alias, !alias.isEmpty {
+                        HStack(spacing: 6) {
+                            Text(secret.name)
+                                .font(.headline)
+                            Text("—")
+                                .font(.subheadline)
+                                .foregroundStyle(.tertiary)
+                            Text(alias)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Text(secret.name)
+                            .font(.headline)
+                    }
 
-                    Text(secret.category.displayName)
+                    // Subtitle now leads with the secret type and falls
+                    // back to the category — matches Android's
+                    // "Alias under category" layout when alias is set.
+                    Text(secret.alias != nil
+                         ? secret.category.displayName
+                         : secret.category.displayName)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
