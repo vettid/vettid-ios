@@ -193,6 +193,61 @@ final class FeedAuditLogViewModel: ObservableObject {
         verificationByEventId[event.eventId] ?? .unsigned
     }
 
+    /// Area C (Android 06afb55): summary scoped to whatever the user
+    /// has filtered into view, not the whole page. Lets the pill say
+    /// "3 of 5 signed" when a filter narrows to a subset where the
+    /// signed count differs from the chainStatus aggregate.
+    struct VisibleVerificationSummary {
+        let total: Int
+        let verified: Int
+        let tampered: Int
+        let unsigned: Int
+
+        var pillTitle: String {
+            if total == 0 { return "No events" }
+            if tampered > 0 {
+                return "\(tampered) of \(total) tampered"
+            }
+            if verified == total {
+                return "Chain verified · \(verified) of \(total) signed"
+            }
+            return "\(verified) of \(total) signed"
+        }
+
+        var color: VisibleVerificationColor {
+            if total == 0 { return .neutral }
+            if tampered > 0 { return .red }
+            if verified == 0 { return .orange }
+            return .green
+        }
+    }
+
+    enum VisibleVerificationColor {
+        case green, orange, red, neutral
+    }
+
+    /// "X of Y signed" pill source — recomputes on every filter change
+    /// since `filteredEvents` is the @Published-driven dependency.
+    var visibleVerificationSummary: VisibleVerificationSummary {
+        let rows = filteredEvents
+        var verified = 0
+        var tampered = 0
+        var unsigned = 0
+        for row in rows {
+            switch verificationByEventId[row.eventId] ?? .unsigned {
+            case .verified: verified += 1
+            case .tampered: tampered += 1
+            case .unsigned: unsigned += 1
+            }
+        }
+        return VisibleVerificationSummary(
+            total: rows.count,
+            verified: verified,
+            tampered: tampered,
+            unsigned: unsigned
+        )
+    }
+
     // MARK: - Load Audit
 
     func loadAudit() async {

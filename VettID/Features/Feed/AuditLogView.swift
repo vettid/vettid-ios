@@ -254,17 +254,38 @@ struct FeedAuditLogView: View {
 
     @ViewBuilder
     private var chainStatusPill: some View {
+        // Area C (Android 06afb55): pill summarises the
+        // currently-visible (filtered) subset, not the whole page.
+        // Recomputes via `visibleVerificationSummary` on every filter
+        // change. Falls back to the empty/no-chain branch when there
+        // are no events at all, OR when the chain anchor is missing
+        // entirely (chainStatus = .empty / .unsigned) — those are
+        // about the chain itself, not the visible subset.
+        let summary = viewModel.visibleVerificationSummary
         let status = viewModel.chainStatus
         let (label, icon, color): (String, String, Color) = {
             switch status {
+            case .empty where summary.total == 0:
+                return ("No events", "questionmark.circle", .secondary)
             case .empty:
                 return ("No chain", "questionmark.circle", .secondary)
-            case .verified:
-                return (status.pillTitle, "checkmark.shield.fill", .green)
-            case .unsigned:
+            case .unsigned where summary.verified == 0:
                 return (status.pillTitle, "minus.circle", .orange)
             case .tampered:
-                return (status.pillTitle, "exclamationmark.shield.fill", .red)
+                return (summary.pillTitle, "exclamationmark.shield.fill", .red)
+            case .verified, .unsigned:
+                let sf = (summary.color == .red)
+                    ? "exclamationmark.shield.fill"
+                    : (summary.color == .orange ? "minus.circle" : "checkmark.shield.fill")
+                let tint: Color = {
+                    switch summary.color {
+                    case .green:   return .green
+                    case .orange:  return .orange
+                    case .red:     return .red
+                    case .neutral: return .secondary
+                    }
+                }()
+                return (summary.pillTitle, sf, tint)
             }
         }()
         HStack(spacing: 4) {
