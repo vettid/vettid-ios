@@ -94,6 +94,7 @@ struct SecretsView: View {
 
     private var secretsList: some View {
         let filtered = viewModel.filteredSecrets(searchText: searchText)
+        let groups = Self.groupSecretsByAlias(filtered)
 
         return Group {
             if filtered.isEmpty && !searchText.isEmpty {
@@ -108,37 +109,147 @@ struct SecretsView: View {
                 }
             } else {
                 List {
-                    ForEach(filtered) { secret in
-                        SecretRowView(
-                            secret: secret,
-                            isRevealed: viewModel.revealedSecretId == secret.id,
-                            revealedValue: viewModel.revealedSecretId == secret.id ? viewModel.revealedValue : nil,
-                            autoHideCountdown: viewModel.autoHideCountdown,
-                            onRevealTap: {
-                                viewModel.requestRevealSecret(secret.id)
-                            },
-                            onHideTap: {
-                                viewModel.hideSecret()
-                            },
-                            onCopyTap: {
-                                if let value = viewModel.revealedValue {
-                                    UIPasteboard.general.string = value
-                                }
-                            }
-                        )
-                    }
-                    .onDelete { indexSet in
-                        let filtered = viewModel.filteredSecrets(searchText: searchText)
-                        for index in indexSet {
-                            Task {
-                                await viewModel.deleteSecret(filtered[index].id)
-                            }
+                    // Area A (Android c537e7a + bbb376d): one card per
+                    // alias. Singletons (no alias, or unique alias)
+                    // render as plain rows; multi-secret aliases
+                    // collapse into a card with a header (alias
+                    // label + reveal-group action) and the secrets
+                    // listed inside.
+                    ForEach(groups, id: \.id) { group in
+                        if group.secrets.count > 1, let alias = group.alias {
+                            aliasCard(alias: alias, secrets: group.secrets)
+                                .listRowInsets(EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8))
+                                .listRowSeparator(.hidden)
+                        } else if let secret = group.secrets.first {
+                            singleSecretRow(secret)
                         }
                     }
                 }
                 .listStyle(.plain)
             }
         }
+    }
+
+    /// Single-secret row (existing flat-list rendering).
+    private func singleSecretRow(_ secret: MinorSecret) -> some View {
+        SecretRowView(
+            secret: secret,
+            isRevealed: viewModel.revealedSecretIds.contains(secret.id),
+            revealedValue: viewModel.revealedValues[secret.id],
+            autoHideCountdown: viewModel.autoHideCountdown,
+            onRevealTap: { viewModel.requestRevealSecret(secret.id) },
+            onHideTap: { viewModel.hideSecret() },
+            onCopyTap: {
+                if let value = viewModel.revealedValues[secret.id] {
+                    UIPasteboard.general.string = value
+                }
+            }
+        )
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button(role: .destructive) {
+                Task { await viewModel.deleteSecret(secret.id) }
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+    }
+
+    /// Alias-card cluster: header with the alias label + one reveal
+    /// button that surfaces every secret in the group, plus a
+    /// vertical stack of secret rows underneath.
+    private func aliasCard(alias: String, secrets: [MinorSecret]) -> some View {
+        let secretIds = secrets.map { $0.id }
+        let groupRevealed = secretIds.allSatisfy { viewModel.revealedSecretIds.contains($0) }
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: secrets.first?.category.icon ?? "key.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(.blue)
+                Text(alias)
+                    .font(.headline)
+                Spacer()
+                Button {
+                    if groupRevealed {
+                        viewModel.hideSecret()
+                    } else {
+                        viewModel.requestRevealAlias(secretIds)
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: groupRevealed ? "eye.slash.fill" : "eye.fill")
+                        if groupRevealed {
+                            Text("\(viewModel.autoHideCountdown)s")
+                                .font(.caption).monospacedDigit()
+                        }
+                    }
+                    .foregroundStyle(groupRevealed ? .orange : .blue)
+                }
+            }
+            VStack(spacing: 6) {
+                ForEach(secrets) { secret in
+                    SecretRowView(
+                        secret: secret,
+                        isRevealed: viewModel.revealedSecretIds.contains(secret.id),
+                        revealedValue: viewModel.revealedValues[secret.id],
+                        autoHideCountdown: viewModel.autoHideCountdown,
+                        showAlias: false,
+                        onRevealTap: { viewModel.requestRevealSecret(secret.id) },
+                        onHideTap: { viewModel.hideSecret() },
+                        onCopyTap: {
+                            if let value = viewModel.revealedValues[secret.id] {
+                                UIPasteboard.general.string = value
+                            }
+                        }
+                    )
+                    if secret.id != secrets.last?.id {
+                        Divider()
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.gray.opacity(0.08))
+        )
+    }
+
+    /// Group secrets by alias. Secrets without an alias get a unique
+    /// singleton "group" so the renderer can treat them uniformly.
+    private static func groupSecretsByAlias(_ secrets: [MinorSecret]) -> [AliasGroup] {
+        var byAlias: [String: [MinorSecret]] = [:]
+        var aliasOrder: [String] = []
+        var singletons: [AliasGroup] = []
+
+        for secret in secrets {
+            let alias = secret.alias?.trimmingCharacters(in: .whitespaces)
+            if let alias = alias, !alias.isEmpty {
+                if byAlias[alias] == nil {
+                    aliasOrder.append(alias)
+                }
+                byAlias[alias, default: []].append(secret)
+            } else {
+                singletons.append(AliasGroup(id: "single:\(secret.id)", alias: nil, secrets: [secret]))
+            }
+        }
+        // Aliases with only one secret render as singletons too —
+        // the "card" treatment is reserved for multi-secret groups.
+        var groups: [AliasGroup] = []
+        for alias in aliasOrder {
+            let items = byAlias[alias] ?? []
+            if items.count == 1 {
+                groups.append(AliasGroup(id: "single:\(items[0].id)", alias: nil, secrets: items))
+            } else {
+                groups.append(AliasGroup(id: "alias:\(alias)", alias: alias, secrets: items))
+            }
+        }
+        return groups + singletons
+    }
+
+    private struct AliasGroup {
+        let id: String
+        let alias: String?
+        let secrets: [MinorSecret]
     }
 
     // MARK: - Error View
@@ -177,6 +288,10 @@ struct SecretRowView: View {
     let isRevealed: Bool
     let revealedValue: String?
     let autoHideCountdown: Int
+    /// Area A (Android c537e7a): when rendered inside an alias-card
+    /// the alias is already in the card header — suppress the
+    /// "Name — Alias" duplication on each row.
+    var showAlias: Bool = true
     let onRevealTap: () -> Void
     let onHideTap: () -> Void
     let onCopyTap: () -> Void
@@ -200,7 +315,7 @@ struct SecretRowView: View {
                     // Phase 2.3: "Name — Alias" when an alias is set,
                     // otherwise just the name. The alias is the
                     // user-visible disambiguator (e.g. "Wife", "Trading").
-                    if let alias = secret.alias, !alias.isEmpty {
+                    if showAlias, let alias = secret.alias, !alias.isEmpty {
                         HStack(spacing: 6) {
                             Text(secret.name)
                                 .font(.headline)
@@ -219,11 +334,25 @@ struct SecretRowView: View {
                     // Subtitle now leads with the secret type and falls
                     // back to the category — matches Android's
                     // "Alias under category" layout when alias is set.
-                    Text(secret.alias != nil
-                         ? secret.category.displayName
-                         : secret.category.displayName)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
+                        Text(secret.category.displayName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        // Area A (Android 0f77278): USE_ONLY badge.
+                        // Critical secrets and any user-marked
+                        // use-only field render a tag so the user
+                        // sees this row can't be granted as a bulk
+                        // value — only as a one-tap "use" by a peer.
+                        if secret.visibility == .useOnly {
+                            Text("Use only")
+                                .font(.caption2).fontWeight(.semibold)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.orange.opacity(0.18))
+                                .foregroundStyle(.orange)
+                                .clipShape(Capsule())
+                        }
+                    }
                 }
 
                 Spacer()

@@ -290,6 +290,10 @@ final class PersonalDataStore: ObservableObject {
         // `is_public` on the field record wins; fall back to the
         // top-level public-fields set for older vault payloads.
         let isPublic = (raw["is_public"] as? Bool) ?? publicFields.contains(namespace)
+        // Area A (Android ac7148d): forward the alias group label if
+        // the vault recorded one on this field — drives the alias-
+        // card grouping in PersonalDataView.
+        let alias = (raw["alias"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         return PersonalDataItem(
             id: namespace,
             name: mapped.name,
@@ -300,7 +304,8 @@ final class PersonalDataStore: ObservableObject {
             isSystemField: false,
             isInPublicProfile: isPublic,
             isSensitive: false,
-            sortOrder: 0
+            sortOrder: 0,
+            alias: alias
         )
     }
 

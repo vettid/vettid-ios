@@ -71,6 +71,50 @@ final class GrantsClient {
         return response.result?["request_id"] as? String ?? ""
     }
 
+    /// Area A (Android 621b8ce + da09d0f): request a multi-field
+    /// alias bundle in one round-trip. The vault treats the bundle
+    /// as a single approval unit — the owner approves or denies the
+    /// whole group, and approval issues one grant per member field.
+    ///
+    /// `items` carries (kind, ref, label) triples for every field
+    /// the alias group covers. `aliasGroup` is the user-visible
+    /// label peers see ("Driver's License", "Home Address").
+    func requestAliasGroup(
+        connectionId: String,
+        aliasGroup: String,
+        items: [(kind: String, ref: String, label: String)],
+        mode: String,
+        deliverTo: String,
+        requestedExpiresAt: TimeInterval,
+        requestedMaxUses: Int,
+        reason: String
+    ) async throws -> String {
+        let fieldsPayload: [[String: Any]] = items.map { item in
+            [
+                "item_kind": item.kind,
+                "item_ref": item.ref,
+                "item_label": item.label
+            ]
+        }
+        let payload: [String: AnyCodableValue] = [
+            "connection_id": AnyCodableValue(connectionId),
+            "alias_group": AnyCodableValue(aliasGroup),
+            "fields": AnyCodableValue(fieldsPayload as [Any]),
+            "mode": AnyCodableValue(mode),
+            "deliver_to": AnyCodableValue(deliverTo),
+            "requested_expires_at": AnyCodableValue(Int(requestedExpiresAt)),
+            "requested_max_uses": AnyCodableValue(requestedMaxUses),
+            "reason": AnyCodableValue(reason)
+        ]
+        let response = try await ownerSpaceClient.sendAndAwaitResponse(
+            "grant.request", payload: payload, timeout: defaultTimeout
+        )
+        guard response.success else {
+            throw GrantsClientError.vaultError(response.error ?? "grant.request failed")
+        }
+        return response.result?["request_id"] as? String ?? ""
+    }
+
     /// Approve an inbound grant request. `expiresAt` / `maxUses` /
     /// `mode` override the requester's ask when provided (pass 0 / nil
     /// to inherit the request's values). Returns the issued grant_id.

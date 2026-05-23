@@ -177,6 +177,37 @@ final class GrantsRepository: ObservableObject {
         )
     }
 
+    /// Area A (Android 621b8ce + da09d0f): send a multi-field alias
+    /// grant request in one round-trip. The vault treats the bundle
+    /// as one approval unit — the owner sees the whole group on the
+    /// DataGrantApprovalView and approves/denies once.
+    @discardableResult
+    func sendAliasRequest(
+        connectionId: String,
+        aliasGroup: String,
+        items: [(kind: GrantItemKind, itemRef: String, itemLabel: String)],
+        mode: GrantMode,
+        deliverTo: String,
+        requestedExpiresAt: Date?,
+        requestedMaxUses: Int,
+        reason: String
+    ) async throws -> String {
+        guard let client = client else { throw GrantsRepositoryError.notConfigured }
+        let wireItems = items.map { item in
+            (kind: item.kind.rawValue, ref: item.itemRef, label: item.itemLabel)
+        }
+        return try await client.requestAliasGroup(
+            connectionId: connectionId,
+            aliasGroup: aliasGroup,
+            items: wireItems,
+            mode: mode.rawValue,
+            deliverTo: deliverTo,
+            requestedExpiresAt: requestedExpiresAt?.timeIntervalSince1970 ?? 0,
+            requestedMaxUses: requestedMaxUses,
+            reason: reason
+        )
+    }
+
     // MARK: - Reset
 
     func reset() {

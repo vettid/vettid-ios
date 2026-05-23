@@ -93,6 +93,12 @@ struct GrantSummary: Identifiable, Equatable {
     let expiresAt: Date?
     let maxUses: Int
     let usesRemaining: Int
+    /// Area A (Android e6857ba): alias group this grant belongs to,
+    /// when the request was made for a multi-field alias bundle (e.g.
+    /// "Driver's License" covering license #, expiry, state). Nil for
+    /// single-field grants. Outbound list collapses by this field so
+    /// the user sees one row per alias.
+    let aliasGroup: String?
 
     var id: String { grantId }
 
@@ -120,7 +126,8 @@ struct GrantSummary: Identifiable, Equatable {
             createdAt: createdAt > 0 ? Date(timeIntervalSince1970: createdAt) : Date(),
             expiresAt: expiresAt > 0 ? Date(timeIntervalSince1970: expiresAt) : nil,
             maxUses: (dict["max_uses"] as? Int) ?? 0,
-            usesRemaining: (dict["uses_remaining"] as? Int) ?? 0
+            usesRemaining: (dict["uses_remaining"] as? Int) ?? 0,
+            aliasGroup: (dict["alias_group"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         )
     }
 }
@@ -142,6 +149,15 @@ struct PendingRequestSummary: Identifiable, Equatable, Hashable {
     let requestedMaxUses: Int
     let reason: String
     let createdAt: Date
+    /// Area A (Android 621b8ce + da09d0f): alias group label when the
+    /// peer requested a multi-field bundle (e.g. "Driver's License").
+    /// Nil for single-field requests.
+    let aliasGroup: String?
+    /// Member fields of an alias-group request. Empty for single-field
+    /// requests. Each entry mirrors a (kind, ref, label) triple sent by
+    /// the requester so the approval surface can render the whole
+    /// bundle as one list.
+    let fields: [PendingRequestField]
 
     var id: String { requestId }
 
@@ -156,6 +172,11 @@ struct PendingRequestSummary: Identifiable, Equatable, Hashable {
             ?? (dict["created_at"] as? Int).map(Double.init) ?? 0
         let expiresAt = (dict["requested_expires_at"] as? Double)
             ?? (dict["requested_expires_at"] as? Int).map(Double.init) ?? 0
+        let aliasGroup = (dict["alias_group"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        let fields: [PendingRequestField] = {
+            guard let raw = dict["fields"] as? [[String: Any]] else { return [] }
+            return raw.compactMap(PendingRequestField.from(dict:))
+        }()
         return PendingRequestSummary(
             requestId: requestId,
             connectionId: connectionId,
@@ -167,7 +188,31 @@ struct PendingRequestSummary: Identifiable, Equatable, Hashable {
             requestedExpiresAt: expiresAt > 0 ? Date(timeIntervalSince1970: expiresAt) : nil,
             requestedMaxUses: (dict["requested_max_uses"] as? Int) ?? 0,
             reason: (dict["reason"] as? String) ?? "",
-            createdAt: createdAt > 0 ? Date(timeIntervalSince1970: createdAt) : Date()
+            createdAt: createdAt > 0 ? Date(timeIntervalSince1970: createdAt) : Date(),
+            aliasGroup: aliasGroup,
+            fields: fields
+        )
+    }
+}
+
+/// One field inside a multi-field alias-group request. Surfaced on
+/// the DataGrantApprovalView so the owner sees the whole bundle the
+/// peer is asking for in one list.
+struct PendingRequestField: Equatable, Hashable, Identifiable {
+    let itemKind: GrantItemKind
+    let itemRef: String
+    let itemLabel: String
+
+    var id: String { "\(itemKind.rawValue):\(itemRef)" }
+
+    static func from(dict: [String: Any]) -> PendingRequestField? {
+        guard let ref = dict["item_ref"] as? String else { return nil }
+        let kindRaw = (dict["item_kind"] as? String) ?? "DATA"
+        let label = (dict["item_label"] as? String) ?? ref
+        return PendingRequestField(
+            itemKind: GrantItemKind(rawValue: kindRaw) ?? .data,
+            itemRef: ref,
+            itemLabel: label
         )
     }
 }

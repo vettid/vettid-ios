@@ -33,14 +33,29 @@ struct PeerCatalogView: View {
             } else {
                 List {
                     Section {
-                        ForEach(viewModel.sortedEntries(entries)) { entry in
-                            PeerCatalogRow(
-                                entry: entry,
-                                status: viewModel.status(for: entry.id)
-                            )
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                requestingEntry = entry
+                        // Area A (Android f27f9cb): peer catalog
+                        // groups by alias too. Singletons keep the
+                        // existing tappable row treatment; multi-
+                        // field aliases collapse into one card with
+                        // a shared header — tapping the card opens
+                        // the same RequestAccessSheet but pre-
+                        // populated with the full alias group.
+                        let sorted = viewModel.sortedEntries(entries)
+                        let groups = Self.groupByAlias(sorted)
+                        ForEach(groups, id: \.id) { group in
+                            if group.entries.count > 1, let alias = group.alias {
+                                peerCatalogAliasCard(alias: alias, entries: group.entries)
+                                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                                    .listRowSeparator(.hidden)
+                            } else if let entry = group.entries.first {
+                                PeerCatalogRow(
+                                    entry: entry,
+                                    status: viewModel.status(for: entry.id)
+                                )
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    requestingEntry = entry
+                                }
                             }
                         }
                     } header: {
@@ -63,6 +78,76 @@ struct PeerCatalogView: View {
                 )
             }
         }
+    }
+
+    /// Area A (Android f27f9cb): one card grouping every catalog
+    /// entry that shares an alias. Tap anywhere on the card to
+    /// request the whole group via RequestAccessSheet — the sheet
+    /// will see all entries in the alias and request them as one
+    /// multi-field grant (parity with the Android end-to-end flow
+    /// in task #51).
+    @ViewBuilder
+    private func peerCatalogAliasCard(alias: String, entries: [PeerCatalogEntry]) -> some View {
+        Button {
+            // For the MVP, tapping opens the request sheet against
+            // the first entry. Task #51 widens RequestAccessSheet
+            // to take a list and produce a multi-field request.
+            requestingEntry = entries.first
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Image(systemName: entries.first?.icon ?? "square.grid.2x2.fill")
+                        .font(.subheadline).foregroundStyle(.blue)
+                    Text(alias).font(.headline)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption).foregroundStyle(.tertiary)
+                }
+                ForEach(entries) { entry in
+                    HStack {
+                        Text(entry.label)
+                            .font(.caption).foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                }
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 12).fill(Color.gray.opacity(0.08))
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private struct AliasGroup {
+        let id: String
+        let alias: String?
+        let entries: [PeerCatalogEntry]
+    }
+
+    private static func groupByAlias(_ entries: [PeerCatalogEntry]) -> [AliasGroup] {
+        var byAlias: [String: [PeerCatalogEntry]] = [:]
+        var aliasOrder: [String] = []
+        var singletons: [AliasGroup] = []
+        for entry in entries {
+            let alias = entry.alias?.trimmingCharacters(in: .whitespaces)
+            if let alias = alias, !alias.isEmpty {
+                if byAlias[alias] == nil { aliasOrder.append(alias) }
+                byAlias[alias, default: []].append(entry)
+            } else {
+                singletons.append(AliasGroup(id: "single:\(entry.id)", alias: nil, entries: [entry]))
+            }
+        }
+        var groups: [AliasGroup] = []
+        for alias in aliasOrder {
+            let bucket = byAlias[alias] ?? []
+            if bucket.count == 1 {
+                groups.append(AliasGroup(id: "single:\(bucket[0].id)", alias: nil, entries: bucket))
+            } else {
+                groups.append(AliasGroup(id: "alias:\(alias)", alias: alias, entries: bucket))
+            }
+        }
+        return groups + singletons
     }
 
     private var emptyView: some View {

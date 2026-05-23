@@ -122,6 +122,11 @@ struct PersonalDataItem: Identifiable, Codable, Equatable {
     var isInPublicProfile: Bool
     var isSensitive: Bool
     var sortOrder: Int
+    /// Area A (Android ac7148d): user-defined group name for multi-
+    /// field templates (e.g. "Home Address" groups street/city/state).
+    /// Fields sharing an alias collapse into one card in the data tab.
+    /// Nil/empty means the field stands alone.
+    var alias: String?
     let createdAt: Date
     var updatedAt: Date
 
@@ -136,6 +141,7 @@ struct PersonalDataItem: Identifiable, Codable, Equatable {
         isInPublicProfile: Bool = false,
         isSensitive: Bool = false,
         sortOrder: Int = 0,
+        alias: String? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -149,6 +155,7 @@ struct PersonalDataItem: Identifiable, Codable, Equatable {
         self.isInPublicProfile = isInPublicProfile
         self.isSensitive = isSensitive
         self.sortOrder = sortOrder
+        self.alias = alias
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
