@@ -124,18 +124,25 @@ enum AgentApprovalState: Equatable {
 // MARK: - Create Invitation State
 
 /// State for the create agent invitation screen.
+///
+/// Matches Android aecfa99 + the new vault agent pairing flow
+/// (vettid-dev 338ca24): the vault mints a 12-char invite code +
+/// scoped NATS creds, publishes the payload to invite.<code> on
+/// JetStream, and returns the code for the user to paste into
+/// `vettid-agent init`. Previous shape (`inviteToken` + `shortLink`
+/// pointing at the never-registered vettid.com/agent URL) is retired.
 enum CreateAgentInvitationState: Equatable {
     case ready
     case creating
-    case created(inviteToken: String, connectionId: String, shortLink: String)
+    case created(inviteCode: String, connectionId: String, expiresAt: String)
     case error(String)
 
     static func == (lhs: CreateAgentInvitationState, rhs: CreateAgentInvitationState) -> Bool {
         switch (lhs, rhs) {
         case (.ready, .ready), (.creating, .creating):
             return true
-        case (.created(let t1, let c1, let s1), .created(let t2, let c2, let s2)):
-            return t1 == t2 && c1 == c2 && s1 == s2
+        case (.created(let c1, let cid1, let e1), .created(let c2, let cid2, let e2)):
+            return c1 == c2 && cid1 == cid2 && e1 == e2
         case (.error(let a), .error(let b)):
             return a == b
         default:

@@ -24,8 +24,8 @@ struct CreateAgentInvitationView: View {
             case .creating:
                 creatingContent
 
-            case .created(let inviteToken, _, let shortLink):
-                createdContent(inviteToken: inviteToken, shortLink: shortLink)
+            case .created(let inviteCode, _, _):
+                createdContent(inviteCode: inviteCode)
 
             case .error(let message):
                 errorContent(message)
@@ -114,8 +114,9 @@ struct CreateAgentInvitationView: View {
 
     // MARK: - Created Content
 
-    private func createdContent(inviteToken: String, shortLink: String) -> some View {
-        let initCommand = "vettid-agent init \(shortLink)"
+    private func createdContent(inviteCode: String) -> some View {
+        let dashed = Self.formatInviteCode(inviteCode)
+        let initCommand = "vettid-agent init \(inviteCode)"
 
         return ScrollView {
             VStack(spacing: 24) {
@@ -130,24 +131,25 @@ struct CreateAgentInvitationView: View {
                         .font(.title2)
                         .fontWeight(.bold)
 
-                    Text("Run this command on the machine where your agent runs:")
+                    Text("Type this code into `vettid-agent init` on the machine where your agent runs:")
                         .font(.body)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 16)
                 }
 
-                // Command card
+                // Invite code card — large, monospace, dash-grouped
+                // (ABCD-EFGH-JKLM). Mirrors Android aecfa99.
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("INIT COMMAND")
+                    Text("INVITE CODE")
                         .font(.caption)
                         .fontWeight(.semibold)
                         .foregroundColor(.accentColor)
 
-                    Text(initCommand)
-                        .font(.system(.body, design: .monospaced))
+                    Text(dashed)
+                        .font(.system(.title, design: .monospaced).weight(.bold))
                         .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(maxWidth: .infinity, alignment: .center)
 
                     Button {
                         UIPasteboard.general.string = initCommand
@@ -158,7 +160,7 @@ struct CreateAgentInvitationView: View {
                     } label: {
                         HStack {
                             Image(systemName: showCopiedFeedback ? "checkmark" : "doc.on.doc")
-                            Text(showCopiedFeedback ? "Copied!" : "Copy Command")
+                            Text(showCopiedFeedback ? "Copied!" : "Copy `vettid-agent init` command")
                         }
                         .frame(maxWidth: .infinity)
                     }
@@ -247,13 +249,26 @@ struct CreateAgentInvitationView: View {
                 .foregroundColor(.red)
                 .font(.caption)
 
-            Text("This invitation expires in 24 hours. Do not share it with others.")
+            Text("This code expires in 2 minutes. You'll be asked to approve the connection after the agent uses it.")
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
         .padding(16)
         .background(Color.red.opacity(0.08))
         .cornerRadius(12)
+    }
+
+    /// Display a 12-char ambiguity-safe invite code as three 4-char
+    /// groups (ABCD-EFGH-JKLM). Anything other than 12 chars falls
+    /// through unmodified. Mirrors Android `formatInviteCode`.
+    private static func formatInviteCode(_ code: String) -> String {
+        guard code.count == 12 else { return code }
+        let a = code.prefix(4)
+        let bStart = code.index(code.startIndex, offsetBy: 4)
+        let bEnd = code.index(code.startIndex, offsetBy: 8)
+        let b = code[bStart..<bEnd]
+        let c = code.suffix(4)
+        return "\(a)-\(b)-\(c)"
     }
 }
 

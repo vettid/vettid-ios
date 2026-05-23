@@ -45,8 +45,14 @@ final class CreateAgentInvitationViewModel: ObservableObject {
         state = .creating
 
         do {
+            // Stage 1 of the agent pairing flow — see
+            // vettid-agent/docs/AGENT-PAIRING-FLOW.md. The vault mints
+            // a 12-char invite code + scoped NATS creds, publishes the
+            // payload to invite.<code> on JetStream, and returns the
+            // code for the user to paste into `vettid-agent init`.
+            // Mirrors Android aecfa99 (vettid-dev 338ca24).
             let response = try await client.sendAndAwaitResponse(
-                "agent.create-invitation",
+                "agent.create-invite",
                 payload: [
                     "label": AnyCodableValue(label)
                 ],
@@ -54,22 +60,19 @@ final class CreateAgentInvitationViewModel: ObservableObject {
             )
 
             if response.success {
-                let inviteToken = response.getString("invite_token") ?? ""
+                let inviteCode = response.getString("invite_code") ?? ""
                 let connectionId = response.getString("connection_id") ?? ""
-                let ownerGuid = response.getString("owner_guid") ?? ""
+                let expiresAt = response.getString("expires_at") ?? ""
 
-                // Build the short link for vettid-agent init
-                let shortLink: String
-                if !inviteToken.isEmpty {
-                    shortLink = "https://vettid.com/agent?t=\(inviteToken)&o=\(ownerGuid)"
-                } else {
-                    shortLink = ""
+                guard !inviteCode.isEmpty else {
+                    state = .error("Vault returned an empty invite code")
+                    return
                 }
 
                 state = .created(
-                    inviteToken: inviteToken,
+                    inviteCode: inviteCode,
                     connectionId: connectionId,
-                    shortLink: shortLink
+                    expiresAt: expiresAt
                 )
 
                 #if DEBUG
