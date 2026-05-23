@@ -203,12 +203,12 @@ final class ConnectionsClient {
         limit: Int = 50,
         cursor: String? = nil
     ) async throws -> NatsConnectionListResult {
-        // Area D (Android ccc9285): only the unfiltered first-page
-        // call (no status filter, no cursor, default limit) is
-        // cacheable. Filtered / paginated calls always hit the vault
-        // — they're far less hot than the feed-tap → detail path.
-        let isCacheable = status == nil && cursor == nil && limit == 50
-        if isCacheable, let cached = Self.cachedSnapshot() {
+        // Area D (Android ccc9285): cache the first-page result keyed
+        // by status. Paginated calls (cursor non-nil) always hit the
+        // vault. Two slots (nil + "active") covers both the iOS list
+        // path and an Android-parity unfiltered warmList call.
+        let isCacheable = cursor == nil && limit == 50
+        if isCacheable, let cached = Self.cachedSnapshot(status: status) {
             return cached
         }
 
@@ -241,7 +241,7 @@ final class ConnectionsClient {
             nextCursor: result["next_cursor"] as? String
         )
         if isCacheable {
-            Self.storeCache(result0)
+            Self.storeCache(status: status, result: result0)
         }
         return result0
     }
@@ -264,37 +264,41 @@ final class ConnectionsClient {
     }
     private static let listCacheTtl: TimeInterval = 30
     private static var listCacheLock = NSLock()
-    private static var _listCache: CachedList?
+    /// Cache slot per status string. nil status → key "" (sentinel
+    /// for the unfiltered call).
+    private static var _listCache: [String: CachedList] = [:]
 
     /// Drop the cached list, forcing the next list() to hit the
     /// vault. Call after any mutation that could change the list
     /// shape so the cached snapshot doesn't lag.
     static func invalidateListCache() {
         listCacheLock.lock(); defer { listCacheLock.unlock() }
-        _listCache = nil
+        _listCache.removeAll()
     }
 
-    private static func cachedSnapshot() -> NatsConnectionListResult? {
+    private static func cachedSnapshot(status: String? = nil) -> NatsConnectionListResult? {
         listCacheLock.lock(); defer { listCacheLock.unlock() }
-        guard let cached = _listCache else { return nil }
+        let key = status ?? ""
+        guard let cached = _listCache[key] else { return nil }
         if Date().timeIntervalSince(cached.fetchedAt) >= listCacheTtl {
-            _listCache = nil
+            _listCache.removeValue(forKey: key)
             return nil
         }
         return cached.result
     }
 
-    private static func storeCache(_ result: NatsConnectionListResult) {
+    private static func storeCache(status: String?, result: NatsConnectionListResult) {
         listCacheLock.lock(); defer { listCacheLock.unlock() }
-        _listCache = CachedList(result: result, fetchedAt: Date())
+        _listCache[status ?? ""] = CachedList(result: result, fetchedAt: Date())
     }
 
     /// Synchronous accessor for callers that want to render
     /// optimistically before kicking off the real fetch. Mirrors
     /// Android `cachedListSnapshot`. Returns nil on a cold or stale
     /// cache — caller falls through to `list()` and shows Loading.
-    func cachedListSnapshot() -> NatsConnectionListResult? {
-        Self.cachedSnapshot()
+    /// Looks up the slot the caller will actually re-fetch.
+    func cachedListSnapshot(status: String? = nil) -> NatsConnectionListResult? {
+        Self.cachedSnapshot(status: status)
     }
 
     /// Drop the cached list (instance-side convenience that proxies
@@ -306,10 +310,13 @@ final class ConnectionsClient {
     /// Fire-and-forget pre-fetch (Area D — Android ccc9285). Already-
     /// hot cache early-outs so a flurry of taps doesn't spam the
     /// vault. Failure is silent — the next real `list()` call will
-    /// retry.
-    func warmList() async {
-        if Self.cachedSnapshot() != nil { return }
-        _ = try? await list()
+    /// retry. Warms the same status slot the UI will read — iOS's
+    /// ConnectionsViewModel uses `status: "active"`, so that's the
+    /// default; pass `status: nil` for the Android-style unfiltered
+    /// warm.
+    func warmList(status: String? = "active") async {
+        if Self.cachedSnapshot(status: status) != nil { return }
+        _ = try? await list(status: status)
     }
 
     /// Mutation subjects on `connection.*` — keep in sync with the
