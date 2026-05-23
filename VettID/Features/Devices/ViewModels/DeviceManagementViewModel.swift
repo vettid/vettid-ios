@@ -45,7 +45,7 @@ final class DeviceManagementViewModel: ObservableObject {
 
         do {
             let response = try await client.sendAndAwaitResponse(
-                "connection.device.list",
+                "device.list",
                 timeout: 30
             )
 
@@ -97,7 +97,7 @@ final class DeviceManagementViewModel: ObservableObject {
 
         do {
             let response = try await client.sendAndAwaitResponse(
-                "connection.device.revoke",
+                "device.revoke",
                 payload: [
                     "connection_id": AnyCodableValue(connectionId)
                 ],
@@ -145,7 +145,7 @@ final class DeviceManagementViewModel: ObservableObject {
 
         do {
             let response = try await client.sendAndAwaitResponse(
-                "connection.device.extend-session",
+                "device.extend-session",
                 payload: [
                     "connection_id": AnyCodableValue(connectionId)
                 ],
@@ -205,7 +205,7 @@ final class DeviceManagementViewModel: ObservableObject {
 
         do {
             let _ = try await client.sendAndAwaitResponse(
-                "connection.device.heartbeat",
+                "device.heartbeat",
                 timeout: 10
             )
 
