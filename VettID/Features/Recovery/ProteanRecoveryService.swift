@@ -435,7 +435,6 @@ final class ProteanRecoveryService: ObservableObject {
     private func handleSuccessfulQrRecovery(_ result: RecoveryExchangeResult) async {
         #if DEBUG
         print("[Recovery] QR recovery successful")
-        print("[Recovery] UserGuid: \(result.userGuid ?? "unknown")")
         #endif
 
         // Store the recovered credential

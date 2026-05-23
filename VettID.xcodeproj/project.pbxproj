@@ -374,6 +374,7 @@
 		895CC1D327A5739F8D028196 /* AuthorizeDeviceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E743BBAEF7FCC98E636D90E2 /* AuthorizeDeviceView.swift */; };
 		B67102FA360851AAB87E0D00 /* DesktopConnectionDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62A6449463D07AE37C1A7785 /* DesktopConnectionDetailViewModel.swift */; };
 		7D0929D3B1650ADC325303F5 /* DesktopConnectionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4F9008FF781E5B175E326F8 /* DesktopConnectionDetailView.swift */; };
+		5B58334DE06897BF3105A67D /* PinAttemptTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69CAFB3459AA1A342A64050B /* PinAttemptTracker.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -772,6 +773,7 @@
 		E743BBAEF7FCC98E636D90E2 /* AuthorizeDeviceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthorizeDeviceView.swift; sourceTree = "<group>"; };
 		62A6449463D07AE37C1A7785 /* DesktopConnectionDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopConnectionDetailViewModel.swift; sourceTree = "<group>"; };
 		F4F9008FF781E5B175E326F8 /* DesktopConnectionDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopConnectionDetailView.swift; sourceTree = "<group>"; };
+		69CAFB3459AA1A342A64050B /* PinAttemptTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinAttemptTracker.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1274,6 +1276,7 @@
 				10000050 /* SecurePasteboard.swift */,
 				10000051 /* ScreenProtection.swift */,
 				7AFABA11945E99D1E175383D /* ApiSecurity.swift */,
+				69CAFB3459AA1A342A64050B /* PinAttemptTracker.swift */,
 			);
 			path = VettID/Core/Security;
 			sourceTree = SOURCE_ROOT;
@@ -2263,6 +2266,7 @@
 				895CC1D327A5739F8D028196 /* AuthorizeDeviceView.swift in Sources */,
 				B67102FA360851AAB87E0D00 /* DesktopConnectionDetailViewModel.swift in Sources */,
 				7D0929D3B1650ADC325303F5 /* DesktopConnectionDetailView.swift in Sources */,
+				5B58334DE06897BF3105A67D /* PinAttemptTracker.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

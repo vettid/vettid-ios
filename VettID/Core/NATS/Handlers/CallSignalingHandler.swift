@@ -250,7 +250,7 @@ actor CallSignalingHandler {
         }
 
         #if DEBUG
-        print("[CallSignalingHandler] Blocking user: \(userGuid)")
+        print("[CallSignalingHandler] Blocking user")
         #endif
 
         let response = try await vaultResponseHandler.submitRawAndAwait(
@@ -277,7 +277,7 @@ actor CallSignalingHandler {
         ]
 
         #if DEBUG
-        print("[CallSignalingHandler] Unblocking user: \(userGuid)")
+        print("[CallSignalingHandler] Unblocking user")
         #endif
 
         let response = try await vaultResponseHandler.submitRawAndAwait(

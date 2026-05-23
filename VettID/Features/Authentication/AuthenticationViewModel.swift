@@ -196,8 +196,21 @@ final class AuthenticationViewModel: ObservableObject {
                 throw AuthenticationError.keyAlreadyUsed
             }
 
-            // Hash password with Argon2id (or PBKDF2 fallback)
-            let hashResult = try PasswordHasher.hash(password: password)
+            // SECURITY (Area E #50): copy the String password into a
+            // SecurePassword right at the consumption boundary and
+            // immediately clear the @Published state String so ARC is
+            // free to release the original. SecurePassword owns a
+            // wipeable [UInt8] that zeroes on `use {}` exit. Matches
+            // Android VaultCredentialEnrollmentViewModel's
+            // SecurePassword.fromString hand-off (commit 95bcabf).
+            let pw = SecurePassword(string: password)
+            password = ""
+
+            // Hash password with Argon2id (or PBKDF2 fallback). The
+            // SecurePassword overload zeroes its internal byte copy
+            // before returning.
+            let hashResult = try PasswordHasher.hash(password: pw)
+            pw.wipe()
 
             // Encrypt password hash with UTK
             let encryptedPayload = try CryptoManager.encryptPasswordHash(

@@ -205,6 +205,18 @@ struct VaultWarmingView: View {
         guard pin.count == 6 else { return }
         guard !isWarming else { return }
 
+        // SECURITY (Area E #97): durable rate-limit. Survives process
+        // restart, so a stolen device can't be brute-forced by
+        // kill/relaunch loops. UnlockRateLimiter handles per-session
+        // exponential backoff; PinAttemptTracker enforces the
+        // wall-clock lockout that crosses launches.
+        let tracker = PinAttemptTracker.shared
+        if tracker.isLockedOut() {
+            errorMessage = "Too many attempts. Try again in \(tracker.lockoutLabel())."
+            shakeAndClearPIN()
+            return
+        }
+
         // #56 — pre-PIN PCR0 trust check. Skip when the user already
         // tapped "Not Now" this session, or when there's no user GUID
         // yet (pre-warm state). On bootstrap (no recorded trusted set)
@@ -272,12 +284,30 @@ struct VaultWarmingView: View {
             }
 
             appState.loadProfile()
+            // SECURITY (Area E #97): a real unlock zeroes the durable
+            // failure counter. Vault-not-ready / migration-race
+            // failures DON'T count against the user — they're not PIN
+            // errors. recordFailure is gated to the catch branches
+            // that look like wrong-PIN responses.
+            PinAttemptTracker.shared.reset()
             await MainActor.run {
                 isWarming = false
                 onSuccess()
             }
         } catch let error as VaultWarmingError {
             await MainActor.run {
+                // Wrong-PIN cases (invalidPIN, warmingFailed with auth
+                // error) count against the durable tracker; transport
+                // failures don't.
+                if case .invalidPIN = error {
+                    let lockoutSeconds = PinAttemptTracker.shared.recordFailure()
+                    if lockoutSeconds > 0 {
+                        errorMessage = "Too many attempts. Try again in \(PinAttemptTracker.shared.lockoutLabel())."
+                        shakeAndClearPIN()
+                        isWarming = false
+                        return
+                    }
+                }
                 handleWarmingError(error)
             }
         } catch {

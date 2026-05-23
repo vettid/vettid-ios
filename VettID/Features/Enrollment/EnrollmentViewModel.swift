@@ -319,7 +319,7 @@ final class EnrollmentViewModel: ObservableObject {
             // Parse QR code JSON data to extract api_url and session_token or invitation_code
             let qrData = try parseQRCodeData(code)
             #if DEBUG
-            print("[Enrollment] Parsed QR data - apiUrl: \(qrData.apiUrl), userGuid: \(qrData.userGuid)")
+            print("[Enrollment] Parsed QR data - apiUrl: \(qrData.apiUrl)")
             #endif
 
             // Create API client with the URL from QR code
@@ -888,8 +888,19 @@ final class EnrollmentViewModel: ObservableObject {
         state = .processingPassword
 
         do {
+            // SECURITY (Area E #50): wrap the @Published String into
+            // a wipeable SecurePassword right at the launch boundary
+            // and immediately clear the ViewModel state. The Argon2id
+            // hash goes through the SecurePassword overload, which
+            // zeros its internal byte copy before returning. Mirrors
+            // Android 95bcabf.
+            let pw = SecurePassword(string: password)
+            password = ""
+            confirmPassword = ""
+            defer { pw.wipe() }
+
             // Hash password with Argon2id
-            let hashResult = try PasswordHasher.hash(password: password)
+            let hashResult = try PasswordHasher.hash(password: pw)
 
             // Encrypt password hash to enclave public key (verified during attestation)
             let encryptedPayload = try CryptoManager.encryptPasswordHash(

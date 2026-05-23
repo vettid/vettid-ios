@@ -395,9 +395,16 @@ final class NatsConnectionManager: ObservableObject {
         // Generate a unique request ID
         let requestId = UUID().uuidString
 
-        // Hash password with Argon2id (or PBKDF2 fallback)
+        // Hash password with Argon2id (or PBKDF2 fallback).
+        // SECURITY (Area E #45): the Argon2id output IS the credential
+        // material — it unlocks the encrypted backup server-side. Pull
+        // the bytes into a mutable buffer so we can zero them the
+        // instant we no longer need them (right after base64-encoding
+        // into the request).
         let passwordHashResult = try PasswordHasher.hash(password: password)
-        let passwordHashBase64 = passwordHashResult.hash.base64EncodedString()
+        var passwordHashBytes = [UInt8](passwordHashResult.hash)
+        let passwordHashBase64 = Data(passwordHashBytes).base64EncodedString()
+        defer { passwordHashBytes.secureWipe() }
 
         // Generate nonce for request freshness
         let nonce = CryptoManager.randomBytes(count: 16).base64EncodedString()
@@ -433,9 +440,18 @@ final class NatsConnectionManager: ObservableObject {
         let fullResponseTopic = "\(responseTopic.replacingOccurrences(of: ".>", with: "")).\(requestId)"
         let responseStream = try await subscribe(to: fullResponseTopic)
 
-        // Publish authenticate request
-        let requestData = try JSONEncoder().encode(request)
-        try await publish(requestData, to: topic)
+        // Publish authenticate request.
+        // SECURITY (Area E #45/#51): the request body carries the
+        // base64 Argon2id hash — same wipe-after-publish pattern as
+        // the PIN envelope in warmVault.
+        var requestData = try JSONEncoder().encode(request)
+        do {
+            try await publish(requestData, to: topic)
+        } catch {
+            requestData.secureWipeBytes()
+            throw error
+        }
+        requestData.secureWipeBytes()
 
         #if DEBUG
         print("[NATS] Sent authenticate request to \(topic)")
@@ -624,10 +640,25 @@ final class NatsConnectionManager: ObservableObject {
         let responseTopic = "\(ownerSpace).forApp.vault.warm.>"
         let responseStream = try await subscribe(to: responseTopic)
 
-        // Send warm request to vault
+        // SECURITY (Area E #51): the PIN is unavoidable as `String` at
+        // the IME / JSON-encoding boundary — Swift Strings are
+        // immutable, and JSONEncoder serialises straight into a Data
+        // we then publish. The mitigation we CAN apply is zeroing the
+        // serialised buffer the moment `publish` returns, so the
+        // plaintext doesn't linger on the heap waiting for ARC to
+        // reclaim it. PIN entropy is only ~10^6 so this is a
+        // hygiene-grade defence — a heap snapshot of a PIN is
+        // brute-forceable in microseconds — but it bounds the
+        // accidental-disclosure window to the publish call.
         let requestTopic = "\(ownerSpace).forVault.vault.warm"
-        let requestData = try JSONEncoder().encode(request)
-        try await publish(requestData, to: requestTopic)
+        var requestData = try JSONEncoder().encode(request)
+        do {
+            try await publish(requestData, to: requestTopic)
+        } catch {
+            requestData.secureWipeBytes()
+            throw error
+        }
+        requestData.secureWipeBytes()
 
         #if DEBUG
         print("[NATS] Sent vault warm request to \(requestTopic)")
