@@ -290,7 +290,8 @@ final class OwnerSpaceClient {
             success: success,
             result: result,
             error: error,
-            errorCode: errorCode
+            errorCode: errorCode,
+            raw: json
         )
     }
 
@@ -1010,6 +1011,10 @@ struct VaultHandlerResponse {
     let result: [String: Any]?
     let error: String?
     let errorCode: String?
+    /// Whole top-level dict. Lets callers reach error-body fields that
+    /// don't fit `result` — `existing_devices` on an
+    /// existing_session_active rejection, for example.
+    let raw: [String: Any]
 
     /// Get a string value from the result
     func getString(_ key: String) -> String? {

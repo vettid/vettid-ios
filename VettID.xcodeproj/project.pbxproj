@@ -370,6 +370,10 @@
 		FFEC75DD850E79B5ED665914 /* VaultPreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8285A14EAFF8FCF54C60C6E2 /* VaultPreferencesView.swift */; };
 		1310CA520E3A8F4E6A5DA5A1 /* AppleNatsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE971FCB35D943C78FBDE794 /* AppleNatsClient.swift */; };
 		0499DC9B10E3448E0C9002D0 /* NKeys in Frameworks */ = {isa = PBXBuildFile; productRef = A453624F6AB64C8C0C5C5658 /* NKeys */; };
+		771894AB0B23DF97CFF56548 /* AuthorizeDeviceViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0821701A094637BFD6A50B0 /* AuthorizeDeviceViewModel.swift */; };
+		895CC1D327A5739F8D028196 /* AuthorizeDeviceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E743BBAEF7FCC98E636D90E2 /* AuthorizeDeviceView.swift */; };
+		B67102FA360851AAB87E0D00 /* DesktopConnectionDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62A6449463D07AE37C1A7785 /* DesktopConnectionDetailViewModel.swift */; };
+		7D0929D3B1650ADC325303F5 /* DesktopConnectionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4F9008FF781E5B175E326F8 /* DesktopConnectionDetailView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -764,6 +768,10 @@
 		FD000368D20F4D86A91D50FD /* DataRequestSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataRequestSheet.swift; sourceTree = "<group>"; };
 		FE16327EB86641DCA62EDC24 /* DeviceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceModels.swift; sourceTree = "<group>"; };
 		AE971FCB35D943C78FBDE794 /* AppleNatsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleNatsClient.swift; sourceTree = "<group>"; };
+		C0821701A094637BFD6A50B0 /* AuthorizeDeviceViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthorizeDeviceViewModel.swift; sourceTree = "<group>"; };
+		E743BBAEF7FCC98E636D90E2 /* AuthorizeDeviceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthorizeDeviceView.swift; sourceTree = "<group>"; };
+		62A6449463D07AE37C1A7785 /* DesktopConnectionDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopConnectionDetailViewModel.swift; sourceTree = "<group>"; };
+		F4F9008FF781E5B175E326F8 /* DesktopConnectionDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopConnectionDetailView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1616,6 +1624,8 @@
 				414782E7178A44F9A72D51C0 /* DeviceManagementView.swift */,
 				3B3C002C39A546F3BF126024 /* DevicePairingView.swift */,
 				9A39D3949EE547B0A71D3866 /* DeviceApprovalView.swift */,
+				E743BBAEF7FCC98E636D90E2 /* AuthorizeDeviceView.swift */,
+				F4F9008FF781E5B175E326F8 /* DesktopConnectionDetailView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -1646,6 +1656,8 @@
 				8A8469B0FB5B45AFB92FD8AB /* DeviceManagementViewModel.swift */,
 				D4D1B2D59A354DD2BB819BC0 /* DevicePairingViewModel.swift */,
 				5CE1ACF29E164605AB1E151B /* DeviceApprovalViewModel.swift */,
+				C0821701A094637BFD6A50B0 /* AuthorizeDeviceViewModel.swift */,
+				62A6449463D07AE37C1A7785 /* DesktopConnectionDetailViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -2247,6 +2259,10 @@
 				27A0738ACBC28521326D3B89 /* TrustedPCRStore.swift in Sources */,
 				E483F66A5C2888C27DAD8A2B /* EnclaveUpdatePromptView.swift in Sources */,
 							1310CA520E3A8F4E6A5DA5A1 /* AppleNatsClient.swift in Sources */,
+				771894AB0B23DF97CFF56548 /* AuthorizeDeviceViewModel.swift in Sources */,
+				895CC1D327A5739F8D028196 /* AuthorizeDeviceView.swift in Sources */,
+				B67102FA360851AAB87E0D00 /* DesktopConnectionDetailViewModel.swift in Sources */,
+				7D0929D3B1650ADC325303F5 /* DesktopConnectionDetailView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

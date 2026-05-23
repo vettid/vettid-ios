@@ -207,6 +207,104 @@ enum DeviceApprovalState: Equatable {
     }
 }
 
+// MARK: - Authorize Device (Stage-2 pairing)
+
+/// Metadata shown to the user when they authorize a new desktop
+/// session. Mirrors Android `PendingDeviceInfo`. The desktop's
+/// fingerprints are surfaced verbatim so the user can compare them
+/// bit-for-bit against the desktop's own Settings → Device tab.
+struct PendingDeviceInfo: Equatable {
+    let connectionId: String
+    let hostname: String
+    let platform: String
+    let osName: String
+    let osVersion: String
+    let appVersion: String
+    let clientIp: String
+    let binaryFingerprint: String
+    let machineFingerprint: String
+    let defaultDurationSeconds: Int
+    let maxDurationSeconds: Int
+
+    static func from(notification: DevicePendingAuthNotification) -> PendingDeviceInfo {
+        PendingDeviceInfo(
+            connectionId: notification.connectionId,
+            hostname: notification.deviceMetadata?.hostname ?? "",
+            platform: notification.deviceMetadata?.platform ?? "",
+            osName: notification.deviceMetadata?.osName ?? "",
+            osVersion: notification.deviceMetadata?.osVersion ?? "",
+            appVersion: notification.deviceMetadata?.appVersion ?? "",
+            clientIp: notification.deviceMetadata?.clientIp ?? "",
+            binaryFingerprint: notification.deviceMetadata?.binaryFingerprint ?? "",
+            machineFingerprint: notification.deviceMetadata?.machineFingerprint ?? "",
+            defaultDurationSeconds: notification.defaultDurationSeconds,
+            maxDurationSeconds: notification.maxDurationSeconds
+        )
+    }
+
+    /// Conservative defaults when the user scans the QR before the
+    /// vault's pending-authorization notification arrives. The vault
+    /// separately enforces its own session-duration policy, so these
+    /// are display-time suggestions, not the source of truth. Matches
+    /// Android `DEFAULT_FALLBACK_DURATION_S` / `MAX_FALLBACK_DURATION_S`.
+    static func fallback(connectionId: String) -> PendingDeviceInfo {
+        PendingDeviceInfo(
+            connectionId: connectionId,
+            hostname: "",
+            platform: "",
+            osName: "",
+            osVersion: "",
+            appVersion: "",
+            clientIp: "",
+            binaryFingerprint: "",
+            machineFingerprint: "",
+            defaultDurationSeconds: 24 * 60 * 60,
+            maxDurationSeconds: 30 * 24 * 60 * 60
+        )
+    }
+}
+
+/// QR payload shown by the desktop at Stage-2 — user scans this in the
+/// app. JSON shape on the wire: `{"t":"<64-hex token>","c":"<conn id>"}`.
+struct ScannedDeviceAuthQr: Equatable {
+    let approvalToken: String
+    let connectionId: String
+
+    /// Decode the JSON-encoded QR payload. Validates the token is the
+    /// expected 64-hex length and that the connection_id is non-empty;
+    /// returns nil on any other shape.
+    static func parse(_ text: String) -> ScannedDeviceAuthQr? {
+        guard let data = text.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let token = json["t"] as? String,
+              let conn  = json["c"] as? String,
+              token.count == 64,
+              !conn.isEmpty
+        else { return nil }
+        return ScannedDeviceAuthQr(approvalToken: token, connectionId: conn)
+    }
+}
+
+/// Existing-session summary surfaced in the ConfirmReplace prompt.
+/// Mirrors Android `ExistingDeviceSummary`.
+struct ExistingDeviceSummary: Equatable, Identifiable {
+    let connectionId: String
+    let deviceName: String
+    let lastActiveAt: Int
+    let expiresAt: Int
+
+    var id: String { connectionId }
+}
+
+enum AuthorizeDeviceState: Equatable {
+    case scanning
+    case ready(scanned: ScannedDeviceAuthQr, info: PendingDeviceInfo, deviceName: String, durationSeconds: Int)
+    case submitting
+    case confirmReplace(scanned: ScannedDeviceAuthQr, info: PendingDeviceInfo, deviceName: String, durationSeconds: Int, existingDevices: [ExistingDeviceSummary])
+    case done
+    case error(String)
+}
+
 // MARK: - Device Approval Info
 
 /// Wraps DeviceApprovalRequest with Equatable conformance for state usage
