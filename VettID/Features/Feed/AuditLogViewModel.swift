@@ -117,6 +117,15 @@ final class FeedAuditLogViewModel: ObservableObject {
     @Published var selectedTimeWindow: AuditTimeWindow = .all
     @Published var selectedEventType: String? = nil
     @Published var verificationFilter: AuditVerificationFilter = .all
+    /// Area C (Android fdc12d5): narrow the audit log to one peer
+    /// connection. Set to a non-nil connection_id (source_id on the
+    /// audit row) via the connection filter chip; nil means "all
+    /// connections". Drives `filteredEvents`.
+    @Published var selectedConnectionId: String? = nil
+    /// Area C: filter chip row collapsed/expanded toggle. Saves
+    /// vertical room on first open; user taps "Filters" to expand.
+    /// Mirrors Android 5399b64.
+    @Published var filtersExpanded: Bool = false
     @Published var integrityVerified: Bool? = nil
     @Published var errorMessage: String?
 
@@ -142,13 +151,22 @@ final class FeedAuditLogViewModel: ObservableObject {
 
     // MARK: - Computed Properties
 
-    /// Events filtered by search text, event type, and verification state.
+    /// Events filtered by search text, event type, verification state,
+    /// and connection.
     var filteredEvents: [VaultFeedEvent] {
         var result = events
 
         // Filter by event type
         if let eventType = selectedEventType {
             result = result.filter { $0.eventType == eventType }
+        }
+
+        // Area C (Android fdc12d5): filter by peer connection. Each
+        // audit row carries the peer connection_id as `sourceId` when
+        // `sourceType == "peer"` / "connection" — match against
+        // either to be tolerant of taxonomy drift.
+        if let connId = selectedConnectionId {
+            result = result.filter { $0.sourceId == connId }
         }
 
         // Filter by verification state (Phase 5.3)
@@ -183,9 +201,25 @@ final class FeedAuditLogViewModel: ObservableObject {
         Array(Set(events.map { $0.eventType })).sorted()
     }
 
+    /// Area C: distinct peer connection_ids represented in the loaded
+    /// events — drives the connection filter chip set. Filtered to
+    /// peer/connection-scoped sources so server-side events (vault.*,
+    /// system.*) don't pollute the list.
+    var availableConnectionIds: [String] {
+        let ids = events.compactMap { event -> String? in
+            guard let sourceId = event.sourceId, !sourceId.isEmpty else { return nil }
+            let type = event.sourceType?.lowercased() ?? ""
+            return (type == "peer" || type == "connection") ? sourceId : nil
+        }
+        return Array(Set(ids)).sorted()
+    }
+
     /// Whether any filters are active
     var hasActiveFilters: Bool {
-        selectedEventType != nil || !searchText.isEmpty || verificationFilter != .all
+        selectedEventType != nil
+            || selectedConnectionId != nil
+            || !searchText.isEmpty
+            || verificationFilter != .all
     }
 
     /// Verification verdict for a single row — used by AuditEventRow.
@@ -344,11 +378,44 @@ final class FeedAuditLogViewModel: ObservableObject {
         let exportEvents = filteredEvents
         guard !exportEvents.isEmpty else { return "[]" }
 
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-
-        guard let data = try? encoder.encode(exportEvents),
-              let jsonString = String(data: data, encoding: .utf8) else {
+        // Area C (Android 5399b64): each exported row carries its
+        // verification verdict so the export is self-evidencing — a
+        // reviewer can see which rows are Verified / Tampered /
+        // Unsigned without re-running the verifier locally.
+        let exportRows: [[String: Any]] = exportEvents.map { event in
+            let verdict = verificationByEventId[event.eventId] ?? .unsigned
+            var row: [String: Any] = [
+                "event_id": event.eventId,
+                "event_type": event.eventType,
+                "title": event.title,
+                "created_at": event.createdAt,
+                "sync_sequence": event.syncSequence,
+                "verification": verdict.rawValue
+            ]
+            if let msg = event.message { row["message"] = msg }
+            if let sourceType = event.sourceType { row["source_type"] = sourceType }
+            if let sourceId = event.sourceId { row["source_id"] = sourceId }
+            if let entryHash = event.entryHash { row["entry_hash"] = entryHash }
+            if let previousHash = event.previousHash { row["previous_hash"] = previousHash }
+            if let entrySig = event.entrySig { row["entry_sig"] = entrySig }
+            return row
+        }
+        let payload: [String: Any] = [
+            "exported_at": Date().timeIntervalSince1970,
+            "chain_status": String(describing: chainStatus),
+            "filters": [
+                "time_window": selectedTimeWindow.rawValue,
+                "event_type": selectedEventType ?? "all",
+                "connection_id": selectedConnectionId ?? "all",
+                "verification": verificationFilter.rawValue,
+                "search": searchText
+            ],
+            "events": exportRows
+        ]
+        guard let data = try? JSONSerialization.data(
+            withJSONObject: payload,
+            options: [.prettyPrinted, .sortedKeys]
+        ), let jsonString = String(data: data, encoding: .utf8) else {
             return "[]"
         }
         return jsonString
@@ -382,6 +449,7 @@ final class FeedAuditLogViewModel: ObservableObject {
 
     func clearFilters() {
         selectedEventType = nil
+        selectedConnectionId = nil
         searchText = ""
         verificationFilter = .all
     }

@@ -5,6 +5,7 @@ import SwiftUI
 struct FeedAuditLogView: View {
     @StateObject private var viewModel: FeedAuditLogViewModel
     @State private var showingEventTypeFilter = false
+    @State private var showingConnectionFilter = false
     @State private var showingExportSheet = false
 
     init(feedClient: FeedClient? = nil) {
@@ -114,6 +115,23 @@ struct FeedAuditLogView: View {
 
     private var searchAndFilterBar: some View {
         VStack(spacing: 8) {
+            // Always-visible header row — search + filter toggle.
+            // Area C (Android 5399b64): the filter chips collapse by
+            // default so the screen lands with the list front-and-
+            // centre. "Filters" disclosure shows the chip row when
+            // the user taps in.
+            filterHeaderRow
+            if viewModel.filtersExpanded {
+                filterDisclosureBody
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(Color(.secondarySystemBackground))
+    }
+
+    private var filterHeaderRow: some View {
+        HStack(spacing: 8) {
             // Search field
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
@@ -137,34 +155,46 @@ struct FeedAuditLogView: View {
             .background(Color(.systemGray6))
             .cornerRadius(10)
 
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    viewModel.filtersExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "line.3.horizontal.decrease.circle")
+                    if viewModel.hasActiveFilters {
+                        Circle().fill(Color.blue).frame(width: 6, height: 6)
+                    }
+                }
+                .font(.subheadline)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(Color(.systemGray6))
+                .cornerRadius(10)
+            }
+            .accessibilityLabel(viewModel.filtersExpanded ? "Hide filters" : "Show filters")
+        }
+    }
+
+    @ViewBuilder
+    private var filterDisclosureBody: some View {
+        VStack(spacing: 8) {
             // Verification-state chips (Phase 5.3). All / Verified /
             // Tampered / Unsigned — narrows the list to one row state
             // so a user can answer "any tampered rows?" at a glance.
             verificationChips
 
-            // Event type filter
+            // Event type + connection filter row
             HStack(spacing: 8) {
                 // Event type dropdown
                 Button {
                     showingEventTypeFilter = true
                 } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "line.3.horizontal.decrease")
-                            .font(.caption)
-                        Text(viewModel.selectedEventType ?? "All Types")
-                            .font(.subheadline)
-                        Image(systemName: "chevron.down")
-                            .font(.caption2)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(
-                        viewModel.selectedEventType != nil
-                            ? Color.blue
-                            : Color(.systemGray6)
+                    filterChip(
+                        icon: "line.3.horizontal.decrease",
+                        label: viewModel.selectedEventType.map(formatEventType) ?? "All Types",
+                        active: viewModel.selectedEventType != nil
                     )
-                    .foregroundStyle(viewModel.selectedEventType != nil ? .white : .primary)
-                    .cornerRadius(16)
                 }
                 .confirmationDialog("Filter by Event Type", isPresented: $showingEventTypeFilter) {
                     Button("All Types") {
@@ -177,19 +207,38 @@ struct FeedAuditLogView: View {
                     }
                 }
 
-                // Integrity status badge
-                if let verified = viewModel.integrityVerified {
-                    integrityBadge(verified: verified)
+                // Area C (Android fdc12d5): connection filter chip.
+                // Only renders when the loaded page has at least one
+                // peer-scoped row — otherwise the dropdown would have
+                // a single "All connections" entry and nothing else.
+                if !viewModel.availableConnectionIds.isEmpty {
+                    Button {
+                        showingConnectionFilter = true
+                    } label: {
+                        filterChip(
+                            icon: "person.2",
+                            label: viewModel.selectedConnectionId.map { String($0.prefix(8)) + "…" } ?? "All Connections",
+                            active: viewModel.selectedConnectionId != nil
+                        )
+                    }
+                    .confirmationDialog("Filter by Connection", isPresented: $showingConnectionFilter) {
+                        Button("All Connections") {
+                            viewModel.selectedConnectionId = nil
+                        }
+                        ForEach(viewModel.availableConnectionIds, id: \.self) { connectionId in
+                            Button(String(connectionId.prefix(12)) + "…") {
+                                viewModel.selectedConnectionId = connectionId
+                            }
+                        }
+                    }
                 }
 
                 Spacer()
 
-                // Event count
                 Text("\(viewModel.filteredEvents.count) events")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                // Clear filters
                 if viewModel.hasActiveFilters {
                     Button("Clear") {
                         viewModel.clearFilters()
@@ -199,9 +248,20 @@ struct FeedAuditLogView: View {
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(Color(.secondarySystemBackground))
+    }
+
+    /// Shared filter-chip rendering helper.
+    private func filterChip(icon: String, label: String, active: Bool) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon).font(.caption)
+            Text(label).font(.subheadline)
+            Image(systemName: "chevron.down").font(.caption2)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(active ? Color.blue : Color(.systemGray6))
+        .foregroundStyle(active ? .white : .primary)
+        .cornerRadius(16)
     }
 
     // MARK: - Verification Chips (Phase 5.3)
