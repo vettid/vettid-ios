@@ -395,9 +395,16 @@ final class NatsConnectionManager: ObservableObject {
         // Generate a unique request ID
         let requestId = UUID().uuidString
 
-        // Hash password with Argon2id (or PBKDF2 fallback)
+        // Hash password with Argon2id (or PBKDF2 fallback).
+        // SECURITY (Area E #45): the Argon2id output IS the credential
+        // material — it unlocks the encrypted backup server-side. Pull
+        // the bytes into a mutable buffer so we can zero them the
+        // instant we no longer need them (right after base64-encoding
+        // into the request).
         let passwordHashResult = try PasswordHasher.hash(password: password)
-        let passwordHashBase64 = passwordHashResult.hash.base64EncodedString()
+        var passwordHashBytes = [UInt8](passwordHashResult.hash)
+        let passwordHashBase64 = Data(passwordHashBytes).base64EncodedString()
+        defer { passwordHashBytes.secureWipe() }
 
         // Generate nonce for request freshness
         let nonce = CryptoManager.randomBytes(count: 16).base64EncodedString()
@@ -433,9 +440,18 @@ final class NatsConnectionManager: ObservableObject {
         let fullResponseTopic = "\(responseTopic.replacingOccurrences(of: ".>", with: "")).\(requestId)"
         let responseStream = try await subscribe(to: fullResponseTopic)
 
-        // Publish authenticate request
-        let requestData = try JSONEncoder().encode(request)
-        try await publish(requestData, to: topic)
+        // Publish authenticate request.
+        // SECURITY (Area E #45/#51): the request body carries the
+        // base64 Argon2id hash — same wipe-after-publish pattern as
+        // the PIN envelope in warmVault.
+        var requestData = try JSONEncoder().encode(request)
+        do {
+            try await publish(requestData, to: topic)
+        } catch {
+            requestData.secureWipeBytes()
+            throw error
+        }
+        requestData.secureWipeBytes()
 
         #if DEBUG
         print("[NATS] Sent authenticate request to \(topic)")
