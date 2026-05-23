@@ -45,6 +45,21 @@ class DeepLinkHandler: ObservableObject {
     private let maxCodeLength = 128
     private let maxConnectionIdLength = 64
 
+    /// SECURITY (Area E #99): hard cap on the deep-link URL as a whole.
+    /// A hostile share-sheet handoff or universal-link redirect could
+    /// hand us a multi-megabyte URL string that we'd then run regex
+    /// and substring passes over. Real invitation / enrollment URLs
+    /// sit under 1 KB; 4 KB leaves headroom for future growth and
+    /// rejects pathological input. Matches Android 450489e.
+    private let maxUrlStringLength = 4096
+
+    /// SECURITY (Area E #98): hosts we accept on the vettid:// custom
+    /// scheme, gated up-front in `parse(url:)` so a URL with an unknown
+    /// host bails before parseCustomScheme's switch even runs. The
+    /// switch keeps the same set as a defence-in-depth `default`
+    /// branch. Matches Android ALLOWED_VETTID_HOSTS.
+    private let allowedVettidHosts: Set<String> = ["enroll", "connect", "message", "vault"]
+
     /// Allowed characters for tokens (base64 + common URL-safe chars)
     private let allowedTokenCharacters = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_=+/."))
 
@@ -73,6 +88,14 @@ class DeepLinkHandler: ObservableObject {
     /// Parse a URL into a DeepLink
     /// Supports both custom scheme (vettid://) and universal links (https://vettid.dev/)
     func parse(url: URL) -> DeepLink {
+        // SECURITY (Area E #99): cap the URL string size before any
+        // other work. Cheap rejection of pathological input — keeps
+        // the rest of the validator from scanning megabytes of garbage.
+        if url.absoluteString.count > maxUrlStringLength {
+            logSecurityEvent("Deep link exceeds \(maxUrlStringLength)-char cap (got \(url.absoluteString.count))", url: url)
+            return .unknown
+        }
+
         // SECURITY: Validate URL scheme first
         guard let scheme = url.scheme?.lowercased() else {
             logSecurityEvent("Deep link with missing scheme", url: url)
@@ -81,6 +104,14 @@ class DeepLinkHandler: ObservableObject {
 
         // Handle custom scheme: vettid://
         if scheme == "vettid" {
+            // SECURITY (Area E #98): allow-list the (scheme, host) pair
+            // up front so an unknown vettid:// host can't slip into
+            // parseCustomScheme's switch and hit the default branch's
+            // suspicious-host log path. Matches Android ALLOWED_VETTID_HOSTS.
+            guard let host = url.host?.lowercased(), allowedVettidHosts.contains(host) else {
+                logSecurityEvent("vettid:// host not in allow-list: \(url.host ?? "<nil>")", url: url)
+                return .unknown
+            }
             return parseCustomScheme(url: url)
         }
 
@@ -95,6 +126,15 @@ class DeepLinkHandler: ObservableObject {
             let allowedHosts = ["vettid.dev", "www.vettid.dev", "app.vettid.dev"]
             guard allowedHosts.contains(host) else {
                 logSecurityEvent("Deep link from untrusted host: \(host)", url: url)
+                return .unknown
+            }
+
+            // SECURITY (Area E #98): the path's first segment must
+            // match the same allow-list as the vettid:// hosts —
+            // mirrors Android's https://vettid.dev/<allowed-host> guard.
+            let firstSegment = url.pathComponents.filter { $0 != "/" }.first?.lowercased()
+            guard let segment = firstSegment, allowedVettidHosts.contains(segment) else {
+                logSecurityEvent("HTTPS deep link path not in allow-list: \(firstSegment ?? "<empty>")", url: url)
                 return .unknown
             }
 
