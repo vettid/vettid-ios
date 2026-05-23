@@ -28,11 +28,28 @@ final class SecretsViewModel: ObservableObject {
     }
 
     @Published var state: State = .loading
-    @Published var revealedSecretId: String? = nil
-    @Published var revealedValue: String? = nil
+    /// Area A (Android bbb376d): revealed secrets are tracked as a
+    /// set so an alias-card "reveal whole group" tap can surface
+    /// every secret in the alias at once. Single-secret reveal
+    /// remains a 1-element set. All revealed secrets share one
+    /// auto-hide timer and clear together.
+    @Published var revealedSecretIds: Set<String> = []
+    @Published var revealedValues: [String: String] = [:]
     @Published var showPasswordPrompt = false
     @Published var passwordError: String? = nil
     @Published var autoHideCountdown: Int = 30
+
+    /// Legacy single-secret accessor — preserves the previous shape
+    /// for the few call sites that only care about "is exactly one
+    /// secret revealed right now". Returns nil unless exactly one is
+    /// revealed.
+    var revealedSecretId: String? {
+        revealedSecretIds.count == 1 ? revealedSecretIds.first : nil
+    }
+    var revealedValue: String? {
+        guard let id = revealedSecretId else { return nil }
+        return revealedValues[id]
+    }
 
     /// Injected by the parent view via `.task` after vault warm-up.
     /// `AppState.secretsClient` is the source of truth. When nil, the
@@ -157,12 +174,48 @@ final class SecretsViewModel: ObservableObject {
                 passwordError = "Secret unavailable"
                 return
             }
-            revealedSecretId = secretId
-            revealedValue = value
+            revealedSecretIds = [secretId]
+            revealedValues = [secretId: value]
             startAutoHideTimer()
         } catch {
             passwordError = "Failed to reveal: \(error.localizedDescription)"
         }
+    }
+
+    /// Area A (Android bbb376d): reveal every secret in an alias
+    /// group as one action. Fetches the value for each id in parallel
+    /// and surfaces them together; a single auto-hide timer covers
+    /// the whole group.
+    func requestRevealAlias(_ secretIds: [String]) {
+        Task { await revealAlias(secretIds) }
+    }
+
+    private func revealAlias(_ secretIds: [String]) async {
+        guard let client = client else {
+            passwordError = "Not connected"
+            return
+        }
+        var revealed: [String: String] = [:]
+        for id in secretIds {
+            do {
+                if let value = try await client.getMinor(id: id), !value.isEmpty {
+                    revealed[id] = value
+                }
+            } catch {
+                // Skip individual failures — group reveal is best-effort;
+                // a partial set is more useful than nothing.
+                #if DEBUG
+                print("[SecretsVM] reveal of \(id) failed: \(error)")
+                #endif
+            }
+        }
+        if revealed.isEmpty {
+            passwordError = "Alias group unavailable"
+            return
+        }
+        revealedSecretIds = Set(revealed.keys)
+        revealedValues = revealed
+        startAutoHideTimer()
     }
 
     func cancelPasswordPrompt() {
@@ -175,8 +228,8 @@ final class SecretsViewModel: ObservableObject {
     func hideSecret() {
         autoHideTask?.cancel()
         autoHideTask = nil
-        revealedSecretId = nil
-        revealedValue = nil
+        revealedSecretIds = []
+        revealedValues = [:]
         autoHideCountdown = 30
     }
 
