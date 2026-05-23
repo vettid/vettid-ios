@@ -29,9 +29,17 @@ struct DataGrantApprovalView: View {
                 requestHeader
             }
 
+            // Area A (Android da09d0f + 621b8ce): when the request
+            // is a multi-field alias bundle, surface every member
+            // field so the owner sees exactly what they're approving.
+            // Single-field requests keep the existing one-line "Item"
+            // row.
             Section("Details") {
                 detailRow("Kind", request.kind.displayName)
-                if !request.itemLabel.isEmpty {
+                if let alias = request.aliasGroup, !alias.isEmpty {
+                    detailRow("Alias group", alias)
+                    detailRow("Fields", "\(max(request.fields.count, 1))")
+                } else if !request.itemLabel.isEmpty {
                     detailRow("Item", request.itemLabel)
                 }
                 detailRow("Mode", request.requestedMode.title)
@@ -40,6 +48,27 @@ struct DataGrantApprovalView: View {
                 }
                 if request.requestedMaxUses > 0 {
                     detailRow("Max uses", "\(request.requestedMaxUses)")
+                }
+            }
+
+            // Per-field breakdown for alias-group requests.
+            if !request.fields.isEmpty {
+                Section("Fields requested") {
+                    ForEach(request.fields) { field in
+                        HStack(spacing: 8) {
+                            Image(systemName: field.itemKind.icon)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 18)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(field.itemLabel)
+                                    .font(.subheadline)
+                                Text(field.itemKind.displayName)
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                            }
+                            Spacer()
+                        }
+                    }
                 }
             }
 
