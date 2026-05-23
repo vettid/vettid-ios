@@ -203,6 +203,15 @@ final class ConnectionsClient {
         limit: Int = 50,
         cursor: String? = nil
     ) async throws -> NatsConnectionListResult {
+        // Area D (Android ccc9285): only the unfiltered first-page
+        // call (no status filter, no cursor, default limit) is
+        // cacheable. Filtered / paginated calls always hit the vault
+        // — they're far less hot than the feed-tap → detail path.
+        let isCacheable = status == nil && cursor == nil && limit == 50
+        if isCacheable, let cached = Self.cachedSnapshot() {
+            return cached
+        }
+
         var payload: [String: AnyCodableValue] = [
             "limit": AnyCodableValue(limit)
         ]
@@ -227,11 +236,92 @@ final class ConnectionsClient {
 
         let items = itemsArray.map { Self.parseConnectionRecord(from: $0) }
 
-        return NatsConnectionListResult(
+        let result0 = NatsConnectionListResult(
             items: items,
             nextCursor: result["next_cursor"] as? String
         )
+        if isCacheable {
+            Self.storeCache(result0)
+        }
+        return result0
     }
+
+    // MARK: - List cache (Area D — Android ccc9285 / 0691ed2)
+
+    /// Short-TTL in-memory cache for the most-recent unfiltered
+    /// `connection.list` result. Mirrors Android's `listCache`. A
+    /// speculative pre-fetch fired from a feed card tap and the
+    /// immediate detail-screen load share one round-trip; mutations
+    /// (create, revoke, store-credentials) invalidate.
+    ///
+    /// 30 s is short enough that staleness never bites legitimate UI
+    /// flows and long enough to cover screen transitions on slow
+    /// devices. Process-wide static so different `ConnectionsClient`
+    /// instances built per-AppState-cycle share the cache.
+    private struct CachedList {
+        let result: NatsConnectionListResult
+        let fetchedAt: Date
+    }
+    private static let listCacheTtl: TimeInterval = 30
+    private static var listCacheLock = NSLock()
+    private static var _listCache: CachedList?
+
+    /// Drop the cached list, forcing the next list() to hit the
+    /// vault. Call after any mutation that could change the list
+    /// shape so the cached snapshot doesn't lag.
+    static func invalidateListCache() {
+        listCacheLock.lock(); defer { listCacheLock.unlock() }
+        _listCache = nil
+    }
+
+    private static func cachedSnapshot() -> NatsConnectionListResult? {
+        listCacheLock.lock(); defer { listCacheLock.unlock() }
+        guard let cached = _listCache else { return nil }
+        if Date().timeIntervalSince(cached.fetchedAt) >= listCacheTtl {
+            _listCache = nil
+            return nil
+        }
+        return cached.result
+    }
+
+    private static func storeCache(_ result: NatsConnectionListResult) {
+        listCacheLock.lock(); defer { listCacheLock.unlock() }
+        _listCache = CachedList(result: result, fetchedAt: Date())
+    }
+
+    /// Synchronous accessor for callers that want to render
+    /// optimistically before kicking off the real fetch. Mirrors
+    /// Android `cachedListSnapshot`. Returns nil on a cold or stale
+    /// cache — caller falls through to `list()` and shows Loading.
+    func cachedListSnapshot() -> NatsConnectionListResult? {
+        Self.cachedSnapshot()
+    }
+
+    /// Drop the cached list (instance-side convenience that proxies
+    /// to the static — keeps call sites readable).
+    func invalidateListCache() {
+        Self.invalidateListCache()
+    }
+
+    /// Fire-and-forget pre-fetch (Area D — Android ccc9285). Already-
+    /// hot cache early-outs so a flurry of taps doesn't spam the
+    /// vault. Failure is silent — the next real `list()` call will
+    /// retry.
+    func warmList() async {
+        if Self.cachedSnapshot() != nil { return }
+        _ = try? await list()
+    }
+
+    /// Mutation subjects on `connection.*` — keep in sync with the
+    /// `sendAndAwait` invalidation hook. List subjects, get/resolve,
+    /// and any other read-only op are excluded.
+    private static let mutationOps: Set<String> = [
+        "connection.create-invite",
+        "connection.store-credentials",
+        "connection.rotate",
+        "connection.revoke",
+        "connection.respond"
+    ]
 
     // MARK: - Get Credentials
 
@@ -359,6 +449,14 @@ final class ConnectionsClient {
                 error: error,
                 errorCode: response.errorCode
             )
+        }
+
+        // Area D (Android ccc9285): any mutation invalidates the
+        // unfiltered-list cache so the next render reflects the new
+        // shape. Reads stay cached. Centralised here so a new
+        // mutation method can't forget to invalidate.
+        if Self.mutationOps.contains(messageType) {
+            Self.invalidateListCache()
         }
 
         #if DEBUG
