@@ -334,9 +334,25 @@ struct SecretRowView: View {
                     // Subtitle now leads with the secret type and falls
                     // back to the category — matches Android's
                     // "Alias under category" layout when alias is set.
-                    Text(secret.category.displayName)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
+                        Text(secret.category.displayName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        // Area A (Android 0f77278): USE_ONLY badge.
+                        // Critical secrets and any user-marked
+                        // use-only field render a tag so the user
+                        // sees this row can't be granted as a bulk
+                        // value — only as a one-tap "use" by a peer.
+                        if secret.visibility == .useOnly {
+                            Text("Use only")
+                                .font(.caption2).fontWeight(.semibold)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.orange.opacity(0.18))
+                                .foregroundStyle(.orange)
+                                .clipShape(Capsule())
+                        }
+                    }
                 }
 
                 Spacer()
