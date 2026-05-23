@@ -114,11 +114,25 @@ struct LocationSettingsView: View {
             get: { appState.preferences.location.trackingEnabled },
             set: { newValue in
                 appState.preferences.location.trackingEnabled = newValue
+                // SECURITY (Area E #46): when the user disables
+                // tracking, also wipe the cached last-known lat/lon
+                // and capture time. The vault is the canonical store
+                // for retained location history; this cache exists
+                // only to compute displacement-since-last-reading so
+                // we skip duplicates without a vault round-trip — it
+                // has no reason to outlive the opt-in window.
+                // Mirrors Android 6f3341e.
+                if !newValue {
+                    appState.preferences.location.lastKnownLatitude = nil
+                    appState.preferences.location.lastKnownLongitude = nil
+                    appState.preferences.location.lastCaptureTime = nil
+                }
                 appState.preferences.save()
                 if newValue {
                     locationService.updateSettings(appState.preferences.location)
                     locationService.startCollecting()
                 } else {
+                    locationService.updateSettings(appState.preferences.location)
                     locationService.stopCollecting()
                 }
             }
