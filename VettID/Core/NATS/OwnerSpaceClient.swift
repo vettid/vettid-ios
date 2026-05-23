@@ -1064,13 +1064,15 @@ struct AgentApprovalRequest: Codable {
 }
 
 /// Device approval request from vault
-struct DeviceApprovalRequest: Codable {
+struct DeviceApprovalRequest: Codable, Identifiable {
     let requestId: String
     let connectionId: String
     let deviceName: String
     let operation: String?
     let secretCategory: String?
     let timestamp: String?
+
+    var id: String { requestId }
 
     enum CodingKeys: String, CodingKey {
         case requestId = "request_id"

@@ -2,10 +2,13 @@ import SwiftUI
 
 /// Main view for managing connected devices
 struct DeviceManagementView: View {
+    @EnvironmentObject var appState: AppState
     @StateObject private var viewModel: DeviceManagementViewModel
     @State private var showPairing = false
     @State private var showRevokeConfirmation = false
     @State private var deviceToRevoke: ConnectedDevice?
+    /// Set on row-tap → drives navigation to DesktopConnectionDetailView.
+    @State private var detailConnectionId: String?
 
     init(ownerSpaceClient: OwnerSpaceClient? = nil) {
         self._viewModel = StateObject(wrappedValue: DeviceManagementViewModel(
@@ -41,7 +44,20 @@ struct DeviceManagementView: View {
         }
         .sheet(isPresented: $showPairing) {
             NavigationStack {
-                DevicePairingView(ownerSpaceClient: viewModel.ownerSpaceClientRef)
+                DevicePairingView(ownerSpaceClient: appState.ownerSpaceClient)
+            }
+        }
+        // Area B — tap a desktop row → push DesktopConnectionDetailView.
+        // Uses isPresented binding for iOS 16 compatibility.
+        .navigationDestination(isPresented: Binding(
+            get: { detailConnectionId != nil },
+            set: { newValue in if !newValue { detailConnectionId = nil } }
+        )) {
+            if let connectionId = detailConnectionId {
+                DesktopConnectionDetailView(
+                    connectionId: connectionId,
+                    ownerSpaceClient: appState.ownerSpaceClient
+                )
             }
         }
         .alert("Revoke Device", isPresented: $showRevokeConfirmation) {
@@ -74,6 +90,10 @@ struct DeviceManagementView: View {
             }
         }
         .task {
+            // Configure now in case init() ran before AppState had warmed.
+            if let osc = appState.ownerSpaceClient {
+                viewModel.configure(with: osc)
+            }
             await viewModel.loadDevices()
         }
     }
@@ -136,7 +156,12 @@ struct DeviceManagementView: View {
             if !activeDevices.isEmpty {
                 Section {
                     ForEach(activeDevices) { device in
-                        DeviceRow(device: device)
+                        Button {
+                            detailConnectionId = device.connectionId
+                        } label: {
+                            DeviceRow(device: device)
+                        }
+                        .buttonStyle(.plain)
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 Button(role: .destructive) {
                                     deviceToRevoke = device
@@ -174,7 +199,12 @@ struct DeviceManagementView: View {
             if !otherDevices.isEmpty {
                 Section {
                     ForEach(otherDevices) { device in
-                        DeviceRow(device: device)
+                        Button {
+                            detailConnectionId = device.connectionId
+                        } label: {
+                            DeviceRow(device: device)
+                        }
+                        .buttonStyle(.plain)
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 if device.status != .revoked {
                                     Button(role: .destructive) {
