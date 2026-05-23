@@ -939,7 +939,8 @@ final class OwnerSpaceClient {
             return .revoked(grantId: gid)
         case "fetch-result", "fetch_result":
             guard let gid = grantId else { return nil }
-            return .fetchResult(grantId: gid, valueBase64: value)
+            let error = (inner["error"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            return .fetchResult(grantId: gid, valueBase64: value, error: error)
         default:
             return nil
         }
@@ -1437,8 +1438,13 @@ enum GrantEvent {
     case denied(requestId: String)
     case revoked(grantId: String)
     /// Value-grant fetch result landed (receiver-side). `valueBase64` is
-    /// nil for non-value grants (e.g. critical-use / verify).
-    case fetchResult(grantId: String, valueBase64: String?)
+    /// nil for non-value grants (e.g. critical-use / verify) and for
+    /// denials. Area F (Android 29a51e0): when the vault refuses to
+    /// produce a value (item_not_found, max_uses_exhausted,
+    /// grant_revoked, grant_expired, requester_mismatch, …) it
+    /// includes a non-nil `error` so the receiver-side UI can surface
+    /// a visible signal instead of failing silently.
+    case fetchResult(grantId: String, valueBase64: String?, error: String?)
 }
 
 /// On-wire payload of `forApp.presence.heartbeat.*`. Some vaults nest the

@@ -22,6 +22,11 @@ struct GrantsView: View {
 
     @EnvironmentObject private var appState: AppState
     @StateObject private var viewModel = GrantsViewModel()
+    /// Area F (Android 29a51e0): observed to surface fetch-denial
+    /// errors as an alert. The repository sets `transientError`
+    /// whenever a `forApp.grant.fetch-result` carries a non-nil
+    /// error; the alert clears it via the binding setter.
+    @ObservedObject private var grantsRepo = GrantsRepository.shared
     @State private var selectedTab: GrantsTab = .pending
     /// Phase 3.6-3.8: which pending request to present an approval
     /// screen for. The destination view differs by kind; navigation
@@ -63,6 +68,21 @@ struct GrantsView: View {
         }
         .sheet(item: $presentedVerify) { input in
             NavigationView { IdentityVerifyApprovalView(request: input) }
+        }
+        // Area F (Android 29a51e0): fetch-denial alert. Before this,
+        // a denied fetch (item_not_found / max_uses_exhausted /
+        // grant_revoked / grant_expired / requester_mismatch …)
+        // produced no UI signal at all; the receiver tapped Reveal
+        // and saw nothing.
+        .alert("Fetch denied", isPresented: Binding(
+            get: { grantsRepo.transientError != nil },
+            set: { newValue in if !newValue { grantsRepo.transientError = nil } }
+        ), presenting: grantsRepo.transientError) { _ in
+            Button("OK", role: .cancel) {
+                grantsRepo.transientError = nil
+            }
+        } message: { message in
+            Text(message)
         }
     }
 

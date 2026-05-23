@@ -28,6 +28,12 @@ final class GrantsRepository: ObservableObject {
     @Published private(set) var pending: [PendingRequestSummary] = []
     @Published private(set) var isHydrated: Bool = false
     @Published private(set) var lastError: String?
+    /// Area F (Android 29a51e0): one-shot transient error surfaced when
+    /// the vault refuses to produce a value for a fetched grant
+    /// (item_not_found, max_uses_exhausted, grant_revoked, …). The
+    /// view consumes it via .alert and resets to nil. Distinct from
+    /// `lastError`, which is hydrate-failure state.
+    @Published var transientError: String?
 
     // MARK: - Dependencies
 
@@ -71,6 +77,15 @@ final class GrantsRepository: ObservableObject {
         // without re-mounting. Tolerate over-firing — the row's
         // refresh is cheap (one connection.get-verify-state call).
         NotificationCenter.default.post(name: .verifyStateChanged, object: event)
+
+        // Area F (Android 29a51e0): surface fetch denials as a
+        // user-visible transient error. Before this, a fetch denial
+        // (item_not_found / max_uses_exhausted / grant_revoked / …)
+        // emitted into the event stream had no UI consumer — the
+        // user tapped Reveal and saw nothing.
+        if case .fetchResult(_, _, let error) = event, let error = error {
+            transientError = "Fetch denied: \(error)"
+        }
 
         #if DEBUG
         print("[GrantsRepository] grant event: \(event)")
