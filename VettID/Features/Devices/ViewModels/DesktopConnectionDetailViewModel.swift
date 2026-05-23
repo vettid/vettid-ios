@@ -13,6 +13,13 @@ final class DesktopConnectionDetailViewModel: ObservableObject {
     @Published var toast: String?
     @Published private(set) var activity: DesktopActivityState = .loading
 
+    /// Area C (Android 2150404): per-row chain-verification map keyed
+    /// by entry_id, plus the screen-level aggregate. Set by
+    /// `loadActivity`; consumed by the view to stamp badges and the
+    /// section pill.
+    @Published private(set) var verificationByEntryId: [String: AuditChainVerifier.RowState] = [:]
+    @Published private(set) var chainStatus: AuditChainVerifier.ChainStatus = .empty
+
     // MARK: - Dependencies
 
     private var ownerSpaceClient: OwnerSpaceClient?
@@ -66,6 +73,11 @@ final class DesktopConnectionDetailViewModel: ObservableObject {
         }
     }
 
+    /// Area C (Android 2150404): the activity load now goes through
+    /// `ConnectionAuditClient` (which returns the chain anchor +
+    /// per-row hash/sig fields) and runs `AuditChainVerifier` over
+    /// the page. Per-row verdicts land in `verificationByEntryId` so
+    /// the view can stamp Verified / Tampered / Unsigned badges.
     private func loadActivity(connectionId: String) async {
         guard let client = ownerSpaceClient else {
             activity = .error("Not connected to vault")
@@ -73,23 +85,29 @@ final class DesktopConnectionDetailViewModel: ObservableObject {
         }
         activity = .loading
 
+        let auditClient = ConnectionAuditClient(ownerSpaceClient: client)
         do {
-            let response = try await client.sendAndAwaitResponse(
-                "connection.audit.list",
-                payload: [
-                    "connection_id": AnyCodableValue(connectionId),
-                    "limit": AnyCodableValue(20)
-                ],
-                timeout: 15
+            let result = try await auditClient.list(
+                connectionId: connectionId,
+                limit: 20
             )
 
-            guard response.success else {
-                activity = .error(response.error ?? "Failed to load activity")
-                return
+            // Walk the verifier over the page (newest-first). The
+            // verifier reverses internally to keep prev_hash linkage
+            // checkable.
+            let (perRow, status) = AuditChainVerifier.verifyChain(
+                rows: result.entries,
+                anchor: result.chainAnchor,
+                entryHashOf: { ($0.entryHash, $0.previousHash, $0.entrySig) }
+            )
+            var verdicts: [String: AuditChainVerifier.RowState] = [:]
+            verdicts.reserveCapacity(result.entries.count)
+            for (i, entry) in result.entries.enumerated() {
+                verdicts[entry.entryId] = perRow[i].state
             }
-
-            let entries = (response.getArray("entries") ?? []).compactMap { DesktopActivityEntry.from(dict: $0) }
-            activity = .loaded(entries)
+            verificationByEntryId = verdicts
+            chainStatus = status
+            activity = .loaded(result.entries.map { DesktopActivityEntry.from(audit: $0) })
         } catch {
             activity = .error(error.localizedDescription)
         }
@@ -233,6 +251,10 @@ struct DesktopActivityEntry: Equatable, Identifiable {
     let title: String
     let body: String?
     let createdAt: Date?
+    /// Event type — drives the lifecycle icon/label mapping below.
+    /// Empty for legacy rows that pre-date the connection.audit
+    /// surface.
+    let eventType: String
 
     static func from(dict: [String: Any]) -> DesktopActivityEntry? {
         guard let id = dict["id"] as? String ?? dict["event_id"] as? String else { return nil }
@@ -256,7 +278,22 @@ struct DesktopActivityEntry: Equatable, Identifiable {
             id: id,
             title: title,
             body: dict["body"] as? String,
-            createdAt: createdAt
+            createdAt: createdAt,
+            eventType: (dict["event_type"] as? String) ?? ""
+        )
+    }
+
+    /// Adapter from the typed `AuditEntry` returned by
+    /// `ConnectionAuditClient`. The activity row UI uses the simpler
+    /// `DesktopActivityEntry` shape; the per-row verification verdict
+    /// lives on the view-model in `verificationByEntryId`.
+    static func from(audit: AuditEntry) -> DesktopActivityEntry {
+        DesktopActivityEntry(
+            id: audit.entryId,
+            title: audit.title,
+            body: audit.body,
+            createdAt: audit.createdAtDate,
+            eventType: audit.eventType
         )
     }
 }

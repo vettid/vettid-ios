@@ -5,6 +5,7 @@ import SwiftUI
 struct FeedAuditLogView: View {
     @StateObject private var viewModel: FeedAuditLogViewModel
     @State private var showingEventTypeFilter = false
+    @State private var showingConnectionFilter = false
     @State private var showingExportSheet = false
 
     init(feedClient: FeedClient? = nil) {
@@ -114,6 +115,23 @@ struct FeedAuditLogView: View {
 
     private var searchAndFilterBar: some View {
         VStack(spacing: 8) {
+            // Always-visible header row — search + filter toggle.
+            // Area C (Android 5399b64): the filter chips collapse by
+            // default so the screen lands with the list front-and-
+            // centre. "Filters" disclosure shows the chip row when
+            // the user taps in.
+            filterHeaderRow
+            if viewModel.filtersExpanded {
+                filterDisclosureBody
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(Color(.secondarySystemBackground))
+    }
+
+    private var filterHeaderRow: some View {
+        HStack(spacing: 8) {
             // Search field
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
@@ -137,34 +155,46 @@ struct FeedAuditLogView: View {
             .background(Color(.systemGray6))
             .cornerRadius(10)
 
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    viewModel.filtersExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "line.3.horizontal.decrease.circle")
+                    if viewModel.hasActiveFilters {
+                        Circle().fill(Color.blue).frame(width: 6, height: 6)
+                    }
+                }
+                .font(.subheadline)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(Color(.systemGray6))
+                .cornerRadius(10)
+            }
+            .accessibilityLabel(viewModel.filtersExpanded ? "Hide filters" : "Show filters")
+        }
+    }
+
+    @ViewBuilder
+    private var filterDisclosureBody: some View {
+        VStack(spacing: 8) {
             // Verification-state chips (Phase 5.3). All / Verified /
             // Tampered / Unsigned — narrows the list to one row state
             // so a user can answer "any tampered rows?" at a glance.
             verificationChips
 
-            // Event type filter
+            // Event type + connection filter row
             HStack(spacing: 8) {
                 // Event type dropdown
                 Button {
                     showingEventTypeFilter = true
                 } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "line.3.horizontal.decrease")
-                            .font(.caption)
-                        Text(viewModel.selectedEventType ?? "All Types")
-                            .font(.subheadline)
-                        Image(systemName: "chevron.down")
-                            .font(.caption2)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(
-                        viewModel.selectedEventType != nil
-                            ? Color.blue
-                            : Color(.systemGray6)
+                    filterChip(
+                        icon: "line.3.horizontal.decrease",
+                        label: viewModel.selectedEventType.map(formatEventType) ?? "All Types",
+                        active: viewModel.selectedEventType != nil
                     )
-                    .foregroundStyle(viewModel.selectedEventType != nil ? .white : .primary)
-                    .cornerRadius(16)
                 }
                 .confirmationDialog("Filter by Event Type", isPresented: $showingEventTypeFilter) {
                     Button("All Types") {
@@ -177,19 +207,38 @@ struct FeedAuditLogView: View {
                     }
                 }
 
-                // Integrity status badge
-                if let verified = viewModel.integrityVerified {
-                    integrityBadge(verified: verified)
+                // Area C (Android fdc12d5): connection filter chip.
+                // Only renders when the loaded page has at least one
+                // peer-scoped row — otherwise the dropdown would have
+                // a single "All connections" entry and nothing else.
+                if !viewModel.availableConnectionIds.isEmpty {
+                    Button {
+                        showingConnectionFilter = true
+                    } label: {
+                        filterChip(
+                            icon: "person.2",
+                            label: viewModel.selectedConnectionId.map { String($0.prefix(8)) + "…" } ?? "All Connections",
+                            active: viewModel.selectedConnectionId != nil
+                        )
+                    }
+                    .confirmationDialog("Filter by Connection", isPresented: $showingConnectionFilter) {
+                        Button("All Connections") {
+                            viewModel.selectedConnectionId = nil
+                        }
+                        ForEach(viewModel.availableConnectionIds, id: \.self) { connectionId in
+                            Button(String(connectionId.prefix(12)) + "…") {
+                                viewModel.selectedConnectionId = connectionId
+                            }
+                        }
+                    }
                 }
 
                 Spacer()
 
-                // Event count
                 Text("\(viewModel.filteredEvents.count) events")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                // Clear filters
                 if viewModel.hasActiveFilters {
                     Button("Clear") {
                         viewModel.clearFilters()
@@ -199,9 +248,20 @@ struct FeedAuditLogView: View {
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(Color(.secondarySystemBackground))
+    }
+
+    /// Shared filter-chip rendering helper.
+    private func filterChip(icon: String, label: String, active: Bool) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon).font(.caption)
+            Text(label).font(.subheadline)
+            Image(systemName: "chevron.down").font(.caption2)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(active ? Color.blue : Color(.systemGray6))
+        .foregroundStyle(active ? .white : .primary)
+        .cornerRadius(16)
     }
 
     // MARK: - Verification Chips (Phase 5.3)
@@ -254,17 +314,38 @@ struct FeedAuditLogView: View {
 
     @ViewBuilder
     private var chainStatusPill: some View {
+        // Area C (Android 06afb55): pill summarises the
+        // currently-visible (filtered) subset, not the whole page.
+        // Recomputes via `visibleVerificationSummary` on every filter
+        // change. Falls back to the empty/no-chain branch when there
+        // are no events at all, OR when the chain anchor is missing
+        // entirely (chainStatus = .empty / .unsigned) — those are
+        // about the chain itself, not the visible subset.
+        let summary = viewModel.visibleVerificationSummary
         let status = viewModel.chainStatus
         let (label, icon, color): (String, String, Color) = {
             switch status {
+            case .empty where summary.total == 0:
+                return ("No events", "questionmark.circle", .secondary)
             case .empty:
                 return ("No chain", "questionmark.circle", .secondary)
-            case .verified:
-                return (status.pillTitle, "checkmark.shield.fill", .green)
-            case .unsigned:
+            case .unsigned where summary.verified == 0:
                 return (status.pillTitle, "minus.circle", .orange)
             case .tampered:
-                return (status.pillTitle, "exclamationmark.shield.fill", .red)
+                return (summary.pillTitle, "exclamationmark.shield.fill", .red)
+            case .verified, .unsigned:
+                let sf = (summary.color == .red)
+                    ? "exclamationmark.shield.fill"
+                    : (summary.color == .orange ? "minus.circle" : "checkmark.shield.fill")
+                let tint: Color = {
+                    switch summary.color {
+                    case .green:   return .green
+                    case .orange:  return .orange
+                    case .red:     return .red
+                    case .neutral: return .secondary
+                    }
+                }()
+                return (summary.pillTitle, sf, tint)
             }
         }()
         HStack(spacing: 4) {
@@ -367,10 +448,20 @@ struct FeedAuditLogView: View {
     // MARK: - Helpers
 
     private func formatEventType(_ eventType: String) -> String {
-        eventType
-            .replacingOccurrences(of: ".", with: " ")
-            .replacingOccurrences(of: "_", with: " ")
-            .capitalized
+        // Area C (Android a1414ce): hand-written labels for the
+        // shared-data lifecycle so the audit row reads like a
+        // sentence the user wrote, not the dotted backend taxonomy.
+        switch eventType {
+        case "data.granted":          return "Data shared"
+        case "data.grant.denied":     return "Data request declined"
+        case "data.grant.revoked":    return "Data access revoked"
+        case "data.request.received": return "Data request received"
+        default:
+            return eventType
+                .replacingOccurrences(of: ".", with: " ")
+                .replacingOccurrences(of: "_", with: " ")
+                .capitalized
+        }
     }
 }
 
@@ -471,7 +562,19 @@ struct AuditEventRow: View {
     }
 
     private var eventIcon: String {
-        let type = event.eventType.lowercased()
+        let raw = event.eventType
+        // Area C (Android a1414ce): distinct icons for the shared-data
+        // lifecycle so a row reads like a sentence — "this was granted",
+        // "this was refused" — instead of all the .data.* events
+        // collapsing onto one generic icon.
+        switch raw {
+        case "data.granted":          return "checkmark.circle.fill"
+        case "data.grant.denied":     return "hand.raised.fill"
+        case "data.grant.revoked":    return "link.badge.plus"
+        case "data.request.received": return "tray.and.arrow.down.fill"
+        default: break
+        }
+        let type = raw.lowercased()
         if type.contains("auth") || type.contains("login") {
             return "person.badge.key.fill"
         } else if type.contains("credential") {
@@ -496,7 +599,17 @@ struct AuditEventRow: View {
     }
 
     private var eventColor: Color {
-        let type = event.eventType.lowercased()
+        let raw = event.eventType
+        // Area C (Android a1414ce): the shared-data lifecycle gets a
+        // distinct tint so refusals stand out from grants.
+        switch raw {
+        case "data.granted":          return .green
+        case "data.grant.denied":     return .red
+        case "data.grant.revoked":    return .secondary
+        case "data.request.received": return .orange
+        default: break
+        }
+        let type = raw.lowercased()
         if type.contains("security") || type.contains("alert") {
             return .red
         } else if type.contains("auth") || type.contains("login") {

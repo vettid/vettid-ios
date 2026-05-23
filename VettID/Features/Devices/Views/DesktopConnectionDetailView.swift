@@ -190,23 +190,92 @@ struct DesktopConnectionDetailView: View {
                         .font(.subheadline).foregroundStyle(.secondary)
                 } else {
                     VStack(alignment: .leading, spacing: 6) {
+                        // Area C (Android 2150404): screen-section
+                        // pill summarising the chain-verification of
+                        // the loaded page. Hidden when the chain is
+                        // empty (no anchor / pre-chain rows only).
+                        chainStatusPill
                         ForEach(entries) { entry in
-                            VStack(alignment: .leading, spacing: 2) {
-                                HStack {
-                                    Text(entry.title).font(.subheadline).fontWeight(.medium)
-                                    Spacer()
-                                    Text(Self.formatDate(entry.createdAt))
-                                        .font(.caption).foregroundStyle(.secondary)
-                                }
-                                if let body = entry.body, !body.isEmpty {
-                                    Text(body).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                                }
-                            }
-                            .padding(.vertical, 4)
+                            activityRow(for: entry)
                         }
                     }
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func activityRow(for entry: DesktopActivityEntry) -> some View {
+        let verdict = viewModel.verificationByEntryId[entry.id] ?? .unsigned
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text(entry.title).font(.subheadline).fontWeight(.medium)
+                Spacer()
+                // Inline "Unverified" badge only on tampered rows —
+                // Verified / Unsigned would clutter every row, and
+                // the section pill already summarises those.
+                if verdict == .tampered {
+                    HStack(spacing: 3) {
+                        Image(systemName: "exclamationmark.shield.fill")
+                            .font(.caption2)
+                        Text("Unverified")
+                            .font(.caption2).fontWeight(.medium)
+                    }
+                    .foregroundStyle(.red)
+                }
+                Text(Self.formatDate(entry.createdAt))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if let body = entry.body, !body.isEmpty {
+                Text(body).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private struct ChainPillStyle {
+        let label: String
+        let icon: String
+        let color: Color
+    }
+
+    private var chainPillStyle: ChainPillStyle? {
+        switch viewModel.chainStatus {
+        case .empty:
+            return nil
+        case .verified(let signed, let unsigned):
+            let total = signed + unsigned
+            let title = unsigned == 0
+                ? "\(signed) of \(total) signed — chain verified"
+                : "\(signed) of \(total) signed"
+            return ChainPillStyle(label: title, icon: "checkmark.shield.fill", color: .green)
+        case .unsigned(let rows):
+            return ChainPillStyle(
+                label: "\(rows) unsigned — unlock to verify",
+                icon: "minus.circle",
+                color: .orange
+            )
+        case .tampered:
+            return ChainPillStyle(
+                label: "Chain tampered",
+                icon: "exclamationmark.shield.fill",
+                color: .red
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var chainStatusPill: some View {
+        if let style = chainPillStyle {
+            HStack(spacing: 4) {
+                Image(systemName: style.icon).font(.caption2)
+                Text(style.label).font(.caption2).fontWeight(.medium)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(style.color.opacity(0.15))
+            .foregroundStyle(style.color)
+            .clipShape(Capsule())
         }
     }
 
