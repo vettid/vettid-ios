@@ -133,3 +133,18 @@ extension Array where Element == UInt8 {
         }
     }
 }
+
+extension Data {
+    /// Zero a Data buffer's underlying bytes via `memset_s` (not
+    /// elided by the optimizer). Use right after a sensitive payload
+    /// has been transmitted / consumed so the plaintext doesn't sit
+    /// on the heap waiting for ARC. Same primitive as
+    /// `[UInt8].secureWipe`; lives here because Data is what
+    /// JSONEncoder hands back at the JSON-serialise boundary.
+    mutating func secureWipeBytes() {
+        withUnsafeMutableBytes { raw in
+            guard let base = raw.baseAddress, raw.count > 0 else { return }
+            _ = memset_s(base, raw.count, 0, raw.count)
+        }
+    }
+}

@@ -624,10 +624,25 @@ final class NatsConnectionManager: ObservableObject {
         let responseTopic = "\(ownerSpace).forApp.vault.warm.>"
         let responseStream = try await subscribe(to: responseTopic)
 
-        // Send warm request to vault
+        // SECURITY (Area E #51): the PIN is unavoidable as `String` at
+        // the IME / JSON-encoding boundary — Swift Strings are
+        // immutable, and JSONEncoder serialises straight into a Data
+        // we then publish. The mitigation we CAN apply is zeroing the
+        // serialised buffer the moment `publish` returns, so the
+        // plaintext doesn't linger on the heap waiting for ARC to
+        // reclaim it. PIN entropy is only ~10^6 so this is a
+        // hygiene-grade defence — a heap snapshot of a PIN is
+        // brute-forceable in microseconds — but it bounds the
+        // accidental-disclosure window to the publish call.
         let requestTopic = "\(ownerSpace).forVault.vault.warm"
-        let requestData = try JSONEncoder().encode(request)
-        try await publish(requestData, to: requestTopic)
+        var requestData = try JSONEncoder().encode(request)
+        do {
+            try await publish(requestData, to: requestTopic)
+        } catch {
+            requestData.secureWipeBytes()
+            throw error
+        }
+        requestData.secureWipeBytes()
 
         #if DEBUG
         print("[NATS] Sent vault warm request to \(requestTopic)")
