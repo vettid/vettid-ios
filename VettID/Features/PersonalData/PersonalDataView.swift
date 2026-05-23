@@ -84,17 +84,83 @@ struct PersonalDataView: View {
                 if data.isEmpty {
                     emptyCategory(category)
                 } else {
-                    ForEach(data) { item in
-                        PersonalDataRowView(item: item)
-                    }
-                    .onDelete { indexSet in
-                        deleteItems(at: indexSet, in: category)
+                    // Area A (Android ac7148d): bucket by alias.
+                    // Singletons render as plain rows; multi-field
+                    // aliases collapse into a card with a header
+                    // and the fields listed inside.
+                    let groups = Self.groupByAlias(data)
+                    ForEach(groups, id: \.id) { group in
+                        if group.items.count > 1, let alias = group.alias {
+                            aliasCard(alias: alias, items: group.items)
+                                .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                                .listRowSeparator(.hidden)
+                        } else if let item = group.items.first {
+                            PersonalDataRowView(item: item)
+                        }
                     }
                 }
             }
         } header: {
             sectionHeader(category: category, count: data.count)
         }
+    }
+
+    /// Alias card — header + per-field rows inside one rounded
+    /// background. Matches the SecretsView treatment.
+    private func aliasCard(alias: String, items: [PersonalDataItem]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: items.first?.category.icon ?? "square.grid.2x2.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(.blue)
+                Text(alias)
+                    .font(.headline)
+            }
+            VStack(spacing: 6) {
+                ForEach(items) { item in
+                    PersonalDataRowView(item: item)
+                    if item.id != items.last?.id {
+                        Divider()
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.gray.opacity(0.08))
+        )
+    }
+
+    private struct AliasGroup {
+        let id: String
+        let alias: String?
+        let items: [PersonalDataItem]
+    }
+
+    private static func groupByAlias(_ items: [PersonalDataItem]) -> [AliasGroup] {
+        var byAlias: [String: [PersonalDataItem]] = [:]
+        var aliasOrder: [String] = []
+        var singletons: [AliasGroup] = []
+        for item in items {
+            let alias = item.alias?.trimmingCharacters(in: .whitespaces)
+            if let alias = alias, !alias.isEmpty {
+                if byAlias[alias] == nil { aliasOrder.append(alias) }
+                byAlias[alias, default: []].append(item)
+            } else {
+                singletons.append(AliasGroup(id: "single:\(item.id)", alias: nil, items: [item]))
+            }
+        }
+        var groups: [AliasGroup] = []
+        for alias in aliasOrder {
+            let bucket = byAlias[alias] ?? []
+            if bucket.count == 1 {
+                groups.append(AliasGroup(id: "single:\(bucket[0].id)", alias: nil, items: bucket))
+            } else {
+                groups.append(AliasGroup(id: "alias:\(alias)", alias: alias, items: bucket))
+            }
+        }
+        return groups + singletons
     }
 
     private func sectionHeader(category: DataCategory, count: Int) -> some View {
