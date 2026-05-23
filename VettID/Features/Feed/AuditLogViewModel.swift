@@ -109,7 +109,12 @@ final class FeedAuditLogViewModel: ObservableObject {
     @Published var events: [VaultFeedEvent] = []
     @Published var isLoading = false
     @Published var searchText = ""
-    @Published var selectedTimeWindow: AuditTimeWindow = .last24Hours
+    /// Area C (Android ad76333): default to "all events" rather than
+    /// hiding routine entries behind a 24-hour window. The previous
+    /// default hid most of the audit log on first open, which
+    /// confused users into thinking the chain was empty. User-driven
+    /// chips narrow from here.
+    @Published var selectedTimeWindow: AuditTimeWindow = .all
     @Published var selectedEventType: String? = nil
     @Published var verificationFilter: AuditVerificationFilter = .all
     @Published var integrityVerified: Bool? = nil

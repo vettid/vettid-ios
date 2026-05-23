@@ -367,10 +367,20 @@ struct FeedAuditLogView: View {
     // MARK: - Helpers
 
     private func formatEventType(_ eventType: String) -> String {
-        eventType
-            .replacingOccurrences(of: ".", with: " ")
-            .replacingOccurrences(of: "_", with: " ")
-            .capitalized
+        // Area C (Android a1414ce): hand-written labels for the
+        // shared-data lifecycle so the audit row reads like a
+        // sentence the user wrote, not the dotted backend taxonomy.
+        switch eventType {
+        case "data.granted":          return "Data shared"
+        case "data.grant.denied":     return "Data request declined"
+        case "data.grant.revoked":    return "Data access revoked"
+        case "data.request.received": return "Data request received"
+        default:
+            return eventType
+                .replacingOccurrences(of: ".", with: " ")
+                .replacingOccurrences(of: "_", with: " ")
+                .capitalized
+        }
     }
 }
 
@@ -471,7 +481,19 @@ struct AuditEventRow: View {
     }
 
     private var eventIcon: String {
-        let type = event.eventType.lowercased()
+        let raw = event.eventType
+        // Area C (Android a1414ce): distinct icons for the shared-data
+        // lifecycle so a row reads like a sentence — "this was granted",
+        // "this was refused" — instead of all the .data.* events
+        // collapsing onto one generic icon.
+        switch raw {
+        case "data.granted":          return "checkmark.circle.fill"
+        case "data.grant.denied":     return "hand.raised.fill"
+        case "data.grant.revoked":    return "link.badge.plus"
+        case "data.request.received": return "tray.and.arrow.down.fill"
+        default: break
+        }
+        let type = raw.lowercased()
         if type.contains("auth") || type.contains("login") {
             return "person.badge.key.fill"
         } else if type.contains("credential") {
@@ -496,7 +518,17 @@ struct AuditEventRow: View {
     }
 
     private var eventColor: Color {
-        let type = event.eventType.lowercased()
+        let raw = event.eventType
+        // Area C (Android a1414ce): the shared-data lifecycle gets a
+        // distinct tint so refusals stand out from grants.
+        switch raw {
+        case "data.granted":          return .green
+        case "data.grant.denied":     return .red
+        case "data.grant.revoked":    return .secondary
+        case "data.request.received": return .orange
+        default: break
+        }
+        let type = raw.lowercased()
         if type.contains("security") || type.contains("alert") {
             return .red
         } else if type.contains("auth") || type.contains("login") {
