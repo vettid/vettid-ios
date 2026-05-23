@@ -4,8 +4,15 @@ import SwiftUI
 struct DevicePairingView: View {
     @StateObject private var viewModel: DevicePairingViewModel
     @Environment(\.dismiss) private var dismiss
+    /// Set when `devicePendingAuth` fires for our in-flight invite —
+    /// drives a `.navigationDestination` to AuthorizeDeviceView.
+    @State private var authorizeConnectionId: String?
+    /// Owner-space client threaded through to the authorize step so
+    /// the QR-scan submission can reuse the same NATS wire.
+    private let ownerSpaceClient: OwnerSpaceClient?
 
     init(ownerSpaceClient: OwnerSpaceClient? = nil) {
+        self.ownerSpaceClient = ownerSpaceClient
         self._viewModel = StateObject(wrappedValue: DevicePairingViewModel(
             ownerSpaceClient: ownerSpaceClient
         ))
@@ -68,6 +75,24 @@ struct DevicePairingView: View {
                     viewModel.cancel()
                     dismiss()
                 }
+            }
+        }
+        // Area B — auto-advance to AuthorizeDeviceView the moment the
+        // vault confirms the desktop is waiting on us. `markAdvancingToAuthorize`
+        // suppresses the invite-teardown the VM would otherwise fire
+        // when this view leaves the screen. Mirrors Android
+        // `LaunchedEffect(state) → onNavigateToAuthorize` (commit 649b2a3).
+        .onChange(of: viewModel.pendingAuthorization?.connectionId) { newConnectionId in
+            guard let connectionId = newConnectionId else { return }
+            viewModel.markAdvancingToAuthorize()
+            authorizeConnectionId = connectionId
+        }
+        .navigationDestination(isPresented: Binding(
+            get: { authorizeConnectionId != nil },
+            set: { newValue in if !newValue { authorizeConnectionId = nil } }
+        )) {
+            if let connectionId = authorizeConnectionId {
+                AuthorizeDeviceView(connectionId: connectionId, ownerSpaceClient: ownerSpaceClient)
             }
         }
     }

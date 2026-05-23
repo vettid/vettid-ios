@@ -84,12 +84,12 @@ final class DeviceApprovalViewModel: ObservableObject {
 
         do {
             let response = try await client.sendAndAwaitResponse(
-                "connection.device.approval",
+                "device.approval",
                 payload: [
                     "request_id": AnyCodableValue(requestId),
                     "approved": AnyCodableValue(true)
                 ],
-                timeout: 30
+                timeout: 60
             )
 
             if response.success {
@@ -125,12 +125,12 @@ final class DeviceApprovalViewModel: ObservableObject {
 
         do {
             let response = try await client.sendAndAwaitResponse(
-                "connection.device.approval",
+                "device.approval",
                 payload: [
                     "request_id": AnyCodableValue(requestId),
                     "approved": AnyCodableValue(false)
                 ],
-                timeout: 30
+                timeout: 60
             )
 
             if response.success {

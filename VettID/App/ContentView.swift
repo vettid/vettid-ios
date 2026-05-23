@@ -121,6 +121,25 @@ struct ContentView: View {
         } message: { request in
             Text("\(request.peerLabel ?? "A connection") asked for your current location. Sending shares it once — they won't see your future location unless you turn on sharing.")
         }
+        // Area B — per-op desktop approval. A new pending request flips
+        // appState.pendingDeviceApproval to non-null; full-screen cover
+        // pops the user straight onto DeviceApprovalView regardless of
+        // which screen they were on. Mirrors Android's
+        // LaunchedEffect(pendingDeviceApproval) → DeviceApproval route.
+        // Gated on isAuthenticated so a request that lands while the
+        // app is locked doesn't pre-empt the PIN screen — it'll
+        // resurface from fetchPendingDeviceApprovals after unlock.
+        .fullScreenCover(item: Binding<DeviceApprovalRequest?>(
+            get: { appState.isAuthenticated ? appState.pendingDeviceApproval : nil },
+            set: { newValue in if newValue == nil { appState.clearPendingDeviceApproval() } }
+        )) { request in
+            NavigationStack {
+                DeviceApprovalView(
+                    ownerSpaceClient: appState.ownerSpaceClient,
+                    approvalRequest: request
+                )
+            }
+        }
     }
 
     private func handleScenePhaseChange(_ phase: ScenePhase) {

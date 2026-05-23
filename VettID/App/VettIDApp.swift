@@ -228,6 +228,14 @@ class AppState: ObservableObject {
     /// `failed`. Cleared on the next warm.
     @Published var lastMigrationStatus: String?
 
+    /// Area B — per-operation device approval the user is being asked
+    /// to action right now. Set by the `forApp.device.approval.request.*`
+    /// observer (and by `fetchPendingDeviceApprovals` on every post-PIN-
+    /// unlock pre-warm). Drives root-level navigation to
+    /// `DeviceApprovalView`. Cleared by the approval screen on
+    /// approve/deny/dismiss via `clearPendingDeviceApproval`.
+    @Published var pendingDeviceApproval: DeviceApprovalRequest?
+
     // NATS connection manager for vault operations
     lazy var natsConnectionManager: NatsConnectionManager = {
         NatsConnectionManager(userGuidProvider: { [weak self] in
@@ -281,6 +289,11 @@ class AppState: ObservableObject {
     /// Used by the Security Audit Log surface to call `audit.query`
     /// and run the Ed25519 chain verifier on the response.
     private(set) var feedClient: FeedClient?
+
+    /// Area B — observer task that bridges `OwnerSpaceClient.deviceApprovalRequests`
+    /// into `pendingDeviceApproval`. Held here so a credential-rotation
+    /// space-change can cancel the old observer before starting a new one.
+    private var deviceApprovalObserverTask: Task<Void, Never>?
 
     /// Flag indicating if running in UI test mode
     static var isUITesting: Bool {
@@ -659,7 +672,42 @@ class AppState: ObservableObject {
                 }
                 await GrantsRepository.shared.hydrate()
             }
+            // Area B: wire the forApp.device.> subscription so per-op
+            // approvals and Stage-2 pairing notifications reach the
+            // app, and re-pull any approval requests that arrived
+            // while we were offline (no replay on core-NATS forApp.*).
+            osc.startDeviceEventSubscription()
+            self.startDeviceApprovalObserver(osc)
+            Task { await osc.fetchPendingDeviceApprovals() }
         }
+    }
+
+    /// Area B — bridge `OwnerSpaceClient.deviceApprovalRequests` into
+    /// `AppState.pendingDeviceApproval` so root-level navigation can
+    /// pop the user onto `DeviceApprovalView` the moment a request
+    /// lands. Idempotent: re-entering `syncProfileFromVault` after a
+    /// credential rotation re-uses the same OwnerSpaceClient instance
+    /// (we only rebuild on owner-space change), so the observer keeps
+    /// running across re-syncs. A space-change rebuilds the client
+    /// AND restarts this observer (caller drops the old task by
+    /// nilling `deviceApprovalObserverTask` first).
+    private func startDeviceApprovalObserver(_ client: OwnerSpaceClient) {
+        deviceApprovalObserverTask?.cancel()
+        deviceApprovalObserverTask = Task { [weak self] in
+            for await request in client.deviceApprovalRequests {
+                guard let self = self else { return }
+                await MainActor.run { self.pendingDeviceApproval = request }
+                #if DEBUG
+                print("[AppState] pendingDeviceApproval set: \(request.requestId) op=\(request.operation ?? "-")")
+                #endif
+            }
+        }
+    }
+
+    /// Called from the approval screen on approve / deny / dismiss.
+    /// Mirrors Android `AppViewModel.clearPendingDeviceApproval`.
+    func clearPendingDeviceApproval() {
+        pendingDeviceApproval = nil
     }
 
     /// Mark vault as cold (e.g., after background timeout)
