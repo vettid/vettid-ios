@@ -140,7 +140,7 @@ final class RecoveryViewModel: ObservableObject {
             state = .completed(userGuid: userGuid)
             onRecoveryComplete?(userGuid, encryptedCredential)
 
-            print("[Recovery] Credential saved successfully for user: \(userGuid)")
+            print("[Recovery] Credential saved successfully")
         } catch {
             state = .failed(error: .credentialSaveFailed)
             errorMessage = RecoveryError.credentialSaveFailed.errorDescription

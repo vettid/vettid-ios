@@ -319,7 +319,7 @@ final class EnrollmentViewModel: ObservableObject {
             // Parse QR code JSON data to extract api_url and session_token or invitation_code
             let qrData = try parseQRCodeData(code)
             #if DEBUG
-            print("[Enrollment] Parsed QR data - apiUrl: \(qrData.apiUrl), userGuid: \(qrData.userGuid)")
+            print("[Enrollment] Parsed QR data - apiUrl: \(qrData.apiUrl)")
             #endif
 
             // Create API client with the URL from QR code
