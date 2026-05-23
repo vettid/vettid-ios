@@ -348,6 +348,182 @@ final class OwnerSpaceClient {
         deviceApprovalContinuation?.yield(request)
     }
 
+    /// Stage-2 pairing: a paired desktop has completed Stage-1 and is
+    /// waiting on the phone's authorize-session decision. Carries the
+    /// desktop's full identity for the AuthorizeDeviceView's fingerprint
+    /// card. Mirrors Android `OwnerSpaceClient.devicePendingAuth`.
+    private var devicePendingAuthContinuation: AsyncStream<DevicePendingAuthNotification>.Continuation?
+    private var _devicePendingAuthStream: AsyncStream<DevicePendingAuthNotification>?
+
+    var devicePendingAuth: AsyncStream<DevicePendingAuthNotification> {
+        if let stream = _devicePendingAuthStream { return stream }
+        let stream = AsyncStream<DevicePendingAuthNotification> { continuation in
+            self.devicePendingAuthContinuation = continuation
+            continuation.onTermination = { [weak self] _ in
+                self?.devicePendingAuthContinuation = nil
+                self?._devicePendingAuthStream = nil
+            }
+        }
+        _devicePendingAuthStream = stream
+        return stream
+    }
+
+    /// Subscribe to the `forApp.device.>` family and pump decoded
+    /// events into `deviceApprovalRequests` (per-operation approvals)
+    /// and `devicePendingAuth` (Stage-2 desktop pairing). Idempotent;
+    /// call once after PIN unlock from `AppState.syncProfileFromVault`
+    /// alongside the other warm-up wires.
+    ///
+    /// Subjects:
+    ///   - forApp.device.approval.request.<requestId>   → DeviceApprovalRequest
+    ///   - forApp.device.pending-authorization          → DevicePendingAuthNotification
+    private var deviceSubscriptionTask: Task<Void, Never>?
+    func startDeviceEventSubscription() {
+        guard deviceSubscriptionTask == nil else { return }
+        let prefix = forAppPrefix
+        deviceSubscriptionTask = Task { [weak self] in
+            guard let self = self else { return }
+            do {
+                let stream = try await self.connectionManager.subscribe(
+                    to: "\(prefix).device.>"
+                )
+                for await raw in stream {
+                    if Task.isCancelled { return }
+                    let subject = raw.topic
+                    if subject.contains(".forApp.device.approval.request.") {
+                        if let request = Self.parseDeviceApprovalRequest(raw: raw) {
+                            self.deviceApprovalContinuation?.yield(request)
+                        }
+                    } else if subject.hasSuffix(".forApp.device.pending-authorization") {
+                        if let notif = Self.parseDevicePendingAuth(raw: raw) {
+                            self.devicePendingAuthContinuation?.yield(notif)
+                        }
+                    }
+                }
+            } catch {
+                #if DEBUG
+                print("[OwnerSpaceClient] device.> subscription failed: \(error)")
+                #endif
+            }
+        }
+    }
+
+    /// Pull device-operation approvals still awaiting this owner's
+    /// decision and surface each one onto `deviceApprovalRequests`
+    /// (same flow a live request uses). Mirrors Android
+    /// `OwnerSpaceClient.fetchPendingDeviceApprovals`.
+    ///
+    /// The live approval request reaches the phone over a core-NATS
+    /// forApp.* subject with no replay — a phone that was killed or
+    /// offline when a desktop made the request never sees it. Pulling
+    /// on every post-unlock rebuilds the pending set from the vault,
+    /// the durable source of truth, so the user can still act on a
+    /// request that arrived while the app was down. Best-effort: a
+    /// transport error or timeout is logged and ignored.
+    func fetchPendingDeviceApprovals() async {
+        do {
+            let response = try await sendAndAwaitResponse(
+                "device.approval-pending",
+                timeout: 15
+            )
+            guard response.success else { return }
+            let pending = response.getArray("pending") ?? []
+            var surfaced = 0
+            for entry in pending {
+                guard let requestId = entry["request_id"] as? String, !requestId.isEmpty else {
+                    continue
+                }
+                let payloadDict = entry["payload"] as? [String: Any]
+                let request = DeviceApprovalRequest(
+                    requestId: requestId,
+                    connectionId: entry["connection_id"] as? String ?? "",
+                    deviceName: (entry["device_name"] as? String) ?? "Desktop",
+                    operation: entry["operation"] as? String ?? "unknown",
+                    secretCategory: (payloadDict?["id"] as? String).flatMap { $0.isEmpty ? nil : $0 },
+                    timestamp: entry["timestamp"] as? String
+                )
+                deviceApprovalContinuation?.yield(request)
+                surfaced += 1
+            }
+            #if DEBUG
+            if surfaced > 0 {
+                print("[OwnerSpaceClient] Pending-approvals pull: surfaced \(surfaced) device approval(s)")
+            }
+            #endif
+        } catch {
+            #if DEBUG
+            print("[OwnerSpaceClient] fetchPendingDeviceApprovals failed: \(error)")
+            #endif
+        }
+    }
+
+    /// Decode a `forApp.device.approval.request.<id>` message into a
+    /// `DeviceApprovalRequest`. Tolerates a null `payload` field — for
+    /// ops that carry no inner data (e.g. `secret.unlock-session`) the
+    /// vault serialises it as JSON null. Mirrors Android
+    /// `handleDeviceApprovalRequest` (commit bd5b681).
+    private static func parseDeviceApprovalRequest(raw: NatsMessage) -> DeviceApprovalRequest? {
+        guard let json = (try? JSONSerialization.jsonObject(with: raw.data)) as? [String: Any] else {
+            return nil
+        }
+        guard let requestId = json["request_id"] as? String, !requestId.isEmpty else {
+            return nil
+        }
+        // `payload` may be JSON null when the op carries no inner data;
+        // cast-to-dict naturally yields nil there.
+        let payloadDict = json["payload"] as? [String: Any]
+        return DeviceApprovalRequest(
+            requestId: requestId,
+            connectionId: json["connection_id"] as? String ?? "",
+            deviceName: (json["device_name"] as? String) ?? "Desktop",
+            operation: json["operation"] as? String ?? "unknown",
+            secretCategory: (payloadDict?["id"] as? String).flatMap { $0.isEmpty ? nil : $0 },
+            timestamp: json["timestamp"] as? String
+        )
+    }
+
+    /// Decode a `forApp.device.pending-authorization` message into a
+    /// `DevicePendingAuthNotification`. The desktop's identity card
+    /// (hostname / fingerprints / app version) is inlined under
+    /// `device_metadata`; the vault's session-duration policy under
+    /// `default_duration_seconds` + `max_duration_seconds`.
+    private static func parseDevicePendingAuth(raw: NatsMessage) -> DevicePendingAuthNotification? {
+        guard let json = (try? JSONSerialization.jsonObject(with: raw.data)) as? [String: Any] else {
+            return nil
+        }
+        // Allow either flat or nested `payload` shape — same tolerance
+        // we use for presence heartbeats.
+        let outer = (json["payload"] as? [String: Any]) ?? json
+        guard let connectionId = outer["connection_id"] as? String, !connectionId.isEmpty else {
+            return nil
+        }
+        let metaDict = outer["device_metadata"] as? [String: Any]
+        let metadata = metaDict.map { dict in
+            DevicePendingAuthMetadata(
+                hostname: dict["hostname"] as? String ?? "",
+                platform: dict["platform"] as? String ?? "",
+                osName: dict["os_name"] as? String ?? "",
+                osVersion: dict["os_version"] as? String ?? "",
+                appVersion: dict["app_version"] as? String ?? "",
+                clientIp: dict["client_ip"] as? String ?? "",
+                binaryFingerprint: dict["binary_fingerprint"] as? String ?? "",
+                machineFingerprint: dict["machine_fingerprint"] as? String ?? ""
+            )
+        }
+        let defaultSec = (outer["default_duration_seconds"] as? Int)
+            ?? (outer["default_duration_seconds"] as? Double).map(Int.init)
+            ?? 24 * 60 * 60
+        let maxSec = (outer["max_duration_seconds"] as? Int)
+            ?? (outer["max_duration_seconds"] as? Double).map(Int.init)
+            ?? 30 * 24 * 60 * 60
+        return DevicePendingAuthNotification(
+            connectionId: connectionId,
+            deviceMetadata: metadata,
+            defaultDurationSeconds: defaultSec,
+            maxDurationSeconds: maxSec
+        )
+    }
+
     // MARK: - Connection Events
 
     /// Publisher for connection acceptance notifications
@@ -899,6 +1075,38 @@ struct DeviceApprovalRequest: Codable {
         case secretCategory = "secret_category"
         case timestamp
     }
+}
+
+/// Stage-2 pairing handshake: paired desktop is waiting on the phone's
+/// `device.authorize-session` decision. Mirrors Android
+/// `DevicePendingAuthNotification`.
+struct DevicePendingAuthNotification: Equatable {
+    let connectionId: String
+    let deviceMetadata: DevicePendingAuthMetadata?
+    /// Vault's recommended session length. Surfaced as the default
+    /// chip selection in AuthorizeDeviceView's duration row.
+    let defaultDurationSeconds: Int
+    /// Vault's policy ceiling. Caps the chip row and the in-VM
+    /// `updateDuration` clamp.
+    let maxDurationSeconds: Int
+}
+
+/// Desktop identity card inlined under `device_metadata` of a
+/// `forApp.device.pending-authorization` message. Surfaced verbatim
+/// in AuthorizeDeviceView's fingerprint card so the user can compare
+/// bit-for-bit against the desktop's Settings → Device tab.
+struct DevicePendingAuthMetadata: Equatable {
+    let hostname: String
+    let platform: String
+    let osName: String
+    let osVersion: String
+    let appVersion: String
+    let clientIp: String
+    /// SHA-256 of the desktop binary, full 64-char hex.
+    let binaryFingerprint: String
+    /// HMAC-SHA256 over stable machine attributes. May be empty on
+    /// first-generation desktop builds.
+    let machineFingerprint: String
 }
 
 /// Connection peer accepted notification
