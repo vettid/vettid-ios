@@ -231,6 +231,90 @@ final class OwnerSpaceClient {
         payload: [String: AnyCodableValue] = [:],
         timeout: TimeInterval = 30
     ) async throws -> VaultHandlerResponse {
+        // Area D (Android 20ccbb9 + bc715b8): coalesce a burst of
+        // identical read-only ops into one vault round-trip. Screen-
+        // loads, the 30s periodic refresh, and event handlers
+        // routinely fire the same feed.sync / connection.list /
+        // wallet.list within the same second — this collapses each
+        // burst to a single op.
+        //
+        // The freshness window is load-bearing: a request arriving
+        // well after the leader started is a RETRY (the caller's
+        // previous attempt is failing/slow). It must NOT coalesce —
+        // if the leader is doomed (its response was lost to a NATS
+        // resubscribe), coalescing every retry into it turns one
+        // missed response into a 30s hang.
+        guard Self.dedupSafeOps.contains(messageType) else {
+            return try await dispatchVaultOp(
+                messageType: messageType,
+                payload: payload,
+                timeout: timeout
+            )
+        }
+
+        let key = Self.dedupKey(messageType: messageType, payload: payload)
+        let now = Date()
+
+        let leaderTask: Task<VaultHandlerResponse, Error>? = inflightLock.withLock {
+            if let existing = inflight[key] {
+                let age = now.timeIntervalSince(existing.startedAt)
+                if age <= Self.dedupCoalesceWindow {
+                    return existing.task
+                }
+                // Stale leader — caller is a deliberate retry. Bypass.
+                return nil
+            }
+            return nil
+        }
+        if let task = leaderTask {
+            #if DEBUG
+            print("[OwnerSpaceClient] Coalesced \(messageType) into in-flight request")
+            #endif
+            do {
+                return try await task.value
+            } catch {
+                // Leader failed — fall back to our own op.
+                return try await dispatchVaultOp(
+                    messageType: messageType,
+                    payload: payload,
+                    timeout: timeout
+                )
+            }
+        }
+
+        // We're the leader. Launch the dispatch in a child task so
+        // followers awaiting via `task.value` get the result.
+        let myTask = Task<VaultHandlerResponse, Error> {
+            try await dispatchVaultOp(
+                messageType: messageType,
+                payload: payload,
+                timeout: timeout
+            )
+        }
+        let myToken = UUID()
+        inflightLock.withLock {
+            inflight[key] = InflightOp(task: myTask, startedAt: now, token: myToken)
+        }
+        defer {
+            inflightLock.withLock {
+                // Only clear if it's still ours — a stale-retry path
+                // may have already overwritten the slot.
+                if inflight[key]?.token == myToken {
+                    inflight.removeValue(forKey: key)
+                }
+            }
+        }
+        return try await myTask.value
+    }
+
+    /// Single-flight dispatch — the unconditional one-vault-op path.
+    /// `sendAndAwaitResponse` wraps this with burst-dedup; both safe
+    /// reads and any mutation flow through here.
+    private func dispatchVaultOp(
+        messageType: String,
+        payload: [String: AnyCodableValue],
+        timeout: TimeInterval
+    ) async throws -> VaultHandlerResponse {
         let requestId = UUID().uuidString
         let requestSubject = "\(forVaultPrefix).\(messageType)"
         let responseSubject = "\(forAppPrefix).\(messageType).response"
@@ -264,6 +348,56 @@ final class OwnerSpaceClient {
         }
 
         return response
+    }
+
+    // MARK: - In-flight dedup (Area D — Android 20ccbb9 / bc715b8)
+
+    private struct InflightOp {
+        let task: Task<VaultHandlerResponse, Error>
+        let startedAt: Date
+        /// Identity token so the leader's `defer` can clear the slot
+        /// only if a stale-retry hasn't already overwritten it.
+        /// Swift `Task` is a struct so we can't compare by `===`.
+        let token: UUID
+    }
+    private var inflight: [String: InflightOp] = [:]
+    private let inflightLock = NSLock()
+
+    /// How long after a read op becomes the in-flight leader that a
+    /// later identical request still coalesces onto it. Sized to a
+    /// screen-load burst (sub-second). A request arriving past this
+    /// window is a deliberate retry and is issued fresh — so a retry
+    /// can recover from a leader whose response was lost (e.g. to a
+    /// NATS resubscribe) instead of joining its timeout.
+    private static let dedupCoalesceWindow: TimeInterval = 2.0
+
+    /// Idempotent read ops safe to coalesce. Strict allowlist: a
+    /// mutation must never be deduped, or two intentionally-identical
+    /// writes would collapse into one. These are the read ops that
+    /// screen-loads + the periodic refresh fire in bursts.
+    private static let dedupSafeOps: Set<String> = [
+        "feed.sync",
+        "location.peer.get",
+        "connection.list",
+        "wallet.list",
+        "personal-data.get",
+        "secret.list",
+        "device.list",
+        "audit.query",
+        "connection.audit.list",
+        "profile.get"
+    ]
+
+    /// Stable string key over messageType + payload shape. Equal
+    /// payloads must hash to equal keys; we serialise with sorted
+    /// keys to make that robust against dict-iteration order.
+    private static func dedupKey(messageType: String, payload: [String: AnyCodableValue]) -> String {
+        // AnyCodableValue is Codable; use JSONEncoder with sortedKeys
+        // so the same payload always produces the same string.
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        let payloadStr = (try? encoder.encode(payload)).flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        return "\(messageType) \(payloadStr)"
     }
 
     /// Parse vault response data into a VaultHandlerResponse

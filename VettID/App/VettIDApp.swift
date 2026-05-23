@@ -679,6 +679,17 @@ class AppState: ObservableObject {
             osc.startDeviceEventSubscription()
             self.startDeviceApprovalObserver(osc)
             Task { await osc.fetchPendingDeviceApprovals() }
+
+            // Area D (Android ab25dc2): pre-warm the caches the
+            // first post-unlock screen will read so Feed /
+            // Connections render without a Loading flash. Fires
+            // in parallel; each helper is self-throttling
+            // (ConnectionsClient.warmList early-outs on a hot
+            // cache; PersonalDataStore.hydrate is idempotent).
+            // PersonalDataStore hydrate already runs above; only
+            // warmList still needs to be kicked here.
+            let connectionsClient = ConnectionsClient(ownerSpaceClient: osc)
+            Task.detached { await connectionsClient.warmList() }
         }
     }
 

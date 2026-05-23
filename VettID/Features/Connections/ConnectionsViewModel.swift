@@ -90,7 +90,17 @@ final class ConnectionsViewModel: ObservableObject {
 
     /// Load connections, trying NATS first with HTTP fallback
     func loadConnections() async {
-        state = .loading
+        // Area D (Android 0691ed2): render optimistically from the
+        // ConnectionsClient cache before issuing the fetch. Skips
+        // the Loading flash entirely on the hot path (D #142
+        // pre-warm or a recent screen visit populated it). The
+        // refresh underneath then replaces the snapshot.
+        if let client = connectionsClient,
+           let snapshot = client.cachedListSnapshot(status: "active") {
+            applyNatsListResult(snapshot)
+        } else {
+            state = .loading
+        }
 
         // Try NATS-based loading first
         if connectionsClient != nil {
@@ -123,52 +133,60 @@ final class ConnectionsViewModel: ObservableObject {
 
         do {
             let listResult = try await client.list(status: "active")
-            let isoFormatter = ISO8601DateFormatter()
-
-            let connections = listResult.items.map { record -> Connection in
-                let displayName = record.peerProfile?.displayName ?? record.label
-                let createdDate = isoFormatter.date(from: record.createdAt) ?? Date()
-                let expiresDate = record.expiresAt.flatMap { isoFormatter.date(from: $0) }
-                let rotatedDate = record.lastRotatedAt.flatMap { isoFormatter.date(from: $0) }
-
-                let status: ConnectionStatus
-                switch record.status {
-                case "active": status = .active
-                case "revoked": status = .revoked
-                default: status = .pending
-                }
-
-                return Connection(
-                    id: record.connectionId,
-                    peerGuid: record.peerGuid,
-                    peerDisplayName: displayName,
-                    peerAvatarUrl: record.peerProfile?.photo,
-                    status: status,
-                    createdAt: createdDate,
-                    direction: record.direction,
-                    e2ePublicKey: record.e2ePublicKey,
-                    peerProfile: record.peerProfile,
-                    lastRotatedAt: rotatedDate,
-                    expiresAt: expiresDate
-                )
-            }
-
-            allConnections = connections.sorted {
-                ($0.lastMessageAt ?? $0.createdAt) > ($1.lastMessageAt ?? $1.createdAt)
-            }
-
-            if allConnections.isEmpty && serviceConnections.isEmpty {
-                state = .empty
-            } else {
-                state = .loaded(filteredConnections)
-            }
-
+            applyNatsListResult(listResult)
             return true
         } catch {
             #if DEBUG
             print("[ConnectionsViewModel] NATS loadFromNats failed, falling back to HTTP: \(error)")
             #endif
             return false
+        }
+    }
+
+    /// Area D (Android 0691ed2): shared mapping from a vault
+    /// `NatsConnectionListResult` to the screen's `allConnections`
+    /// + state. Used by both the optimistic cache-render path and
+    /// the live fetch — keeping them in one place ensures the
+    /// optimistic UI matches the post-fetch UI exactly.
+    private func applyNatsListResult(_ listResult: NatsConnectionListResult) {
+        let isoFormatter = ISO8601DateFormatter()
+
+        let connections = listResult.items.map { record -> Connection in
+            let displayName = record.peerProfile?.displayName ?? record.label
+            let createdDate = isoFormatter.date(from: record.createdAt) ?? Date()
+            let expiresDate = record.expiresAt.flatMap { isoFormatter.date(from: $0) }
+            let rotatedDate = record.lastRotatedAt.flatMap { isoFormatter.date(from: $0) }
+
+            let status: ConnectionStatus
+            switch record.status {
+            case "active": status = .active
+            case "revoked": status = .revoked
+            default: status = .pending
+            }
+
+            return Connection(
+                id: record.connectionId,
+                peerGuid: record.peerGuid,
+                peerDisplayName: displayName,
+                peerAvatarUrl: record.peerProfile?.photo,
+                status: status,
+                createdAt: createdDate,
+                direction: record.direction,
+                e2ePublicKey: record.e2ePublicKey,
+                peerProfile: record.peerProfile,
+                lastRotatedAt: rotatedDate,
+                expiresAt: expiresDate
+            )
+        }
+
+        allConnections = connections.sorted {
+            ($0.lastMessageAt ?? $0.createdAt) > ($1.lastMessageAt ?? $1.createdAt)
+        }
+
+        if allConnections.isEmpty && serviceConnections.isEmpty {
+            state = .empty
+        } else {
+            state = .loaded(filteredConnections)
         }
     }
 

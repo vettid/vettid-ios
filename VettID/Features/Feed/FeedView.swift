@@ -3,6 +3,7 @@ import SwiftUI
 // MARK: - Feed View
 
 struct FeedView: View {
+    @EnvironmentObject var appState: AppState
     @StateObject private var viewModel = FeedViewModel()
     @State private var isSearching = false
 
@@ -296,6 +297,16 @@ struct FeedView: View {
         if card.isSystem {
             showVaultMessages = true
             return
+        }
+        // Area D (Android ccc9285): speculative connection.list
+        // pre-fetch on card tap. The detail screen will read the
+        // cache when it mounts; we kick the warm in the background
+        // here so by the time the navigation lands, the cache is
+        // ready. Self-throttled — already-hot cache early-outs.
+        if let osc = appState.ownerSpaceClient {
+            Task.detached {
+                await ConnectionsClient(ownerSpaceClient: osc).warmList()
+            }
         }
         let dest = card.needsReview ? "review" : "detail"
         #if DEBUG
