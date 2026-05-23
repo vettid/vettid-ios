@@ -105,7 +105,22 @@ final class ConnectionAuditClient {
             nextCursor = AuditCursor(createdAt: createdAt, entryId: entryId)
         }
         let total = result["total_estimate"] as? Int ?? entries.count
-        return AuditListResult(entries: entries, nextCursor: nextCursor, totalEstimate: total)
+        // Area C (Android 2150404): forward the audit-chain anchor.
+        // Vault returns it on every connection.audit.list response when
+        // the session has an audit key. Absent → caller renders rows
+        // as Unsigned. Strings stripped to nil-on-blank so the verifier
+        // can fail-fast in the no-anchor case.
+        let anchor = AuditChainVerifier.ChainAnchor(
+            auditPubB64: (result["audit_pub"] as? String).flatMap { $0.isEmpty ? nil : $0 },
+            bindingSigB64: (result["binding_sig"] as? String).flatMap { $0.isEmpty ? nil : $0 },
+            identityPubB64: (result["identity_pub"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        )
+        return AuditListResult(
+            entries: entries,
+            nextCursor: nextCursor,
+            totalEstimate: total,
+            chainAnchor: anchor
+        )
     }
 }
 
@@ -131,6 +146,14 @@ struct AuditEntry: Identifiable, Equatable {
     /// underlying object.
     let refs: [String: String]?
     let metadata: [String: String]?
+    /// Area C (Android 2150404): audit-chain row fields. The vault
+    /// emits these alongside the entry when the chain anchor is
+    /// available; the client runs them through `AuditChainVerifier`
+    /// to stamp each row Verified / Tampered / Unsigned. Nil/empty
+    /// for legacy pre-chain rows — those render Unsigned.
+    let entryHash: String?
+    let previousHash: String?
+    let entrySig: String?
 
     var id: String { entryId }
     var createdAtDate: Date { Date(timeIntervalSince1970: createdAt) }
@@ -154,7 +177,10 @@ struct AuditEntry: Identifiable, Equatable {
             body: dict["body"] as? String,
             createdAt: createdAt,
             refs: dict["refs"] as? [String: String],
-            metadata: dict["metadata"] as? [String: String]
+            metadata: dict["metadata"] as? [String: String],
+            entryHash: dict["entry_hash"] as? String,
+            previousHash: dict["previous_hash"] as? String,
+            entrySig: dict["entry_sig"] as? String
         )
     }
 }
@@ -172,6 +198,23 @@ struct AuditListResult {
     let nextCursor: AuditCursor?
     /// Best-effort estimate from the vault for empty-state messaging.
     let totalEstimate: Int
+    /// Area C (Android 2150404): chain anchor for client-side
+    /// `AuditChainVerifier`. Absent (all-nil) means the vault hadn't
+    /// been unlocked this session when the page was fetched — caller
+    /// renders every row as Unsigned.
+    let chainAnchor: AuditChainVerifier.ChainAnchor
+
+    init(
+        entries: [AuditEntry],
+        nextCursor: AuditCursor?,
+        totalEstimate: Int,
+        chainAnchor: AuditChainVerifier.ChainAnchor = AuditChainVerifier.ChainAnchor.empty
+    ) {
+        self.entries = entries
+        self.nextCursor = nextCursor
+        self.totalEstimate = totalEstimate
+        self.chainAnchor = chainAnchor
+    }
 }
 
 // MARK: - Time-range filter
