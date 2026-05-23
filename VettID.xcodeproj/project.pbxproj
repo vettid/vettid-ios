@@ -370,6 +370,7 @@
 		FFEC75DD850E79B5ED665914 /* VaultPreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8285A14EAFF8FCF54C60C6E2 /* VaultPreferencesView.swift */; };
 		1310CA520E3A8F4E6A5DA5A1 /* AppleNatsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE971FCB35D943C78FBDE794 /* AppleNatsClient.swift */; };
 		0499DC9B10E3448E0C9002D0 /* NKeys in Frameworks */ = {isa = PBXBuildFile; productRef = A453624F6AB64C8C0C5C5658 /* NKeys */; };
+		5B58334DE06897BF3105A67D /* PinAttemptTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69CAFB3459AA1A342A64050B /* PinAttemptTracker.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -764,6 +765,7 @@
 		FD000368D20F4D86A91D50FD /* DataRequestSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataRequestSheet.swift; sourceTree = "<group>"; };
 		FE16327EB86641DCA62EDC24 /* DeviceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceModels.swift; sourceTree = "<group>"; };
 		AE971FCB35D943C78FBDE794 /* AppleNatsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleNatsClient.swift; sourceTree = "<group>"; };
+		69CAFB3459AA1A342A64050B /* PinAttemptTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinAttemptTracker.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1266,6 +1268,7 @@
 				10000050 /* SecurePasteboard.swift */,
 				10000051 /* ScreenProtection.swift */,
 				7AFABA11945E99D1E175383D /* ApiSecurity.swift */,
+				69CAFB3459AA1A342A64050B /* PinAttemptTracker.swift */,
 			);
 			path = VettID/Core/Security;
 			sourceTree = SOURCE_ROOT;
@@ -2247,6 +2250,7 @@
 				27A0738ACBC28521326D3B89 /* TrustedPCRStore.swift in Sources */,
 				E483F66A5C2888C27DAD8A2B /* EnclaveUpdatePromptView.swift in Sources */,
 							1310CA520E3A8F4E6A5DA5A1 /* AppleNatsClient.swift in Sources */,
+				5B58334DE06897BF3105A67D /* PinAttemptTracker.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
