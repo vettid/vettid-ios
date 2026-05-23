@@ -93,6 +93,12 @@ struct GrantSummary: Identifiable, Equatable {
     let expiresAt: Date?
     let maxUses: Int
     let usesRemaining: Int
+    /// Area A (Android e6857ba): alias group this grant belongs to,
+    /// when the request was made for a multi-field alias bundle (e.g.
+    /// "Driver's License" covering license #, expiry, state). Nil for
+    /// single-field grants. Outbound list collapses by this field so
+    /// the user sees one row per alias.
+    let aliasGroup: String?
 
     var id: String { grantId }
 
@@ -120,7 +126,8 @@ struct GrantSummary: Identifiable, Equatable {
             createdAt: createdAt > 0 ? Date(timeIntervalSince1970: createdAt) : Date(),
             expiresAt: expiresAt > 0 ? Date(timeIntervalSince1970: expiresAt) : nil,
             maxUses: (dict["max_uses"] as? Int) ?? 0,
-            usesRemaining: (dict["uses_remaining"] as? Int) ?? 0
+            usesRemaining: (dict["uses_remaining"] as? Int) ?? 0,
+            aliasGroup: (dict["alias_group"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         )
     }
 }

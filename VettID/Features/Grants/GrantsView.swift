@@ -74,7 +74,14 @@ struct GrantsView: View {
                  emptyTitle: "No pending requests",
                  emptyMessage: "When a connection asks for access to your data, it'll show up here.")
         case .granted:
-            list(rows: viewModel.outbound.map { .grant($0, direction: .outbound) },
+            // Area A (Android e6857ba): collapse outbound grants
+            // that share an alias group into one row per alias so
+            // a multi-field grant (Driver's License → license #,
+            // expiry, state) doesn't sprawl into three rows. The
+            // collapsed row labels the alias and shows the field
+            // count so the user can see the breadth at a glance.
+            list(rows: Self.collapseByAlias(viewModel.outbound)
+                          .map { GrantRow.grant($0.merged, direction: .outbound) },
                  emptyTitle: "Nothing granted yet",
                  emptyMessage: "Grants you've approved will appear here.")
         case .received:
@@ -132,6 +139,63 @@ struct GrantsView: View {
                 challenge: req.reason
             )
         }
+    }
+
+    /// Area A (Android e6857ba): collapse outbound grants by
+    /// (connection, aliasGroup). Grants without an aliasGroup, or
+    /// the only grant in a group, render unchanged. A multi-field
+    /// alias collapses into one synthetic row whose label is the
+    /// alias name and subtitle lists the field count + the
+    /// shared expiry/mode (taken from the most-recent grant).
+    private struct CollapsedGrant {
+        let merged: GrantSummary
+        let memberCount: Int
+    }
+    private static func collapseByAlias(_ grants: [GrantSummary]) -> [CollapsedGrant] {
+        var byKey: [String: [GrantSummary]] = [:]
+        var keyOrder: [String] = []
+        var singletonOrder: [GrantSummary] = []
+        for grant in grants {
+            if let alias = grant.aliasGroup?.trimmingCharacters(in: .whitespaces), !alias.isEmpty {
+                let key = "\(grant.connectionId)|\(alias)"
+                if byKey[key] == nil { keyOrder.append(key) }
+                byKey[key, default: []].append(grant)
+            } else {
+                singletonOrder.append(grant)
+            }
+        }
+        var result: [CollapsedGrant] = []
+        for key in keyOrder {
+            let bucket = byKey[key] ?? []
+            if bucket.count == 1 {
+                singletonOrder.append(bucket[0])
+                continue
+            }
+            // Pick the most recent grant as the representative;
+            // overwrite itemLabel with the alias name + count so
+            // the row reads as one alias bundle.
+            let representative = bucket.max(by: { $0.createdAt < $1.createdAt }) ?? bucket[0]
+            let alias = bucket[0].aliasGroup ?? "Alias"
+            let aliasLabel = "\(alias) · \(bucket.count) fields"
+            let merged = GrantSummary(
+                grantId: representative.grantId,
+                connectionId: representative.connectionId,
+                peerLabel: representative.peerLabel,
+                kind: representative.kind,
+                itemRef: representative.itemRef,
+                itemLabel: aliasLabel,
+                mode: representative.mode,
+                status: representative.status,
+                createdAt: representative.createdAt,
+                expiresAt: representative.expiresAt,
+                maxUses: representative.maxUses,
+                usesRemaining: representative.usesRemaining,
+                aliasGroup: representative.aliasGroup
+            )
+            result.append(CollapsedGrant(merged: merged, memberCount: bucket.count))
+        }
+        result.append(contentsOf: singletonOrder.map { CollapsedGrant(merged: $0, memberCount: 1) })
+        return result
     }
 
     private func emptyView(title: String, message: String) -> some View {
