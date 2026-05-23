@@ -210,17 +210,87 @@ final class PCRManifestManager {
     ///   - attestationDocument: The attestation document to verify
     ///   - nonce: Optional nonce for freshness
     /// - Returns: Verification result if any PCR set matches
+    ///
+    /// SECURITY (Area E #234): force-refresh the manifest and retry
+    /// ONCE on a clean PCR-mismatch sweep across the cached sets.
+    /// Without this, an enclave that's been redeployed past the cached
+    /// manifest is unreachable until the next cacheDuration tick — a
+    /// user who tries to PIN-unlock during that window gets locked out
+    /// even though a fresh manifest is one network call away. Sig /
+    /// nonce failures aren't retried; they wouldn't be cured by a
+    /// fresh manifest. Mirrors Android AttestationRetryingVerifier
+    /// (commit ea00e46).
     func verifyAttestation(
         _ attestationDocument: Data,
         nonce: Data? = nil
     ) async throws -> NitroAttestationVerifier.AttestationResult {
+        do {
+            return try await verifyAttestationOnce(
+                attestationDocument,
+                nonce: nonce,
+                forceRefresh: false
+            )
+        } catch let error as NitroAttestationError {
+            // Only retry when the failure is a PCR mismatch. Signature
+            // or nonce failures aren't a manifest-staleness problem
+            // and we don't want to mask them with a second round-trip.
+            if case .pcrMismatch = error {
+                #if DEBUG
+                print("[PCRManifestManager] PCR mismatch on cached manifest; force-refreshing and retrying once")
+                #endif
+                return try await verifyAttestationOnce(
+                    attestationDocument,
+                    nonce: nonce,
+                    forceRefresh: true
+                )
+            }
+            throw error
+        } catch let error as PCRManifestError {
+            if case .noValidPCRSets = error {
+                #if DEBUG
+                print("[PCRManifestManager] No valid PCR sets matched cached manifest; force-refreshing and retrying once")
+                #endif
+                return try await verifyAttestationOnce(
+                    attestationDocument,
+                    nonce: nonce,
+                    forceRefresh: true
+                )
+            }
+            throw error
+        }
+    }
+
+    /// Single attestation-verify sweep across whatever PCR sets the
+    /// cached (or force-refreshed) manifest currently exposes.
+    private func verifyAttestationOnce(
+        _ attestationDocument: Data,
+        nonce: Data?,
+        forceRefresh: Bool
+    ) async throws -> NitroAttestationVerifier.AttestationResult {
         let verifier = NitroAttestationVerifier()
-        let validSets = try await getAllValidPCRSets()
+        let validSets = try await getAllValidPCRSets(forceRefresh: forceRefresh)
+
+        // SECURITY (Area E #53): refuse to verify against the all-
+        // zeros bootstrap PCRs (the "development-placeholder" set the
+        // bundled fallback exposes when no real manifest has been
+        // fetched yet). Without this guard, a hostile attestation
+        // doc with all-zero PCRs would silently match the placeholder
+        // and bridge into the attestation path. Mirrors Android
+        // 4fa73fa. Filtered here rather than in getAllValidPCRSets so
+        // unrelated callers (e.g. UI badge "we have real PCRs") can
+        // still see the placeholder.
+        let filteredSets = validSets.filter { !Self.isAllZerosPlaceholder($0) }
+        if filteredSets.isEmpty {
+            #if DEBUG
+            print("[PCRManifestManager] verifyAttestation called before real PCRs fetched — failing closed")
+            #endif
+            throw PCRManifestError.noValidPCRSets
+        }
 
         var lastError: Error?
 
         // Try each valid PCR set
-        for pcrSet in validSets {
+        for pcrSet in filteredSets {
             do {
                 let result = try verifier.verify(
                     attestationDocument: attestationDocument,
@@ -241,6 +311,24 @@ final class PCRManifestManager {
 
         // No PCR set matched
         throw lastError ?? PCRManifestError.noValidPCRSets
+    }
+
+    /// SECURITY (Area E #53): true when the PCR set is the all-zeros
+    /// bootstrap placeholder. The bundled fallback exposes one such
+    /// set with id "development-placeholder"; treating it as a real
+    /// verification candidate would silently pass any attestation
+    /// document carrying all-zero PCRs. Defence-in-depth — the id
+    /// match is the primary signal; the all-zeros byte check guards
+    /// against the placeholder being renamed.
+    private static func isAllZerosPlaceholder(_ set: PCRSet) -> Bool {
+        if set.id == "development-placeholder" { return true }
+        return Self.isAllZerosHex(set.pcr0)
+            && Self.isAllZerosHex(set.pcr1)
+            && Self.isAllZerosHex(set.pcr2)
+    }
+
+    private static func isAllZerosHex(_ hex: String) -> Bool {
+        !hex.isEmpty && hex.allSatisfy { $0 == "0" }
     }
 
     // MARK: - Manifest Fetching
