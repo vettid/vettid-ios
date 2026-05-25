@@ -36,11 +36,13 @@ final class CreateAgentInvitationViewModel: ObservableObject {
             return
         }
 
-        let label = agentName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !label.isEmpty else {
-            state = .error("Agent name cannot be empty")
-            return
-        }
+        // Area G (Android bbe0f2a + 8649b2f): the name + scope prompt
+        // is deferred to AuthorizeAgentView at Stage 2 — Stage 1
+        // creates the invite with a "Pending agent…" placeholder so
+        // the brief window between Stage 1 and Stage 2 doesn't paint
+        // a generic "Agent" label on the connection list.
+        let trimmed = agentName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let label = trimmed.isEmpty ? "Pending agent…" : trimmed
 
         state = .creating
 

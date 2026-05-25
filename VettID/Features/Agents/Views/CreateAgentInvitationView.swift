@@ -6,7 +6,6 @@ import SwiftUI
 struct CreateAgentInvitationView: View {
     @StateObject private var viewModel: CreateAgentInvitationViewModel
     @Environment(\.dismiss) private var dismiss
-    @State private var agentName = ""
     @State private var showCopiedFeedback = false
 
     init(ownerSpaceClient: OwnerSpaceClient? = nil) {
@@ -58,33 +57,25 @@ struct CreateAgentInvitationView: View {
                         .font(.title2)
                         .fontWeight(.bold)
 
-                    Text("Create an invitation to connect an AI agent tool to your vault.")
+                    Text("Create an invitation to connect an AI agent tool to your vault. You'll name it and pick its permissions after the agent connects.")
                         .font(.body)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 16)
                 }
 
-                // Name field
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Agent Name")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-
-                    TextField("e.g., Claude Code, GitHub Copilot", text: $agentName)
-                        .textFieldStyle(.roundedBorder)
-                        .autocorrectionDisabled()
-                }
-                .padding(.horizontal, 24)
-
-                // Info card
+                // Info card (Area G — Android bbe0f2a: name + scope
+                // prompt deferred to AuthorizeAgentView at Stage 2).
                 infoCard
                     .padding(.horizontal, 24)
 
                 // Create button
                 Button {
                     Task {
-                        await viewModel.createInvitation(agentName: agentName)
+                        // Empty name → vault uses "Pending agent…"
+                        // placeholder until Stage 2 writes the real
+                        // name (Android 8649b2f).
+                        await viewModel.createInvitation(agentName: "")
                     }
                 } label: {
                     HStack {
@@ -94,7 +85,6 @@ struct CreateAgentInvitationView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(agentName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .padding(.horizontal, 24)
             }
             .padding(.bottom, 24)
@@ -210,7 +200,7 @@ struct CreateAgentInvitationView: View {
 
             Button("Retry") {
                 Task {
-                    await viewModel.createInvitation(agentName: agentName)
+                    await viewModel.createInvitation(agentName: "")
                 }
             }
             .buttonStyle(.borderedProminent)
@@ -231,7 +221,7 @@ struct CreateAgentInvitationView: View {
                     .font(.subheadline)
                     .fontWeight(.semibold)
 
-                Text("After creating the invitation, run the invite command on the machine where your agent runs. The agent will connect to your vault with \"always ask\" approval mode by default.")
+                Text("Tap Create to generate an invite code. Run the invite command on the machine where your agent runs, then you'll review and name the agent before approving the session.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
