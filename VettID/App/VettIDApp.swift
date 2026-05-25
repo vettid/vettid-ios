@@ -236,6 +236,13 @@ class AppState: ObservableObject {
     /// approve/deny/dismiss via `clearPendingDeviceApproval`.
     @Published var pendingDeviceApproval: DeviceApprovalRequest?
 
+    /// Area G — Stage-2 agent pairing notification the user needs to
+    /// authorize right now (scope picker + duration). Set by the
+    /// `forApp.agent.pending-authorization` observer; cleared via
+    /// `clearPendingAgentAuth`. Mirrors Android's `agentPendingAuth`
+    /// LaunchedEffect in VettIDApp.kt.
+    @Published var pendingAgentAuth: AgentPendingAuthNotification?
+
     // NATS connection manager for vault operations
     lazy var natsConnectionManager: NatsConnectionManager = {
         NatsConnectionManager(userGuidProvider: { [weak self] in
@@ -294,6 +301,11 @@ class AppState: ObservableObject {
     /// into `pendingDeviceApproval`. Held here so a credential-rotation
     /// space-change can cancel the old observer before starting a new one.
     private var deviceApprovalObserverTask: Task<Void, Never>?
+
+    /// Area G — observer task that bridges `OwnerSpaceClient.agentPendingAuth`
+    /// into `pendingAgentAuth`. Held here for the same lifecycle reason
+    /// as the device approval observer.
+    private var agentPendingAuthObserverTask: Task<Void, Never>?
 
     /// Flag indicating if running in UI test mode
     static var isUITesting: Bool {
@@ -680,6 +692,13 @@ class AppState: ObservableObject {
             self.startDeviceApprovalObserver(osc)
             Task { await osc.fetchPendingDeviceApprovals() }
 
+            // Area G: wire the forApp.agent.> subscription so Stage-2
+            // agent pairings reach the app + bridge pending-auth
+            // events to AppState so root-level navigation can present
+            // AuthorizeAgentView.
+            osc.startAgentEventSubscription()
+            self.startAgentPendingAuthObserver(osc)
+
             // Area D (Android ab25dc2): pre-warm the caches the
             // first post-unlock screen will read so Feed /
             // Connections render without a Loading flash. Fires
@@ -719,6 +738,29 @@ class AppState: ObservableObject {
     /// Mirrors Android `AppViewModel.clearPendingDeviceApproval`.
     func clearPendingDeviceApproval() {
         pendingDeviceApproval = nil
+    }
+
+    /// Area G — bridge `OwnerSpaceClient.agentPendingAuth` into
+    /// `AppState.pendingAgentAuth` so root-level navigation can
+    /// present AuthorizeAgentView the moment a Stage-2 pairing
+    /// arrives. Mirrors `startDeviceApprovalObserver`.
+    private func startAgentPendingAuthObserver(_ client: OwnerSpaceClient) {
+        agentPendingAuthObserverTask?.cancel()
+        agentPendingAuthObserverTask = Task { [weak self] in
+            for await notification in client.agentPendingAuth {
+                guard let self = self else { return }
+                await MainActor.run { self.pendingAgentAuth = notification }
+                #if DEBUG
+                print("[AppState] pendingAgentAuth set: \(notification.connectionId) (\(notification.agentMetadata?.agentType ?? "agent"))")
+                #endif
+            }
+        }
+    }
+
+    /// Called from AuthorizeAgentView on Done/Deny/dismiss so the
+    /// root-level cover unmounts.
+    func clearPendingAgentAuth() {
+        pendingAgentAuth = nil
     }
 
     /// Mark vault as cold (e.g., after background timeout)

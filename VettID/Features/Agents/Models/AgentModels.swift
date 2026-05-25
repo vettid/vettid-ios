@@ -137,7 +137,12 @@ enum AgentApprovalState: Equatable {
 /// `OwnerSpace.<guid>.forApp.agent.pending-authorization`. Parallel to
 /// `DevicePendingAuthNotification` but carries scope + duration hints
 /// the desktop equivalent doesn't need.
-struct AgentPendingAuthNotification: Equatable {
+///
+/// `Identifiable` (id = connectionId) so ContentView's
+/// `fullScreenCover(item:)` binding can present
+/// `AuthorizeAgentView` directly on a `pendingAgentAuth` value.
+struct AgentPendingAuthNotification: Equatable, Identifiable {
+    var id: String { connectionId }
     let connectionId: String
     let approvalToken: String
     let agentPubKey: String
