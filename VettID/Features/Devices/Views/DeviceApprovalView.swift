@@ -34,11 +34,18 @@ struct DeviceApprovalView: View {
                     processingView(message: "Denying request...")
 
                 case .approved:
+                    // Area G (Android d4cb91d): auto-dismiss the
+                    // success card after a brief beat. The user
+                    // approved, sees the confirmation, and the app
+                    // gets out of the way. Denied / Timeout keep
+                    // the explicit dismiss because the user may
+                    // want to read the reason.
                     resultView(
                         icon: "checkmark.circle.fill",
                         iconColor: .green,
                         title: "Device Approved",
-                        message: "The device has been approved and can now connect to your vault."
+                        message: "The device has been approved and can now connect to your vault.",
+                        autoDismiss: true
                     )
 
                 case .denied:
@@ -287,7 +294,13 @@ struct DeviceApprovalView: View {
 
     // MARK: - Result View
 
-    private func resultView(icon: String, iconColor: Color, title: String, message: String) -> some View {
+    private func resultView(
+        icon: String,
+        iconColor: Color,
+        title: String,
+        message: String,
+        autoDismiss: Bool = false
+    ) -> some View {
         VStack(spacing: 32) {
             Spacer()
 
@@ -308,17 +321,27 @@ struct DeviceApprovalView: View {
 
             Spacer()
 
-            Button {
-                dismiss()
-            } label: {
-                Text("Done")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.blue)
-                    .foregroundColor(.white)
-                    .cornerRadius(12)
+            // Auto-dismiss path skips the Done button — the screen
+            // closes itself after a 1.2 s beat. Mirrors Android
+            // d4cb91d's LaunchedEffect delay(1200) on Approved.
+            if !autoDismiss {
+                Button {
+                    dismiss()
+                } label: {
+                    Text("Done")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(12)
+                }
             }
+        }
+        .task(id: autoDismiss) {
+            guard autoDismiss else { return }
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            dismiss()
         }
     }
 

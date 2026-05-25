@@ -94,7 +94,8 @@ struct ConversationView: View {
                         ForEach(group.messages) { message in
                             MessageBubble(
                                 message: message,
-                                isSent: message.senderId == viewModel.currentUserId
+                                isSent: message.senderId == viewModel.currentUserId,
+                                isAgent: viewModel.isAgentConnection
                             )
                             .id(message.id)
                             .onAppear {
@@ -193,6 +194,12 @@ struct DateDivider: View {
 struct MessageBubble: View {
     let message: Message
     let isSent: Bool
+    /// Area G (Android 6650853): agent conversations suppress per-
+    /// message read receipts. The recipient is a process, not a
+    /// human — "delivered" / "read" indicators would imply a
+    /// status the agent has no notion of. Defaults to false so
+    /// existing peer-conversation callers behave exactly as before.
+    var isAgent: Bool = false
     /// Phase 5.6 — invoked when a recipient taps "Pay" on an inbound
     /// payment request. Optional so legacy callers still compile.
     var onPayRequest: ((PaymentRequest) -> Void)? = nil
@@ -214,7 +221,7 @@ struct MessageBubble: View {
                         .font(.caption2)
                         .foregroundColor(.secondary)
 
-                    if isSent {
+                    if isSent && !isAgent {
                         MessageStatusIcon(status: message.status)
                     }
                 }
