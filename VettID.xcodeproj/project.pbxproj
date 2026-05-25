@@ -375,6 +375,9 @@
 		B67102FA360851AAB87E0D00 /* DesktopConnectionDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62A6449463D07AE37C1A7785 /* DesktopConnectionDetailViewModel.swift */; };
 		7D0929D3B1650ADC325303F5 /* DesktopConnectionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4F9008FF781E5B175E326F8 /* DesktopConnectionDetailView.swift */; };
 		5B58334DE06897BF3105A67D /* PinAttemptTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69CAFB3459AA1A342A64050B /* PinAttemptTracker.swift */; };
+		5031F58D9C1B4FFC159B0EA8 /* AgentScopeLabels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 672518662F65036B9EE065FA /* AgentScopeLabels.swift */; };
+		558FA4764707B0A44E5899CB /* AuthorizeAgentViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98797B3F232BD1152ABEF1B2 /* AuthorizeAgentViewModel.swift */; };
+		70F90E1CC7FDCC105BF6339A /* AuthorizeAgentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96A16B30206BB30AF954F243 /* AuthorizeAgentView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -774,6 +777,9 @@
 		62A6449463D07AE37C1A7785 /* DesktopConnectionDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopConnectionDetailViewModel.swift; sourceTree = "<group>"; };
 		F4F9008FF781E5B175E326F8 /* DesktopConnectionDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopConnectionDetailView.swift; sourceTree = "<group>"; };
 		69CAFB3459AA1A342A64050B /* PinAttemptTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinAttemptTracker.swift; sourceTree = "<group>"; };
+		672518662F65036B9EE065FA /* AgentScopeLabels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentScopeLabels.swift; sourceTree = "<group>"; };
+		98797B3F232BD1152ABEF1B2 /* AuthorizeAgentViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthorizeAgentViewModel.swift; sourceTree = "<group>"; };
+		96A16B30206BB30AF954F243 /* AuthorizeAgentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthorizeAgentView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1377,6 +1383,7 @@
 				F9E8562654A04FE5B0A51AF3 /* AgentManagementViewModel.swift */,
 				8262E49C26F34DD9AC80C979 /* AgentApprovalViewModel.swift */,
 				3161116EF69E42939707CF54 /* CreateAgentInvitationViewModel.swift */,
+				98797B3F232BD1152ABEF1B2 /* AuthorizeAgentViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -1402,6 +1409,7 @@
 			isa = PBXGroup;
 			children = (
 				268BF9C3C06C47C6A3F55452 /* AgentModels.swift */,
+				672518662F65036B9EE065FA /* AgentScopeLabels.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -1519,6 +1527,7 @@
 				835FD46334F14325A9605057 /* AgentManagementView.swift */,
 				EE88639454A54B66B331A847 /* AgentApprovalView.swift */,
 				9B99FA6C415A4E2A8329FE71 /* CreateAgentInvitationView.swift */,
+				96A16B30206BB30AF954F243 /* AuthorizeAgentView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -2267,6 +2276,9 @@
 				B67102FA360851AAB87E0D00 /* DesktopConnectionDetailViewModel.swift in Sources */,
 				7D0929D3B1650ADC325303F5 /* DesktopConnectionDetailView.swift in Sources */,
 				5B58334DE06897BF3105A67D /* PinAttemptTracker.swift in Sources */,
+				5031F58D9C1B4FFC159B0EA8 /* AgentScopeLabels.swift in Sources */,
+				558FA4764707B0A44E5899CB /* AuthorizeAgentViewModel.swift in Sources */,
+				70F90E1CC7FDCC105BF6339A /* AuthorizeAgentView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
