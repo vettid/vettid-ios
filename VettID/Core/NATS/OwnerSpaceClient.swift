@@ -478,6 +478,30 @@ final class OwnerSpaceClient {
         return stream
     }
 
+    /// Area H — agent-initiated LEASH mint request. The agent
+    /// publishes a `leash_mint_request` envelope, the vault stores
+    /// a `PendingLeashRequest`, and the phone receives
+    /// `forApp.agent.leash-mint-pending` with the owner's choice
+    /// of scope/duration. Distinct from `agentPendingAuth` (which is
+    /// pair-time session authorization) — this is a per-mint
+    /// request issued by an already-paired agent.
+    /// Mirrors Android ef03314.
+    private var agentLeashMintContinuation: AsyncStream<AgentLeashMintPendingNotification>.Continuation?
+    private var _agentLeashMintStream: AsyncStream<AgentLeashMintPendingNotification>?
+
+    var agentLeashMintPending: AsyncStream<AgentLeashMintPendingNotification> {
+        if let stream = _agentLeashMintStream { return stream }
+        let stream = AsyncStream<AgentLeashMintPendingNotification> { continuation in
+            self.agentLeashMintContinuation = continuation
+            continuation.onTermination = { [weak self] _ in
+                self?.agentLeashMintContinuation = nil
+                self?._agentLeashMintStream = nil
+            }
+        }
+        _agentLeashMintStream = stream
+        return stream
+    }
+
     /// Subscribe to the `forApp.agent.>` family and pump decoded
     /// events into `agentApprovalRequests` (per-operation approvals)
     /// and `agentPendingAuth` (Stage-2 agent pairing). Idempotent;
@@ -508,6 +532,15 @@ final class OwnerSpaceClient {
                     if subject.hasSuffix(".forApp.agent.pending-authorization") {
                         if let notif = Self.parseAgentPendingAuth(raw: raw) {
                             self.agentPendingAuthContinuation?.yield(notif)
+                        }
+                    } else if subject.hasSuffix(".forApp.agent.leash-mint-pending") {
+                        // Area H (Android ef03314): agent-initiated
+                        // LEASH mint awaiting owner approval. Distinct
+                        // subject + distinct flow so the existing
+                        // AuthorizeAgent listener doesn't fire on
+                        // mint requests.
+                        if let notif = Self.parseAgentLeashMintPending(raw: raw) {
+                            self.agentLeashMintContinuation?.yield(notif)
                         }
                     } else if subject.contains(".forApp.agent.approval.request.") {
                         if let request = Self.parseAgentApprovalRequest(raw: raw) {
@@ -567,6 +600,39 @@ final class OwnerSpaceClient {
             requestedDurationSeconds: intOrDouble(outer["requested_duration_s"], 0),
             defaultDurationSeconds: intOrDouble(outer["default_duration_s"], 3600),
             maxDurationSeconds: intOrDouble(outer["max_duration_s"], 24 * 3600)
+        )
+    }
+
+    /// Decode a `forApp.agent.leash-mint-pending` message. The
+    /// vault stores a `PendingLeashRequest` when an agent publishes
+    /// a `leash_mint_request` envelope; this push carries the
+    /// agent's requested scope + duration + reason for the owner
+    /// to review on `LeashApprovalView`. Mirrors Android
+    /// `handleAgentLeashMintPending` (commit ef03314).
+    private static func parseAgentLeashMintPending(raw: NatsMessage) -> AgentLeashMintPendingNotification? {
+        guard let json = (try? JSONSerialization.jsonObject(with: raw.data)) as? [String: Any] else {
+            return nil
+        }
+        let outer = (json["payload"] as? [String: Any]) ?? json
+        guard let requestId = outer["request_id"] as? String, !requestId.isEmpty,
+              let connectionId = outer["connection_id"] as? String, !connectionId.isEmpty
+        else { return nil }
+        let requestedScope = (outer["requested_scope"] as? [String]) ?? []
+        let intOrDouble: (Any?, Int) -> Int = { value, fallback in
+            if let i = value as? Int { return i }
+            if let d = value as? Double { return Int(d) }
+            return fallback
+        }
+        return AgentLeashMintPendingNotification(
+            requestId: requestId,
+            connectionId: connectionId,
+            agentName: (outer["agent_name"] as? String) ?? "Agent",
+            agentType: outer["agent_type"] as? String ?? "",
+            agentPubkey: outer["agent_pubkey"] as? String ?? "",
+            requestedScope: requestedScope,
+            durationSeconds: intOrDouble(outer["duration_secs"], 1800),
+            reason: (outer["reason"] as? String) ?? "",
+            expiresAt: intOrDouble(outer["expires_at"], 0)
         )
     }
 

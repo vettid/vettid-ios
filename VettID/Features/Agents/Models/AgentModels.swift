@@ -186,6 +186,49 @@ struct ScopeToggle: Equatable, Identifiable {
     var id: String { token }
 }
 
+// MARK: - LEASH Mint (Area H)
+
+/// Notification that a vettid-agent has published a
+/// `leash_mint_request` and is awaiting the owner's approval to mint
+/// a LEASH bound to its Ed25519 pubkey. Mirrors Android
+/// `AgentLeashMintPendingNotification` (commit ef03314).
+///
+/// Distinct from `AgentPendingAuthNotification` — that's pair-time
+/// session authorization; this is a per-mint request issued by an
+/// already-paired agent.
+///
+/// `Identifiable` (id = requestId) so ContentView's
+/// fullScreenCover(item:) binding can present LeashApprovalView
+/// directly.
+struct AgentLeashMintPendingNotification: Equatable, Identifiable {
+    var id: String { requestId }
+    let requestId: String
+    let connectionId: String
+    let agentName: String
+    let agentType: String
+    /// Base64url Ed25519. Informational on the approval screen — the
+    /// vault is the one that actually binds the LEASH to this key.
+    let agentPubkey: String
+    let requestedScope: [String]
+    let durationSeconds: Int
+    let reason: String
+    let expiresAt: Int
+}
+
+/// State for the LeashApprovalView. Mirrors Android
+/// `LeashApprovalState` (commit ef03314).
+enum LeashApprovalState: Equatable {
+    case waiting
+    case ready(
+        notification: AgentLeashMintPendingNotification,
+        scopes: [ScopeToggle],
+        durationSeconds: Int
+    )
+    case submitting
+    case done
+    case error(String)
+}
+
 /// State for the AuthorizeAgentView (Stage-2 surface). Mirrors Android
 /// `AuthorizeAgentState`.
 enum AuthorizeAgentState: Equatable {
