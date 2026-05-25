@@ -301,6 +301,21 @@ final class ConnectionsClient {
         Self.cachedSnapshot(status: status)
     }
 
+    /// Area G — process-wide lookup of a connection's type from the
+    /// cached list. Used by surfaces that don't hold an
+    /// OwnerSpaceClient (e.g. ConversationViewModel needing to know
+    /// "is this an agent?" for the read-receipt suppression). Returns
+    /// nil when the cache is cold or the id isn't in it.
+    static func cachedConnectionType(forId connectionId: String) -> String? {
+        listCacheLock.lock(); defer { listCacheLock.unlock() }
+        for (_, cached) in _listCache {
+            if let match = cached.result.items.first(where: { $0.connectionId == connectionId }) {
+                return match.connectionType
+            }
+        }
+        return nil
+    }
+
     /// Drop the cached list (instance-side convenience that proxies
     /// to the static — keeps call sites readable).
     func invalidateListCache() {

@@ -140,6 +140,26 @@ struct ContentView: View {
                 )
             }
         }
+        // Area G — Stage-2 agent pairing. When the vault publishes
+        // forApp.agent.pending-authorization, AppState bridges it to
+        // pendingAgentAuth; we full-screen-cover AuthorizeAgentView
+        // so the owner can pick scope/duration and Approve regardless
+        // of which screen they were on. Mirrors Android's
+        // LaunchedEffect(agentPendingAuth) → Screen.AgentAuthorize
+        // route in VettIDApp.kt (commit 830ba5f).
+        .fullScreenCover(item: Binding<AgentPendingAuthNotification?>(
+            get: { appState.isAuthenticated ? appState.pendingAgentAuth : nil },
+            set: { newValue in if newValue == nil { appState.clearPendingAgentAuth() } }
+        )) { notification in
+            NavigationStack {
+                AuthorizeAgentView(
+                    connectionId: notification.connectionId,
+                    ownerSpaceClient: appState.ownerSpaceClient,
+                    onAuthorized: { appState.clearPendingAgentAuth() },
+                    onDeny: { appState.clearPendingAgentAuth() }
+                )
+            }
+        }
     }
 
     private func handleScenePhaseChange(_ phase: ScenePhase) {

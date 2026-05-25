@@ -15,6 +15,11 @@ final class ConversationViewModel: ObservableObject {
     @Published private(set) var isSending = false
     @Published private(set) var hasMoreMessages = false
     @Published var errorMessage: String?
+    /// Area G (Android 6650853): true when this conversation is with
+    /// an agent. Drives `MessageBubble.isAgent` so per-message read
+    /// receipts are suppressed — agents have no notion of
+    /// "delivered/read", so showing a status would mislead the user.
+    @Published private(set) var isAgentConnection: Bool = false
 
     // MARK: - Properties
 
@@ -68,6 +73,16 @@ final class ConversationViewModel: ObservableObject {
 
     // MARK: - Loading
 
+    /// Area G (Android 6650853): set `isAgentConnection` from the
+    /// shared ConnectionsClient cache (Area D's listCache). Cheap —
+    /// no vault round-trip. If the cache is cold, leaves the flag
+    /// false; the conversation still works, read receipts may briefly
+    /// show until the cache warms.
+    private func resolveIsAgent() {
+        let type = ConnectionsClient.cachedConnectionType(forId: connectionId)
+        isAgentConnection = (type == "agent")
+    }
+
     /// Load messages for the connection, trying NATS first with HTTP fallback
     func loadMessages() async {
         guard !connectionId.isEmpty else {
@@ -78,6 +93,11 @@ final class ConversationViewModel: ObservableObject {
 
         isLoading = true
         errorMessage = nil
+
+        // Area G (Android 6650853): resolve the connection's type
+        // from the ConnectionsClient cache (Area D) so MessageBubble
+        // can suppress read receipts on agent conversations.
+        resolveIsAgent()
 
         // Try NATS-based loading first
         if messagingClient != nil {
