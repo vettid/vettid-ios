@@ -123,6 +123,85 @@ enum AgentApprovalState: Equatable {
 
 // MARK: - Create Invitation State
 
+// MARK: - Stage-2 Authorization Models
+//
+// Mirrors Android 830ba5f (agents Phase 4). vettid-agent has completed
+// Stage 1 (resolved invite, generated ephemeral X25519 keypair) and
+// posted `agent.request-session`. The phone surfaces the agent's
+// identity card + requested scope hints, the owner picks the final
+// `granted_scope` / `approval_mode` / `duration` / `rate_limit`, and
+// `agent.authorize-session` writes them into the vault's
+// ConnectionContract.
+
+/// Stage-2 pending-auth payload pushed to the phone over
+/// `OwnerSpace.<guid>.forApp.agent.pending-authorization`. Parallel to
+/// `DevicePendingAuthNotification` but carries scope + duration hints
+/// the desktop equivalent doesn't need.
+struct AgentPendingAuthNotification: Equatable {
+    let connectionId: String
+    let approvalToken: String
+    let agentPubKey: String
+    let agentMetadata: AgentMetadataSummary?
+    let binaryFpPrefix: String
+    let expiresAt: Int
+    /// Tokens the agent is asking for. Defaults-on in the picker;
+    /// owner can untoggle anything before approving. Tokens outside
+    /// this set can't be added — the vault would refuse them since
+    /// the agent didn't acknowledge them in request-session.
+    let requestedScope: [String]
+    /// "always_ask" | "auto_within_contract". Owner can downgrade
+    /// (auto → ask) but not upgrade.
+    let requestedApprovalMode: String
+    let requestedDurationSeconds: Int
+    let defaultDurationSeconds: Int
+    let maxDurationSeconds: Int
+}
+
+/// Identity-card fields the agent sends for the owner to verify before
+/// approving. Mirrors `AgentMetadataSummary` (Android 830ba5f). Same
+/// shape as the vault's vault-manager AgentMetadata, minus the
+/// server-side fields (first_seen_at, ip_address).
+struct AgentMetadataSummary: Equatable {
+    let agentType: String
+    let binaryFingerprint: String
+    let machineFingerprint: String
+    let hostname: String
+    let platform: String
+    let osName: String
+    let osVersion: String
+    let appVersion: String
+}
+
+/// Per-scope toggle state for the AuthorizeAgentView scope picker.
+/// Each requested token gets default-on; the owner can untoggle anything
+/// before approving.
+struct ScopeToggle: Equatable, Identifiable {
+    let token: String
+    var granted: Bool
+    var id: String { token }
+}
+
+/// State for the AuthorizeAgentView (Stage-2 surface). Mirrors Android
+/// `AuthorizeAgentState`.
+enum AuthorizeAgentState: Equatable {
+    /// Waiting for the pending-authorization push from the vault.
+    case waiting
+    /// Form is ready — owner can pick scope / mode / duration and Approve.
+    case ready(
+        notification: AgentPendingAuthNotification,
+        scopes: [ScopeToggle],
+        approvalMode: String,         // "always_ask" | "auto_within_contract"
+        durationSeconds: Int,
+        rateLimitMax: Int,
+        rateLimitPer: String          // "minute" | "hour"
+    )
+    case submitting
+    case done
+    case error(String)
+}
+
+// MARK: - Create-Invitation State
+
 /// State for the create agent invitation screen.
 ///
 /// Matches Android aecfa99 + the new vault agent pairing flow

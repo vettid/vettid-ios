@@ -456,6 +456,149 @@ final class OwnerSpaceClient {
         agentApprovalContinuation?.yield(request)
     }
 
+    /// Stage-2 agent pairing: a vettid-agent has completed Stage-1
+    /// (resolved invite, generated ephemeral X25519 keypair, posted
+    /// agent.request-session) and is waiting on the phone's
+    /// authorize-session decision. Carries the agent's identity card +
+    /// requested scope hints. Mirrors Android
+    /// `OwnerSpaceClient.agentPendingAuth`.
+    private var agentPendingAuthContinuation: AsyncStream<AgentPendingAuthNotification>.Continuation?
+    private var _agentPendingAuthStream: AsyncStream<AgentPendingAuthNotification>?
+
+    var agentPendingAuth: AsyncStream<AgentPendingAuthNotification> {
+        if let stream = _agentPendingAuthStream { return stream }
+        let stream = AsyncStream<AgentPendingAuthNotification> { continuation in
+            self.agentPendingAuthContinuation = continuation
+            continuation.onTermination = { [weak self] _ in
+                self?.agentPendingAuthContinuation = nil
+                self?._agentPendingAuthStream = nil
+            }
+        }
+        _agentPendingAuthStream = stream
+        return stream
+    }
+
+    /// Subscribe to the `forApp.agent.>` family and pump decoded
+    /// events into `agentApprovalRequests` (per-operation approvals)
+    /// and `agentPendingAuth` (Stage-2 agent pairing). Idempotent;
+    /// call once after PIN unlock from `AppState.syncProfileFromVault`
+    /// alongside `startDeviceEventSubscription`. Mirrors Android
+    /// `handleAgentPendingAuth` dispatch (Phase 4, commit 830ba5f).
+    ///
+    /// Subjects:
+    ///   - forApp.agent.pending-authorization          → AgentPendingAuthNotification
+    ///   - forApp.agent.approval.request.<requestId>   → AgentApprovalRequest
+    private var agentSubscriptionTask: Task<Void, Never>?
+    func startAgentEventSubscription() {
+        guard agentSubscriptionTask == nil else { return }
+        let prefix = forAppPrefix
+        agentSubscriptionTask = Task { [weak self] in
+            guard let self = self else { return }
+            do {
+                let stream = try await self.connectionManager.subscribe(
+                    to: "\(prefix).agent.>"
+                )
+                for await raw in stream {
+                    if Task.isCancelled { return }
+                    let subject = raw.topic
+                    // Specific match BEFORE the catch-all approval path
+                    // (Android 830ba5f: pending-authorization payload
+                    // lacks the request_id field that approval parsers
+                    // expect, so misrouting silently loses the event).
+                    if subject.hasSuffix(".forApp.agent.pending-authorization") {
+                        if let notif = Self.parseAgentPendingAuth(raw: raw) {
+                            self.agentPendingAuthContinuation?.yield(notif)
+                        }
+                    } else if subject.contains(".forApp.agent.approval.request.") {
+                        if let request = Self.parseAgentApprovalRequest(raw: raw) {
+                            self.agentApprovalContinuation?.yield(request)
+                        }
+                    }
+                }
+            } catch {
+                #if DEBUG
+                print("[OwnerSpaceClient] agent.> subscription failed: \(error)")
+                #endif
+            }
+        }
+    }
+
+    /// Decode a `forApp.agent.pending-authorization` message. Tolerates
+    /// either flat or `{ "payload": {...} }` envelope wraps. Maps the
+    /// 9-token `requested_scope` array straight through so the
+    /// AuthorizeAgentView's scope picker can render unknown tokens
+    /// rather than silently dropping them.
+    private static func parseAgentPendingAuth(raw: NatsMessage) -> AgentPendingAuthNotification? {
+        guard let json = (try? JSONSerialization.jsonObject(with: raw.data)) as? [String: Any] else {
+            return nil
+        }
+        let outer = (json["payload"] as? [String: Any]) ?? json
+        guard let connectionId = outer["connection_id"] as? String, !connectionId.isEmpty else {
+            return nil
+        }
+        let metaDict = outer["agent_metadata"] as? [String: Any]
+        let metadata = metaDict.map { dict in
+            AgentMetadataSummary(
+                agentType: dict["agent_type"] as? String ?? "",
+                binaryFingerprint: dict["binary_fingerprint"] as? String ?? "",
+                machineFingerprint: dict["machine_fingerprint"] as? String ?? "",
+                hostname: dict["hostname"] as? String ?? "",
+                platform: dict["platform"] as? String ?? "",
+                osName: dict["os_name"] as? String ?? "",
+                osVersion: dict["os_version"] as? String ?? "",
+                appVersion: dict["app_version"] as? String ?? ""
+            )
+        }
+        let requestedScope = (outer["requested_scope"] as? [String]) ?? []
+        let intOrDouble: (Any?, Int) -> Int = { value, fallback in
+            if let i = value as? Int { return i }
+            if let d = value as? Double { return Int(d) }
+            return fallback
+        }
+        return AgentPendingAuthNotification(
+            connectionId: connectionId,
+            approvalToken: outer["approval_token"] as? String ?? "",
+            agentPubKey: outer["agent_pubkey"] as? String ?? "",
+            agentMetadata: metadata,
+            binaryFpPrefix: outer["binary_fp_prefix"] as? String ?? "",
+            expiresAt: intOrDouble(outer["expires_at"], 0),
+            requestedScope: requestedScope,
+            requestedApprovalMode: outer["requested_approval_mode"] as? String ?? "always_ask",
+            requestedDurationSeconds: intOrDouble(outer["requested_duration_s"], 0),
+            defaultDurationSeconds: intOrDouble(outer["default_duration_s"], 3600),
+            maxDurationSeconds: intOrDouble(outer["max_duration_s"], 24 * 3600)
+        )
+    }
+
+    /// Decode a `forApp.agent.approval.request.<id>` message into an
+    /// `AgentApprovalRequest`. Wires the previously-dead
+    /// `agentApprovalRequests` stream (mirrors the device fix from
+    /// Area B).
+    private static func parseAgentApprovalRequest(raw: NatsMessage) -> AgentApprovalRequest? {
+        guard let json = (try? JSONSerialization.jsonObject(with: raw.data)) as? [String: Any] else {
+            return nil
+        }
+        guard let requestId = json["request_id"] as? String, !requestId.isEmpty else {
+            return nil
+        }
+        let timestamp: String? = {
+            if let s = json["timestamp"] as? String { return s }
+            if let n = json["timestamp"] as? Double {
+                return ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: n))
+            }
+            return nil
+        }()
+        let payloadDict = json["payload"] as? [String: Any]
+        return AgentApprovalRequest(
+            requestId: requestId,
+            agentName: (json["agent_name"] as? String) ?? "Agent",
+            agentType: json["agent_type"] as? String,
+            operation: json["operation"] as? String,
+            secretCategory: (payloadDict?["id"] as? String).flatMap { $0.isEmpty ? nil : $0 },
+            timestamp: timestamp
+        )
+    }
+
     // MARK: - Device Events
 
     /// Publisher for device approval requests
