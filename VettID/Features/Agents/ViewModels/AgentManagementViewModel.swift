@@ -50,8 +50,20 @@ final class AgentManagementViewModel: ObservableObject {
                 if agentsArray.isEmpty {
                     state = .empty
                 } else {
-                    let agents = agentsArray.map { AgentConnection.from(dict: $0) }
-                    state = .loaded(agents)
+                    // Area H (Android 789adf2): hide revoked + expired
+                    // from the main list. The vault still returns
+                    // them; the management screen is for in-use
+                    // agents only.
+                    let all = agentsArray.map { AgentConnection.from(dict: $0) }
+                    let active = all.filter { agent in
+                        let s = agent.status.lowercased()
+                        return s != "revoked" && s != "expired"
+                    }
+                    if active.isEmpty {
+                        state = .empty
+                    } else {
+                        state = .loaded(active)
+                    }
                 }
             } else {
                 state = .error(response.error ?? "Failed to load agents")
