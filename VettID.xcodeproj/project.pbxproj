@@ -381,6 +381,8 @@
 		46C2D6CC9609E258E3AD5E02 /* LeashScopeCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5707D7AFD8C9C8DA7C87F83F /* LeashScopeCatalog.swift */; };
 		10F58E1A4BFE8EBEDD1B4E77 /* LeashApprovalViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE88B0114CB989E294C39314 /* LeashApprovalViewModel.swift */; };
 		BC57DBE8BBEF5D866B3BC98C /* LeashApprovalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83C73EC06FE179D0F1C019BC /* LeashApprovalView.swift */; };
+		432673FF07918B29548E3329 /* AgentDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD8FF4E71EF2AC40679770EB /* AgentDetailViewModel.swift */; };
+		1C2493E1D9DFF6B94DB954C8 /* AgentDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EB0FAE3D2D110FADB52938E /* AgentDetailView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -786,6 +788,8 @@
 		5707D7AFD8C9C8DA7C87F83F /* LeashScopeCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeashScopeCatalog.swift; sourceTree = "<group>"; };
 		AE88B0114CB989E294C39314 /* LeashApprovalViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeashApprovalViewModel.swift; sourceTree = "<group>"; };
 		83C73EC06FE179D0F1C019BC /* LeashApprovalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeashApprovalView.swift; sourceTree = "<group>"; };
+		BD8FF4E71EF2AC40679770EB /* AgentDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentDetailViewModel.swift; sourceTree = "<group>"; };
+		1EB0FAE3D2D110FADB52938E /* AgentDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentDetailView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1391,6 +1395,7 @@
 				3161116EF69E42939707CF54 /* CreateAgentInvitationViewModel.swift */,
 				98797B3F232BD1152ABEF1B2 /* AuthorizeAgentViewModel.swift */,
 				AE88B0114CB989E294C39314 /* LeashApprovalViewModel.swift */,
+				BD8FF4E71EF2AC40679770EB /* AgentDetailViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -1537,6 +1542,7 @@
 				9B99FA6C415A4E2A8329FE71 /* CreateAgentInvitationView.swift */,
 				96A16B30206BB30AF954F243 /* AuthorizeAgentView.swift */,
 				83C73EC06FE179D0F1C019BC /* LeashApprovalView.swift */,
+				1EB0FAE3D2D110FADB52938E /* AgentDetailView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -2291,6 +2297,8 @@
 				46C2D6CC9609E258E3AD5E02 /* LeashScopeCatalog.swift in Sources */,
 				10F58E1A4BFE8EBEDD1B4E77 /* LeashApprovalViewModel.swift in Sources */,
 				BC57DBE8BBEF5D866B3BC98C /* LeashApprovalView.swift in Sources */,
+				432673FF07918B29548E3329 /* AgentDetailViewModel.swift in Sources */,
+				1C2493E1D9DFF6B94DB954C8 /* AgentDetailView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

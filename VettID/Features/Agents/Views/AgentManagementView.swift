@@ -6,6 +6,11 @@ struct AgentManagementView: View {
     @StateObject private var viewModel: AgentManagementViewModel
     @State private var showCreateInvitation = false
     @State private var agentToRevoke: AgentConnection?
+    /// Area H — row-tap pushes AgentDetailView, the new
+    /// per-agent screen (capability/visibility/Mint LEASH). Reached
+    /// only from Settings → Agents, mirroring Android's
+    /// AgentManagementScreen → AgentDetailScreen navigation.
+    @State private var detailConnectionId: String?
 
     private let ownerSpaceClient: OwnerSpaceClient?
 
@@ -68,6 +73,19 @@ struct AgentManagementView: View {
         .task {
             await viewModel.loadAgents()
         }
+        // Area H — push per-agent detail on row-tap. iOS 16+
+        // navigationDestination(isPresented:) pattern.
+        .navigationDestination(isPresented: Binding(
+            get: { detailConnectionId != nil },
+            set: { newValue in if !newValue { detailConnectionId = nil } }
+        )) {
+            if let cid = detailConnectionId {
+                AgentDetailView(
+                    connectionId: cid,
+                    ownerSpaceClient: ownerSpaceClient
+                )
+            }
+        }
     }
 
     // MARK: - Alert Binding
@@ -129,16 +147,21 @@ struct AgentManagementView: View {
     private func agentsList(_ agents: [AgentConnection]) -> some View {
         List {
             ForEach(agents) { agent in
-                AgentRow(agent: agent)
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        if agent.isActive {
-                            Button(role: .destructive) {
-                                agentToRevoke = agent
-                            } label: {
-                                Label("Revoke", systemImage: "xmark.shield")
-                            }
+                Button {
+                    detailConnectionId = agent.connectionId
+                } label: {
+                    AgentRow(agent: agent)
+                }
+                .buttonStyle(.plain)
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    if agent.isActive {
+                        Button(role: .destructive) {
+                            agentToRevoke = agent
+                        } label: {
+                            Label("Revoke", systemImage: "xmark.shield")
                         }
                     }
+                }
             }
         }
         .listStyle(.insetGrouped)
