@@ -775,6 +775,21 @@ class AppState: ObservableObject {
                 #if DEBUG
                 print("[AppState] pendingAgentAuth set: \(notification.connectionId) (\(notification.agentMetadata?.agentType ?? "agent"))")
                 #endif
+                // Area H — surface a local banner if the app isn't
+                // foregrounded so the user doesn't miss the pairing
+                // window. The in-app fullScreenCover still drives
+                // approval; this is purely a wake signal.
+                let isActive = await MainActor.run { UIApplication.shared.applicationState == .active }
+                if !isActive {
+                    let label = notification.agentMetadata?.hostname.isEmpty == false
+                        ? notification.agentMetadata!.hostname
+                        : "Agent"
+                    await LocalNotificationManager.shared.showAgentPendingAuth(
+                        connectionId: notification.connectionId,
+                        agentName: label,
+                        agentType: notification.agentMetadata?.agentType
+                    )
+                }
             }
         }
     }
@@ -782,7 +797,13 @@ class AppState: ObservableObject {
     /// Called from AuthorizeAgentView on Done/Deny/dismiss so the
     /// root-level cover unmounts.
     func clearPendingAgentAuth() {
+        let cid = pendingAgentAuth?.connectionId
         pendingAgentAuth = nil
+        if let cid {
+            // Area H — clear any banner we may have raised for this
+            // pairing so the lockscreen doesn't keep nagging.
+            Task { await LocalNotificationManager.shared.removeAgentNotifications(connectionId: cid) }
+        }
     }
 
     /// Area H — bridge `OwnerSpaceClient.agentLeashMintPending` into
@@ -798,6 +819,15 @@ class AppState: ObservableObject {
                 #if DEBUG
                 print("[AppState] pendingLeashMint set: \(notification.requestId) agent=\(notification.agentName)")
                 #endif
+                // Area H — wake the user if the app isn't foregrounded.
+                let isActive = await MainActor.run { UIApplication.shared.applicationState == .active }
+                if !isActive {
+                    await LocalNotificationManager.shared.showLeashMintPending(
+                        requestId: notification.requestId,
+                        agentName: notification.agentName,
+                        scope: notification.requestedScope
+                    )
+                }
             }
         }
     }
@@ -805,7 +835,11 @@ class AppState: ObservableObject {
     /// Called from LeashApprovalView on Approve/Deny/dismiss so the
     /// root-level cover unmounts.
     func clearPendingLeashMint() {
+        let rid = pendingLeashMint?.requestId
         pendingLeashMint = nil
+        if let rid {
+            Task { await LocalNotificationManager.shared.removeAgentNotifications(requestId: rid) }
+        }
     }
 
     /// Mark vault as cold (e.g., after background timeout)
