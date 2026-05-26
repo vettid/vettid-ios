@@ -16,6 +16,10 @@ final class LocalNotificationManager: NSObject {
         case recoveryAlert = "RECOVERY_ALERT"
         case transferRequest = "TRANSFER_REQUEST"
         case fraudAlert = "FRAUD_ALERT"
+        /// Area H — agent-initiated LEASH mint awaiting owner approval.
+        case agentLeashMintPending = "AGENT_LEASH_MINT_PENDING"
+        /// Area H — Stage-2 agent pairing awaiting authorization.
+        case agentPendingAuth = "AGENT_PENDING_AUTH"
     }
 
     // MARK: - Notification Actions
@@ -519,6 +523,80 @@ extension LocalNotificationManager {
             print("[LocalNotificationManager] Failed to show notification: \(error)")
             #endif
         }
+    }
+
+    // MARK: - Agent notifications (Area H)
+
+    /// Local notification for an agent-initiated LEASH mint awaiting
+    /// owner approval. Fired by AppState when
+    /// `agentLeashMintPending` lands AND the app is not in the
+    /// foreground — surfaces a tap target on the lockscreen / banner
+    /// that brings the user back into the LeashApprovalView cover.
+    func showLeashMintPending(requestId: String, agentName: String, scope: [String]) async {
+        let content = UNMutableNotificationContent()
+        content.title = "🔑 Agent wants a LEASH"
+        content.subtitle = agentName.isEmpty ? "Approval required" : agentName
+        let scopeLine = scope.isEmpty ? "Tap to review and approve" : "Scope: \(scope.joined(separator: ", "))"
+        content.body = scopeLine
+        content.categoryIdentifier = Category.agentLeashMintPending.rawValue
+        content.sound = .default
+        content.interruptionLevel = .timeSensitive
+        content.userInfo = [
+            UserInfoKey.requestId.rawValue: requestId,
+            UserInfoKey.eventType.rawValue: "agent_leash_mint_pending"
+        ]
+        let request = UNNotificationRequest(
+            identifier: "leash-mint-\(requestId)",
+            content: content,
+            trigger: nil
+        )
+        do { try await notificationCenter.add(request) } catch {
+            #if DEBUG
+            print("[LocalNotificationManager] Failed to show leash-mint alert: \(error)")
+            #endif
+        }
+    }
+
+    /// Local notification for Stage-2 agent pairing awaiting owner
+    /// authorization. Fired when the vault publishes
+    /// `agent.pending-authorization` and the app is not in the
+    /// foreground.
+    func showAgentPendingAuth(connectionId: String, agentName: String, agentType: String?) async {
+        let content = UNMutableNotificationContent()
+        content.title = "🤖 Agent wants to connect"
+        content.subtitle = agentName.isEmpty ? "Authorization required" : agentName
+        content.body = (agentType?.isEmpty == false)
+            ? "Type: \(agentType!). Tap to review."
+            : "Tap to review and authorize."
+        content.categoryIdentifier = Category.agentPendingAuth.rawValue
+        content.sound = .default
+        content.interruptionLevel = .timeSensitive
+        content.userInfo = [
+            "connection_id": connectionId,
+            UserInfoKey.eventType.rawValue: "agent_pending_auth"
+        ]
+        let request = UNNotificationRequest(
+            identifier: "agent-auth-\(connectionId)",
+            content: content,
+            trigger: nil
+        )
+        do { try await notificationCenter.add(request) } catch {
+            #if DEBUG
+            print("[LocalNotificationManager] Failed to show agent-auth alert: \(error)")
+            #endif
+        }
+    }
+
+    /// Clear any pending agent-related notifications by id once the
+    /// owner has resolved the request in-app (so a stale banner can't
+    /// re-open a cover for a finished request).
+    func removeAgentNotifications(requestId: String? = nil, connectionId: String? = nil) {
+        var ids: [String] = []
+        if let r = requestId { ids.append("leash-mint-\(r)") }
+        if let c = connectionId { ids.append("agent-auth-\(c)") }
+        guard !ids.isEmpty else { return }
+        notificationCenter.removeDeliveredNotifications(withIdentifiers: ids)
+        notificationCenter.removePendingNotificationRequests(withIdentifiers: ids)
     }
 
     private func formatFraudReason(_ reason: FraudDetectionReason) -> String {

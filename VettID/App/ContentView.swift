@@ -160,6 +160,23 @@ struct ContentView: View {
                 )
             }
         }
+        // Area H — agent-initiated LEASH mint awaiting owner approval.
+        // Mirrors the agentPendingAuth pattern above: the vault
+        // pushes forApp.agent.leash-mint-pending, AppState bridges to
+        // pendingLeashMint, root-level cover pops LeashApprovalView
+        // regardless of which screen the user was on.
+        .fullScreenCover(item: Binding<AgentLeashMintPendingNotification?>(
+            get: { appState.isAuthenticated ? appState.pendingLeashMint : nil },
+            set: { newValue in if newValue == nil { appState.clearPendingLeashMint() } }
+        )) { notification in
+            NavigationStack {
+                LeashApprovalView(
+                    requestId: notification.requestId,
+                    ownerSpaceClient: appState.ownerSpaceClient,
+                    onDone: { appState.clearPendingLeashMint() }
+                )
+            }
+        }
     }
 
     private func handleScenePhaseChange(_ phase: ScenePhase) {

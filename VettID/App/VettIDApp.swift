@@ -243,6 +243,13 @@ class AppState: ObservableObject {
     /// LaunchedEffect in VettIDApp.kt.
     @Published var pendingAgentAuth: AgentPendingAuthNotification?
 
+    /// Area H — agent-initiated LEASH mint awaiting owner approval.
+    /// Set by the `forApp.agent.leash-mint-pending` observer; cleared
+    /// via `clearPendingLeashMint`. Drives root-level routing to
+    /// `LeashApprovalView`. Mirrors Android's `agentLeashMintPending`
+    /// LaunchedEffect (commit ef03314).
+    @Published var pendingLeashMint: AgentLeashMintPendingNotification?
+
     // NATS connection manager for vault operations
     lazy var natsConnectionManager: NatsConnectionManager = {
         NatsConnectionManager(userGuidProvider: { [weak self] in
@@ -306,6 +313,10 @@ class AppState: ObservableObject {
     /// into `pendingAgentAuth`. Held here for the same lifecycle reason
     /// as the device approval observer.
     private var agentPendingAuthObserverTask: Task<Void, Never>?
+
+    /// Area H — observer task that bridges
+    /// `OwnerSpaceClient.agentLeashMintPending` into `pendingLeashMint`.
+    private var agentLeashMintObserverTask: Task<Void, Never>?
 
     /// Flag indicating if running in UI test mode
     static var isUITesting: Bool {
@@ -699,6 +710,17 @@ class AppState: ObservableObject {
             osc.startAgentEventSubscription()
             self.startAgentPendingAuthObserver(osc)
 
+            // Area H: bridge the agent-initiated LEASH mint stream
+            // (same forApp.agent.> subscription already started above)
+            // into pendingLeashMint so root-level nav can present
+            // LeashApprovalView. Plus pull the pending list once on
+            // unlock so any mint request that arrived while the app
+            // was offline (core-NATS forApp.* has no replay) is
+            // re-surfaced. Mirrors Android 23463c8 / Area B's
+            // fetchPendingDeviceApprovals.
+            self.startAgentLeashMintObserver(osc)
+            Task { await osc.fetchPendingLeashMints() }
+
             // Area D (Android ab25dc2): pre-warm the caches the
             // first post-unlock screen will read so Feed /
             // Connections render without a Loading flash. Fires
@@ -753,6 +775,21 @@ class AppState: ObservableObject {
                 #if DEBUG
                 print("[AppState] pendingAgentAuth set: \(notification.connectionId) (\(notification.agentMetadata?.agentType ?? "agent"))")
                 #endif
+                // Area H — surface a local banner if the app isn't
+                // foregrounded so the user doesn't miss the pairing
+                // window. The in-app fullScreenCover still drives
+                // approval; this is purely a wake signal.
+                let isActive = await MainActor.run { UIApplication.shared.applicationState == .active }
+                if !isActive {
+                    let label = notification.agentMetadata?.hostname.isEmpty == false
+                        ? notification.agentMetadata!.hostname
+                        : "Agent"
+                    await LocalNotificationManager.shared.showAgentPendingAuth(
+                        connectionId: notification.connectionId,
+                        agentName: label,
+                        agentType: notification.agentMetadata?.agentType
+                    )
+                }
             }
         }
     }
@@ -760,7 +797,49 @@ class AppState: ObservableObject {
     /// Called from AuthorizeAgentView on Done/Deny/dismiss so the
     /// root-level cover unmounts.
     func clearPendingAgentAuth() {
+        let cid = pendingAgentAuth?.connectionId
         pendingAgentAuth = nil
+        if let cid {
+            // Area H — clear any banner we may have raised for this
+            // pairing so the lockscreen doesn't keep nagging.
+            Task { await LocalNotificationManager.shared.removeAgentNotifications(connectionId: cid) }
+        }
+    }
+
+    /// Area H — bridge `OwnerSpaceClient.agentLeashMintPending` into
+    /// `AppState.pendingLeashMint` so root-level navigation can
+    /// present LeashApprovalView the moment an agent-initiated mint
+    /// arrives. Mirrors `startAgentPendingAuthObserver`.
+    private func startAgentLeashMintObserver(_ client: OwnerSpaceClient) {
+        agentLeashMintObserverTask?.cancel()
+        agentLeashMintObserverTask = Task { [weak self] in
+            for await notification in client.agentLeashMintPending {
+                guard let self = self else { return }
+                await MainActor.run { self.pendingLeashMint = notification }
+                #if DEBUG
+                print("[AppState] pendingLeashMint set: \(notification.requestId) agent=\(notification.agentName)")
+                #endif
+                // Area H — wake the user if the app isn't foregrounded.
+                let isActive = await MainActor.run { UIApplication.shared.applicationState == .active }
+                if !isActive {
+                    await LocalNotificationManager.shared.showLeashMintPending(
+                        requestId: notification.requestId,
+                        agentName: notification.agentName,
+                        scope: notification.requestedScope
+                    )
+                }
+            }
+        }
+    }
+
+    /// Called from LeashApprovalView on Approve/Deny/dismiss so the
+    /// root-level cover unmounts.
+    func clearPendingLeashMint() {
+        let rid = pendingLeashMint?.requestId
+        pendingLeashMint = nil
+        if let rid {
+            Task { await LocalNotificationManager.shared.removeAgentNotifications(requestId: rid) }
+        }
     }
 
     /// Mark vault as cold (e.g., after background timeout)

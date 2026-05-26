@@ -33,6 +33,10 @@ final class ConversationViewModel: ObservableObject {
     private let authTokenProvider: @Sendable () -> String?
     private var messageHandler: MessageHandler?
     var messagingClient: MessagingClient?
+    /// Area H (Android 8f09d21): the `agent.message.*` refresh
+    /// observer. Held on the VM so it can be torn down when
+    /// `attachOwnerSpace` is re-called (e.g. credential rotation).
+    private var agentMessageObserverTask: Task<Void, Never>?
 
     // MARK: - Transport Key
 
@@ -412,6 +416,27 @@ final class ConversationViewModel: ObservableObject {
     }
 
     // MARK: - Incoming Messages
+
+    /// Area H (Android 8f09d21): observe `agent.message.*` refresh
+    /// pings. When the vault publishes a sent/received event for *this*
+    /// connection, reload the thread so the new turn appears.
+    /// Caller passes in the stream from
+    /// `OwnerSpaceClient.agentMessageNotifications` once at attach time.
+    func attachAgentMessageObserver(_ stream: AsyncStream<String>) {
+        agentMessageObserverTask?.cancel()
+        agentMessageObserverTask = Task { [weak self] in
+            for await cid in stream {
+                guard let self else { return }
+                if cid == self.connectionId {
+                    await self.loadMessages()
+                }
+            }
+        }
+    }
+
+    deinit {
+        agentMessageObserverTask?.cancel()
+    }
 
     /// Handle an incoming message from a peer (received via MessageSubscriber)
     /// Uses the IncomingMessage type from MessageSubscriber.swift
