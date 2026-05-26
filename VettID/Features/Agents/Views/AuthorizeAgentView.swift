@@ -56,9 +56,14 @@ struct AuthorizeAgentView: View {
         .onChange(of: stateKey) { _ in
             switch viewModel.state {
             case .done:
+                // Area H — route to onDeny when the .done was driven
+                // by a Deny tap so the root cover can clear
+                // pendingAgentAuth either way and any future telemetry
+                // can distinguish accepted vs. denied pairings.
+                let denied = viewModel.lastActionWasDeny
                 Task {
                     try? await Task.sleep(nanoseconds: 600_000_000)
-                    onAuthorized()
+                    if denied { onDeny() } else { onAuthorized() }
                     dismiss()
                 }
             default:

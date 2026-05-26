@@ -34,6 +34,11 @@ final class AuthorizeAgentViewModel: ObservableObject {
     // MARK: - Published State
 
     @Published private(set) var state: AuthorizeAgentState = .waiting
+    /// Area H — true once `deny()` has driven the state to `.done`.
+    /// The view uses this to route the dismiss path to `onDeny` vs
+    /// `onAuthorized`. Reset on every fresh `.ready` seed so a single
+    /// VM instance can host successive flows.
+    @Published private(set) var lastActionWasDeny: Bool = false
 
     // MARK: - Dependencies
 
@@ -104,6 +109,7 @@ final class AuthorizeAgentViewModel: ObservableObject {
             ? "auto_within_contract"
             : "always_ask"
 
+        lastActionWasDeny = false
         state = .ready(
             notification: notif,
             scopes: toggles,
@@ -208,6 +214,7 @@ final class AuthorizeAgentViewModel: ObservableObject {
     func deny() async {
         guard case .ready(let notif, _, _, _, _, _) = state else { return }
         guard let client = ownerSpaceClient else {
+            lastActionWasDeny = true
             state = .done
             return
         }
@@ -224,6 +231,7 @@ final class AuthorizeAgentViewModel: ObservableObject {
         } catch {
             // fire-and-forget from the owner's POV
         }
+        lastActionWasDeny = true
         state = .done
     }
 
