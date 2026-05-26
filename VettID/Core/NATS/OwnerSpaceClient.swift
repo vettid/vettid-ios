@@ -502,6 +502,28 @@ final class OwnerSpaceClient {
         return stream
     }
 
+    /// Area H — refresh trigger fired by every
+    /// `forApp.agent.message.{sent,received}` event. The payload's
+    /// connection_id is emitted as a string; consumers (the
+    /// conversation pane) re-fetch via `message.list` rather than
+    /// trying to parse the agent-specific payload shape. Mirrors
+    /// Android `agentMessageNotifications` (commit 8f09d21).
+    private var agentMessageNotifContinuation: AsyncStream<String>.Continuation?
+    private var _agentMessageNotifStream: AsyncStream<String>?
+
+    var agentMessageNotifications: AsyncStream<String> {
+        if let stream = _agentMessageNotifStream { return stream }
+        let stream = AsyncStream<String> { continuation in
+            self.agentMessageNotifContinuation = continuation
+            continuation.onTermination = { [weak self] _ in
+                self?.agentMessageNotifContinuation = nil
+                self?._agentMessageNotifStream = nil
+            }
+        }
+        _agentMessageNotifStream = stream
+        return stream
+    }
+
     /// Subscribe to the `forApp.agent.>` family and pump decoded
     /// events into `agentApprovalRequests` (per-operation approvals)
     /// and `agentPendingAuth` (Stage-2 agent pairing). Idempotent;
@@ -541,6 +563,16 @@ final class OwnerSpaceClient {
                         // mint requests.
                         if let notif = Self.parseAgentLeashMintPending(raw: raw) {
                             self.agentLeashMintContinuation?.yield(notif)
+                        }
+                    } else if subject.contains(".forApp.agent.message.") {
+                        // Area H (Android 8f09d21): agent chat refresh
+                        // trigger. Emit the connection_id so the
+                        // conversation pane reloads via message.list —
+                        // the agent payload shape differs from
+                        // IncomingMessage so we don't try to thread
+                        // it through here.
+                        if let connectionId = Self.extractConnectionId(raw: raw) {
+                            self.agentMessageNotifContinuation?.yield(connectionId)
                         }
                     } else if subject.contains(".forApp.agent.approval.request.") {
                         if let request = Self.parseAgentApprovalRequest(raw: raw) {
@@ -601,6 +633,18 @@ final class OwnerSpaceClient {
             defaultDurationSeconds: intOrDouble(outer["default_duration_s"], 3600),
             maxDurationSeconds: intOrDouble(outer["max_duration_s"], 24 * 3600)
         )
+    }
+
+    /// Area H — small helper: pull `connection_id` out of a flat or
+    /// `{payload:{…}}` agent envelope. Used by the agent.message.*
+    /// refresh path that doesn't otherwise care about the payload.
+    private static func extractConnectionId(raw: NatsMessage) -> String? {
+        guard let json = (try? JSONSerialization.jsonObject(with: raw.data)) as? [String: Any] else {
+            return nil
+        }
+        let outer = (json["payload"] as? [String: Any]) ?? json
+        let id = outer["connection_id"] as? String
+        return (id?.isEmpty == false) ? id : nil
     }
 
     /// Decode a `forApp.agent.leash-mint-pending` message. The

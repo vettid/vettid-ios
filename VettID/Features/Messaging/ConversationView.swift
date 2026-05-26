@@ -5,6 +5,7 @@ struct ConversationView: View {
     let connectionId: String
     let authTokenProvider: @Sendable () -> String?
 
+    @EnvironmentObject private var appState: AppState
     @StateObject private var viewModel: ConversationViewModel
     @State private var messageText = ""
     @FocusState private var isInputFocused: Bool
@@ -37,6 +38,19 @@ struct ConversationView: View {
         .navigationTitle(viewModel.connectionName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            // Area H — for agent conversations, surface a cpu glyph
+            // next to the title so it's visually distinct from a
+            // peer/desktop thread. Mirrors Android `AgentBadge`.
+            if viewModel.isAgentConnection {
+                ToolbarItem(placement: .principal) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "cpu")
+                            .foregroundColor(.accentColor)
+                        Text(viewModel.connectionName)
+                            .font(.headline)
+                    }
+                }
+            }
             ToolbarItem(placement: .navigationBarTrailing) {
                 NavigationLink(destination: ConnectionDetailView(
                     connectionId: connectionId,
@@ -55,6 +69,11 @@ struct ConversationView: View {
         }
         .task {
             viewModel.connectionId = connectionId
+            // Area H (Android 8f09d21): subscribe to agent.message.*
+            // refresh pings so agent turns appear without manual reload.
+            if let osc = appState.ownerSpaceClient {
+                viewModel.attachAgentMessageObserver(osc.agentMessageNotifications)
+            }
             await viewModel.loadMessages()
         }
     }
