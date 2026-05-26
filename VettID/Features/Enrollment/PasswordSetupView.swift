@@ -10,26 +10,21 @@ struct PasswordSetupView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                // Header
-                headerSection
-
-                // Password fields
-                passwordFieldsSection
-
-                // Strength indicator
-                strengthIndicator
-
-                // Requirements
-                requirementsSection
-
-                // Submit button
-                submitButton
-
-                Spacer(minLength: 40)
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 20) {
+                    headerSection
+                    passwordFieldsSection
+                    strengthIndicator
+                    requirementsSection
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 8)
             }
-            .padding()
+
+            submitButton
+                .padding(.horizontal, 24)
+                .padding(.bottom, 16)
         }
         .navigationBarBackButtonHidden(viewModel.state == .processingPassword)
     }
@@ -39,55 +34,63 @@ struct PasswordSetupView: View {
     private var headerSection: some View {
         VStack(spacing: 12) {
             Image(systemName: "lock.shield.fill")
-                .font(.system(size: 60))
-                .foregroundStyle(.blue)
+                .font(.system(size: 56))
+                .foregroundStyle(Color.accentColor)
 
             Text("Create Your Password")
                 .font(.title2)
                 .fontWeight(.bold)
 
-            Text("Create a password for managing Vault Services")
+            Text("This password protects high-value vault operations. Encrypted before it leaves the device.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
-        .padding(.vertical)
+        .padding(.top, 16)
+        .padding(.bottom, 8)
     }
 
     // MARK: - Password Fields
 
     private var passwordFieldsSection: some View {
-        VStack(spacing: 16) {
-            // Password field
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Password")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+        VStack(spacing: 12) {
+            outlinedSecureField(
+                title: "Password",
+                placeholder: "Enter password",
+                text: $viewModel.password,
+                focused: .password,
+                onChange: { viewModel.updatePasswordStrength() }
+            )
+            outlinedSecureField(
+                title: "Confirm Password",
+                placeholder: "Confirm password",
+                text: $viewModel.confirmPassword,
+                focused: .confirm
+            )
+        }
+    }
 
-                SecureField("Enter password", text: $viewModel.password)
-                    .textContentType(.newPassword)
-                    .focused($focusedField, equals: .password)
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(10)
-                    .onChange(of: viewModel.password) { _ in
-                        viewModel.updatePasswordStrength()
-                    }
-            }
-
-            // Confirm password field
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Confirm Password")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-
-                SecureField("Confirm password", text: $viewModel.confirmPassword)
-                    .textContentType(.newPassword)
-                    .focused($focusedField, equals: .confirm)
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(10)
-            }
+    private func outlinedSecureField(
+        title: String,
+        placeholder: String,
+        text: Binding<String>,
+        focused: Field,
+        onChange: (() -> Void)? = nil
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            SecureField(placeholder, text: text)
+                .textContentType(.newPassword)
+                .focused($focusedField, equals: focused)
+                .padding(.vertical, 14)
+                .padding(.horizontal, 14)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(focusedField == focused ? Color.accentColor : Color(.separator), lineWidth: 1)
+                )
+                .onChange(of: text.wrappedValue) { _ in onChange?() }
         }
     }
 
@@ -183,28 +186,24 @@ struct PasswordSetupView: View {
     // MARK: - Submit Button
 
     private var submitButton: some View {
-        Button(action: {
+        Button {
             focusedField = nil
-            Task {
-                await viewModel.submitPassword()
-            }
-        }) {
-            HStack {
+            Task { await viewModel.submitPassword() }
+        } label: {
+            HStack(spacing: 8) {
                 if viewModel.state == .processingPassword {
-                    ProgressView()
-                        .tint(.white)
+                    ProgressView().tint(.white)
                 } else {
-                    Text("Create Password")
+                    Text("Continue")
+                        .font(.headline)
                 }
             }
             .frame(maxWidth: .infinity)
-            .padding()
-            .background(viewModel.isPasswordValid ? Color.blue : Color.gray)
-            .foregroundColor(.white)
-            .cornerRadius(12)
+            .frame(height: 32)
         }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
         .disabled(!viewModel.isPasswordValid || viewModel.state == .processingPassword)
-        .padding(.top)
     }
 }
 

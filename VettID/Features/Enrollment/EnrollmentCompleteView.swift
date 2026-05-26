@@ -9,78 +9,65 @@ struct EnrollmentCompleteView: View {
     @State private var showContent = false
 
     var body: some View {
-        VStack(spacing: 32) {
-            Spacer()
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 20) {
+                    Spacer().frame(height: 32)
 
-            // Success animation
-            successIcon
+                    successIcon
 
-            // Content
-            if showContent {
-                VStack(spacing: 16) {
-                    Text("Welcome to VettID!")
-                        .font(.title)
-                        .fontWeight(.bold)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    if showContent {
+                        VStack(spacing: 8) {
+                            Text("Welcome to VettID!")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .transition(.opacity.combined(with: .move(edge: .bottom)))
 
-                    Text("Your credential has been securely stored on this device.")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .transition(.opacity)
+                            Text("Your credential is securely stored on this device.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                                .transition(.opacity)
+                        }
 
-                    // Feature highlights
-                    featureList
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        featureList
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    }
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 8)
             }
 
-            Spacer()
-
-            // Continue button
             if showContent {
                 Button(action: onDismiss) {
                     Text("Get Started")
-                        .fontWeight(.semibold)
+                        .font(.headline)
                         .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.blue)
-                        .foregroundColor(.white)
-                        .cornerRadius(12)
+                        .frame(height: 32)
                 }
-                .padding(.horizontal)
-                .padding(.bottom, 40)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 16)
                 .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
         }
-        .onAppear {
-            animateIn()
-        }
+        .onAppear { animateIn() }
     }
 
     // MARK: - Success Icon
 
     private var successIcon: some View {
         ZStack {
-            // Background circle
             Circle()
-                .fill(Color.green.opacity(0.15))
-                .frame(width: 140, height: 140)
-                .scaleEffect(showCheckmark ? 1 : 0.5)
-                .opacity(showCheckmark ? 1 : 0)
-
-            // Outer ring
-            Circle()
-                .stroke(Color.green, lineWidth: 4)
+                .fill(Color.accentColor.opacity(0.15))
                 .frame(width: 120, height: 120)
                 .scaleEffect(showCheckmark ? 1 : 0.5)
                 .opacity(showCheckmark ? 1 : 0)
 
-            // Checkmark
-            Image(systemName: "checkmark")
-                .font(.system(size: 50, weight: .bold))
-                .foregroundStyle(.green)
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 80))
+                .foregroundStyle(Color.accentColor)
                 .scaleEffect(showCheckmark ? 1 : 0)
                 .opacity(showCheckmark ? 1 : 0)
         }
@@ -90,44 +77,45 @@ struct EnrollmentCompleteView: View {
     // MARK: - Feature List
 
     private var featureList: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             featureRow(
                 icon: "lock.shield.fill",
-                title: "Secure Credential",
-                description: "Your credential is encrypted and stored in the Keychain"
-            )
-
-            featureRow(
-                icon: "faceid",
-                title: "Biometric Protection",
-                description: "Use Face ID or Touch ID for quick access"
+                title: "Encrypted vault",
+                description: "Credential stored in iOS Keychain, sealed to this device."
             )
 
             featureRow(
                 icon: "arrow.triangle.2.circlepath",
-                title: "Key Rotation",
-                description: "Security keys rotate automatically with each use"
+                title: "Key rotation",
+                description: "Transaction keys rotate automatically with each use."
+            )
+
+            featureRow(
+                icon: "checkmark.shield",
+                title: "Hardware attestation",
+                description: "Enclave verifies the device on every sensitive operation."
             )
         }
-        .padding()
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.systemGray6))
-        .cornerRadius(16)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
     private func featureRow(icon: String, title: String, description: String) -> some View {
-        HStack(alignment: .top, spacing: 16) {
+        HStack(alignment: .top, spacing: 14) {
             Image(systemName: icon)
                 .font(.title3)
-                .foregroundStyle(.blue)
-                .frame(width: 32)
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 28)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.subheadline)
                     .fontWeight(.semibold)
 
                 Text(description)
-                    .font(.caption)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
             }
 

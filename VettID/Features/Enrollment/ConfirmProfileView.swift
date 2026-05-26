@@ -11,99 +11,108 @@ struct ConfirmProfileView: View {
     let onSkip: () -> Void
 
     var body: some View {
-        VStack(spacing: 32) {
-            Spacer()
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 20) {
+                    Spacer().frame(height: 12)
 
-            // Profile icon
-            ZStack {
-                Circle()
-                    .fill(Color.green.opacity(0.15))
-                    .frame(width: 100, height: 100)
+                    Image(systemName: "person.crop.circle.badge.checkmark.fill")
+                        .font(.system(size: 56))
+                        .foregroundStyle(Color.accentColor)
 
-                Image(systemName: "person.crop.circle.badge.checkmark")
-                    .font(.system(size: 44))
-                    .foregroundStyle(.green)
+                    VStack(spacing: 8) {
+                        Text("Your Public Profile")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                        Text("This is what others will see when they connect with you.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+
+                    profileCard
+                    privacyNote
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 8)
             }
 
-            // Title
             VStack(spacing: 8) {
-                Text("Your Public Profile")
-                    .font(.title2)
-                    .fontWeight(.bold)
-
-                Text("This is what others will see when they connect with you")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
-            }
-
-            // Profile card
-            VStack(spacing: 16) {
-                // Avatar placeholder
-                ZStack {
-                    Circle()
-                        .fill(Color.blue.opacity(0.15))
-                        .frame(width: 80, height: 80)
-
-                    Text(initials)
-                        .font(.title)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.blue)
-                }
-
-                Text(displayName)
-                    .font(.title3)
-                    .fontWeight(.semibold)
-
-                if let email = email, !email.isEmpty {
-                    Text(email)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-
-                HStack(spacing: 4) {
-                    Image(systemName: "globe")
-                        .font(.caption)
-                    Text("Visible to connections")
-                        .font(.caption)
-                }
-                .foregroundStyle(.blue)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color.blue.opacity(0.1))
-                .cornerRadius(8)
-            }
-            .padding(24)
-            .frame(maxWidth: .infinity)
-            .background(Color(.systemGray6))
-            .cornerRadius(16)
-            .padding(.horizontal)
-
-            Text("You can edit your profile anytime from settings")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-
-            Spacer()
-
-            // Action buttons
-            VStack(spacing: 12) {
                 Button(action: onConfirm) {
                     Text("Publish Profile")
-                        .fontWeight(.semibold)
+                        .font(.headline)
                         .frame(maxWidth: .infinity)
+                        .frame(height: 32)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
 
                 Button(action: onSkip) {
-                    Text("Skip for Now")
-                        .foregroundStyle(.secondary)
+                    Text("Skip for now")
+                        .font(.subheadline)
+                        .frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .padding(.vertical, 8)
             }
-            .padding(.horizontal)
-            .padding(.bottom, 24)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 16)
         }
+    }
+
+    private var profileCard: some View {
+        VStack(spacing: 16) {
+            ZStack {
+                Circle()
+                    .fill(Color.accentColor.opacity(0.15))
+                    .frame(width: 80, height: 80)
+
+                Text(initials)
+                    .font(.title)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Color.accentColor)
+            }
+
+            Text(displayName)
+                .font(.title3)
+                .fontWeight(.semibold)
+
+            if let email = email, !email.isEmpty {
+                Text(email)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 4) {
+                Image(systemName: "globe")
+                    .font(.caption)
+                Text("Visible to connections")
+                    .font(.caption)
+            }
+            .foregroundStyle(Color.accentColor)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Color.accentColor.opacity(0.1))
+            .clipShape(Capsule())
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity)
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var privacyNote: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "lock.fill")
+                .font(.footnote)
+                .foregroundStyle(Color.accentColor)
+            Text("You can edit your public profile anytime from Settings.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 8)
     }
 
     private var initials: String {

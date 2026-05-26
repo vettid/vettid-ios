@@ -19,58 +19,74 @@ struct PermissionsPhaseView: View {
     @State private var microphoneChecked = false
 
     var body: some View {
-        VStack(spacing: 24) {
-            Text("Permissions")
-                .font(.title2.weight(.bold))
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 20) {
+                    Spacer().frame(height: 12)
 
-            Text("VettID works best with these permissions. You can change them later in Settings.")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
+                    Image(systemName: "checkmark.shield.fill")
+                        .font(.system(size: 56))
+                        .foregroundStyle(Color.accentColor)
 
-            VStack(spacing: 12) {
-                PermissionCard(
-                    icon: "bell.badge",
-                    title: "Notifications",
-                    description: "Get alerts for connection requests, messages, and vault activity.",
-                    isGranted: notificationsGranted,
-                    isChecked: notificationsChecked
-                ) {
-                    await requestNotifications()
+                    VStack(spacing: 8) {
+                        Text("Permissions")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                        Text("VettID works best with these permissions. You can change them later in Settings.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+
+                    VStack(spacing: 12) {
+                        PermissionCard(
+                            icon: "bell.badge",
+                            title: "Notifications",
+                            description: "Get alerts for connection requests, messages, and vault activity.",
+                            isGranted: notificationsGranted,
+                            isChecked: notificationsChecked
+                        ) {
+                            await requestNotifications()
+                        }
+
+                        PermissionCard(
+                            icon: "camera",
+                            title: "Camera",
+                            description: "Scan QR codes for connections and credentials.",
+                            isGranted: cameraGranted,
+                            isChecked: cameraChecked
+                        ) {
+                            await requestCamera()
+                        }
+
+                        PermissionCard(
+                            icon: "mic",
+                            title: "Microphone",
+                            description: "Make voice and video calls to your connections.",
+                            isGranted: microphoneGranted,
+                            isChecked: microphoneChecked
+                        ) {
+                            await requestMicrophone()
+                        }
+                    }
                 }
-
-                PermissionCard(
-                    icon: "camera",
-                    title: "Camera",
-                    description: "Scan QR codes for connections and credentials.",
-                    isGranted: cameraGranted,
-                    isChecked: cameraChecked
-                ) {
-                    await requestCamera()
-                }
-
-                PermissionCard(
-                    icon: "mic",
-                    title: "Microphone",
-                    description: "Make voice and video calls to your connections.",
-                    isGranted: microphoneGranted,
-                    isChecked: microphoneChecked
-                ) {
-                    await requestMicrophone()
-                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 8)
             }
-            .padding(.horizontal)
 
-            Spacer()
-
-            Button("Continue") {
+            Button {
                 onContinue()
+            } label: {
+                Text("Continue")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 32)
             }
             .buttonStyle(.borderedProminent)
-            .padding(.bottom, 40)
+            .controlSize(.large)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 16)
         }
-        .padding(.top, 40)
         .task {
             await checkExistingPermissions()
         }

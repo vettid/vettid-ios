@@ -607,6 +607,15 @@ struct EnrollmentContainerView: View {
     /// Phase 5.8 — flips on EnrollmentCompleteView's Continue tap so
     /// the .complete case renders the post-enrollment next-steps panel.
     @State private var showNextSteps = false
+    /// If non-nil, run `handleScannedCode` with this on appear so the
+    /// manual-entry screen can hand control to the wizard with the
+    /// portal short code already in flight (instead of showing the
+    /// QR scanner first).
+    let seededCode: String?
+
+    init(seededCode: String? = nil) {
+        self.seededCode = seededCode
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -717,6 +726,15 @@ struct EnrollmentContainerView: View {
                 }
             }
         }
+        // Manual-entry handoff: when the parent pushes us with a
+        // pre-typed portal code, kick off the same path the QR
+        // scanner uses so the wizard transitions through progress
+        // and error states normally.
+        .task(id: seededCode ?? "") {
+            if let code = seededCode, !code.isEmpty, case .initial = viewModel.state {
+                await viewModel.handleScannedCode(code)
+            }
+        }
     }
 
     private var shouldShowStepIndicator: Bool {
@@ -731,228 +749,219 @@ struct EnrollmentContainerView: View {
     // MARK: - Identity Rejected View
 
     private var identityRejectedView: some View {
-        VStack(spacing: 24) {
-            Image(systemName: "exclamationmark.shield.fill")
-                .font(.system(size: 60))
-                .foregroundStyle(.red)
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 20) {
+                    Spacer().frame(height: 32)
 
-            Text("Identity Mismatch Reported")
-                .font(.title2)
-                .fontWeight(.bold)
+                    Image(systemName: "exclamationmark.shield.fill")
+                        .font(.system(size: 64))
+                        .foregroundStyle(.red)
 
-            Text("This enrollment has been cancelled. A mismatch report has been sent for investigation.")
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
+                    VStack(spacing: 8) {
+                        Text("Identity Mismatch Reported")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                        Text("This enrollment has been cancelled. A mismatch report has been sent for investigation.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                }
+                .padding(.horizontal, 24)
+            }
 
-            Button("Done") {
+            Button {
                 viewModel.reset()
                 dismiss()
+            } label: {
+                Text("Done")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 32)
             }
             .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 16)
         }
-        .padding()
     }
 
-    // MARK: - Processing View
+    // MARK: - Transient Progress Views
+    //
+    // All "doing background work" wizard states share the same layout:
+    // a tall centered card with an icon, headline, body subtitle, and
+    // a small spinner — modeled on Android's transient phase rows.
+    // `transientProgressView` is the single source of truth so they
+    // stay visually consistent and easy to retune.
+
+    private func transientProgressView(
+        icon: String,
+        title: String,
+        subtitle: String,
+        accessibilityIdentifier: String? = nil
+    ) -> some View {
+        VStack(spacing: 16) {
+            Spacer()
+            Image(systemName: icon)
+                .font(.system(size: 56))
+                .foregroundStyle(Color.accentColor)
+            VStack(spacing: 8) {
+                Text(title)
+                    .font(.title2)
+                    .fontWeight(.bold)
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            ProgressView()
+                .controlSize(.regular)
+                .padding(.top, 8)
+            Spacer()
+        }
+        .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityIdentifier(accessibilityIdentifier ?? "")
+    }
 
     private var processingView: some View {
-        VStack(spacing: 20) {
-            ProgressView()
-                .scaleEffect(1.5)
-                .accessibilityIdentifier("enrollment.progressIndicator")
-
-            Text("Processing invitation...")
-                .font(.headline)
-                .accessibilityIdentifier("enrollment.processingText")
-
-            Text("Connecting to vault services")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .accessibilityIdentifier("enrollment.processingView")
+        transientProgressView(
+            icon: "qrcode.viewfinder",
+            title: "Processing invitation",
+            subtitle: "Connecting to vault services…",
+            accessibilityIdentifier: "enrollment.processingView"
+        )
     }
-
-    // MARK: - Finalizing View
 
     private var finalizingView: some View {
-        VStack(spacing: 20) {
-            ProgressView()
-                .scaleEffect(1.5)
-
-            Text("Completing enrollment...")
-                .font(.headline)
-
-            Text("Setting up your secure credential")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
+        transientProgressView(
+            icon: "checkmark.shield",
+            title: "Completing enrollment",
+            subtitle: "Setting up your secure credential…"
+        )
     }
-
-    // MARK: - Setting Up NATS View
 
     private var settingUpNatsView: some View {
-        VStack(spacing: 20) {
-            ProgressView()
-                .scaleEffect(1.5)
-
-            Text("Setting up messaging...")
-                .font(.headline)
-
-            Text("Configuring secure vault communication")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
+        transientProgressView(
+            icon: "antenna.radiowaves.left.and.right",
+            title: "Setting up messaging",
+            subtitle: "Configuring secure vault communication…"
+        )
     }
-
-    // MARK: - Connecting to NATS View
 
     private var connectingToNatsView: some View {
-        VStack(spacing: 20) {
-            ProgressView()
-                .scaleEffect(1.5)
-                .accessibilityIdentifier("enrollment.connectingProgress")
-
-            Text("Connecting to vault...")
-                .font(.headline)
-                .accessibilityIdentifier("enrollment.connectingText")
-
-            Text("Establishing secure channel")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .accessibilityIdentifier("enrollment.connectingToNatsView")
+        transientProgressView(
+            icon: "antenna.radiowaves.left.and.right",
+            title: "Connecting to vault",
+            subtitle: "Establishing secure channel…",
+            accessibilityIdentifier: "enrollment.connectingToNatsView"
+        )
     }
-
-    // MARK: - Requesting Attestation View
 
     private var requestingAttestationView: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "checkmark.shield")
-                .font(.system(size: 50))
-                .foregroundStyle(.blue)
-                .accessibilityIdentifier("enrollment.attestationIcon")
-
-            ProgressView()
-                .scaleEffect(1.2)
-
-            Text("Verifying enclave...")
-                .font(.headline)
-                .accessibilityIdentifier("enrollment.attestationText")
-
-            Text("Validating secure environment")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .accessibilityIdentifier("enrollment.requestingAttestationView")
+        transientProgressView(
+            icon: "checkmark.shield",
+            title: "Verifying enclave",
+            subtitle: "Validating secure environment…",
+            accessibilityIdentifier: "enrollment.requestingAttestationView"
+        )
     }
-
-    // MARK: - Waiting for Vault View
 
     private var waitingForVaultView: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "building.2")
-                .font(.system(size: 50))
-                .foregroundStyle(.blue)
-                .accessibilityIdentifier("enrollment.vaultIcon")
-
-            ProgressView()
-                .scaleEffect(1.2)
-
-            Text("Starting your vault...")
-                .font(.headline)
-                .accessibilityIdentifier("enrollment.waitingVaultText")
-
-            Text("This may take a moment")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .accessibilityIdentifier("enrollment.waitingForVaultView")
+        transientProgressView(
+            icon: "building.2.fill",
+            title: "Starting your vault",
+            subtitle: "This may take a moment…",
+            accessibilityIdentifier: "enrollment.waitingForVaultView"
+        )
     }
-
-    // MARK: - Creating Credential View
 
     private var creatingCredentialView: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "key.fill")
-                .font(.system(size: 50))
-                .foregroundStyle(.blue)
-                .accessibilityIdentifier("enrollment.credentialIcon")
-
-            ProgressView()
-                .scaleEffect(1.2)
-
-            Text("Creating credential...")
-                .font(.headline)
-                .accessibilityIdentifier("enrollment.creatingCredentialText")
-
-            Text("Generating secure keys")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .accessibilityIdentifier("enrollment.creatingCredentialView")
+        transientProgressView(
+            icon: "key.fill",
+            title: "Creating credential",
+            subtitle: "Generating secure keys…",
+            accessibilityIdentifier: "enrollment.creatingCredentialView"
+        )
     }
 
-    // MARK: - Verifying Enrollment View
-
     private var verifyingEnrollmentView: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "checkmark.circle")
-                .font(.system(size: 50))
-                .foregroundStyle(.green)
-                .accessibilityIdentifier("enrollment.verifyIcon")
-
-            ProgressView()
-                .scaleEffect(1.2)
-
-            Text("Verifying enrollment...")
-                .font(.headline)
-                .accessibilityIdentifier("enrollment.verifyingText")
-
-            Text("Almost done")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .accessibilityIdentifier("enrollment.verifyingEnrollmentView")
+        transientProgressView(
+            icon: "checkmark.circle",
+            title: "Verifying enrollment",
+            subtitle: "Almost done…",
+            accessibilityIdentifier: "enrollment.verifyingEnrollmentView"
+        )
     }
 
     // MARK: - Error View
 
     private func errorView(message: String, retryable: Bool) -> some View {
-        VStack(spacing: 24) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 60))
-                .foregroundStyle(.orange)
-                .accessibilityIdentifier("enrollment.errorIcon")
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 20) {
+                    Spacer().frame(height: 24)
 
-            Text("Enrollment Failed")
-                .font(.title2)
-                .fontWeight(.bold)
-                .accessibilityIdentifier("enrollment.errorTitle")
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 64))
+                        .foregroundStyle(.orange)
+                        .accessibilityIdentifier("enrollment.errorIcon")
 
-            Text(message)
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-                .accessibilityIdentifier("enrollment.errorMessage")
+                    Text("Enrollment Failed")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .accessibilityIdentifier("enrollment.errorTitle")
 
-            if retryable {
-                Button("Try Again") {
-                    viewModel.reset()
+                    // Surface the underlying detail in a quiet card —
+                    // matches Android's errorContainer treatment so the
+                    // actual error message stays visible/copyable rather
+                    // than being a tiny grey subtitle.
+                    if !message.isEmpty {
+                        Text(message)
+                            .font(.subheadline)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(16)
+                            .background(Color.red.opacity(0.08))
+                            .foregroundStyle(.primary)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .accessibilityIdentifier("enrollment.errorMessage")
+                    }
                 }
-                .buttonStyle(.borderedProminent)
-                .accessibilityIdentifier("enrollment.retryButton")
+                .padding(.horizontal, 24)
             }
 
-            Button("Cancel") {
-                dismiss()
+            VStack(spacing: 8) {
+                if retryable {
+                    Button {
+                        viewModel.reset()
+                    } label: {
+                        Text("Try Again")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 32)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .accessibilityIdentifier("enrollment.retryButton")
+                }
+
+                Button {
+                    dismiss()
+                } label: {
+                    Text("Cancel")
+                        .font(.subheadline)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .padding(.vertical, 8)
+                .accessibilityIdentifier("enrollment.cancelButton")
             }
-            .buttonStyle(.bordered)
-            .accessibilityIdentifier("enrollment.cancelButton")
+            .padding(.horizontal, 24)
+            .padding(.bottom, 16)
         }
-        .padding()
         .accessibilityIdentifier("enrollment.errorView")
     }
 }
@@ -961,35 +970,125 @@ struct EnrollmentContainerView: View {
 
 struct ManualEnrollmentView: View {
     @State private var invitationCode = ""
-    @StateObject private var viewModel = EnrollmentViewModel()
+    @State private var submittedCode: String? = nil
+    @FocusState private var fieldFocused: Bool
 
-    var body: some View {
-        VStack(spacing: 24) {
-            Text("Enter your invitation code")
-                .font(.headline)
-                .accessibilityIdentifier("manualEnrollment.instructionText")
+    /// Custom binding that uppercases, strips invalid chars, caps at
+    /// 8 alphanumerics, and auto-inserts the hyphen.
+    /// Behavior:
+    ///   • After typing the 4th char, show `ABCD-` so the second block
+    ///     is obviously next.
+    ///   • If the user backspaces from `ABCD-`, drop to `ABC` — the
+    ///     trailing dash disappears with the 4th char (so backspace
+    ///     doesn't feel "stuck").
+    ///   • Once there's at least one second-block char, always keep
+    ///     the dash to make `ABCD-1` render canonically.
+    private var formattedCodeBinding: Binding<String> {
+        Binding(
+            get: { invitationCode },
+            set: { raw in
+                let allowed = Set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+                let cleaned = raw.uppercased().filter { allowed.contains($0) }
+                let capped = String(cleaned.prefix(8))
+                let prevAlnumCount = invitationCode.filter { allowed.contains($0) }.count
+                let isAddingChar = capped.count > prevAlnumCount
 
-            TextField("Invitation Code", text: $invitationCode)
-                .textFieldStyle(.roundedBorder)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .padding(.horizontal)
-                .accessibilityIdentifier("manualEnrollment.codeTextField")
-
-            Button("Continue") {
-                Task {
-                    await viewModel.handleScannedCode(invitationCode)
+                if capped.count > 4 {
+                    invitationCode = "\(capped.prefix(4))-\(capped.dropFirst(4))"
+                } else if capped.count == 4 && isAddingChar {
+                    invitationCode = "\(capped)-"
+                } else {
+                    invitationCode = capped
                 }
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(invitationCode.isEmpty)
-            .accessibilityIdentifier("manualEnrollment.continueButton")
+        )
+    }
 
-            Spacer()
+    /// True once the user has typed all 8 alphanumerics (with the
+    /// auto-inserted hyphen the visible string is 9 chars).
+    private var isCodeComplete: Bool {
+        invitationCode.count == 9
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 24) {
+                    Spacer().frame(height: 16)
+
+                    Image(systemName: "key.horizontal.fill")
+                        .font(.system(size: 56))
+                        .foregroundStyle(Color.accentColor)
+                        .accessibilityHidden(true)
+
+                    VStack(spacing: 8) {
+                        Text("Enter Enrollment Code")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .accessibilityIdentifier("manualEnrollment.instructionText")
+
+                        Text("Enter the 8-character code from your VettID web portal.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 8)
+                    }
+
+                    TextField("ABCD-1234", text: formattedCodeBinding)
+                        .font(.system(.title2, design: .monospaced))
+                        .multilineTextAlignment(.center)
+                        .padding(.vertical, 14)
+                        .padding(.horizontal, 20)
+                        .frame(maxWidth: 280)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color(.separator), lineWidth: 1)
+                        )
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                        .focused($fieldFocused)
+                        .accessibilityIdentifier("manualEnrollment.codeTextField")
+                        .onSubmit { submit() }
+                }
+                .padding(.horizontal, 24)
+            }
+
+            VStack(spacing: 12) {
+                Button(action: submit) {
+                    Text("Continue")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 32)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(!isCodeComplete)
+                .accessibilityIdentifier("manualEnrollment.continueButton")
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 16)
         }
-        .padding(.top, 40)
+        .frame(maxWidth: .infinity)
         .navigationTitle("Enter Code")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear { fieldFocused = true }
         .accessibilityIdentifier("manualEnrollment.view")
+        .navigationDestination(isPresented: Binding(
+            get: { submittedCode != nil },
+            set: { newValue in if !newValue { submittedCode = nil } }
+        )) {
+            if let code = submittedCode {
+                EnrollmentContainerView(seededCode: code)
+            }
+        }
+    }
+
+    private func submit() {
+        guard isCodeComplete else { return }
+        fieldFocused = false
+        // Push the wizard with this code pre-seeded so all progress
+        // and error states render through EnrollmentContainerView.
+        submittedCode = invitationCode
     }
 }
 
@@ -999,6 +1098,7 @@ struct ManualEnrollmentView: View {
 struct AuthenticationView: View {
     @EnvironmentObject var appState: AppState
     @State private var showFullAuth = false
+    @State private var showResetConfirm = false
 
     var body: some View {
         VStack(spacing: 24) {
@@ -1014,7 +1114,7 @@ struct AuthenticationView: View {
                 .fontWeight(.semibold)
                 .accessibilityIdentifier("unlock.title")
 
-            Text("Use Face ID for quick access or authenticate with your password")
+            Text("Enter your password to authenticate.")
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -1023,35 +1123,44 @@ struct AuthenticationView: View {
 
             VStack(spacing: 12) {
                 Button(action: {
-                    attemptBiometricUnlock()
-                }) {
-                    Label("Unlock with Face ID", systemImage: "faceid")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .accessibilityIdentifier("unlock.biometricButton")
-
-                Button(action: {
                     showFullAuth = true
                 }) {
                     Text("Use Password")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .accessibilityIdentifier("unlock.passwordButton")
+
+                // Escape hatch — if the credential on this device
+                // belongs to a previous install / test account, this
+                // wipes the local keychain + UserDefaults state and
+                // returns the user to the enrollment Welcome screen.
+                Button(role: .destructive, action: {
+                    showResetConfirm = true
+                }) {
+                    Text("Start Over")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .accessibilityIdentifier("unlock.startOverButton")
             }
             .padding(.horizontal)
         }
         .padding()
         .accessibilityIdentifier("unlockView")
-        .onAppear {
-            attemptBiometricUnlock()
-        }
         .sheet(isPresented: $showFullAuth) {
             AuthenticationContainerView()
                 .environmentObject(appState)
+        }
+        .alert("Start over with a new enrollment?", isPresented: $showResetConfirm) {
+            Button("Cancel", role: .cancel) { }
+            Button("Start Over", role: .destructive) {
+                appState.fullSignOut()
+            }
+        } message: {
+            Text("This clears the credential stored on this device. You'll go back to the welcome screen and can enroll a new identity. The vault on the server is not affected.")
         }
     }
 

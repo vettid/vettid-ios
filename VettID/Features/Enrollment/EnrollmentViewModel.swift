@@ -1,5 +1,8 @@
 import Foundation
 import SwiftUI
+import os
+
+private let enrollLog = Logger(subsystem: "com.vettid.app", category: "enrollment")
 
 // MARK: - QR Code Data Model
 
@@ -10,7 +13,10 @@ struct EnrollmentQRCodeData: Codable {
     let apiUrl: String
     let sessionToken: String?      // For QR code flow (web-initiated)
     let invitationCode: String?    // For direct invitation code flow
-    let userGuid: String
+    /// Optional — only present on QRs that came from the new Nitro
+    /// flow. Older / portal-issued QRs may omit it, so decode must
+    /// not fail on its absence. Mirrors Android's nullable userGuid.
+    let userGuid: String?
 
     enum CodingKeys: String, CodingKey {
         case type
@@ -309,43 +315,115 @@ final class EnrollmentViewModel: ObservableObject {
     }
 
     func handleScannedCode(_ code: String) async {
-        #if DEBUG
-        print("[Enrollment] handleScannedCode called with: \(code.prefix(100))...")
-        #endif
+        enrollLog.info("handleScannedCode: len=\(code.count, privacy: .public) prefix=\(code.prefix(40), privacy: .public)")
         scannedCode = code
         state = .processingInvitation
+
+        // Short enrollment code (`XXXX-XXXX`, 8 chars + hyphen) issued
+        // by the web portal — resolve via POST /vault/enroll/resolve-code
+        // to get the full QR-equivalent payload, then continue with
+        // the standard flow. Mirrors Android's `processQRCode` short-
+        // code branch. Lenient on input: accept the 8 chars with or
+        // without the hyphen, then send the canonical `XXXX-XXXX` form.
+        if let canonical = Self.normalizedShortCode(code) {
+            enrollLog.info("matched short-code regex, resolving canonical=\(canonical, privacy: .public)")
+            await resolveShortCodeAndContinue(canonical)
+            return
+        }
 
         do {
             // Parse QR code JSON data to extract api_url and session_token or invitation_code
             let qrData = try parseQRCodeData(code)
-            #if DEBUG
-            print("[Enrollment] Parsed QR data - apiUrl: \(qrData.apiUrl)")
-            #endif
-
-            // Create API client with the URL from QR code
-            guard let apiUrl = URL(string: qrData.apiUrl) else {
-                throw EnrollmentError.invalidInvitationCode
-            }
-            apiClient = APIClient(baseURL: apiUrl)
-
-            // Route to appropriate flow based on QR data content
-            if qrData.isQRFlow, let sessionToken = qrData.sessionToken {
-                // QR Code Flow: Authenticate with session_token first
-                await startQRCodeFlow(sessionToken: sessionToken)
-            } else if qrData.isInvitationFlow, let invitationCode = qrData.invitationCode {
-                // Invitation Code Flow: Start enrollment directly
-                await startInvitationCodeFlow(invitationCode: invitationCode)
-            } else {
-                // Fallback: Assume session token for backwards compatibility
-                await startQRCodeFlow(sessionToken: qrData.sessionToken ?? code)
-            }
-
+            enrollLog.info("Parsed QR data apiUrl=\(qrData.apiUrl, privacy: .public) hasSession=\(qrData.sessionToken != nil, privacy: .public) hasInvite=\(qrData.invitationCode != nil, privacy: .public)")
+            await continueWithQRData(qrData, fallbackTokenIfMissing: code)
         } catch {
-            #if DEBUG
-            print("[Enrollment] Error during handleScannedCode: \(error)")
-            #endif
+            enrollLog.error("handleScannedCode threw: \(String(describing: error), privacy: .public)")
             handleError(error, retryable: true)
         }
+    }
+
+    /// Continue the enrollment flow with a fully-populated QR payload —
+    /// either parsed from the scanned JSON or returned by
+    /// `/vault/enroll/resolve-code`. Factored out so both the QR-scan
+    /// and short-code paths share it.
+    private func continueWithQRData(
+        _ qrData: EnrollmentQRCodeData,
+        fallbackTokenIfMissing: String
+    ) async {
+        guard let apiUrl = URL(string: qrData.apiUrl) else {
+            handleError(EnrollmentError.invalidInvitationCode, retryable: true)
+            return
+        }
+        apiClient = APIClient(baseURL: apiUrl)
+
+        if qrData.isQRFlow, let sessionToken = qrData.sessionToken {
+            await startQRCodeFlow(sessionToken: sessionToken)
+        } else if qrData.isInvitationFlow, let invitationCode = qrData.invitationCode {
+            await startInvitationCodeFlow(invitationCode: invitationCode)
+        } else {
+            // Fallback for older-format QRs that only have a bare token
+            await startQRCodeFlow(sessionToken: qrData.sessionToken ?? fallbackTokenIfMissing)
+        }
+    }
+
+    /// Hit `/vault/enroll/resolve-code` with the 8-char portal code
+    /// and continue with the returned QR payload.
+    private func resolveShortCodeAndContinue(_ code: String) async {
+        do {
+            let resolverClient = APIClient(baseURL: AppConfiguration.enrollmentAPIURL)
+            apiClient = resolverClient
+            let request = ResolveEnrollmentCodeRequest(
+                enrollmentCode: code,
+                deviceId: getDeviceId(),
+                deviceType: "ios"
+            )
+            enrollLog.info("POST resolve-code base=\(AppConfiguration.enrollmentAPIURL.absoluteString, privacy: .public) code=\(code, privacy: .public)")
+            let qrData = try await resolverClient.resolveEnrollmentCode(request: request)
+            enrollLog.info("resolve-code OK apiUrl=\(qrData.apiUrl, privacy: .public) hasSession=\(qrData.sessionToken != nil, privacy: .public)")
+            await continueWithQRData(qrData, fallbackTokenIfMissing: code)
+        } catch {
+            enrollLog.error("resolve-code failed: \(String(describing: error), privacy: .public)")
+            handleError(error, retryable: true)
+        }
+    }
+
+    /// Read `exp` (seconds since epoch) from a NATS JWT payload. We
+    /// only need a best-effort expiration for credential lifecycle —
+    /// return nil if the JWT is malformed or has no `exp` claim and
+    /// let the caller fall back.
+    private static func parseJWTExp(jwt: String) -> Date? {
+        let parts = jwt.split(separator: ".")
+        guard parts.count >= 2 else { return nil }
+        var base64 = String(parts[1])
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        while base64.count % 4 != 0 { base64 += "=" }
+        guard
+            let payloadData = Data(base64Encoded: base64),
+            let payload = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any],
+            let exp = payload["exp"] as? TimeInterval
+        else { return nil }
+        return Date(timeIntervalSince1970: exp)
+    }
+
+    /// 8-character portal short code. Accepts `ABCD-1234`, `ABCD1234`,
+    /// or whitespace/lowercase variants — returns the canonical
+    /// `XXXX-XXXX` form to send to the resolver, or nil if it doesn't
+    /// look like a short code at all.
+    static func normalizedShortCode(_ raw: String) -> String? {
+        let upper = raw
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+        // Without hyphen
+        if upper.range(of: "^[A-Z0-9]{8}$", options: .regularExpression) != nil {
+            let idx = upper.index(upper.startIndex, offsetBy: 4)
+            return "\(upper[..<idx])-\(upper[idx...])"
+        }
+        // With hyphen
+        if upper.range(of: "^[A-Z0-9]{4}-[A-Z0-9]{4}$", options: .regularExpression) != nil {
+            return upper
+        }
+        return nil
     }
 
     /// Handle direct invitation code entry (without QR scan)
@@ -355,6 +433,13 @@ final class EnrollmentViewModel: ObservableObject {
         #endif
         scannedCode = code
         state = .processingInvitation
+
+        // If the user typed an 8-char portal code (`XXXX-XXXX`), route
+        // through resolve-code so manual entry matches the QR-scan flow.
+        if let canonical = Self.normalizedShortCode(code) {
+            await resolveShortCodeAndContinue(canonical)
+            return
+        }
 
         do {
             // Use provided API URL or default from configuration
@@ -408,19 +493,14 @@ final class EnrollmentViewModel: ObservableObject {
         do {
             let deviceId = getDeviceId()
 
-            // Step 1: Authenticate with session_token to get enrollment JWT
-            #if DEBUG
-            print("[Enrollment] Step 1: Authenticating with session token...")
-            #endif
+            enrollLog.info("startQRCodeFlow: POST enroll/authenticate")
             let authRequest = EnrollAuthenticateRequest(
                 sessionToken: sessionToken,
                 deviceId: deviceId,
                 deviceType: "ios"
             )
             let authResponse = try await apiClient.enrollAuthenticate(request: authRequest)
-            #if DEBUG
-            print("[Enrollment] Auth successful - enrollmentSessionId: \(authResponse.enrollmentSessionId)")
-            #endif
+            enrollLog.info("authenticate OK sessionId=\(authResponse.enrollmentSessionId, privacy: .public)")
 
             // Store the enrollment token (JWT) for subsequent calls
             enrollmentToken = authResponse.enrollmentToken
@@ -431,16 +511,13 @@ final class EnrollmentViewModel: ObservableObject {
             if useNatsFlow {
                 await startNatsBasedEnrollment()
             } else {
-                // Legacy API-based flow
                 let startRequest = EnrollStartRequest(skipAttestation: true)
                 let response = try await apiClient.enrollStart(request: startRequest, authToken: authResponse.enrollmentToken)
                 await handleEnrollStartResponse(response)
             }
 
         } catch {
-            #if DEBUG
-            print("[Enrollment] Error during QR code flow: \(error)")
-            #endif
+            enrollLog.error("startQRCodeFlow threw: \(String(describing: error), privacy: .public)")
             handleError(error, retryable: true)
         }
     }
@@ -465,31 +542,47 @@ final class EnrollmentViewModel: ObservableObject {
         }
 
         do {
-            // Step 1: Call finalize to get NATS bootstrap credentials
-            #if DEBUG
-            print("[Enrollment] NATS Flow: Getting bootstrap credentials...")
-            #endif
+            // Step 1: Get NATS bootstrap credentials. Mirrors Android's
+            // post-`authenticate` step — `/vault/enroll/nats-bootstrap`
+            // returns the NATS creds we use to drive PIN/password/
+            // finalize over messaging. (The old `enrollFinalize`-first
+            // path was removed; the server now rejects it with 400
+            // "Enrollment not properly initialized.")
+            enrollLog.info("NATS Flow: POST nats-bootstrap")
             state = .connectingToNats
 
-            let request = EnrollFinalizeRequest()
-            let response = try await apiClient.enrollFinalize(request: request, authToken: token)
+            let deviceId = getDeviceId()
+            let bootstrapRequest = EnrollNatsBootstrapRequest.test(deviceId: deviceId)
+            let bootstrap = try await apiClient.enrollNatsBootstrap(
+                request: bootstrapRequest,
+                authToken: token
+            )
 
-            // Extract NATS connection info
-            guard let natsInfo = response.natsConnection else {
-                #if DEBUG
-                print("[Enrollment] No NATS connection info in finalize response, falling back to API flow")
-                #endif
-                useNatsFlow = false
-                let startRequest = EnrollStartRequest(skipAttestation: true)
-                let startResponse = try await apiClient.enrollStart(request: startRequest, authToken: token)
-                await handleEnrollStartResponse(startResponse)
-                return
-            }
+            enrollLog.info("nats-bootstrap OK userGuid=\(bootstrap.userGuid, privacy: .public) endpoint=\(bootstrap.natsEndpoint, privacy: .public)")
+            userGuid = bootstrap.userGuid
 
-            // Parse NATS credentials
-            let credentials = NatsCredentials(from: natsInfo)
+            // Build NatsCredentials from the structured response fields
+            // directly. The bootstrap response carries `nats_jwt` and
+            // `nats_seed` as their own keys; we previously parsed those
+            // out of the `nats_creds` PEM-style blob, but that parser
+            // was fragile (subtle dash-count / line-ending mismatches
+            // → silent nil). Read the JWT `exp` claim ourselves so the
+            // expiration date is correct.
+            let credentials = NatsCredentials(
+                tokenId: bootstrap.tokenId,
+                jwt: bootstrap.natsJwt,
+                seed: bootstrap.natsSeed,
+                endpoint: bootstrap.natsEndpoint,
+                expiresAt: Self.parseJWTExp(jwt: bootstrap.natsJwt)
+                    ?? ISO8601DateFormatter().date(from: bootstrap.expiresAt)
+                    ?? Date().addingTimeInterval(3600),
+                permissions: NatsPermissions(
+                    publish: ["\(bootstrap.ownerSpace).forVault.>"],
+                    subscribe: ["\(bootstrap.ownerSpace).forApp.>"]
+                )
+            )
             natsBootstrapCredentials = credentials
-            natsOwnerSpace = natsInfo.ownerSpace
+            natsOwnerSpace = bootstrap.ownerSpace
 
             // Step 2: Connect to NATS
             #if DEBUG
@@ -503,7 +596,7 @@ final class EnrollmentViewModel: ObservableObject {
             let handler = EnrollmentNatsHandler(natsConnectionManager: connectionManager)
             enrollmentNatsHandler = handler
 
-            try await handler.connect(credentials: credentials, ownerSpace: natsInfo.ownerSpace)
+            try await handler.connect(credentials: credentials, ownerSpace: bootstrap.ownerSpace)
 
             // Step 3: Request attestation via NATS
             #if DEBUG

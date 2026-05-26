@@ -124,9 +124,20 @@ final class NatsConnectionManager: ObservableObject {
         }
     }
 
-    /// Connect to NATS using credentials from enrollment
-    /// This is called after enrollment when credentials are provided in the enrollFinalize response
-    func connectWithEnrollmentCredentials(_ credentials: NatsCredentials, ownerSpace: String? = nil) async throws {
+    /// Connect to NATS using credentials from enrollment.
+    /// Called twice in the credential lifecycle:
+    ///   1. Mid-enrollment (PIN/password not set yet) — pass
+    ///      `performE2EBootstrap: false`. The vault isn't running, so
+    ///      the bootstrap publish would just time out. Android skips
+    ///      this step in its enrollment flow too.
+    ///   2. Post-enrollment / on subsequent reconnects — default
+    ///      `performE2EBootstrap: true`. The vault is up and we want
+    ///      an encrypted session via SessionKeyManager.
+    func connectWithEnrollmentCredentials(
+        _ credentials: NatsCredentials,
+        ownerSpace: String? = nil,
+        performE2EBootstrap: Bool = true
+    ) async throws {
         guard connectionState != .connected else { return }
 
         connectionState = .connecting
@@ -160,8 +171,10 @@ final class NatsConnectionManager: ObservableObject {
             print("[NATS] JWT expires: \(credentials.expiresAt)")
             #endif
 
-            // Perform E2E bootstrap if owner space is known
-            if ownerSpaceId != nil {
+            // Perform E2E bootstrap only when the vault is expected to
+            // respond. Skipped during enrollment, where the vault isn't
+            // running yet — the publish would just sit and time out.
+            if performE2EBootstrap, ownerSpaceId != nil {
                 try await performBootstrap()
             }
 

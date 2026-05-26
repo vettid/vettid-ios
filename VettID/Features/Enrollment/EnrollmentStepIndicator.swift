@@ -47,75 +47,45 @@ enum WizardPhase: Int, CaseIterable {
 
 // MARK: - Enrollment Step Indicator
 
+/// Matches Android's `WizardStepIndicator` — a compact, single-line
+/// "Step X of Y • Label" header above a thin linear progress bar.
+/// Replaces the iOS dots-with-icons row, which was visually busier
+/// than the Android equivalent for the same data.
 struct EnrollmentStepIndicator: View {
     let currentPhase: WizardPhase
 
+    private var progress: CGFloat {
+        CGFloat(currentPhase.rawValue + 1) / CGFloat(WizardPhase.totalSteps)
+    }
+
     var body: some View {
-        VStack(spacing: 8) {
-            // Progress bar
-            GeometryReader { geometry in
-                let totalWidth = geometry.size.width
-                let progress = CGFloat(currentPhase.rawValue) / CGFloat(WizardPhase.totalSteps - 1)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 4) {
+                Text("Step \(currentPhase.rawValue + 1) of \(WizardPhase.totalSteps)")
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                Text(" • ")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+                Text(currentPhase.label)
+                    .font(.headline)
+                    .foregroundStyle(Color.accentColor)
+            }
 
+            GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    // Background track
-                    RoundedRectangle(cornerRadius: 2)
+                    Capsule()
                         .fill(Color(.systemGray5))
-                        .frame(height: 4)
-
-                    // Progress fill
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(Color.blue)
-                        .frame(width: totalWidth * progress, height: 4)
+                    Capsule()
+                        .fill(Color.accentColor)
+                        .frame(width: geo.size.width * progress)
                         .animation(.easeInOut(duration: 0.3), value: progress)
                 }
             }
             .frame(height: 4)
-
-            // Step dots with labels
-            HStack(spacing: 0) {
-                ForEach(WizardPhase.allCases, id: \.rawValue) { phase in
-                    stepDot(phase: phase)
-                    if phase.rawValue < WizardPhase.totalSteps - 1 {
-                        Spacer()
-                    }
-                }
-            }
-
-            // Current step label
-            Text("Step \(currentPhase.rawValue + 1) of \(WizardPhase.totalSteps): \(currentPhase.label)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-    }
-
-    private func stepDot(phase: WizardPhase) -> some View {
-        let isComplete = phase.rawValue < currentPhase.rawValue
-        let isCurrent = phase == currentPhase
-
-        return VStack(spacing: 4) {
-            ZStack {
-                Circle()
-                    .fill(isComplete ? Color.blue : (isCurrent ? Color.blue : Color(.systemGray5)))
-                    .frame(width: 24, height: 24)
-
-                if isComplete {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.white)
-                } else if isCurrent {
-                    Image(systemName: phase.icon)
-                        .font(.system(size: 10))
-                        .foregroundStyle(.white)
-                } else {
-                    Text("\(phase.rawValue + 1)")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 }
 

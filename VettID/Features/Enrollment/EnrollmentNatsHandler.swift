@@ -1,4 +1,7 @@
 import Foundation
+import os
+
+private let natsEnrollLog = Logger(subsystem: "com.vettid.app", category: "enrollment-nats")
 
 /// Handles NATS-based enrollment operations for Nitro Enclave vault
 /// (Architecture v2.0 Section 5.6)
@@ -33,16 +36,24 @@ actor EnrollmentNatsHandler {
 
     // MARK: - NATS Connection
 
-    /// Connect to NATS using bootstrap credentials from /vault/enroll/finalize
+    /// Connect to NATS using bootstrap credentials from
+    /// /vault/enroll/nats-bootstrap. Skips the E2E session bootstrap
+    /// — the vault isn't running yet, so its `forApp.app.bootstrap.>`
+    /// reply will never come.
     func connect(credentials: NatsCredentials, ownerSpace: String) async throws {
         self.ownerSpace = ownerSpace
-
-        // Connect using enrollment credentials
-        try await natsConnectionManager.connectWithEnrollmentCredentials(credentials)
-
-        #if DEBUG
-        print("[EnrollmentNats] Connected to NATS for enrollment, ownerSpace: \(ownerSpace)")
-        #endif
+        natsEnrollLog.info("connecting to NATS endpoint=\(credentials.endpoint, privacy: .public) ownerSpace=\(ownerSpace, privacy: .public)")
+        do {
+            try await natsConnectionManager.connectWithEnrollmentCredentials(
+                credentials,
+                ownerSpace: ownerSpace,
+                performE2EBootstrap: false
+            )
+            natsEnrollLog.info("connected to NATS")
+        } catch {
+            natsEnrollLog.error("connect failed: \(String(describing: error), privacy: .public)")
+            throw error
+        }
     }
 
     // MARK: - Phase 3: Attestation
@@ -66,34 +77,48 @@ actor EnrollmentNatsHandler {
         let nonce = CryptoManager.randomBytes(count: 32)
         attestationNonce = nonce
 
-        // Step 11: Send attestation request to supervisor
+        // Step 11: Send attestation request to supervisor. Topic +
+        // envelope shape mirror Android's `requestAttestation` —
+        // `{ownerSpace}.forVault.attestation` (no `.request` suffix)
+        // with a `{id, type, payload, timestamp}` envelope. The
+        // enclave's request subscription only matches that exact
+        // subject; the previous iOS form was silently dropped.
         let requestId = UUID().uuidString
         let request = NatsAttestationRequest(
             id: requestId,
-            nonce: nonce.base64EncodedString(),
+            type: "attestation.request",
+            payload: NatsAttestationRequest.Payload(nonce: nonce.base64EncodedString()),
             timestamp: ISO8601DateFormatter().string(from: Date())
         )
 
-        let requestTopic = "\(ownerSpace).forVault.attestation.request"
-        try await natsConnectionManager.publish(request, to: requestTopic)
-
-        #if DEBUG
-        print("[EnrollmentNats] Sent attestation request with nonce: \(nonce.base64EncodedString().prefix(20))...")
-        #endif
-
-        // Subscribe to attestation response
-        let responseTopic = "\(ownerSpace).forApp.attestation.response.>"
+        // Subscribe BEFORE publishing so we don't miss a fast reply.
+        // Match Android — single subject, no wildcard.
+        let responseTopic = "\(ownerSpace).forApp.attestation.response"
+        natsEnrollLog.info("subscribing to \(responseTopic, privacy: .public)")
         let responseStream = try await natsConnectionManager.subscribe(to: responseTopic)
+
+        let requestTopic = "\(ownerSpace).forVault.attestation"
+        natsEnrollLog.info("publishing attestation request to \(requestTopic, privacy: .public) requestId=\(requestId, privacy: .public)")
+        try await natsConnectionManager.publish(request, to: requestTopic)
+        natsEnrollLog.info("attestation request published, waiting for response (60s timeout)")
 
         // Wait for response with timeout
         let timeout: TimeInterval = 60
         let response: NatsAttestationResponse = try await withThrowingTaskGroup(of: NatsAttestationResponse.self) { group in
             group.addTask {
                 for await message in responseStream {
-                    if let response = try? JSONDecoder().decode(NatsAttestationResponse.self, from: message.data) {
-                        if response.requestId == requestId {
+                    natsEnrollLog.info("attestation response received bytes=\(message.data.count, privacy: .public)")
+                    do {
+                        let response = try NatsAttestationResponse.parse(data: message.data)
+                        natsEnrollLog.info("attestation response decoded requestId=\(response.requestId ?? "nil", privacy: .public)")
+                        if response.requestId == nil || response.requestId == requestId {
                             return response
+                        } else {
+                            natsEnrollLog.info("attestation response requestId mismatch got=\(response.requestId ?? "nil", privacy: .public) want=\(requestId, privacy: .public)")
                         }
+                    } catch {
+                        let raw = String(data: message.data, encoding: .utf8) ?? "<binary \(message.data.count)B>"
+                        natsEnrollLog.error("attestation response parse failed: \(String(describing: error), privacy: .public) raw=\(raw.prefix(400), privacy: .public)")
                     }
                 }
                 throw EnrollmentNatsError.attestationFailed("Response stream ended")
@@ -112,27 +137,58 @@ actor EnrollmentNatsHandler {
             return result
         }
 
-        // Clean up subscription
-        await natsConnectionManager.unsubscribe(from: responseTopic)
+        natsEnrollLog.info("post-group: returned with docLen=\(response.attestationDocument.count, privacy: .public) keyLen=\(response.enclavePublicKey.count, privacy: .public)")
+
+        // NOTE: Skipping the explicit `unsubscribe(from: responseTopic)`
+        // call here — it was reliably crashing the app (after the
+        // task-group returned, before the continuation finished tearing
+        // down). The subscription is auto-cleaned when the connection
+        // closes at end of enrollment. The race/use-after-free in the
+        // AppleNatsClient unsubscribe path is tracked separately.
 
         guard response.success else {
+            natsEnrollLog.error("attestation failed: \(response.message ?? "denied", privacy: .public)")
             throw EnrollmentNatsError.attestationFailed(response.message ?? "Attestation denied")
         }
 
         // Step 13-14: Verify attestation document
         guard let documentData = Data(base64Encoded: response.attestationDocument) else {
+            natsEnrollLog.error("attestation document is not base64")
             throw EnrollmentNatsError.attestationFailed("Invalid attestation document encoding")
         }
+        natsEnrollLog.info("attestation CBOR bytes=\(documentData.count, privacy: .public)")
 
         // Get expected PCRs (from PCR store or response)
-        let expectedPCRs = try await getExpectedPCRs(from: response)
+        let expectedPCRs: NitroAttestationVerifier.ExpectedPCRs
+        do {
+            expectedPCRs = try await getExpectedPCRs(from: response)
+            natsEnrollLog.info("expected PCRs resolved")
+        } catch {
+            natsEnrollLog.error("getExpectedPCRs threw: \(String(describing: error), privacy: .public)")
+            throw error
+        }
 
-        // Verify attestation with our nonce
-        let result = try nitroVerifier.verify(
-            attestationDocument: documentData,
-            expectedPCRs: expectedPCRs,
-            nonce: nonce  // Critical: must match the nonce we sent
-        )
+        // Verify attestation with our nonce. On failure, wrap the
+        // underlying NitroAttestationError so the UI shows the
+        // verification step that rejected the doc — e.g.
+        // "Attestation verification failed: PCR0 mismatch …",
+        // "Attestation verification failed: Invalid COSE signature …"
+        // — instead of just the bare detail. Mirrors Android 88c65b6
+        // (release-build attestation rejection fix).
+        let result: NitroAttestationVerifier.AttestationResult
+        do {
+            result = try nitroVerifier.verify(
+                attestationDocument: documentData,
+                expectedPCRs: expectedPCRs,
+                nonce: nonce  // Critical: must match the nonce we sent
+            )
+            natsEnrollLog.info("nitro verify OK enclaveKeyLen=\(result.enclavePublicKey.count, privacy: .public)")
+        } catch {
+            natsEnrollLog.error("nitro verify threw: \(String(describing: error), privacy: .public)")
+            let detail = (error as? LocalizedError)?.errorDescription
+                ?? error.localizedDescription
+            throw EnrollmentNatsError.attestationFailed(detail)
+        }
 
         // Verify the extracted key matches what was in the response
         if let responseKey = Data(base64Encoded: response.enclavePublicKey) {
@@ -487,31 +543,93 @@ struct NatsIdentityMismatchReport: Encodable {
 
 struct NatsAttestationRequest: Encodable {
     let id: String
-    let nonce: String  // Base64 encoded 32-byte nonce
+    let type: String
+    let payload: Payload
     let timestamp: String
-}
 
-struct NatsAttestationResponse: Decodable {
-    let success: Bool
-    let message: String?
-    let requestId: String
-    let attestationDocument: String  // Base64 CBOR
-    let enclavePublicKey: String  // Base64 X25519 public key
-    let expectedPcrs: ExpectedPCRSet?
-
-    enum CodingKeys: String, CodingKey {
-        case success
-        case message
-        case requestId = "request_id"
-        case attestationDocument = "attestation_document"
-        case enclavePublicKey = "enclave_public_key"
-        case expectedPcrs = "expected_pcrs"
+    struct Payload: Encodable {
+        /// Base64 encoded 32-byte nonce
+        let nonce: String
     }
 
-    struct ExpectedPCRSet: Decodable {
+    enum CodingKeys: String, CodingKey {
+        case id
+        case type
+        case payload
+        case timestamp
+    }
+}
+
+/// Attestation response from the enclave supervisor. Tolerant of the
+/// two response shapes Android handles — fields can be at the top
+/// level or wrapped under a `payload` object, and the correlation id
+/// can be `request_id` / `event_id` / `id`.
+///
+/// Parsed via `JSONSerialization` rather than `Decodable` after two
+/// earlier custom-decoder attempts crashed the process at the
+/// `JSONDecoder` boundary (Swift runtime issue with our keyed
+/// containers on a 6 KB response). Direct dictionary lookups don't
+/// trip whatever Decodable was hitting.
+struct NatsAttestationResponse {
+    let success: Bool
+    let message: String?
+    let requestId: String?
+    let attestationDocument: String  // Base64 CBOR
+    let enclavePublicKey: String     // Base64 X25519 public key
+    let expectedPcrs: ExpectedPCRSet?
+
+    struct ExpectedPCRSet {
         let pcr0: String
         let pcr1: String
         let pcr2: String
+    }
+
+    static func parse(data: Data) throws -> NatsAttestationResponse {
+        let raw = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+        guard let root = raw as? [String: Any] else {
+            throw EnrollmentNatsError.attestationFailed("Response is not a JSON object")
+        }
+        let payload = (root["payload"] as? [String: Any]) ?? [:]
+
+        func string(_ keys: String...) -> String? {
+            for key in keys {
+                if let v = root[key] as? String, !v.isEmpty { return v }
+                if let v = payload[key] as? String, !v.isEmpty { return v }
+            }
+            return nil
+        }
+
+        let success = (root["success"] as? Bool) ?? (payload["success"] as? Bool) ?? true
+        let message = string("message", "error")
+        let requestId = string("request_id", "event_id", "id")
+
+        guard let doc = string("attestation", "attestation_document") else {
+            throw EnrollmentNatsError.attestationFailed("No attestation document in response")
+        }
+        guard let key = string("public_key", "enclave_public_key") else {
+            throw EnrollmentNatsError.attestationFailed("No enclave public key in response")
+        }
+
+        let pcrDict = (root["expected_pcrs"] as? [String: Any])
+            ?? (payload["expected_pcrs"] as? [String: Any])
+        let expectedPcrs: ExpectedPCRSet?
+        if let dict = pcrDict,
+           let p0 = dict["PCR0"] as? String,
+           let p1 = dict["PCR1"] as? String,
+           let p2 = dict["PCR2"] as? String {
+            expectedPcrs = ExpectedPCRSet(pcr0: p0, pcr1: p1, pcr2: p2)
+        } else {
+            expectedPcrs = nil
+        }
+
+        return NatsAttestationResponse(
+            success: success,
+            message: message,
+            requestId: requestId,
+            attestationDocument: doc,
+            enclavePublicKey: key,
+            expectedPcrs: expectedPcrs
+        )
     }
 }
 
@@ -632,7 +750,7 @@ enum EnrollmentNatsError: Error, LocalizedError {
         case .timeout(let msg):
             return "Operation timed out: \(msg)"
         case .attestationFailed(let msg):
-            return "Attestation failed: \(msg)"
+            return "Attestation verification failed: \(msg)"
         case .pinSetupFailed(let msg):
             return "PIN setup failed: \(msg)"
         case .vaultNotReady(let msg):

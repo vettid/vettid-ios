@@ -1,6 +1,7 @@
 import Foundation
 import CryptoKit
 import UIKit
+import os
 
 /// HTTP client for communicating with the VettID Ledger Service
 /// Security hardened with certificate pinning, request signing, and replay protection
@@ -103,6 +104,28 @@ actor APIClient {
     /// This is a PUBLIC endpoint - no Authorization header needed
     func enrollAuthenticate(request: EnrollAuthenticateRequest) async throws -> EnrollAuthenticateResponse {
         return try await post(endpoint: "/vault/enroll/authenticate", body: request)
+    }
+
+    /// Step 0-alt: Resolve an 8-character short enrollment code
+    /// (`XXXX-XXXX`) from the web portal to the full enrollment payload.
+    /// Public endpoint — no auth header. Mirrors Android's
+    /// `resolveEnrollmentCode` (POST /vault/enroll/resolve-code).
+    func resolveEnrollmentCode(request: ResolveEnrollmentCodeRequest) async throws -> EnrollmentQRCodeData {
+        return try await post(endpoint: "/vault/enroll/resolve-code", body: request)
+    }
+
+    /// Step 1b: Issue NATS bootstrap credentials so the app can finish
+    /// enrollment over NATS instead of HTTP. Replaces the deprecated
+    /// `enrollFinalize`-for-NATS-creds path (which the server now
+    /// rejects with 400 "Enrollment not properly initialized" — finalize
+    /// is post-PIN/post-password only). Mirrors Android's
+    /// `getNatsBootstrapCredentials` → POST /vault/enroll/nats-bootstrap
+    /// with a `device_attestation` body.
+    func enrollNatsBootstrap(
+        request: EnrollNatsBootstrapRequest,
+        authToken: String
+    ) async throws -> EnrollNatsBootstrapResponse {
+        return try await post(endpoint: "/vault/enroll/nats-bootstrap", body: request, authToken: authToken)
     }
 
     /// Step 1: Start enrollment (requires enrollment JWT from authenticate)
@@ -737,13 +760,22 @@ actor APIClient {
             finalRequest = requestSigner.signRequest(request, with: signingKey)
         }
 
+        let urlString = finalRequest.url?.absoluteString ?? "<nil>"
+        let method = finalRequest.httpMethod ?? "<nil>"
+        apiLog.info("\(method, privacy: .public) \(urlString, privacy: .public)")
+
         let (data, response) = try await session.data(for: finalRequest)
 
         guard let httpResponse = response as? HTTPURLResponse else {
+            apiLog.error("non-HTTP response from \(urlString, privacy: .public)")
             throw APIError.invalidResponse
         }
 
+        apiLog.info("status=\(httpResponse.statusCode, privacy: .public) bytes=\(data.count, privacy: .public) url=\(urlString, privacy: .public)")
+
         guard (200...299).contains(httpResponse.statusCode) else {
+            let bodyStr = String(data: data, encoding: .utf8) ?? "<binary \(data.count)B>"
+            apiLog.error("HTTP \(httpResponse.statusCode, privacy: .public) body=\(bodyStr.prefix(400), privacy: .public)")
             if let errorResponse = try? JSONDecoder().decode(APIErrorResponse.self, from: data) {
                 throw APIError.serverError(httpResponse.statusCode, errorResponse.message)
             }
@@ -756,17 +788,14 @@ actor APIClient {
             decoder.dateDecodingStrategy = .iso8601
             return try decoder.decode(T.self, from: data)
         } catch {
-            #if DEBUG
-            print("[APIClient] Decoding failed for \(T.self)")
-            print("[APIClient] Error: \(error)")
-            if let responseString = String(data: data, encoding: .utf8) {
-                print("[APIClient] Raw response: \(responseString)")
-            }
-            #endif
+            let raw = String(data: data, encoding: .utf8) ?? "<binary \(data.count)B>"
+            apiLog.error("decode failed type=\(String(describing: T.self), privacy: .public) err=\(String(describing: error), privacy: .public) raw=\(raw.prefix(400), privacy: .public)")
             throw APIError.decodingFailed(error)
         }
     }
 }
+
+private let apiLog = Logger(subsystem: "com.vettid.app", category: "api")
 
 // MARK: - Enrollment Authentication Request/Response Types
 
@@ -774,6 +803,87 @@ struct EnrollAuthenticateRequest: Encodable {
     let sessionToken: String
     let deviceId: String
     let deviceType: String
+}
+
+/// Body for `/vault/enroll/resolve-code`. Mirrors Android's
+/// `ResolveEnrollmentCodeRequest` (snake_case fields applied by the
+/// encoder strategy).
+struct ResolveEnrollmentCodeRequest: Encodable {
+    let enrollmentCode: String
+    let deviceId: String
+    let deviceType: String
+}
+
+// MARK: - NATS Bootstrap (post-authenticate, pre-finalize)
+
+/// Body for `/vault/enroll/nats-bootstrap`. Mirrors Android's
+/// `NatsBootstrapRequest`. The server accepts `attestation_type:
+/// "test"` for debug builds (same shape Android uses with
+/// `BuildConfig.SKIP_ATTESTATION=true`); a future real-App-Attest
+/// payload would set `attestationType: "ios_app_attest"` plus the
+/// CBOR attestation under a different field.
+struct EnrollNatsBootstrapRequest: Encodable {
+    let deviceAttestation: EnrollDeviceAttestationPayload
+
+    /// Convenience for the debug/test-mode flow. Generates a synthetic
+    /// payload the server understands without an Apple App Attest
+    /// roundtrip.
+    static func test(deviceId: String) -> EnrollNatsBootstrapRequest {
+        return EnrollNatsBootstrapRequest(
+            deviceAttestation: EnrollDeviceAttestationPayload(
+                attestationType: "test",
+                certificateChain: [],
+                challenge: "",
+                securityLevel: "software",
+                deviceInfo: EnrollDeviceInfo(
+                    manufacturer: "Apple",
+                    model: deviceId,
+                    osVersion: UIDevice.current.systemVersion,
+                    sdkVersion: 0,
+                    securityPatch: nil
+                )
+            )
+        )
+    }
+}
+
+struct EnrollDeviceAttestationPayload: Encodable {
+    let attestationType: String
+    let certificateChain: [String]
+    let challenge: String
+    let securityLevel: String
+    let deviceInfo: EnrollDeviceInfo
+}
+
+struct EnrollDeviceInfo: Encodable {
+    let manufacturer: String
+    let model: String
+    let osVersion: String
+    let sdkVersion: Int
+    let securityPatch: String?
+}
+
+/// Response from `/vault/enroll/nats-bootstrap`. Mirrors Android's
+/// `NatsBootstrapResponse` — provides NATS credentials so the rest
+/// of enrollment (PIN, password, finalize) can happen over the
+/// supervisor's NATS channel.
+struct EnrollNatsBootstrapResponse: Decodable {
+    let natsEndpoint: String
+    let natsJwt: String
+    let natsSeed: String
+    let natsCreds: String
+    let ownerSpace: String
+    let messageSpace: String
+    let userGuid: String
+    let tokenId: String
+    let expiresAt: String
+    let registrationProfile: RegistrationProfileBootstrap?
+}
+
+struct RegistrationProfileBootstrap: Decodable {
+    let firstName: String?
+    let lastName: String?
+    let email: String?
 }
 
 struct EnrollAuthenticateResponse: Decodable {

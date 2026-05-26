@@ -133,7 +133,11 @@
 				<array>
 					<dict>
 						<key>SPKI-SHA256-BASE64</key>
-						<string>9QtkkgnK4aEEt3xxiK1NwP/A1D06Pl1HFV7ZpffNLQA=</string>
+						<string>G9LNNAql897egYsabashkzUCTEJkWBzgoEtk8X/678c=</string>
+					</dict>
+					<dict>
+						<key>SPKI-SHA256-BASE64</key>
+						<string>++MBgDH5WGvL9Bcn5Be30cRcL0f5O+NyoXuWtQdX1aI=</string>
 					</dict>
 				</array>
 			</dict>
@@ -145,7 +149,11 @@
 				<array>
 					<dict>
 						<key>SPKI-SHA256-BASE64</key>
-						<string>9QtkkgnK4aEEt3xxiK1NwP/A1D06Pl1HFV7ZpffNLQA=</string>
+						<string>G9LNNAql897egYsabashkzUCTEJkWBzgoEtk8X/678c=</string>
+					</dict>
+					<dict>
+						<key>SPKI-SHA256-BASE64</key>
+						<string>++MBgDH5WGvL9Bcn5Be30cRcL0f5O+NyoXuWtQdX1aI=</string>
 					</dict>
 				</array>
 			</dict>

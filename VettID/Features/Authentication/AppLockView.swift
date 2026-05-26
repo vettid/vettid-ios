@@ -120,8 +120,12 @@ struct AppLockView: View {
                     PINKeypadView(pin: $pin, onComplete: attemptPINUnlock)
                 }
 
-                // Biometric button
-                if lockService.shouldUseBiometrics && !lockService.isLockedOut {
+                // Biometric button — currently hidden; PIN-only UX
+                // for the tech-preview phase. Re-enable by flipping
+                // `useBiometricsUI` to true (keeps the underlying
+                // BiometricAuthService path warm so we can turn this
+                // back on without re-implementing it).
+                if Self.useBiometricsUI && lockService.shouldUseBiometrics && !lockService.isLockedOut {
                     Button(action: attemptBiometricUnlock) {
                         HStack {
                             Image(systemName: biometricIcon)
@@ -138,12 +142,22 @@ struct AppLockView: View {
             .padding()
         }
         .onAppear {
-            // Automatically prompt for biometrics if available and no other input required
-            if lockService.shouldUseBiometrics && !lockService.shouldUsePIN && !lockService.shouldUsePattern {
+            // Biometrics UI is hidden in this build, so no auto-prompt.
+            // When `useBiometricsUI` is flipped back on, restore the
+            // previous behavior: auto-prompt when neither PIN nor
+            // pattern is configured.
+            if Self.useBiometricsUI
+                && lockService.shouldUseBiometrics
+                && !lockService.shouldUsePIN
+                && !lockService.shouldUsePattern {
                 attemptBiometricUnlock()
             }
         }
     }
+
+    /// Feature flag — hide biometric UI in the lock screen. Toggle to
+    /// `true` to bring Face ID / Touch ID back as an unlock option.
+    private static let useBiometricsUI = false
 
     // MARK: - Helpers
 

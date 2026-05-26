@@ -1,6 +1,9 @@
 import Foundation
 import CryptoKit
 import Security
+import os
+
+private let pinLog = Logger(subsystem: "com.vettid.app", category: "pinning")
 
 /// Certificate pinning delegate for URLSession
 /// Implements SSL pinning to prevent MITM attacks
@@ -134,15 +137,14 @@ final class CertificatePinningDelegate: NSObject, URLSessionDelegate {
         let isValid = SecTrustEvaluateWithError(serverTrust, &error)
 
         guard isValid else {
-            #if DEBUG
-            print("CertificatePinning: Trust evaluation failed: \(error?.localizedDescription ?? "unknown error")")
-            #endif
+            pinLog.error("trust eval FAILED domain=\(config.domain, privacy: .public) err=\(error?.localizedDescription ?? "unknown", privacy: .public)")
             return false
         }
 
         // Get certificate chain (iOS 15+ API)
         guard let certificateChain = SecTrustCopyCertificateChain(serverTrust) as? [SecCertificate],
               !certificateChain.isEmpty else {
+            pinLog.error("empty cert chain domain=\(config.domain, privacy: .public)")
             return false
         }
 
@@ -150,21 +152,22 @@ final class CertificatePinningDelegate: NSObject, URLSessionDelegate {
         for certificate in certificateChain {
             if let publicKeyHash = extractPublicKeyHash(from: certificate) {
                 if config.publicKeyHashes.contains(publicKeyHash) {
+                    pinLog.info("pin matched domain=\(config.domain, privacy: .public) hash=\(publicKeyHash, privacy: .public)")
                     return true
                 }
             }
         }
 
-        #if DEBUG
-        print("CertificatePinning: No matching pin found for \(config.domain)")
-        // Log the actual hashes for debugging (only in debug builds)
+        // No match — dump the computed hashes vs the expected pins so we
+        // can tell whether the chain rotated or the SPKI computation drifted.
+        pinLog.error("no pin match domain=\(config.domain, privacy: .public) expected=\(config.publicKeyHashes.joined(separator: ","), privacy: .public)")
         for (index, cert) in certificateChain.enumerated() {
             if let hash = extractPublicKeyHash(from: cert) {
-                print("  Certificate \(index) hash: \(hash)")
+                pinLog.error("  chain[\(index, privacy: .public)] hash=\(hash, privacy: .public)")
+            } else {
+                pinLog.error("  chain[\(index, privacy: .public)] hash=<nil>")
             }
         }
-        #endif
-
         return false
     }
 

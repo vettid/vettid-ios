@@ -14,26 +14,21 @@ struct EnrollmentPINSetupView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                // Header
-                headerSection
-
-                // PIN fields
-                pinFieldsSection
-
-                // Requirements
-                requirementsSection
-
-                // Info section
-                infoSection
-
-                // Submit button
-                submitButton
-
-                Spacer(minLength: 40)
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 20) {
+                    headerSection
+                    pinFieldsSection
+                    requirementsSection
+                    infoSection
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 8)
             }
-            .padding()
+
+            submitButton
+                .padding(.horizontal, 24)
+                .padding(.bottom, 16)
         }
         .navigationBarBackButtonHidden(viewModel.state == .processingPIN)
     }
@@ -42,71 +37,67 @@ struct EnrollmentPINSetupView: View {
 
     private var headerSection: some View {
         VStack(spacing: 12) {
-            Image(systemName: "rectangle.and.pencil.and.ellipsis")
-                .font(.system(size: 60))
-                .foregroundStyle(.blue)
+            Image(systemName: "circle.grid.3x3.fill")
+                .font(.system(size: 56))
+                .foregroundStyle(Color.accentColor)
 
-            Text("Create Vault PIN")
+            Text("Set Your PIN")
                 .font(.title2)
                 .fontWeight(.bold)
 
-            Text("Create a 6-digit PIN to unlock your vault. You'll enter this PIN each time you open the app.")
+            Text("Create a PIN (4–8 digits) to secure your vault. 6+ digits recommended. This PIN is encrypted and sent directly to the secure enclave.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
-        .padding(.vertical)
+        .padding(.top, 16)
+        .padding(.bottom, 8)
     }
 
     // MARK: - PIN Fields
 
     private var pinFieldsSection: some View {
-        VStack(spacing: 16) {
-            // PIN field
-            VStack(alignment: .leading, spacing: 8) {
-                Text("PIN")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+        VStack(spacing: 12) {
+            outlinedSecureField(
+                title: "PIN",
+                placeholder: "Enter 6-digit PIN",
+                text: $viewModel.pin,
+                focused: .pin
+            )
+            outlinedSecureField(
+                title: "Confirm PIN",
+                placeholder: "Confirm PIN",
+                text: $viewModel.confirmPin,
+                focused: .confirm
+            )
+        }
+    }
 
-                SecureField("Enter 6-digit PIN", text: $viewModel.pin)
-                    .keyboardType(.numberPad)
-                    .textContentType(.oneTimeCode)
-                    .focused($focusedField, equals: .pin)
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(10)
-                    .onChange(of: viewModel.pin) { newValue in
-                        // Limit to 6 digits
-                        if newValue.count > 6 {
-                            viewModel.pin = String(newValue.prefix(6))
-                        }
-                        // Only allow numbers
-                        viewModel.pin = newValue.filter { $0.isNumber }
-                    }
-            }
-
-            // Confirm PIN field
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Confirm PIN")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-
-                SecureField("Confirm PIN", text: $viewModel.confirmPin)
-                    .keyboardType(.numberPad)
-                    .textContentType(.oneTimeCode)
-                    .focused($focusedField, equals: .confirm)
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(10)
-                    .onChange(of: viewModel.confirmPin) { newValue in
-                        // Limit to 6 digits
-                        if newValue.count > 6 {
-                            viewModel.confirmPin = String(newValue.prefix(6))
-                        }
-                        // Only allow numbers
-                        viewModel.confirmPin = newValue.filter { $0.isNumber }
-                    }
-            }
+    private func outlinedSecureField(
+        title: String,
+        placeholder: String,
+        text: Binding<String>,
+        focused: Field
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            SecureField(placeholder, text: text)
+                .keyboardType(.numberPad)
+                .textContentType(.oneTimeCode)
+                .focused($focusedField, equals: focused)
+                .padding(.vertical, 14)
+                .padding(.horizontal, 14)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(focusedField == focused ? Color.accentColor : Color(.separator), lineWidth: 1)
+                )
+                .onChange(of: text.wrappedValue) { newValue in
+                    var cleaned = newValue.filter { $0.isNumber }
+                    if cleaned.count > 6 { cleaned = String(cleaned.prefix(6)) }
+                    if cleaned != newValue { text.wrappedValue = cleaned }
+                }
         }
     }
 
@@ -187,28 +178,24 @@ struct EnrollmentPINSetupView: View {
     // MARK: - Submit Button
 
     private var submitButton: some View {
-        Button(action: {
+        Button {
             focusedField = nil
-            Task {
-                await viewModel.submitPIN()
-            }
-        }) {
-            HStack {
+            Task { await viewModel.submitPIN() }
+        } label: {
+            HStack(spacing: 8) {
                 if viewModel.state == .processingPIN {
-                    ProgressView()
-                        .tint(.white)
+                    ProgressView().tint(.white)
                 } else {
-                    Text("Set PIN")
+                    Text("Continue")
+                        .font(.headline)
                 }
             }
             .frame(maxWidth: .infinity)
-            .padding()
-            .background(viewModel.isPINValid ? Color.blue : Color.gray)
-            .foregroundColor(.white)
-            .cornerRadius(12)
+            .frame(height: 32)
         }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
         .disabled(!viewModel.isPINValid || viewModel.state == .processingPIN)
-        .padding(.top)
     }
 }
 

@@ -8,36 +8,35 @@ struct AttestationView: View {
     @State private var animationPhase = 0
 
     var body: some View {
-        VStack(spacing: 32) {
-            Spacer()
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 20) {
+                    Spacer().frame(height: 24)
 
-            // Animated icon
-            attestationIcon
+                    attestationIcon
 
-            // Title and description
-            VStack(spacing: 12) {
-                Text(titleText)
-                    .font(.title2)
-                    .fontWeight(.bold)
+                    VStack(spacing: 8) {
+                        Text(titleText)
+                            .font(.title2)
+                            .fontWeight(.bold)
+                        Text(descriptionText)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
 
-                Text(descriptionText)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
+                    if case .attesting(let progress) = viewModel.state {
+                        progressSection(progress: progress)
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 8)
             }
 
-            // Progress indicator
-            if case .attesting(let progress) = viewModel.state {
-                progressSection(progress: progress)
-            }
-
-            Spacer()
-
-            // Status message
             statusMessage
+                .padding(.horizontal, 24)
+                .padding(.bottom, 16)
         }
-        .padding()
         .onAppear {
             startAnimation()
             startAttestation()
@@ -183,28 +182,35 @@ struct AttestationView: View {
         Group {
             switch viewModel.state {
             case .attestationRequired:
-                Button("Start Verification") {
-                    Task {
-                        await viewModel.performAttestation()
-                    }
+                Button {
+                    Task { await viewModel.performAttestation() }
+                } label: {
+                    Text("Start Verification")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 32)
                 }
                 .buttonStyle(.borderedProminent)
+                .controlSize(.large)
 
             case .error(_, let retryable):
                 if retryable {
-                    Button("Try Again") {
-                        Task {
-                            await viewModel.performAttestation()
-                        }
+                    Button {
+                        Task { await viewModel.performAttestation() }
+                    } label: {
+                        Text("Try Again")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 32)
                     }
                     .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
                 }
 
             default:
                 EmptyView()
             }
         }
-        .padding(.bottom, 40)
     }
 
     // MARK: - Actions
