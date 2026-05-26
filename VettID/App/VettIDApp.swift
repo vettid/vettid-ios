@@ -243,6 +243,13 @@ class AppState: ObservableObject {
     /// LaunchedEffect in VettIDApp.kt.
     @Published var pendingAgentAuth: AgentPendingAuthNotification?
 
+    /// Area H — agent-initiated LEASH mint awaiting owner approval.
+    /// Set by the `forApp.agent.leash-mint-pending` observer; cleared
+    /// via `clearPendingLeashMint`. Drives root-level routing to
+    /// `LeashApprovalView`. Mirrors Android's `agentLeashMintPending`
+    /// LaunchedEffect (commit ef03314).
+    @Published var pendingLeashMint: AgentLeashMintPendingNotification?
+
     // NATS connection manager for vault operations
     lazy var natsConnectionManager: NatsConnectionManager = {
         NatsConnectionManager(userGuidProvider: { [weak self] in
@@ -306,6 +313,10 @@ class AppState: ObservableObject {
     /// into `pendingAgentAuth`. Held here for the same lifecycle reason
     /// as the device approval observer.
     private var agentPendingAuthObserverTask: Task<Void, Never>?
+
+    /// Area H — observer task that bridges
+    /// `OwnerSpaceClient.agentLeashMintPending` into `pendingLeashMint`.
+    private var agentLeashMintObserverTask: Task<Void, Never>?
 
     /// Flag indicating if running in UI test mode
     static var isUITesting: Bool {
@@ -699,6 +710,12 @@ class AppState: ObservableObject {
             osc.startAgentEventSubscription()
             self.startAgentPendingAuthObserver(osc)
 
+            // Area H: bridge the agent-initiated LEASH mint stream
+            // (same forApp.agent.> subscription already started above)
+            // into pendingLeashMint so root-level nav can present
+            // LeashApprovalView.
+            self.startAgentLeashMintObserver(osc)
+
             // Area D (Android ab25dc2): pre-warm the caches the
             // first post-unlock screen will read so Feed /
             // Connections render without a Loading flash. Fires
@@ -761,6 +778,29 @@ class AppState: ObservableObject {
     /// root-level cover unmounts.
     func clearPendingAgentAuth() {
         pendingAgentAuth = nil
+    }
+
+    /// Area H — bridge `OwnerSpaceClient.agentLeashMintPending` into
+    /// `AppState.pendingLeashMint` so root-level navigation can
+    /// present LeashApprovalView the moment an agent-initiated mint
+    /// arrives. Mirrors `startAgentPendingAuthObserver`.
+    private func startAgentLeashMintObserver(_ client: OwnerSpaceClient) {
+        agentLeashMintObserverTask?.cancel()
+        agentLeashMintObserverTask = Task { [weak self] in
+            for await notification in client.agentLeashMintPending {
+                guard let self = self else { return }
+                await MainActor.run { self.pendingLeashMint = notification }
+                #if DEBUG
+                print("[AppState] pendingLeashMint set: \(notification.requestId) agent=\(notification.agentName)")
+                #endif
+            }
+        }
+    }
+
+    /// Called from LeashApprovalView on Approve/Deny/dismiss so the
+    /// root-level cover unmounts.
+    func clearPendingLeashMint() {
+        pendingLeashMint = nil
     }
 
     /// Mark vault as cold (e.g., after background timeout)
