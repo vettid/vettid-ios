@@ -713,8 +713,13 @@ class AppState: ObservableObject {
             // Area H: bridge the agent-initiated LEASH mint stream
             // (same forApp.agent.> subscription already started above)
             // into pendingLeashMint so root-level nav can present
-            // LeashApprovalView.
+            // LeashApprovalView. Plus pull the pending list once on
+            // unlock so any mint request that arrived while the app
+            // was offline (core-NATS forApp.* has no replay) is
+            // re-surfaced. Mirrors Android 23463c8 / Area B's
+            // fetchPendingDeviceApprovals.
             self.startAgentLeashMintObserver(osc)
+            Task { await osc.fetchPendingLeashMints() }
 
             // Area D (Android ab25dc2): pre-warm the caches the
             // first post-unlock screen will read so Feed /

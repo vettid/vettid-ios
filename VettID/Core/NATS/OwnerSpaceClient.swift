@@ -752,6 +752,67 @@ final class OwnerSpaceClient {
         }
     }
 
+    /// Area H — poll the vault for any `PendingLeashRequest` rows
+    /// still awaiting the owner's decision and re-emit each onto
+    /// `agentLeashMintPending`. Used on post-PIN-unlock pre-warm to
+    /// recover requests the app missed while backgrounded — the
+    /// `forApp.agent.leash-mint-pending` push is NATS core (no
+    /// replay), so a request issued with no live subscriber is
+    /// otherwise invisible. Mirrors Android `pollPendingLeashMints`
+    /// (commit 23463c8). Best-effort; transport errors are
+    /// swallowed.
+    func fetchPendingLeashMints() async {
+        do {
+            let response = try await sendAndAwaitResponse(
+                "agent.leash-pending-list",
+                timeout: 10
+            )
+            guard response.success else { return }
+            let pending = response.getArray("pending") ?? []
+            var surfaced = 0
+            for entry in pending {
+                guard let requestId = entry["request_id"] as? String, !requestId.isEmpty,
+                      let connectionId = entry["connection_id"] as? String, !connectionId.isEmpty
+                else { continue }
+                let scope = (entry["requested_scope"] as? [String]) ?? []
+                let durationSeconds: Int = {
+                    if let i = entry["duration_secs"] as? Int { return i }
+                    if let d = entry["duration_secs"] as? Double { return Int(d) }
+                    return 1800
+                }()
+                let expiresAt: Int = {
+                    if let i = entry["expires_at"] as? Int { return i }
+                    if let d = entry["expires_at"] as? Double { return Int(d) }
+                    return 0
+                }()
+                let notif = AgentLeashMintPendingNotification(
+                    requestId: requestId,
+                    connectionId: connectionId,
+                    agentName: (entry["agent_name"] as? String) ?? "Agent",
+                    agentType: (entry["agent_type"] as? String) ?? "",
+                    // pending-list payload doesn't carry agent_pubkey;
+                    // informational on the approval screen anyway.
+                    agentPubkey: "",
+                    requestedScope: scope,
+                    durationSeconds: durationSeconds,
+                    reason: (entry["reason"] as? String) ?? "",
+                    expiresAt: expiresAt
+                )
+                agentLeashMintContinuation?.yield(notif)
+                surfaced += 1
+            }
+            #if DEBUG
+            if surfaced > 0 {
+                print("[OwnerSpaceClient] Pending LEASH-mint pull: surfaced \(surfaced) request(s)")
+            }
+            #endif
+        } catch {
+            #if DEBUG
+            print("[OwnerSpaceClient] fetchPendingLeashMints failed: \(error)")
+            #endif
+        }
+    }
+
     /// Pull device-operation approvals still awaiting this owner's
     /// decision and surface each one onto `deviceApprovalRequests`
     /// (same flow a live request uses). Mirrors Android
