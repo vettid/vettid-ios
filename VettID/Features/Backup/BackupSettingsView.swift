@@ -80,14 +80,17 @@ struct BackupSettingsView: View {
                     Toggle("WiFi Only", isOn: $viewModel.settings.wifiOnly)
                 }
             } header: {
-                Text("Automatic Backup")
+                // Section header mirrors Android `BackupSettingsScreen`
+                // line 130 ("Automatic Backups", plural).
+                Text("Automatic Backups")
             } footer: {
                 Text("Backups are enabled by default to protect your credentials. You can disable automatic backups here, but this is not recommended.")
                     .foregroundColor(viewModel.settings.autoBackupEnabled ? .secondary : .orange)
             }
 
-            // Content section
-            Section("Content") {
+            // Content section — header mirrors Android line 156
+            // ("Backup Content").
+            Section("Backup Content") {
                 Toggle("Include Messages", isOn: $viewModel.settings.includeMessages)
 
                 Stepper(
