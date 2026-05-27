@@ -48,13 +48,16 @@ struct WalletDetailView: View {
                 ReceiveBtcView(wallet: wallet, walletClient: walletClient)
             }
         }
+        // Dialog copy mirrors Android `WalletDetailScreen` lines
+        // 530-546 — the more explicit warning about address +
+        // transaction history visibility.
         .alert("Make Wallet Public?", isPresented: $viewModel.showVisibilityWarning) {
             Button("Make Public", role: .destructive) {
                 Task { await viewModel.confirmMakePublic() }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Making your wallet public allows connections to see your address. This cannot be undone.")
+            Text("Making your wallet address public allows anyone with your profile to see your Bitcoin address and transaction history. This cannot be undone without changing your address.")
         }
     }
 
