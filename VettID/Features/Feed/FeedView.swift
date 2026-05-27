@@ -166,7 +166,7 @@ struct FeedView: View {
                 .font(.system(size: 60))
                 .foregroundStyle(.secondary)
 
-            Text("No Activity")
+            Text("No Activity Yet")
                 .font(.title2)
                 .fontWeight(.semibold)
 
@@ -180,11 +180,14 @@ struct FeedView: View {
         }
     }
 
+    /// Empty-state subtitle. Matches Android `FeedScreen.EmptyContent`
+    /// ("Your activity feed is empty.\nPull down to refresh."), with
+    /// a search-active variant for parity with iOS's search affordance.
     private var emptyMessage: String {
         if !viewModel.searchQuery.isEmpty {
             return "No results for \"\(viewModel.searchQuery)\"."
         }
-        return "Your connections will appear here. Share your invitation to connect with someone."
+        return "Your activity feed is empty.\nPull down to refresh."
     }
 
     // MARK: - Display Items List

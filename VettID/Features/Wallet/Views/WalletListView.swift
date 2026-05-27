@@ -69,12 +69,14 @@ struct WalletListView: View {
 
     private var emptyView: some View {
         VStack(spacing: 16) {
-            Image(systemName: "bitcoinsign.circle")
+            // Icon mirrors Android `Icons.Default.AccountBalance` —
+            // same icon the Vault segment + drawer entry now use.
+            Image(systemName: "building.columns.fill")
                 .font(.system(size: 60))
                 .foregroundColor(.secondary)
-            Text("No Wallets")
+            Text("No wallets yet")
                 .font(.title2.weight(.semibold))
-            Text("Create your first wallet to send and receive Bitcoin.")
+            Text("Create your first Bitcoin wallet to start sending and receiving payments securely through your vault.")
                 .font(.body)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)

@@ -72,15 +72,16 @@ struct SecretsView: View {
         VStack(spacing: 20) {
             Spacer()
 
-            Image(systemName: "lock.fill")
+            // Icon mirrors Android `Icons.Default.Key`.
+            Image(systemName: "key.fill")
                 .font(.system(size: 60))
                 .foregroundStyle(.secondary)
 
-            Text("No Secrets")
+            Text("No Secrets Yet")
                 .font(.title2)
                 .fontWeight(.semibold)
 
-            Text("Add passwords, API keys, PINs, and other secrets to keep them secure.")
+            Text("Store API keys, passwords, crypto wallets, and other sensitive data securely.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

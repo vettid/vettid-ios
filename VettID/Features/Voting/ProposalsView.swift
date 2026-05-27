@@ -79,7 +79,8 @@ struct ProposalsView: View {
         VStack(spacing: 24) {
             Spacer()
 
-            Image(systemName: "doc.text")
+            // Icon mirrors Android `Icons.Default.HowToVote`.
+            Image(systemName: "checkmark.square")
                 .font(.system(size: 60))
                 .foregroundColor(.secondary)
 
@@ -87,7 +88,7 @@ struct ProposalsView: View {
                 .font(.title2)
                 .fontWeight(.semibold)
 
-            Text("There are no proposals available at this time.")
+            Text("There are no proposals available for voting at this time.")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
