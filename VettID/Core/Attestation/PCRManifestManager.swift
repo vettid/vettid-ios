@@ -290,30 +290,26 @@ final class PCRManifestManager {
             throw PCRManifestError.noValidPCRSets
         }
 
-        var lastError: Error?
-
-        // Try each valid PCR set
-        for pcrSet in filteredSets {
-            do {
-                let result = try verifier.verify(
-                    attestationDocument: attestationDocument,
-                    expectedPCRs: pcrSet.toExpectedPCRs(),
-                    nonce: nonce
-                )
-                return result
-            } catch let error as NitroAttestationError {
-                // PCR mismatch - try next set
-                if case .pcrMismatch = error {
-                    lastError = error
-                    continue
-                }
-                // Other errors are fatal
-                throw error
-            }
+        // SPEED (#attestation-stall): parse + verify cert chain +
+        // verify COSE signature ONCE and only iterate the PCR
+        // comparison against each candidate set. The previous form
+        // (call full `verify()` per set in a Swift loop) re-parsed
+        // 6 KB of CBOR + re-validated the AWS cert chain + re-
+        // verified the ES384 signature for every one of the ~205
+        // sets in the manifest, blocking the actor ~40 s before the
+        // user got past "Verifying enclave".
+        do {
+            let result = try verifier.verify(
+                attestationDocument: attestationDocument,
+                candidatePCRs: filteredSets.map { $0.toExpectedPCRs() },
+                nonce: nonce
+            )
+            return result
+        } catch let error as NitroAttestationError {
+            // Hand back PCR-mismatch errors so `verifyAttestation`'s
+            // refresh-on-mismatch retry path triggers.
+            throw error
         }
-
-        // No PCR set matched
-        throw lastError ?? PCRManifestError.noValidPCRSets
     }
 
     /// SECURITY (Area E #53): true when the PCR set is the all-zeros

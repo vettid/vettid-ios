@@ -125,19 +125,43 @@ final class NitroAttestationVerifier {
         expectedPCRs: ExpectedPCRs,
         nonce: Data? = nil
     ) throws -> AttestationResult {
-        // Step 1: Parse COSE_Sign1 structure
+        // Single-PCR-set fast path. Internally goes through the same
+        // prepare → match pipeline as the multi-set variant so the
+        // code stays in one place.
+        return try verify(
+            attestationDocument: attestationDocument,
+            candidatePCRs: [expectedPCRs],
+            nonce: nonce
+        )
+    }
+
+    /// Multi-PCR-set verify. Parses the COSE_Sign1 / payload /
+    /// cert chain / COSE signature / timestamp / nonce **once**, then
+    /// iterates the candidate PCR sets and returns on the first match.
+    /// All the expensive crypto runs once — the per-set work is just
+    /// a constant-time PCR comparison.
+    ///
+    /// The previous design (call `verify(attestationDocument:,
+    /// expectedPCRs:, nonce:)` in a `for pcrSet in filteredSets` loop)
+    /// re-parsed the 6 KB CBOR doc and re-verified the cert chain +
+    /// COSE signature for every candidate. With a 205-set manifest
+    /// that's roughly 200 × ~200 ms = ~40 s of CPU on the main actor
+    /// before the user sees a result — surfacing as a "Verifying
+    /// enclave" stall.
+    func verify(
+        attestationDocument: Data,
+        candidatePCRs: [ExpectedPCRs],
+        nonce: Data? = nil
+    ) throws -> AttestationResult {
+        // Steps 1-6 — the same expensive work the single-set call did
+        // before, but now done exactly once regardless of how many
+        // candidate PCR sets the caller has.
         let (payload, signature, protectedHeader) = try parseCOSESign1(attestationDocument)
-
-        // Step 2: Parse attestation payload
         let document = try parseAttestationPayload(payload)
-
-        // Step 3: Verify certificate chain
         try verifyCertificateChain(
             certificate: document.certificate,
             cabundle: document.cabundle
         )
-
-        // Step 4: Verify COSE signature using the leaf certificate
         try verifyCOSESignature(
             protectedHeader: protectedHeader,
             payload: payload,
@@ -145,37 +169,55 @@ final class NitroAttestationVerifier {
             certificate: document.certificate
         )
 
-        // Step 5: Verify timestamp is recent
         let attestationTime = Date(timeIntervalSince1970: TimeInterval(document.timestamp / 1000))
         let age = Date().timeIntervalSince(attestationTime)
         if age > maxAttestationAge {
             throw NitroAttestationError.documentExpired(age: age)
         }
 
-        // Step 6: Verify nonce if provided
         if let expectedNonce = nonce {
             guard let documentNonce = document.nonce, documentNonce == expectedNonce else {
                 throw NitroAttestationError.nonceMismatch
             }
         }
 
-        // Step 7: Verify PCR values
-        try verifyPCRs(document.pcrs, expected: expectedPCRs)
-
-        // Step 8: Extract public key
-        guard let publicKey = document.publicKey else {
-            throw NitroAttestationError.missingPublicKey
+        // Step 7 — iterate the candidate PCR sets. First match wins.
+        // If every set mismatches, surface the last mismatch error so
+        // callers can show a useful "expected X, got Y" message.
+        guard !candidatePCRs.isEmpty else {
+            throw NitroAttestationError.pcrSetExpired
         }
-
-        return AttestationResult(
-            isValid: true,
-            enclavePublicKey: publicKey,
-            pcrs: document.pcrs,
-            timestamp: attestationTime,
-            moduleId: document.moduleId,
-            userData: document.userData,
-            nonce: document.nonce
-        )
+        var lastError: NitroAttestationError?
+        for expected in candidatePCRs {
+            do {
+                try verifyPCRs(document.pcrs, expected: expected)
+                guard let publicKey = document.publicKey else {
+                    throw NitroAttestationError.missingPublicKey
+                }
+                return AttestationResult(
+                    isValid: true,
+                    enclavePublicKey: publicKey,
+                    pcrs: document.pcrs,
+                    timestamp: attestationTime,
+                    moduleId: document.moduleId,
+                    userData: document.userData,
+                    nonce: document.nonce
+                )
+            } catch let error as NitroAttestationError {
+                if case .pcrMismatch = error {
+                    lastError = error
+                    continue
+                }
+                if case .pcrSetExpired = error {
+                    // The candidate set itself is outside its validity
+                    // window; skip rather than failing the whole sweep.
+                    lastError = error
+                    continue
+                }
+                throw error
+            }
+        }
+        throw lastError ?? NitroAttestationError.pcrSetExpired
     }
 
     /// Verify PCR values match expected values
