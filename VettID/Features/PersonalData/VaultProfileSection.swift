@@ -16,40 +16,44 @@ import SwiftUI
 struct VaultProfileSection: View {
 
     @EnvironmentObject private var appState: AppState
-    @ObservedObject private var store = PersonalDataStore.shared
-    /// Binding from the parent so tapping "Available data" hops to the
-    /// Data segment before the dialog appears. Optional — when nil, the
+    /// Binding from the parent so tapping the strip hops to the Data
+    /// segment before the dialog appears. Optional — when nil, the
     /// segment isn't switched.
     var segment: Binding<VaultSegment>?
     @State private var showAvailableData = false
 
     var body: some View {
-        HStack(spacing: 12) {
-            avatar
-            VStack(alignment: .leading, spacing: 2) {
-                Text(displayName)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+        // Matches Android `VaultProfileSection`: avatar + clickable
+        // name/subtitle column, no trailing icon button. Tapping the
+        // name column flips to the Data segment and opens the
+        // catalog preview.
+        Button {
+            segment?.wrappedValue = .data
+            showAvailableData = true
+        } label: {
+            HStack(spacing: 12) {
+                avatar
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(displayName)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                        .foregroundStyle(.primary)
+                    Text("Tap to preview")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
             }
-            Spacer()
-            Button {
-                segment?.wrappedValue = .data
-                showAvailableData = true
-            } label: {
-                Label("Available data", systemImage: "doc.text.magnifyingglass")
-                    .labelStyle(.iconOnly)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .accessibilityLabel("Available personal data")
         }
+        .buttonStyle(.plain)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(Color(.secondarySystemBackground))
+        .accessibilityLabel("Tap to preview your profile")
         .sheet(isPresented: $showAvailableData) {
             AvailableDataCatalogView()
         }
@@ -82,12 +86,4 @@ struct VaultProfileSection: View {
         appState.currentProfile?.displayName ?? "VettID User"
     }
 
-    private var subtitle: String {
-        let publicCount = store.publicFieldNamespaces.count
-        if publicCount == 0 {
-            return "Nothing published yet"
-        }
-        let plural = publicCount == 1 ? "field" : "fields"
-        return "\(publicCount) \(plural) available to connections"
-    }
 }

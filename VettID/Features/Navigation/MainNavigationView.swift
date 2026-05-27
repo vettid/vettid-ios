@@ -5,24 +5,21 @@ import SwiftUI
 struct MainNavigationView: View {
     @EnvironmentObject var appState: AppState
 
-    @State private var isDrawerOpen = false
-    /// Phase 1.3: the bottom nav now has only ACTIVITY and VAULT (plus a
-    /// More menu). `currentItem` still anchors deep-link routing into
-    /// `DrawerItem` — `.connections` for activity, `.vault` (or a
-    /// segmented shortcut) for vault. The drawer's voting / archive /
-    /// devices / auditLog entries open from the More menu or from cards.
+    /// Top-level destination. Android's main scaffold has exactly two:
+    /// the Connections list (default) and the Vault (reached by tapping
+    /// the avatar or swiping left). The drawer + bottom-nav + More
+    /// menu that used to live here are gone — `currentItem` now toggles
+    /// between `.connections` and `.vault`, and the previously-drawered
+    /// destinations (voting, devices, audit log, grants, actions,
+    /// archive) are reached from Settings rows or surfaced inside the
+    /// VettID system connection's audit trail.
     @State private var currentItem: DrawerItem = .connections
-    /// Phase 1.3: which segment is showing when the Vault destination is
-    /// active. Drawer shortcuts (`.personalData`, `.secrets`, `.wallets`)
-    /// flip the segment via the binding instead of pointing currentItem
-    /// at a separate top-level destination.
+    /// Which segment is showing when the Vault destination is active.
+    /// Matches Android `NavigationState.vaultSegment`.
     @State private var vaultSegment: VaultSegment = .data
 
     // Badge counts
     @StateObject private var badgeCounts = BadgeCountsViewModel()
-
-    // More menu
-    @State private var showMoreMenu = false
 
     // Search state
     @State private var searchText = ""
@@ -43,50 +40,27 @@ struct MainNavigationView: View {
     @State private var deepLinkConnectionId: String?
 
     var body: some View {
-        ZStack {
-            VStack(spacing: 0) {
-                // Header
-                currentHeader
+        VStack(spacing: 0) {
+            // Header — tap-avatar toggles Connections ↔ Vault, gear
+            // opens Settings. No drawer, no bottom nav (Android parity).
+            currentHeader
 
-                // Content
-                currentContent
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .contentShape(Rectangle())
-                    .gesture(contentSwipeGesture)
-
-                // Bottom Nav
-                BottomNavBar(
-                    currentItem: $currentItem,
-                    badgeCounts: badgeCounts,
-                    onMoreTap: { showMoreMenu = true }
-                )
-            }
-
-            // Drawer overlay
-            DrawerView(
-                isOpen: $isDrawerOpen,
-                currentItem: $currentItem,
-                onSignOut: {},
-                badgeCounts: badgeCounts
-            )
+            // Content
+            currentContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .gesture(contentSwipeGesture)
         }
-        .gesture(edgeSwipeGesture)
         .onChange(of: currentItem) { newValue in
             searchText = ""
             isSearching = false
-            // Drawer shortcuts to a specific Vault segment: flip the
-            // segment binding then collapse back to the canonical
-            // `.vault` item so the body switch resolves correctly.
+            // The drawer-shortcut segment mapping is preserved for
+            // deep links / external callers that still set currentItem
+            // to .personalData / .secrets / .wallets — flip the
+            // segment then collapse to the canonical `.vault` item.
             if let seg = newValue.vaultSegment {
                 vaultSegment = seg
-                // Defer the re-assignment so the onChange handler
-                // doesn't immediately re-fire.
                 Task { @MainActor in currentItem = .vault }
-            }
-        }
-        .sheet(isPresented: $showMoreMenu) {
-            MoreMenuSheet { item in
-                currentItem = item
             }
         }
         .sheet(isPresented: $showAddConnection) {
@@ -172,7 +146,7 @@ struct MainNavigationView: View {
         case .connections:
             SearchableHeaderView(
                 title: "Connections",
-                onProfileTap: openDrawer,
+                onProfileTap: toggleDestination,
                 searchText: $searchText,
                 isSearching: $isSearching,
                 actionIcon: "plus",
@@ -187,7 +161,7 @@ struct MainNavigationView: View {
             if vaultSegment == .secrets || vaultSegment == .data {
                 SearchableHeaderView(
                     title: "Vault",
-                    onProfileTap: openDrawer,
+                    onProfileTap: toggleDestination,
                     searchText: $searchText,
                     isSearching: $isSearching,
                     onSettingsTap: { showSettings = true },
@@ -196,7 +170,7 @@ struct MainNavigationView: View {
             } else {
                 HeaderView(
                     title: "Vault",
-                    onProfileTap: openDrawer,
+                    onProfileTap: toggleDestination,
                     onSettingsTap: { showSettings = true },
                     profilePhotoData: profilePhotoData
                 )
@@ -204,7 +178,7 @@ struct MainNavigationView: View {
         default:
             HeaderView(
                 title: currentItem.title,
-                onProfileTap: openDrawer,
+                onProfileTap: toggleDestination,
                 onSettingsTap: { showSettings = true },
                 profilePhotoData: profilePhotoData
             )
@@ -257,20 +231,11 @@ struct MainNavigationView: View {
 
     // MARK: - Gestures
 
-    private var edgeSwipeGesture: some Gesture {
-        DragGesture()
-            .onEnded { value in
-                if value.startLocation.x < 50 && value.translation.width > 100 {
-                    withAnimation(.spring(response: 0.3)) {
-                        isDrawerOpen = true
-                    }
-                }
-            }
-    }
-
+    /// Horizontal swipe between the two top-level destinations.
+    /// Matches Android `horizontalSwipeNavigation` on MainScaffold —
+    /// swipe-left from Connections enters the Vault, swipe-right inside
+    /// the Vault pops back to Connections.
     private var contentSwipeGesture: some Gesture {
-        // Phase 1.3: horizontal swipe now toggles between the two
-        // top-level destinations only — ACTIVITY (connections) and VAULT.
         DragGesture(minimumDistance: 50)
             .onEnded { value in
                 guard value.startLocation.x >= 50 else { return }
@@ -291,9 +256,11 @@ struct MainNavigationView: View {
 
     // MARK: - Actions
 
-    private func openDrawer() {
-        withAnimation(.spring(response: 0.3)) {
-            isDrawerOpen = true
+    /// Avatar tap — mirrors Android `onAvatarClick` in `MainScaffold`.
+    /// Toggles between the two top-level destinations.
+    private func toggleDestination() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            currentItem = (currentItem == .connections) ? .vault : .connections
         }
     }
 }
@@ -333,6 +300,31 @@ struct SettingsListView: View {
 
                 NavigationLink(destination: BackupListView(authTokenProvider: { nil })) {
                     Label("Backups", systemImage: "externaldrive.fill")
+                }
+            }
+
+            // Phase 1.4 — destinations previously reached from the
+            // drawer / More menu live here now. Android folds these
+            // into Settings + the VettID system connection's audit
+            // trail; we mirror that.
+            Section("Activity") {
+                NavigationLink(destination: ArchivedConnectionsView()) {
+                    Label("Archive", systemImage: "archivebox.fill")
+                }
+                NavigationLink(destination: ProposalsView(authTokenProvider: { nil })) {
+                    Label("Voting", systemImage: "checkmark.square.fill")
+                }
+                NavigationLink(destination: DeviceManagementView()) {
+                    Label("Devices", systemImage: "desktopcomputer")
+                }
+                NavigationLink(destination: FeedAuditLogView(feedClient: appState.feedClient)) {
+                    Label("Audit Log", systemImage: "lock.shield")
+                }
+                NavigationLink(destination: GrantsView()) {
+                    Label("Grants", systemImage: "key.fill")
+                }
+                NavigationLink(destination: ActionsView()) {
+                    Label("Actions", systemImage: "wand.and.stars")
                 }
             }
 

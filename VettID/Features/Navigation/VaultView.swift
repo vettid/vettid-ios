@@ -71,12 +71,42 @@ struct VaultView: View {
         }
     }
 
+    /// Icon-and-small-label tab strip, matching Android's
+    /// `IconTabSelector` (TabRow + Tab with `Icon(...)` and
+    /// `Text(fontSize=10.sp)`). Each tab takes equal width; the
+    /// selected one gets a 2pt accent-colored underline.
     private var segmentPicker: some View {
-        Picker("Vault section", selection: $segment) {
+        HStack(spacing: 0) {
             ForEach(VaultSegment.allCases) { seg in
-                Text(seg.title).tag(seg)
+                segmentTab(seg)
             }
         }
-        .pickerStyle(.segmented)
+        .background(Color(.systemBackground))
+    }
+
+    @ViewBuilder
+    private func segmentTab(_ seg: VaultSegment) -> some View {
+        let isSelected = segment == seg
+        Button {
+            withAnimation(.easeInOut(duration: 0.15)) { segment = seg }
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: seg.icon)
+                    .font(.system(size: 18, weight: .regular))
+                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                Text(seg.title)
+                    .font(.system(size: 10, weight: isSelected ? .semibold : .regular))
+                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                Rectangle()
+                    .fill(isSelected ? Color.accentColor : .clear)
+                    .frame(height: 2)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(seg.title)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
