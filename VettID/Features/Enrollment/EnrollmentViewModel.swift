@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UserNotifications
 import os
 
 private let enrollLog = Logger(subsystem: "com.vettid.app", category: "enrollment")
@@ -49,6 +50,17 @@ final class EnrollmentViewModel: ObservableObject {
     @Published var confirmPin: String = ""    // NEW: PIN confirmation
     @Published var errorMessage: String?
     @Published var showError: Bool = false
+    /// Optional profile photo picked during the REVIEW phase. Persisted
+    /// after enrollment so the silent default-profile publish (and
+    /// later profile.update calls) can attach the avatar. Matches
+    /// Android `EnrollmentWizardViewModel.profilePhotoBytes`.
+    @Published var profilePhotoData: Data?
+    /// Password re-entered during the Android-parity VERIFY_CREDENTIAL
+    /// phase. Compared locally against the still-in-memory `password`
+    /// (kept around until verify completes) — no extra server round-trip.
+    @Published var verifyPassword: String = ""
+    /// Notification permission status surfaced on the permissions screen.
+    @Published var notificationPermissionGranted: Bool?
 
     // MARK: - Session Data
 
@@ -116,6 +128,12 @@ final class EnrollmentViewModel: ObservableObject {
         case finalizing
         case settingUpNats
         case verifyingEnrollment     // NATS flow: final verification
+        // ===== Android-parity VERIFY_CREDENTIAL phase =====
+        case verifyingCredentialEntry           // User re-enters password to verify credential
+        case processingVerify                   // "Verifying credential..."
+        case verifySuccess(userGuid: String)    // Brief success checkmark before permissions
+        // ===== Android-parity PERMISSIONS phase =====
+        case requestingPermissions              // Ask for notification permission
         case complete(userGuid: String)
         case error(message: String, retryable: Bool)
 
@@ -151,6 +169,12 @@ final class EnrollmentViewModel: ObservableObject {
                 return "Setting Up Messaging"
             case .verifyingEnrollment:
                 return "Verifying..."
+            case .verifyingCredentialEntry, .processingVerify:
+                return "Verify Credential"
+            case .verifySuccess:
+                return "Credential Verified"
+            case .requestingPermissions:
+                return "App Permissions"
             case .complete:
                 return "Welcome to VettID"
             case .error:
@@ -230,59 +254,11 @@ final class EnrollmentViewModel: ObservableObject {
 
     /// Validate the vault PIN. 4-8 digits, matching Android's
     /// NitroEnrollmentClient.setupPin: `pin.length !in 4..8`.
+    /// Android does no client-side "weak PIN" rejection, so iOS doesn't either.
     var isPINValid: Bool {
         (4...8).contains(pin.count) &&
         pin.allSatisfy { $0.isNumber } &&
-        pin == confirmPin &&
-        !isWeakPIN(pin)
-    }
-
-    var pinValidationErrors: [String] {
-        var errors: [String] = []
-
-        if !pin.isEmpty && !(4...8).contains(pin.count) {
-            errors.append("PIN must be 4–8 digits")
-        }
-        if !pin.isEmpty && !pin.allSatisfy({ $0.isNumber }) {
-            errors.append("PIN must contain only numbers")
-        }
-        if !pin.isEmpty && isWeakPIN(pin) {
-            errors.append("PIN is too weak (avoid sequences and repeated digits)")
-        }
-        if !confirmPin.isEmpty && pin != confirmPin {
-            errors.append("PINs don't match")
-        }
-
-        return errors
-    }
-
-    /// Check for weak PIN patterns (sequences, repeated digits, common values).
-    private func isWeakPIN(_ pin: String) -> Bool {
-        guard (4...8).contains(pin.count) else { return true }
-
-        // Check for repeated digits (e.g., 1111, 222222)
-        if Set(pin).count == 1 { return true }
-
-        let digits = pin.compactMap { Int(String($0)) }
-        guard digits.count == pin.count else { return true }
-
-        // Check for monotonic sequences (e.g., 1234, 123456, 87654321)
-        let ascending = zip(digits, digits.dropFirst()).allSatisfy { $1 - $0 == 1 }
-        let descending = zip(digits, digits.dropFirst()).allSatisfy { $0 - $1 == 1 }
-        if ascending || descending { return true }
-
-        // Check for common weak PINs across allowed lengths.
-        let weakPINs: Set<String> = [
-            "0000", "1111", "2222", "3333", "4444", "5555", "6666", "7777", "8888", "9999",
-            "1234", "4321",
-            "000000", "111111", "222222", "333333", "444444",
-            "555555", "666666", "777777", "888888", "999999",
-            "123456", "654321", "123123", "112233",
-            "12345678", "87654321"
-        ]
-        if weakPINs.contains(pin) { return true }
-
-        return false
+        pin == confirmPin
     }
 
     // MARK: - Password Strength Calculation
@@ -643,8 +619,24 @@ final class EnrollmentViewModel: ObservableObject {
             // Brief pause for UI feedback
             try await Task.sleep(nanoseconds: 500_000_000)
 
-            // Step 4: Prompt for PIN (UI will handle this)
-            state = .settingPIN
+            // Step 4: REVIEW phase — show the registration profile from
+            // nats-bootstrap (name + email) so the user can confirm
+            // identity (and optionally add a profile photo) before PIN
+            // setup. Matches Android `WizardPhase.REVIEW`, which sits
+            // between START and PIN_SETUP. The fallback to settingPIN
+            // covers older invites where nats-bootstrap didn't carry a
+            // registrationProfile — we'd rather continue than block.
+            if let profile = pendingRegistrationProfile {
+                state = .confirmIdentity(
+                    EnrollmentIdentity(
+                        firstName: profile.firstName,
+                        lastName: profile.lastName,
+                        email: profile.email
+                    )
+                )
+            } else {
+                state = .settingPIN
+            }
 
         } catch {
             #if DEBUG
@@ -765,7 +757,7 @@ final class EnrollmentViewModel: ObservableObject {
                 try storeNatsCredential(encryptedCredential: encryptedCred, localData: localData)
             }
 
-            // Step 9: Verify enrollment
+            // Step 9: Verify enrollment (vault.get_info round-trip — Android-parity).
             #if DEBUG
             print("[Enrollment] NATS Flow: Verifying enrollment...")
             #endif
@@ -774,13 +766,16 @@ final class EnrollmentViewModel: ObservableObject {
             try await handler.verifyEnrollment()
 
             #if DEBUG
-            print("[Enrollment] NATS Flow: Enrollment complete!")
+            print("[Enrollment] NATS Flow: Vault verify OK — moving to credential re-entry")
             #endif
 
-            // Clear sensitive data
-            clearSessionData()
-
-            state = .complete(userGuid: userGuid ?? "unknown")
+            // Step 10: VERIFY_CREDENTIAL — show password re-entry. We
+            // keep `password` populated until the local compare in
+            // `submitVerifyPassword` completes; only `confirmPassword`
+            // gets wiped now so the new verify field starts empty.
+            confirmPassword = ""
+            verifyPassword = ""
+            state = .verifyingCredentialEntry
 
         } catch {
             #if DEBUG
@@ -1325,6 +1320,82 @@ final class EnrollmentViewModel: ObservableObject {
         try credentialStore.store(credential: credential)
     }
 
+    // MARK: - Verify Credential (Android-parity VERIFY_CREDENTIAL phase)
+
+    /// Whether the verify-credential Continue button should enable.
+    /// Matches Android: requires the verify field to be non-empty.
+    var isVerifyPasswordValid: Bool {
+        !verifyPassword.isEmpty
+    }
+
+    /// Verify the freshly-created credential by re-entering the
+    /// password. Compares locally against the in-memory `password` to
+    /// avoid a second NATS round-trip — Android does an authenticate
+    /// round-trip here, but iOS already has both NATS credentials and
+    /// the stored credential, so a local compare delivers the same UX
+    /// guarantee ("you remembered the password") without extra
+    /// failure modes.
+    func submitVerifyCredential() async {
+        guard case .verifyingCredentialEntry = state else { return }
+        guard isVerifyPasswordValid else { return }
+
+        let entered = verifyPassword
+        verifyPassword = ""
+
+        state = .processingVerify
+
+        // Brief progress UI for parity with Android `Authenticating`.
+        try? await Task.sleep(nanoseconds: 300_000_000)
+
+        guard entered == password else {
+            handleError(EnrollmentError.passwordSetFailed, retryable: true)
+            // Re-show the verify entry on retry; handleError leaves
+            // the wizard in `.error` so the user can retry.
+            return
+        }
+
+        // Match confirmed — wipe the cached password and advance.
+        password = ""
+        confirmPassword = ""
+
+        state = .verifySuccess(userGuid: userGuid ?? "unknown")
+
+        // Short success-checkmark dwell, then advance to permissions.
+        try? await Task.sleep(nanoseconds: 700_000_000)
+        state = .requestingPermissions
+    }
+
+    // MARK: - Permissions (Android-parity PERMISSIONS phase)
+
+    /// Request notification permission and advance to completion.
+    /// Mirrors Android `RequestingPermissions` → `Complete`. The
+    /// notification ask is best-effort; user can skip without
+    /// blocking enrollment.
+    func requestNotificationPermissionAndContinue() async {
+        let granted = await requestNotificationPermission()
+        notificationPermissionGranted = granted
+        finishEnrollment()
+    }
+
+    /// Skip notification permission and advance to completion.
+    func skipPermissions() {
+        finishEnrollment()
+    }
+
+    private func requestNotificationPermission() async -> Bool {
+        await withCheckedContinuation { cont in
+            UNUserNotificationCenter.current().requestAuthorization(
+                options: [.alert, .badge, .sound]
+            ) { granted, _ in
+                cont.resume(returning: granted)
+            }
+        }
+    }
+
+    private func finishEnrollment() {
+        state = .complete(userGuid: userGuid ?? "unknown")
+    }
+
     private func clearSessionData() {
         enrollmentToken = nil
         enrollmentSessionId = nil
@@ -1337,6 +1408,7 @@ final class EnrollmentViewModel: ObservableObject {
         enclavePublicKey = nil
         password = ""
         confirmPassword = ""
+        verifyPassword = ""
     }
 
     private func handleError(_ error: Error, retryable: Bool) {

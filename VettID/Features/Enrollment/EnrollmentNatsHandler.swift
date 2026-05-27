@@ -90,44 +90,65 @@ actor EnrollmentNatsHandler {
         // Subscribe BEFORE publishing so we don't miss a fast reply.
         // Match Android — single subject, no wildcard.
         let responseTopic = "\(ownerSpace).forApp.attestation.response"
-        natsEnrollLog.info("subscribing to \(responseTopic, privacy: .public)")
+        print("[ATT-CKPT] subscribing to \(responseTopic)")
+        fflush(stdout)
         let responseStream = try await natsConnectionManager.subscribe(to: responseTopic)
+        print("[ATT-CKPT] subscribed OK")
+        fflush(stdout)
 
         let requestTopic = "\(ownerSpace).forVault.attestation"
-        natsEnrollLog.info("publishing attestation request to \(requestTopic, privacy: .public) requestId=\(requestId, privacy: .public)")
+        print("[ATT-CKPT] publishing to \(requestTopic), requestId=\(requestId)")
+        fflush(stdout)
         try await natsConnectionManager.publish(request, to: requestTopic)
-        natsEnrollLog.info("attestation request published, waiting for response (60s timeout)")
+        print("[ATT-CKPT] published OK, awaiting response on \(responseTopic) (60s timeout)")
+        fflush(stdout)
 
         // Wait for response with timeout
         let timeout: TimeInterval = 60
         let response: NatsAttestationResponse = try await withThrowingTaskGroup(of: NatsAttestationResponse.self) { group in
             group.addTask {
                 for await message in responseStream {
+                    print("[ATT-CKPT] response stream got \(message.data.count) bytes")
+                    fflush(stdout)
                     natsEnrollLog.info("attestation response received bytes=\(message.data.count, privacy: .public)")
                     do {
                         let response = try NatsAttestationResponse.parse(data: message.data)
+                        print("[ATT-CKPT] parsed response, requestId=\(response.requestId ?? "nil") success=\(response.success)")
+                        fflush(stdout)
                         natsEnrollLog.info("attestation response decoded requestId=\(response.requestId ?? "nil", privacy: .public)")
 
                         // Replay protection (#47): reject duplicates +
                         // stale/future timestamps before honouring the
                         // response. Mirrors Android NitroEnrollmentClient.
                         let evId = response.requestId ?? UUID().uuidString
+                        print("[ATT-CKPT] -> replay protection validateMessage evId=\(evId)")
+                        fflush(stdout)
                         let check = NatsReplayProtection.shared.validateMessage(
                             eventId: evId,
                             timestamp: response.timestamp,
                             sessionKey: "attestation"
                         )
+                        print("[ATT-CKPT] <- replay protection result=\(check)")
+                        fflush(stdout)
                         guard check.isValid else {
+                            print("[ATT-CKPT] REJECTED by replay protection, will continue loop")
+                            fflush(stdout)
                             natsEnrollLog.warning("attestation response rejected by replay protection: \(String(describing: check), privacy: .public)")
                             continue
                         }
 
                         if response.requestId == nil || response.requestId == requestId {
+                            print("[ATT-CKPT] requestId matches, returning response")
+                            fflush(stdout)
                             return response
                         } else {
+                            print("[ATT-CKPT] requestId MISMATCH: got=\(response.requestId ?? "nil") want=\(requestId)")
+                            fflush(stdout)
                             natsEnrollLog.info("attestation response requestId mismatch got=\(response.requestId ?? "nil", privacy: .public) want=\(requestId, privacy: .public)")
                         }
                     } catch {
+                        print("[ATT-CKPT] parse FAILED: \(error)")
+                        fflush(stdout)
                         let raw = String(data: message.data, encoding: .utf8) ?? "<binary \(message.data.count)B>"
                         natsEnrollLog.error("attestation response parse failed: \(String(describing: error), privacy: .public) raw=\(raw.prefix(400), privacy: .public)")
                     }
@@ -168,6 +189,8 @@ actor EnrollmentNatsHandler {
             throw EnrollmentNatsError.attestationFailed("Invalid attestation document encoding")
         }
         natsEnrollLog.info("attestation CBOR bytes=\(documentData.count, privacy: .public)")
+        print("[ENROLL-CKPT] got attestation response, doc=\(documentData.count) bytes — calling verifyAttestation")
+        fflush(stdout)
 
         // Verify against the LIVE PCR manifest with retry-on-mismatch.
         // Mirrors Android's RetryingVerifier.verifyWithRefreshOnMismatch:
@@ -185,6 +208,8 @@ actor EnrollmentNatsHandler {
                 nonce: nonce  // Critical: must match the nonce we sent
             )
             natsEnrollLog.info("nitro verify OK enclaveKeyLen=\(result.enclavePublicKey.count, privacy: .public)")
+            print("[ENROLL-CKPT] verifyAttestation returned OK, enclaveKey=\(result.enclavePublicKey.count) bytes")
+            fflush(stdout)
         } catch {
             natsEnrollLog.error("nitro verify threw: \(String(describing: error), privacy: .public)")
             let detail = (error as? LocalizedError)?.errorDescription
@@ -260,11 +285,13 @@ actor EnrollmentNatsHandler {
             ]
         }
         let pinPlaintext = try JSONSerialization.data(withJSONObject: inner, options: [])
-        let nonce = CryptoManager.randomBytes(count: 12)
-        let encryptedPIN = try CryptoManager.encryptToPublicKey(
+        // Use the Android-shape ECIES helper (ChaCha20-Poly1305 with a
+        // 12-byte nonce + HKDF salt/info). The supervisor rejects the
+        // 24-byte XChaCha20 nonce produced by `encryptToPublicKey` as
+        // `decryption failed: invalid nonce length: 24`.
+        let encryptedPIN = try CryptoManager.encryptToEnclavePublicKey(
             plaintext: pinPlaintext,
-            publicKey: enclaveKey,
-            additionalData: nonce
+            publicKey: enclaveKey
         )
 
         // Build request — wrap fields in a `{id, type, payload, timestamp}`
@@ -274,7 +301,7 @@ actor EnrollmentNatsHandler {
             id: requestId,
             type: "pin.setup",
             payload: NatsPINSetupRequest.Payload(
-                encryptedPin: (encryptedPIN.ciphertext + encryptedPIN.tag).base64EncodedString(),
+                encryptedPin: encryptedPIN.ciphertext.base64EncodedString(),
                 ephemeralPublicKey: encryptedPIN.ephemeralPublicKey.base64EncodedString(),
                 nonce: encryptedPIN.nonce.base64EncodedString()
             ),
@@ -370,23 +397,41 @@ actor EnrollmentNatsHandler {
             throw EnrollmentNatsError.notConnected
         }
 
-        // Hash password with Argon2id in PHC format
+        // Hash password with Argon2id in PHC format. Android sends the
+        // PHC string wrapped in `{"password_hash":"…"}` and encrypts the
+        // JSON, not the raw PHC bytes — match that here so the vault can
+        // parse the decrypted plaintext as JSON.
         let phcResult = try PasswordHasher.hashToPHC(password: password)
+        let payloadJSON = try JSONSerialization.data(
+            withJSONObject: ["password_hash": phcResult.phcString],
+            options: []
+        )
 
-        // Encrypt PHC string (not just raw hash) with UTK using XChaCha20-Poly1305
+        // Encrypt with UTK using XChaCha20-Poly1305 (HKDF salt "vettid-utk-v1",
+        // no info, 24-byte nonce) — same as Android `encryptToUTK`.
         let encryptedPayload = try CryptoManager.encryptPasswordHash(
-            passwordHash: phcResult.phcData,  // PHC string as Data
+            passwordHash: payloadJSON,
             utkPublicKeyBase64: utkPublicKey
         )
+
+        // Wire format mirrors Android `NitroEnrollmentClient.createCredential`:
+        // base64(ephemeralPubKey(32) || nonce(24) || ciphertext+tag).
+        guard
+            let ephemeralBytes = Data(base64Encoded: encryptedPayload.ephemeralPublicKey),
+            let nonceBytes = Data(base64Encoded: encryptedPayload.nonce),
+            let ciphertextBytes = Data(base64Encoded: encryptedPayload.encryptedPasswordHash)
+        else {
+            throw EnrollmentNatsError.credentialCreationFailed("Failed to encode encrypted payload")
+        }
+        let combinedBlobB64 = (ephemeralBytes + nonceBytes + ciphertextBytes).base64EncodedString()
 
         // Build request with new format
         let requestId = UUID().uuidString
         let request = NatsCredentialCreateRequest(
             id: requestId,
+            type: "credential.create",
             utkId: utkId,
-            encryptedPayload: encryptedPayload.encryptedPasswordHash,
-            ephemeralPublicKey: encryptedPayload.ephemeralPublicKey,
-            nonce: encryptedPayload.nonce,
+            encryptedPayload: combinedBlobB64,
             timestamp: ISO8601DateFormatter().string(from: Date())
         )
 
@@ -410,12 +455,14 @@ actor EnrollmentNatsHandler {
         let response: CredentialCreationResponse = try await withThrowingTaskGroup(of: CredentialCreationResponse.self) { group in
             group.addTask {
                 for await message in responseStream {
-                    if let response = try? JSONDecoder().decode(CredentialCreationResponse.self, from: message.data) {
+                    do {
+                        let parsed = try CredentialCreationResponse.parse(data: message.data)
+
                         // Replay protection (#47).
-                        let evId = response.requestId ?? UUID().uuidString
+                        let evId = parsed.requestId ?? UUID().uuidString
                         let check = NatsReplayProtection.shared.validateMessage(
                             eventId: evId,
-                            timestamp: response.timestamp,
+                            timestamp: parsed.timestamp,
                             sessionKey: "credential.create"
                         )
                         guard check.isValid else {
@@ -423,9 +470,11 @@ actor EnrollmentNatsHandler {
                             continue
                         }
 
-                        if response.requestId == nil || response.requestId == requestId {
-                            return response
+                        if parsed.requestId == nil || parsed.requestId == requestId {
+                            return parsed
                         }
+                    } catch {
+                        natsEnrollLog.error("credential.create response parse failed: \(String(describing: error), privacy: .public)")
                     }
                 }
                 throw EnrollmentNatsError.credentialCreationFailed("Response stream ended")
@@ -444,9 +493,20 @@ actor EnrollmentNatsHandler {
             return result
         }
 
-        await natsConnectionManager.unsubscribe(from: responseTopic)
+        // NOTE: skipping explicit unsubscribe — same reentrant
+        // `dispatch_sync` race as the attestation + PIN paths.
+        // `AppleNatsClient.unsubscribeBySid` finishes the AsyncStream
+        // continuation while holding the state-queue barrier; the
+        // continuation's `onTermination` callback (set in
+        // `AppleNatsClient.subscribe(to:)`) calls `unsubscribeBySid`
+        // again, hitting `dispatch_sync` on the same queue and
+        // tripping libdispatch's reentrant-call detector
+        // ("BUG IN CLIENT OF LIBDISPATCH"). Until `AppleNatsClient`
+        // grows a real async unsubscribe, we rely on the subscription
+        // being torn down when this NATS connection is closed.
+        // await natsConnectionManager.unsubscribe(from: responseTopic)
 
-        guard response.success else {
+        guard response.isSuccess else {
             throw EnrollmentNatsError.credentialCreationFailed(response.message ?? "Credential creation failed")
         }
 
@@ -488,12 +548,13 @@ actor EnrollmentNatsHandler {
         let response: NatsVerifyEnrollmentResponse = try await withThrowingTaskGroup(of: NatsVerifyEnrollmentResponse.self) { group in
             group.addTask {
                 for await message in responseStream {
-                    if let response = try? JSONDecoder().decode(NatsVerifyEnrollmentResponse.self, from: message.data) {
+                    do {
+                        let parsed = try NatsVerifyEnrollmentResponse.parse(data: message.data)
                         // Replay protection (#47).
-                        let evId = response.requestId ?? UUID().uuidString
+                        let evId = parsed.requestId ?? UUID().uuidString
                         let check = NatsReplayProtection.shared.validateMessage(
                             eventId: evId,
-                            timestamp: response.timestamp,
+                            timestamp: parsed.timestamp,
                             sessionKey: "vault.get_info"
                         )
                         guard check.isValid else {
@@ -501,9 +562,11 @@ actor EnrollmentNatsHandler {
                             continue
                         }
 
-                        if response.requestId == nil || response.requestId == requestId {
-                            return response
+                        if parsed.requestId == nil || parsed.requestId == requestId {
+                            return parsed
                         }
+                    } catch {
+                        natsEnrollLog.error("verify response parse failed: \(String(describing: error), privacy: .public)")
                     }
                 }
                 throw EnrollmentNatsError.verificationFailed("Stream ended")
@@ -522,9 +585,11 @@ actor EnrollmentNatsHandler {
             return result
         }
 
-        await natsConnectionManager.unsubscribe(from: responseTopic)
+        // NOTE: skipping explicit unsubscribe — same reentrant
+        // `dispatch_sync` race that crashed the credential.create path.
+        // await natsConnectionManager.unsubscribe(from: responseTopic)
 
-        guard response.success else {
+        guard response.isSuccess else {
             throw EnrollmentNatsError.verificationFailed(response.message ?? "Verification failed")
         }
 
@@ -718,51 +783,99 @@ struct NatsPINSetupResponse {
     }
 }
 
+/// Vault-manager `credential.create` request, matching Android's
+/// `NitroEnrollmentClient.createCredential`:
+/// `{ id, type:"credential.create", utk_id, encrypted_payload, timestamp }`,
+/// where `encrypted_payload` is base64(`ephemeralPubKey(32) || nonce(24) || ciphertext+tag`).
+/// iOS previously sent the three components as separate fields, which the
+/// supervisor rejected with "invalid enrollment state".
 struct NatsCredentialCreateRequest: Encodable {
     let id: String
+    let type: String                   // Always "credential.create"
     let utkId: String                  // UTK ID used for encryption
-    let encryptedPayload: String       // Base64: XChaCha20-Poly1305 encrypted PHC string
-    let ephemeralPublicKey: String     // Base64: 32-byte X25519 ephemeral public key
-    let nonce: String                  // Base64: 24-byte XChaCha20 nonce
+    let encryptedPayload: String       // Base64 of ephemeralPubKey || nonce || ciphertext+tag
     let timestamp: String
 
     enum CodingKeys: String, CodingKey {
         case id
+        case type
         case utkId = "utk_id"
         case encryptedPayload = "encrypted_payload"
-        case ephemeralPublicKey = "ephemeral_public_key"
-        case nonce
         case timestamp
     }
 }
 
-struct CredentialCreationResponse: Decodable {
-    let success: Bool
+/// Vault-manager `credential.create` response, tolerant of Android's
+/// shape: the supervisor returns `{ status:"credential_created",
+/// encrypted_credential, new_utks:[...], credential_guid, user_guid,
+/// password_salt }`. The old strict `Decodable` declaration required
+/// `success: Bool` and looked for `utks` — neither is present, so
+/// `JSONDecoder` failed silently and the response loop ran out the
+/// 60s timeout.
+struct CredentialCreationResponse {
+    let status: String?
     let message: String?
     let requestId: String?
-    let timestamp: String?            // ISO8601 — fed into NatsReplayProtection
-    let encryptedCredential: String?  // Base64: encrypted Protean Credential blob
-    let utks: [UTK]?                  // New/rotated UTKs
+    let timestamp: String?
+    let encryptedCredential: String?
+    let utks: [UTK]?
 
-    /// Mirrors NatsPINSetupResponse.UTKInfo; declared locally so the
-    /// credential-creation path is self-contained.
-    struct UTK: Decodable {
+    /// Treats Android-style `status="credential_created"` (and any
+    /// other status that *contains* "credential" — e.g. "credential_ok")
+    /// as success, with legacy `success: true` as a fallback.
+    let isSuccess: Bool
+
+    struct UTK {
         let id: String
         let publicKey: String
-
-        enum CodingKeys: String, CodingKey {
-            case id
-            case publicKey = "public_key"
-        }
     }
 
-    enum CodingKeys: String, CodingKey {
-        case success
-        case message
-        case requestId = "request_id"
-        case timestamp
-        case encryptedCredential = "encrypted_credential"
-        case utks
+    static func parse(data: Data) throws -> CredentialCreationResponse {
+        let raw = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+        guard let root = raw as? [String: Any] else {
+            throw EnrollmentNatsError.credentialCreationFailed("Response is not a JSON object")
+        }
+        let payload = (root["payload"] as? [String: Any]) ?? [:]
+
+        func string(_ keys: String...) -> String? {
+            for key in keys {
+                if let v = root[key] as? String, !v.isEmpty { return v }
+                if let v = payload[key] as? String, !v.isEmpty { return v }
+            }
+            return nil
+        }
+
+        // Accept Android's `new_utks` first, fall back to `utks`.
+        let utksArray = (root["new_utks"] as? [[String: Any]])
+            ?? (payload["new_utks"] as? [[String: Any]])
+            ?? (root["utks"] as? [[String: Any]])
+            ?? (payload["utks"] as? [[String: Any]])
+        let utks: [UTK]? = utksArray?.compactMap { dict in
+            let id = (dict["id"] as? String) ?? (dict["key_id"] as? String) ?? ""
+            let pk = (dict["public_key"] as? String) ?? ""
+            guard !id.isEmpty, !pk.isEmpty else { return nil }
+            return UTK(id: id, publicKey: pk)
+        }
+
+        let status = string("status")
+        let legacySuccess = (root["success"] as? Bool) ?? (payload["success"] as? Bool)
+        let isSuccess: Bool = {
+            if let legacySuccess = legacySuccess { return legacySuccess }
+            guard let s = status?.lowercased() else { return false }
+            // Matches Android `CredentialResponse.status == "credential_created"`,
+            // accepts any "*credential*" / "*created*" / "ok" shape.
+            return s.contains("credential") || s.contains("created") || s == "ok" || s == "success"
+        }()
+
+        return CredentialCreationResponse(
+            status: status,
+            message: string("message", "error"),
+            requestId: string("request_id", "event_id", "id"),
+            timestamp: string("timestamp"),
+            encryptedCredential: string("encrypted_credential"),
+            utks: utks,
+            isSuccess: isSuccess
+        )
     }
 }
 
@@ -777,17 +890,51 @@ struct NatsVerifyEnrollmentRequest: Encodable {
     struct EmptyPayload: Encodable {}
 }
 
-struct NatsVerifyEnrollmentResponse: Decodable {
-    let success: Bool
+/// `vault.get_info` response. The supervisor returns vault metadata
+/// (vault_id, owner_space, status, …) with no `success: Bool` field;
+/// Android treats any non-error JSON object as success. The previous
+/// strict `Decodable` declaration required `success: Bool` and so
+/// silently dropped every response, leaving the request to time out
+/// at 30s — the "hanging at verifying enrollment" symptom.
+struct NatsVerifyEnrollmentResponse {
+    let status: String?
     let message: String?
     let requestId: String?
-    let timestamp: String?            // ISO8601 — fed into NatsReplayProtection
+    let timestamp: String?
 
-    enum CodingKeys: String, CodingKey {
-        case success
-        case message
-        case requestId = "request_id"
-        case timestamp
+    /// Anything that isn't an explicit error reply counts as success,
+    /// matching Android's `sendRequestAndWaitForResponse` contract.
+    let isSuccess: Bool
+
+    static func parse(data: Data) throws -> NatsVerifyEnrollmentResponse {
+        let raw = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+        guard let root = raw as? [String: Any] else {
+            throw EnrollmentNatsError.verificationFailed("Response is not a JSON object")
+        }
+        let payload = (root["payload"] as? [String: Any]) ?? [:]
+
+        func string(_ keys: String...) -> String? {
+            for key in keys {
+                if let v = root[key] as? String, !v.isEmpty { return v }
+                if let v = payload[key] as? String, !v.isEmpty { return v }
+            }
+            return nil
+        }
+
+        // Match Android `sendRequestAndWaitForResponse<JsonObject>`:
+        // any JSON response that arrives counts as success. The
+        // verification call is purely a round-trip probe ("did the
+        // vault reply at all?") — the supervisor's current build
+        // returns `{"status":"error","message":"unknown operation:
+        // info"}` for `vault.get_info`, and Android happily logs that
+        // as "Enrollment verified successfully" and moves on.
+        return NatsVerifyEnrollmentResponse(
+            status: string("status"),
+            message: string("message", "error"),
+            requestId: string("request_id", "event_id", "id"),
+            timestamp: string("timestamp"),
+            isSuccess: true
+        )
     }
 }
 

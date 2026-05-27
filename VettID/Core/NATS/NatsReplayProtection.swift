@@ -36,14 +36,32 @@ final class NatsReplayProtection {
     private var processedEvents: [String: Date] = [:]
     private var sequenceTrackers: [String: Int64] = [:]
 
-    /// ISO 8601 parser configured with fractional seconds (the
-    /// supervisor emits e.g. `"2026-05-27T15:42:34.046Z"`). Lazy because
-    /// ISO8601DateFormatter is non-trivial to construct.
-    private static let timestampParser: ISO8601DateFormatter = {
+    /// ISO 8601 parsers — the supervisor emits BOTH
+    /// `"2026-05-27T15:42:34.046Z"` (PCR manifest) and
+    /// `"2026-05-27T13:37:24Z"` (attestation response) depending on
+    /// the producer, so we try the fractional-seconds parser first
+    /// and fall back to the plain RFC 3339 parser. `ISO8601DateFormatter`
+    /// with `.withFractionalSeconds` *requires* fractional seconds in
+    /// the input — without the fallback every attestation response
+    /// was failing replay validation as "Invalid timestamp format"
+    /// and the response loop waited forever for a retry that never
+    /// came (the supervisor only publishes once).
+    private static let timestampParserFractional: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return f
     }()
+
+    private static let timestampParserPlain: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
+    private static func parseISO8601(_ ts: String) -> Date? {
+        if let d = timestampParserFractional.date(from: ts) { return d }
+        return timestampParserPlain.date(from: ts)
+    }
 
     private init() {}
 
@@ -140,7 +158,7 @@ final class NatsReplayProtection {
     // MARK: - Internals
 
     private func validateTimestamp(_ timestamp: String) -> TimestampOutcome {
-        guard let messageTime = Self.timestampParser.date(from: timestamp) else {
+        guard let messageTime = Self.parseISO8601(timestamp) else {
             return .invalid("Invalid timestamp format")
         }
         let now = Date()

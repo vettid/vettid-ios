@@ -365,6 +365,58 @@ final class CryptoManager {
         )
     }
 
+    // MARK: - Enclave ECIES (Android-parity)
+
+    /// Result of an Android-shape ECIES encryption to the enclave: a
+    /// ChaCha20-Poly1305 envelope with a 12-byte nonce and a sealed
+    /// `ciphertext || tag` blob, plus the ephemeral X25519 public key.
+    struct EnclaveEncryptedData {
+        let ciphertext: Data           // ciphertext + 16-byte Poly1305 tag
+        let ephemeralPublicKey: Data   // 32-byte X25519
+        let nonce: Data                // 12-byte ChaCha20 nonce
+    }
+
+    /// X25519 + HKDF-SHA256 + ChaCha20-Poly1305 (12-byte nonce) encryption
+    /// to the attested enclave public key, matching Android's
+    /// `CryptoManager.encryptToPublicKey(plaintext, publicKeyBase64, context)`.
+    ///
+    /// The supervisor decrypts with the *same* salt and info, and expects
+    /// a 12-byte nonce. iOS's `encryptToPublicKey` uses XChaCha20 with a
+    /// 24-byte nonce, which the supervisor rejects as
+    /// `decryption failed: invalid nonce length: 24`.
+    static func encryptToEnclavePublicKey(
+        plaintext: Data,
+        publicKey: Data,
+        context: String = "enclave-encryption-v1"
+    ) throws -> EnclaveEncryptedData {
+        let recipientPublicKey = try Curve25519.KeyAgreement.PublicKey(rawRepresentation: publicKey)
+
+        let ephemeralPrivate = Curve25519.KeyAgreement.PrivateKey()
+        let ephemeralPublic = ephemeralPrivate.publicKey
+
+        let sharedSecret = try ephemeralPrivate.sharedSecretFromKeyAgreement(with: recipientPublicKey)
+
+        // HKDF: cross-platform salt + caller-supplied context string,
+        // mirroring `core/crypto/CryptoManager.kt#deriveEncryptionKey`.
+        let salt = Data("VettID-HKDF-Salt-v1".utf8)
+        let info = Data(context.utf8)
+        let symmetricKey = sharedSecret.hkdfDerivedSymmetricKey(
+            using: SHA256.self,
+            salt: salt,
+            sharedInfo: info,
+            outputByteCount: 32
+        )
+
+        // ChaChaPoly generates a fresh 12-byte nonce internally.
+        let sealed = try ChaChaPoly.seal(plaintext, using: symmetricKey)
+
+        return EnclaveEncryptedData(
+            ciphertext: sealed.ciphertext + sealed.tag,
+            ephemeralPublicKey: ephemeralPublic.rawRepresentation,
+            nonce: Data(sealed.nonce)
+        )
+    }
+
     // MARK: - Voting Key Derivation
 
     /// Derive a voting keypair from identity key and proposal ID

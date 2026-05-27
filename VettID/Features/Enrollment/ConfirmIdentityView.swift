@@ -4,17 +4,37 @@ import SwiftUI
 
 /// Matches Android `ConfirmIdentityPhaseContent`: shows the identity
 /// from the enrollment response with a "what your connections will
-/// see" preview + a security note, in a scrollable centered layout.
-/// Photo picker is intentionally deferred (Android treats it as
-/// optional) — iOS adds it in the post-enrollment profile step.
+/// see" preview, an optional profile-photo picker, and a security
+/// note, in a scrollable centered layout.
 struct ConfirmIdentityView: View {
     let firstName: String
     let lastName: String
     let email: String
+    /// Optional binding so the captured photo survives the
+    /// review-screen lifecycle (the view-model holds the photo so the
+    /// post-enrollment profile publish can attach it).
+    @Binding var photoData: Data?
     let onConfirm: () -> Void
     let onReject: () -> Void
 
     @State private var isReporting = false
+    @State private var showingPhotoPicker = false
+
+    init(
+        firstName: String,
+        lastName: String,
+        email: String,
+        photoData: Binding<Data?> = .constant(nil),
+        onConfirm: @escaping () -> Void,
+        onReject: @escaping () -> Void
+    ) {
+        self.firstName = firstName
+        self.lastName = lastName
+        self.email = email
+        self._photoData = photoData
+        self.onConfirm = onConfirm
+        self.onReject = onReject
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -22,7 +42,7 @@ struct ConfirmIdentityView: View {
                 VStack(spacing: 20) {
                     Spacer().frame(height: 12)
 
-                    avatarPlaceholder
+                    avatarSection
 
                     VStack(spacing: 8) {
                         Text("Is this right?")
@@ -80,14 +100,70 @@ struct ConfirmIdentityView: View {
 
     // MARK: - Sections
 
-    private var avatarPlaceholder: some View {
-        ZStack {
-            Circle()
-                .fill(Color(.systemGray5))
-                .frame(width: 112, height: 112)
-            Image(systemName: "person.fill")
-                .font(.system(size: 56))
-                .foregroundStyle(Color.accentColor)
+    /// Tappable avatar with optional photo + camera badge, matching
+    /// Android `ConfirmIdentityPhaseContent`. Hits the existing
+    /// `ProfilePhotoPickerSheet` (camera / library / remove) so the
+    /// enrollment flow doesn't reinvent the picker UI.
+    private var avatarSection: some View {
+        VStack(spacing: 8) {
+            ZStack(alignment: .bottomTrailing) {
+                Button {
+                    showingPhotoPicker = true
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(Color(.systemGray5))
+                            .frame(width: 112, height: 112)
+                        if let data = photoData, let uiImage = UIImage(data: data) {
+                            Image(uiImage: uiImage)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 112, height: 112)
+                                .clipShape(Circle())
+                        } else {
+                            Image(systemName: "person.fill")
+                                .font(.system(size: 56))
+                                .foregroundStyle(Color.accentColor)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    showingPhotoPicker = true
+                } label: {
+                    Image(systemName: "camera.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(.white)
+                        .padding(10)
+                        .background(Color.accentColor)
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+
+            if photoData == nil {
+                Text("Tap to add a profile photo (optional)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Button("Remove photo") {
+                    photoData = nil
+                }
+                .font(.caption)
+            }
+        }
+        .sheet(isPresented: $showingPhotoPicker) {
+            ProfilePhotoPickerSheet { image in
+                // ProfilePhotoPickerSheet signals "remove" with a 1×1
+                // transparent image — detect that and clear the photo
+                // instead of running it through the resize pipeline.
+                if image.size.width <= 1 && image.size.height <= 1 {
+                    photoData = nil
+                } else {
+                    photoData = ProfilePhotoHelper.processProfilePhoto(image)
+                }
+            }
         }
     }
 

@@ -27,16 +27,24 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            // Main content
+            // Main content. Android-parity routing: once the device
+            // holds a credential, the only unlock surface is the PIN
+            // entry / vault warm screen. The old `!isAuthenticated →
+            // AuthenticationView` branch dropped the user onto the
+            // "Unlock VettID / Use Password" screen post-relaunch and
+            // pushed them through a password sheet that surfaced
+            // `AuthenticationContainerView`'s "no keys available — re-
+            // enrollment required" error. iOS now treats a successful
+            // PIN warm as the authentication, the same way Android
+            // does.
             Group {
                 if !appState.hasCredential {
                     WelcomeView()
-                } else if !appState.isAuthenticated {
-                    AuthenticationView()
-                } else if appState.needsVaultWarming {
-                    // Vault is cold - need PIN to warm it (Architecture v2.0 Section 5.8)
+                } else if appState.needsVaultWarming || !appState.isAuthenticated {
+                    // Vault is cold or session not yet established —
+                    // PIN unlock is the authentication.
                     VaultWarmingView {
-                        // Successfully warmed vault
+                        appState.isAuthenticated = true
                     }
                 } else {
                     MainNavigationView()
@@ -653,6 +661,7 @@ struct EnrollmentContainerView: View {
                         firstName: identity.firstName,
                         lastName: identity.lastName,
                         email: identity.email,
+                        photoData: $viewModel.profilePhotoData,
                         onConfirm: { viewModel.confirmIdentity() },
                         onReject: { viewModel.rejectIdentity() }
                     )
@@ -691,22 +700,29 @@ struct EnrollmentContainerView: View {
                 case .verifyingEnrollment:
                     verifyingEnrollmentView
 
+                // ===== Android-parity VERIFY_CREDENTIAL =====
+                case .verifyingCredentialEntry, .processingVerify:
+                    VerifyCredentialView(viewModel: viewModel)
+
+                case .verifySuccess:
+                    VerifySuccessView()
+
+                // ===== Android-parity PERMISSIONS =====
+                case .requestingPermissions:
+                    RequestPermissionsView(viewModel: viewModel)
+
                 case .complete(let userGuid):
-                    // Phase 5.8: chain EnrollmentCompleteView (success
-                    // animation) → PostEnrollmentNextStepsView (three
-                    // optional deep-links). `showNextSteps` flips on
-                    // EnrollmentCompleteView's Continue tap; dismiss
-                    // happens from PostEnrollmentNextStepsView.
-                    if showNextSteps {
-                        PostEnrollmentNextStepsView {
-                            appState.refreshCredentialState()
-                            VaultBackgroundRefresh.shared.onEnrollmentComplete()
-                            dismiss()
-                        }
-                    } else {
-                        EnrollmentCompleteView(userGuid: userGuid) {
-                            showNextSteps = true
-                        }
+                    // Drop the legacy `PostEnrollmentNextStepsView` (the
+                    // "offer to add data" screen) — Android's wizard
+                    // lands on the success screen and then straight on
+                    // the main app. Continue here marks the user as
+                    // authenticated so the parent ContentView routes to
+                    // `MainNavigationView` instead of bouncing through
+                    // the password-prompt `AuthenticationView`.
+                    EnrollmentCompleteView(userGuid: userGuid) {
+                        appState.markEnrolledAndAuthenticated(userGuid: userGuid)
+                        VaultBackgroundRefresh.shared.onEnrollmentComplete()
+                        dismiss()
                     }
 
                 case .error(let message, let retryable):

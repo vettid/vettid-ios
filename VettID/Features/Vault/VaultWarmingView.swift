@@ -29,6 +29,12 @@ struct VaultWarmingView: View {
     /// Delay between automatic retries in seconds
     private let retryDelay: UInt64 = 2_000_000_000
 
+    // Android-parity PIN bounds (4–8 digits, matching enrollment).
+    private let minPinLength = 4
+    private let maxPinLength = 8
+
+    @State private var showStartOverConfirm = false
+
     let onSuccess: () -> Void
 
     /// Welcome message using the user's first name if available
@@ -68,16 +74,20 @@ struct VaultWarmingView: View {
             } else {
                 // PIN entry
                 VStack(spacing: 20) {
-                    // PIN dots
-                    HStack(spacing: 16) {
-                        ForEach(0..<6, id: \.self) { index in
+                    // PIN dots — show one dot per typed digit, up to
+                    // the 8-digit cap that matches the Android-parity
+                    // enrollment range. The dots grow with the PIN
+                    // rather than always reserving 6 slots.
+                    HStack(spacing: 12) {
+                        ForEach(0..<maxPinLength, id: \.self) { index in
                             Circle()
                                 .fill(dotFill(for: index))
-                                .frame(width: 16, height: 16)
+                                .frame(width: 14, height: 14)
                                 .overlay(
                                     Circle()
                                         .stroke(Color(.systemGray3), lineWidth: 1)
                                 )
+                                .opacity(index < pin.count || index < minPinLength ? 1 : 0.35)
                         }
                     }
                     .modifier(ShakeEffect(shakes: isShaking ? 2 : 0))
@@ -96,7 +106,11 @@ struct VaultWarmingView: View {
                             .foregroundStyle(.orange)
                     }
 
-                    // Hidden text field for keyboard input
+                    // Hidden text field for keyboard input (4–8 digit
+                    // PINs, manual submit). Auto-submit removed — the
+                    // Android-parity enrollment now lets users pick
+                    // any length in [4,8], so we don't know when to
+                    // stop without an explicit confirm.
                     TextField("", text: $pin)
                         .keyboardType(.numberPad)
                         .textContentType(.oneTimeCode)
@@ -104,29 +118,44 @@ struct VaultWarmingView: View {
                         .frame(width: 1, height: 1)
                         .opacity(0)
                         .onChange(of: pin) { newValue in
-                            // Limit to 6 digits
-                            if newValue.count > 6 {
-                                pin = String(newValue.prefix(6))
+                            var cleaned = newValue.filter { $0.isNumber }
+                            if cleaned.count > maxPinLength {
+                                cleaned = String(cleaned.prefix(maxPinLength))
                             }
-                            // Only allow numbers
-                            pin = newValue.filter { $0.isNumber }
-
-                            // Auto-submit when 6 digits entered
-                            if pin.count == 6 {
-                                attemptWarmVault()
-                            }
+                            if cleaned != newValue { pin = cleaned }
                         }
                 }
 
                 Spacer()
 
-                // Keypad
+                // Keypad + explicit Unlock submit. Matches Android's
+                // `PinEntryContent` — keypad accumulates digits, the
+                // Unlock button fades in once >= MIN_PIN_LENGTH.
                 if !isWarming {
-                    PINKeypadView(pin: $pin) {
-                        if pin.count == 6 {
-                            attemptWarmVault()
+                    PINKeypadView(
+                        pin: $pin,
+                        onComplete: {},
+                        maxLength: maxPinLength,
+                        autoSubmit: false
+                    )
+
+                    Button {
+                        attemptWarmVault()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "lock.open.fill")
+                            Text("Unlock")
+                                .font(.headline)
                         }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 32)
                     }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .padding(.horizontal, 48)
+                    .opacity(pin.count >= minPinLength ? 1 : 0)
+                    .disabled(pin.count < minPinLength)
+                    .animation(.easeInOut(duration: 0.15), value: pin.count >= minPinLength)
                 } else {
                     ProgressView("Unlocking vault...")
                         .padding()
@@ -134,10 +163,32 @@ struct VaultWarmingView: View {
             }
 
             Spacer()
+
+            // Subtle "Start over" — Android doesn't surface this, but
+            // we keep it for the case where the user is testing with a
+            // stale credential. Tiny text link, not a button, so it's
+            // not a confusing primary action.
+            Button {
+                showStartOverConfirm = true
+            } label: {
+                Text("Start over")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.bottom, 16)
+            .accessibilityIdentifier("vaultWarming.startOver")
         }
         .padding()
         .onAppear {
             isPinFieldFocused = true
+        }
+        .alert("Start over with a new enrollment?", isPresented: $showStartOverConfirm) {
+            Button("Cancel", role: .cancel) {}
+            Button("Start Over", role: .destructive) {
+                appState.fullSignOut()
+            }
+        } message: {
+            Text("This clears the credential stored on this device. You'll go back to the welcome screen and can enroll a new identity. The vault on the server is not affected.")
         }
         // #56 — Enclave Update Required sheet. Fires when the running
         // PCR0 isn't in the user's trusted set; Approve adds it and
@@ -202,7 +253,7 @@ struct VaultWarmingView: View {
     }
 
     private func attemptWarmVault() {
-        guard pin.count == 6 else { return }
+        guard (minPinLength...maxPinLength).contains(pin.count) else { return }
         guard !isWarming else { return }
 
         // SECURITY (Area E #97): durable rate-limit. Survives process

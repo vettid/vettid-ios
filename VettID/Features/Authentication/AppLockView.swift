@@ -241,6 +241,15 @@ struct AppLockView: View {
 struct PINKeypadView: View {
     @Binding var pin: String
     let onComplete: () -> Void
+    /// Maximum digits accepted. AppLock keeps the legacy 6-digit cap;
+    /// VaultWarmingView raises it to 8 to match the 4–8 digit PINs
+    /// supported by the Android-parity enrollment flow.
+    var maxLength: Int = 6
+    /// When false, taps accumulate into `pin` and the caller is
+    /// responsible for invoking submit (used by VaultWarmingView's
+    /// explicit Unlock button). When true (default), keeps the
+    /// legacy AppLock auto-submit-after-4-digits behavior.
+    var autoSubmit: Bool = true
 
     private let keys = [
         ["1", "2", "3"],
@@ -280,9 +289,9 @@ struct PINKeypadView: View {
             }
         } else {
             Button {
-                if pin.count < 6 {
+                if pin.count < maxLength {
                     pin += key
-                    if pin.count >= 4 {
+                    if autoSubmit && pin.count >= 4 {
                         // Small delay for visual feedback
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                             onComplete()

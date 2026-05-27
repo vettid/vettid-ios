@@ -19,8 +19,7 @@ struct EnrollmentPINSetupView: View {
                 VStack(spacing: 20) {
                     headerSection
                     pinFieldsSection
-                    requirementsSection
-                    infoSection
+                    pinMatchIndicator
                 }
                 .padding(.horizontal, 24)
                 .padding(.bottom, 8)
@@ -31,6 +30,27 @@ struct EnrollmentPINSetupView: View {
                 .padding(.bottom, 16)
         }
         .navigationBarBackButtonHidden(viewModel.state == .processingPIN)
+        // iOS number-pad keyboards have no return key, so we surface
+        // the Android-style "Next/Done" actions via a keyboard toolbar
+        // bar. Mirrors what `imeAction = ImeAction.Next/Done` gives
+        // for free on Android.
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                if focusedField == .pin {
+                    Button("Next") { focusedField = .confirm }
+                        .disabled(viewModel.pin.count < 4)
+                } else if focusedField == .confirm {
+                    Button("Done") {
+                        focusedField = nil
+                        if viewModel.isPINValid {
+                            Task { await viewModel.submitPINViaNats() }
+                        }
+                    }
+                    .disabled(!viewModel.isPINValid)
+                }
+            }
+        }
     }
 
     // MARK: - Header
@@ -101,78 +121,34 @@ struct EnrollmentPINSetupView: View {
         }
     }
 
-    // MARK: - Requirements
+    // MARK: - PIN Match Indicator
 
-    private var requirementsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Requirements")
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .foregroundStyle(.secondary)
+    /// Mirrors Android's PinSetupPhaseContent feedback row: shows a green
+    /// "PINs match" indicator once both fields hold matching 4+ digit
+    /// PINs, or a red "PINs don't match" hint once Confirm is at least as
+    /// long as PIN but the values diverge.
+    private var pinMatchIndicator: some View {
+        let pin = viewModel.pin
+        let confirm = viewModel.confirmPin
+        let pinsMatch = pin.count >= 4 && confirm.count >= 4 && pin == confirm
+        let pinsMismatch = confirm.count >= pin.count && !confirm.isEmpty && pin != confirm
 
-            VStack(alignment: .leading, spacing: 8) {
-                requirementRow(
-                    text: "4–8 digits",
-                    isMet: (4...8).contains(viewModel.pin.count) && viewModel.pin.allSatisfy { $0.isNumber }
-                )
-
-                requirementRow(
-                    text: "No weak patterns (123456, 111111)",
-                    isMet: !viewModel.pin.isEmpty && viewModel.pinValidationErrors.filter { $0.contains("weak") }.isEmpty
-                )
-
-                requirementRow(
-                    text: "PINs match",
-                    isMet: !viewModel.confirmPin.isEmpty && viewModel.pin == viewModel.confirmPin
-                )
-            }
-        }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
-    }
-
-    private func requirementRow(text: String, isMet: Bool) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: isMet ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(isMet ? .green : .secondary)
-                .font(.body)
-
-            Text(text)
-                .font(.subheadline)
-                .foregroundStyle(isMet ? .primary : .secondary)
-
-            Spacer()
-        }
-    }
-
-    // MARK: - Info Section
-
-    private var infoSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label {
-                Text("Your PIN and password serve different purposes:")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-            } icon: {
-                Image(systemName: "info.circle.fill")
-                    .foregroundStyle(.blue)
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("PIN - Unlocks your vault when you open the app")
+        return Group {
+            if pinsMatch {
+                HStack(spacing: 4) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(Color.accentColor)
+                        .font(.caption)
+                    Text("PINs match")
+                        .font(.caption)
+                        .foregroundStyle(Color.accentColor)
+                }
+            } else if pinsMismatch {
+                Text("PINs don't match")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Text("Password - Authorizes sensitive vault operations")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.red)
             }
-            .padding(.leading, 28)
         }
-        .padding()
-        .background(Color.blue.opacity(0.1))
-        .cornerRadius(12)
     }
 
     // MARK: - Submit Button

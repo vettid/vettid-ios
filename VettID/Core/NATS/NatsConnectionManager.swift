@@ -660,16 +660,16 @@ final class NatsConnectionManager: ObservableObject {
         // ECIES-encrypt {"pin":"…"} to the enclave's public key — matches
         // Android `PinUnlockViewModel.verifyPin`. Wire format of
         // `encrypted_payload` is `ephemeralPubKey || nonce || ciphertext+tag`,
-        // base64-encoded.
+        // base64-encoded. Uses the Android-shape ECIES helper
+        // (ChaCha20-Poly1305 with a 12-byte nonce); the supervisor rejects
+        // XChaCha20's 24-byte nonce as `invalid nonce length: 24`.
         let pinJSON = "{\"pin\":\"\(pin)\"}"
         var pinBytes = Data(pinJSON.utf8)
-        let encrypted: EncryptedPayload
+        let encrypted: CryptoManager.EnclaveEncryptedData
         do {
-            encrypted = try CryptoManager.encryptToPublicKey(
+            encrypted = try CryptoManager.encryptToEnclavePublicKey(
                 plaintext: pinBytes,
-                publicKey: enclavePublicKey,
-                additionalData: nil,
-                domain: .pin
+                publicKey: enclavePublicKey
             )
         } catch {
             pinBytes.secureWipeBytes()
@@ -681,7 +681,6 @@ final class NatsConnectionManager: ObservableObject {
         combined.append(encrypted.ephemeralPublicKey)
         combined.append(encrypted.nonce)
         combined.append(encrypted.ciphertext)
-        combined.append(encrypted.tag)
         let encryptedPayloadB64 = combined.base64EncodedString()
 
         let requestId = UUID().uuidString

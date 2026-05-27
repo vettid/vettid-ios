@@ -488,6 +488,27 @@ class AppState: ObservableObject {
         checkExistingCredential()
     }
 
+    /// Called at the very end of the enrollment wizard's permissions
+    /// step. Refreshes the locally-stored credential, marks the user
+    /// as authenticated, and leaves vault temperature at `.warming`
+    /// so the next vault op kicks off a warm (matching Android, which
+    /// goes straight to the home screen without re-prompting).
+    /// Without this hook the parent ContentView routes through
+    /// `AuthenticationView` post-enrollment because `isAuthenticated`
+    /// stays false, forcing the user to re-enter their password on a
+    /// generic unlock screen — the user-visible "Unlock VettID" bounce.
+    func markEnrolledAndAuthenticated(userGuid: String) {
+        checkExistingCredential()
+        currentUserGuid = userGuid
+        isAuthenticated = true
+        // The PIN exchange during enrollment already warmed the vault
+        // (the supervisor returned UTKs alongside the ECIES key). Mark
+        // it warm here so the parent ContentView skips VaultWarmingView
+        // and goes straight to MainNavigationView — Android lands on
+        // the home screen without re-prompting for the PIN.
+        vaultTemperature = .warm(ttlSeconds: 3600)
+    }
+
     /// Sign out - clears authentication but keeps credentials
     func signOut() {
         isAuthenticated = false

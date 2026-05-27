@@ -227,12 +227,17 @@ final class PCRManifestManager {
         _ attestationDocument: Data,
         nonce: Data? = nil
     ) async throws -> NitroAttestationVerifier.AttestationResult {
+        print("[PCR-CKPT] verifyAttestation enter, doc=\(attestationDocument.count)B nonce=\(nonce?.count ?? 0)B")
+        fflush(stdout)
         do {
-            return try await verifyAttestationOnce(
+            let r = try await verifyAttestationOnce(
                 attestationDocument,
                 nonce: nonce,
                 forceRefresh: false
             )
+            print("[PCR-CKPT] verifyAttestation succeeded on first try")
+            fflush(stdout)
+            return r
         } catch let error as NitroAttestationError {
             // Only retry when the failure is a PCR mismatch. Signature
             // or nonce failures aren't a manifest-staleness problem
@@ -270,8 +275,14 @@ final class PCRManifestManager {
         nonce: Data?,
         forceRefresh: Bool
     ) async throws -> NitroAttestationVerifier.AttestationResult {
+        print("[PCR-CKPT] verifyAttestationOnce forceRefresh=\(forceRefresh)")
+        fflush(stdout)
         let verifier = NitroAttestationVerifier()
+        print("[PCR-CKPT] -> getAllValidPCRSets(forceRefresh: \(forceRefresh))")
+        fflush(stdout)
         let validSets = try await getAllValidPCRSets(forceRefresh: forceRefresh)
+        print("[PCR-CKPT] <- getAllValidPCRSets returned \(validSets.count) sets")
+        fflush(stdout)
 
         // SECURITY (Area E #53): refuse to verify against the all-
         // zeros bootstrap PCRs (the "development-placeholder" set the
@@ -298,14 +309,20 @@ final class PCRManifestManager {
         // verified the ES384 signature for every one of the ~205
         // sets in the manifest, blocking the actor ~40 s before the
         // user got past "Verifying enclave".
+        print("[PCR-CKPT] -> verifier.verify(candidatePCRs: \(filteredSets.count))")
+        fflush(stdout)
         do {
             let result = try verifier.verify(
                 attestationDocument: attestationDocument,
                 candidatePCRs: filteredSets.map { $0.toExpectedPCRs() },
                 nonce: nonce
             )
+            print("[PCR-CKPT] <- verifier.verify OK")
+            fflush(stdout)
             return result
         } catch let error as NitroAttestationError {
+            print("[PCR-CKPT] <- verifier.verify threw: \(error)")
+            fflush(stdout)
             // Hand back PCR-mismatch errors so `verifyAttestation`'s
             // refresh-on-mismatch retry path triggers.
             throw error
@@ -334,28 +351,41 @@ final class PCRManifestManager {
 
     /// Get the manifest, using cache if valid
     private func getManifest(forceRefresh: Bool) async throws -> PCRManifest {
+        print("[PCR-CKPT] getManifest forceRefresh=\(forceRefresh) cached=\(cachedManifest != nil)")
+        fflush(stdout)
         // Check cache first (unless force refresh)
         if !forceRefresh,
            let cached = cachedManifest,
            let timestamp = cacheTimestamp,
            Date().timeIntervalSince(timestamp) < Self.cacheDuration {
+            print("[PCR-CKPT] getManifest using fresh cache, \(cached.pcrSets.count) sets")
+            fflush(stdout)
             return cached
         }
 
         // Try to fetch from network
         do {
+            print("[PCR-CKPT] -> fetchManifest()")
+            fflush(stdout)
             let manifest = try await fetchManifest()
+            print("[PCR-CKPT] <- fetchManifest OK, \(manifest.pcrSets.count) sets")
+            fflush(stdout)
             cachedManifest = manifest
             cacheTimestamp = Date()
             persistCache(manifest)
             return manifest
         } catch {
+            print("[PCR-CKPT] fetchManifest threw: \(error)")
+            fflush(stdout)
             // If network fails, try cached manifest (even if expired)
             if let cached = cachedManifest {
-                print("PCRManifestManager: Network failed, using cached manifest")
+                print("[PCR-CKPT] using stale cached manifest, \(cached.pcrSets.count) sets")
+                fflush(stdout)
                 return cached
             }
 
+            print("[PCR-CKPT] falling back to bundled PCRs")
+            fflush(stdout)
             // Fall back to bundled PCRs
             return try loadBundledPCRs()
         }
@@ -367,7 +397,11 @@ final class PCRManifestManager {
             throw PCRManifestError.invalidManifest("Invalid manifest URL")
         }
 
+        print("[PCR-CKPT] fetchManifest GET \(url.absoluteString)")
+        fflush(stdout)
         let (data, response) = try await session.data(from: url)
+        print("[PCR-CKPT] fetchManifest got \(data.count)B response")
+        fflush(stdout)
 
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
@@ -378,7 +412,11 @@ final class PCRManifestManager {
         }
 
         // Parse manifest
+        print("[PCR-CKPT] -> parseAndVerifyManifest")
+        fflush(stdout)
         let manifest = try parseAndVerifyManifest(data)
+        print("[PCR-CKPT] <- parseAndVerifyManifest OK, version=\(manifest.version) sets=\(manifest.pcrSets.count)")
+        fflush(stdout)
         try enforceManifestSecurityChecks(manifest)
         return manifest
     }

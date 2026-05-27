@@ -112,8 +112,11 @@ extension EnrollmentViewModel.EnrollmentState {
             return .pin
         case .settingPassword, .processingPassword, .creatingCredential:
             return .password
-        case .finalizing, .settingUpNats, .verifyingEnrollment, .confirmProfile:
+        case .finalizing, .settingUpNats, .verifyingEnrollment, .confirmProfile,
+             .verifyingCredentialEntry, .processingVerify, .verifySuccess:
             return .verify
+        case .requestingPermissions:
+            return .permissions
         case .complete:
             return .done
         case .error:
