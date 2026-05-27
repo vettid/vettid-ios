@@ -353,9 +353,17 @@ final class NitroAttestationVerifier {
     private func parseCOSESign1(_ data: Data) throws -> (payload: Data, signature: Data, protectedHeader: Data) {
         let decoder = CBORDecoder(data: data)
 
-        // COSE_Sign1 is a CBOR array with tag 18
-        guard let tag = try? decoder.readTag(), tag == 18 else {
-            throw NitroAttestationError.invalidCBOR("Expected COSE_Sign1 tag (18)")
+        // COSE_Sign1 documents MAY be prefixed with the optional CBOR
+        // tag 18, but AWS Nitro Enclaves returns the document as a
+        // raw 4-element array with no tag. Consume the tag only when
+        // it's present; otherwise drop straight into the array. Mirrors
+        // Android's NitroAttestationVerifier.parseCoseSign1, which notes
+        // "Jackson CBOR parser doesn't expose tags directly. We parse
+        // the array structure directly."
+        if let first = decoder.peekByte(), (first >> 5) == 6 {
+            guard let tag = try? decoder.readTag(), tag == 18 else {
+                throw NitroAttestationError.invalidCBOR("Expected COSE_Sign1 tag (18) if tag is present")
+            }
         }
 
         // Array of 4 elements: [protected, unprotected, payload, signature]
@@ -382,9 +390,27 @@ final class NitroAttestationVerifier {
     private func parseAttestationPayload(_ data: Data) throws -> AttestationDocument {
         let decoder = CBORDecoder(data: data)
 
-        // Attestation document is a CBOR map
-        guard let mapLength = try? decoder.readMapLength() else {
-            throw NitroAttestationError.invalidCBOR("Expected map for attestation document")
+        // Skip any optional CBOR tag wrapping the document — Android's
+        // Jackson parser hides tags transparently, so we tolerate one
+        // here for parity with whatever the enclave emits.
+        if let first = decoder.peekByte(), (first >> 5) == 6 {
+            _ = try? decoder.readTag()
+        }
+
+        // Attestation document is a CBOR map. On failure include the
+        // first 16 bytes hex + the decoder's own reason so we can tell
+        // whether the payload is tagged, indefinite-length, or otherwise
+        // wrapped.
+        let mapLength: Int
+        do {
+            mapLength = try decoder.readMapLength()
+        } catch {
+            let preview = data.prefix(16).map { String(format: "%02x", $0) }.joined(separator: " ")
+            let underlying = (error as? LocalizedError)?.errorDescription
+                ?? error.localizedDescription
+            throw NitroAttestationError.invalidCBOR(
+                "Expected map for attestation document (\(underlying)); first 16 bytes: \(preview)"
+            )
         }
 
         var moduleId: String?
@@ -397,9 +423,8 @@ final class NitroAttestationVerifier {
         var userData: Data?
         var nonce: Data?
 
-        for _ in 0..<mapLength {
+        func parseOneField() throws {
             let key = try decoder.readTextString()
-
             switch key {
             case "module_id":
                 moduleId = try decoder.readTextString()
@@ -424,6 +449,18 @@ final class NitroAttestationVerifier {
             }
         }
 
+        if mapLength == CBORDecoder.indefiniteLength {
+            // AWS Nitro Enclaves emits the attestation document with an
+            // indefinite-length map header (0xBF, items, 0xFF break).
+            while !decoder.tryConsumeBreak() {
+                try parseOneField()
+            }
+        } else {
+            for _ in 0..<mapLength {
+                try parseOneField()
+            }
+        }
+
         guard let moduleId = moduleId,
               let timestamp = timestamp,
               let digest = digest,
@@ -444,32 +481,53 @@ final class NitroAttestationVerifier {
         )
     }
 
-    /// Parse PCR map from CBOR
+    /// Parse PCR map from CBOR. Tolerates both definite (`0xA0..0xBA`)
+    /// and indefinite (`0xBF...0xFF`) map encodings — AWS Nitro nests
+    /// its PCRs under an indefinite-length container in the same
+    /// payload that wraps the outer document.
     private func parsePCRs(_ decoder: CBORDecoder) throws -> [Int: Data] {
         guard let mapLength = try? decoder.readMapLength() else {
             throw NitroAttestationError.invalidCBOR("Expected map for PCRs")
         }
 
         var pcrs: [Int: Data] = [:]
-        for _ in 0..<mapLength {
+
+        func parseEntry() throws {
             let index = try decoder.readUInt64()
             let value = try decoder.readByteString()
             pcrs[Int(index)] = value
         }
 
+        if mapLength == CBORDecoder.indefiniteLength {
+            while !decoder.tryConsumeBreak() {
+                try parseEntry()
+            }
+        } else {
+            for _ in 0..<mapLength {
+                try parseEntry()
+            }
+        }
+
         return pcrs
     }
 
-    /// Parse certificate bundle array from CBOR
+    /// Parse certificate bundle array from CBOR. Tolerates both
+    /// definite and indefinite array encodings.
     private func parseCertificateBundle(_ decoder: CBORDecoder) throws -> [Data] {
         guard let arrayLength = try? decoder.readArrayLength() else {
             throw NitroAttestationError.invalidCBOR("Expected array for cabundle")
         }
 
         var certs: [Data] = []
-        for _ in 0..<arrayLength {
-            let cert = try decoder.readByteString()
-            certs.append(cert)
+
+        if arrayLength == CBORDecoder.indefiniteLength {
+            while !decoder.tryConsumeBreak() {
+                certs.append(try decoder.readByteString())
+            }
+        } else {
+            for _ in 0..<arrayLength {
+                certs.append(try decoder.readByteString())
+            }
         }
 
         return certs
@@ -500,8 +558,14 @@ final class NitroAttestationVerifier {
             throw NitroAttestationError.certificateChainInvalid("No valid certificates in CA bundle")
         }
 
-        // The last certificate in cabundle is the root CA
-        let rootCert = intermediateCerts.last!
+        // AWS Nitro emits the cabundle in ROOT-TO-LEAF order — the
+        // first certificate is the root CA, the last is the intermediate
+        // that issued the signing cert. Mirrors Android (which had the
+        // correct ordering all along: "AWS orders root-to-leaf").
+        // Previously iOS pinned `intermediateCerts.last!`, hashing the
+        // SPKI of an intermediate against the AWS root pin and reporting
+        // "Root CA SPKI hash mismatch" on every verify.
+        let rootCert = intermediateCerts.first!
 
         // Verify this is the AWS Nitro root CA by checking common name
         guard let rootSubject = SecCertificateCopySubjectSummary(rootCert) as String? else {
@@ -641,7 +705,12 @@ final class NitroAttestationVerifier {
             payload: payload
         )
 
-        // Verify signature (ECDSA with SHA-384 for Nitro)
+        // Verify signature (ECDSA with SHA-384 for Nitro). COSE_Sign1
+        // signatures are raw IEEE P1363 (`r || s`, 96 bytes for P-384),
+        // but Apple's SecKeyVerifySignature with
+        // ecdsaSignatureMessageX962SHA384 expects DER-encoded ASN.1
+        // (`SEQUENCE { INTEGER r, INTEGER s }`). Convert before passing.
+        // Mirrors Android's `convertCoseSignatureToDer`.
         var error: Unmanaged<CFError>?
         let algorithm = SecKeyAlgorithm.ecdsaSignatureMessageX962SHA384
 
@@ -649,17 +718,65 @@ final class NitroAttestationVerifier {
             throw NitroAttestationError.invalidCOSESignature("Unsupported algorithm")
         }
 
+        let derSignature = Self.coseSignatureToDER(signature)
+
         let verified = SecKeyVerifySignature(
             publicKey,
             algorithm,
             sigStructure as CFData,
-            signature as CFData,
+            derSignature as CFData,
             &error
         )
 
         guard verified else {
-            throw NitroAttestationError.invalidCOSESignature("Signature verification failed")
+            let detail: String
+            if let cfError = error?.takeRetainedValue() {
+                detail = CFErrorCopyDescription(cfError) as String? ?? "Signature verification failed"
+            } else {
+                detail = "Signature verification failed"
+            }
+            throw NitroAttestationError.invalidCOSESignature(detail)
         }
+    }
+
+    /// Convert a COSE_Sign1 signature (raw IEEE P1363, `r || s`) to the
+    /// DER-encoded ASN.1 SEQUENCE form `SecKeyVerifySignature` expects.
+    /// Pass-through if the input isn't the expected 96-byte P-384 size
+    /// (covers the unlikely case of an already-DER-encoded signature).
+    private static func coseSignatureToDER(_ raw: Data) -> Data {
+        guard raw.count == 96 else { return raw }
+
+        let r = Data(raw.prefix(48))
+        let s = Data(raw.suffix(48))
+
+        func encodeInteger(_ bytes: Data) -> Data {
+            // Strip leading zero bytes but keep at least one byte.
+            var trimmed = bytes
+            while trimmed.count > 1 && trimmed.first == 0 {
+                trimmed = trimmed.dropFirst()
+            }
+            // ASN.1 INTEGERs are signed — prepend 0x00 if the high bit
+            // is set so the value isn't interpreted as negative.
+            let needsPadding = ((trimmed.first ?? 0) & 0x80) != 0
+            var out = Data([0x02]) // INTEGER tag
+            let length = trimmed.count + (needsPadding ? 1 : 0)
+            out.append(UInt8(length))
+            if needsPadding { out.append(0x00) }
+            out.append(trimmed)
+            return out
+        }
+
+        let inner = encodeInteger(r) + encodeInteger(s)
+
+        var sequence = Data([0x30]) // SEQUENCE tag
+        if inner.count < 128 {
+            sequence.append(UInt8(inner.count))
+        } else {
+            sequence.append(0x81)
+            sequence.append(UInt8(inner.count))
+        }
+        sequence.append(inner)
+        return sequence
     }
 
     /// Build COSE Sig_structure for signature verification
@@ -748,6 +865,13 @@ private class CBORDecoder {
         return byte
     }
 
+    /// Non-consuming peek of the byte at the current offset, or nil if at end.
+    /// Used to make the COSE_Sign1 CBOR tag optional.
+    func peekByte() -> UInt8? {
+        guard offset < data.count else { return nil }
+        return data[offset]
+    }
+
     func readBytes(_ count: Int) throws -> Data {
         guard offset + count <= data.count else {
             throw NitroAttestationError.invalidCBOR("Unexpected end of data")
@@ -766,13 +890,23 @@ private class CBORDecoder {
         return try readArgument(byte & 0x1F)
     }
 
+    /// Sentinel returned by `readArrayLength` / `readMapLength` when the
+    /// header uses indefinite-length encoding (additional info 31).
+    /// Callers must iterate by checking `tryConsumeBreak()` after each
+    /// element instead of using the returned count.
+    static let indefiniteLength: Int = -1
+
     func readArrayLength() throws -> Int {
         let byte = try readByte()
         let majorType = byte >> 5
         guard majorType == 4 else {
             throw NitroAttestationError.invalidCBOR("Expected array, got major type \(majorType)")
         }
-        return Int(try readArgument(byte & 0x1F))
+        let ai = byte & 0x1F
+        if ai == 31 {
+            return Self.indefiniteLength
+        }
+        return Int(try readArgument(ai))
     }
 
     func readMapLength() throws -> Int {
@@ -781,7 +915,21 @@ private class CBORDecoder {
         guard majorType == 5 else {
             throw NitroAttestationError.invalidCBOR("Expected map, got major type \(majorType)")
         }
-        return Int(try readArgument(byte & 0x1F))
+        let ai = byte & 0x1F
+        if ai == 31 {
+            return Self.indefiniteLength
+        }
+        return Int(try readArgument(ai))
+    }
+
+    /// CBOR indefinite-length collections (additional info 31) stream
+    /// elements until a 0xFF "break" stop code. Consumes and returns
+    /// `true` when positioned at the break; otherwise leaves the offset
+    /// alone and returns `false`.
+    func tryConsumeBreak() -> Bool {
+        guard let first = peekByte(), first == 0xFF else { return false }
+        offset += 1
+        return true
     }
 
     func readByteString() throws -> Data {
@@ -790,7 +938,17 @@ private class CBORDecoder {
         guard majorType == 2 else {
             throw NitroAttestationError.invalidCBOR("Expected byte string, got major type \(majorType)")
         }
-        let length = Int(try readArgument(byte & 0x1F))
+        let ai = byte & 0x1F
+        if ai == 31 {
+            // Indefinite-length byte string — concatenation of definite-
+            // length byte-string chunks until 0xFF.
+            var out = Data()
+            while !tryConsumeBreak() {
+                out.append(try readByteString())
+            }
+            return out
+        }
+        let length = Int(try readArgument(ai))
         return try readBytes(length)
     }
 
@@ -800,7 +958,17 @@ private class CBORDecoder {
         guard majorType == 3 else {
             throw NitroAttestationError.invalidCBOR("Expected text string, got major type \(majorType)")
         }
-        let length = Int(try readArgument(byte & 0x1F))
+        let ai = byte & 0x1F
+        if ai == 31 {
+            // Indefinite-length text string — concatenation of definite-
+            // length text-string chunks until 0xFF.
+            var out = ""
+            while !tryConsumeBreak() {
+                out.append(try readTextString())
+            }
+            return out
+        }
+        let length = Int(try readArgument(ai))
         let bytes = try readBytes(length)
         guard let string = String(data: bytes, encoding: .utf8) else {
             throw NitroAttestationError.invalidCBOR("Invalid UTF-8 in text string")
@@ -845,23 +1013,43 @@ private class CBORDecoder {
         let byte = try readByte()
         let majorType = byte >> 5
         let additionalInfo = byte & 0x1F
+        let isIndefinite = additionalInfo == 31
 
         switch majorType {
         case 0, 1: // Unsigned/negative integer
             _ = try readArgument(additionalInfo)
         case 2, 3: // Byte/text string
-            let length = Int(try readArgument(additionalInfo))
-            _ = try readBytes(length)
+            if isIndefinite {
+                while !tryConsumeBreak() {
+                    try skipValue()
+                }
+            } else {
+                let length = Int(try readArgument(additionalInfo))
+                _ = try readBytes(length)
+            }
         case 4: // Array
-            let length = Int(try readArgument(additionalInfo))
-            for _ in 0..<length {
-                try skipValue()
+            if isIndefinite {
+                while !tryConsumeBreak() {
+                    try skipValue()
+                }
+            } else {
+                let length = Int(try readArgument(additionalInfo))
+                for _ in 0..<length {
+                    try skipValue()
+                }
             }
         case 5: // Map
-            let length = Int(try readArgument(additionalInfo))
-            for _ in 0..<length {
-                try skipValue()
-                try skipValue()
+            if isIndefinite {
+                while !tryConsumeBreak() {
+                    try skipValue()
+                    try skipValue()
+                }
+            } else {
+                let length = Int(try readArgument(additionalInfo))
+                for _ in 0..<length {
+                    try skipValue()
+                    try skipValue()
+                }
             }
         case 6: // Tag
             _ = try readArgument(additionalInfo)

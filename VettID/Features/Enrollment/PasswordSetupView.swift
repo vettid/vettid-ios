@@ -37,11 +37,11 @@ struct PasswordSetupView: View {
                 .font(.system(size: 56))
                 .foregroundStyle(Color.accentColor)
 
-            Text("Create Your Password")
+            Text("Protean Credential Password")
                 .font(.title2)
                 .fontWeight(.bold)
 
-            Text("This password protects high-value vault operations. Encrypted before it leaves the device.")
+            Text("This password protects your Protean Credential and is required for sensitive operations.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

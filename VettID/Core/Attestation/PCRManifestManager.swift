@@ -112,11 +112,14 @@ final class PCRManifestManager {
     /// CloudFront URL for the PCR manifest
     private static let manifestURL = "https://pcr-manifest.vettid.dev/pcr-manifest.json"
 
-    /// VettID PCR signing public key (P-256, DER-encoded, base64)
-    /// Key ID: a5e30b97-89da-41e9-b447-c759a9f9c801 (alias/vettid-pcr-signing)
-    /// Updated: 2026-01-06
+    /// VettID PCR signing public key (P-256, DER-encoded, base64).
+    /// Matches Android's `VETTID_SIGNING_KEY_BASE64` (PcrConfigManager.kt).
+    /// Updated: 2026-05-26 after KMS rotation — the prior key
+    /// (`zSr2U/RxJRP7…`) no longer verifies live manifests and was
+    /// silently routing every release-build manifest fetch into the
+    /// stale bundled fallback (PCR0 9b03797f…).
     private static let signingPublicKeyBase64 = """
-    MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEzSr2U/RxJRP7dWKMASJSs6fURsEzdn59XSvp3TitMaw3bMBIj8slPXJhJF7d2/DS4UnzMhxEdQHLq2NdoKaVUw==
+    MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEW4IZe5nk/Rf7eyf9/PT2HCM5v22m2p1VURccr/D/LXUBJGRK8lliecP7F01f6ILhvrkCg3fwm2UlLls0S97Arw==
     """
 
     /// Cache duration for the manifest (5 minutes)
@@ -423,12 +426,12 @@ final class PCRManifestManager {
             throw PCRManifestError.invalidManifest("Missing signature")
         }
 
-        // Build the data that was signed (manifest without signature field)
+        // Build the data that was signed (manifest without signature field).
         var signedData = json
         signedData.removeValue(forKey: "signature")
         signedData.removeValue(forKey: "public_key")
 
-        let signedJSON = try JSONSerialization.data(withJSONObject: signedData, options: .sortedKeys)
+        let signedJSON = try Self.canonicalJSONBytes(from: signedData)
 
         // Verify signature
         try verifySignature(signatureBase64, for: signedJSON)
@@ -439,6 +442,24 @@ final class PCRManifestManager {
 
         let manifest = try decoder.decode(PCRManifest.self, from: data)
         return manifest
+    }
+
+    /// Produce canonical JSON bytes that match the form the backend
+    /// signs: keys recursively sorted, no whitespace, forward slashes
+    /// LEFT UNESCAPED. `JSONSerialization.data(.. .sortedKeys)` is
+    /// almost right but emits `\/` inside strings (RFC 8259 lets it,
+    /// but the server uses Node's `JSON.stringify`, which doesn't), so
+    /// the SHA-256 over Apple's raw output never matched what KMS had
+    /// signed — every release-build manifest fetch failed verification
+    /// and silently fell back to the bundled stale PCRs. Mirrors
+    /// Android's `canonicalizeJson` (which never escapes `/` to begin
+    /// with).
+    private static func canonicalJSONBytes(from object: Any) throws -> Data {
+        let raw = try JSONSerialization.data(withJSONObject: object, options: .sortedKeys)
+        guard let s = String(data: raw, encoding: .utf8) else {
+            throw PCRManifestError.invalidManifest("Non-UTF8 canonical JSON")
+        }
+        return Data(s.replacingOccurrences(of: "\\/", with: "/").utf8)
     }
 
     /// Verify ECDSA-P256 signature using embedded public key

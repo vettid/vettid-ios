@@ -523,11 +523,34 @@ class AppState: ObservableObject {
     func warmVault(pin: String, migrateConsent: Bool = false) async throws {
         vaultWarmingError = nil
 
+        // Load the bits required to ECIES-encrypt the PIN — mirrors
+        // Android PinUnlockViewModel.verifyPin (storeEnclavePublicKey
+        // + getUtkPool + getEncryptedBlob).
+        guard let enclavePubKey = credentialStore.getEnclavePublicKey() else {
+            vaultWarmingError = "Security key missing — please re-enroll."
+            vaultTemperature = .cold
+            throw VaultWarmingError.warmingFailed("Enclave public key missing")
+        }
+        guard let credential = try? credentialStore.retrieveFirst(),
+              let utk = credential.getUnusedKey() else {
+            vaultWarmingError = "No available transaction keys — please re-enroll."
+            vaultTemperature = .cold
+            throw VaultWarmingError.warmingFailed("No unused UTK available")
+        }
+
         do {
             let response = try await natsConnectionManager.warmVault(
                 pin: pin,
+                enclavePublicKey: enclavePubKey,
+                utkId: utk.keyId,
+                encryptedCredentialBlob: credential.sealedCredential.isEmpty ? nil : credential.sealedCredential,
                 migrateConsent: migrateConsent
             )
+
+            // UTKs are single-use — remove the one we just spent regardless
+            // of response outcome (matches Android `removeUtk` placement).
+            let afterUse = credential.markingKeyUsed(keyId: utk.keyId)
+            try? credentialStore.store(credential: afterUse)
 
             if response.success {
                 vaultTemperature = .warm(ttlSeconds: response.sessionTtl)

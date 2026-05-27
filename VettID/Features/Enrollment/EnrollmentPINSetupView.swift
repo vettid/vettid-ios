@@ -45,7 +45,7 @@ struct EnrollmentPINSetupView: View {
                 .font(.title2)
                 .fontWeight(.bold)
 
-            Text("Create a PIN (4–8 digits) to secure your vault. 6+ digits recommended. This PIN is encrypted and sent directly to the secure enclave.")
+            Text("Create a PIN (4–8 digits) to secure your vault. This PIN is encrypted and sent directly to the secure enclave.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -60,7 +60,7 @@ struct EnrollmentPINSetupView: View {
         VStack(spacing: 12) {
             outlinedSecureField(
                 title: "PIN",
-                placeholder: "Enter 6-digit PIN",
+                placeholder: "Enter 4–8 digit PIN",
                 text: $viewModel.pin,
                 focused: .pin
             )
@@ -95,7 +95,7 @@ struct EnrollmentPINSetupView: View {
                 )
                 .onChange(of: text.wrappedValue) { newValue in
                     var cleaned = newValue.filter { $0.isNumber }
-                    if cleaned.count > 6 { cleaned = String(cleaned.prefix(6)) }
+                    if cleaned.count > 8 { cleaned = String(cleaned.prefix(8)) }
                     if cleaned != newValue { text.wrappedValue = cleaned }
                 }
         }
@@ -112,8 +112,8 @@ struct EnrollmentPINSetupView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 requirementRow(
-                    text: "Exactly 6 digits",
-                    isMet: viewModel.pin.count == 6 && viewModel.pin.allSatisfy { $0.isNumber }
+                    text: "4–8 digits",
+                    isMet: (4...8).contains(viewModel.pin.count) && viewModel.pin.allSatisfy { $0.isNumber }
                 )
 
                 requirementRow(
@@ -180,7 +180,11 @@ struct EnrollmentPINSetupView: View {
     private var submitButton: some View {
         Button {
             focusedField = nil
-            Task { await viewModel.submitPIN() }
+            // Route through NATS (matches Android's NitroEnrollmentClient.setupPin).
+            // The old `submitPIN()` call hit the deprecated HTTP enrollSetPIN
+            // endpoint and returned 404 because the supervisor no longer
+            // serves that route post-architecture-v2.
+            Task { await viewModel.submitPINViaNats() }
         } label: {
             HStack(spacing: 8) {
                 if viewModel.state == .processingPIN {

@@ -620,7 +620,26 @@ final class NatsConnectionManager: ObservableObject {
     ///
     /// - Parameter pin: The user's 6-digit PIN
     /// - Returns: VaultWarmResponse with success status and session TTL
-    func warmVault(pin: String, migrateConsent: Bool = false) async throws -> VaultWarmResponse {
+    /// Warm the vault by ECIES-encrypting the PIN to the stored enclave
+    /// public key (captured at enrollment from pin.setup.response) and
+    /// sending it to `forVault.pin-unlock`. Mirrors Android's
+    /// `PinUnlockViewModel.verifyPin` + `OwnerSpaceClient("pin-unlock", ...)`.
+    ///
+    /// - Parameters:
+    ///   - pin: User's PIN (4–8 digits)
+    ///   - enclavePublicKey: 32-byte X25519 ECIES key returned by pin.setup
+    ///   - utkId: ID of an unused UTK from the credential's pool —
+    ///     single-use, the caller must remove it after this call returns
+    ///   - encryptedCredentialBlob: optional app-stored, ECIES-sealed
+    ///     credential blob the vault uses to self-heal carve-outs
+    ///   - migrateConsent: Phase 5.7 M1 — opt into PIN-coupled migration
+    func warmVault(
+        pin: String,
+        enclavePublicKey: Data,
+        utkId: String,
+        encryptedCredentialBlob: String? = nil,
+        migrateConsent: Bool = false
+    ) async throws -> VaultWarmResponse {
         guard connectionState == .connected else {
             throw NatsConnectionError.notConnected
         }
@@ -638,32 +657,55 @@ final class NatsConnectionManager: ObservableObject {
 
         vaultTemperature = .warming
 
+        // ECIES-encrypt {"pin":"…"} to the enclave's public key — matches
+        // Android `PinUnlockViewModel.verifyPin`. Wire format of
+        // `encrypted_payload` is `ephemeralPubKey || nonce || ciphertext+tag`,
+        // base64-encoded.
+        let pinJSON = "{\"pin\":\"\(pin)\"}"
+        var pinBytes = Data(pinJSON.utf8)
+        let encrypted: EncryptedPayload
+        do {
+            encrypted = try CryptoManager.encryptToPublicKey(
+                plaintext: pinBytes,
+                publicKey: enclavePublicKey,
+                additionalData: nil,
+                domain: .pin
+            )
+        } catch {
+            pinBytes.secureWipeBytes()
+            throw error
+        }
+        pinBytes.secureWipeBytes()
+
+        var combined = Data()
+        combined.append(encrypted.ephemeralPublicKey)
+        combined.append(encrypted.nonce)
+        combined.append(encrypted.ciphertext)
+        combined.append(encrypted.tag)
+        let encryptedPayloadB64 = combined.base64EncodedString()
+
         let requestId = UUID().uuidString
         let timestamp = ISO8601DateFormatter().string(from: Date())
 
-        let request = VaultWarmRequest(
+        let request = PinUnlockRequest(
             id: requestId,
-            pin: pin,
-            deviceId: getDeviceId(),
-            timestamp: timestamp,
-            migrateConsent: migrateConsent ? true : nil
+            type: "pin-unlock",
+            payload: PinUnlockRequest.Payload(
+                utkId: utkId,
+                encryptedPayload: encryptedPayloadB64,
+                encryptedCredential: encryptedCredentialBlob,
+                migrateConsent: migrateConsent ? true : nil
+            ),
+            timestamp: timestamp
         )
 
-        // Subscribe to response topic
-        let responseTopic = "\(ownerSpace).forApp.vault.warm.>"
+        // Subscribe BEFORE publishing — matches Android's pre-armed
+        // `forApp.>` subscription pattern. The vault's pin-unlock
+        // response lands on `forApp.pin-unlock.response`.
+        let responseTopic = "\(ownerSpace).forApp.pin-unlock.response"
         let responseStream = try await subscribe(to: responseTopic)
 
-        // SECURITY (Area E #51): the PIN is unavoidable as `String` at
-        // the IME / JSON-encoding boundary — Swift Strings are
-        // immutable, and JSONEncoder serialises straight into a Data
-        // we then publish. The mitigation we CAN apply is zeroing the
-        // serialised buffer the moment `publish` returns, so the
-        // plaintext doesn't linger on the heap waiting for ARC to
-        // reclaim it. PIN entropy is only ~10^6 so this is a
-        // hygiene-grade defence — a heap snapshot of a PIN is
-        // brute-forceable in microseconds — but it bounds the
-        // accidental-disclosure window to the publish call.
-        let requestTopic = "\(ownerSpace).forVault.vault.warm"
+        let requestTopic = "\(ownerSpace).forVault.pin-unlock"
         var requestData = try JSONEncoder().encode(request)
         do {
             try await publish(requestData, to: requestTopic)
@@ -674,7 +716,7 @@ final class NatsConnectionManager: ObservableObject {
         requestData.secureWipeBytes()
 
         #if DEBUG
-        print("[NATS] Sent vault warm request to \(requestTopic)")
+        print("[NATS] Sent ECIES-encrypted PIN to \(requestTopic), utkId=\(utkId)")
         #endif
 
         // Wait for response with timeout
@@ -683,10 +725,31 @@ final class NatsConnectionManager: ObservableObject {
             // Response listener
             group.addTask {
                 for await message in responseStream {
-                    if let response = try? JSONDecoder().decode(VaultWarmResponse.self, from: message.data) {
-                        if response.requestId == nil || response.requestId == requestId {
-                            return response
+                    do {
+                        let parsed = try VaultWarmResponse.parse(data: message.data)
+
+                        // Replay protection (#47): reject duplicates and
+                        // stale/future timestamps for pin-unlock responses.
+                        let evId = parsed.requestId ?? UUID().uuidString
+                        let check = NatsReplayProtection.shared.validateMessage(
+                            eventId: evId,
+                            timestamp: parsed.timestamp,
+                            sessionKey: "pin-unlock"
+                        )
+                        guard check.isValid else {
+                            #if DEBUG
+                            print("[NATS] pin-unlock response rejected by replay protection: \(check)")
+                            #endif
+                            continue
                         }
+
+                        if parsed.requestId == nil || parsed.requestId == requestId {
+                            return parsed
+                        }
+                    } catch {
+                        #if DEBUG
+                        print("[NATS] pin-unlock response parse failed: \(error)")
+                        #endif
                     }
                 }
                 throw NatsConnectionError.connectionFailed("Vault warm response stream ended")
@@ -1448,81 +1511,153 @@ struct NatsSubscription {
     let id: String
 }
 
-// MARK: - Vault Warming Types (Architecture v2.0 Section 5.8)
+// MARK: - PIN Unlock Types
+//
+// Mirrors Android's `pin-unlock` request/response shape:
+// publish `{ownerSpace}.forVault.pin-unlock` with envelope
+// `{id, type:"pin-unlock", payload:{utk_id, encrypted_payload,
+//   encrypted_credential?, migrate_consent?}, timestamp}` and receive
+// `{ownerSpace}.forApp.pin-unlock.response` with `{status, new_utks,
+//   encrypted_credential?, migration_status, migration_version, ...}`.
 
-/// Request to warm the vault by deriving DEK from PIN
-struct VaultWarmRequest: Encodable {
+/// Wire envelope for pin-unlock — matches Android `VaultMessage.create`.
+struct PinUnlockRequest: Encodable {
     let id: String
-    let pin: String
-    let deviceId: String
+    let type: String  // "pin-unlock"
+    let payload: Payload
     let timestamp: String
-    /// Phase 5.7 — when set, the vault re-seals sealed_material.bin
-    /// against the running PCR0 in the same transaction. Routes per
-    /// the M1 model: the request lands on NEW if Phase 4.6 reclaim has
-    /// settled, else the vault returns `migration_status =
-    /// pending_new_enclave` and the client retries.
-    let migrateConsent: Bool?
 
-    enum CodingKeys: String, CodingKey {
-        case id
-        case pin
-        case deviceId = "device_id"
-        case timestamp
-        case migrateConsent = "migrate_consent"
+    struct Payload: Encodable {
+        /// UTK ID consumed by this unlock (single-use).
+        let utkId: String
+        /// `ephemeralPubKey || nonce || ciphertext+tag`, base64.
+        let encryptedPayload: String
+        /// Optional ECIES-sealed credential blob the vault uses to
+        /// restore narrow carve-outs on every unlock. Mirrors Android.
+        let encryptedCredential: String?
+        /// Phase 5.7 — opt into PIN-coupled M1 migration.
+        let migrateConsent: Bool?
+
+        enum CodingKeys: String, CodingKey {
+            case utkId = "utk_id"
+            case encryptedPayload = "encrypted_payload"
+            case encryptedCredential = "encrypted_credential"
+            case migrateConsent = "migrate_consent"
+        }
     }
 }
 
-/// Response from vault warming request
-struct VaultWarmResponse: Decodable {
-    let success: Bool
+/// Parsed pin-unlock response. Tolerant of both Android-shape
+/// `{status, new_utks:[...]}` and the historical iOS shape
+/// `{success, utks:[...]}` so a server in mid-rollout still works.
+/// Parsed via JSONSerialization (same pattern as
+/// NatsAttestationResponse / NatsPINSetupResponse).
+struct VaultWarmResponse {
+    let status: String?
+    let success: Bool                  // derived: status in {"unlocked","success","vault_ready"} || legacy success bool
     let message: String?
     let requestId: String?
-    let sessionTtl: Int?  // How long the vault will stay warm (seconds)
-    let remainingAttempts: Int?  // PIN attempts remaining before lockout
-    let utks: [UTKInfo]?  // New UTKs returned after successful warming
-
-    /// Phase 5.7 — M1 migration status echoed by the vault when
-    /// `migrate_consent=true` rides on the request. Possible values:
-    /// "completed", "pending_new_enclave", "failed", "not_requested",
-    /// or "" / nil when the vault didn't process a migration.
-    /// Drives the WarmingUp / Success / Error transitions on the PIN
-    /// unlock screen.
+    let timestamp: String?             // ISO8601 — fed into NatsReplayProtection
+    let sessionTtl: Int?
+    let remainingAttempts: Int?
+    let utks: [UTKInfo]?
     let migrationStatus: String?
     let migrationVersion: String?
-
-    /// UTK info returned in vault warming response
-    struct UTKInfo: Decodable {
-        let id: String
-        let publicKey: String
-
-        enum CodingKeys: String, CodingKey {
-            case id
-            case publicKey = "public_key"
-        }
-    }
-
-    // Vault-issued NATS credentials (full OwnerSpace/MessageSpace access)
-    // Only the vault can issue these — Lambda only issues narrow bootstrap creds
     let natsCredentials: String?
     let natsEndpoint: String?
     let ownerSpace: String?
     let messageSpace: String?
     let credentialsTtlSeconds: Int?
 
-    enum CodingKeys: String, CodingKey {
-        case success
-        case message
-        case requestId = "request_id"
-        case sessionTtl = "session_ttl"
-        case remainingAttempts = "remaining_attempts"
-        case utks
-        case natsCredentials = "nats_credentials"
-        case natsEndpoint = "nats_endpoint"
-        case ownerSpace = "owner_space"
-        case messageSpace = "message_space"
-        case credentialsTtlSeconds = "credentials_ttl_seconds"
-        case migrationStatus = "migration_status"
-        case migrationVersion = "migration_version"
+    struct UTKInfo {
+        let id: String
+        let publicKey: String
+    }
+
+    static func parse(data: Data) throws -> VaultWarmResponse {
+        let raw = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+        guard let root = raw as? [String: Any] else {
+            throw NatsConnectionError.connectionFailed("pin-unlock response is not a JSON object")
+        }
+        let payload = (root["payload"] as? [String: Any]) ?? [:]
+
+        func string(_ keys: String...) -> String? {
+            for key in keys {
+                if let v = root[key] as? String, !v.isEmpty { return v }
+                if let v = payload[key] as? String, !v.isEmpty { return v }
+            }
+            return nil
+        }
+        func int(_ keys: String...) -> Int? {
+            for key in keys {
+                if let v = root[key] as? Int { return v }
+                if let v = payload[key] as? Int { return v }
+            }
+            return nil
+        }
+        func bool(_ keys: String...) -> Bool? {
+            for key in keys {
+                if let v = root[key] as? Bool { return v }
+                if let v = payload[key] as? Bool { return v }
+            }
+            return nil
+        }
+
+        let status = string("status")
+        let legacySuccess = bool("success")
+        let successDerived: Bool = {
+            if let s = status,
+               ["unlocked", "success", "vault_ready"].contains(s) {
+                return true
+            }
+            // Android also treats "no status + first_name/email present"
+            // as success (vault was already unlocked). Match.
+            if status == nil && (root["first_name"] != nil || payload["first_name"] != nil) {
+                return true
+            }
+            return legacySuccess ?? false
+        }()
+
+        // Android pin-unlock returns `new_utks` as an array of
+        // "ID:base64PublicKey" strings (UtkInfo.kt). The legacy iOS
+        // shape returned `utks` as objects. Accept both.
+        var utks: [UTKInfo] = []
+        if let stringArr = (root["new_utks"] as? [String]) ?? (payload["new_utks"] as? [String]) {
+            for entry in stringArr {
+                let parts = entry.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
+                if parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty {
+                    utks.append(UTKInfo(id: parts[0], publicKey: parts[1]))
+                }
+            }
+        }
+        if utks.isEmpty,
+           let objArr = (root["utks"] as? [[String: Any]]) ?? (payload["utks"] as? [[String: Any]]) {
+            for dict in objArr {
+                let id = (dict["id"] as? String) ?? (dict["key_id"] as? String) ?? ""
+                let pk = (dict["public_key"] as? String) ?? ""
+                if !id.isEmpty, !pk.isEmpty {
+                    utks.append(UTKInfo(id: id, publicKey: pk))
+                }
+            }
+        }
+
+        return VaultWarmResponse(
+            status: status,
+            success: successDerived,
+            message: string("message", "error"),
+            requestId: string("request_id", "event_id", "id"),
+            timestamp: string("timestamp"),
+            sessionTtl: int("session_ttl"),
+            remainingAttempts: int("remaining_attempts"),
+            utks: utks.isEmpty ? nil : utks,
+            migrationStatus: string("migration_status"),
+            migrationVersion: string("migration_version"),
+            natsCredentials: string("nats_credentials"),
+            natsEndpoint: string("nats_endpoint"),
+            ownerSpace: string("owner_space"),
+            messageSpace: string("message_space"),
+            credentialsTtlSeconds: int("credentials_ttl_seconds")
+        )
     }
 }
 

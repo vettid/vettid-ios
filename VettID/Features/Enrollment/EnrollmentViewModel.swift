@@ -76,7 +76,12 @@ final class EnrollmentViewModel: ObservableObject {
     private var natsConnectionManager: NatsConnectionManager?
     private var natsBootstrapCredentials: NatsCredentials?
     private var natsOwnerSpace: String?
-    private var vaultUTKs: [VaultReadyResponse.UTKInfo] = []
+    private var vaultUTKs: [NatsPINSetupResponse.UTKInfo] = []
+    /// Registration profile pulled from the nats-bootstrap response.
+    /// Sent INSIDE the encrypted PIN payload during pin.setup so the
+    /// vault stores `first_name`/`last_name`/`email` on initialise.
+    /// Mirrors Android `pendingRegistrationProfile`.
+    private var pendingRegistrationProfile: EnrollmentNatsHandler.RegistrationProfile?
     private var useNatsFlow: Bool = true  // Enable NATS-based enrollment by default
 
     // MARK: - Enrollment Identity Data
@@ -223,9 +228,10 @@ final class EnrollmentViewModel: ObservableObject {
 
     // MARK: - PIN Validation
 
-    /// Validate the 6-digit vault PIN
+    /// Validate the vault PIN. 4-8 digits, matching Android's
+    /// NitroEnrollmentClient.setupPin: `pin.length !in 4..8`.
     var isPINValid: Bool {
-        pin.count == 6 &&
+        (4...8).contains(pin.count) &&
         pin.allSatisfy { $0.isNumber } &&
         pin == confirmPin &&
         !isWeakPIN(pin)
@@ -234,8 +240,8 @@ final class EnrollmentViewModel: ObservableObject {
     var pinValidationErrors: [String] {
         var errors: [String] = []
 
-        if pin.count != 6 {
-            errors.append("PIN must be 6 digits")
+        if !pin.isEmpty && !(4...8).contains(pin.count) {
+            errors.append("PIN must be 4–8 digits")
         }
         if !pin.isEmpty && !pin.allSatisfy({ $0.isNumber }) {
             errors.append("PIN must contain only numbers")
@@ -250,23 +256,30 @@ final class EnrollmentViewModel: ObservableObject {
         return errors
     }
 
-    /// Check for weak PIN patterns (sequences, repeated digits)
+    /// Check for weak PIN patterns (sequences, repeated digits, common values).
     private func isWeakPIN(_ pin: String) -> Bool {
-        // Check for repeated digits (e.g., 111111, 222222)
+        guard (4...8).contains(pin.count) else { return true }
+
+        // Check for repeated digits (e.g., 1111, 222222)
         if Set(pin).count == 1 { return true }
 
-        // Check for sequential patterns (e.g., 123456, 654321)
         let digits = pin.compactMap { Int(String($0)) }
-        guard digits.count == 6 else { return true }
+        guard digits.count == pin.count else { return true }
 
+        // Check for monotonic sequences (e.g., 1234, 123456, 87654321)
         let ascending = zip(digits, digits.dropFirst()).allSatisfy { $1 - $0 == 1 }
         let descending = zip(digits, digits.dropFirst()).allSatisfy { $0 - $1 == 1 }
         if ascending || descending { return true }
 
-        // Check for common weak PINs
-        let weakPINs = ["000000", "111111", "222222", "333333", "444444",
-                        "555555", "666666", "777777", "888888", "999999",
-                        "123456", "654321", "123123", "112233"]
+        // Check for common weak PINs across allowed lengths.
+        let weakPINs: Set<String> = [
+            "0000", "1111", "2222", "3333", "4444", "5555", "6666", "7777", "8888", "9999",
+            "1234", "4321",
+            "000000", "111111", "222222", "333333", "444444",
+            "555555", "666666", "777777", "888888", "999999",
+            "123456", "654321", "123123", "112233",
+            "12345678", "87654321"
+        ]
         if weakPINs.contains(pin) { return true }
 
         return false
@@ -561,6 +574,21 @@ final class EnrollmentViewModel: ObservableObject {
             enrollLog.info("nats-bootstrap OK userGuid=\(bootstrap.userGuid, privacy: .public) endpoint=\(bootstrap.natsEndpoint, privacy: .public)")
             userGuid = bootstrap.userGuid
 
+            // Capture the registration profile for the encrypted PIN
+            // payload. Matches Android `connectToNatsAndContinue` which
+            // caches it in `pendingRegistrationProfile`.
+            if let bp = bootstrap.registrationProfile,
+               let first = bp.firstName, !first.isEmpty,
+               let last = bp.lastName, !last.isEmpty,
+               let email = bp.email, !email.isEmpty {
+                pendingRegistrationProfile = EnrollmentNatsHandler.RegistrationProfile(
+                    firstName: first,
+                    lastName: last,
+                    email: email
+                )
+                enrollLog.info("nats-bootstrap registrationProfile captured for \(email, privacy: .public)")
+            }
+
             // Build NatsCredentials from the structured response fields
             // directly. The bootstrap response carries `nats_jwt` and
             // `nats_seed` as their own keys; we previously parsed those
@@ -630,34 +658,57 @@ final class EnrollmentViewModel: ObservableObject {
     func submitPINViaNats() async {
         guard isPINValid else { return }
         guard let handler = enrollmentNatsHandler else {
-            // Fall back to API-based PIN submission
-            await submitPIN()
+            handleError(EnrollmentError.invalidState, retryable: true)
             return
         }
 
         state = .processingPIN
 
         do {
-            // Step 5: Submit encrypted PIN to supervisor via NATS
+            // Submit encrypted PIN to supervisor via NATS. Android-shape
+            // response carries UTKs + ecies_public_key inline, so there's
+            // no separate `vault.ready` wait — matches Android's
+            // RetryingEnrollmentClient.setupPin.
             #if DEBUG
             print("[Enrollment] NATS Flow: Submitting PIN...")
             #endif
-            try await handler.submitPIN(pin)
+            let pinResponse = try await handler.submitPIN(pin, profile: pendingRegistrationProfile)
+            vaultUTKs = pinResponse.utks ?? []
 
-            // Step 6: Wait for vault ready + UTKs
+            // Persist the ECIES public key returned in the PIN setup
+            // response. Required at PIN-unlock / vault-warming time to
+            // ECIES-encrypt the PIN before publishing — matches
+            // Android (PinUnlockViewModel + storeEnclavePublicKey).
+            if let eciesB64 = pinResponse.eciesPublicKey,
+               let eciesBytes = Data(base64Encoded: eciesB64) {
+                do {
+                    try credentialStore.storeEnclavePublicKey(eciesBytes)
+                    #if DEBUG
+                    print("[Enrollment] Stored ECIES public key (\(eciesBytes.count) bytes) for PIN unlock")
+                    #endif
+                } catch {
+                    handleError(
+                        EnrollmentError.invalidState,
+                        retryable: true
+                    )
+                    return
+                }
+            } else {
+                // Android treats this as a hard failure ("CRITICAL: No
+                // ECIES public key in PIN setup response — cannot
+                // continue"). Without it the user can't unlock later.
+                handleError(
+                    EnrollmentNatsError.pinSetupFailed("Missing ECIES public key in PIN setup response"),
+                    retryable: true
+                )
+                return
+            }
+
             #if DEBUG
-            print("[Enrollment] NATS Flow: Waiting for vault ready...")
-            #endif
-            state = .waitingForVault
-
-            let vaultReady = try await handler.waitForVaultReady()
-            vaultUTKs = vaultReady.utks ?? []
-
-            #if DEBUG
-            print("[Enrollment] NATS Flow: Vault ready with \(vaultUTKs.count) UTKs")
+            print("[Enrollment] NATS Flow: PIN setup OK, \(vaultUTKs.count) UTKs received")
             #endif
 
-            // Step 7: Prompt for password
+            // Prompt for password
             state = .settingPassword
 
         } catch {
@@ -702,9 +753,11 @@ final class EnrollmentViewModel: ObservableObject {
             // Create local data from PHC result for offline password re-hashing
             let localData = VaultLocalData.from(phcResult: phcResult)
 
-            // Store new UTKs if returned
+            // Store new UTKs if returned (translate from the credential-
+            // response UTK type to the PIN-response UTK type the rest of
+            // the wizard holds).
             if let newUTKs = credentialResponse.utks {
-                vaultUTKs = newUTKs
+                vaultUTKs = newUTKs.map { NatsPINSetupResponse.UTKInfo(id: $0.id, publicKey: $0.publicKey) }
             }
 
             // Store the encrypted credential with local data
@@ -1033,52 +1086,11 @@ final class EnrollmentViewModel: ObservableObject {
     ///
     /// The PIN is encrypted to the enclave's attestation-bound public key and sent
     /// to the supervisor, which uses it for DEK derivation during vault warming.
-    func submitPIN() async {
-        guard isPINValid else { return }
-        guard let token = enrollmentToken,
-              let enclaveKey = enclavePublicKey else {
-            handleError(EnrollmentError.invalidState, retryable: false)
-            return
-        }
-
-        state = .processingPIN
-
-        do {
-            // Generate a nonce to prevent replay attacks
-            let nonce = CryptoManager.randomBytes(count: 16)
-
-            // Encrypt PIN to enclave public key (from verified attestation)
-            // The supervisor will receive this and use it for DEK derivation
-            let encryptedPIN = try CryptoManager.encryptToPublicKey(
-                plaintext: Data(pin.utf8),
-                publicKey: enclaveKey,
-                additionalData: nonce
-            )
-
-            // Send encrypted PIN to supervisor via Lambda
-            let request = EnrollSetPINRequest(
-                encryptedPIN: encryptedPIN.ciphertext.base64EncodedString(),
-                nonce: nonce.base64EncodedString(),
-                ephemeralPublicKey: encryptedPIN.ephemeralPublicKey.base64EncodedString()
-            )
-
-            let response = try await apiClient.enrollSetPIN(request: request, authToken: token)
-
-            #if DEBUG
-            print("[Enrollment] Set PIN response - status: \(response.status)")
-            #endif
-
-            guard response.status.lowercased().contains("pin") || response.status.lowercased().contains("success") else {
-                throw EnrollmentError.pinSetFailed
-            }
-
-            // Finalize enrollment
-            await finalizeEnrollment()
-
-        } catch {
-            handleError(error, retryable: true)
-        }
-    }
+    // submitPIN()/finalizeEnrollment() HTTP fallback removed — the
+    // deprecated `enrollSetPIN` Lambda was returning 404 against the
+    // current backend. All enrollment now flows through NATS via
+    // `submitPINViaNats` / EnrollmentNatsHandler.submitPIN, matching
+    // Android.
 
     private func finalizeEnrollment() async {
         guard let token = enrollmentToken else {

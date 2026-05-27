@@ -383,6 +383,8 @@
 		BC57DBE8BBEF5D866B3BC98C /* LeashApprovalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83C73EC06FE179D0F1C019BC /* LeashApprovalView.swift */; };
 		432673FF07918B29548E3329 /* AgentDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD8FF4E71EF2AC40679770EB /* AgentDetailViewModel.swift */; };
 		1C2493E1D9DFF6B94DB954C8 /* AgentDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EB0FAE3D2D110FADB52938E /* AgentDetailView.swift */; };
+		BA6A46DA0087504BC23362C4 /* PCRManifestManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8242E7C1D13F73E2EE99F73 /* PCRManifestManager.swift */; };
+		2080B6995B32C6DD48381BAD /* NatsReplayProtection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4939DE4335E56D75D79FB1CF /* NatsReplayProtection.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -790,6 +792,8 @@
 		83C73EC06FE179D0F1C019BC /* LeashApprovalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeashApprovalView.swift; sourceTree = "<group>"; };
 		BD8FF4E71EF2AC40679770EB /* AgentDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentDetailViewModel.swift; sourceTree = "<group>"; };
 		1EB0FAE3D2D110FADB52938E /* AgentDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentDetailView.swift; sourceTree = "<group>"; };
+		E8242E7C1D13F73E2EE99F73 /* PCRManifestManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PCRManifestManager.swift; sourceTree = "<group>"; };
+		4939DE4335E56D75D79FB1CF /* NatsReplayProtection.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NatsReplayProtection.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1096,8 +1100,8 @@
 				2508C629676886E946486AC6 /* ExpectedPCRStore.swift */,
 				80D6C81AAEA975F5D4A6FD84 /* NitroAttestationVerifier.swift */,
 				8AEF55837C33201737405887 /* PCRUpdateService.swift */,
-				9EE32D61F7604C05BAFC294F /* TrustedPCRStore.swift */,
-			);
+				9EE32D61F7604C05BAFC294F /* TrustedPCRStore.swift */,				E8242E7C1D13F73E2EE99F73 /* PCRManifestManager.swift */,
+);
 			path = Attestation;
 			sourceTree = "<group>";
 		};
@@ -1183,8 +1187,8 @@
 				63A1F2CAA115F5BCD8014C95 /* VaultClientProtocol.swift */,
 				2C3B06F55F2562689A7BB80E /* GrantsClient.swift */,
 				DA972338A09C08FFC87CE7A5 /* ActionsClient.swift */,
-							AE971FCB35D943C78FBDE794 /* AppleNatsClient.swift */,
-			);
+							AE971FCB35D943C78FBDE794 /* AppleNatsClient.swift */,				4939DE4335E56D75D79FB1CF /* NatsReplayProtection.swift */,
+);
 			path = NATS;
 			sourceTree = "<group>";
 		};
@@ -1996,6 +2000,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2080B6995B32C6DD48381BAD /* NatsReplayProtection.swift in Sources */,
+				BA6A46DA0087504BC23362C4 /* PCRManifestManager.swift in Sources */,
 				38489BADD2184FCE9171E72C /* AgentModels.swift in Sources */,
 				A20F1BB90636434D8A6C1B1F /* AgentManagementViewModel.swift in Sources */,
 				E8C1542B3AEF4A16AE69957B /* AgentApprovalViewModel.swift in Sources */,

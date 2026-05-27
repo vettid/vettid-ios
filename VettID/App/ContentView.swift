@@ -333,8 +333,8 @@ struct WelcomeView: View {
                     .fontWeight(.bold)
                     .accessibilityIdentifier("welcome.title")
 
-                // Subtitle
-                Text("Secure credential management\nfor your personal vault")
+                // Subtitle — matches Android welcome screen (VettIDApp.kt).
+                Text("Control your data.\nSecure your keys.\nOwn your future.")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -969,45 +969,39 @@ struct EnrollmentContainerView: View {
 // MARK: - Manual Enrollment View
 
 struct ManualEnrollmentView: View {
+    /// RAW alphanumeric storage — e.g. "ABCD1234". The dash is never
+    /// stored; it's reintroduced only for display (via the binding's
+    /// `get`) and again on submit (canonical "XXXX-XXXX"). Same pattern
+    /// as Android's StartPhaseContent + VisualTransformation, which we
+    /// adopted after a String-with-dash storage there pinned the IME in
+    /// caps-lock by clobbering the composing region every char.
     @State private var invitationCode = ""
     @State private var submittedCode: String? = nil
     @FocusState private var fieldFocused: Bool
 
-    /// Custom binding that uppercases, strips invalid chars, caps at
-    /// 8 alphanumerics, and auto-inserts the hyphen.
-    /// Behavior:
-    ///   • After typing the 4th char, show `ABCD-` so the second block
-    ///     is obviously next.
-    ///   • If the user backspaces from `ABCD-`, drop to `ABC` — the
-    ///     trailing dash disappears with the 4th char (so backspace
-    ///     doesn't feel "stuck").
-    ///   • Once there's at least one second-block char, always keep
-    ///     the dash to make `ABCD-1` render canonically.
+    /// Display-side binding: dash injected purely for rendering.
+    /// • get → "ABCD-1234" once there's a 5th char, "ABCD" before that
+    /// • set → strip dash + any non-alphanumeric, uppercase, cap at 8
     private var formattedCodeBinding: Binding<String> {
         Binding(
-            get: { invitationCode },
-            set: { raw in
-                let allowed = Set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-                let cleaned = raw.uppercased().filter { allowed.contains($0) }
-                let capped = String(cleaned.prefix(8))
-                let prevAlnumCount = invitationCode.filter { allowed.contains($0) }.count
-                let isAddingChar = capped.count > prevAlnumCount
-
-                if capped.count > 4 {
-                    invitationCode = "\(capped.prefix(4))-\(capped.dropFirst(4))"
-                } else if capped.count == 4 && isAddingChar {
-                    invitationCode = "\(capped)-"
-                } else {
-                    invitationCode = capped
+            get: {
+                if invitationCode.count > 4 {
+                    return "\(invitationCode.prefix(4))-\(invitationCode.dropFirst(4))"
                 }
+                return invitationCode
+            },
+            set: { displayed in
+                let allowed = Set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+                let cleaned = displayed.uppercased().filter { allowed.contains($0) }
+                invitationCode = String(cleaned.prefix(8))
             }
         )
     }
 
-    /// True once the user has typed all 8 alphanumerics (with the
-    /// auto-inserted hyphen the visible string is 9 chars).
+    /// True once the user has typed all 8 alphanumerics (raw storage,
+    /// so the count is on the raw 8 chars — no dash).
     private var isCodeComplete: Bool {
-        invitationCode.count == 9
+        invitationCode.count == 8
     }
 
     var body: some View {
@@ -1086,9 +1080,14 @@ struct ManualEnrollmentView: View {
     private func submit() {
         guard isCodeComplete else { return }
         fieldFocused = false
+        // Storage is raw alphanumeric; the resolver and downstream API
+        // both expect canonical "XXXX-XXXX". Format here, at the
+        // hand-off, exactly mirroring Android's
+        // EnrollmentWizardViewModel.submitManualInviteCode.
+        let canonical = "\(invitationCode.prefix(4))-\(invitationCode.dropFirst(4))"
         // Push the wizard with this code pre-seeded so all progress
         // and error states render through EnrollmentContainerView.
-        submittedCode = invitationCode
+        submittedCode = canonical
     }
 }
 

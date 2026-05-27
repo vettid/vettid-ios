@@ -162,16 +162,13 @@ struct ProfileView: View {
             }
             .padding(.horizontal)
 
-            // Status — "Last updated" replaces "Synced". The vault
-            // owns publish state now; we just surface the freshness.
-            if let syncedAt = profile.syncedAt {
-                Text("Last updated \(syncedAt, style: .relative)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-
-            // Last updated
-            Text("Last updated \(profile.lastUpdated, style: .relative)")
+            // "Last updated" line — prefer the vault's syncedAt
+            // timestamp (the canonical publish time once the profile
+            // round-tripped through the enclave) and fall back to the
+            // local lastUpdated only if the vault hasn't synced yet.
+            // Previously rendered twice (vault syncedAt + local
+            // lastUpdated stacked), which Android shows as one line.
+            Text("Last updated \((profile.syncedAt ?? profile.lastUpdated), style: .relative)")
                 .font(.caption)
                 .foregroundColor(.secondary)
 

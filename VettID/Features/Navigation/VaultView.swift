@@ -20,11 +20,16 @@ enum VaultSegment: String, CaseIterable, Identifiable {
         }
     }
 
+    /// SF Symbol equivalents of the icons Android uses in
+    /// `NavigationModels.VaultSegment`:
+    ///   - DATA    → `Icons.Default.Person`           → `person.fill`
+    ///   - SECRETS → `Icons.Default.Lock`             → `lock.fill`
+    ///   - WALLETS → `Icons.Default.AccountBalance`   → `building.columns.fill`
     var icon: String {
         switch self {
-        case .data:    return "folder.fill"
+        case .data:    return "person.fill"
         case .secrets: return "lock.fill"
-        case .wallets: return "bitcoinsign.circle.fill"
+        case .wallets: return "building.columns.fill"
         }
     }
 }

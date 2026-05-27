@@ -52,17 +52,24 @@ enum DrawerItem: String, CaseIterable, Identifiable {
     }
 
     var icon: String {
-        switch self {
+        // SF Symbols matched to the Material icons Android uses in
+    // `NavigationModels.kt` (BottomTab / VaultSegment / DrawerItem):
+    //   People       → person.2.fill
+    //   Lock         → lock.fill          (Vault tab)
+    //   Person       → person.fill        (Personal Data / Data segment)
+    //   AccountBalance → building.columns.fill (Wallets)
+    //   Security     → lock.shield        (Audit Log)
+    switch self {
         case .connections:  return "person.2.fill"
-        case .vault:        return "lock.shield.fill"
-        case .personalData: return "folder.fill"
+        case .vault:        return "lock.fill"
+        case .personalData: return "person.fill"
         case .secrets:      return "lock.fill"
-        case .wallets:      return "bitcoinsign.circle.fill"
+        case .wallets:      return "building.columns.fill"
         case .archive:      return "archivebox.fill"
         case .voting:       return "checkmark.square.fill"
         case .devices:      return "desktopcomputer"
-        case .auditLog:     return "list.clipboard"
-        case .grants:       return "lock.shield"
+        case .auditLog:     return "lock.shield"
+        case .grants:       return "key.fill"
         case .actions:      return "wand.and.stars"
         }
     }

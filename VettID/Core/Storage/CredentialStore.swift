@@ -324,6 +324,55 @@ final class CredentialStore {
             try store(credential: credential)
         }
     }
+
+    // MARK: - Enclave (ECIES) Public Key
+    //
+    // Persisted independently of the full StoredCredential so it's
+    // available between PIN-setup and credential creation. Used by the
+    // vault warming path to ECIES-encrypt the PIN before publishing.
+    // Mirrors Android `CredentialStore.storeEnclavePublicKey` /
+    // `getEnclavePublicKey`.
+
+    private static let enclavePubKeyAccount = "enclave_public_key"
+
+    /// Persist the enclave ECIES public key returned by `pin.setup`.
+    func storeEnclavePublicKey(_ publicKey: Data) throws {
+        let baseQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: Self.enclavePubKeyAccount
+        ]
+        SecItemDelete(baseQuery as CFDictionary)
+
+        var query = baseQuery
+        query[kSecValueData as String] = publicKey
+        query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        query[kSecAttrSynchronizable as String] = false
+
+        let status = SecItemAdd(query as CFDictionary, nil)
+        guard status == errSecSuccess else {
+            throw NSError(
+                domain: "CredentialStore",
+                code: Int(status),
+                userInfo: [NSLocalizedDescriptionKey: "Failed to persist enclave public key (\(status))"]
+            )
+        }
+    }
+
+    /// Read back the persisted enclave ECIES public key, if any.
+    func getEnclavePublicKey() -> Data? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: Self.enclavePubKeyAccount,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess, let data = result as? Data else { return nil }
+        return data
+    }
 }
 
 // MARK: - Stored Credential Model

@@ -18,12 +18,12 @@ struct EnrollmentCompleteView: View {
 
                     if showContent {
                         VStack(spacing: 8) {
-                            Text("Welcome to VettID!")
+                            Text("Enrollment Complete!")
                                 .font(.title2)
                                 .fontWeight(.bold)
                                 .transition(.opacity.combined(with: .move(edge: .bottom)))
 
-                            Text("Your credential is securely stored on this device.")
+                            Text("Your Protean Credential has been created and securely stored on this device.")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center)
@@ -40,7 +40,7 @@ struct EnrollmentCompleteView: View {
 
             if showContent {
                 Button(action: onDismiss) {
-                    Text("Get Started")
+                    Text("Continue to VettID")
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .frame(height: 32)
@@ -76,24 +76,27 @@ struct EnrollmentCompleteView: View {
 
     // MARK: - Feature List
 
+    /// Three-row checklist that mirrors Android `CompletePhaseContent`.
+    /// Same labels in the same order so the two platforms feel
+    /// identical on the post-enrollment screen.
     private var featureList: some View {
         VStack(alignment: .leading, spacing: 14) {
             featureRow(
                 icon: "lock.shield.fill",
-                title: "Encrypted vault",
-                description: "Credential stored in iOS Keychain, sealed to this device."
-            )
-
-            featureRow(
-                icon: "arrow.triangle.2.circlepath",
-                title: "Key rotation",
-                description: "Transaction keys rotate automatically with each use."
+                title: "Hardware-encrypted credential",
+                description: nil
             )
 
             featureRow(
                 icon: "checkmark.shield",
-                title: "Hardware attestation",
-                description: "Enclave verifies the device on every sensitive operation."
+                title: "Connected to secure vault",
+                description: nil
+            )
+
+            featureRow(
+                icon: "person.crop.circle.badge.checkmark",
+                title: "Identity verified",
+                description: nil
             )
         }
         .padding(20)
@@ -102,7 +105,7 @@ struct EnrollmentCompleteView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
-    private func featureRow(icon: String, title: String, description: String) -> some View {
+    private func featureRow(icon: String, title: String, description: String?) -> some View {
         HStack(alignment: .top, spacing: 14) {
             Image(systemName: icon)
                 .font(.title3)
@@ -114,9 +117,11 @@ struct EnrollmentCompleteView: View {
                     .font(.subheadline)
                     .fontWeight(.semibold)
 
-                Text(description)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                if let description = description {
+                    Text(description)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Spacer()
