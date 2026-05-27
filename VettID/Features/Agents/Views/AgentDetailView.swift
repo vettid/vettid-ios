@@ -137,10 +137,13 @@ struct AgentDetailView: View {
 
     private func visibilityList(items: [VisibilityItem]) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("Toggle which secrets this agent can see in your catalog. Visibility is global — peers see the same set.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
+            // Section header mirrors Android `AgentDetailScreen` line
+            // 435 ("Visible to this agent"). The longer explanation
+            // below stays as a footnote.
+            Text("Visible to this agent")
+                .font(.subheadline).fontWeight(.semibold)
+            Text("Toggle which secrets this agent can see in your catalog. Visibility is global — peers see the same set.")
+                .font(.caption).foregroundStyle(.secondary)
             HStack(spacing: 8) {
                 Button("Show all") { Task { await viewModel.bulkSet(makeVisible: true) } }
                     .buttonStyle(.bordered).font(.caption)
@@ -274,10 +277,13 @@ private struct MintDialogSheet: View {
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Custom scope")
+                    // Label "Custom scope (optional)" + placeholder
+                    // "resource.field:action" match Android
+                    // `AgentDetailScreen` lines 243-244.
+                    Text("Custom scope (optional)")
                         .font(.caption).foregroundStyle(.secondary)
                     TextField(
-                        "resource:action (e.g. wallet.balance:read)",
+                        "resource.field:action",
                         text: Binding(
                             get: { dialog.customScope },
                             set: { onSetCustom($0) }
