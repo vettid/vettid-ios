@@ -358,7 +358,8 @@ struct MessageInputView: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            TextField("Message", text: $text, axis: .vertical)
+            // Placeholder mirrors Android `ConversationScreen` ("Message...").
+            TextField("Message...", text: $text, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
                 .lineLimit(1...5)
                 .focused(isFocused)

@@ -36,7 +36,8 @@ struct AppLockView: View {
                         .font(.title)
                         .fontWeight(.bold)
 
-                    Text(usePattern ? "Draw your pattern to unlock" : "Enter your PIN to unlock")
+                    // Subtitle mirrors Android `PinUnlockScreen` ("Enter your PIN").
+                    Text(usePattern ? "Draw your pattern to unlock" : "Enter your PIN")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -84,9 +85,15 @@ struct AppLockView: View {
                             .foregroundStyle(.orange)
                     }
                 } else {
-                    // PIN dots
+                    // PIN dots — show one dot per entered digit, but always
+                    // render at least a 4-dot row as a hint that the
+                    // minimum length is 4. Caps at the 8-digit ceiling
+                    // setupPin enforces. (Was hardcoded to 6, which
+                    // didn't fit the 4–8-digit range we adopted for
+                    // Android parity.)
                     HStack(spacing: 16) {
-                        ForEach(0..<6, id: \.self) { index in
+                        let dotCount = max(4, min(pin.count, 8))
+                        ForEach(0..<dotCount, id: \.self) { index in
                             Circle()
                                 .fill(dotFill(for: index))
                                 .frame(width: 16, height: 16)

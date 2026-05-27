@@ -121,9 +121,10 @@ struct SendBtcView: View {
             Spacer()
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("Amount")
+                // Title matches Android `SendBtcScreen` label "Amount (BTC)".
+                Text("Amount (BTC)")
                     .font(.headline)
-                TextField("0.00000000", text: $viewModel.amountBtc)
+                TextField("0.0", text: $viewModel.amountBtc)
                     .font(.system(.title2, design: .monospaced))
                     .textFieldStyle(.roundedBorder)
                     .keyboardType(.decimalPad)

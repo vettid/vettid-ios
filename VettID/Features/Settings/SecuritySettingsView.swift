@@ -376,9 +376,11 @@ struct PINSetupView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
 
-                // PIN dots
+                // PIN dots — render at least 4 (minimum length hint),
+                // expand as the user types up to the 8-digit ceiling.
                 HStack(spacing: 16) {
-                    ForEach(0..<6) { index in
+                    let dotCount = max(4, min(currentPin.count, 8))
+                    ForEach(0..<dotCount, id: \.self) { index in
                         Circle()
                             .fill(dotFill(for: index))
                             .frame(width: 16, height: 16)
@@ -420,7 +422,9 @@ struct PINSetupView: View {
     private var stepSubtitle: String {
         switch step {
         case .enter:
-            return "Enter a 4-6 digit PIN"
+            // 4-8 digits matches the range setupPin / EnrollmentViewModel
+            // enforce. (Was "4-6" — predated the Android-parity change.)
+            return "Enter a 4-8 digit PIN"
         case .confirm:
             return "Enter your PIN again to confirm"
         }
