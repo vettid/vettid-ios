@@ -73,7 +73,10 @@ struct ServiceConnectionDetailView: View {
                 showingPasswordPrompt = true
             }
         } message: {
-            Text("This will immediately terminate your connection with this service. You will need to reconnect to use this service again.")
+            // Mirrors Android `ServiceConnectionsScreen` revoke
+            // dialog body — emphasises that they lose data access
+            // AND can't send further requests.
+            Text("This will permanently revoke your connection to this service. They will no longer be able to access any of your data or send you requests.")
         }
         .sheet(isPresented: $showingPasswordPrompt) {
             RevokeConnectionPasswordPrompt(
