@@ -437,7 +437,9 @@ struct AddPersonalDataView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .navigationTitle("Add Data")
+            // Title mirrors Android `PersonalDataScreen` line 2576
+            // ("Add Personal Data").
+            .navigationTitle("Add Personal Data")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
