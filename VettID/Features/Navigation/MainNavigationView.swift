@@ -272,41 +272,57 @@ struct SettingsListView: View {
     @EnvironmentObject var appState: AppState
 
     var body: some View {
+        // Section layout mirrors Android `VaultPreferencesContent`:
+        // Account → Privacy, Data & Logging → App → Activity → Help →
+        // Appearance. Android keeps Agent Connections / Audit Log /
+        // Grants / Actions under Privacy; Archive / Voting / Devices
+        // don't have Android Settings rows so they live in an
+        // iOS-only "Activity" section (kept reachable since the
+        // drawer is gone).
         List {
-            Section("Appearance") {
-                NavigationLink(destination: ThemeSettingsView()) {
-                    Label("Theme", systemImage: "paintbrush.fill")
-                }
-            }
-
-            Section("Security") {
+            Section("Account") {
                 NavigationLink(destination: SecuritySettingsView()) {
                     Label("Security", systemImage: "lock.shield.fill")
                 }
+                NavigationLink(destination: BackupListView(authTokenProvider: { nil })) {
+                    Label("Credential Backup", systemImage: "externaldrive.fill")
+                }
             }
 
-            Section("Vault") {
+            Section("Privacy, Data & Logging") {
                 NavigationLink(destination: LocationSettingsView().environmentObject(appState)) {
                     Label("Location", systemImage: "location.fill")
                 }
-
-                NavigationLink(destination: VaultPreferencesView().environmentObject(appState)) {
-                    Label("Vault Preferences", systemImage: "gearshape.fill")
+                NavigationLink(destination: AgentManagementView()) {
+                    Label("Agent Connections", systemImage: "sparkles")
                 }
-
-                NavigationLink(destination: VaultServicesStatusView()) {
-                    Label("Vault Status", systemImage: "chart.bar.fill")
+                NavigationLink(destination: FeedAuditLogView(feedClient: appState.feedClient)) {
+                    Label("View Audit Logs", systemImage: "lock.shield")
                 }
-
-                NavigationLink(destination: BackupListView(authTokenProvider: { nil })) {
-                    Label("Backups", systemImage: "externaldrive.fill")
+                NavigationLink(destination: GrantsView()) {
+                    Label("Grants", systemImage: "key.fill")
+                }
+                NavigationLink(destination: ActionsView()) {
+                    Label("Actions", systemImage: "wand.and.stars")
                 }
             }
 
-            // Phase 1.4 — destinations previously reached from the
-            // drawer / More menu live here now. Android folds these
-            // into Settings + the VettID system connection's audit
-            // trail; we mirror that.
+            Section("App") {
+                NavigationLink(destination: AboutView()) {
+                    Label("App Details", systemImage: "info.circle.fill")
+                }
+                NavigationLink(destination: VaultServicesStatusView()) {
+                    Label("Vault Status", systemImage: "chart.bar.fill")
+                }
+                NavigationLink(destination: VaultPreferencesView().environmentObject(appState)) {
+                    Label("Vault Preferences", systemImage: "gearshape.fill")
+                }
+            }
+
+            // Connection / activity surfaces that don't map to an
+            // Android Settings row (Android reaches them from the
+            // feed or system-card audit trail). Kept here so the
+            // drawer-removal restructure doesn't strand them.
             Section("Activity") {
                 NavigationLink(destination: ArchivedConnectionsView()) {
                     Label("Archive", systemImage: "archivebox.fill")
@@ -317,24 +333,17 @@ struct SettingsListView: View {
                 NavigationLink(destination: DeviceManagementView()) {
                     Label("Devices", systemImage: "desktopcomputer")
                 }
-                NavigationLink(destination: FeedAuditLogView(feedClient: appState.feedClient)) {
-                    Label("Audit Log", systemImage: "lock.shield")
-                }
-                NavigationLink(destination: GrantsView()) {
-                    Label("Grants", systemImage: "key.fill")
-                }
-                NavigationLink(destination: ActionsView()) {
-                    Label("Actions", systemImage: "wand.and.stars")
-                }
             }
 
             Section("Help") {
                 NavigationLink(destination: GuideListView()) {
                     Label("Guides", systemImage: "questionmark.circle.fill")
                 }
+            }
 
-                NavigationLink(destination: AboutView()) {
-                    Label("About", systemImage: "info.circle.fill")
+            Section("Appearance") {
+                NavigationLink(destination: ThemeSettingsView()) {
+                    Label("Theme", systemImage: "paintbrush.fill")
                 }
             }
         }
@@ -493,6 +502,10 @@ struct AddConnectionSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
+        // Four actions matching Android's `+` FAB on the feed: Agent
+        // Invitation, Connect Desktop, Scan Invitation, Create
+        // Invitation. Same icons (SF Symbols equivalent of Material
+        // SmartToy / Computer / QrCodeScanner / PersonAdd) and order.
         NavigationView {
             VStack(spacing: 24) {
                 Text("Add Connection")
@@ -500,17 +513,29 @@ struct AddConnectionSheet: View {
                     .fontWeight(.semibold)
 
                 VStack(spacing: 12) {
-                    NavigationLink(destination: CreateInvitationView(authTokenProvider: { nil })) {
-                        Label("Create Invitation", systemImage: "qrcode")
+                    NavigationLink(destination: CreateAgentInvitationView()) {
+                        Label("Agent Invitation", systemImage: "sparkles")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.bordered)
+
+                    NavigationLink(destination: DevicePairingView()) {
+                        Label("Connect Desktop", systemImage: "desktopcomputer")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
 
                     NavigationLink(destination: ScanInvitationView(authTokenProvider: { nil })) {
                         Label("Scan Invitation", systemImage: "qrcode.viewfinder")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
+
+                    NavigationLink(destination: CreateInvitationView(authTokenProvider: { nil })) {
+                        Label("Create Invitation", systemImage: "person.badge.plus")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
                 .padding(.horizontal)
 
