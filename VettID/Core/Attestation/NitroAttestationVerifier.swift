@@ -650,6 +650,18 @@ final class NitroAttestationVerifier {
         SecTrustSetAnchorCertificates(trust, [rootCert] as CFArray)
         SecTrustSetAnchorCertificatesOnly(trust, true)
 
+        // SPEED (#attestation-stall): SecTrustEvaluateWithError will
+        // by default try to fetch OCSP / CRL revocation info from any
+        // URL embedded in the cert extensions, even when the trust
+        // already has a pinned anchor. AWS Nitro's intermediate certs
+        // can carry OCSP URLs that are slow / unreachable from the
+        // phone's network, which makes the evaluation hang for tens
+        // of seconds. We pinned the root by SPKI already and the
+        // chain is short-lived (3 hours per AWS), so OCSP doesn't buy
+        // us anything here. Turning off network fetch makes the
+        // evaluation purely local.
+        SecTrustSetNetworkFetchAllowed(trust, false)
+
         // Evaluate trust
         var error: CFError?
         let trusted = SecTrustEvaluateWithError(trust, &error)
@@ -712,6 +724,9 @@ final class NitroAttestationVerifier {
         // Set itself as the only anchor
         SecTrustSetAnchorCertificates(trust, [cert] as CFArray)
         SecTrustSetAnchorCertificatesOnly(trust, true)
+        // Same OCSP / CRL fetch problem as the main chain — purely
+        // local evaluation here since the cert IS its own anchor.
+        SecTrustSetNetworkFetchAllowed(trust, false)
 
         // If it's self-signed, it should verify successfully
         var error: CFError?
