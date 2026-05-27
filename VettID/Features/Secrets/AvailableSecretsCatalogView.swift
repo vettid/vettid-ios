@@ -44,6 +44,14 @@ struct AvailableSecretsCatalogView: View {
             emptyView
         } else {
             List {
+                // Header subtitle mirrors Android `PublicMetadataDialog`
+                // line 152: same disclosure wording as the personal-data
+                // catalog.
+                Section {
+                    Text("Metadata only — peers can request these via policy. Values are never shared without consent.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
                 ForEach(sections) { section in
                     Section(section.title) {
                         ForEach(section.items) { secret in

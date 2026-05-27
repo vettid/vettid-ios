@@ -44,6 +44,14 @@ struct AvailableDataCatalogView: View {
             emptyView
         } else {
             List {
+                // Header subtitle mirrors Android `PublicMetadataDialog`
+                // line 143: "Metadata only — peers can request these via
+                // policy. Values are never shared without consent."
+                Section {
+                    Text("Metadata only — peers can request these via policy. Values are never shared without consent.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
                 ForEach(sections) { section in
                     Section(section.title) {
                         ForEach(section.items) { item in
