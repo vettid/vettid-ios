@@ -32,7 +32,8 @@ struct DeviceManagementView: View {
                 errorView(message)
             }
         }
-        .navigationTitle("Devices")
+        // Title matches Android `DeviceManagementScreen` ("Desktop Devices").
+        .navigationTitle("Desktop Devices")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -73,8 +74,11 @@ struct DeviceManagementView: View {
                 deviceToRevoke = nil
             }
         } message: {
+            // Mirrors Android `DeviceManagementScreen` revoke dialog
+            // copy: "Disconnect X and revoke its session? The desktop
+            // will need to be paired again."
             if let device = deviceToRevoke {
-                Text("Are you sure you want to revoke access for \"\(device.deviceName)\"? This device will no longer be able to connect to your vault.")
+                Text("Disconnect \(device.deviceName) and revoke its session? The desktop will need to be paired again.")
             }
         }
         .alert("Error", isPresented: Binding(

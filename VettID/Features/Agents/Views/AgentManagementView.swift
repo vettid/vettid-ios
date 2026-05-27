@@ -115,7 +115,11 @@ struct AgentManagementView: View {
         VStack(spacing: 24) {
             Spacer()
 
-            Image(systemName: "cpu")
+            // Icon mirrors Android `Icons.Default.SmartToy` (robot
+            // face). SF Symbols equivalent: `sparkles` (same icon the
+            // Settings → Agent Connections row + AddConnectionSheet
+            // use for consistency).
+            Image(systemName: "sparkles")
                 .font(.system(size: 60))
                 .foregroundColor(.secondary)
 
