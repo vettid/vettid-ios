@@ -12,9 +12,13 @@ struct CreateWalletSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Wallet name", text: $viewModel.label)
+                    // Placeholder "e.g., Savings, Daily" matches
+                    // Android `CreateWalletSheet` line 72.
+                    TextField("e.g., Savings, Daily", text: $viewModel.label)
                 } header: {
-                    Text("Label")
+                    // Section header mirrors Android's inline label
+                    // "Wallet Label" (line 71).
+                    Text("Wallet Label")
                 }
 
                 Section {
