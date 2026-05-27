@@ -67,7 +67,10 @@ struct DevicePairingView: View {
             }
         }
         .padding()
-        .navigationTitle("Pair Device")
+        // Title mirrors Android `DevicePairingScreen` line 43
+        // ("Pair Desktop") — narrower scope than "Pair Device"
+        // since the flow is exclusively for desktop clients.
+        .navigationTitle("Pair Desktop")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {

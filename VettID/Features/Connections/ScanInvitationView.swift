@@ -237,7 +237,9 @@ struct ManualCodeEntryView: View {
                 Text("Enter the invitation code")
                     .font(.headline)
 
-                TextField("Invitation code", text: $code)
+                // Placeholder matches Android `ScanInvitationScreen`
+                // line 304 ("ABCD-EFGH-JKLM").
+                TextField("ABCD-EFGH-JKLM", text: $code)
                     .textFieldStyle(.roundedBorder)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
