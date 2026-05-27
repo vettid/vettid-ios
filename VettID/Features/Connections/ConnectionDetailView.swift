@@ -31,10 +31,16 @@ struct ConnectionDetailView: View {
                 errorView(error)
             }
         }
-        .navigationTitle("Connection")
+        // Title is the peer's display name, matching Android
+        // `ConnectionDetailScreen` (line 200: `Text(titleText)`).
+        // Falls back to "Connection" until the model loads.
+        .navigationTitle(viewModel.connection?.peerDisplayName ?? "Connection")
         .navigationBarTitleDisplayMode(.inline)
+        // Confirmation copy mirrors Android `ConnectionDetailScreen`
+        // line 158-174 ("Revoke Connection?" title, "This will
+        // permanently remove this connection. …" body).
         .confirmationDialog(
-            "Revoke Connection",
+            "Revoke Connection?",
             isPresented: $showRevokeConfirmation,
             titleVisibility: .visible
         ) {
@@ -43,7 +49,7 @@ struct ConnectionDetailView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This will permanently end the connection. You won't be able to message each other.")
+            Text("This will permanently remove this connection. You won't be able to send or receive messages from this person anymore.")
         }
         .alert("Error", isPresented: .constant(viewModel.errorMessage != nil && !viewModel.isLoading)) {
             Button("OK") { viewModel.clearError() }
@@ -522,12 +528,15 @@ struct PeerCatalogSummaryCard: View {
         Button {
             navigate = true
         } label: {
+            // Headline + subtitle mirror Android `ConnectionDetailScreen`
+            // ("Their catalog" / "Items $peerShortName has published —
+            // request access here").
             HStack {
                 Image(systemName: "doc.text.magnifyingglass")
                     .foregroundStyle(Color.accentColor)
                     .frame(width: 24)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("What \(peer.label.isEmpty ? "they" : peer.label) shares")
+                    Text("Their catalog")
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.primary)
                     Text(subtitle)
@@ -555,8 +564,12 @@ struct PeerCatalogSummaryCard: View {
 
     private var subtitle: String {
         let count = catalogEntries.count
-        if count == 0 { return "Nothing published yet" }
-        return "\(count) \(count == 1 ? "item" : "items") available"
+        let name = peer.label.isEmpty ? "this connection" : peer.label
+        if count == 0 {
+            return "\(name) hasn't published anything yet"
+        }
+        // Mirrors Android `supportingContent` line 564.
+        return "Items \(name) has published — request access here"
     }
 
     /// Build catalog entries from the peer's published profile. Data
@@ -603,7 +616,8 @@ struct OutboundGrantsForConnectionList: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("What you've shared").font(.headline)
+                // Mirrors Android headlineContent "Data you've shared".
+                Text("Data you've shared").font(.headline)
                 Spacer()
                 if !grantsForThisConnection.isEmpty {
                     Text("\(grantsForThisConnection.count) \(grantsForThisConnection.count == 1 ? "grant" : "grants")")
