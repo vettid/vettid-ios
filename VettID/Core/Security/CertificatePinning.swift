@@ -132,6 +132,17 @@ final class CertificatePinningDelegate: NSObject, URLSessionDelegate {
 
     /// Validate certificate chain against pinned public keys
     private func validateCertificateChain(serverTrust: SecTrust, against config: PinConfiguration) -> Bool {
+        // SPEED (#attestation-stall round 2): `SecTrustEvaluateWithError`
+        // tries to fetch OCSP / CRL revocation info from URLs embedded
+        // in the server's certs by default. For pcr-manifest.vettid.dev
+        // those URLs were either unreachable or extremely slow from
+        // some phone networks, hanging the entire enrollment-time
+        // manifest fetch inside the URLSession auth challenge (where
+        // the request-level `timeoutIntervalForRequest` doesn't fire).
+        // The pin check below already authenticates the chain to the
+        // exact SPKI we trust; OCSP doesn't add anything here.
+        SecTrustSetNetworkFetchAllowed(serverTrust, false)
+
         // Evaluate the trust first
         var error: CFError?
         let isValid = SecTrustEvaluateWithError(serverTrust, &error)
