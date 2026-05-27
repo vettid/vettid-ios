@@ -43,7 +43,9 @@ struct LeashApprovalView: View {
                 errorView(message)
             }
         }
-        .navigationTitle("Agent wants a LEASH")
+        // Title mirrors Android `LeashApprovalScreen` line 44
+        // ("LEASH approval").
+        .navigationTitle("LEASH approval")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { viewModel.bindRequest(requestId: requestId) }
         .onChange(of: stateKey) { _ in
@@ -157,7 +159,10 @@ struct LeashApprovalView: View {
 
     private func scopePicker(scopes: [ScopeToggle]) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Permissions")
+            // Section header mirrors Android `LeashApprovalScreen`
+            // line 162 — "Scopes" (LEASH terminology), not the
+            // looser "Permissions".
+            Text("Scopes")
                 .font(.subheadline).fontWeight(.semibold)
             Text("The LEASH lets the agent do these things. Toggle any off you don't want to grant.")
                 .font(.caption).foregroundStyle(.secondary)
