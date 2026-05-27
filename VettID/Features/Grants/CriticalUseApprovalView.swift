@@ -65,7 +65,9 @@ struct CriticalUseApprovalView: View {
                 }
             }
         }
-        .navigationTitle("Approve operation")
+        // Title mirrors Android `CriticalUseApprovalScreen` line 59
+        // ("Use of your critical secret").
+        .navigationTitle("Use of your critical secret")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -132,7 +134,10 @@ struct CriticalUseApprovalView: View {
                 if viewModel.isProcessing {
                     ProgressView().frame(maxWidth: .infinity)
                 } else {
-                    Text("Approve operation").frame(maxWidth: .infinity)
+                    // Button copy mirrors Android line 193 ("Approve
+                    // once") — emphasises that the authorization
+                    // covers a single operation.
+                    Text("Approve once").frame(maxWidth: .infinity)
                 }
             }
             .buttonStyle(.borderedProminent)
