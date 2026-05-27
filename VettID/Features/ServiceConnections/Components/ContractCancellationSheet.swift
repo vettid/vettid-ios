@@ -32,7 +32,10 @@ struct ContractCancellationSheet: View {
                 // Cancel button
                 cancelButtonSection
             }
-            .navigationTitle("Cancel Connection")
+            // Title mirrors Android `ContractCancellationScreen` line 64
+            // ("Disconnect Service") — uses the same "disconnect"
+            // verb the rest of the service flow uses.
+            .navigationTitle("Disconnect Service")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
