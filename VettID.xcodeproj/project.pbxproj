@@ -347,6 +347,9 @@
 		ED962162C78A7852AF97706A /* ServiceActivityCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BF1AB58870F33B464E69F4E /* ServiceActivityCard.swift */; };
 		EDBBEC3DCEE796C63045A6F6 /* ProfilePhotoCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28BD2140A42BBFBB014962C9 /* ProfilePhotoCapture.swift */; };
 		F0DECAFE0000000000000001 /* ProfilePhotoCameraView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0DECAFE0000000000000002 /* ProfilePhotoCameraView.swift */; };
+		F0C010F00000000000000A01 /* VettIDColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0C010F00000000000000A02 /* VettIDColors.swift */; };
+		F0C010F00000000000000B01 /* ConnectionsHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0C010F00000000000000B02 /* ConnectionsHomeView.swift */; };
+		F0C010F00000000000000C01 /* ConnectionCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0C010F00000000000000C02 /* ConnectionCards.swift */; };
 		EF72E641AE4C5663EB4A4CAD /* RequestPaymentSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 957D38392477A7D722F4A059 /* RequestPaymentSheet.swift */; };
 		EFDD21120E654E6CB1A758F8 /* OfflineQueueManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 394919A7D70E43798470243C /* OfflineQueueManager.swift */; };
 		EFFB2B1EE3C66D2AB5AFAB5D /* TransferRequestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C45FB5259A76C8CF05FFF102 /* TransferRequestView.swift */; };
@@ -531,6 +534,9 @@
 		2890018C4BA02E8E472C8A62 /* MessageHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MessageHandler.swift; sourceTree = "<group>"; };
 		28BD2140A42BBFBB014962C9 /* ProfilePhotoCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilePhotoCapture.swift; sourceTree = "<group>"; };
 		F0DECAFE0000000000000002 /* ProfilePhotoCameraView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilePhotoCameraView.swift; sourceTree = "<group>"; };
+		F0C010F00000000000000A02 /* VettIDColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VettIDColors.swift; sourceTree = "<group>"; };
+		F0C010F00000000000000B02 /* ConnectionsHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionsHomeView.swift; sourceTree = "<group>"; };
+		F0C010F00000000000000C02 /* ConnectionCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionCards.swift; sourceTree = "<group>"; };
 		2AB1CA62FFB4444590E09F2A /* CapabilityManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapabilityManagementView.swift; sourceTree = "<group>"; };
 		2B2D6CF42AD511A65BF8DC12 /* AboutView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		2C3B06F55F2562689A7BB80E /* GrantsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrantsClient.swift; sourceTree = "<group>"; };
@@ -1241,6 +1247,7 @@
 				10000037 /* ConnectionDetailView.swift */,
 				A2366284EFC2FA141A74850B /* ConnectionReviewView.swift */,
 				7C1C8208277178C5A59B0B13 /* ConnectionReviewViewModel.swift */,
+				F0C010F00000000000000B02 /* ConnectionsHomeView.swift */,
 				78D53229FB03DA5D577C6EF1 /* Models */,
 				809A036866E950BAB7E6589F /* Components */,
 			);
@@ -1357,6 +1364,7 @@
 			isa = PBXGroup;
 			children = (
 				DD50872DD57AF5FBCE85C6FD /* Components */,
+				F0C010F00000000000000A02 /* VettIDColors.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -1444,6 +1452,7 @@
 			isa = PBXGroup;
 			children = (
 				482A967EEBF92DA861EEC680 /* BusinessCardView.swift */,
+				F0C010F00000000000000C02 /* ConnectionCards.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -2226,6 +2235,9 @@
 				5FBFE89B623ECDDACD5F1B6E /* AddSecretView.swift in Sources */,
 				EDBBEC3DCEE796C63045A6F6 /* ProfilePhotoCapture.swift in Sources */,
 				F0DECAFE0000000000000001 /* ProfilePhotoCameraView.swift in Sources */,
+				F0C010F00000000000000A01 /* VettIDColors.swift in Sources */,
+				F0C010F00000000000000B01 /* ConnectionsHomeView.swift in Sources */,
+				F0C010F00000000000000C01 /* ConnectionCards.swift in Sources */,
 				BD2FEE9B47FF1B13477CCE9F /* SecretTemplate.swift in Sources */,
 				7EBC134B0224FAC3512A6826 /* PersonalDataTemplate.swift in Sources */,
 				9B5AF6D980D2481DA32EDDB3 /* DatePickerInput.swift in Sources */,

@@ -29,7 +29,6 @@ struct MainNavigationView: View {
     @State private var showSettings = false
 
     // Action sheets
-    @State private var showAddConnection = false
     @State private var showProfile = false
     @State private var showGuides = false
 
@@ -62,9 +61,6 @@ struct MainNavigationView: View {
                 vaultSegment = seg
                 Task { @MainActor in currentItem = .vault }
             }
-        }
-        .sheet(isPresented: $showAddConnection) {
-            AddConnectionSheet()
         }
         .sheet(isPresented: $showProfile) {
             NavigationView {
@@ -144,13 +140,13 @@ struct MainNavigationView: View {
     private var currentHeader: some View {
         switch currentItem {
         case .connections:
+            // No header "+" — the Connections screen uses a bottom-right
+            // FAB (in ConnectionsHomeView) for the add-connection actions.
             SearchableHeaderView(
                 title: "Connections",
                 onProfileTap: toggleDestination,
                 searchText: $searchText,
                 isSearching: $isSearching,
-                actionIcon: "plus",
-                onActionTap: { showAddConnection = true },
                 onSettingsTap: { showSettings = true },
                 profilePhotoData: profilePhotoData
             )
@@ -191,10 +187,11 @@ struct MainNavigationView: View {
     private var currentContent: some View {
         switch currentItem {
         case .connections:
-            // ACTIVITY destination — the connection-centric feed. The
-            // separate "feed" tab is gone; the feed IS the connections
-            // list now.
-            NavigationStack { FeedView() }
+            // HOME destination — typed connection cards (system / people
+            // / desktops / agents) with the add-connection FAB. The
+            // activity feed now opens from the VettID system card.
+            // ConnectionsHomeView owns its own NavigationStack.
+            ConnectionsHomeView(searchText: searchText)
         case .vault:
             // VAULT destination — segmented Data / Secrets / Wallets.
             NavigationStack {
@@ -357,227 +354,6 @@ struct SettingsListView: View {
     }
 }
 
-// MARK: - Connections Content View (without NavigationView)
-
-struct ConnectionsContentView: View {
-    let searchText: String
-    let authTokenProvider: @Sendable () -> String?
-
-    @StateObject private var viewModel: ConnectionsViewModel
-    @State private var showCreateInvitation = false
-    @State private var showScanInvitation = false
-
-    init(searchText: String, authTokenProvider: @escaping @Sendable () -> String?) {
-        self.searchText = searchText
-        self.authTokenProvider = authTokenProvider
-        self._viewModel = StateObject(wrappedValue: ConnectionsViewModel(authTokenProvider: authTokenProvider))
-    }
-
-    var body: some View {
-        Group {
-            switch viewModel.state {
-            case .loading:
-                loadingView
-
-            case .empty:
-                emptyView
-
-            case .loaded(let connections):
-                connectionsList(filteredConnections(connections))
-
-            case .error(let message):
-                errorView(message)
-            }
-        }
-        .sheet(isPresented: $showCreateInvitation) {
-            CreateInvitationView(authTokenProvider: authTokenProvider)
-        }
-        .sheet(isPresented: $showScanInvitation) {
-            ScanInvitationView(authTokenProvider: authTokenProvider)
-        }
-        .task {
-            await viewModel.loadConnections()
-        }
-    }
-
-    private func filteredConnections(_ connections: [Connection]) -> [Connection] {
-        if searchText.isEmpty {
-            return connections
-        }
-        return connections.filter { connection in
-            connection.peerDisplayName.localizedCaseInsensitiveContains(searchText)
-        }
-    }
-
-    private var loadingView: some View {
-        VStack {
-            ProgressView()
-            Text("Loading connections...")
-                .foregroundColor(.secondary)
-                .padding(.top, 8)
-        }
-    }
-
-    private var emptyView: some View {
-        VStack(spacing: 24) {
-            Spacer()
-
-            Image(systemName: "person.2")
-                .font(.system(size: 60))
-                .foregroundColor(.secondary)
-
-            Text("No Connections Yet")
-                .font(.title2)
-                .fontWeight(.semibold)
-
-            Text("Create an invitation or scan someone else's to get started")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
-
-            VStack(spacing: 12) {
-                Button(action: { showCreateInvitation = true }) {
-                    Label("Create Invitation", systemImage: "qrcode")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-
-                Button(action: { showScanInvitation = true }) {
-                    Label("Scan Invitation", systemImage: "qrcode.viewfinder")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-            }
-            .padding(.horizontal, 40)
-
-            Spacer()
-        }
-    }
-
-    private func connectionsList(_ connections: [Connection]) -> some View {
-        List(connections) { connection in
-            NavigationLink(destination: ConnectionDetailView(
-                connectionId: connection.id,
-                authTokenProvider: authTokenProvider
-            )) {
-                ConnectionListRow(
-                    connection: connection,
-                    lastMessage: viewModel.lastMessage(for: connection.id)
-                )
-            }
-        }
-        .listStyle(.plain)
-        .refreshable {
-            await viewModel.refresh()
-        }
-    }
-
-    private func errorView(_ message: String) -> some View {
-        VStack(spacing: 16) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 50))
-                .foregroundColor(.red)
-
-            Text("Error")
-                .font(.headline)
-
-            Text(message)
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-
-            Button("Retry") {
-                Task { await viewModel.refresh() }
-            }
-            .buttonStyle(.borderedProminent)
-        }
-    }
-}
-
-// MARK: - Placeholder Sheets
-
-struct AddConnectionSheet: View {
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        // Four actions matching Android's `+` FAB on the feed: Agent
-        // Invitation, Connect Desktop, Scan Invitation, Create
-        // Invitation. Same icons (SF Symbols equivalent of Material
-        // SmartToy / Computer / QrCodeScanner / PersonAdd) and order.
-        NavigationView {
-            VStack(spacing: 24) {
-                Text("Add Connection")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-
-                VStack(spacing: 12) {
-                    NavigationLink(destination: CreateAgentInvitationView()) {
-                        Label("Agent Invitation", systemImage: "sparkles")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-
-                    NavigationLink(destination: DevicePairingView()) {
-                        Label("Connect Desktop", systemImage: "desktopcomputer")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-
-                    NavigationLink(destination: ScanInvitationView(authTokenProvider: { nil })) {
-                        Label("Scan Invitation", systemImage: "qrcode.viewfinder")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-
-                    NavigationLink(destination: CreateInvitationView(authTokenProvider: { nil })) {
-                        Label("Create Invitation", systemImage: "person.badge.plus")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .padding(.horizontal)
-
-                Spacer()
-            }
-            .padding(.top, 40)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Placeholder Views
-
-struct HandlersListView: View {
-    let authTokenProvider: @Sendable () -> String?
-
-    var body: some View {
-        HandlerDiscoveryView(viewModel: HandlerDiscoveryViewModel(authTokenProvider: authTokenProvider))
-    }
-}
-
-struct MessagingView: View {
-    var body: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "message.fill")
-                .font(.system(size: 60))
-                .foregroundStyle(.blue)
-
-            Text("Messaging")
-                .font(.title2)
-                .fontWeight(.semibold)
-
-            Text("Select a connection to start messaging")
-                .foregroundStyle(.secondary)
-        }
-    }
-}
 
 // MARK: - Preview
 

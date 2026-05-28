@@ -14,24 +14,33 @@ struct NatsHeaderStatusIndicator: View {
 
     var body: some View {
         Button(action: onTap) {
-            Circle()
-                .fill(dotColor)
-                .frame(width: 10, height: 10)
-                .overlay(
-                    Circle().stroke(Color.black.opacity(0.1), lineWidth: 0.5)
-                )
+            Image(systemName: cloudSymbol)
+                .font(.system(size: 20))
+                .foregroundStyle(cloudColor)
                 .accessibilityLabel("Vault connection: \(accessibilityText)")
         }
         .buttonStyle(.plain)
     }
 
-    private var dotColor: Color {
+    /// Cloud glyph mirrors Android `NatsConnectionStatusIndicator`
+    /// (CloudDone / CloudSync / CloudOff / Cloud).
+    private var cloudSymbol: String {
         switch appState.natsConnectionManager.connectionState {
-        case .connected: return .green
+        case .connected: return "checkmark.icloud.fill"
         case .connecting, .reconnecting, .startingVault, .waitingForVault:
-            return .yellow
-        case .disconnected: return .gray
-        case .error: return .red
+            return "arrow.clockwise.icloud.fill"
+        case .disconnected: return "icloud.slash.fill"
+        case .error: return "xmark.icloud.fill"
+        }
+    }
+
+    private var cloudColor: Color {
+        switch appState.natsConnectionManager.connectionState {
+        case .connected: return VettIDColor.statusConnected
+        case .connecting, .reconnecting, .startingVault, .waitingForVault:
+            return VettIDColor.statusConnecting
+        case .disconnected: return VettIDColor.statusIdle
+        case .error: return VettIDColor.statusFailed
         }
     }
 
@@ -72,7 +81,7 @@ struct HeaderView: View {
                 } else {
                     Image(systemName: "person.circle.fill")
                         .font(.system(size: 32))
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(VettIDColor.gold)
                 }
             }
 
