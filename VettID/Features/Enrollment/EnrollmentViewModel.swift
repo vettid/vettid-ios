@@ -835,6 +835,13 @@ final class EnrollmentViewModel: ObservableObject {
                 #endif
             }
 
+            // Upload the profile photo over the live enrollment connection
+            // (Android-parity uploadPendingProfilePhoto). The vault persists
+            // it so the first warm hydrates it into the avatar.
+            if let photo = profilePhotoData {
+                await handler.uploadProfilePhoto(base64: photo.base64EncodedString())
+            }
+
             // Step 10: VERIFY_CREDENTIAL — show password re-entry. We
             // keep `password` populated until the local compare in
             // `submitVerifyPassword` completes; only `confirmPassword`
@@ -1314,6 +1321,11 @@ final class EnrollmentViewModel: ObservableObject {
     }
 
     private func finishEnrollment() {
+        // Stash the enrollment photo so the first post-warm vault sync can
+        // publish it — the profile RPC clients don't exist during enrollment.
+        if let photo = profilePhotoData {
+            UserDefaults.standard.set(photo.base64EncodedString(), forKey: "pending_enrollment_photo")
+        }
         state = .complete(userGuid: userGuid ?? "unknown")
     }
 

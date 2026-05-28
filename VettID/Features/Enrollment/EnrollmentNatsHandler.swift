@@ -709,6 +709,34 @@ actor EnrollmentNatsHandler {
         #endif
     }
 
+    // MARK: - Profile Photo Upload
+
+    /// Upload the profile photo captured during enrollment, over the live
+    /// enrollment connection — mirrors Android `uploadPendingProfilePhoto`
+    /// (publishes `profile.photo.update` with the base64 under the `photo`
+    /// key, which is what the vault's HandlePhotoUpdate reads). Best-effort:
+    /// failures don't block enrollment; the vault persists it so the first
+    /// warm hydrates it into the avatar.
+    func uploadProfilePhoto(base64: String) async {
+        guard let ownerSpace = ownerSpace else { return }
+        let request = NatsProfilePhotoUpdateRequest(
+            id: UUID().uuidString,
+            type: "profile.photo.update",
+            payload: .init(photo: base64),
+            timestamp: ISO8601DateFormatter().string(from: Date())
+        )
+        do {
+            try await natsConnectionManager.publish(request, to: "\(ownerSpace).forVault.profile.photo.update")
+            #if DEBUG
+            print("[EnrollmentNats] Uploaded profile photo (\(base64.count) b64 chars)")
+            #endif
+        } catch {
+            #if DEBUG
+            print("[EnrollmentNats] Profile photo upload failed (non-fatal): \(error)")
+            #endif
+        }
+    }
+
     // MARK: - Identity Mismatch Report
 
     /// Report an identity mismatch during enrollment
@@ -830,6 +858,19 @@ struct NatsIdentityMismatchReport: Encodable {
     let id: String
     let reason: String
     let timestamp: String
+}
+
+/// `profile.photo.update` — base64 JPEG under the `photo` key (matches
+/// the vault's HandlePhotoUpdate and Android's upload).
+struct NatsProfilePhotoUpdateRequest: Encodable {
+    let id: String
+    let type: String
+    let payload: Payload
+    let timestamp: String
+
+    struct Payload: Encodable {
+        let photo: String
+    }
 }
 
 struct NatsAttestationRequest: Encodable {

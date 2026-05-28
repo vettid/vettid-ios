@@ -104,12 +104,9 @@ struct HeaderView: View {
                 }
 
                 if let settingsAction = onSettingsTap {
+                    // Cloud status icon doubles as the Settings entry —
+                    // no separate gear (Android parity).
                     NatsHeaderStatusIndicator(onTap: settingsAction)
-
-                    Button(action: settingsAction) {
-                        Image(systemName: "gearshape")
-                            .font(.system(size: 18))
-                    }
                 }
             }
             .frame(minWidth: 32, alignment: .trailing)
@@ -147,7 +144,7 @@ struct SearchableHeaderView: View {
                     } else {
                         Image(systemName: "person.circle.fill")
                             .font(.system(size: 32))
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(VettIDColor.gold)
                     }
                 }
 
@@ -200,12 +197,9 @@ struct SearchableHeaderView: View {
                         }
 
                         if let settingsAction = onSettingsTap {
+                            // Cloud status icon is the Settings entry — no
+                            // separate gear (Android parity).
                             NatsHeaderStatusIndicator(onTap: settingsAction)
-
-                            Button(action: settingsAction) {
-                                Image(systemName: "gearshape")
-                                    .font(.system(size: 18))
-                            }
                         }
                     }
                     .frame(minWidth: 32, alignment: .trailing)

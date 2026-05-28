@@ -810,9 +810,21 @@ final class NatsConnectionManager: ObservableObject {
                         seed: newCreds.seed
                     )
                     try await natsClient?.connect()
-                    // Re-subscribe to vault topics
+                    // Re-establish the E2E session — NON-FATAL. The
+                    // full-creds connection already serves JWT-authed RPC
+                    // (warmVault's own PIN exchange uses ECIES, not this
+                    // session), and the current backend doesn't always
+                    // answer app.bootstrap on the warm path. A bootstrap
+                    // timeout here must NOT fail the unlock — that was
+                    // leaving the user stuck on "Unlocking vault…".
+                    // Fire-and-forget — do NOT await. Awaiting blocked the
+                    // unlock for the full 30s bootstrap timeout (the
+                    // backend doesn't answer app.bootstrap on this path).
+                    // The full-creds connection already serves JWT-authed
+                    // RPC; the E2E session, if it ever establishes, just
+                    // upgrades later.
                     if ownerSpaceId != nil {
-                        try await performBootstrap()
+                        Task { [weak self] in try? await self?.performBootstrap() }
                     }
                     #if DEBUG
                     print("[NATS] Reconnected with vault-issued full credentials")

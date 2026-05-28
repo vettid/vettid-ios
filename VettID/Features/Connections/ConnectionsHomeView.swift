@@ -14,7 +14,10 @@ struct ConnectionsHomeView: View {
 
     var body: some View {
         Group {
-            if let osc = appState.ownerSpaceClient {
+            // Gate on the @Published readiness flag (not the plain
+            // ownerSpaceClient var) so this re-renders once the vault
+            // clients are built — otherwise the spinner sticks forever.
+            if appState.vaultClientsReady, let osc = appState.ownerSpaceClient {
                 ConnectionsHomeContent(ownerSpaceClient: osc, searchText: searchText)
             } else {
                 VStack(spacing: 12) {
@@ -77,7 +80,8 @@ private struct ConnectionsHomeContent: View {
             ZStack(alignment: .bottomTrailing) {
                 ScrollView {
                     LazyVStack(spacing: 12) {
-                        // VettID system card — always first.
+                        // All connections render as cards in one list —
+                        // no section labels. VettID system card first.
                         NavigationLink {
                             FeedView()
                         } label: {
@@ -85,7 +89,6 @@ private struct ConnectionsHomeContent: View {
                         }
                         .buttonStyle(.plain)
 
-                        sectionHeader("People", count: peers.count)
                         ForEach(peers) { peer in
                             NavigationLink {
                                 ConnectionDetailView(connectionId: peer.id, authTokenProvider: { nil })
@@ -99,28 +102,22 @@ private struct ConnectionsHomeContent: View {
                             .buttonStyle(.plain)
                         }
 
-                        if !devices.isEmpty {
-                            sectionHeader("Desktops", count: devices.count)
-                            ForEach(devices) { device in
-                                NavigationLink {
-                                    DesktopConnectionDetailView(connectionId: device.connectionId, ownerSpaceClient: ownerSpaceClient)
-                                } label: {
-                                    DesktopConnectionCard(device: device, onManage: { route = .desktop(device.connectionId) })
-                                }
-                                .buttonStyle(.plain)
+                        ForEach(devices) { device in
+                            NavigationLink {
+                                DesktopConnectionDetailView(connectionId: device.connectionId, ownerSpaceClient: ownerSpaceClient)
+                            } label: {
+                                DesktopConnectionCard(device: device, onManage: { route = .desktop(device.connectionId) })
                             }
+                            .buttonStyle(.plain)
                         }
 
-                        if !agents.isEmpty {
-                            sectionHeader("Agents", count: agents.count)
-                            ForEach(agents) { agent in
-                                NavigationLink {
-                                    AgentDetailView(connectionId: agent.connectionId, ownerSpaceClient: ownerSpaceClient)
-                                } label: {
-                                    AgentConnectionCard(agent: agent, onChat: { route = .agent(agent.connectionId) }, onManage: { route = .agent(agent.connectionId) })
-                                }
-                                .buttonStyle(.plain)
+                        ForEach(agents) { agent in
+                            NavigationLink {
+                                AgentDetailView(connectionId: agent.connectionId, ownerSpaceClient: ownerSpaceClient)
+                            } label: {
+                                AgentConnectionCard(agent: agent, onChat: { route = .agent(agent.connectionId) }, onManage: { route = .agent(agent.connectionId) })
                             }
+                            .buttonStyle(.plain)
                         }
 
                         Color.clear.frame(height: 88) // FAB clearance
@@ -171,25 +168,14 @@ private struct ConnectionsHomeContent: View {
         }
     }
 
-    private func sectionHeader(_ title: String, count: Int) -> some View {
-        HStack {
-            Text(title.uppercased())
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-            Spacer()
-            Text("\(count)")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.tertiary)
-        }
-        .padding(.top, 10)
-        .padding(.horizontal, 2)
-    }
-
     private func loadAll() async {
-        async let a: () = connectionsVM.loadConnections()
-        async let b: () = devicesVM.loadDevices()
-        async let c: () = agentsVM.loadAgents()
-        _ = await (a, b, c)
+        // Load SEQUENTIALLY, not concurrently. Three parallel NATS
+        // requests over the same connection retrigger the reentrant
+        // dispatch_sync crash in AppleNatsClient (subscribe/unsubscribe
+        // on the shared state queue) — the cause of the unlock-then-crash.
+        await connectionsVM.loadConnections()
+        await devicesVM.loadDevices()
+        await agentsVM.loadAgents()
     }
 
     // MARK: - FAB

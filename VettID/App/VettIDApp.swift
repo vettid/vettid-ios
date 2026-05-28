@@ -1,5 +1,6 @@
 import SwiftUI
 import BackgroundTasks
+import os
 
 @main
 struct VettIDApp: App {
@@ -304,6 +305,13 @@ class AppState: ObservableObject {
     /// and run the Ed25519 chain verifier on the response.
     private(set) var feedClient: FeedClient?
 
+    /// Published so SwiftUI surfaces (e.g. ConnectionsHomeView) re-render
+    /// when the vault RPC clients become available. `ownerSpaceClient`
+    /// itself is a plain var and doesn't trigger objectWillChange, so a
+    /// view that read it as nil at first render would otherwise never
+    /// update — the cause of a stuck "Connecting to vault…" spinner.
+    @Published private(set) var vaultClientsReady = false
+
     /// Area B — observer task that bridges `OwnerSpaceClient.deviceApprovalRequests`
     /// into `pendingDeviceApproval`. Held here so a credential-rotation
     /// space-change can cancel the old observer before starting a new one.
@@ -431,6 +439,37 @@ class AppState: ObservableObject {
         }
     }
 
+    /// Publish the photo captured during enrollment (stashed in
+    /// UserDefaults because the vault RPC clients didn't exist yet) on the
+    /// first warm where the vault has no photo. Clears the stash after.
+    private func publishPendingEnrollmentPhotoIfNeeded() async {
+        let key = "pending_enrollment_photo"
+        let logger = os.Logger(subsystem: "com.vettid.app", category: "photo")
+        guard let b64 = UserDefaults.standard.string(forKey: key) else {
+            logger.notice("publishPending: no stashed photo in UserDefaults")
+            return
+        }
+        logger.notice("publishPending: stashed photo found (\(b64.count, privacy: .public) chars), vault photoBase64=\(PersonalDataStore.shared.photoBase64?.count ?? -1, privacy: .public)")
+        // Treat empty-string as "no photo" too — the vault's profile.get
+        // can return `"photo":""` (not nil) when none is set, which would
+        // otherwise skip the publish.
+        if (PersonalDataStore.shared.photoBase64 ?? "").isEmpty {
+            do {
+                try await PersonalDataStore.shared.updatePhoto(base64: b64)
+                #if DEBUG
+                print("[AppState] Published pending enrollment photo to vault")
+                #endif
+            } catch {
+                #if DEBUG
+                print("[AppState] Failed to publish pending enrollment photo: \(error)")
+                #endif
+                return // keep the stash; retry next warm
+            }
+        }
+        UserDefaults.standard.removeObject(forKey: key)
+        await MainActor.run { self.syncCurrentProfileFromStore() }
+    }
+
     /// Phase 2.2: synthesize `currentProfile` from `PersonalDataStore`.
     /// Called once after configure() and again on every snapshot tick;
     /// keeps the legacy `Profile` view-model in sync without backing it
@@ -507,6 +546,24 @@ class AppState: ObservableObject {
         // and goes straight to MainNavigationView — Android lands on
         // the home screen without re-prompting for the PIN.
         vaultTemperature = .warm(ttlSeconds: 3600)
+
+        // Enrollment ran over a separate NATS connection, so AppState's
+        // own manager isn't connected and the vault RPC clients
+        // (ownerSpaceClient etc.) were never built — which left the
+        // Connections home stuck on "Connecting to vault…". Connect with
+        // the full creds enrollment stored, then build the clients (also
+        // publishes the pending profile photo).
+        Task { @MainActor in
+            if !natsConnectionManager.connectionState.isConnected,
+               let creds = try? NatsCredentialStore().getCredentials() {
+                try? await natsConnectionManager.connectWithEnrollmentCredentials(
+                    creds,
+                    ownerSpace: creds.ownerSpace,
+                    performE2EBootstrap: false
+                )
+            }
+            syncProfileFromVault()
+        }
     }
 
     /// Sign out - clears authentication but keeps credentials
@@ -730,6 +787,9 @@ class AppState: ObservableObject {
               let pc = profileClient,
               let pdc = personalDataClient else { return }
 
+        // Clients are live — let dependent SwiftUI surfaces render.
+        vaultClientsReady = true
+
         // Configure the cache, then fan out the hydrate reads. `configure`
         // also starts the `forApp.profile.public` subscription so multi-
         // device edits land in the cache without manual refresh.
@@ -753,6 +813,10 @@ class AppState: ObservableObject {
             // Phase 2.2: synthesize currentProfile from the vault-
             // hydrated store now that the data is in memory.
             await MainActor.run { self.syncCurrentProfileFromStore() }
+            // Enrollment captures a profile photo before the RPC clients
+            // exist, so it couldn't be published then. Publish it now on
+            // the first warm where the vault still has no photo.
+            await self.publishPendingEnrollmentPhotoIfNeeded()
             // Start the presence aggregator (Phase 1.6). Idempotent.
             await PresenceAggregator.shared.attach(to: osc)
             // Phase 3.3 + 3.9: configure + hydrate the Grants
@@ -934,6 +998,7 @@ class AppState: ObservableObject {
         hasActiveVault = false
         vaultInstanceId = nil
         currentProfile = nil
+        vaultClientsReady = false
 
         // Reset vault temperature
         resetVaultTemperature()

@@ -54,6 +54,29 @@ final class AppleNatsClient {
         self.endpoint = endpoint
         self.jwt = jwt
         self.seed = seed
+        // Tag stateQueue so we can detect re-entry and avoid a nested
+        // `stateQueue.sync` (which traps libdispatch). This happens when a
+        // block already running on stateQueue finishes an AsyncStream
+        // continuation, whose onTermination calls back into unsubscribeBySid.
+        stateQueue.setSpecific(key: Self.stateQueueKey, value: ())
+    }
+
+    /// Marker used to detect whether the current thread is already
+    /// executing on `stateQueue`.
+    private static let stateQueueKey = DispatchSpecificKey<Void>()
+
+    /// Run `body` on `stateQueue`, but if we're *already* on it, run it
+    /// inline instead of issuing a reentrant `stateQueue.sync` (which
+    /// would trap with "dispatch_sync called on queue already owned by
+    /// current thread"). Serial-queue mutual exclusion is preserved
+    /// because re-entry only happens synchronously within an existing
+    /// stateQueue block.
+    @discardableResult
+    private func withState<T>(_ body: () -> T) -> T {
+        if DispatchQueue.getSpecific(key: Self.stateQueueKey) != nil {
+            return body()
+        }
+        return stateQueue.sync(execute: body)
     }
 
     deinit {
@@ -141,18 +164,22 @@ final class AppleNatsClient {
         connection?.cancel()
         connection = nil
 
-        stateQueue.sync {
+        withState {
             // Fail any in-flight request continuations so callers don't hang.
             for (_, cont) in pendingRequests {
                 cont.resume(throwing: NatsConnectionError.notConnected)
             }
             pendingRequests.removeAll()
-            // Close all subscription streams; consumers will exit their
-            // for-await loops cleanly.
-            for (_, sub) in subscriptions { sub.finish() }
+            // Drop subscription bookkeeping BEFORE finishing the streams.
+            // `sub.finish()` synchronously fires each stream's
+            // onTermination → unsubscribeBySid; clearing first means that
+            // callback is a no-op (nothing left to remove) and — via
+            // withState — won't issue a reentrant stateQueue.sync.
+            let subs = Array(subscriptions.values)
             subscriptions.removeAll()
             subscriptionTopics.removeAll()
             inboxSubject = nil
+            for sub in subs { sub.finish() }
         }
     }
 
@@ -263,11 +290,12 @@ final class AppleNatsClient {
     }
 
     private func unsubscribeBySid(_ sid: Int) {
-        stateQueue.sync {
-            if let cont = self.subscriptions.removeValue(forKey: sid) {
-                cont.finish()
-            }
+        // withState (not stateQueue.sync) so a finish()-triggered
+        // onTermination re-entering this method doesn't trap.
+        withState {
+            let cont = self.subscriptions.removeValue(forKey: sid)
             self.subscriptionTopics.removeValue(forKey: sid)
+            cont?.finish()
         }
     }
 

@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 // MARK: - Profile Client
 
@@ -127,17 +128,26 @@ final class ProfileClient {
 
     /// Upload (or clear) the profile photo. Pass `nil` to remove.
     func syncPhoto(base64Data: String?) async throws {
+        // The vault's HandlePhotoUpdate reads `json:"photo"` (see
+        // vault-manager/profile.go) and rejects an empty value with
+        // "photo is required". iOS previously sent `photo_data`, which the
+        // vault silently ignored — so no iOS photo ever persisted. Match
+        // Android: send the base64 under the `photo` key.
         var payload: [String: AnyCodableValue] = [:]
         if let data = base64Data {
-            payload["photo_data"] = AnyCodableValue(data)
+            payload["photo"] = AnyCodableValue(data)
         } else {
             payload["clear"] = AnyCodableValue(true)
         }
+        os.Logger(subsystem: "com.vettid.app", category: "photo")
+            .notice("syncPhoto sending photo.update (clear=\(base64Data == nil)) bytes=\(base64Data?.count ?? 0, privacy: .public)")
         let response = try await ownerSpaceClient.sendAndAwaitResponse(
             "profile.photo.update",
             payload: payload,
             timeout: defaultTimeout
         )
+        os.Logger(subsystem: "com.vettid.app", category: "photo")
+            .notice("syncPhoto response success=\(response.success, privacy: .public) error=\(response.error ?? "nil", privacy: .public)")
         guard response.success else {
             throw ProfileClientError.vaultError(response.error ?? "unknown")
         }

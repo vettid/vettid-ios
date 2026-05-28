@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import os
 
 // MARK: - Personal Data Store
 
@@ -161,6 +162,8 @@ final class PersonalDataStore: ObservableObject {
             self.fieldOrder = vaultFieldOrder
             self.photoBase64 = (published["photo"] as? String)
                 ?? (canonical["photo"] as? String)
+            os.Logger(subsystem: "com.vettid.app", category: "photo")
+                .notice("hydrate: published.photo=\((published["photo"] as? String)?.count ?? -1, privacy: .public) canonical.photo=\((canonical["photo"] as? String)?.count ?? -1, privacy: .public) → photoBase64=\(self.photoBase64?.count ?? -1, privacy: .public)")
 
             // Sort: if the vault gave us a field_order, prefer it.
             // Otherwise fall back to PersonalDataItem.sortOrder.
