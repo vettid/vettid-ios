@@ -347,6 +347,7 @@
 		ED686EAE2668E65467DC2DC9 /* VaultSecurityServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6B109BCA50019712BD05C4D /* VaultSecurityServiceTests.swift */; };
 		ED962162C78A7852AF97706A /* ServiceActivityCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BF1AB58870F33B464E69F4E /* ServiceActivityCard.swift */; };
 		EDBBEC3DCEE796C63045A6F6 /* ProfilePhotoCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28BD2140A42BBFBB014962C9 /* ProfilePhotoCapture.swift */; };
+		F0DECAFE0000000000000001 /* ProfilePhotoCameraView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0DECAFE0000000000000002 /* ProfilePhotoCameraView.swift */; };
 		EF72E641AE4C5663EB4A4CAD /* RequestPaymentSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 957D38392477A7D722F4A059 /* RequestPaymentSheet.swift */; };
 		EFDD21120E654E6CB1A758F8 /* OfflineQueueManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 394919A7D70E43798470243C /* OfflineQueueManager.swift */; };
 		EFFB2B1EE3C66D2AB5AFAB5D /* TransferRequestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C45FB5259A76C8CF05FFF102 /* TransferRequestView.swift */; };
@@ -531,6 +532,7 @@
 		276A748FA18E40238015322D /* ServiceActivityHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceActivityHistoryView.swift; sourceTree = "<group>"; };
 		2890018C4BA02E8E472C8A62 /* MessageHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MessageHandler.swift; sourceTree = "<group>"; };
 		28BD2140A42BBFBB014962C9 /* ProfilePhotoCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilePhotoCapture.swift; sourceTree = "<group>"; };
+		F0DECAFE0000000000000002 /* ProfilePhotoCameraView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilePhotoCameraView.swift; sourceTree = "<group>"; };
 		2AB1CA62FFB4444590E09F2A /* CapabilityManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapabilityManagementView.swift; sourceTree = "<group>"; };
 		2B2D6CF42AD511A65BF8DC12 /* AboutView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		2C3B06F55F2562689A7BB80E /* GrantsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrantsClient.swift; sourceTree = "<group>"; };
@@ -1255,6 +1257,7 @@
 				10000039 /* ProfileView.swift */,
 				1000003A /* EditProfileView.swift */,
 				28BD2140A42BBFBB014962C9 /* ProfilePhotoCapture.swift */,
+				F0DECAFE0000000000000002 /* ProfilePhotoCameraView.swift */,
 			);
 			path = Profile;
 			sourceTree = "<group>";
@@ -2226,6 +2229,7 @@
 				DEE3D9B0EE3791B354526EAA /* CriticalSecretsView.swift in Sources */,
 				5FBFE89B623ECDDACD5F1B6E /* AddSecretView.swift in Sources */,
 				EDBBEC3DCEE796C63045A6F6 /* ProfilePhotoCapture.swift in Sources */,
+				F0DECAFE0000000000000001 /* ProfilePhotoCameraView.swift in Sources */,
 				BD2FEE9B47FF1B13477CCE9F /* SecretTemplate.swift in Sources */,
 				7EBC134B0224FAC3512A6826 /* PersonalDataTemplate.swift in Sources */,
 				9B5AF6D980D2481DA32EDDB3 /* DatePickerInput.swift in Sources */,

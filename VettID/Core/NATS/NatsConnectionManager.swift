@@ -768,8 +768,16 @@ final class NatsConnectionManager: ObservableObject {
             return result
         }
 
-        // Clean up subscription
-        await unsubscribe(from: responseTopic)
+        // NOTE: deliberately NOT calling `unsubscribe(from:)` here — it
+        // trips the same reentrant `dispatch_sync` crash the enrollment
+        // paths avoid ("BUG IN CLIENT OF LIBDISPATCH"):
+        // AppleNatsClient.unsubscribeBySid finishes the AsyncStream
+        // continuation while holding the state-queue barrier, and the
+        // continuation's onTermination handler calls unsubscribeBySid
+        // again on that same queue. This line is why the app crashed
+        // right after a successful PIN warm. The subscription is torn
+        // down when the connection closes.
+        // await unsubscribe(from: responseTopic)
 
         // Update vault temperature based on response
         if response.success {

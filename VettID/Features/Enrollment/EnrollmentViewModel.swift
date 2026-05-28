@@ -745,17 +745,33 @@ final class EnrollmentViewModel: ObservableObject {
             // Create local data from PHC result for offline password re-hashing
             let localData = VaultLocalData.from(phcResult: phcResult)
 
-            // Store new UTKs if returned (translate from the credential-
-            // response UTK type to the PIN-response UTK type the rest of
-            // the wizard holds).
-            if let newUTKs = credentialResponse.utks {
+            // Store new UTKs if the response actually carries a fresh
+            // pool. Android-parity (`response.newUtks ?: nitroUtks`):
+            // an empty array means "no rotation" — keep the pool from
+            // PIN setup. Overwriting with [] here was the bug behind
+            // "No unused UTK available" on the next PIN unlock.
+            if let newUTKs = credentialResponse.utks, !newUTKs.isEmpty {
                 vaultUTKs = newUTKs.map { NatsPINSetupResponse.UTKInfo(id: $0.id, publicKey: $0.publicKey) }
             }
 
-            // Store the encrypted credential with local data
-            if let encryptedCred = credentialResponse.encryptedCredential {
-                try storeNatsCredential(encryptedCredential: encryptedCred, localData: localData)
+            // Store the credential + UTK pool UNCONDITIONALLY. Gating
+            // this on a non-nil `encrypted_credential` was the real bug:
+            // when the vault's credential.create response didn't surface
+            // that field (or it parsed as nil), iOS stored nothing at
+            // all, so the UTK pool was lost. That's what surfaced as
+            // "No unused UTK" at unlock — and now as "no transaction
+            // keys" at finalize. warmVault tolerates an empty sealed
+            // blob (the vault holds the authoritative credential), so
+            // storing with "" is safe and keeps the pool on-device.
+            if credentialResponse.encryptedCredential == nil {
+                #if DEBUG
+                print("[Enrollment] WARNING: credential.create response had no encrypted_credential — storing UTK pool with empty blob")
+                #endif
             }
+            try storeNatsCredential(
+                encryptedCredential: credentialResponse.encryptedCredential ?? "",
+                localData: localData
+            )
 
             // Step 9: Verify enrollment (vault.get_info round-trip — Android-parity).
             #if DEBUG
@@ -766,8 +782,31 @@ final class EnrollmentViewModel: ObservableObject {
             try await handler.verifyEnrollment()
 
             #if DEBUG
-            print("[Enrollment] NATS Flow: Vault verify OK — moving to credential re-entry")
+            print("[Enrollment] NATS Flow: Vault verify OK — finalizing via app.authenticate")
             #endif
+
+            // Step 9.5: Post-enrollment authenticate (Android
+            // PostEnrollmentAuthClient parity). This is the step iOS was
+            // missing: the Account Portal only marks the vault enrolled
+            // once the user has authenticated against it, and the vault
+            // replenishes the UTK pool here via `new_utks`. Without it,
+            // enrollment looked done on-device but the portal showed it
+            // incomplete and the pool was left stale → "No unused UTK".
+            //
+            // Reuse `phcResult` (same salt as the stored credential) and
+            // spend a UTK that wasn't already consumed by credential.create.
+            //
+            // Best-effort: the credential + UTK pool are already stored
+            // above, so a failure here doesn't strand the user — they can
+            // still unlock. We log and continue rather than failing the
+            // whole enrollment on an authenticate hiccup.
+            do {
+                try await finalizeViaAuthenticate(handler: handler, phcString: phcResult.phcString, creationUtkId: utk.id)
+            } catch {
+                #if DEBUG
+                print("[Enrollment] Post-enrollment authenticate failed (non-fatal): \(error)")
+                #endif
+            }
 
             // Step 10: VERIFY_CREDENTIAL — show password re-entry. We
             // keep `password` populated until the local compare in
@@ -783,6 +822,59 @@ final class EnrollmentViewModel: ObservableObject {
             #endif
             handleError(error, retryable: true)
         }
+    }
+
+    /// Post-enrollment `app.authenticate` — the finalization step that
+    /// marks the vault enrolled server-side and replenishes the local
+    /// UTK pool. Mirrors Android `PostEnrollmentAuthClient`.
+    ///
+    /// - Parameters:
+    ///   - handler: The connected enrollment NATS handler.
+    ///   - phcString: The Argon2id PHC from credential.create (same salt
+    ///     the vault stored, so the verifier matches).
+    ///   - creationUtkId: The UTK already spent by credential.create —
+    ///     skipped here so we don't replay a server-consumed key.
+    private func finalizeViaAuthenticate(handler: EnrollmentNatsHandler, phcString: String, creationUtkId: String) async throws {
+        guard let stored = try? credentialStore.retrieveFirst() else {
+            throw EnrollmentError.noTransactionKeys
+        }
+        // Prefer a UTK that wasn't consumed by credential.create; fall
+        // back to any unused key if the pool was fully rotated.
+        guard let authUtk = stored.transactionKeys.first(where: { !$0.isUsed && $0.keyId != creationUtkId })
+                ?? stored.getUnusedKey() else {
+            throw EnrollmentError.noTransactionKeys
+        }
+
+        let result = try await handler.authenticatePostEnrollment(
+            phcString: phcString,
+            utkId: authUtk.keyId,
+            utkPublicKey: authUtk.publicKey,
+            encryptedCredential: stored.sealedCredential
+        )
+
+        // Mark the spent UTK used and fold in any replenishment, then
+        // persist so the next PIN unlock finds a healthy pool.
+        var updatedKeys = stored.markingKeyUsed(keyId: authUtk.keyId).transactionKeys
+        for newKey in result.newUTKs {
+            updatedKeys.append(StoredUTK(keyId: newKey.id, publicKey: newKey.publicKey, algorithm: "X25519", isUsed: false))
+        }
+        let finalized = StoredCredential(
+            userGuid: stored.userGuid,
+            sealedCredential: stored.sealedCredential,
+            enclavePublicKey: stored.enclavePublicKey,
+            backupKey: stored.backupKey,
+            ledgerAuthToken: stored.ledgerAuthToken,
+            transactionKeys: updatedKeys,
+            createdAt: stored.createdAt,
+            lastUsedAt: Date(),
+            vaultStatus: stored.vaultStatus,
+            localData: stored.localData
+        )
+        try? credentialStore.store(credential: finalized)
+
+        #if DEBUG
+        print("[Enrollment] Finalize OK — pool now \(finalized.unusedKeyCount) unused UTKs (added \(result.newUTKs.count))")
+        #endif
     }
 
     /// Store credential received via NATS

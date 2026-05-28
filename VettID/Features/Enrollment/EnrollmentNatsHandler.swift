@@ -517,6 +517,117 @@ actor EnrollmentNatsHandler {
         return (response, phcResult)
     }
 
+    // MARK: - Phase 6.5: Post-Enrollment Authenticate
+
+    /// Run the post-enrollment `app.authenticate` against the vault —
+    /// the step Android's `PostEnrollmentAuthClient` performs after
+    /// the wizard. This is what marks enrollment complete server-side
+    /// (the portal won't show the vault as enrolled until the user has
+    /// authenticated once) AND replenishes the UTK pool: the vault
+    /// consumes the supplied UTK and returns `new_utks`.
+    ///
+    /// Unlike `credential.create` (which encrypts JSON-wrapped PHC as a
+    /// single combined blob), `app.authenticate` encrypts the RAW PHC
+    /// string bytes and sends the three fields separately — matching
+    /// Android `CryptoManager.encryptPasswordForServer`.
+    ///
+    /// - Parameters:
+    ///   - phcString: Argon2id PHC produced during `credential.create`
+    ///     (reused so the salt matches the stored credential).
+    ///   - utkId: ID of the UTK to spend.
+    ///   - utkPublicKey: That UTK's public key (base64).
+    ///   - encryptedCredential: The sealed credential blob from enrollment.
+    /// - Returns: success flag plus any fresh UTKs the vault issued.
+    func authenticatePostEnrollment(
+        phcString: String,
+        utkId: String,
+        utkPublicKey: String,
+        encryptedCredential: String
+    ) async throws -> PostEnrollmentAuthResult {
+        guard let ownerSpace = ownerSpace else {
+            throw EnrollmentNatsError.notConnected
+        }
+
+        guard let phcData = phcString.data(using: .utf8) else {
+            throw EnrollmentNatsError.credentialCreationFailed("Failed to encode PHC string")
+        }
+
+        // app.authenticate encrypts the RAW PHC bytes (no JSON wrapper)
+        // and sends encrypted_password_hash / ephemeral_public_key /
+        // nonce as separate fields — same crypto as credential.create
+        // (X25519 + HKDF utk domain + XChaCha20-Poly1305), different
+        // framing.
+        let encrypted = try CryptoManager.encryptPasswordHash(
+            passwordHash: phcData,
+            utkPublicKeyBase64: utkPublicKey
+        )
+
+        let requestId = UUID().uuidString
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+        let request = NatsPostEnrollmentAuthRequest(
+            id: requestId,
+            type: "app.authenticate",
+            payload: NatsPostEnrollmentAuthRequest.Payload(
+                deviceId: UUID().uuidString,
+                deviceType: "ios",
+                appVersion: appVersion,
+                encryptedCredential: encryptedCredential,
+                keyId: utkId,
+                encryptedPasswordHash: encrypted.encryptedPasswordHash,
+                ephemeralPublicKey: encrypted.ephemeralPublicKey,
+                nonce: encrypted.nonce
+            ),
+            timestamp: ISO8601DateFormatter().string(from: Date())
+        )
+
+        // Match Android PostEnrollmentAuthClient: subscribe broadly to
+        // forApp.> and filter by request id, since the vault's reply
+        // subject for app.authenticate isn't a fixed leaf.
+        let responseTopic = "\(ownerSpace).forApp.>"
+        let responseStream = try await natsConnectionManager.subscribe(to: responseTopic)
+
+        let requestTopic = "\(ownerSpace).forVault.app.authenticate"
+        try await natsConnectionManager.publish(request, to: requestTopic)
+
+        #if DEBUG
+        print("[EnrollmentNats] Sent post-enrollment app.authenticate")
+        #endif
+
+        let timeout: TimeInterval = 30
+        let result: PostEnrollmentAuthResult = try await withThrowingTaskGroup(of: PostEnrollmentAuthResult.self) { group in
+            group.addTask {
+                for await message in responseStream {
+                    guard let parsed = PostEnrollmentAuthResult.parse(data: message.data) else { continue }
+                    if parsed.requestId == nil || parsed.requestId == requestId {
+                        return parsed
+                    }
+                }
+                throw EnrollmentNatsError.credentialCreationFailed("Authenticate response stream ended")
+            }
+
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                throw EnrollmentNatsError.timeout("Post-enrollment authenticate timed out")
+            }
+
+            guard let r = try await group.next() else {
+                throw EnrollmentNatsError.credentialCreationFailed("No authenticate response")
+            }
+            group.cancelAll()
+            return r
+        }
+
+        guard result.success else {
+            throw EnrollmentNatsError.credentialCreationFailed(result.message ?? "Authentication failed")
+        }
+
+        #if DEBUG
+        print("[EnrollmentNats] Post-enrollment authenticate OK — \(result.newUTKs.count) new UTKs")
+        #endif
+
+        return result
+    }
+
     // MARK: - Phase 7: Verify Enrollment
 
     /// Send test operation to verify enrollment is complete
@@ -623,6 +734,97 @@ actor EnrollmentNatsHandler {
 }
 
 // MARK: - NATS Request/Response Types
+
+/// `app.authenticate` request — matches Android PostEnrollmentAuthClient.
+/// The encrypted password fields are sent separately (not as a combined
+/// blob like credential.create).
+struct NatsPostEnrollmentAuthRequest: Encodable {
+    let id: String
+    let type: String
+    let payload: Payload
+    let timestamp: String
+
+    struct Payload: Encodable {
+        let deviceId: String
+        let deviceType: String
+        let appVersion: String
+        let encryptedCredential: String
+        let keyId: String
+        let encryptedPasswordHash: String
+        let ephemeralPublicKey: String
+        let nonce: String
+
+        enum CodingKeys: String, CodingKey {
+            case deviceId = "device_id"
+            case deviceType = "device_type"
+            case appVersion = "app_version"
+            case encryptedCredential = "encrypted_credential"
+            case keyId = "key_id"
+            case encryptedPasswordHash = "encrypted_password_hash"
+            case ephemeralPublicKey = "ephemeral_public_key"
+            case nonce
+        }
+    }
+}
+
+/// Parsed `app.authenticate` response. The vault replenishes the UTK
+/// pool by returning `new_utks` as `["keyId:base64PublicKey", …]`
+/// strings (same shape Android's `extractAndStoreUtks` parses).
+struct PostEnrollmentAuthResult {
+    let success: Bool
+    let message: String?
+    let requestId: String?
+    let newUTKs: [(id: String, publicKey: String)]
+
+    static func parse(data: Data) -> PostEnrollmentAuthResult? {
+        guard let raw = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]),
+              let root = raw as? [String: Any] else {
+            return nil
+        }
+        let payload = (root["payload"] as? [String: Any]) ?? [:]
+        let result = (root["result"] as? [String: Any]) ?? [:]
+
+        func bool(_ keys: String...) -> Bool? {
+            for key in keys {
+                if let v = root[key] as? Bool { return v }
+                if let v = payload[key] as? Bool { return v }
+                if let v = result[key] as? Bool { return v }
+            }
+            return nil
+        }
+        func string(_ keys: String...) -> String? {
+            for key in keys {
+                if let v = root[key] as? String, !v.isEmpty { return v }
+                if let v = payload[key] as? String, !v.isEmpty { return v }
+                if let v = result[key] as? String, !v.isEmpty { return v }
+            }
+            return nil
+        }
+
+        // new_utks: array of "keyId:base64" strings (Android shape).
+        let rawUtks = (root["new_utks"] as? [Any])
+            ?? (payload["new_utks"] as? [Any])
+            ?? (result["new_utks"] as? [Any])
+            ?? []
+        let newUTKs: [(id: String, publicKey: String)] = rawUtks.compactMap { entry in
+            guard let s = entry as? String else { return nil }
+            let parts = s.split(separator: ":", maxSplits: 1).map(String.init)
+            guard parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty else { return nil }
+            return (id: parts[0], publicKey: parts[1])
+        }
+
+        let status = string("status")
+        let success = bool("success")
+            ?? (status.map { $0.lowercased().contains("ok") || $0.lowercased().contains("success") || $0.lowercased().contains("authenticated") } ?? false)
+
+        return PostEnrollmentAuthResult(
+            success: success,
+            message: string("message", "error"),
+            requestId: string("request_id", "event_id", "id"),
+            newUTKs: newUTKs
+        )
+    }
+}
 
 struct NatsIdentityMismatchReport: Encodable {
     let id: String

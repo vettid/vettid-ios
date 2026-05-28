@@ -552,14 +552,41 @@ class AppState: ObservableObject {
             vaultTemperature = .cold
             throw VaultWarmingError.warmingFailed("Enclave public key missing")
         }
-        guard let credential = try? credentialStore.retrieveFirst(),
-              let utk = credential.getUnusedKey() else {
+        // Split so the failure mode is unambiguous: a missing credential
+        // is a storage problem (re-enroll), an exhausted pool means the
+        // UTKs need replenishment.
+        guard let credential = try? credentialStore.retrieveFirst() else {
+            vaultWarmingError = "No credential found — please re-enroll."
+            vaultTemperature = .cold
+            throw VaultWarmingError.warmingFailed("No credential stored")
+        }
+        guard let utk = credential.getUnusedKey() else {
             vaultWarmingError = "No available transaction keys — please re-enroll."
             vaultTemperature = .cold
             throw VaultWarmingError.warmingFailed("No unused UTK available")
         }
 
         do {
+            // Cold-launch reconnect: after relaunch the PIN screen is the
+            // first surface shown and nothing has re-established the NATS
+            // link yet. warmVault requires a live connection, so dial it
+            // with the stored credentials first — otherwise it throws
+            // notConnected ("not connected to NATS"). warmVault does its
+            // own ECIES-to-enclave encryption, so we skip the E2E
+            // bootstrap here.
+            if !natsConnectionManager.connectionState.isConnected {
+                guard let creds = try? NatsCredentialStore().getCredentials() else {
+                    vaultWarmingError = "No vault connection details — please re-enroll."
+                    vaultTemperature = .cold
+                    throw VaultWarmingError.notConnected
+                }
+                try await natsConnectionManager.connectWithEnrollmentCredentials(
+                    creds,
+                    ownerSpace: creds.ownerSpace,
+                    performE2EBootstrap: false
+                )
+            }
+
             let response = try await natsConnectionManager.warmVault(
                 pin: pin,
                 enclavePublicKey: enclavePubKey,

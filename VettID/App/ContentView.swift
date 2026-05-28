@@ -397,20 +397,11 @@ struct WelcomeView: View {
 /// This allows users to recover their credential on a new device
 struct WelcomeRecoveryView: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var email = ""
-    @State private var isRequestingRecovery = false
-    @State private var showError = false
-    @State private var errorMessage = ""
-    @State private var recoveryRequested = false
     @State private var showQrScanner = false
 
     var body: some View {
         NavigationStack {
-            if recoveryRequested {
-                recoveryRequestedView
-            } else {
-                recoveryRequestForm
-            }
+            recoveryRequestForm
         }
     }
 
@@ -418,7 +409,7 @@ struct WelcomeRecoveryView: View {
         VStack(spacing: 24) {
             // Header
             VStack(spacing: 12) {
-                Image(systemName: "person.badge.clock")
+                Image(systemName: "qrcode.viewfinder")
                     .font(.system(size: 60))
                     .foregroundStyle(.blue)
 
@@ -426,84 +417,30 @@ struct WelcomeRecoveryView: View {
                     .font(.title2)
                     .fontWeight(.bold)
 
-                Text("If you have a backup of your credential, you can recover it on this device.")
+                Text("Scan the recovery QR code from the Account Portal to restore your credential on this device.")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
             }
             .padding(.top, 20)
-
-            // Recovery options
-            VStack(spacing: 16) {
-                // QR Code recovery (instant)
-                Button {
-                    showQrScanner = true
-                } label: {
-                    HStack {
-                        Image(systemName: "qrcode.viewfinder")
-                            .font(.title2)
-                            .frame(width: 40)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Scan Recovery QR Code")
-                                .fontWeight(.medium)
-                            Text("Instant recovery from Account Portal")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .foregroundColor(.secondary)
-                    }
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(12)
-                }
-                .foregroundColor(.primary)
-
-                // Email recovery (24-hour delay)
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Or request recovery via email")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-
-                    TextField("Email address", text: $email)
-                        .textFieldStyle(.roundedBorder)
-                        .textContentType(.emailAddress)
-                        .keyboardType(.emailAddress)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-
-                    Text("Recovery via email has a 24-hour security delay")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(12)
-            }
             .padding(.horizontal)
 
             Spacer()
 
-            // Request recovery button
             Button {
-                requestRecovery()
+                showQrScanner = true
             } label: {
-                HStack {
-                    if isRequestingRecovery {
-                        ProgressView()
-                            .tint(.white)
-                            .padding(.trailing, 4)
-                    }
-                    Text(isRequestingRecovery ? "Requesting..." : "Request Email Recovery")
+                HStack(spacing: 8) {
+                    Image(systemName: "qrcode.viewfinder")
+                    Text("Scan Recovery QR Code")
+                        .fontWeight(.semibold)
                 }
                 .frame(maxWidth: .infinity)
                 .padding()
-                .background(email.isEmpty || isRequestingRecovery ? Color.gray : Color.accentColor)
+                .background(Color.accentColor)
                 .foregroundColor(.white)
                 .cornerRadius(12)
             }
-            .disabled(email.isEmpty || isRequestingRecovery)
             .padding(.horizontal)
             .padding(.bottom, 20)
         }
@@ -517,93 +454,8 @@ struct WelcomeRecoveryView: View {
         .sheet(isPresented: $showQrScanner) {
             ProteanRecoveryView(authTokenProvider: { nil })
         }
-        .alert("Error", isPresented: $showError) {
-            Button("OK") { }
-        } message: {
-            Text(errorMessage)
-        }
     }
 
-    private var recoveryRequestedView: some View {
-        VStack(spacing: 24) {
-            Image(systemName: "envelope.badge.shield.half.filled")
-                .font(.system(size: 80))
-                .foregroundStyle(.green)
-                .padding(.top, 40)
-
-            Text("Recovery Requested")
-                .font(.title)
-                .fontWeight(.bold)
-
-            VStack(spacing: 12) {
-                Text("Check your email for a verification link.")
-                    .multilineTextAlignment(.center)
-
-                Text("Once verified, your credential will be available for download after a 24-hour security delay.")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-            .padding(.horizontal)
-
-            // Security notice
-            VStack(alignment: .leading, spacing: 8) {
-                Label("Why 24 hours?", systemImage: "lock.shield")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-
-                Text("This delay protects you if someone gains temporary access to your email. You'll be notified of the recovery request and can cancel it if you didn't initiate it.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            .padding()
-            .background(Color(.systemGray6))
-            .cornerRadius(12)
-            .padding(.horizontal)
-
-            Spacer()
-
-            Button("Done") {
-                dismiss()
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .padding(.horizontal)
-            .padding(.bottom, 40)
-        }
-        .navigationTitle("Recovery Requested")
-        .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
-    }
-
-    private func requestRecovery() {
-        guard !email.isEmpty else { return }
-
-        isRequestingRecovery = true
-
-        // In a real implementation, this would:
-        // 1. Call the API to initiate recovery
-        // 2. Send verification email
-        // 3. Show the pending state
-
-        Task {
-            do {
-                // Simulate API call
-                try await Task.sleep(nanoseconds: 1_500_000_000)
-
-                await MainActor.run {
-                    isRequestingRecovery = false
-                    recoveryRequested = true
-                }
-            } catch {
-                await MainActor.run {
-                    isRequestingRecovery = false
-                    errorMessage = error.localizedDescription
-                    showError = true
-                }
-            }
-        }
-    }
 }
 
 // MARK: - Enrollment Container

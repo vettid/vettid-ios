@@ -158,41 +158,58 @@ final class CredentialStore {
     /// Retrieve the first stored credential (for single-credential scenarios)
     /// - Parameter authenticationPrompt: Prompt shown for biometric authentication (if credential requires it)
     func retrieveFirst(authenticationPrompt: String = "Authenticate to access your credentials") throws -> StoredCredential? {
-        // Try biometric-protected service first
-        let biometricQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: biometricService,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-            kSecUseOperationPrompt as String: authenticationPrompt
-        ]
-
-        var result: AnyObject?
-        var status = SecItemCopyMatching(biometricQuery as CFDictionary, &result)
-
-        if status == errSecSuccess, let data = result as? Data {
-            return try JSONDecoder().decode(StoredCredential.self, from: data)
-        }
-
-        // Fall back to non-biometric service
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
-        ]
-
-        result = nil
-        status = SecItemCopyMatching(query as CFDictionary, &result)
-
-        guard status == errSecSuccess, let data = result as? Data else {
-            if status == errSecItemNotFound {
-                return nil
+        // IMPORTANT: the `service` keychain bucket holds more than just
+        // the credential — the enclave public key lives here too (under
+        // a fixed account), and potentially other generic-password
+        // items. A bare `kSecMatchLimitOne` with no account filter
+        // returns an *arbitrary* one of those, so it could hand back the
+        // raw enclave-key bytes, which then fail to decode as a
+        // StoredCredential. That non-determinism surfaced as the
+        // flip-flop between "no credential found" and "0 unused UTK".
+        //
+        // Fetch ALL items for the service and return the first that
+        // actually decodes as a StoredCredential, skipping non-credential
+        // entries.
+        func firstDecodableCredential(in serviceName: String, prompt: String?) -> StoredCredential? {
+            var query: [String: Any] = [
+                kSecClass as String: kSecClassGenericPassword,
+                kSecAttrService as String: serviceName,
+                kSecReturnData as String: true,
+                kSecMatchLimit as String: kSecMatchLimitAll
+            ]
+            if let prompt = prompt {
+                query[kSecUseOperationPrompt as String] = prompt
             }
-            throw CredentialStoreError.retrieveFailed(status)
+
+            var result: AnyObject?
+            let status = SecItemCopyMatching(query as CFDictionary, &result)
+            guard status == errSecSuccess else { return nil }
+
+            // With kSecMatchLimitAll + kSecReturnData (no
+            // kSecReturnAttributes), the result is an array of Data.
+            let dataItems: [Data]
+            if let arr = result as? [Data] {
+                dataItems = arr
+            } else if let single = result as? Data {
+                dataItems = [single]
+            } else {
+                dataItems = []
+            }
+
+            for data in dataItems {
+                if let cred = try? JSONDecoder().decode(StoredCredential.self, from: data) {
+                    return cred
+                }
+            }
+            return nil
         }
 
-        return try JSONDecoder().decode(StoredCredential.self, from: data)
+        // Biometric-protected store first (reading its data prompts), then
+        // the regular store.
+        if let cred = firstDecodableCredential(in: biometricService, prompt: authenticationPrompt) {
+            return cred
+        }
+        return firstDecodableCredential(in: service, prompt: nil)
     }
 
     /// Check if any credential is stored (does not require authentication)

@@ -13,7 +13,6 @@ struct VaultWarmingView: View {
     @State private var remainingAttempts: Int?
     @State private var isShaking = false
     @State private var retryCount = 0
-    @FocusState private var isPinFieldFocused: Bool
 
     // #56 — pre-PIN PCR0 trust check. When the current enclave PCR0 is
     // not in the user's trusted set, we hold the typed PIN and show
@@ -106,24 +105,6 @@ struct VaultWarmingView: View {
                             .foregroundStyle(.orange)
                     }
 
-                    // Hidden text field for keyboard input (4–8 digit
-                    // PINs, manual submit). Auto-submit removed — the
-                    // Android-parity enrollment now lets users pick
-                    // any length in [4,8], so we don't know when to
-                    // stop without an explicit confirm.
-                    TextField("", text: $pin)
-                        .keyboardType(.numberPad)
-                        .textContentType(.oneTimeCode)
-                        .focused($isPinFieldFocused)
-                        .frame(width: 1, height: 1)
-                        .opacity(0)
-                        .onChange(of: pin) { newValue in
-                            var cleaned = newValue.filter { $0.isNumber }
-                            if cleaned.count > maxPinLength {
-                                cleaned = String(cleaned.prefix(maxPinLength))
-                            }
-                            if cleaned != newValue { pin = cleaned }
-                        }
                 }
 
                 Spacer()
@@ -179,9 +160,6 @@ struct VaultWarmingView: View {
             .accessibilityIdentifier("vaultWarming.startOver")
         }
         .padding()
-        .onAppear {
-            isPinFieldFocused = true
-        }
         .alert("Start over with a new enrollment?", isPresented: $showStartOverConfirm) {
             Button("Cancel", role: .cancel) {}
             Button("Start Over", role: .destructive) {

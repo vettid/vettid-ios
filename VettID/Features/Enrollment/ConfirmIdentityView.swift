@@ -17,7 +17,6 @@ struct ConfirmIdentityView: View {
     let onConfirm: () -> Void
     let onReject: () -> Void
 
-    @State private var isReporting = false
     @State private var showingPhotoPicker = false
 
     init(
@@ -76,25 +75,23 @@ struct ConfirmIdentityView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
 
-                Button {
-                    isReporting = true
-                } label: {
+                // Android-parity: full-width text button that goes
+                // straight to the IdentityRejected screen — no
+                // intermediate confirmation alert. Previously this was
+                // a low-contrast subheadline label that read as static
+                // text, so users didn't realize it was tappable.
+                Button(action: onReject) {
                     Text("Something's wrong")
-                        .font(.subheadline)
+                        .font(.headline)
                         .frame(maxWidth: .infinity)
+                        .frame(height: 32)
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .padding(.vertical, 8)
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .tint(.red)
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 16)
-        }
-        .alert("Report Mismatch", isPresented: $isReporting) {
-            Button("Cancel", role: .cancel) {}
-            Button("Report & Exit", role: .destructive) { onReject() }
-        } message: {
-            Text("If this identity doesn't match yours, we'll report a potential account mismatch and cancel enrollment.")
         }
     }
 

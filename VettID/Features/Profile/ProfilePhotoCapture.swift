@@ -1,55 +1,5 @@
 import SwiftUI
-import PhotosUI
-
-// MARK: - Profile Photo Capture
-
-/// Wraps UIImagePickerController for camera + photo library access
-/// with crop/resize to square and compression for vault storage.
-struct ProfilePhotoCapture: UIViewControllerRepresentable {
-    let sourceType: UIImagePickerController.SourceType
-    let onImageCaptured: (UIImage) -> Void
-    let onCancel: () -> Void
-
-    func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
-        picker.sourceType = sourceType
-        picker.allowsEditing = true
-        picker.delegate = context.coordinator
-        if sourceType == .camera {
-            picker.cameraDevice = .front
-        }
-        return picker
-    }
-
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(onImageCaptured: onImageCaptured, onCancel: onCancel)
-    }
-
-    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
-        let onImageCaptured: (UIImage) -> Void
-        let onCancel: () -> Void
-
-        init(onImageCaptured: @escaping (UIImage) -> Void, onCancel: @escaping () -> Void) {
-            self.onImageCaptured = onImageCaptured
-            self.onCancel = onCancel
-        }
-
-        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
-            let image = (info[.editedImage] as? UIImage) ?? (info[.originalImage] as? UIImage)
-            if let image = image {
-                onImageCaptured(image)
-            }
-            picker.dismiss(animated: true)
-        }
-
-        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            onCancel()
-            picker.dismiss(animated: true)
-        }
-    }
-}
+import UIKit
 
 // MARK: - Profile Photo Helper
 
@@ -60,19 +10,30 @@ enum ProfilePhotoHelper {
     /// Maximum file size in bytes (100KB)
     static let maxFileSize = 100_000
 
-    /// Crop and resize image to a square
+    /// Crop image to a centered square.
+    ///
+    /// `CGImage.cropping(to:)` operates in raw pixel coordinates and
+    /// ignores `UIImage.scale`. Computing the rect from `image.size`
+    /// (which is in points) produced a rect 1/4 the intended area on
+    /// 2x devices and 1/9 on 3x — landing roughly in the top-left of
+    /// the actual pixel buffer instead of the center. Compute the rect
+    /// from the `cgImage` pixel dimensions so the crop matches what
+    /// the user framed.
     static func cropToSquare(_ image: UIImage) -> UIImage {
-        let size = min(image.size.width, image.size.height)
+        guard let cg = image.cgImage else { return image }
+        let pixelWidth = CGFloat(cg.width)
+        let pixelHeight = CGFloat(cg.height)
+        let side = min(pixelWidth, pixelHeight)
         let origin = CGPoint(
-            x: (image.size.width - size) / 2,
-            y: (image.size.height - size) / 2
+            x: (pixelWidth - side) / 2,
+            y: (pixelHeight - side) / 2
         )
-        let cropRect = CGRect(origin: origin, size: CGSize(width: size, height: size))
+        let cropRect = CGRect(origin: origin, size: CGSize(width: side, height: side))
 
-        guard let cgImage = image.cgImage?.cropping(to: cropRect) else {
+        guard let cropped = cg.cropping(to: cropRect) else {
             return image
         }
-        return UIImage(cgImage: cgImage, scale: image.scale, orientation: image.imageOrientation)
+        return UIImage(cgImage: cropped, scale: image.scale, orientation: image.imageOrientation)
     }
 
     /// Resize image to fit within maxDimension
@@ -110,6 +71,20 @@ enum ProfilePhotoHelper {
         return compress(resized)
     }
 
+    /// Horizontally flip an image, baking the mirror into pixels with
+    /// `.up` orientation so downstream crop/resize/JPEG steps preserve
+    /// it. Used to undo the un-mirroring iOS does on front-camera
+    /// captures (the preview is mirrored, the saved frame is not).
+    static func horizontallyMirrored(_ image: UIImage) -> UIImage {
+        let renderer = UIGraphicsImageRenderer(size: image.size)
+        return renderer.image { ctx in
+            let cg = ctx.cgContext
+            cg.translateBy(x: image.size.width, y: 0)
+            cg.scaleBy(x: -1, y: 1)
+            image.draw(in: CGRect(origin: .zero, size: image.size))
+        }
+    }
+
     /// Encode photo data to base64 for NATS transmission
     static func encodeToBase64(_ data: Data) -> String {
         data.base64EncodedString()
@@ -118,14 +93,14 @@ enum ProfilePhotoHelper {
 
 // MARK: - Profile Photo Picker Sheet
 
-/// A sheet that offers camera or photo library selection
+/// Camera-only profile photo picker. The "Choose from Library"
+/// option was removed deliberately — profile photos are identity
+/// photos and must be taken live, not imported.
 struct ProfilePhotoPickerSheet: View {
     let onImageSelected: (UIImage) -> Void
     @Environment(\.dismiss) private var dismiss
 
     @State private var showCamera = false
-    @State private var showPhotoLibrary = false
-    @State private var selectedPhotoItem: PhotosPickerItem?
 
     var body: some View {
         NavigationView {
@@ -136,12 +111,6 @@ struct ProfilePhotoPickerSheet: View {
                     } label: {
                         Label("Take Photo", systemImage: "camera")
                     }
-                }
-
-                Button {
-                    showPhotoLibrary = true
-                } label: {
-                    Label("Choose from Library", systemImage: "photo.on.rectangle")
                 }
 
                 Button(role: .destructive) {
@@ -165,8 +134,11 @@ struct ProfilePhotoPickerSheet: View {
                 }
             }
             .fullScreenCover(isPresented: $showCamera) {
-                ProfilePhotoCapture(
-                    sourceType: .camera,
+                // Android-parity custom camera (mirrored preview,
+                // circular framing guide, no system editor) — replaces
+                // UIImagePickerController, which showed the un-mirrored
+                // frame during cropping and confused the user.
+                ProfilePhotoCameraView(
                     onImageCaptured: { image in
                         onImageSelected(image)
                         dismiss()
@@ -176,20 +148,6 @@ struct ProfilePhotoPickerSheet: View {
                     }
                 )
                 .ignoresSafeArea()
-            }
-            .sheet(isPresented: $showPhotoLibrary) {
-                PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                    Text("Select Photo")
-                }
-                .onChange(of: selectedPhotoItem) { newItem in
-                    Task {
-                        if let data = try? await newItem?.loadTransferable(type: Data.self),
-                           let uiImage = UIImage(data: data) {
-                            onImageSelected(uiImage)
-                            await MainActor.run { dismiss() }
-                        }
-                    }
-                }
             }
         }
         .presentationDetents([.medium])
