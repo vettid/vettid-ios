@@ -147,9 +147,17 @@ actor APIClient {
     // longer serves that route under Architecture v2.0; PIN setup runs
     // over NATS via EnrollmentNatsHandler.submitPIN.
 
-    /// Step 3: Finalize enrollment and receive credential (requires enrollment JWT)
-    func enrollFinalize(request: EnrollFinalizeRequest, authToken: String) async throws -> EnrollFinalizeResponse {
-        return try await post(endpoint: "/vault/enroll/finalize", body: request, authToken: authToken)
+    /// Final step (NATS flow): mark the enrollment session COMPLETED
+    /// server-side. This is the call that creates the VaultInstances
+    /// record, which is what the Account Portal reads to show the vault
+    /// as enrolled. Mirrors Android's `finalizeEnrollmentForProfile`
+    /// (POST /vault/enroll/finalize with the enrollment JWT) that runs
+    /// right after the post-enrollment app.authenticate. iOS was never
+    /// making this call, so the portal stayed empty even though the
+    /// vault was live. Body is empty — the session is resolved from the
+    /// enrollment JWT by the authorizer.
+    func enrollFinalizeForProfile(authToken: String) async throws -> EnrollFinalizeProfileResponse {
+        return try await post(endpoint: "/vault/enroll/finalize", body: EnrollFinalizeRequest(), authToken: authToken)
     }
 
     // MARK: - Authentication (Action-Based)
@@ -982,13 +990,31 @@ struct EnrollFinalizeRequest: Encodable {
     // Empty - session info is passed via JWT
 }
 
-struct EnrollFinalizeResponse: Decodable {
-    let status: String
-    let credentialPackage: CredentialPackage
-    let vaultStatus: String?
+/// Tolerant response for the NATS-flow finalize (`finalizeWithProfile`
+/// on Android). The server returns `registration_profile` and a status.
+/// All fields optional — we only care that the
+/// call succeeds (it's what creates the VaultInstances portal record).
+struct EnrollFinalizeProfileResponse: Decodable {
+    let status: String?
     let message: String?
-    let natsConnection: NatsConnectionInfo?  // NATS credentials from auto-provisioned vault
-    let vaultInstanceId: String?             // EC2 instance ID for the vault
+    let registrationProfile: FinalizeRegistrationProfile?
+
+    enum CodingKeys: String, CodingKey {
+        case status, message
+        case registrationProfile = "registration_profile"
+    }
+}
+
+struct FinalizeRegistrationProfile: Decodable {
+    let firstName: String?
+    let lastName: String?
+    let email: String?
+
+    enum CodingKeys: String, CodingKey {
+        case firstName = "first_name"
+        case lastName = "last_name"
+        case email
+    }
 }
 
 // MARK: - NATS Connection Info (returned from enrollFinalize)

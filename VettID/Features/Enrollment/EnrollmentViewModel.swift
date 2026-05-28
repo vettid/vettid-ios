@@ -60,7 +60,6 @@ final class EnrollmentViewModel: ObservableObject {
     /// (kept around until verify completes) — no extra server round-trip.
     @Published var verifyPassword: String = ""
     /// Notification permission status surfaced on the permissions screen.
-    @Published var notificationPermissionGranted: Bool?
 
     // MARK: - Session Data
 
@@ -715,8 +714,11 @@ final class EnrollmentViewModel: ObservableObject {
     func submitPasswordViaNats() async {
         guard isPasswordValid else { return }
         guard let handler = enrollmentNatsHandler else {
-            // Fall back to API-based password submission
-            await submitPassword()
+            // The NATS handler is established during attestation; if it's
+            // missing the enrollment is in an unrecoverable state. (The
+            // old HTTP set-password fallback was removed — credential
+            // creation is NATS-only now.)
+            handleError(EnrollmentError.invalidState, retryable: false)
             return
         }
 
@@ -805,6 +807,31 @@ final class EnrollmentViewModel: ObservableObject {
             } catch {
                 #if DEBUG
                 print("[Enrollment] Post-enrollment authenticate failed (non-fatal): \(error)")
+                #endif
+            }
+
+            // Step 9.6: HTTP finalize — marks the enrollment session
+            // COMPLETED server-side, which creates the VaultInstances
+            // record the Account Portal reads. This is the call iOS was
+            // missing (confirmed by watching Android's logs: its wizard
+            // runs finalizeEnrollmentForProfile → POST /vault/enroll/finalize
+            // right after app.authenticate, and that's when the portal
+            // flips to enrolled). Best-effort: a 409 just means the
+            // session was already finalized.
+            if let token = enrollmentToken {
+                do {
+                    _ = try await apiClient.enrollFinalizeForProfile(authToken: token)
+                    #if DEBUG
+                    print("[Enrollment] HTTP finalize OK — vault should now show enrolled in the portal")
+                    #endif
+                } catch {
+                    #if DEBUG
+                    print("[Enrollment] HTTP finalize failed (non-fatal): \(error)")
+                    #endif
+                }
+            } else {
+                #if DEBUG
+                print("[Enrollment] WARNING: no enrollmentToken — cannot call HTTP finalize, portal will not update")
                 #endif
             }
 
@@ -1109,151 +1136,9 @@ final class EnrollmentViewModel: ObservableObject {
         state = .settingPassword
     }
 
-    func submitPassword() async {
-        guard isPasswordValid else { return }
-        guard let token = enrollmentToken,
-              let keyId = passwordKeyId,
-              let enclaveKey = enclavePublicKey else {
-            handleError(EnrollmentError.invalidState, retryable: false)
-            return
-        }
-
-        state = .processingPassword
-
-        do {
-            // SECURITY (Area E #50): wrap the @Published String into
-            // a wipeable SecurePassword right at the launch boundary
-            // and immediately clear the ViewModel state. The Argon2id
-            // hash goes through the SecurePassword overload, which
-            // zeros its internal byte copy before returning. Mirrors
-            // Android 95bcabf.
-            let pw = SecurePassword(string: password)
-            password = ""
-            confirmPassword = ""
-            defer { pw.wipe() }
-
-            // Hash password with Argon2id
-            let hashResult = try PasswordHasher.hash(password: pw)
-
-            // Encrypt password hash to enclave public key (verified during attestation)
-            let encryptedPayload = try CryptoManager.encryptPasswordHash(
-                passwordHash: hashResult.hash,
-                utkPublicKeyBase64: enclaveKey.base64EncodedString()
-            )
-
-            // Submit to API (session info is in the JWT)
-            let request = EnrollSetPasswordRequest(
-                encryptedPasswordHash: encryptedPayload.encryptedPasswordHash,
-                keyId: keyId,
-                nonce: encryptedPayload.nonce,
-                ephemeralPublicKey: encryptedPayload.ephemeralPublicKey
-            )
-
-            let response = try await apiClient.enrollSetPassword(request: request, authToken: token)
-
-            #if DEBUG
-            print("[Enrollment] Set password response - status: \(response.status), nextStep: \(response.nextStep ?? "nil")")
-            #endif
-
-            // Accept any successful response (HTTP 200 already verified by APIClient)
-            // Server returns status: "password_set" on success
-            guard response.status.lowercased().contains("password") || response.status.lowercased().contains("success") else {
-                throw EnrollmentError.passwordSetFailed
-            }
-
-            // Proceed to PIN setup (Architecture v2.0 - two-factor model)
-            state = .settingPIN
-
-        } catch {
-            handleError(error, retryable: true)
-        }
-    }
-
-    /// Submit vault PIN for DEK binding (Architecture v2.0 Section 5.7)
-    ///
-    /// The PIN is encrypted to the enclave's attestation-bound public key and sent
-    /// to the supervisor, which uses it for DEK derivation during vault warming.
-    // submitPIN()/finalizeEnrollment() HTTP fallback removed — the
-    // deprecated `enrollSetPIN` Lambda was returning 404 against the
-    // current backend. All enrollment now flows through NATS via
-    // `submitPINViaNats` / EnrollmentNatsHandler.submitPIN, matching
-    // Android.
-
-    private func finalizeEnrollment() async {
-        guard let token = enrollmentToken else {
-            handleError(EnrollmentError.invalidState, retryable: false)
-            return
-        }
-
-        state = .finalizing
-
-        do {
-            // Session info is passed via JWT
-            let request = EnrollFinalizeRequest()
-            let response = try await apiClient.enrollFinalize(request: request, authToken: token)
-
-            guard response.status == "enrolled" else {
-                throw EnrollmentError.finalizationFailed
-            }
-
-            // Store credential
-            try storeCredential(package: response.credentialPackage, vaultStatus: response.vaultStatus ?? "unknown")
-
-            let completedUserGuid = response.credentialPackage.userGuid
-
-            // Set up NATS account for real-time messaging
-            await setupNatsAccount(authToken: token)
-
-            // Clear sensitive data
-            clearSessionData()
-
-            state = .complete(userGuid: completedUserGuid)
-
-        } catch {
-            handleError(error, retryable: true)
-        }
-    }
-
-    /// Set up NATS account after enrollment for real-time vault communication
-    private func setupNatsAccount(authToken: String) async {
-        state = .settingUpNats
-
-        do {
-            // Check if account already exists
-            let status = try await apiClient.getNatsStatus(authToken: authToken)
-
-            if !status.hasAccount {
-                // Create NATS account
-                let accountResponse = try await apiClient.createNatsAccount(authToken: authToken)
-
-                // Store account info
-                let accountInfo = NatsAccountInfo(
-                    ownerSpaceId: accountResponse.ownerSpaceId,
-                    messageSpaceId: accountResponse.messageSpaceId,
-                    status: accountResponse.status,
-                    createdAt: ISO8601DateFormatter().string(from: Date())
-                )
-                try NatsCredentialStore().saveAccountInfo(accountInfo)
-            }
-
-            // Generate initial NATS token for the app
-            let tokenResponse = try await apiClient.generateNatsToken(
-                request: .app(deviceId: getDeviceId()),
-                authToken: authToken
-            )
-
-            // Store credentials for later connection
-            let credentials = NatsCredentials(from: tokenResponse)
-            try NatsCredentialStore().saveCredentials(credentials)
-
-        } catch {
-            // NATS setup failure is not critical - user can set it up later
-            // Log the error but don't fail enrollment
-            #if DEBUG
-            print("[Enrollment] NATS setup failed: \(error.localizedDescription)")
-            #endif
-        }
-    }
+    // Legacy HTTP enrollment path removed (submitPassword / finalizeEnrollment
+    // / setupNatsAccount): credential creation, finalize, and NATS account
+    // setup all run over NATS now via EnrollmentNatsHandler + submitPasswordViaNats.
 
     // MARK: - Identity Confirmation
 
@@ -1372,46 +1257,6 @@ final class EnrollmentViewModel: ObservableObject {
         return clientData.data(using: .utf8) ?? Data()
     }
 
-    private func storeCredential(package: CredentialPackage, vaultStatus: String) throws {
-        let storedKeys = (package.transactionKeys ?? []).map { keyInfo in
-            StoredUTK(
-                keyId: keyInfo.keyId,
-                publicKey: keyInfo.publicKey,
-                algorithm: keyInfo.algorithm,
-                isUsed: false
-            )
-        }
-
-        // Mark password key as used
-        var allKeys = storedKeys
-        if let usedKeyId = passwordKeyId {
-            allKeys = allKeys.map { key in
-                if key.keyId == usedKeyId {
-                    return StoredUTK(keyId: key.keyId, publicKey: key.publicKey, algorithm: key.algorithm, isUsed: true)
-                }
-                return key
-            }
-        }
-
-        let credential = StoredCredential(
-            userGuid: package.userGuid,
-            sealedCredential: package.sealedCredential,
-            enclavePublicKey: package.enclavePublicKey,
-            backupKey: package.backupKey,
-            ledgerAuthToken: StoredLAT(
-                latId: package.ledgerAuthToken.latId ?? package.ledgerAuthToken.token,
-                token: package.ledgerAuthToken.token,
-                version: package.ledgerAuthToken.version
-            ),
-            transactionKeys: allKeys,
-            createdAt: Date(),
-            lastUsedAt: Date(),
-            vaultStatus: "running"  // Enclave is always running
-        )
-
-        try credentialStore.store(credential: credential)
-    }
-
     // MARK: - Verify Credential (Android-parity VERIFY_CREDENTIAL phase)
 
     /// Whether the verify-credential Continue button should enable.
@@ -1459,29 +1304,13 @@ final class EnrollmentViewModel: ObservableObject {
 
     // MARK: - Permissions (Android-parity PERMISSIONS phase)
 
-    /// Request notification permission and advance to completion.
-    /// Mirrors Android `RequestingPermissions` → `Complete`. The
-    /// notification ask is best-effort; user can skip without
-    /// blocking enrollment.
-    func requestNotificationPermissionAndContinue() async {
-        let granted = await requestNotificationPermission()
-        notificationPermissionGranted = granted
+    /// Advance to completion after the permissions screen. The
+    /// individual OS permission prompts (notifications, mic, camera,
+    /// location) are handled inline by `PermissionsPhaseView`; every
+    /// permission is optional, so "Continue" simply finishes — mirrors
+    /// Android `PermissionsComplete` → `Complete`.
+    func completePermissions() {
         finishEnrollment()
-    }
-
-    /// Skip notification permission and advance to completion.
-    func skipPermissions() {
-        finishEnrollment()
-    }
-
-    private func requestNotificationPermission() async -> Bool {
-        await withCheckedContinuation { cont in
-            UNUserNotificationCenter.current().requestAuthorization(
-                options: [.alert, .badge, .sound]
-            ) { granted, _ in
-                cont.resume(returning: granted)
-            }
-        }
     }
 
     private func finishEnrollment() {
@@ -1522,6 +1351,89 @@ final class EnrollmentViewModel: ObservableObject {
     /// Set the member auth token (from Cognito) for authenticated API calls
     func setMemberAuthToken(_ token: String) {
         memberAuthToken = token
+    }
+}
+
+// MARK: - Enrollment Error
+
+/// Relocated here from the deleted legacy `EnrollmentService.swift`.
+/// Used by `EnrollmentViewModel` and `PasswordSetupView`.
+enum EnrollmentError: Error, Equatable, LocalizedError {
+    case attestationNotSupported
+    case attestationFailed
+    case invalidInvitationCode
+    case invitationExpired
+    case passwordSetFailed
+    case pinSetFailed           // PIN setup failed
+    case noTransactionKeys      // No UTKs available for credential creation
+    case finalizationFailed
+    case storageFailed
+    case invalidState
+    case apiError(APIError)
+    case unexpected(Error)
+    // Nitro Enclave attestation errors
+    case missingAttestation
+    case invalidAttestation
+    case missingPCRs
+    case publicKeyMismatch
+
+    static func == (lhs: EnrollmentError, rhs: EnrollmentError) -> Bool {
+        switch (lhs, rhs) {
+        case (.attestationNotSupported, .attestationNotSupported),
+             (.attestationFailed, .attestationFailed),
+             (.invalidInvitationCode, .invalidInvitationCode),
+             (.invitationExpired, .invitationExpired),
+             (.passwordSetFailed, .passwordSetFailed),
+             (.pinSetFailed, .pinSetFailed),
+             (.noTransactionKeys, .noTransactionKeys),
+             (.finalizationFailed, .finalizationFailed),
+             (.storageFailed, .storageFailed),
+             (.invalidState, .invalidState),
+             (.missingAttestation, .missingAttestation),
+             (.invalidAttestation, .invalidAttestation),
+             (.missingPCRs, .missingPCRs),
+             (.publicKeyMismatch, .publicKeyMismatch):
+            return true
+        default:
+            return false
+        }
+    }
+
+    var errorDescription: String? {
+        switch self {
+        case .attestationNotSupported:
+            return "Device attestation is not supported"
+        case .attestationFailed:
+            return "Device attestation failed verification"
+        case .invalidInvitationCode:
+            return "The invitation code is invalid"
+        case .invitationExpired:
+            return "The invitation code has expired"
+        case .passwordSetFailed:
+            return "Failed to set password"
+        case .pinSetFailed:
+            return "Failed to set vault PIN"
+        case .noTransactionKeys:
+            return "No transaction keys available. Please try again."
+        case .finalizationFailed:
+            return "Failed to finalize enrollment"
+        case .storageFailed:
+            return "Failed to store credential"
+        case .invalidState:
+            return "Invalid enrollment state"
+        case .apiError(let error):
+            return error.errorDescription
+        case .unexpected(let error):
+            return "Unexpected error: \(error.localizedDescription)"
+        case .missingAttestation:
+            return "Server did not provide enclave attestation"
+        case .invalidAttestation:
+            return "Invalid enclave attestation document"
+        case .missingPCRs:
+            return "Missing expected PCR values in attestation"
+        case .publicKeyMismatch:
+            return "Enclave public key does not match attestation"
+        }
     }
 }
 

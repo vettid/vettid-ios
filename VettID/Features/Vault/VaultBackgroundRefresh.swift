@@ -430,8 +430,7 @@ extension VaultBackgroundRefresh {
         BackupBackgroundTask.shared.schedule(settings: defaultSettings)
         Self.logger.info("Scheduled automatic backups after enrollment")
 
-        // Note: The Protean Credential is already backed up during enrollment
-        // in EnrollmentService.storeAndBackupProteanCredential()
+        // Note: The Protean Credential is already backed up during enrollment.
         // This just ensures automatic backups are scheduled going forward
     }
 

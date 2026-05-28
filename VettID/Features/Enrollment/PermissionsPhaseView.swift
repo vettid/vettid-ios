@@ -17,6 +17,9 @@ struct PermissionsPhaseView: View {
     @State private var notificationsChecked = false
     @State private var cameraChecked = false
     @State private var microphoneChecked = false
+    @State private var locationChecked = false
+
+    @StateObject private var locationRequester = LocationPermissionRequester()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -29,10 +32,11 @@ struct PermissionsPhaseView: View {
                         .foregroundStyle(Color.accentColor)
 
                     VStack(spacing: 8) {
-                        Text("Permissions")
+                        Text("Make VettID work first time")
                             .font(.title2)
                             .fontWeight(.bold)
-                        Text("VettID works best with these permissions. You can change them later in Settings.")
+                            .multilineTextAlignment(.center)
+                        Text("We'll set up the permissions VettID needs now so calls, messages, and notifications work the moment your enrollment finishes. Each is optional — you can continue without any of them.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
@@ -42,7 +46,7 @@ struct PermissionsPhaseView: View {
                         PermissionCard(
                             icon: "bell.badge",
                             title: "Notifications",
-                            description: "Get alerts for connection requests, messages, and vault activity.",
+                            description: "Incoming calls, messages, connection requests, and security alerts.",
                             isGranted: notificationsGranted,
                             isChecked: notificationsChecked
                         ) {
@@ -50,9 +54,19 @@ struct PermissionsPhaseView: View {
                         }
 
                         PermissionCard(
+                            icon: "mic",
+                            title: "Microphone",
+                            description: "Voice and video calls. Granting now means the first call connects with audio working — without it the OS prompt fires too late to attach your mic.",
+                            isGranted: microphoneGranted,
+                            isChecked: microphoneChecked
+                        ) {
+                            await requestMicrophone()
+                        }
+
+                        PermissionCard(
                             icon: "camera",
                             title: "Camera",
-                            description: "Scan QR codes for connections and credentials.",
+                            description: "Video calls, QR-code scanning to add connections, and your profile photo.",
                             isGranted: cameraGranted,
                             isChecked: cameraChecked
                         ) {
@@ -60,13 +74,13 @@ struct PermissionsPhaseView: View {
                         }
 
                         PermissionCard(
-                            icon: "mic",
-                            title: "Microphone",
-                            description: "Make voice and video calls to your connections.",
-                            isGranted: microphoneGranted,
-                            isChecked: microphoneChecked
+                            icon: "location",
+                            title: "Location",
+                            description: "Optional. Lets you share your location with a connection — only when you turn the toggle on for that connection. Granting here avoids an OS prompt mid-flow.",
+                            isGranted: locationGranted,
+                            isChecked: locationChecked
                         ) {
-                            await requestMicrophone()
+                            await requestLocation()
                         }
                     }
                 }
@@ -126,6 +140,11 @@ struct PermissionsPhaseView: View {
         microphoneChecked = true
     }
 
+    private func requestLocation() async {
+        locationGranted = await locationRequester.request()
+        locationChecked = true
+    }
+
     private func checkExistingPermissions() async {
         // Notifications
         let settings = await UNUserNotificationCenter.current().notificationSettings()
@@ -141,6 +160,45 @@ struct PermissionsPhaseView: View {
         let micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
         microphoneGranted = micStatus == .authorized
         microphoneChecked = micStatus != .notDetermined
+
+        // Location
+        let locStatus = CLLocationManager().authorizationStatus
+        locationGranted = locStatus == .authorizedWhenInUse || locStatus == .authorizedAlways
+        locationChecked = locStatus != .notDetermined
+    }
+}
+
+// MARK: - Location Permission Requester
+
+/// Bridges CLLocationManager's delegate-based authorization callback to
+/// async/await so the Location card can `await` the user's choice.
+/// CoreLocation has no async authorization API like AVCaptureDevice.
+private final class LocationPermissionRequester: NSObject, ObservableObject, CLLocationManagerDelegate {
+    private var manager: CLLocationManager?
+    private var continuation: CheckedContinuation<Bool, Never>?
+
+    func request() async -> Bool {
+        let status = CLLocationManager().authorizationStatus
+        // Already decided — return the current verdict without re-prompting.
+        if status != .notDetermined {
+            return status == .authorizedWhenInUse || status == .authorizedAlways
+        }
+        return await withCheckedContinuation { cont in
+            self.continuation = cont
+            let mgr = CLLocationManager()
+            mgr.delegate = self
+            self.manager = mgr
+            mgr.requestWhenInUseAuthorization()
+        }
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        let status = manager.authorizationStatus
+        // The delegate fires once with .notDetermined right after we set
+        // it — ignore that and wait for the user's actual choice.
+        guard status != .notDetermined else { return }
+        continuation?.resume(returning: status == .authorizedWhenInUse || status == .authorizedAlways)
+        continuation = nil
     }
 }
 

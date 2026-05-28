@@ -561,7 +561,7 @@ struct EnrollmentContainerView: View {
 
                 // ===== Android-parity PERMISSIONS =====
                 case .requestingPermissions:
-                    RequestPermissionsView(viewModel: viewModel)
+                    PermissionsPhaseView(onContinue: { viewModel.completePermissions() })
 
                 case .complete(let userGuid):
                     // Drop the legacy `PostEnrollmentNextStepsView` (the

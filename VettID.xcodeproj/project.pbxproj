@@ -14,7 +14,6 @@
 		00000005 /* SecureKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000005 /* SecureKeyStore.swift */; };
 		00000006 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000006 /* APIClient.swift */; };
 		00000007 /* AttestationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000007 /* AttestationManager.swift */; };
-		00000008 /* EnrollmentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000008 /* EnrollmentService.swift */; };
 		00000009 /* QRScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000009 /* QRScannerView.swift */; };
 		0000000A /* BiometricAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000000A /* BiometricAuthService.swift */; };
 		0000000B /* VaultService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1000000B /* VaultService.swift */; };
@@ -428,7 +427,6 @@
 		10000005 /* SecureKeyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureKeyStore.swift; sourceTree = "<group>"; };
 		10000006 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		10000007 /* AttestationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttestationManager.swift; sourceTree = "<group>"; };
-		10000008 /* EnrollmentService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnrollmentService.swift; sourceTree = "<group>"; };
 		10000009 /* QRScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRScannerView.swift; sourceTree = "<group>"; };
 		1000000A /* BiometricAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiometricAuthService.swift; sourceTree = "<group>"; };
 		1000000B /* VaultService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultService.swift; sourceTree = "<group>"; };
@@ -1110,7 +1108,6 @@
 		4000000C /* Enrollment */ = {
 			isa = PBXGroup;
 			children = (
-				10000008 /* EnrollmentService.swift */,
 				10000009 /* QRScannerView.swift */,
 				10000010 /* EnrollmentViewModel.swift */,
 				10000011 /* PasswordSetupView.swift */,
@@ -2032,7 +2029,6 @@
 				00000005 /* SecureKeyStore.swift in Sources */,
 				00000006 /* APIClient.swift in Sources */,
 				00000007 /* AttestationManager.swift in Sources */,
-				00000008 /* EnrollmentService.swift in Sources */,
 				00000009 /* QRScannerView.swift in Sources */,
 				0000000A /* BiometricAuthService.swift in Sources */,
 				0000000B /* VaultService.swift in Sources */,
