@@ -106,3 +106,73 @@ public enum Capabilities {
         b.raw(member, JsonBuilder.array(names.map { JsonBuilder.quote($0) }))
     }
 }
+
+/// `device_assertion` of `vault.unlock` (§11.4) and the approval of a release update (§11.10.3), in both forms of
+/// VAULT-MESSAGING §11.7:
+///
+/// ```
+/// {"platform": "android", "sig": "<b64 DER ECDSA P-256 signature>", "chain": [...]}   # chain optional (0.27.0, §11.7.1)
+/// {"platform": "ios", "assertion": "<b64 CBOR assertion>"}
+/// ```
+///
+/// Android's `chain` is the certificate chain of the bound device key, leaf first, sent while the vault has not
+/// recorded its signer; it is not part of any signing string, and an approval never has it. The iPhone app builds the
+/// `ios` form: an App Attest assertion whose `clientDataHash` is the challenge (or SHA-256 of the approval string).
+/// Mirrors vettid-android `DeviceAssertion` (which builds the `android` form only).
+public enum DeviceAssertion: Equatable, Sendable {
+    case android(sig: [UInt8], chain: [[UInt8]]?)
+    case ios(assertion: [UInt8])
+
+    public var platform: String {
+        switch self {
+        case .android: DeviceAttest.platformAndroid
+        case .ios: DeviceAttest.platformIOS
+        }
+    }
+
+    /// [chain]: nil for none; otherwise 1–10 DER certificates, leaf first (as ``DeviceAttest/androidChain(_:)``).
+    public static func androidSignature(_ sig: [UInt8], chain: [[UInt8]]? = nil) throws -> DeviceAssertion {
+        guard !sig.isEmpty, sig.count <= DeviceAttest.maxBlob else { throw CryptoError.format("device_assertion sig") }
+        let badItem: ([UInt8]) -> Bool = { $0.isEmpty || $0.count > DeviceAttest.maxBlob }
+        if let chain, chain.isEmpty || chain.count > DeviceAttest.maxChain || chain.contains(where: badItem) {
+            throw CryptoError.format("device_assertion chain")
+        }
+        return .android(sig: sig, chain: chain)
+    }
+
+    /// An App Attest assertion (CBOR), non-empty.
+    public static func iosAssertion(_ assertion: [UInt8]) throws -> DeviceAssertion {
+        guard !assertion.isEmpty, assertion.count <= DeviceAttest.maxBlob else { throw CryptoError.format("device_assertion ios") }
+        return .ios(assertion: assertion)
+    }
+
+    /// The same assertion without its chain (a request that would not fit with it).
+    public func withoutChain() -> DeviceAssertion {
+        if case .android(let sig, _) = self { return .android(sig: sig, chain: nil) }
+        return self
+    }
+
+    public func marshal() -> String {
+        let b = JsonBuilder().string("platform", platform)
+        switch self {
+        case .android(let sig, let chain):
+            b.base64("sig", sig)
+            if let chain { b.raw("chain", JsonBuilder.array(chain.map { JsonBuilder.quote(Base64s.encodeStd($0)) })) }
+        case .ios(let assertion):
+            b.base64("assertion", assertion)
+        }
+        return b.build()
+    }
+
+    public static func parse(_ o: JsonObject) throws -> DeviceAssertion {
+        switch try o.string("platform") {
+        case DeviceAttest.platformAndroid:
+            let chain = o.has("chain") ? try o.array("chain").map { try Base64s.decodeStd(try $0.asString()) } : nil
+            return try androidSignature(try o.base64("sig"), chain: chain)
+        case DeviceAttest.platformIOS:
+            return try iosAssertion(try o.base64("assertion"))
+        default:
+            throw CryptoError.format("device_assertion platform")
+        }
+    }
+}
