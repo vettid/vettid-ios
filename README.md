@@ -4,6 +4,14 @@ Privacy-first digital identity app for iOS.
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
+> **Being rebuilt.** This code is the first implementation of VettID's
+> old architecture (NATS) and does not work with the current vault. The
+> app is being rebuilt for the 2.0 architecture, as the Android app was;
+> the plan is [IOS-PLAN](https://github.com/vettid/vettid.org/blob/master/docs/IOS-PLAN.md)
+> in the vettid.org repository. The old code will move to the branch
+> `legacy/v1` (tag `legacy-v1-final`) in the rebuild's first PR. The
+> sections below describe the old code.
+
 ## Overview
 
 VettID gives you complete control over your digital identity through hardware-secured vaults. Your personal data is encrypted and stored in AWS Nitro Enclaves - even VettID cannot access your information.
