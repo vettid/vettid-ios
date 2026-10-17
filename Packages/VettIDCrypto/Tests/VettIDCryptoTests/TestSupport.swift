@@ -13,8 +13,10 @@ struct VectorDoc {
     func hex(_ k: String) throws -> [UInt8] { try Bytes.unhex(str(k)) }
     func b64(_ k: String) throws -> [UInt8] { try Base64s.decodeStd(str(k)) }
 
-    static func load(_ name: String) throws -> VectorDoc {
-        let url = try #require(Bundle.module.url(forResource: name, withExtension: nil, subdirectory: "vectors"), "missing vector \(name)")
+    static func load(_ name: String, subdirectory: String = "vectors") throws -> VectorDoc {
+        let url = try #require(
+            Bundle.module.url(forResource: name, withExtension: nil, subdirectory: subdirectory), "missing vector \(name)"
+        )
         return VectorDoc(o: try StrictJson.parseObject(Array(try Data(contentsOf: url))))
     }
 }
