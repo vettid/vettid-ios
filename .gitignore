@@ -1,75 +1,28 @@
-# Xcode
+# Build output (xcodebuild -derivedDataPath build/…, the release check)
 build/
 DerivedData/
-*.xcworkspace
-!*.xcworkspace/contents.xcworkspacedata
-*.xcuserdata
+
+# Xcode user state
+xcuserdata/
+*.xcuserstate
 *.xcscmblueprint
-*.xccheckout
 
 # Swift Package Manager
-.swiftpm/
 .build/
-Packages/
-Package.pins
-Package.resolved
+.swiftpm/
 
-# CocoaPods
-Pods/
-Podfile.lock
-*.xcworkspace
+# Signing material is never committed (CLAUDE.md "Secrets")
+*.p12
+*.p8
+*.mobileprovision
+*.provisionprofile
+*.cer
 
-# Carthage
-Carthage/Build/
-Carthage/Checkouts/
-
-# fastlane
-fastlane/report.xml
-fastlane/Preview.html
-fastlane/screenshots/**/*.png
-fastlane/test_output
-
-# Code Injection
-iOSInjectionProject/
+# Local tooling
+.claude/
 
 # OS files
 .DS_Store
 .AppleDouble
 .LSOverride
 ._*
-
-# IDE
-*.swp
-*.swo
-*~
-.idea/
-*.iml
-
-# Secrets - NEVER commit
-*.pem
-*.p12
-*.key
-*.cer
-*.mobileprovision
-# Anchor secrets/ to the repo root so it doesn't accidentally exclude
-# the VettID/Features/Secrets/ source directory on case-insensitive
-# filesystems (default on macOS). Same for the other credential paths.
-/secrets/
-secrets.*
-credentials.*
-.env
-.env.*
-*.xcconfig.local
-# API keys and tokens
-**/GoogleService-Info.plist
-**/google-services.json
-firebase*.json
-
-# Archives
-*.ipa
-*.dSYM.zip
-*.dSYM
-
-# Playgrounds
-timeline.xctimeline
-playground.xcworkspace

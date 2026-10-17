@@ -9,13 +9,11 @@ vault in AWS Nitro Enclaves, the relay, the alternate channel, the
 Protean Credential of VAULT-MESSAGING §3.5), the counterpart of the
 rebuilt Android app (`vettid/vettid-android`, branch `master`).
 
-The code on `master` today is the **first implementation of the old
-architecture** (NATS, "cloud status", the old enrollment and
-credential). It does not work with the current vault. It stays until
-phase I0's first PR (I0.1) tags it `legacy-v1-final`, keeps it on the
-branch `legacy/v1`, and removes it from `master`. Port nothing from it
-except what the plan names, and then rewrite it against the spec with
-its tests.
+The **first implementation of the old architecture** (NATS, "cloud
+status", the old enrollment and credential) is on the branch `legacy/v1`
+(tag `legacy-v1-final`); I0.1 removed it from `master`. It does not work
+with the current vault. Port nothing from it except what the plan names,
+and then rewrite it against the spec with its tests.
 
 ## The plan and the specifications
 
@@ -34,8 +32,7 @@ its tests.
   Android app on `master`. Where it and ANDROID-PLAN differ, follow the
   code and say so in the PR.
 - The phases are tracked as issues in this repository (one per phase).
-- **Start with issue #39**: help the owner create the App IDs under
-  team `3X25CJ86MV`. Then I0 (issue #34).
+- Issue #39 (the App IDs) is done; I0 is issue #34.
 
 ## How to work
 
@@ -57,18 +54,26 @@ its tests.
   # pure Swift packages (no simulator)
   swift test --package-path Packages/VettIDCrypto
 
-  # the app on a simulator
+  # the app and every package's tests on a simulator
   xcodebuild test -project VettID.xcodeproj -scheme VettID \
-    -destination 'platform=iOS Simulator,name=iPhone 16' \
+    -destination "$(scripts/simulator-destination.sh)" \
     -parallel-testing-worker-count 2
+
+  # Release and Staging archives checked for TEST, dev-stack and
+  # other-environment strings
+  scripts/release-check.sh --self-test
+
+  swiftlint lint --strict
 
   # on the connected iPhone (device id from `xcrun devicectl list devices`)
   xcodebuild test -project VettID.xcodeproj -scheme VettID -configuration Debug \
     -destination 'platform=iOS,id=<device id>' -allowProvisioningUpdates
   ```
 
-  (The packages and configurations are set up by I0.1, IOS-PLAN §5;
-  until then the old project's `VettID` scheme is the only one.)
+- **The Xcode project is generated** from `project.yml` with XcodeGen.
+  Add files, packages and settings there, run `xcodegen generate`, and
+  commit both; never edit `VettID.xcodeproj` by hand. CI fails when they
+  differ.
 - **Spec questions go to the owner**: open an issue in
   `vettid/vettid.org` titled `IOS-PLAN: …`, or comment on the relevant
   vettid.org PR. Never edit a specification. Where a spec is silent,

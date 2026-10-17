@@ -1,0 +1,10 @@
+// Debug configuration: VettID Dev (IOS-PLAN §5 "Build configurations").
+#include "Base.xcconfig"
+
+VETTID_APP_BUNDLE_ID = com.vettid.app.dev
+VETTID_DISPLAY_NAME = VettID Dev
+VETTID_ENVIRONMENT = debug
+VETTID_ACCOUNT_HOST = account.staging.vettid.org
+
+// Staging for now; the choice between staging and the dev stack at launch
+// comes with the transport (I1).

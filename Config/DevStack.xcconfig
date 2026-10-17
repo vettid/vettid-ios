@@ -1,0 +1,11 @@
+// DevStack configuration: VettID Dev Stack (IOS-PLAN §5 "Build configurations").
+#include "Base.xcconfig"
+
+VETTID_APP_BUNDLE_ID = com.vettid.app.devstack
+VETTID_DISPLAY_NAME = VettID Dev Stack
+VETTID_ENVIRONMENT = devstack
+VETTID_ACCOUNT_HOST = 127.0.0.1:18081
+
+// DEVELOPMENT ONLY: the local dev stack's member API (vettid-vault
+// cmd/devstack). The release check refuses this address in Release and
+// Staging builds.

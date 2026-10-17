@@ -1,92 +1,82 @@
 # VettID iOS
 
-Privacy-first digital identity app for iOS.
+The VettID iPhone app.
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
-> **Being rebuilt.** This code is the first implementation of VettID's
-> old architecture (NATS) and does not work with the current vault. The
-> app is being rebuilt for the 2.0 architecture, as the Android app was;
-> the plan is [IOS-PLAN](https://github.com/vettid/vettid.org/blob/master/docs/IOS-PLAN.md)
-> in the vettid.org repository. The old code will move to the branch
-> `legacy/v1` (tag `legacy-v1-final`) in the rebuild's first PR. The
-> sections below describe the old code.
-
-## Overview
-
-VettID gives you complete control over your digital identity through hardware-secured vaults. Your personal data is encrypted and stored in AWS Nitro Enclaves - even VettID cannot access your information.
-
-## Features
-
-- **Secure Enrollment** - QR code-based credential setup
-- **Hardware Security** - Keys stored in iOS Secure Enclave
-- **Biometric Auth** - Face ID and Touch ID
-- **E2E Encryption** - X25519 + XChaCha20-Poly1305
-- **Vault Communication** - Real-time NATS messaging
-- **PCR Attestation** - Verify enclave integrity via App Attest
+> **Being rebuilt.** The app is being rebuilt for VettID's 2.0
+> architecture, as the Android app ([vettid-android](https://github.com/vettid/vettid-android))
+> was. The plan is [IOS-PLAN](https://github.com/vettid/vettid.org/blob/master/docs/IOS-PLAN.md)
+> in the vettid.org repository; the phases are tracked as issues here.
+> The first implementation (the old NATS architecture) is kept on the
+> branch `legacy/v1`, tag `legacy-v1-final`.
 
 ## Requirements
 
-- iOS 16.0+
-- Xcode 15.0+
-- Swift 5.9+
+- Xcode 26 or later (developed with Xcode 27.0; CI uses the default Xcode
+  of GitHub's `macos-26` runner)
+- iOS 17 or later
+- [XcodeGen](https://github.com/yonaskolb/XcodeGen) 2.46.0, SwiftLint
+  0.65.1 and gitleaks 8.30.1 (`brew install xcodegen swiftlint gitleaks`)
 
-## Project Structure
+## Layout
 
 ```
-VettID/
-├── Core/
-│   ├── Crypto/              # X25519, Ed25519, encryption
-│   ├── Storage/             # Keychain, secure storage
-│   ├── Networking/          # API client
-│   ├── NATS/                # NATS messaging client
-│   └── Attestation/         # App Attest integration
-├── Features/
-│   ├── Enrollment/          # QR scanning, credential setup
-│   ├── Authentication/      # Login, biometrics
-│   ├── Vault/               # Vault status, commands
-│   ├── Transfer/            # Credential transfer
-│   └── Settings/            # User preferences
-└── Resources/
-    └── Assets.xcassets
+App/                    the app target (SwiftUI)
+AppTests/               the app's unit tests
+Config/                 one xcconfig per build configuration; Signing.xcconfig
+Packages/               one local Swift package per Android core module
+  VettIDCrypto          pure: swift test on macOS
+  VettIDAttestation     pure
+  VettIDRelay           pure
+  VettIDAltChan         pure
+  VettIDVault           pure
+  VettIDKeys            iOS only
+  VettIDData            iOS only
+  VettIDMedia           iOS only
+  VettIDNotify          iOS only
+  VettIDUI              iOS only
+  VettIDTesting         TEST ONLY: test targets, never the app
+scripts/                release check, simulator selection
+project.yml             XcodeGen spec of VettID.xcodeproj
 ```
 
-## Build
+`VettID.xcodeproj` is generated from `project.yml`. After changing
+`project.yml`, run `xcodegen generate` and commit both; CI fails if they
+differ.
 
-1. Clone the repository
-2. Open `VettID.xcodeproj` in Xcode
-3. Configure signing & capabilities
-4. Build and run
+## Build configurations
+
+| Configuration | Bundle id | Name | Talks to |
+|---|---|---|---|
+| Release | `com.vettid.app` | VettID | production |
+| Staging | `com.vettid.app.staging` | VettID Staging | staging |
+| Debug | `com.vettid.app.dev` | VettID Dev | staging (the dev stack, chosen at launch, from I1) |
+| DevStack | `com.vettid.app.devstack` | VettID Dev Stack | the local dev stack |
+
+All four install side by side.
+
+## Build and test
 
 ```bash
-# Command line build
-xcodebuild -scheme VettID -configuration Debug build
+# pure packages (no simulator)
+swift test --package-path Packages/VettIDCrypto
 
-# Run tests
-xcodebuild -scheme VettID test
+# the app and every package's tests on a simulator
+xcodebuild test -project VettID.xcodeproj -scheme VettID \
+  -destination "$(scripts/simulator-destination.sh)" \
+  -parallel-testing-worker-count 2
+
+# Release and Staging archives (unsigned) checked for TEST, dev-stack and
+# other-environment strings; --self-test also proves the check fails
+scripts/release-check.sh --self-test
+
+swiftlint lint --strict
 ```
 
-## Security
-
-- All cryptographic keys stored in iOS Secure Enclave where available
-- Keychain storage with `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`
-- App Attest for device integrity verification
-- No sensitive data in UserDefaults or plain files
-
-## Related Repositories
-
-- [vettid-dev](https://github.com/vettid/vettid-dev) - Backend infrastructure
-- [vettid-android](https://github.com/vettid/vettid-android) - Android app
-- [vettid-desktop](https://github.com/vettid/vettid-desktop) - Desktop app (Tauri/Rust/Svelte)
-- [vettid-agent](https://github.com/vettid/vettid-agent) - Agent connector (Go sidecar)
-- [vettid-service-vault](https://github.com/vettid/vettid-service-vault) - Service integration layer
-- [vettid.org](https://github.com/vettid/vettid.org) - Website
+Signing is automatic in Xcode; the team is set in
+`Config/Signing.xcconfig` and nowhere else.
 
 ## License
 
-AGPL-3.0-or-later - See [LICENSE](LICENSE) for details.
-
-## Links
-
-- Website: [vettid.org](https://vettid.org)
-- Documentation: [docs.vettid.dev](https://docs.vettid.dev)
+AGPL-3.0-or-later. See [LICENSE](LICENSE).

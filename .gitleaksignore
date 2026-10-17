@@ -1,0 +1,28 @@
+# Findings in the v1 app history (legacy-v1-final and earlier), all in files removed by the
+# rewrite. Reviewed 2026-10-17: public key ids, Swift type annotations, base64 test fixtures,
+# and examples in a design document. New findings are not covered by this list.
+3559c715b9a7f5a9d4dcf8b0920d4f84e0622c0c:docs/protean_credential_system_design.md:generic-api-key:2068
+3559c715b9a7f5a9d4dcf8b0920d4f84e0622c0c:docs/protean_credential_system_design.md:generic-api-key:2072
+3559c715b9a7f5a9d4dcf8b0920d4f84e0622c0c:docs/protean_credential_system_design.md:generic-api-key:3373
+3559c715b9a7f5a9d4dcf8b0920d4f84e0622c0c:docs/protean_credential_system_design.md:generic-api-key:3406
+3559c715b9a7f5a9d4dcf8b0920d4f84e0622c0c:docs/protean_credential_system_design.md:generic-api-key:3445
+3559c715b9a7f5a9d4dcf8b0920d4f84e0622c0c:docs/protean_credential_system_design.md:generic-api-key:3536
+4903147e6e77b2848cd5d6b05d47e2f4599c0af5:VettID/Core/Attestation/PCRManifestManager.swift:generic-api-key:108
+691b8f1620acb938efd2030fce15074dce779a8d:VettID/Features/Enrollment/EnrollmentService.swift:generic-api-key:162
+691b8f1620acb938efd2030fce15074dce779a8d:VettID/Features/Enrollment/EnrollmentService.swift:generic-api-key:164
+6c17bda92d1b4ccaf32d803098a19f8710248cc8:VettIDTests/NatsCredentialsTests.swift:generic-api-key:164
+6c17bda92d1b4ccaf32d803098a19f8710248cc8:VettIDTests/NatsCredentialsTests.swift:generic-api-key:165
+74ef3ad1f608a3a51b4322bc5d0124538d042ce6:VettID/Core/NATS/SessionKeyManager.swift:generic-api-key:304
+a85d3c36b276d7a255635758539f1b3430d516c3:VettIDTests/EnrollmentViewModelTests.swift:generic-api-key:53
+aa8ad6ebb7f8aeae0626ec6367ad03576a173f1c:VettID/Core/Attestation/ExpectedPCRStore.swift:generic-api-key:283
+c1091d84b07e5cfb93a20f0e2b79bf839ba56788:VettIDTests/CredentialStoreTests.swift:generic-api-key:29
+da00209be8c81fbac15bb94207ab548607ded9da:VettIDTests/CredentialStoreTests.swift:generic-api-key:245
+da00209be8c81fbac15bb94207ab548607ded9da:VettIDTests/CredentialStoreTests.swift:generic-api-key:247
+da00209be8c81fbac15bb94207ab548607ded9da:VettIDTests/CredentialStoreTests.swift:generic-api-key:25
+da00209be8c81fbac15bb94207ab548607ded9da:VettIDTests/CredentialStoreTests.swift:generic-api-key:259
+da00209be8c81fbac15bb94207ab548607ded9da:VettIDTests/CredentialStoreTests.swift:generic-api-key:261
+da00209be8c81fbac15bb94207ab548607ded9da:VettIDTests/CredentialStoreTests.swift:generic-api-key:27
+da00209be8c81fbac15bb94207ab548607ded9da:VettIDTests/CredentialStoreTests.swift:generic-api-key:84
+da00209be8c81fbac15bb94207ab548607ded9da:VettIDTests/CredentialStoreTests.swift:generic-api-key:86
+da00209be8c81fbac15bb94207ab548607ded9da:VettIDTests/CredentialStoreTests.swift:generic-api-key:97
+da00209be8c81fbac15bb94207ab548607ded9da:VettIDTests/CredentialStoreTests.swift:generic-api-key:99

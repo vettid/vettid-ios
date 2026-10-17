@@ -1,0 +1,84 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios:
+    # Lint, the pure packages' tests on macOS, the app and package tests on a
+    # simulator, and the release check. Touches no signing material: the
+    # Release and Staging archives are built unsigned.
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: toolchain
+        run: xcodebuild -version && swift --version
+      - name: install SwiftLint 0.65.1 and XcodeGen 2.46.0 (checksum-verified)
+        run: |
+          mkdir -p "$RUNNER_TEMP/tools" && cd "$RUNNER_TEMP/tools"
+          curl -sSLo swiftlint.zip https://github.com/realm/SwiftLint/releases/download/0.65.1/portable_swiftlint.zip
+          curl -sSLo xcodegen.zip https://github.com/yonaskolb/XcodeGen/releases/download/2.46.0/xcodegen.zip
+          shasum -a 256 -c - <<'EOF'
+          c1e429b0599cf1b516f369a2d9ec04eaf0e436f3c12b637df8851fa52ff694d0  swiftlint.zip
+          4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806  xcodegen.zip
+          EOF
+          unzip -q swiftlint.zip -d swiftlint && unzip -q xcodegen.zip
+          echo "$RUNNER_TEMP/tools/swiftlint" >> "$GITHUB_PATH"
+          echo "$RUNNER_TEMP/tools/xcodegen/bin" >> "$GITHUB_PATH"
+      - name: the Xcode project matches project.yml
+        run: |
+          xcodegen generate --quiet
+          git diff --exit-code -- VettID.xcodeproj App/Info.plist
+      - name: SwiftLint
+        run: swiftlint lint --strict
+      - name: pure packages (swift test on macOS)
+        run: |
+          for p in VettIDCrypto VettIDAttestation VettIDRelay VettIDAltChan VettIDVault VettIDTesting; do
+            echo "::group::$p"
+            swift test --package-path "Packages/$p"
+            echo "::endgroup::"
+          done
+      - name: app and package tests (simulator)
+        run: |
+          xcodebuild test -project VettID.xcodeproj -scheme VettID \
+            -destination "$(scripts/simulator-destination.sh)" \
+            -parallel-testing-worker-count 2 \
+            -derivedDataPath build/DerivedData \
+            -resultBundlePath build/VettID.xcresult
+      - name: release check (Release and Staging carry no TEST, dev-stack or other-environment strings)
+        run: scripts/release-check.sh --self-test
+      - name: results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: results
+          path: build/VettID.xcresult
+          if-no-files-found: ignore
+          retention-days: 14
+
+  gitleaks:
+    # Pinned binary over the FULL history (the gitleaks-action fails on a
+    # branch's first push, where there is no "before" commit). Reviewed findings
+    # in the v1 history are listed in .gitleaksignore.
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: install gitleaks v8.30.1 (checksum-verified)
+        run: |
+          curl -sSLo gl.tgz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gl.tgz" | sha256sum -c -
+          tar -xzf gl.tgz gitleaks
+      - name: scan full history
+        run: ./gitleaks git --redact --verbose .
