@@ -19,10 +19,7 @@ its tests.
 
 ## The plan and the specifications
 
-- **The plan: `docs/IOS-PLAN.md` in `vettid/vettid.org`.** Until
-  vettid.org #316 merges, read it on its branch:
-  <https://github.com/vettid/vettid.org/blob/spec/ios-plan/docs/IOS-PLAN.md>;
-  afterwards on `master`:
+- **The plan: `docs/IOS-PLAN.md` in `vettid/vettid.org`**, on `master`:
   <https://github.com/vettid/vettid.org/blob/master/docs/IOS-PLAN.md>.
   It gives the decisions (§2), the package layout and the Android files
   to mirror (§5), the iOS-specific rules (§6), the test vectors (§7),
@@ -37,6 +34,8 @@ its tests.
   Android app on `master`. Where it and ANDROID-PLAN differ, follow the
   code and say so in the PR.
 - The phases are tracked as issues in this repository (one per phase).
+- **Start with issue #39**: help the owner create the App IDs under
+  team `3X25CJ86MV`. Then I0 (issue #34).
 
 ## How to work
 
@@ -100,7 +99,7 @@ Commits, PR texts, issues and code comments are public:
   objects. Never create, read or ask for signing material: Xcode on the
   Mac is signed in to the owner's account and signs automatically.
 - The Apple team ID appears **only** in `Config/Signing.xcconfig`
-  (`DEVELOPMENT_TEAM = TEAMID_TBD` until the owner gives it), never in
+  (`DEVELOPMENT_TEAM = 3X25CJ86MV`, the owner's team, IOS-PLAN ID3), never in
   code, tests or other configuration.
 
 ## Security rules that apply from the first line
