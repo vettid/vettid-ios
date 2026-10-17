@@ -22,8 +22,9 @@ The VettID iPhone app.
 ## Layout
 
 ```
-App/                    the app target (SwiftUI)
+App/                    the app target (SwiftUI); App/Debug: the debug catalog and gallery
 AppTests/               the app's unit tests
+AppUITests/             screenshots of the component gallery (VettIDScreenshots scheme)
 Config/                 one xcconfig per build configuration; Signing.xcconfig
 Packages/               one local Swift package per Android core module
   VettIDCrypto          pure: swift test on macOS
@@ -76,6 +77,25 @@ swiftlint lint --strict
 
 Signing is automatic in Xcode; the team is set in
 `Config/Signing.xcconfig` and nowhere else.
+
+## Debug catalog and component gallery
+
+Debug and DevStack builds have a **Screen catalog** button on the root screen,
+leading to the **Component gallery**: every `VettIDUI` component with sample
+data, in the chosen theme (the counterpart of the Android debug gallery). Open
+it directly at launch with `-vettid.start gallery`, and force a theme with
+`-vettid.theme dark` or `-vettid.theme light`. None of it is compiled into
+Staging or Release builds, and the release check refuses its strings.
+
+The `VettIDScreenshots` scheme (not run by CI) scrolls through the gallery and
+keeps screenshots in the result bundle, in the dark and light themes and at the
+largest accessibility text size:
+
+```bash
+xcodebuild test -project VettID.xcodeproj -scheme VettIDScreenshots \
+  -destination "$(scripts/simulator-destination.sh)" -resultBundlePath build/screens.xcresult
+xcrun xcresulttool export attachments --path build/screens.xcresult --output-path build/screens
+```
 
 ## License
 

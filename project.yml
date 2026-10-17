@@ -94,6 +94,18 @@ targets:
       - target: VettID
       - package: VettIDTesting
 
+  # Screenshots of the debug gallery for review (VettIDScreenshots scheme; not run by CI).
+  VettIDAppUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [AppUITests]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(VETTID_APP_BUNDLE_ID).uitests
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: VettID
+
 schemes:
   VettID:
     build:
@@ -123,3 +135,13 @@ schemes:
       config: Debug
     archive:
       config: Release
+
+  VettIDScreenshots:
+    build:
+      targets:
+        VettID: all
+        VettIDAppUITests: [test]
+    test:
+      config: Debug
+      targets:
+        - VettIDAppUITests

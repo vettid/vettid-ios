@@ -24,7 +24,7 @@ SELF_TEST=0
 
 # Strings no Release or Staging app may contain.
 TEST_MARKERS=("VettIDTesting" "TESTTEAM00")
-DEV_ONLY=("127.0.0.1" "relay.vettid.test" "Component gallery" "Screen catalog")
+DEV_ONLY=("127.0.0.1" "relay.vettid.test" "vettid.start" "vettid.theme" "Component gallery" "Screen catalog")
 
 PRODUCTION_HOSTS=("account.vettid.org")
 STAGING_HOSTS=("staging.vettid.org")
