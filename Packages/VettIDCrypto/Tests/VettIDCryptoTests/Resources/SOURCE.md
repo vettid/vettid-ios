@@ -13,6 +13,9 @@ stop-and-report item, never a skip.
 - `hpke.json`, `envelope_sealed.json`, `envelope_session.json`: copied 2026-10-17 from the same commit, for I0.4;
   last commit touching them df79ca9fbc4b5cb8f3d08c17285c819e71b5fc07. Byte for byte the files vettid-android
   checks (its `SOURCE.md` lists the same hashes).
+- `handshake.json` (last commit touching it 19c03153e2ecda009f449cb26d13929f34085783) and `invite.json`
+  (df79ca9fbc4b5cb8f3d08c17285c819e71b5fc07): copied 2026-10-17 from the same commit, for I0.5; the same hashes as
+  vettid-android's.
 - Each later PR adds the files it checks.
 
 To refresh: copy the files again from a newer vettid-vault commit, update the commits
@@ -23,6 +26,8 @@ above and the hashes below, and run `swift test --package-path Packages/VettIDCr
 ```
 3ab4f20eebb3ec621e97d3b03705c8b3851312e99e227d423e8f0e6066887360  envelope_sealed.json
 8cbf6324c294e6c99011bd3bd5f875fcd329cbe7be1e354b7be06f3c03044827  envelope_session.json
+9b69503b507fd117ab3d6a66368cb60bb24e09286867921a6f473fb476fb0577  handshake.json
 08fa20d793577a27196f37e9fe5f5222bbcd90e5adabc015679be3d98b47b226  hpke.json
+6d7be9ba65f8426070ee54f0ea6ed84fed1e49c54eb31e09a1e177d3d5286d2f  invite.json
 568c65595189051a6297653511acb27c88fed17257b985af070342d5bfc1660e  keys.json
 ```
