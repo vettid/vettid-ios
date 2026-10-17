@@ -7,8 +7,16 @@ let package = Package(
     products: [
         .library(name: "VettIDAttestation", targets: ["VettIDAttestation"]),
     ],
+    dependencies: [
+        .package(path: "../VettIDCrypto"),
+    ],
     targets: [
-        .target(name: "VettIDAttestation"),
-        .testTarget(name: "VettIDAttestationTests", dependencies: ["VettIDAttestation"]),
+        .target(name: "VettIDAttestation", dependencies: ["VettIDCrypto"]),
+        .testTarget(
+            name: "VettIDAttestationTests",
+            dependencies: ["VettIDAttestation", "VettIDCrypto"],
+            exclude: ["Resources/SOURCE.md"],
+            resources: [.copy("Resources/nitro"), .copy("Resources/manifest"), .copy("Resources/vectors")]
+        ),
     ]
 )
