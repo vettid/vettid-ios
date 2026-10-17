@@ -20,6 +20,11 @@ stop-and-report item, never a skip.
   3/3", vettid-vault #101): copied 2026-10-17 from the same commit, for I0.6. Newer than vettid-android's copies,
   which predate that commit: the unlock vector now carries release R's `unlock_secret` (the request body and the
   signing string's last line), and `release.json`'s `unlock_with_update` changed the same way.
+- `unlock.json` and `recovery.json` from `testdata/vectors/`, and `verdicts.json` from `testdata/passwords/` (last
+  commit touching them 3c260362ced30aaf0d061cf686708bf59ed47f37): copied 2026-10-17 from commit
+  7f2c5b7bd8c6c04b6f46df610a6aa1f4d29104fe, for I0.7; the files above are unchanged at that commit. The iPhone's
+  unlock secret (VAULT-MESSAGING 0.35.0 §11.14.1 "On an iPhone") has no vector file yet: `ReleaseRTests.swift`
+  checks the values §16 states for it.
 - Each later PR adds the files it checks.
 
 To refresh: copy the files again from a newer vettid-vault commit, update the commits
@@ -35,5 +40,8 @@ above and the hashes below, and run `swift test --package-path Packages/VettIDCr
 08fa20d793577a27196f37e9fe5f5222bbcd90e5adabc015679be3d98b47b226  hpke.json
 6d7be9ba65f8426070ee54f0ea6ed84fed1e49c54eb31e09a1e177d3d5286d2f  invite.json
 568c65595189051a6297653511acb27c88fed17257b985af070342d5bfc1660e  keys.json
+157f89fb392ffb74f5cc76671f19b011cf8edd048faecc2ebf3a3d4b948d5eb4  recovery.json
 8944c466cd00ce5d606f310e954b8d13fdd4d65d598062b3ecc05de6d310ad6f  release.json
+0073c578252ba87960b74f6a1825b6dbb06f8762c77b7f8003d380b48c373905  unlock.json
+09540a0c78b03fb03cfdee762066a9f1171419d2958798b5b4cf054f7dda66a5  verdicts.json
 ```

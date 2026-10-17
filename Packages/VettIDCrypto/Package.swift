@@ -22,7 +22,9 @@ let package = Package(
         ),
         .target(
             name: "VettIDCrypto",
-            dependencies: ["CMLKEM", .product(name: "Clibsodium", package: "swift-sodium")]
+            dependencies: ["CMLKEM", .product(name: "Clibsodium", package: "swift-sodium")],
+            // The password estimator's word lists, from vettid-vault vms/recovery (Resources/passwords/SOURCE.md).
+            resources: [.copy("Resources/passwords")]
         ),
         .testTarget(
             name: "VettIDCryptoTests",

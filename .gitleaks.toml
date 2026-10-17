@@ -4,7 +4,8 @@
 # vettid-android allowlist too (their .gitleaks.toml): HPKE intermediate values derived from the public all-0x05 key
 # seed and all-0x07 encapsulation randomness (hpke.json shared_secret_hex, key_hex, exporter_secret_hex), and the
 # PUBLIC keys (SPKI) of the release-update test keys (release.json) and of the test app key (appkey.json), which the
-# generic rule mistakes for keys. They live in Packages/VettIDCrypto/Tests/VettIDCryptoTests/Resources/vectors (copied
+# generic rule mistakes for keys; release R's derived values from the fixed test inputs (unlock.json unlock keys and
+# secret checks, recovery.json's browser public key and secrets hash) and the example passwords of verdicts.json. They live in Packages/VettIDCrypto/Tests/VettIDCryptoTests/Resources/vectors (copied
 # from vettid-vault, IOS-PLAN §7) and in the tests. Reviewed findings in the v1 history are in .gitleaksignore.
 [extend]
 useDefault = true
@@ -19,4 +20,12 @@ regexes = [
   '''MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERi26GuT8GpaLTazyDN1tvh''',
   '''MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE1lqTl3yqPRsIGFL/V6eeRl8W''',
   '''MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEZpI3VGYrivhlu/KoncHtr3sZZHVE''',
+  '''042464a2f8813e007299b9c0beef9c8d6d8d17470b32bba0329c145f0cfc60b683f831a3''',
+  '''f01975109b4575d994ade44aeae5d667eb56f14b610d1004694a707e9702e624''',
+  '''89f9fa1389f2e7ecfd0521ab27b39207d867a8acd3f99cd23ba19b3c357ccfde''',
+  '''dd657b8c27f970d60c271e531e9477aeef25da911a5e5041be3fc7b886044802''',
+  '''c12589e53da8326b90b0e362e09f83d1ec315e22936c6069decaa686d7a01ef3''',
+  '''6286862e0e08397dc6b79b2b39f3e37ea03fd8a21ca6c1d09bf33fe9d89e5452''',
+  '''QWERTY123456''',
+  '''violet-Kestrel-91-moss''',
 ]
