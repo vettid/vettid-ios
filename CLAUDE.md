@@ -1,85 +1,115 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code in this repository.
 
-## Project Overview
+## What this is
 
-VettID iOS application - Swift/iOS project implementing the Protean Credential System for secure vault enrollment, credential management, and vault communication.
+The VettID iPhone app, **being rebuilt for the 2.0 architecture** (the
+vault in AWS Nitro Enclaves, the relay, the alternate channel, the
+Protean Credential of VAULT-MESSAGING §3.5), the counterpart of the
+rebuilt Android app (`vettid/vettid-android`, branch `master`).
 
-## Build Commands
+The code on `master` today is the **first implementation of the old
+architecture** (NATS, "cloud status", the old enrollment and
+credential). It does not work with the current vault. It stays until
+phase I0's first PR (I0.1) tags it `legacy-v1-final`, keeps it on the
+branch `legacy/v1`, and removes it from `master`. Port nothing from it
+except what the plan names, and then rewrite it against the spec with
+its tests.
 
-```bash
-# Build the project
-xcodebuild -scheme VettID -configuration Debug -destination 'platform=iOS Simulator,name=iPhone 17' build
+## The plan and the specifications
 
-# Run tests (after adding test target in Xcode)
-xcodebuild -scheme VettID -configuration Debug -destination 'platform=iOS Simulator,name=iPhone 17' test
+- **The plan: `docs/IOS-PLAN.md` in `vettid/vettid.org`.** Until
+  vettid.org #316 merges, read it on its branch:
+  <https://github.com/vettid/vettid.org/blob/spec/ios-plan/docs/IOS-PLAN.md>;
+  afterwards on `master`:
+  <https://github.com/vettid/vettid.org/blob/master/docs/IOS-PLAN.md>.
+  It gives the decisions (§2), the package layout and the Android files
+  to mirror (§5), the iOS-specific rules (§6), the test vectors (§7),
+  the phases and their PRs with acceptance tests (§8), what blocks what,
+  and getting started on the Mac (§12).
+- The app's contract with the vault: `docs/VAULT-MESSAGING.md` in
+  vettid.org. Also `ANDROID-PLAN.md` (screens, texts, behaviour),
+  `RELAY-PROTOCOL.md`, `MEMBER-API.md`, `ENROLLMENT-CODES.md`,
+  `VAULT-LOCK.md`, `VAULT-ITEMS.md`, `RELEASE-UPDATES.md`,
+  `PUSH-GATEWAY.md` §11.2.
+- The reference implementation for every screen, text and state is the
+  Android app on `master`. Where it and ANDROID-PLAN differ, follow the
+  code and say so in the PR.
+- The phases are tracked as issues in this repository (one per phase).
 
-# Run a single test
-xcodebuild -scheme VettID -only-testing:VettIDTests/TestClassName/testMethodName test
-```
+## How to work
 
-## Architecture
+- **Small PRs**, one per row of IOS-PLAN §8 (I0.1, I0.2, …), titled with
+  the phase (`I1.4: Secure Enclave keys and App Attest`). Each PR has
+  its tests and they pass locally before it is pushed. Never merge: the
+  owner merges.
+- Only this repository is written to. Clone `vettid-android`,
+  `vettid-vault` and `vettid.org` to read.
+- **Test vectors**: the crypto code must reproduce vettid-vault's
+  `testdata/vectors/` (and the other files of IOS-PLAN §7) byte for
+  byte. Copy them with a `SOURCE.md` naming the source commit and each
+  file's `sha256sum`. A vector that fails is a stop-and-report item;
+  never edit a vector or skip its test.
+- **Builds and tests** (one `xcodebuild` at a time, test parallelism
+  capped):
 
-### Core Components
+  ```bash
+  # pure Swift packages (no simulator)
+  swift test --package-path Packages/VettIDCrypto
 
-- **Core/Crypto/**
-  - `CryptoManager.swift` - X25519 key exchange, Ed25519 signing, ChaCha20-Poly1305 encryption
-  - `PasswordHasher.swift` - Argon2id password hashing (via libsodium) with PBKDF2 fallback
+  # the app on a simulator
+  xcodebuild test -project VettID.xcodeproj -scheme VettID \
+    -destination 'platform=iOS Simulator,name=iPhone 16' \
+    -parallel-testing-worker-count 2
 
-- **Core/Storage/**
-  - `SecureKeyStore.swift` - Keychain integration with biometric protection
-  - `CredentialStore.swift` - Credential lifecycle management (LAT, UTK)
+  # on the connected iPhone (device id from `xcrun devicectl list devices`)
+  xcodebuild test -project VettID.xcodeproj -scheme VettID -configuration Debug \
+    -destination 'platform=iOS,id=<device id>' -allowProvisioningUpdates
+  ```
 
-- **Core/Networking/**
-  - `APIClient.swift` - HTTP client for Ledger Service API
+  (The packages and configurations are set up by I0.1, IOS-PLAN §5;
+  until then the old project's `VettID` scheme is the only one.)
+- **Spec questions go to the owner**: open an issue in
+  `vettid/vettid.org` titled `IOS-PLAN: …`, or comment on the relevant
+  vettid.org PR. Never edit a specification. Where a spec is silent,
+  choose, mark it "(chosen; not in the spec)" in the PR, and ask.
 
-- **Core/Attestation/**
-  - `AttestationManager.swift` - App Attest for device verification
+## Public text
 
-- **Features/**
-  - `EnrollmentService.swift` - 3-step enrollment flow
-  - `AuthenticationService.swift` - Action-based authentication with LAT verification
-  - `VaultService.swift` - Vault lifecycle management
+Commits, PR texts, issues and code comments are public:
 
-### Security Features
+- never mention reviews, finding ids, private files, local paths outside
+  this repository, or device serials;
+- cite specifications by document and section (`VAULT-MESSAGING
+  §11.7`).
 
-- X25519 ECDH key exchange for forward secrecy
-- ChaCha20-Poly1305 authenticated encryption
-- Ed25519 digital signatures
-- Argon2id password hashing (memory-hard, GPU-resistant)
-- Keychain storage with biometric access control
-- App Attest device attestation
-- LAT mutual authentication (anti-phishing)
-- One-time Transaction Keys (UTK)
+## Commit and PR conventions
 
-## Adding swift-sodium for Production
+- Every commit message ends with the `Co-Authored-By:` line for the
+  model and the `Claude-Session:` line with the session link, exactly as
+  the harness provides them.
+- Every PR body ends with the "🤖 Generated with [Claude Code]" line and
+  the session link.
+- No other attribution.
 
-For production, add swift-sodium package for real Argon2id:
+## Secrets and the team ID
 
-1. Open project in Xcode
-2. File → Add Packages...
-3. Add: `https://github.com/jedisct1/swift-sodium.git`
-4. Select "Sodium" product
+- Nothing secret is committed: no signing certificates, `.p12`, `.p8`,
+  provisioning profiles, API keys, member data or real attestation
+  objects. Never create, read or ask for signing material: Xcode on the
+  Mac is signed in to the owner's account and signs automatically.
+- The Apple team ID appears **only** in `Config/Signing.xcconfig`
+  (`DEVELOPMENT_TEAM = TEAMID_TBD` until the owner gives it), never in
+  code, tests or other configuration.
 
-The PasswordHasher will automatically use Argon2id when Sodium is available.
+## Security rules that apply from the first line
 
-## Adding Test Target
-
-To run the unit tests in VettIDTests/:
-
-1. Open project in Xcode
-2. File → New → Target → Unit Testing Bundle
-3. Name it "VettIDTests"
-4. Add existing test files from VettIDTests/ to the target
-5. Build and run tests
-
-## Documentation
-
-All design documents are maintained in the [vettid-dev repository](https://github.com/mesmerverse/vettid-dev/tree/main/docs):
-
-- `protean_credential_system_design.md` - Complete API specification
-- `vault-voting-design.md` - Vault-based voting system design
-- `vault_services_architecture.md` - Vault services architecture
-- `NATS-MESSAGING-ARCHITECTURE.md` - NATS messaging patterns
-- `NITRO-ENCLAVE-VAULT-ARCHITECTURE.md` - Nitro Enclave architecture
+- Keys per IOS-PLAN §6.1: Secure Enclave keys and the App Attest key,
+  `ThisDeviceOnly`, never synchronizable, never bound to biometry or the
+  passcode (except the app-lock key); data excluded from backups.
+- No autofill or "Save Password?" on any secret field, third-party
+  keyboards refused, the PIN on an in-app keypad (IOS-PLAN §6.5).
+- App-switcher cover and capture hiding always on (IOS-PLAN §6.4).
+- Never log keys, secrets, attestation objects, assertions, codes or
+  message content.
