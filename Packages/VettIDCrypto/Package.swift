@@ -30,7 +30,7 @@ let package = Package(
             name: "VettIDCryptoTests",
             dependencies: ["VettIDCrypto"],
             exclude: ["Resources/SOURCE.md"],
-            resources: [.copy("Resources/vectors")]
+            resources: [.copy("Resources/vectors"), .copy("Resources/reference")]
         ),
     ]
 )

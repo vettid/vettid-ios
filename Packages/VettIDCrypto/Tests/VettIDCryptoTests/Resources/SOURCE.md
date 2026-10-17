@@ -25,6 +25,8 @@ stop-and-report item, never a skip.
   7f2c5b7bd8c6c04b6f46df610a6aa1f4d29104fe, for I0.7; the files above are unchanged at that commit. The iPhone's
   unlock secret (VAULT-MESSAGING 0.35.0 §11.14.1 "On an iPhone") has no vector file yet: `ReleaseRTests.swift`
   checks the values §16 states for it.
+- `blob.json` and `attachment.json` (last commit touching them d95fb2fe65c81638b8f0bff6d05e5002549cf92d): copied
+  2026-10-17 from commit 7f2c5b7bd8c6c04b6f46df610a6aa1f4d29104fe, for I0.8; the same hashes as vettid-android's.
 - Each later PR adds the files it checks.
 
 To refresh: copy the files again from a newer vettid-vault commit, update the commits
@@ -34,6 +36,8 @@ above and the hashes below, and run `swift test --package-path Packages/VettIDCr
 
 ```
 3a21d9d6de082476eab7744ad971f31cb47806378c5abc34e07c7839c7ff34c5  altchan.json
+a8d86c76b9469f26526f8238d41bd07a6b74fcce3da6035879fc5910c5f36427  attachment.json
+a890582a80e24cea9e10523f01f2f0040924aa47cd66cd8c442c0a1577e284b3  blob.json
 3ab4f20eebb3ec621e97d3b03705c8b3851312e99e227d423e8f0e6066887360  envelope_sealed.json
 8cbf6324c294e6c99011bd3bd5f875fcd329cbe7be1e354b7be06f3c03044827  envelope_session.json
 9b69503b507fd117ab3d6a66368cb60bb24e09286867921a6f473fb476fb0577  handshake.json
