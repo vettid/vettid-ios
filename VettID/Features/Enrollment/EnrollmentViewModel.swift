@@ -1321,10 +1321,20 @@ final class EnrollmentViewModel: ObservableObject {
     }
 
     private func finishEnrollment() {
-        // Stash the enrollment photo so the first post-warm vault sync can
-        // publish it — the profile RPC clients don't exist during enrollment.
+        // Stash the registration profile + photo so the first post-warm
+        // vault sync can both seed `currentProfile` (immediate display) and
+        // push them to the vault — the profile RPC clients don't exist yet
+        // during enrollment, and the vault doesn't persist the name from
+        // PIN setup into its profile store. Mirrors Android, which holds
+        // the name/photo locally so the home screen shows them right away.
+        let defaults = UserDefaults.standard
         if let photo = profilePhotoData {
-            UserDefaults.standard.set(photo.base64EncodedString(), forKey: "pending_enrollment_photo")
+            defaults.set(photo.base64EncodedString(), forKey: "pending_enrollment_photo")
+        }
+        if let profile = pendingRegistrationProfile {
+            defaults.set(profile.firstName, forKey: "pending_enrollment_first_name")
+            defaults.set(profile.lastName, forKey: "pending_enrollment_last_name")
+            defaults.set(profile.email, forKey: "pending_enrollment_email")
         }
         state = .complete(userGuid: userGuid ?? "unknown")
     }

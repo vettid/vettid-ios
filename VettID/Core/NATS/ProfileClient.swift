@@ -126,6 +126,31 @@ final class ProfileClient {
         }
     }
 
+    /// Publish the public profile catalog (`profile.publish`). Until this
+    /// runs once, the vault's `profile.get-published` returns the
+    /// "no profile has been published yet" stub — with NO first_name,
+    /// last_name, or photo — so the app shows "VettID User" and a blank
+    /// avatar no matter what enrollment stored. Android calls this right
+    /// after enrollment (`publishDefaultProfile`); iOS was missing it.
+    /// `fields` are the namespaces to expose publicly (system name fields
+    /// by default). Server-side this creates `profile/_public` and persists
+    /// the vault state to S3, so the name + photo survive a cold restart.
+    func publishProfile(fields: [String]) async throws {
+        let payload: [String: AnyCodableValue] = [
+            "fields": AnyCodableValue(fields as [Any])
+        ]
+        let response = try await ownerSpaceClient.sendAndAwaitResponse(
+            "profile.publish",
+            payload: payload,
+            timeout: defaultTimeout
+        )
+        os.Logger(subsystem: "com.vettid.app", category: "photo")
+            .notice("publishProfile response success=\(response.success, privacy: .public) error=\(response.error ?? "nil", privacy: .public)")
+        guard response.success else {
+            throw ProfileClientError.vaultError(response.error ?? "unknown")
+        }
+    }
+
     /// Upload (or clear) the profile photo. Pass `nil` to remove.
     func syncPhoto(base64Data: String?) async throws {
         // The vault's HandlePhotoUpdate reads `json:"photo"` (see

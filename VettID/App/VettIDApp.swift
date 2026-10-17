@@ -439,34 +439,109 @@ class AppState: ObservableObject {
         }
     }
 
-    /// Publish the photo captured during enrollment (stashed in
-    /// UserDefaults because the vault RPC clients didn't exist yet) on the
-    /// first warm where the vault has no photo. Clears the stash after.
-    private func publishPendingEnrollmentPhotoIfNeeded() async {
-        let key = "pending_enrollment_photo"
+    /// Seed `currentProfile` from the registration profile + photo stashed
+    /// during enrollment, so the home/vault screens show the user's real
+    /// name and avatar immediately — before (and independent of) any vault
+    /// round-trip. Mirrors Android, which holds these locally post-enroll.
+    /// `syncCurrentProfileFromStore()`'s empty-vault guard preserves this
+    /// seed if the vault hasn't hydrated the name/photo yet.
+    func seedProfileFromEnrollmentStash() {
+        let defaults = UserDefaults.standard
+        let first = defaults.string(forKey: "pending_enrollment_first_name") ?? ""
+        let last  = defaults.string(forKey: "pending_enrollment_last_name") ?? ""
+        let email = defaults.string(forKey: "pending_enrollment_email")
+        let photoData = defaults.string(forKey: "pending_enrollment_photo")
+            .flatMap { Data(base64Encoded: $0) }
+        let displayName = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
+        guard !displayName.isEmpty || (email?.isEmpty == false) || photoData != nil else { return }
+        currentProfile = Profile(
+            guid: currentProfile?.guid ?? currentUserGuid ?? "",
+            displayName: displayName.isEmpty ? "VettID User" : displayName,
+            avatarUrl: nil,
+            bio: nil,
+            location: nil,
+            email: (email?.isEmpty == false) ? email : currentProfile?.email,
+            photoData: photoData ?? currentProfile?.photoData,
+            syncedAt: Date(),
+            lastUpdated: Date()
+        )
+    }
+
+    /// Persist the registration profile + photo captured during enrollment
+    /// to the vault on the first warm, then **publish** it. This is the step
+    /// iOS was missing: until `profile.publish` runs once, the vault's
+    /// `profile.get-published` returns the "no profile published yet" stub —
+    /// with NO first_name/last_name/photo — so the app shows "VettID User"
+    /// with a blank avatar no matter what enrollment stored. Android does
+    /// this via `publishDefaultProfile`. `profile.publish` also persists the
+    /// vault state to S3, so the name + photo survive a cold restart.
+    /// The stash (UserDefaults) is the in-use cache only; it's cleared once
+    /// the publish succeeds — the vault is the source of truth thereafter.
+    private func publishPendingEnrollmentProfileIfNeeded() async {
+        let defaults = UserDefaults.standard
         let logger = os.Logger(subsystem: "com.vettid.app", category: "photo")
-        guard let b64 = UserDefaults.standard.string(forKey: key) else {
-            logger.notice("publishPending: no stashed photo in UserDefaults")
+        let store = PersonalDataStore.shared
+
+        let stashedFirst = defaults.string(forKey: "pending_enrollment_first_name") ?? ""
+        let stashedLast  = defaults.string(forKey: "pending_enrollment_last_name") ?? ""
+        let stashedEmail = defaults.string(forKey: "pending_enrollment_email") ?? ""
+        let stashedPhoto = defaults.string(forKey: "pending_enrollment_photo")
+
+        // Nothing pending from enrollment — just resync from whatever the
+        // vault hydrate produced and bail.
+        guard !stashedFirst.isEmpty || stashedPhoto != nil else {
+            await MainActor.run { self.syncCurrentProfileFromStore() }
             return
         }
-        logger.notice("publishPending: stashed photo found (\(b64.count, privacy: .public) chars), vault photoBase64=\(PersonalDataStore.shared.photoBase64?.count ?? -1, privacy: .public)")
-        // Treat empty-string as "no photo" too — the vault's profile.get
-        // can return `"photo":""` (not nil) when none is set, which would
-        // otherwise skip the publish.
-        if (PersonalDataStore.shared.photoBase64 ?? "").isEmpty {
-            do {
-                try await PersonalDataStore.shared.updatePhoto(base64: b64)
-                #if DEBUG
-                print("[AppState] Published pending enrollment photo to vault")
-                #endif
-            } catch {
-                #if DEBUG
-                print("[AppState] Failed to publish pending enrollment photo: \(error)")
-                #endif
-                return // keep the stash; retry next warm
-            }
+
+        guard let pc = profileClient else {
+            logger.error("publishPending: profileClient not ready; will retry next warm")
+            return
         }
-        UserDefaults.standard.removeObject(forKey: key)
+
+        do {
+            // 1) Ensure the name is in the profile store. PIN setup usually
+            //    stored it already (storeRegistrationProfile), but write it
+            //    if the vault's copy is empty.
+            let vaultFirst = store.items.first { $0.id == "_system_first_name" }?.value ?? ""
+            if vaultFirst.isEmpty && !stashedFirst.isEmpty {
+                try await store.updateField(namespace: "_system_first_name", value: stashedFirst)
+                if !stashedLast.isEmpty {
+                    try await store.updateField(namespace: "_system_last_name", value: stashedLast)
+                }
+                if !stashedEmail.isEmpty {
+                    try await store.updateField(namespace: "_system_email", value: stashedEmail)
+                }
+                logger.notice("publishPending: wrote registration name to vault")
+            }
+
+            // 2) Upload the photo if the vault doesn't have one yet. (Empty
+            //    string counts as "no photo" — profile.get can return "".)
+            if let b64 = stashedPhoto, (store.photoBase64 ?? "").isEmpty {
+                try await store.updatePhoto(base64: b64)
+                logger.notice("publishPending: uploaded enrollment photo (\(b64.count, privacy: .public) chars)")
+            }
+
+            // 3) Publish — creates `profile/_public` server-side so
+            //    `get-published` returns the name + photo, and persists to S3.
+            try await pc.publishProfile(fields: [
+                "_system_first_name", "_system_last_name", "_system_email"
+            ])
+            logger.notice("publishPending: published profile to vault catalog")
+
+            // Success — drop the in-use stash; the vault is SSOT now.
+            defaults.removeObject(forKey: "pending_enrollment_first_name")
+            defaults.removeObject(forKey: "pending_enrollment_last_name")
+            defaults.removeObject(forKey: "pending_enrollment_email")
+            defaults.removeObject(forKey: "pending_enrollment_photo")
+        } catch {
+            logger.error("publishPending: failed: \(String(describing: error), privacy: .public) — keeping stash for next warm")
+            // keep the stash; retry next warm
+        }
+
+        // Re-hydrate so `currentProfile` reflects the now-published vault
+        // state (rather than the in-memory pre-publish snapshot).
+        try? await store.hydrate()
         await MainActor.run { self.syncCurrentProfileFromStore() }
     }
 
@@ -540,6 +615,11 @@ class AppState: ObservableObject {
         checkExistingCredential()
         currentUserGuid = userGuid
         isAuthenticated = true
+        // Show the user's real name + avatar immediately from the
+        // enrollment stash, independent of the vault hydrate (which races
+        // and initially returns an empty profile). The warm path then
+        // pushes these to the vault for cross-launch persistence.
+        seedProfileFromEnrollmentStash()
         // The PIN exchange during enrollment already warmed the vault
         // (the supervisor returned UTKs alongside the ECIES key). Mark
         // it warm here so the parent ContentView skips VaultWarmingView
@@ -816,7 +896,7 @@ class AppState: ObservableObject {
             // Enrollment captures a profile photo before the RPC clients
             // exist, so it couldn't be published then. Publish it now on
             // the first warm where the vault still has no photo.
-            await self.publishPendingEnrollmentPhotoIfNeeded()
+            await self.publishPendingEnrollmentProfileIfNeeded()
             // Start the presence aggregator (Phase 1.6). Idempotent.
             await PresenceAggregator.shared.attach(to: osc)
             // Phase 3.3 + 3.9: configure + hydrate the Grants
