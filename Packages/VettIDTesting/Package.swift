@@ -1,0 +1,14 @@
+// swift-tools-version: 6.0
+import PackageDescription
+
+let package = Package(
+    name: "VettIDTesting",
+    platforms: [.iOS(.v17), .macOS(.v14)],
+    products: [
+        .library(name: "VettIDTesting", targets: ["VettIDTesting"]),
+    ],
+    targets: [
+        .target(name: "VettIDTesting"),
+        .testTarget(name: "VettIDTestingTests", dependencies: ["VettIDTesting"]),
+    ]
+)

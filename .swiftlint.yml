@@ -1,0 +1,15 @@
+# SwiftLint (CI runs `swiftlint lint --strict`).
+included:
+  - App
+  - AppTests
+  - Packages
+excluded:
+  - build
+  - Packages/*/.build
+line_length:
+  warning: 140
+  ignores_comments: true
+identifier_name:
+  excluded: [id, ok]
+disabled_rules:
+  - trailing_comma

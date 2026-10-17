@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
-   LastUpgradeVersion = "1500"
+   LastUpgradeVersion = "1430"
    version = "1.7">
    <BuildAction
       parallelizeBuildables = "YES"
-      buildImplicitDependencies = "YES">
+      buildImplicitDependencies = "YES"
+      runPostActionsOnFailure = "NO">
       <BuildActionEntries>
          <BuildActionEntry
             buildForTesting = "YES"
@@ -14,7 +15,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "50000001"
+               BlueprintIdentifier = "8E7B383155AA2840971E1D41"
                BuildableName = "VettID.app"
                BlueprintName = "VettID"
                ReferencedContainer = "container:VettID.xcodeproj">
@@ -28,23 +29,9 @@
             buildForAnalyzing = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "04B1C0E626228BC38419D4BA"
+               BlueprintIdentifier = "A3B8A0394F811245DD7737EA"
                BuildableName = "VettIDTests.xctest"
                BlueprintName = "VettIDTests"
-               ReferencedContainer = "container:VettID.xcodeproj">
-            </BuildableReference>
-         </BuildActionEntry>
-         <BuildActionEntry
-            buildForTesting = "YES"
-            buildForRunning = "NO"
-            buildForProfiling = "NO"
-            buildForArchiving = "NO"
-            buildForAnalyzing = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "47A19B9656B5C17D32E3CBF5"
-               BuildableName = "VettIDUITests.xctest"
-               BlueprintName = "VettIDUITests"
                ReferencedContainer = "container:VettID.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -55,14 +42,23 @@
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES"
-      shouldAutocreateTestPlan = "YES">
+      onlyGenerateCoverageForSpecifiedTargets = "NO">
+      <MacroExpansion>
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "8E7B383155AA2840971E1D41"
+            BuildableName = "VettID.app"
+            BlueprintName = "VettID"
+            ReferencedContainer = "container:VettID.xcodeproj">
+         </BuildableReference>
+      </MacroExpansion>
       <Testables>
          <TestableReference
             skipped = "NO"
-            parallelizable = "YES">
+            parallelizable = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "04B1C0E626228BC38419D4BA"
+               BlueprintIdentifier = "A3B8A0394F811245DD7737EA"
                BuildableName = "VettIDTests.xctest"
                BlueprintName = "VettIDTests"
                ReferencedContainer = "container:VettID.xcodeproj">
@@ -70,16 +66,128 @@
          </TestableReference>
          <TestableReference
             skipped = "NO"
-            parallelizable = "YES">
+            parallelizable = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "47A19B9656B5C17D32E3CBF5"
-               BuildableName = "VettIDUITests.xctest"
+               BlueprintIdentifier = "VettIDCryptoTests"
+               BuildableName = "VettIDCryptoTests"
+               BlueprintName = "VettIDCryptoTests"
+               ReferencedContainer = "container:Packages/VettIDCrypto">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "VettIDAttestationTests"
+               BuildableName = "VettIDAttestationTests"
+               BlueprintName = "VettIDAttestationTests"
+               ReferencedContainer = "container:Packages/VettIDAttestation">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "VettIDRelayTests"
+               BuildableName = "VettIDRelayTests"
+               BlueprintName = "VettIDRelayTests"
+               ReferencedContainer = "container:Packages/VettIDRelay">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "VettIDAltChanTests"
+               BuildableName = "VettIDAltChanTests"
+               BlueprintName = "VettIDAltChanTests"
+               ReferencedContainer = "container:Packages/VettIDAltChan">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "VettIDVaultTests"
+               BuildableName = "VettIDVaultTests"
+               BlueprintName = "VettIDVaultTests"
+               ReferencedContainer = "container:Packages/VettIDVault">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "VettIDKeysTests"
+               BuildableName = "VettIDKeysTests"
+               BlueprintName = "VettIDKeysTests"
+               ReferencedContainer = "container:Packages/VettIDKeys">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "VettIDDataTests"
+               BuildableName = "VettIDDataTests"
+               BlueprintName = "VettIDDataTests"
+               ReferencedContainer = "container:Packages/VettIDData">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "VettIDMediaTests"
+               BuildableName = "VettIDMediaTests"
+               BlueprintName = "VettIDMediaTests"
+               ReferencedContainer = "container:Packages/VettIDMedia">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "VettIDNotifyTests"
+               BuildableName = "VettIDNotifyTests"
+               BlueprintName = "VettIDNotifyTests"
+               ReferencedContainer = "container:Packages/VettIDNotify">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "VettIDUITests"
+               BuildableName = "VettIDUITests"
                BlueprintName = "VettIDUITests"
-               ReferencedContainer = "container:VettID.xcodeproj">
+               ReferencedContainer = "container:Packages/VettIDUI">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "VettIDTestingTests"
+               BuildableName = "VettIDTestingTests"
+               BlueprintName = "VettIDTestingTests"
+               ReferencedContainer = "container:Packages/VettIDTesting">
             </BuildableReference>
          </TestableReference>
       </Testables>
+      <CommandLineArguments>
+      </CommandLineArguments>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"
@@ -95,12 +203,14 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "50000001"
+            BlueprintIdentifier = "8E7B383155AA2840971E1D41"
             BuildableName = "VettID.app"
             BlueprintName = "VettID"
             ReferencedContainer = "container:VettID.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
+      <CommandLineArguments>
+      </CommandLineArguments>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"
@@ -112,12 +222,14 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "50000001"
+            BlueprintIdentifier = "8E7B383155AA2840971E1D41"
             BuildableName = "VettID.app"
             BlueprintName = "VettID"
             ReferencedContainer = "container:VettID.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
+      <CommandLineArguments>
+      </CommandLineArguments>
    </ProfileAction>
    <AnalyzeAction
       buildConfiguration = "Debug">

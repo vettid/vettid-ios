@@ -1,0 +1,7 @@
+// Staging configuration: VettID Staging (IOS-PLAN §5 "Build configurations").
+#include "Base.xcconfig"
+
+VETTID_APP_BUNDLE_ID = com.vettid.app.staging
+VETTID_DISPLAY_NAME = VettID Staging
+VETTID_ENVIRONMENT = staging
+VETTID_ACCOUNT_HOST = account.staging.vettid.org

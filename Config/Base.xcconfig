@@ -1,0 +1,14 @@
+// Settings shared by every configuration (IOS-PLAN §5).
+// Optional include on purpose: Xcode reads it, XcodeGen does not, so the
+// team ID stays out of the generated project file (CLAUDE.md "Secrets and
+// the team ID").
+#include? "Signing.xcconfig"
+
+IPHONEOS_DEPLOYMENT_TARGET = 17.0
+TARGETED_DEVICE_FAMILY = 1
+SWIFT_VERSION = 6.0
+SWIFT_STRICT_CONCURRENCY = complete
+SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
+GCC_TREAT_WARNINGS_AS_ERRORS = YES
+ENABLE_USER_SCRIPT_SANDBOXING = YES
+ALWAYS_SEARCH_USER_PATHS = NO

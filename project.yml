@@ -1,0 +1,125 @@
+# The Xcode project is generated from this file with XcodeGen
+# (`xcodegen generate`): edit this file, not VettID.xcodeproj. CI checks
+# that the committed project matches it.
+name: VettID
+options:
+  developmentLanguage: en
+  deploymentTarget:
+    iOS: "17.0"
+  defaultConfig: Debug
+  groupSortPosition: top
+configs:
+  Debug: debug
+  DevStack: debug
+  Staging: release
+  Release: release
+configFiles:
+  Debug: Config/Debug.xcconfig
+  DevStack: Config/DevStack.xcconfig
+  Staging: Config/Staging.xcconfig
+  Release: Config/Release.xcconfig
+
+# One local package per Android core module (IOS-PLAN §5).
+packages:
+  VettIDCrypto:
+    path: Packages/VettIDCrypto
+  VettIDAttestation:
+    path: Packages/VettIDAttestation
+  VettIDRelay:
+    path: Packages/VettIDRelay
+  VettIDAltChan:
+    path: Packages/VettIDAltChan
+  VettIDVault:
+    path: Packages/VettIDVault
+  VettIDKeys:
+    path: Packages/VettIDKeys
+  VettIDData:
+    path: Packages/VettIDData
+  VettIDMedia:
+    path: Packages/VettIDMedia
+  VettIDNotify:
+    path: Packages/VettIDNotify
+  VettIDUI:
+    path: Packages/VettIDUI
+  # TEST ONLY: linked by test targets, never by the app (release check).
+  VettIDTesting:
+    path: Packages/VettIDTesting
+
+targets:
+  VettID:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+        excludes: [Info.plist]
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        VettIDEnvironment: $(VETTID_ENVIRONMENT)
+        VettIDAccountHost: $(VETTID_ACCOUNT_HOST)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(VETTID_APP_BUNDLE_ID)
+        PRODUCT_NAME: VettID
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: $(VETTID_DISPLAY_NAME)
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
+        MARKETING_VERSION: 2.0.0
+        CURRENT_PROJECT_VERSION: 1
+    dependencies:
+      - package: VettIDCrypto
+      - package: VettIDAttestation
+      - package: VettIDRelay
+      - package: VettIDAltChan
+      - package: VettIDVault
+      - package: VettIDKeys
+      - package: VettIDData
+      - package: VettIDMedia
+      - package: VettIDNotify
+      - package: VettIDUI
+
+  VettIDTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [AppTests]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(VETTID_APP_BUNDLE_ID).tests
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: VettID
+      - package: VettIDTesting
+
+schemes:
+  VettID:
+    build:
+      targets:
+        VettID: all
+        VettIDTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - VettIDTests
+        - package: VettIDCrypto/VettIDCryptoTests
+        - package: VettIDAttestation/VettIDAttestationTests
+        - package: VettIDRelay/VettIDRelayTests
+        - package: VettIDAltChan/VettIDAltChanTests
+        - package: VettIDVault/VettIDVaultTests
+        - package: VettIDKeys/VettIDKeysTests
+        - package: VettIDData/VettIDDataTests
+        - package: VettIDMedia/VettIDMediaTests
+        - package: VettIDNotify/VettIDNotifyTests
+        - package: VettIDUI/VettIDUITests
+        - package: VettIDTesting/VettIDTestingTests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release

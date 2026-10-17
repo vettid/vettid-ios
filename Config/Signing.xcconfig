@@ -1,0 +1,5 @@
+// Code signing. The only file in this repository that carries the Apple
+// team ID (IOS-PLAN ID3). Signing is automatic: Xcode signs with the
+// owner's account; no signing material is kept in the repository.
+DEVELOPMENT_TEAM = 3X25CJ86MV
+CODE_SIGN_STYLE = Automatic
