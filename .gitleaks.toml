@@ -1,8 +1,18 @@
 # gitleaks configuration for vettid-ios. Extends the default ruleset.
 #
-# Allowlisted values will be the fixed, test-only VAULT-MESSAGING §16
-# vector values that vettid-vault and vettid-android allowlist too, added
-# with the vectors themselves (IOS-PLAN §7). Reviewed findings in the v1
-# history are in .gitleaksignore.
+# The only allowlisted values are the fixed, test-only VAULT-MESSAGING §16 vector values that vettid-vault and
+# vettid-android allowlist too (their .gitleaks.toml): HPKE intermediate values derived from the public all-0x05 key
+# seed and all-0x07 encapsulation randomness (hpke.json shared_secret_hex, key_hex, exporter_secret_hex), which the
+# generic rule mistakes for keys. They live in Packages/VettIDCrypto/Tests/VettIDCryptoTests/Resources/vectors (copied
+# from vettid-vault, IOS-PLAN §7) and in the tests. Reviewed findings in the v1 history are in .gitleaksignore.
 [extend]
 useDefault = true
+
+[allowlist]
+description = "VAULT-MESSAGING §16 test vectors (test-only, public)"
+regexTarget = "match"
+regexes = [
+  '''3239a1c6d8d76895e408c7e65ee38d8b43f4732c7a74c5ccfbac6bd63f743bce''',
+  '''f8cfa15ec73bf1031bc50dfc462438a3d6a3d933f7edf6b28bc149fd7400e2a6''',
+  '''1d7856a1a77eee3accf4e69fb2353f2421e3f15584739e5c6df73d487b4b66b4''',
+]
