@@ -23,7 +23,8 @@ SELF_TEST=0
 [[ "${1:-}" == "--self-test" ]] && SELF_TEST=1
 
 # Strings no Release or Staging app may contain.
-TEST_MARKERS=("VettIDTesting" "TESTTEAM00")
+# The deterministic randomness hook of VettIDCrypto (debug builds only) carries this string.
+TEST_MARKERS=("VettIDTesting" "TESTTEAM00" "VETTID TEST ONLY")
 DEV_ONLY=("127.0.0.1" "relay.vettid.test" "vettid.start" "vettid.theme" "Component gallery" "Screen catalog")
 
 PRODUCTION_HOSTS=("account.vettid.org")
@@ -100,11 +101,62 @@ check_staging() {
 
 app_of() { echo "${OUT}/$1.xcarchive/Products/Applications/VettID.app"; }
 
+# The test-only hooks of the pure packages are compiled into debug builds only (#if DEBUG). The app may not link a
+# package's code yet (it is then dead-stripped and the scan above proves nothing), so the packages are also built on
+# their own: the release build must not contain the marker, and the debug build must (or the scan finds nothing).
+# The package's compiled objects under a SwiftPM bin path, in either build system's layout; fails when there are none.
+package_objects() {
+  local bin=$1 pkg=$2 files
+  files=$(find "${bin}" -maxdepth 1 \( -name "${pkg}.o" -o -name "lib${pkg}.a" \) 2>/dev/null)
+  [[ -z "${files}" && -d "${bin}/${pkg}.build" ]] && files=$(find "${bin}/${pkg}.build" -name '*.o')
+  if [[ -z "${files}" ]]; then
+    echo "no compiled objects of ${pkg} under ${bin}" >&2
+    return 1
+  fi
+  echo "${files}"
+}
+
+check_package_hooks() {
+  local pkg=$1 marker=$2
+  echo "== ${pkg}: test hooks in debug builds only"
+  swift build --package-path "Packages/${pkg}" -c debug --quiet
+  swift build --package-path "Packages/${pkg}" -c release --quiet
+  local found_debug found_release debug_bin release_bin
+  debug_bin=$(swift build --package-path "Packages/${pkg}" -c debug --show-bin-path)
+  release_bin=$(swift build --package-path "Packages/${pkg}" -c release --show-bin-path)
+  found_debug=$(package_objects "${debug_bin}" "${pkg}" | xargs strings -a | grep -cF -- "${marker}" || true)
+  found_release=$(package_objects "${release_bin}" "${pkg}" | xargs strings -a | grep -cF -- "${marker}" || true)
+  if [[ "${found_debug}" -eq 0 ]]; then
+    echo "${pkg}: the debug build lacks the marker '${marker}'; the check would prove nothing" >&2
+    return 1
+  fi
+  if [[ "${found_release}" -ne 0 ]]; then
+    echo "${pkg}: the release build contains the test hook ('${marker}')" >&2
+    return 1
+  fi
+  echo "${pkg}: test hook present in debug, absent in release"
+}
+
+check_package_hooks VettIDCrypto "VETTID TEST ONLY"
+
 rm -rf "${OUT}/Release.xcarchive" "${OUT}/Staging.xcarchive"
 archive Release
 archive Staging
 check_release "$(app_of Release)"
 check_staging "$(app_of Staging)"
+
+# Every object file the two archives compiled (the app's and every package's, before the linker strips unused code)
+# is free of the TEST markers too.
+echo "== objects compiled for the Release and Staging archives"
+objects=$(find "${OUT}/DerivedData/Build/Intermediates.noindex" -name '*.o' | wc -l | tr -d ' ')
+[[ "${objects}" -gt 0 ]] || { echo "no compiled objects under ${OUT}/DerivedData" >&2; exit 1; }
+for marker in "${TEST_MARKERS[@]}"; do
+  if find "${OUT}/DerivedData/Build/Intermediates.noindex" -name '*.o' -exec strings -a {} + | grep -qF -- "${marker}"; then
+    echo "an object compiled for Release or Staging contains '${marker}'" >&2
+    exit 1
+  fi
+done
+echo "${objects} objects: ${#TEST_MARKERS[@]} TEST markers absent"
 
 if [[ ${SELF_TEST} -eq 1 ]]; then
   # plant <config> <checker> <string>: the check must refuse a copy of the
@@ -123,6 +175,7 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
     echo "self-test: ${config} refuses a planted '${planted}'"
   }
   plant Release check_release "VettIDTesting"
+  plant Release check_release "VETTID TEST ONLY: deterministic randomness drew the wrong size"
   plant Release check_release "account.staging.vettid.org"
   plant Staging check_staging "TESTTEAM00.com.vettid.app"
   plant Staging check_staging "127.0.0.1"

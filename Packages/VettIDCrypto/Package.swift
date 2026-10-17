@@ -12,13 +12,22 @@ let package = Package(
         .package(url: "https://github.com/jedisct1/swift-sodium.git", exact: "0.11.0"),
     ],
     targets: [
+        // ML-KEM-768 and SHA-3 from the vendored mlkem-native (Apache-2.0 OR ISC OR MIT; Sources/CMLKEM/SOURCE.md).
+        // One compilation unit: vettid_mlkem.c includes the library's monolithic mlkem_native.c.
+        .target(
+            name: "CMLKEM",
+            exclude: ["mlkem-native/LICENSE", "SOURCE.md"],
+            sources: ["vettid_mlkem.c"],
+            cSettings: [.headerSearchPath("."), .headerSearchPath("mlkem-native")]
+        ),
         .target(
             name: "VettIDCrypto",
-            dependencies: [.product(name: "Clibsodium", package: "swift-sodium")]
+            dependencies: ["CMLKEM", .product(name: "Clibsodium", package: "swift-sodium")]
         ),
         .testTarget(
             name: "VettIDCryptoTests",
             dependencies: ["VettIDCrypto"],
+            exclude: ["Resources/SOURCE.md"],
             resources: [.copy("Resources/vectors")]
         ),
     ]
