@@ -9,12 +9,8 @@ import VettIDUI
 struct DebugCatalog<Root: View>: View {
     @Binding var themeMode: ThemeMode
     @ViewBuilder let root: () -> Root
-    @State private var path: [Entry] = Self.startEntry.map { [$0] } ?? []
+    @State private var path: [DebugCatalogEntry] = DebugCatalogEntry.atLaunch.map { [$0] } ?? []
     @Environment(\.vettIDColors) private var colors
-
-    enum Entry: String, Hashable, CaseIterable {
-        case catalog, gallery
-    }
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -24,14 +20,14 @@ struct DebugCatalog<Root: View>: View {
                         .padding(Spacing.xl)
                 }
                 .toolbar(.hidden, for: .navigationBar)
-                .navigationDestination(for: Entry.self) { entry in
+                .navigationDestination(for: DebugCatalogEntry.self) { entry in
                     destination(entry).toolbar(.hidden, for: .navigationBar)
                 }
         }
     }
 
     @ViewBuilder
-    private func destination(_ entry: Entry) -> some View {
+    private func destination(_ entry: DebugCatalogEntry) -> some View {
         switch entry {
         case .catalog:
             DetailScaffold(onBack: { path.removeLast() }) {
@@ -48,10 +44,15 @@ struct DebugCatalog<Root: View>: View {
             GalleryScreen(themeMode: $themeMode) { path.removeLast() }
         }
     }
+}
+
+/// A screen of the debug catalog.
+enum DebugCatalogEntry: String, Hashable, CaseIterable {
+    case catalog, gallery
 
     /// The screen named by the `vettid.start` launch argument, if any.
-    private static var startEntry: Entry? {
-        UserDefaults.standard.string(forKey: "vettid.start").flatMap(Entry.init(rawValue:))
+    static var atLaunch: DebugCatalogEntry? {
+        UserDefaults.standard.string(forKey: "vettid.start").flatMap(DebugCatalogEntry.init(rawValue:))
     }
 }
 #endif
