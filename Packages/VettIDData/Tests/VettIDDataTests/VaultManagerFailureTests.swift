@@ -287,7 +287,10 @@ import VettIDKeysTesting
         defer { phone.close() }
         try await redeemed()
         let appKey = try phone.appKeys.getOrCreate().spki()
-        service.enrollAnswers(.answerLost)
+        // The vault's `vault.enrolled` is held back: while it has not arrived, only the unknown outcome refuses, and says
+        // for how long.
+        service.enrollAnswers(.answerLostEnrolledLate)
+        service.holdLateEnrolled = true
         _ = await vaultFailure { try await m.enroll(pin: "402817") { _ in } }
         let f = await vaultFailure { try await m.forgetSetupCode() }
         #expect(f?.kind == .enrollmentStarted && f?.code == VaultManager.codeEnrollmentStarted)
