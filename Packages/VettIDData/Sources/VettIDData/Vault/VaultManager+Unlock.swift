@@ -98,6 +98,9 @@ extension VaultManager {
         }
         // §6.7.1 (0.17.0): a phone a transfer set up from an older vault release has no user_guid (§11.4 needs it).
         guard !record.value.userGuid.isEmpty else { return .failed(.notSupported, code: UnlockAttempt.codeNoUserGuid) }
+        // §11.14.9 step 5: while a PIN change is unresolved, the previous PIN with the current record, then the new one.
+        refreshPinStep()
+        let step = path == .current ? unlockPinStep : .pin
         // Read before the unlock: a lock asked for while it is on its way bumps it, and this unlock then opens nothing.
         let locks = lockGeneration
         let rec = record.generation
@@ -106,7 +109,7 @@ extension VaultManager {
             opened = try await lockGuard.keeper.unlocking(opened: { $0.outcome.ok }) {
                 try await guarded {
                     let s = try await openSession()
-                    var out = try await unlockWithSecret(s, pin: pin, options: options, path: path)
+                    var out = try await unlockWithSecret(s, pin: pin, options: options, path: path, tries: tries(step))
                     if out.ok, out.result.update?.result == Self.updateMoved {
                         // §11.10.6: after a move the vault is locked under the new release; unlock again, which reaches it.
                         out = try await unlockWithSecret(s, pin: pin, options: UnlockOptions(), path: .current)
@@ -125,6 +128,7 @@ extension VaultManager {
             return .failed(.other, code: nil)
         }
         let r = opened.outcome.result
+        if let next = afterPinStep(step, ok: r.ok, code: r.code, at: r.at) { return next }
         guard r.ok else {
             if await holder?.onSealedUnlockResult(HolderPolicy.of(r)) == true { return .failed(.other, code: r.code) }
             return Self.refusal(r)
@@ -175,7 +179,7 @@ extension VaultManager {
     /// pending epoch-1 records after `device_secret` (``PhoneSecrets/unlock(isolation:attempt:)``), or the replaced
     /// records on the member's tap. IOS-PLAN ID8: an instance without `recovery_r` is refused before anything is built.
     private func unlockWithSecret(
-        _ s: VaultSession, pin: String, options: UnlockOptions, path: UnlockSecretPath
+        _ s: VaultSession, pin: String, options: UnlockOptions, path: UnlockSecretPath, tries: UnlockTries = .all
     ) async throws -> UnlockOutcome {
         let guid = record.value.userGuid
         let attester = config.attester
@@ -190,7 +194,7 @@ extension VaultManager {
         }
         switch path {
         case .current:
-            return try await phoneSecrets.unlock(attempt: attempt)
+            return try await phoneSecrets.unlock(tries: tries, attempt: attempt)
         case .earlier:
             switch try await phoneSecrets.tryEarlierSecret(attempt: attempt) {
             case .restored(let answer, let opened):

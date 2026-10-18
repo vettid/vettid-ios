@@ -81,13 +81,19 @@ extension VaultDevice {
             timeDropBroadcast.emit(inner.type)
             throw e
         }
+        noteVaultTime(inner.ts)
         let firstTime: Bool = mem.withLock {
             guard st.seenInner[inner.id] == nil else { return false }
             st.seenInner[inner.id] = Self.ms(t)
             Self.prune(&st.seenInner, t)
             return true
         }
-        guard firstTime else { return }
+        guard firstTime else {
+            // §8.2: the vault re-sends a cached response with its own id. A request sent again with the same id (a lost
+            // answer's resend, §11.14.9) is still waiting for it, even when the first copy arrived after its wait ended.
+            if let re = inner.re { mem.withLock { pending[re] }?.complete(inner) }
+            return
+        }
         let body = VaultJSON.object(inner.body)
         switch inner.type {
         // §10.3 (0.10.3, 0.10.4): every device.paired carries the device's standing token; it replaces the token of

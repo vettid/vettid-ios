@@ -52,6 +52,20 @@ final class ManualTicker {
         await vm.settle()
     }
 
+    /// VAULT-MESSAGING §11.14.9 "A lost answer" step 5: while a PIN change is unresolved the previous PIN is asked for;
+    /// `device_secret` to it asks for the new PIN (the typed one is not reused, and no failure is shown), which opens.
+    @Test func aLostPinChangeAsksForThePreviousPinThenTheNewOne() async {
+        vault.unlockPinStep = .previous
+        vault.unlockResults = [.newPinNeeded, .success]
+        let vm = await vm()
+        #expect(vm.state.pinStep == .previous)
+        await submit(vm, "40281795")
+        #expect(vm.state.pinStep == .new && vm.state.pin.isEmpty && vm.state.message == nil && !vm.state.keysGone)
+        #expect(vault.lastPin == "40281795")
+        await submit(vm, "59173048")
+        #expect(vault.lastPin == "59173048" && vault.phase == .unlocked && vm.state.pinStep == .pin)
+    }
+
     @Test func unlocksWithThePin() async {
         let vm = await vm()
         #expect(vm.state.pinAllowed)

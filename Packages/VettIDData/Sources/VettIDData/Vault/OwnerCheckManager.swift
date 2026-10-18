@@ -445,6 +445,9 @@ private final class FreshStatus {
 /// ``OwnerCheckOps`` over the vault client. Mirrors vettid-android `VaultOwnerCheckOps`.
 struct VaultOwnerCheckOps: OwnerCheckOps {
     let api: VaultApi
+    /// Runs before the check is sent: refuses it while a change of PIN or password is unresolved (VAULT-MESSAGING
+    /// §11.14.9 "A lost answer").
+    var gate: @Sendable () async throws -> Void = {}
 
     func statusAndRecovery() async throws -> (OwnerCheckStatus?, RecoveryStatus?) {
         let s = try await api.status()
@@ -452,7 +455,8 @@ struct VaultOwnerCheckOps: OwnerCheckOps {
     }
 
     func check(pin: String, password: String, hold: Bool?, holdOffUntil: String?) async throws -> OwnerCheckPassed {
-        try await api.ownerCheck(pin: pin, password: password, hold: hold, holdOffUntil: holdOffUntil)
+        try await gate()
+        return try await api.ownerCheck(pin: pin, password: password, hold: hold, holdOffUntil: holdOffUntil)
     }
 
     func settingsGet() async throws -> VaultSettings { try await api.settingsGet() }

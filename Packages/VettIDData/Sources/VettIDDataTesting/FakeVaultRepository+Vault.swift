@@ -30,6 +30,15 @@ extension FakeVaultRepository: VaultRepository {
 
     public func dismissRotateOffer() { rotateOffered = false }
 
+    public func waitForChangeCheck(_ waiter: AnyObject?) { changeCheckWaiter = waiter }
+
+    public var changeCheckAwaited: Bool { changeCheckWaiter != nil }
+
+    public func acknowledgeChangeCheck() {
+        calls.append("acknowledgeChangeCheck")
+        if changeCheck?.undecided == false { changeCheck = nil }
+    }
+
     public func acknowledgeMovedAway() {
         calls.append("acknowledgeMovedAway")
         movedAway = false
@@ -83,7 +92,11 @@ extension FakeVaultRepository: VaultRepository {
         lastCancelRecovery = cancelRecovery
         let r = unlockResults.isEmpty ? .success : unlockResults.removeFirst()
         if case .failed = r {} else { refusedByVault = false } // a sealed answer, as the vault manager
-        if r == .success { phase = .unlocked }
+        if r == .success {
+            phase = .unlocked
+            unlockPinStep = .pin
+        }
+        if r == .newPinNeeded { unlockPinStep = .new }
         return r
     }
 

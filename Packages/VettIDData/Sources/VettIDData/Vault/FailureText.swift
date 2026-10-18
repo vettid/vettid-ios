@@ -62,6 +62,8 @@ public extension FailureKind {
         case .releaseTooOld: DataStrings.failureReleaseTooOld
         case .enrollmentStarted: DataStrings.failureEnrollmentStarted
         case .responseTooLarge: DataStrings.failureResponseTooLarge
+        case .changeUnresolved: DataStrings.failureChangeUnresolved
+        case .changeChecking: DataStrings.failureChangeChecking
         case .other: DataStrings.failureOther
         }
     }
@@ -124,6 +126,8 @@ public extension FailureKind {
         case .releaseTooOld: "data_failure_release_too_old"
         case .enrollmentStarted: "data_failure_ios_enrollment_started"
         case .responseTooLarge: "data_failure_response_too_large"
+        case .changeUnresolved: "data_failure_change_unresolved"
+        case .changeChecking: "data_failure_ios_change_checking"
         case .other: "data_failure_other"
         }
     }

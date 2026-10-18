@@ -68,6 +68,20 @@ public struct AppShell: View {
         self.onOpenPortal = onOpenPortal
     }
 
+    /// A lost answer's decision reached while its screen was closed (VAULT-MESSAGING §11.14.9): once, until "OK".
+    @ViewBuilder private var changeCheckNotice: some View {
+        // A change screen waiting for it shows the decision itself.
+        if let check = vault.changeCheck, let text = ChangeCheckNotice.text(check), !vault.changeCheckAwaited {
+            if ChangeCheckNotice.urgent(check) {
+                UrgentBanner(text, actionLabel: ShellStrings.ownerCheckNoticeOk, action: { vault.acknowledgeChangeCheck() })
+                    .accessibilityIdentifier("change_check_notice")
+            } else {
+                InfoBanner(text, actionLabel: ShellStrings.ownerCheckNoticeOk, onAction: { vault.acknowledgeChangeCheck() })
+                    .accessibilityIdentifier("change_check_notice")
+            }
+        }
+    }
+
     public var body: some View {
         ZStack {
             DrawerContainer(isOpen: $model.drawerOpen) {
@@ -84,6 +98,7 @@ public struct AppShell: View {
                         gate: gate, now: now, onCheckNow: { model.ownerCheck(holdOff: false) },
                         onHoldOn: { Task { await model.turnHoldOn() } }, onDismissNotices: { Task { await model.dismissNotices() } }
                     )
+                    changeCheckNotice
                     NavigationStack(path: $model.path) {
                         root
                             .toolbar(.hidden, for: .navigationBar)

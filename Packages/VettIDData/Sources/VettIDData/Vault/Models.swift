@@ -242,6 +242,50 @@ public enum UnlockAttempt: Equatable, Sendable {
     case signerRefused
     /// [retryAfterSeconds]: when the service said when to try again (`Retry-After`, e.g. ``FailureKind/servicePaused``).
     case failed(FailureKind, code: String?, retryAfterSeconds: Int64 = 0)
+    /// (VAULT-MESSAGING §11.14.9 "A lost answer" step 5) A PIN change is unresolved and the previous PIN, sent with the
+    /// current record, was answered `device_secret`: the vault holds the change's candidate. The unlock asks for the new
+    /// PIN next (``UnlockPinStep/new``); nothing was tested against the PIN.
+    case newPinNeeded
+}
+
+/// Which PIN the unlock asks for (VAULT-MESSAGING §11.14.9 "A lost answer" step 5).
+public enum UnlockPinStep: Equatable, Sendable {
+    /// The vault PIN, as always.
+    case pin
+    /// A PIN change is unresolved: the previous PIN, sent with the current record.
+    case previous
+    /// The previous PIN's unlock was answered `device_secret`: the new PIN, sent with the change's candidate.
+    case new
+}
+
+/// Where the decision of a change of PIN or password whose answer was lost stands (VAULT-MESSAGING §11.14.9 "A lost
+/// answer"), for the screens. No failure is shown while it is undecided.
+public struct ChangeCheck: Equatable, Sendable {
+    public enum Status: Equatable, Sendable {
+        /// Undecided; the vault answered, or is being asked.
+        case checking
+        /// Undecided; the vault could not be reached. It is checked again when it can be.
+        case unreachable
+        /// The change applied: the usual success.
+        case applied
+        /// The change did not apply and never will: nothing was changed.
+        case notApplied
+        /// The request's own answer refused it (`bad_pin`, `bad_password`, `weak_password`, …), shown as it is.
+        case refused(FailureKind, code: String?)
+        /// The check ended without a decision (no credential, another version, a clone alarm): that answer's own path.
+        case ended
+    }
+
+    public let type: ChangeType
+    public var status: Status
+
+    public init(_ type: ChangeType, _ status: Status) {
+        self.type = type
+        self.status = status
+    }
+
+    /// Whether the change is still undecided.
+    public var undecided: Bool { status == .checking || status == .unreachable }
 }
 
 /// A clone alarm on the Protean Credential (VAULT-MESSAGING §3.5.9). Mirrors vettid-android `CredentialAlarm`.

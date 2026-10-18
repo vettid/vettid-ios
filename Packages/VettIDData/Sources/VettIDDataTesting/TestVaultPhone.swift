@@ -69,11 +69,16 @@ public final class TestVaultPhone {
     }
     private let gate = PrepareSwitch()
     private let clock = TestPhoneClock()
+    /// The pauses between the checks of a change whose answer was lost: each waits until the test releases it.
+    public let changePauses = TestPauses()
+    private let requestTimeout: TimeInterval
     /// What this phone's wipe erases: its directory and its software keys.
     public let wipeTargets: TestWipeTargets
 
-    public init(service: FakeVaultService) throws {
+    /// [requestTimeout]: how long a request waits for its answer before it is sent again (§8.6).
+    public init(service: FakeVaultService, requestTimeout: TimeInterval = 5) throws {
         self.service = service
+        self.requestTimeout = requestTimeout
         directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("vettid-manager-tests/\(UUID().uuidString)/VettID")
         wipeTargets = TestWipeTargets(
@@ -85,7 +90,7 @@ public final class TestVaultPhone {
         attestStartOver = startOver
         manager = VaultManager(config: try Self.configured(
             service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock, wipeTargets,
-            attester, startOver
+            attester, startOver, (requestTimeout, changePauses)
         ))
     }
 
@@ -94,7 +99,7 @@ public final class TestVaultPhone {
         manager.stopCollecting()
         manager = VaultManager(config: try Self.configured(
             service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock, wipeTargets,
-            attester, attestStartOver
+            attester, attestStartOver, (requestTimeout, changePauses)
         ))
     }
 
@@ -103,11 +108,15 @@ public final class TestVaultPhone {
         _ service: FakeVaultService, _ appKeys: SoftwareAppKeyStore, _ seedWrap: SoftwareSeedWrapKeySource,
         _ wrapped: InMemoryWrappedKeyStore, _ phoneKeys: SoftwarePhoneSecretSource, _ fileKeys: InMemoryFileKeyHolder,
         _ protectedData: ProtectedDataFlag, _ directory: URL, _ gate: PrepareSwitch, _ clock: TestPhoneClock,
-        _ wipeTargets: TestWipeTargets, _ attester: TestAttester, _ startOver: AttestStartOver
+        _ wipeTargets: TestWipeTargets, _ attester: TestAttester, _ startOver: AttestStartOver,
+        _ waits: (requestTimeout: TimeInterval, pauses: TestPauses)
     ) throws -> VaultManagerConfig {
         var c = try config(service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock, wipeTargets)
         c.attester = attester
         c.attestStartOver = startOver
+        c.requestTimeout = waits.requestTimeout
+        let pauses = waits.pauses
+        c.changeCheckSleep = { try await pauses.sleep($0) }
         return c
     }
 
@@ -203,6 +212,44 @@ public final class TestWipeTargets: WipeTargets, @unchecked Sendable {
         func deleteAll() throws {
             if targets.keyStuck { throw KeysError.unavailable("test key") }
         }
+    }
+}
+
+/// TEST ONLY. Pauses a test releases: each ``sleep(_:)`` records its length and waits for ``release()`` (or its task's
+/// cancellation).
+public final class TestPauses: @unchecked Sendable {
+    private let lock = NSLock()
+    private var asked: [TimeInterval] = []
+    private var waiting: [UUID: CheckedContinuation<Void, Never>] = [:]
+
+    /// The lengths asked for, in order.
+    public var lengths: [TimeInterval] { lock.withLock { asked } }
+
+    func sleep(_ s: TimeInterval) async throws {
+        let id = UUID()
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+                let cancelled: Bool = lock.withLock {
+                    asked.append(s)
+                    if Task.isCancelled { return true }
+                    waiting[id] = c
+                    return false
+                }
+                if cancelled { c.resume() }
+            }
+        } onCancel: {
+            lock.withLock { waiting.removeValue(forKey: id) }?.resume()
+        }
+        try Task.checkCancellation()
+    }
+
+    /// Ends the pauses waiting now.
+    public func release() {
+        let ws: [CheckedContinuation<Void, Never>] = lock.withLock {
+            defer { waiting.removeAll() }
+            return Array(waiting.values)
+        }
+        for w in ws { w.resume() }
     }
 }
 
