@@ -76,6 +76,13 @@ and then rewrite it against the spec with its tests.
   # (erases every keychain item and key of the dev app, a dev vault's included)
   ```
 
+- **Staging on the iPhone** (STAGING-TESTING §3, §5): the XCUITests of
+  `AppUITests/StagingTests.swift` against the Staging build, with the
+  test member's inputs from a private file outside the repository (usage
+  at the top of the script; the enrollment code is issued just before):
+  `scripts/staging-ui-test.sh --device <id> --test testStagingEnroll --inputs <file> --fresh`
+  (or `--test testStagingUnlockLock`). Without inputs the tests skip.
+
 - **The Xcode project is generated** from `project.yml` with XcodeGen.
   Add files, packages and settings there, run `xcodegen generate`, and
   commit both; never edit `VettID.xcodeproj` by hand. CI fails when they

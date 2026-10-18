@@ -425,6 +425,7 @@ public struct FormScaffold<Header: View, Content: View, TopActions: View>: View 
                 if let primaryLabel {
                     PrimaryButton(primaryLabel, busy: busy, destructive: destructive, action: onPrimary)
                         .disabled(!primaryEnabled || busy)
+                        .accessibilityIdentifier("form_primary")
                 }
                 if let secondaryLabel {
                     Button(action: onSecondary) {
@@ -435,8 +436,11 @@ public struct FormScaffold<Header: View, Content: View, TopActions: View>: View 
                     }
                     .buttonStyle(.plain)
                     .disabled(busy)
+                    .accessibilityIdentifier("form_secondary")
                 }
             }
+            // A container, so that a screen's own identifier does not replace the buttons' (UI tests find them).
+            .accessibilityElement(children: .contain)
             .padding(.horizontal, Spacing.xl)
             .padding(.vertical, Spacing.l)
         }

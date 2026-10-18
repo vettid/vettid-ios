@@ -306,6 +306,8 @@ public struct AvatarSheetContent<Content: View>: View {
             }
             .padding(.top, Spacing.xl)
             .padding(.bottom, Spacing.l)
+            // A container, so that the identifier is its own and the options keep theirs (UI tests find "Lock vault").
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("avatar_sheet_content")
         }
         .scrollBounceBehavior(.basedOnSize)
