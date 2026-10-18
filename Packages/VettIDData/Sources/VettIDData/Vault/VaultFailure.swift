@@ -89,6 +89,13 @@ public enum FailureKind: Equatable, Sendable, CaseIterable {
     case weakPassword
     /// The phone cannot keep its keys in secure hardware: no enrollment, transfer to it or recovery.
     case hardwareKeys
+    /// (iPhone, IOS-PLAN §6.3) The iPhone is locked, or has not been unlocked since it started, so its keys or records
+    /// cannot be used now: temporary, never "this phone no longer holds the keys". Every key and record is kept; the
+    /// member unlocks the iPhone and tries again.
+    case phoneLocked
+    /// (iPhone, IOS-PLAN §6.3) Four changes of the phone secret are unconfirmed: a new `pin.change` or
+    /// `vault.secret.renew` is refused before anything is sent until an unlock confirms one.
+    case unconfirmedChanges
     /// The vault's answer was too large to send to this phone (`response_too_large`, VAULT-MESSAGING §8.1): an answer
     /// is never silence. Nothing changed; a list asked for again in smaller pages may fit.
     case responseTooLarge

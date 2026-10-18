@@ -43,7 +43,7 @@ jobs:
         run: swiftlint lint --strict
       - name: pure packages (swift test on macOS)
         run: |
-          for p in VettIDCrypto VettIDAttestation VettIDRelay VettIDAltChan VettIDVault VettIDTesting; do
+          for p in VettIDCrypto VettIDAttestation VettIDRelay VettIDAltChan VettIDVault VettIDKeys VettIDTesting; do
             echo "::group::$p"
             swift test --package-path "Packages/$p"
             echo "::endgroup::"

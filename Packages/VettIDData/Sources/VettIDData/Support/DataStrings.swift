@@ -260,6 +260,23 @@ enum DataStrings {
             bundle: .module
         )
     }
+
+    /// IOS-PLAN §14, "Phone locked during a request" (iPhone only; no Android counterpart).
+    static var failurePhoneLocked: String {
+        String(localized: "data_failure_phone_locked", defaultValue: "Unlock your iPhone, then try again.", bundle: .module)
+    }
+
+    /// IOS-PLAN §14, "Four unconfirmed changes" (iPhone only; no Android counterpart).
+    static var failureUnconfirmedChanges: String {
+        String(
+            localized: "data_failure_unconfirmed_changes",
+            defaultValue: """
+                Unlock your vault first, then try again. VettID needs to confirm your last change before it can make \
+                another.
+                """,
+            bundle: .module
+        )
+    }
     static var failureResponseTooLarge: String {
         String(
             localized: "data_failure_response_too_large",

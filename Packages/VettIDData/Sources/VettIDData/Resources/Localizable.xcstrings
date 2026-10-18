@@ -364,6 +364,17 @@
         }
       }
     },
+    "data_failure_phone_locked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock your iPhone, then try again."
+          }
+        }
+      }
+    },
     "data_failure_rate_limited": {
       "extractionState": "manual",
       "localizations": {
@@ -525,6 +536,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "VettID's account service does not accept this phone for your vault any more. If you moved VettID to another phone, this one was replaced. If a setup took longer than an hour, start again with a new code."
+          }
+        }
+      }
+    },
+    "data_failure_unconfirmed_changes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock your vault first, then try again. VettID needs to confirm your last change before it can make another."
           }
         }
       }

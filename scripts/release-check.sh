@@ -5,7 +5,8 @@
 # Archives the Release and Staging configurations unsigned and fails when
 # either app carries:
 #   - a TEST-only marker (the VettIDTesting package, VettIDData's
-#     VettIDDataTesting target, the TEST attester's App ID),
+#     VettIDDataTesting target, VettIDKeys's VettIDKeysTesting target with
+#     the software phone key, the TEST attester's App ID),
 #   - a dev-stack address or a debug-only tool,
 #   - the other environment's hosts,
 # or lacks its own account host, or has another bundle id.
@@ -23,9 +24,9 @@ SELF_TEST=0
 [[ "${1:-}" == "--self-test" ]] && SELF_TEST=1
 
 # Strings no Release or Staging app may contain.
-# The deterministic randomness hook of VettIDCrypto (debug builds only) and VettIDDataTesting's fake carry
-# "VETTID TEST ONLY".
-TEST_MARKERS=("VettIDTesting" "VettIDDataTesting" "TESTTEAM00" "VETTID TEST ONLY")
+# The deterministic randomness hook of VettIDCrypto (debug builds only), VettIDDataTesting's fake and VettIDKeysTesting's
+# software keys (IOS-PLAN §6.3: no software phone key in Release or Staging) carry "VETTID TEST ONLY".
+TEST_MARKERS=("VettIDTesting" "VettIDDataTesting" "VettIDKeysTesting" "TESTTEAM00" "VETTID TEST ONLY")
 # "Scan: another environment" is a title of the onboarding screen catalog (App/Debug, debug builds only).
 DEV_ONLY=("127.0.0.1" "relay.vettid.test" "vettid.start" "vettid.theme" "Component gallery" "Screen catalog"
   "Scan: another environment")
@@ -184,6 +185,10 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
   plant Release check_release "VettIDDataTesting"
   plant Release check_release "VETTID TEST ONLY: the repository-level fake"
   plant Release check_release "VETTID TEST ONLY: deterministic randomness drew the wrong size"
+  plant Release check_release "VettIDKeysTesting"
+  plant Release check_release "VETTID TEST ONLY: software keys instead of the Secure Enclave"
+  plant Staging check_staging "VettIDKeysTesting"
+  plant Staging check_staging "VETTID TEST ONLY: software keys instead of the Secure Enclave"
   plant Release check_release "account.staging.vettid.org"
   plant Release check_release "Scan: another environment"
   plant Staging check_staging "Scan: another environment"
