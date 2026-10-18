@@ -243,6 +243,9 @@ public final class InMemoryFileKeyHolder: FileKeyHolder, @unchecked Sendable {
     }
 
     public func deleteAll() throws { lock.withLock { stored = nil } }
+
+    /// Whether a key is held.
+    public var holdsKey: Bool { lock.withLock { stored != nil } }
 }
 
 /// Wrapped seeds in memory.
@@ -275,4 +278,96 @@ public final class RecordingEraser: KeyEraser, @unchecked Sendable {
         if fails { throw KeysError.unavailable("eraser") }
         lock.withLock { count += 1 }
     }
+}
+
+/// TEST ONLY. The app-lock key's software stand-in (the simulator has no Secure Enclave): an AES-GCM key in memory. Each
+/// prompt answers as ``nextPrompts`` says (success by default); ``invalidate()`` is a new face or finger enrolled.
+public final class SoftwareAppLockKeys: AppLockKeys, @unchecked Sendable, CustomStringConvertible {
+    /// How one prompt ends.
+    public enum Prompt: Sendable {
+        case succeed
+        case cancel
+        case fail
+        /// Face ID or Touch ID locked after too many attempts.
+        case lockout
+        /// Face ID or Touch ID turned off for the app (or the passcode turned off): the key can no longer be used.
+        case unavailable
+    }
+
+    private let lock = NSLock()
+    private var key: SymmetricKey?
+    private var promptsValue: [Prompt] = []
+    private var createdValue: [AppLockMethod] = []
+    private var opensValue = 0
+
+    public init() {}
+
+    public var description: String { SoftwareKeys.testOnlyMarker }
+
+    /// The next prompts' answers, in order; then success.
+    public func nextPrompts(_ p: Prompt...) { lock.withLock { promptsValue += p } }
+
+    /// The methods of the keys made, in order.
+    public var created: [AppLockMethod] { lock.withLock { createdValue } }
+
+    /// How many prompts were shown.
+    public var opens: Int { lock.withLock { opensValue } }
+
+    /// The key no longer opens (a new face or finger, the passcode turned off).
+    public func invalidate() { lock.withLock { key = nil } }
+
+    public func create(_ method: AppLockMethod) throws {
+        lock.withLock {
+            createdValue.append(method)
+            key = SymmetricKey(size: .bits256)
+        }
+    }
+
+    private var lookupFailsValue = false
+
+    /// The key's lookup answers neither "found" nor "no such item" (the iPhone not ready, say).
+    public var lookupFails: Bool {
+        get { lock.withLock { lookupFailsValue } }
+        set { lock.withLock { lookupFailsValue = newValue } }
+    }
+
+    public func exists() throws -> Bool {
+        if lookupFails { throw KeysError.unavailable("app lock key") }
+        return lock.withLock { key != nil }
+    }
+
+    public func seal(_ plaintext: [UInt8]) throws -> [UInt8] {
+        guard let key = lock.withLock({ key }) else { throw KeysError.missing("app lock key") }
+        guard let combined = try AES.GCM.seal(plaintext, using: key).combined else { throw KeysError.invalid("app lock key") }
+        return Array(combined)
+    }
+
+    public func open(_ sealed: [UInt8], reason: String) async throws -> [UInt8] {
+        let prompt = takePrompt()
+        guard let key = lock.withLock({ key }) else { throw AppLockKeyError.invalidated }
+        switch prompt {
+        case .cancel: throw AppLockKeyError.cancelled
+        case .fail: throw AppLockKeyError.failed
+        case .lockout: throw AppLockKeyError.lockedOut
+        case .unavailable: throw AppLockKeyError.invalidated
+        case .succeed: break
+        }
+        do {
+            return Array(try AES.GCM.open(AES.GCM.SealedBox(combined: sealed), using: key))
+        } catch {
+            throw AppLockKeyError.invalidated
+        }
+    }
+
+    /// Counts a prompt and returns how it ends.
+    private func takePrompt() -> Prompt {
+        lock.lock()
+        defer { lock.unlock() }
+        opensValue += 1
+        let prompt: Prompt = promptsValue.first ?? .succeed
+        if !promptsValue.isEmpty { promptsValue.removeFirst() }
+        return prompt
+    }
+
+    public func delete() throws { lock.withLock { key = nil } }
 }

@@ -5,6 +5,8 @@ import VettIDCrypto
 public struct VaultMessage: Sendable, CustomStringConvertible {
     public let inner: Inner
 
+    public init(inner: Inner) { self.inner = inner }
+
     public var type: String { inner.type }
     public var id: String { inner.id }
     public var ts: Date { inner.ts }

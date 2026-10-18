@@ -124,6 +124,23 @@ public final class FakeVaultService: @unchecked Sendable {
     var relayLocksValue = 0
     var memberLocksValue = 0
 
+    // The owner check (FakeVaultService+OwnerCheck.swift), under ``cond``, on the vault's clock.
+    var vaultPassword: String?
+    var credentialVersion: Int64 = 1
+    var checkLastAt: Date?
+    var checkDeadline: Date?
+    var checkInterval: TimeInterval = 86_400
+    var checkFailures = 0
+    /// The state the vault last acted on ("", "due" or "held"), as vettid-vault's `OwnerCheck.Gate`.
+    var checkGate = ""
+    var waitingCounts = [0, 0, 0, 0]
+    var holdOffValue = false
+    var holdOffUntilValue: Date?
+    var passwordFailures = 0
+    var passwordNotBefore: Date?
+    var presentRecordedValue = true
+    var ownerChecksValue: [OwnerCheckSeen] = []
+
     public init() throws {
         etk = try KemPrivateKey.generate()
         kem = try KemPrivateKey.generate()

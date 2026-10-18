@@ -73,6 +73,15 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored private var lockResumed = false
     @ObservationIgnored private(set) var holder: HolderWatch?
     @ObservationIgnored private(set) var refusals: RefusalWatch?
+    /// The daily owner check (VAULT-MESSAGING §3.6): its state, the check, the interval and the hold.
+    @ObservationIgnored public let ownerChecks: OwnerCheckManager
+    /// The wipe of this phone (nil: this build cannot wipe), and what it resets in memory besides the manager's own.
+    @ObservationIgnored let wiper: LocalWipe?
+    @ObservationIgnored var wipeHooks: [@MainActor () async -> Void] = []
+    /// The old vault's device, detached by a wipe and kept until it is forgotten (a retried wipe too).
+    @ObservationIgnored var wipeDevice: VaultDevice?
+    /// A wipe's marker left at the start was looked at (once, after the first-run cleanup).
+    @ObservationIgnored private var wipeResumed = false
     /// The tasks that follow the open session's events and refusals.
     @ObservationIgnored var observers: [Task<Void, Never>] = []
     /// Bumped by every return to the foreground: a background task that began before one does not stop the collection.
@@ -94,7 +103,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         let rec = record
         let lockFile = LockRecordFile(
             file: config.file(VaultFiles.lock),
-            inUse: { rec.value.lockFileInUse },
+            // During a wipe, and after one that did not finish, a missing lock file is no lock: nothing is left to lock.
+            inUse: { rec.value.lockFileInUse && !rec.closed },
             onFirstSave: { _ = try? rec.update(since: rec.generation) { $0.lockFileInUse = true } },
             now: config.now
         )
@@ -106,6 +116,25 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             )
         }
         locking = LockSequence(sleep: timing.sleep)
+        let ref = ManagerRef()
+        let checkFile = config.file(VaultFiles.ownerCheck)
+        ownerChecks = OwnerCheckManager(
+            ops: {
+                guard let m = ref.manager else { throw VaultFailure(.other, code: "session_dropped") }
+                return VaultOwnerCheckOps(api: try m.openApi(try await m.openSession()))
+            },
+            load: { try checkFile.load() },
+            // Nothing is written while a wipe runs or after one that did not finish.
+            persist: { b in
+                guard !rec.closed else { return }
+                if b.isEmpty { try checkFile.clear() } else { try checkFile.save(b) }
+            },
+            now: config.now,
+            mark: { rec.generation },
+            sleep: timing.sleep
+        )
+        wiper = config.wipeTargets.map { LocalWipe(targets: $0, hooks: [{ await ref.manager?.runWipeHooks() }]) }
+        ref.manager = self
         lockPorts.manager = self
         holder = HolderWatch { [weak self] in await self?.wipeReplacedPhone() }
         refusals = RefusalWatch { [weak self] in
@@ -147,7 +176,10 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// The first-run cleanup, then the account record (IOS-PLAN §6.1: nothing is read before the cleanup ran).
     func prepared() throws {
         try config.prepare()
+        resumePendingWipe()
+        try record.refuseWhileClosed()
         try record.load()
+        ownerChecks.loadIfNeeded()
         memberVault.set(recorded: record.value.vaultID)
         if account == nil { account = record.value.info }
         if !lockResumed {
@@ -157,6 +189,20 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             lockNotices.opened(at: record.value.lastOpenedMs.map { Date(timeIntervalSince1970: Double($0) / 1000) })
         }
     }
+
+    /// At the start, right after the first-run cleanup and before anything reads local files: a wipe a crash interrupted
+    /// is finished; one that still cannot finish shuts the record until a wipe completes. Once per process.
+    public func resumePendingWipe() {
+        guard !wipeResumed, let wiper else { return }
+        wipeResumed = true
+        guard wiper.pending else { return }
+        wiper.resumeIfPending()
+        ownerChecks.clear()
+        if wiper.pending { record.markEraseFailed() }
+    }
+
+    /// Protected data became available: what could not be read before (the owner check kept on the phone) is read now.
+    public func reloadLocalState() { try? prepared() }
 
     /// A record of its own (a redeem, or none after "that is not my account").
     func resetRecord(_ a: LocalAccount) throws {
@@ -194,8 +240,13 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     }
 
     private nonisolated static func makeSession(_ c: VaultManagerConfig, _ member: MemberApiClient) async throws -> VaultSession {
+        // A wipe cancels an opening: nothing more is made or written from here.
+        try Task.checkCancellation()
         let keys = DeviceKeys(wrapper: SeedWrapper(source: c.keys.seedWrap), store: c.keys.wrapped)
-        for slot in KeySlot.allCases where try !keys.has(slot) { try keys.generate(slot) }
+        for slot in KeySlot.allCases where try !keys.has(slot) {
+            try Task.checkCancellation()
+            try keys.generate(slot)
+        }
         let secrets = DeviceSecrets(
             identity: try keys.ed25519(.identity), kem: try keys.kem(), relay: try keys.ed25519(.relay),
             apiKey: try c.keys.appKeys.getOrCreate().spki()
@@ -206,7 +257,9 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             collectMode: c.collectMode, pollWait: c.pollWait, requestTimeout: c.requestTimeout
         )
         let restored = try VaultDevice.load(cfg, secrets: secrets)
+        try Task.checkCancellation()
         let device = if let restored { restored } else { try await VaultDevice.create(cfg, secrets: secrets) }
+        try Task.checkCancellation()
         // IOS-PLAN ID8: every vault this app holds is of release R, whose passwords are normalized to NFC (§11.14.7).
         let api = VaultApi(device: device) { true }
         let alt = AltChannelFlow(api: member, trust: c.trust, now: c.now, verifyEnclave: c.enclaveCheck)
@@ -234,6 +287,16 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         let left = Double(started) / 1000 + Self.unknownEnrollmentKept - config.now().timeIntervalSince1970
         guard left > 0 else { return nil }
         return VaultFailure(.enrollmentStarted, code: Self.codeEnrollmentStarted, retryAfterSeconds: Int64(left.rounded(.up)))
+    }
+
+    /// Cancels a session being opened and waits until it stopped (a wipe: nothing it writes outlives the erase). True
+    /// when one was.
+    func cancelOpening() async -> Bool {
+        guard let task = opening else { return false }
+        sessionGeneration += 1
+        task.cancel()
+        _ = try? await task.value
+        return true
     }
 
     /// Drops the session. [forget]: the device state goes, with fresh device keys and a new app key for the next setup
@@ -316,6 +379,11 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     var nowMs: Int64 { Int64((config.now().timeIntervalSince1970 * 1000).rounded(.down)) }
 
     private func evaluate() async throws -> AppPhase {
+        if record.eraseFailed {
+            // "Try again" after a wipe that did not finish: it runs again, and its phase says how it ended.
+            await holder?.wipeNow()
+            return phase
+        }
         try prepared()
         usesPhoneSecret = phoneSecrets.inUse
         recoveryOffered = ReleasePath.recoveryOffered(record.value.capabilities)
@@ -364,6 +432,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         if d.recovering { return .setup(.recovering) }
         guard status.state == Self.stateUnlocked else { return .locked }
         if d.credentialVersion == nil { return .setup(.needsCredential) }
+        ownerChecks.onOpened()
         // A restart after the credential and before the confirmation: the vault is still provisional (§11.3) and may be
         // replaced; the backup choice and vault.enroll.confirm are sent before anything else.
         // Only the phone whose enrollment made the vault confirms it.
@@ -379,4 +448,10 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         servicePaused = a.servicePaused
         return a.vault
     }
+}
+
+/// The vault manager, for what it makes before it is fully initialised (the owner check's operations).
+@MainActor
+final class ManagerRef {
+    weak var manager: VaultManager?
 }

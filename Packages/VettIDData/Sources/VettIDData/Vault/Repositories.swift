@@ -100,9 +100,15 @@ public protocol AccountRepository: AnyObject, Observable, Sendable {
     /// erase itself needs no network. Returns once the phone is as freshly installed (``phase`` ``AppPhase/signedOut``);
     /// it runs to the end even if the caller is cancelled.
     func eraseThisPhone() async throws
+
+    /// "Erase VettID's data on this phone", offered only after a wipe that did not finish (``FailureKind/eraseFailed``):
+    /// local only, every keychain item, key and file of the app. True when nothing is left (``phase`` is then
+    /// ``AppPhase/signedOut``); false when something could not be erased. Default: false.
+    func clearAppData() async -> Bool
 }
 
 public extension AccountRepository {
+    func clearAppData() async -> Bool { false }
     var servicePaused: Bool { false }
     func onForeground() {}
     func forgetMissingVault() async throws {}

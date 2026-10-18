@@ -93,6 +93,11 @@ final class AccountRecord {
     /// Bumped by every reset.
     private(set) var generation = 0
     private var loaded = false
+    /// A wipe of this phone runs (``WipeRun``): no session opens and nothing is written over the record.
+    private(set) var wiping = false
+    /// A wipe of this phone did not finish (or its marker was found at the start and could not be finished): shut until
+    /// one completes.
+    private(set) var eraseFailed = false
 
     init(store: EncryptedFileStore) {
         self.store = store
@@ -114,10 +119,42 @@ final class AccountRecord {
         loaded = true
     }
 
-    /// A read-modify-write, dropped (false) when a reset happened since [since] was read.
+    /// Whether a wipe runs or did not finish: the guard of ``WipeRun``.
+    var closed: Bool { wiping || eraseFailed }
+
+    /// Refuses while the record is shut: ``FailureKind/busy`` during a wipe, ``FailureKind/eraseFailed`` after one that did
+    /// not finish. Mirrors vettid-android `SessionGate.refuseWhileClosed`.
+    func refuseWhileClosed() throws {
+        if wiping { throw VaultFailure(.busy, code: "wiping") }
+        if eraseFailed { throw VaultFailure(.eraseFailed, code: WipeRun.codeWipePending) }
+    }
+
+    /// A wipe begins: the writes on their way for the record are dropped, and the record shuts.
+    func beginWipe() {
+        wiping = true
+        generation += 1
+    }
+
+    /// The wipe ended: [complete], the record is a fresh install's (its file is gone) and opens; otherwise it stays shut.
+    func endWipe(complete: Bool) {
+        wiping = false
+        generation += 1
+        if complete {
+            value = LocalAccount()
+            loaded = true
+            eraseFailed = false
+        } else {
+            eraseFailed = true
+        }
+    }
+
+    /// A wipe's marker found at the start that could not be finished: shut until a wipe completes.
+    func markEraseFailed() { eraseFailed = true }
+
+    /// A read-modify-write, dropped (false) when a reset happened since [since] was read, or while the record is shut.
     @discardableResult
     func update(since: Int, _ change: (inout LocalAccount) -> Void) throws -> Bool {
-        guard since == generation else { return false }
+        guard since == generation, !closed else { return false }
         var a = value
         change(&a)
         if a != value {
@@ -147,6 +184,7 @@ final class AccountRecord {
 
     /// A record of its own ([a]: none, or a new setup's): the writes still on their way for the one before are dropped.
     func reset(_ a: LocalAccount) throws {
+        try refuseWhileClosed()
         generation += 1
         try save(a)
         value = a

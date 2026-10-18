@@ -104,9 +104,19 @@ import VettIDKeys
     func theEraserRemovesEveryItem() throws {
         let items = ["a", "b", "c"].map { KeychainItem(account: "vettid.test.\($0)", accessible: .whenUnlockedThisDeviceOnly) }
         for item in items { try item.write([1]) }
+        #expect(try KeychainEraser().itemsLeft())
         try KeychainEraser().deleteAll()
         #expect(items.allSatisfy { $0.lookup(on) == .missing })
+        #expect(try !KeychainEraser().itemsLeft(), "a wipe's check finds nothing")
         try KeychainEraser().deleteAll()
+    }
+
+    /// A wipe's check that nothing is left sees an item of the app.
+    @Test func itemsLeftSeesAnItem() throws {
+        let item = KeychainItem(account: "vettid.test.left", accessible: .whenUnlockedThisDeviceOnly)
+        try item.write([1])
+        defer { try? item.delete() }
+        #expect(try KeychainEraser().itemsLeft())
     }
 }
 

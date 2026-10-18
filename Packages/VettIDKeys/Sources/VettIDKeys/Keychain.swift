@@ -97,17 +97,46 @@ public struct KeychainItem: Sendable {
 public struct KeychainEraser: KeyEraser {
     public init() {}
 
+    static var classes: [CFString] {
+        [kSecClassGenericPassword, kSecClassInternetPassword, kSecClassKey, kSecClassCertificate, kSecClassIdentity]
+    }
+
+    /// Every class is tried, whatever an earlier one answered; the first failure is thrown at the end.
     public func deleteAll() throws {
-        let classes = [kSecClassGenericPassword, kSecClassInternetPassword, kSecClassKey, kSecClassCertificate, kSecClassIdentity]
-        for itemClass in classes {
+        var failure: KeysError?
+        for itemClass in Self.classes {
             let query: [CFString: Any] = [
                 kSecClass: itemClass,
                 kSecUseDataProtectionKeychain: true,
                 kSecAttrSynchronizable: kSecAttrSynchronizableAny,
             ]
             let status = SecItemDelete(query as CFDictionary)
-            guard status == errSecSuccess || status == errSecItemNotFound else { throw KeysError.unavailable("keychain (\(status))") }
+            if status != errSecSuccess && status != errSecItemNotFound && failure == nil {
+                failure = KeysError.unavailable("keychain (\(status))")
+            }
         }
+        if let failure { throw failure }
+    }
+
+    /// Whether any item or key the app can reach is left (a wipe's check that nothing is). Throws when a lookup fails
+    /// for another reason than "no such item".
+    public func itemsLeft() throws -> Bool {
+        for itemClass in Self.classes {
+            let query: [CFString: Any] = [
+                kSecClass: itemClass,
+                kSecUseDataProtectionKeychain: true,
+                kSecAttrSynchronizable: kSecAttrSynchronizableAny,
+                kSecMatchLimit: kSecMatchLimitOne,
+                kSecReturnAttributes: true,
+            ]
+            var out: CFTypeRef?
+            switch SecItemCopyMatching(query as CFDictionary, &out) {
+            case errSecSuccess: return true
+            case errSecItemNotFound: continue
+            case let status: throw KeysError.unavailable("keychain (\(status))")
+            }
+        }
+        return false
     }
 }
 

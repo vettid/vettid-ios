@@ -30,10 +30,10 @@ SELF_TEST=0
 # software keys (IOS-PLAN §6.3: no software phone key in Release or Staging) and VettIDAltChanTesting's TEST iOS
 # attester (IOS-PLAN §6.2) carry "VETTID TEST ONLY".
 TEST_MARKERS=("VettIDTesting" "VettIDDataTesting" "VettIDKeysTesting" "VettIDAltChanTesting" "TESTTEAM00" "VETTID TEST ONLY")
-# "Scan: another environment" and "Keys gone, earlier keys to try" are titles of the onboarding and unlock screen
-# catalogs (App/Debug, debug builds only).
+# "Scan: another environment", "Keys gone, earlier keys to try" and "Held: messages and a call waiting" are titles of the
+# onboarding, unlock and owner-check screen catalogs (App/Debug, debug builds only).
 DEV_ONLY=("127.0.0.1" "relay.vettid.test" "vettid.start" "vettid.theme" "Component gallery" "Screen catalog"
-  "Scan: another environment" "Keys gone, earlier keys to try")
+  "Scan: another environment" "Keys gone, earlier keys to try" "Held: messages and a call waiting")
 
 PRODUCTION_HOSTS=("account.vettid.org")
 STAGING_HOSTS=("staging.vettid.org")

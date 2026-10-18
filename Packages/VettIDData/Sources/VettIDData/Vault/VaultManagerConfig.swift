@@ -41,10 +41,12 @@ public enum VaultFiles {
     public static let device = "vault-device"
     public static let phoneSecrets = "phone-secrets"
     public static let lock = "lock-record"
+    /// The owner check as this phone last learnt it (``OwnerCheckManager``).
+    public static let ownerCheck = "owner-check"
 
     /// Every data file of the vault manager in [directory].
     public static func all(in directory: URL) -> [URL] {
-        [account, device, phoneSecrets, lock].map { directory.appendingPathComponent($0) }
+        [account, device, phoneSecrets, lock, ownerCheck].map { directory.appendingPathComponent($0) }
     }
 }
 
@@ -117,6 +119,9 @@ public struct VaultManagerConfig: Sendable {
     public var enrolledGrace: TimeInterval
     /// How the member's lock waits.
     public var lockTiming: LockTiming
+    /// What a wipe of this phone erases (``LocalWipe``); nil: this build cannot wipe (``AccountRepository/eraseThisPhone()``
+    /// refuses with ``FailureKind/notSupported``).
+    public var wipeTargets: (any WipeTargets)?
     public var now: @Sendable () -> Date
 
     public init(
@@ -138,6 +143,7 @@ public struct VaultManagerConfig: Sendable {
         requestTimeout: TimeInterval = DeviceConfig.defaultTimeout,
         enrolledGrace: TimeInterval = 15,
         lockTiming: LockTiming = LockTiming(),
+        wipeTargets: (any WipeTargets)? = nil,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.apiOrigin = apiOrigin.hasSuffix("/") ? String(apiOrigin.dropLast()) : apiOrigin
@@ -158,6 +164,7 @@ public struct VaultManagerConfig: Sendable {
         self.requestTimeout = requestTimeout
         self.enrolledGrace = enrolledGrace
         self.lockTiming = lockTiming
+        self.wipeTargets = wipeTargets
         self.now = now
     }
 

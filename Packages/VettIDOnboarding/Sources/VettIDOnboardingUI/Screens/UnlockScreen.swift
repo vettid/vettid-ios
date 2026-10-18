@@ -11,13 +11,20 @@ import VettIDUI
 public struct UnlockFlow: View {
     private let vault: any VaultRepository
     private let account: any AccountRepository
+    private let ownerCheck: (any OwnerCheckRepository)?
     private let onOpenAccountSite: @MainActor () -> Void
     @State private var model: UnlockViewModel?
     @Environment(\.vettIDColors) private var colors
 
-    public init(vault: any VaultRepository, account: any AccountRepository, onOpenAccountSite: @escaping @MainActor () -> Void) {
+    public init(
+        vault: any VaultRepository,
+        account: any AccountRepository,
+        ownerCheck: (any OwnerCheckRepository)? = nil,
+        onOpenAccountSite: @escaping @MainActor () -> Void
+    ) {
         self.vault = vault
         self.account = account
+        self.ownerCheck = ownerCheck
         self.onOpenAccountSite = onOpenAccountSite
     }
 
@@ -30,7 +37,7 @@ public struct UnlockFlow: View {
             }
         }
         .onAppear {
-            if model == nil { model = UnlockViewModel(vault: vault, account: account) }
+            if model == nil { model = UnlockViewModel(vault: vault, account: account, ownerCheck: ownerCheck) }
         }
     }
 }

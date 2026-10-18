@@ -71,10 +71,10 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     public var lock: LockNotice = .none
     public var eraseConfirm = false
     public var erasing = false
-    /// The vault is past its owner-check deadline (§3.6.5): the password is asked for with the PIN (I1.7b sets it).
+    /// The vault is past its owner-check deadline (§3.6.5): the password is asked for with the PIN (from the owner check).
     public var checkDue = false
     public var password = ""
-    /// The vault locked after ten failed checks (§3.6.4; I1.7b sets it).
+    /// The vault locked after ten failed checks (§3.6.4; from the owner check).
     public var lockedByOwnerCheck = false
     /// (Release R) The vault has a phone secret: cancelling a recovery from here sends the owner check at once.
     public var phoneSecret = false

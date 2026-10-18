@@ -35,6 +35,23 @@ public struct OwnerCheckStatus: Decodable, Equatable, Sendable {
     public let idleLockAt: String?
 }
 
+/// `vault.owner-check`'s answer (§3.6.1), less the blob and UTKs the credential layer keeps.
+public struct OwnerCheckPassed: Decodable, Equatable, Sendable {
+    public let deadline: String?
+    public let intervalSeconds: Int64?
+    public let hold: Bool?
+    public let holdOffUntil: String?
+    /// (0.33.0, release R) `recovery{state, present_recorded}` (§11.14.5): `present_recorded` false means the vault could
+    /// not record that the member was here (the presence notice).
+    public let recovery: OwnerCheckRecovery?
+}
+
+/// The owner check answer's `recovery` (VAULT-MESSAGING 0.33.0 §11.14.5).
+public struct OwnerCheckRecovery: Decodable, Equatable, Sendable {
+    public let state: String?
+    public let presentRecorded: Bool?
+}
+
 /// `vault.held` (§3.6.3): content-free counts of what waits since the deadline.
 public struct HeldNotice: Decodable, Equatable, Sendable {
     public let deadline: String?

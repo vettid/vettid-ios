@@ -13,7 +13,14 @@ extension VaultManager {
         stopObserving()
         let events = s.device.events()
         let counts = s.device.vaultRefusalCounts()
+        let required = s.device.ownerCheckRequired()
         observers = [
+            Task { @MainActor [weak self] in
+                for await _ in required {
+                    guard let self else { return }
+                    ownerChecks.onRequired()
+                }
+            },
             Task { @MainActor [weak self] in
                 for await m in events {
                     guard let self else { return }
@@ -37,6 +44,9 @@ extension VaultManager {
         foregrounds += 1
         backgrounded = false
         guard phase != .signedOut else { return }
+        // A vault past its owner-check deadline, or near it, is read again: the check screen shows what is waiting.
+        let t = config.now()
+        if phase == .unlocked, let v = ownerChecks.ownerCheck, v.gated(t) || v.warning(t) { ownerChecks.onOpened() }
         Task { [weak self] in
             guard let self, let s = try? await storedSession() else { return }
             // A session opened in the background (a lock's retry) has not collected yet.
@@ -80,11 +90,12 @@ extension VaultManager {
         observers = []
     }
 
-    /// One vault event. Mirrors the part of vettid-android `VaultManager.onEvent` that the unlock and the lock need; the
-    /// lists, the feed and the owner check follow theirs with their rows.
+    /// One vault event. Mirrors the part of vettid-android `VaultManager.onEvent` that the unlock, the lock and the owner
+    /// check need; the lists and the feed follow theirs with their rows.
     func onEvent(_ m: VaultMessage) {
         // The lock before this phone's last unlock (the one an unlock of a running vault makes), relayed late.
         if lockNotices.stale(m) { return }
+        ownerChecks.onEvent(m)
         switch m.type {
         // §3.6.3: entering the hold ends the credential's unlock window.
         case Self.typeHeld:

@@ -45,19 +45,18 @@ extension VaultManager {
     }
 
     /// A locked vault past its owner-check deadline (§3.6.5): the unlock, then the check with [pin] and [password] before
-    /// the app opens, so that the member types both once. The check itself comes with I1.7b
-    /// (``ownerCheckAfterUnlock(pin:password:)``).
+    /// the app opens, so that the member types both once (``OwnerCheckManager/afterUnlock(pin:password:)``).
     public func unlockWithCheck(pin: String, password: String, approve: ReleaseView?, cancelRecovery: Bool) async throws -> UnlockAttempt {
         await unlockStep(pin: pin, options: Self.options(approve, cancelRecovery: cancelRecovery)) { [weak self] in
-            await self?.ownerCheckAfterUnlock(pin: pin, password: password)
+            await self?.ownerChecks.afterUnlock(pin: pin, password: password)
         }
     }
 
     /// (Release R, ANDROID-PLAN "Other screens") An unlock with `cancel_recovery`, then at once the owner check with the
-    /// PIN and the password, which records that the member is present (§11.14.5). The check comes with I1.7b.
+    /// PIN and the password, which records that the member is present (§11.14.5).
     public func unlockCancellingRecovery(pin: String, password: String, approve: ReleaseView?) async throws -> UnlockAttempt {
         await unlockStep(pin: pin, options: Self.options(approve, cancelRecovery: true)) { [weak self] in
-            await self?.ownerCheckAfterCancelledRecovery(pin: pin, password: password)
+            await self?.ownerChecks.afterCancelledRecovery(pin: pin, password: password)
         }
     }
 
@@ -168,6 +167,7 @@ extension VaultManager {
     func afterUnlocked(_ s: VaultSession) -> AppPhase {
         if s.device.recovering { return .setup(.recovering) }
         if s.device.credentialVersion == nil { return .setup(.needsCredential) }
+        ownerChecks.onOpened()
         return record.value.setupComplete ? .unlocked : .setup(.finishing)
     }
 

@@ -18,19 +18,23 @@ final class ManualTicker {
     }
 
     /// [seconds] pass, one at a time, with what each one starts run.
-    func advance(_ seconds: Int, _ vm: UnlockViewModel) async {
+    func advance(_ seconds: Int, _ vm: UnlockViewModel) async { await advance(seconds) { await vm.settle() } }
+
+    func advance(_ seconds: Int, _ vm: OwnerCheckViewModel) async { await advance(seconds) { await vm.settle() } }
+
+    private func advance(_ seconds: Int, settle: () async -> Void) async {
         for _ in 0..<seconds {
-            await vm.settle()
+            await settle()
             let w = waiters
             waiters = []
             for c in w { c.resume() }
-            await vm.settle()
+            await settle()
         }
     }
 }
 
-/// Mirrors vettid-android `UnlockViewModelTest`, test for test (What's new comes with I1.8; the owner check's own
-/// repository with I1.7b, so its state is set here as that repository will).
+/// Mirrors vettid-android `UnlockViewModelTest`, test for test (What's new comes with I1.8; the owner check's state is set
+/// directly here, and followed from its repository in ``theOwnerChecksStateIsFollowed()``).
 @MainActor
 @Suite struct UnlockViewModelTests {
     let vault = FakeVaultRepository(.locked)
@@ -349,14 +353,50 @@ final class ManualTicker {
         #expect(!vault.calls.contains("eraseThisPhone"))
     }
 
-    /// (iPhone, until I1.7b brings the wipe) a sealed `unknown_device` is shown as not recognised, with the erase, never a
-    /// dead end (vettid-android wipes the phone at once on it).
-    @Test func aSealedUnknownDeviceOffersTheEraseUntilTheWipeArrives() async {
+    /// A sealed `unknown_device` proves a replacement: the vault manager wiped the phone already (vettid-android
+    /// `HolderPolicy`); the unlock screen offers nothing more.
+    @Test func aSealedUnknownDeviceOffersNoErase() async {
         vault.unlockResults = [.failed(.other, code: "unknown_device")]
         let vm = await vm()
         await submit(vm)
-        #expect(vm.state.notRecognised && vm.state.eraseOffered)
+        #expect(!vm.state.notRecognised && !vm.state.eraseOffered)
         #expect(!vault.calls.contains("eraseThisPhone"))
+    }
+
+    /// The deadline passes while the unlock screen is open: the next re-read asks for the password too.
+    @Test func theDeadlinePassingWhileOpenIsSeen() async {
+        let clock = Clock()
+        let deadline = Date(timeIntervalSince1970: 1_791_384_000)
+        clock.t = deadline.addingTimeInterval(-10)
+        vault.ownerCheck = OwnerCheckView(state: .ok, deadline: deadline)
+        let recheck = ManualTicker()
+        let vm = UnlockViewModel(
+            vault: vault, account: vault, ownerCheck: vault, now: { clock.t }, tick: ticker.tick, recheck: recheck.tick
+        )
+        await vm.settle()
+        #expect(!vm.state.checkDue)
+        clock.t = deadline.addingTimeInterval(1)
+        await recheck.advance(1, vm)
+        #expect(vm.state.checkDue)
+    }
+
+    final class Clock: @unchecked Sendable {
+        var t = Date()
+    }
+
+    /// The owner check's repository says the vault is past its deadline, then that it locked after ten checks: the unlock
+    /// screen follows it.
+    @Test func theOwnerChecksStateIsFollowed() async {
+        vault.ownerCheck = OwnerCheckView(state: .held, deadline: Date().addingTimeInterval(-60))
+        let vm = UnlockViewModel(vault: vault, account: vault, ownerCheck: vault, tick: ticker.tick)
+        await vm.settle()
+        #expect(vm.state.checkDue && !vm.state.lockedByOwnerCheck)
+        vault.ownerCheck = OwnerCheckView(state: .ok, deadline: Date().addingTimeInterval(3_600))
+        await vm.settle()
+        #expect(!vm.state.checkDue)
+        vault.lockedByOwnerCheck = true
+        await vm.settle()
+        #expect(vm.state.checkDue && vm.state.lockedByOwnerCheck)
     }
 
     /// A PIN handed over for an unlock the model refuses (the release check not passed) does not stay in its state.

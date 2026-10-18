@@ -75,6 +75,8 @@ targets:
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         # The camera for QR codes (chosen; not in the spec: vettid-android has no such text).
         INFOPLIST_KEY_NSCameraUsageDescription: "VettID uses the camera only to scan QR codes, such as your setup code. Nothing is recorded."
+        # Face ID for the app lock (IOS-PLAN ID17; chosen; not in the spec: vettid-android has no such text).
+        INFOPLIST_KEY_NSFaceIDUsageDescription: "VettID uses Face ID only to open the app when you turn on the app lock."
         MARKETING_VERSION: 2.0.0
         CURRENT_PROJECT_VERSION: 1
     dependencies:

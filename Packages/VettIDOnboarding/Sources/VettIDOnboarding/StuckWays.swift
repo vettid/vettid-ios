@@ -19,12 +19,14 @@ public enum SupportMail {
 }
 
 /// The confirmed way out of a dead end of the root screen (``AppPhase/unreachable(_:longUnreachable:)``). Mirrors
-/// vettid-android `WayOut` (its "Erase VettID's data on this phone" after a wipe that did not finish comes with I1.7b).
+/// vettid-android `WayOut`.
 public enum WayOut: Equatable, Sendable {
     /// The account service says the account has no vault: ask it once more, then forget this phone's keys for it.
     case startOver
     /// This phone's stored keys cannot be read: the in-app erase.
     case erase
+    /// A wipe of this phone did not finish: "Erase VettID's data on this phone" (``AccountRepository/clearAppData()``).
+    case clearData
     /// The account service no longer accepts this phone, or the vault has been unreachable for a long time: the in-app
     /// erase, with "Recover your vault" beside it.
     case eraseOrRecover
@@ -33,6 +35,7 @@ public enum WayOut: Equatable, Sendable {
         switch kind {
         case .noVault: .startOver
         case .localState: .erase
+        case .eraseFailed: .clearData
         case .unauthorized: .eraseOrRecover
         case .some(let k) where longUnreachable && k != .clock: .eraseOrRecover
         default: nil
@@ -47,6 +50,8 @@ public enum WayOut: Equatable, Sendable {
 public final class UnreachableViewModel {
     /// A read of the phase is under way.
     public private(set) var retrying = false
+    /// "Erase VettID's data on this phone" could not erase everything: the member is told to remove the app.
+    public private(set) var clearDataFailed = false
 
     @ObservationIgnored private let account: any AccountRepository
 
@@ -73,6 +78,8 @@ public final class UnreachableViewModel {
                 switch way {
                 case .startOver: try await account.forgetMissingVault()
                 case .erase, .eraseOrRecover: try await account.eraseThisPhone()
+                // Local only: nothing is sent, no session opens.
+                case .clearData: if await !account.clearAppData() { self?.clearDataFailed = true }
                 }
             } catch {
                 try? await account.refresh()

@@ -122,6 +122,67 @@ import VettIDCrypto
         #expect(String(bytes: req.body, encoding: .utf8) == #"{"version":3,"set":{"credential.backup":false}}"#)
         #expect(try await set.value == 4)
     }
+
+    /// The owner check (§3.6.1) is a credential operation: the PIN, the password and the hold change sealed to a UTK, the
+    /// blob beside them; the rotated blob is kept and acknowledged. A `stale_credential` fetches the latest blob once and
+    /// sends the check again, with it and a fresh UTK.
+    @Test func theOwnerCheckSendsTheBlobAndRetriesAStaleOne() async throws {
+        let (d, v) = try await base.pairedDevice()
+        let api = VaultApi(device: d) { true }
+        let (utks, keys) = try pool(3)
+        let fetch = Task { try await api.credentialFetch() }
+        try await answer(v, d, "credential.get", #"{"credential":"AQID","version":1}"#)
+        try await answer(v, d, "credential.ack")
+        try await fetch.value
+
+        let check = Task { try await api.ownerCheck(pin: "975310", password: "Cafe\u{301} pw", hold: false, holdOffUntil: "2026-10-20T00:00:00Z") }
+        try await answer(v, d, "credential.utk.get", utks)
+        let first = try await answer(v, d, VaultApi.typeOwnerCheck, code: "stale_credential", errorBody: "{}")
+        #expect(try StrictJson.parseObject(first.body).string("credential") == "AQID")
+        try await answer(v, d, "credential.get", #"{"credential":"BAUG","version":2}"#)
+        try await answer(v, d, "credential.ack")
+        let req = try await answer(v, d, VaultApi.typeOwnerCheck, #"{"credential":"BwgJ","version":3,"deadline":"2026-10-19T12:00:00Z","interval_seconds":86400,"hold":false,"hold_off_until":"2026-10-20T00:00:00Z","recovery":{"state":"armed","present_recorded":true}}"#)
+        #expect(try StrictJson.parseObject(req.body).string("credential") == "BAUG")
+        let p = try payload(req, v.vaultID, keys)
+        #expect(p.members.map(\.name) == ["pin", "password", "hold", "hold_off_until"])
+        #expect(try p.string("pin") == "975310" && p.string("password") == "Caf\u{e9} pw" && !p.bool("hold"))
+        try await answer(v, d, "credential.ack")
+        let passed = try await check.value
+        #expect(passed.deadline == "2026-10-19T12:00:00Z" && passed.intervalSeconds == 86400 && passed.hold == false)
+        #expect(passed.recovery?.presentRecorded == true)
+        #expect(d.credentialVersion == 3)
+    }
+
+    /// A second `stale_credential` is not retried again: one fetch and one retry only (§3.5.3).
+    @Test func aSecondStaleCredentialIsNotRetried() async throws {
+        let (d, v) = try await base.pairedDevice()
+        let api = VaultApi(device: d) { true }
+        let (utks, _) = try pool(3)
+        let fetch = Task { try await api.credentialFetch() }
+        try await answer(v, d, "credential.get", #"{"credential":"AQID","version":1}"#)
+        try await answer(v, d, "credential.ack")
+        try await fetch.value
+        let check = Task { try await api.ownerCheck(pin: "975310", password: "pw") }
+        try await answer(v, d, "credential.utk.get", utks)
+        try await answer(v, d, VaultApi.typeOwnerCheck, code: "stale_credential", errorBody: "{}")
+        try await answer(v, d, "credential.get", #"{"credential":"BAUG","version":2}"#)
+        try await answer(v, d, "credential.ack")
+        try await answer(v, d, VaultApi.typeOwnerCheck, code: "stale_credential", errorBody: "{}")
+        do {
+            _ = try await check.value
+            Issue.record("no error")
+        } catch let e as VaultOpError {
+            #expect(e.code == "stale_credential")
+        }
+        #expect(await base.relay.noDeposit(within: 0.3), "no third attempt")
+    }
+
+    /// Without a blob on this device the check is not sent.
+    @Test func theOwnerCheckNeedsTheBlob() async throws {
+        let (d, _) = try await base.pairedDevice()
+        let api = VaultApi(device: d)
+        await #expect(throws: VaultStateError.self) { _ = try await api.ownerCheck(pin: "975310", password: "pw") }
+    }
 }
 
 // swiftlint:enable line_length

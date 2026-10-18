@@ -49,13 +49,18 @@ public final class TestVaultPhone {
     }
     private let gate = PrepareSwitch()
     private let clock = TestPhoneClock()
+    /// What this phone's wipe erases: its directory and its software keys.
+    public let wipeTargets: TestWipeTargets
 
     public init(service: FakeVaultService) throws {
         self.service = service
         directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("vettid-manager-tests/\(UUID().uuidString)/VettID")
+        wipeTargets = TestWipeTargets(
+            directory: directory, appKeys: appKeys, seedWrap: seedWrap, wrapped: wrapped, phoneKeys: phoneKeys, fileKeys: fileKeys
+        )
         manager = VaultManager(config: try Self.config(
-            service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock
+            service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock, wipeTargets
         ))
     }
 
@@ -63,7 +68,7 @@ public final class TestVaultPhone {
     public func restart() throws {
         manager.stopCollecting()
         manager = VaultManager(config: try Self.config(
-            service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock
+            service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock, wipeTargets
         ))
     }
 
@@ -74,7 +79,8 @@ public final class TestVaultPhone {
     private static func config(
         _ service: FakeVaultService, _ appKeys: SoftwareAppKeyStore, _ seedWrap: SoftwareSeedWrapKeySource,
         _ wrapped: InMemoryWrappedKeyStore, _ phoneKeys: SoftwarePhoneSecretSource, _ fileKeys: InMemoryFileKeyHolder,
-        _ protectedData: ProtectedDataFlag, _ directory: URL, _ gate: PrepareSwitch, _ clock: TestPhoneClock
+        _ protectedData: ProtectedDataFlag, _ directory: URL, _ gate: PrepareSwitch, _ clock: TestPhoneClock,
+        _ wipeTargets: TestWipeTargets
     ) throws -> VaultManagerConfig {
         VaultManagerConfig(
             apiOrigin: service.api.baseURL,
@@ -101,8 +107,62 @@ public final class TestVaultPhone {
                 relayAnswer: 0.5, relayValid: 0.3, memberWait: 0.3, relayMargin: .milliseconds(50),
                 backoff: { _ in .milliseconds(100) }
             ),
+            wipeTargets: wipeTargets,
             now: { clock.now }
         )
+    }
+}
+
+/// TEST ONLY. What a test phone's wipe erases: its data directory and its software keys. [failingErase] makes the next
+/// erases leave a file behind (a wipe that does not finish).
+public final class TestWipeTargets: WipeTargets, @unchecked Sendable {
+    public let directory: URL
+    private let appKeys: SoftwareAppKeyStore
+    private let seedWrap: SoftwareSeedWrapKeySource
+    private let wrapped: InMemoryWrappedKeyStore
+    private let phoneKeys: SoftwarePhoneSecretSource
+    private let fileKeys: InMemoryFileKeyHolder
+    private let lock = NSLock()
+    private var stuck = false
+    private var notificationsCancelled = 0
+
+    init(
+        directory: URL, appKeys: SoftwareAppKeyStore, seedWrap: SoftwareSeedWrapKeySource, wrapped: InMemoryWrappedKeyStore,
+        phoneKeys: SoftwarePhoneSecretSource, fileKeys: InMemoryFileKeyHolder
+    ) {
+        self.directory = directory
+        self.appKeys = appKeys
+        self.seedWrap = seedWrap
+        self.wrapped = wrapped
+        self.phoneKeys = phoneKeys
+        self.fileKeys = fileKeys
+    }
+
+    /// A key that cannot be deleted for now (the next erases fail until it is set back).
+    public var keyStuck: Bool {
+        get { lock.withLock { stuck } }
+        set { lock.withLock { stuck = newValue } }
+    }
+
+    public var cancelledNotifications: Int { lock.withLock { notificationsCancelled } }
+
+    public var marker: URL { directory.appendingPathComponent(LocalWipe.marker) }
+    public var dirs: [URL] { [directory] }
+    public var kept: [URL] { [] }
+    public var erasers: [any KeyEraser] { [StuckEraser(targets: self), appKeys, seedWrap, wrapped, phoneKeys, fileKeys] }
+
+    public func keysLeft() throws -> Bool {
+        keyStuck || appKeys.current != nil || seedWrap.exists || !wrapped.all.isEmpty || phoneKeys.count > 0 || fileKeys.holdsKey
+    }
+
+    public func cancelNotifications() { lock.withLock { notificationsCancelled += 1 } }
+
+    private struct StuckEraser: KeyEraser {
+        let targets: TestWipeTargets
+
+        func deleteAll() throws {
+            if targets.keyStuck { throw KeysError.unavailable("test key") }
+        }
     }
 }
 
