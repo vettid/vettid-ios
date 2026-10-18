@@ -332,10 +332,8 @@ public final class SoftwareAppLockKeys: AppLockKeys, @unchecked Sendable, Custom
     }
 
     public func exists() throws -> Bool {
-        try lock.withLock {
-            if lookupFailsValue { throw KeysError.unavailable("app lock key") }
-            return key != nil
-        }
+        if lookupFails { throw KeysError.unavailable("app lock key") }
+        return lock.withLock { key != nil }
     }
 
     public func seal(_ plaintext: [UInt8]) throws -> [UInt8] {
@@ -345,11 +343,13 @@ public final class SoftwareAppLockKeys: AppLockKeys, @unchecked Sendable, Custom
     }
 
     public func open(_ sealed: [UInt8], reason: String) async throws -> [UInt8] {
-        let (key, prompt): (SymmetricKey?, Prompt) = lock.withLock {
-            opensValue += 1
-            return (key, promptsValue.isEmpty ? .succeed : promptsValue.removeFirst())
-        }
-        guard let key else { throw AppLockKeyError.invalidated }
+        lock.lock()
+        opensValue += 1
+        let held = key
+        let prompt: Prompt = promptsValue.first ?? .succeed
+        if !promptsValue.isEmpty { promptsValue.removeFirst() }
+        lock.unlock()
+        guard let key = held else { throw AppLockKeyError.invalidated }
         switch prompt {
         case .cancel: throw AppLockKeyError.cancelled
         case .fail: throw AppLockKeyError.failed
