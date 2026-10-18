@@ -12,11 +12,14 @@ import VettIDCrypto
 ///   whose answer did not arrive, each with the operation that made it, so that a retry of that operation reuses it;
 /// - **replaced** (oldest first): records a confirmed later one replaced, each with when its 7 days started (and the
 ///   operation that made it, if any, and whether only an unlock's `ok` put it there); deleted 7 days after that, or at a
-///   wipe, with any key no kept record names.
+///   wipe, with any key no kept record names;
+/// - **unresolved** (at most one): a `pin.change` or `credential.password.change` sent and not yet decided
+///   (VAULT-MESSAGING §11.14.9 "A lost answer"), written in the same atomic write as the PIN change's candidate.
 ///
 /// Stored form (chosen; not in the spec): `{"v":1,"current":E,"pendings":[E],"candidates":[{"operation",E…}],
-/// "replaced":[{"since","operation"?,"by_unlock"?,E…}]}` where `E` is `"key_id","record"`, compact JSON, records in
-/// ``PhoneSecretRecord``'s form, `since` in Unix ms.
+/// "replaced":[{"since","operation"?,"by_unlock"?,E…}],"unresolved"?:U}` where `E` is `"key_id","record"`, `U` is
+/// ``UnresolvedChange``'s form, compact JSON, records in ``PhoneSecretRecord``'s form, `since` in Unix ms. A file without
+/// `unresolved` (written before it existed) has none.
 public struct PhoneRecords: Equatable, Sendable {
     public static let format: UInt64 = 1
 
@@ -67,12 +70,17 @@ public struct PhoneRecords: Equatable, Sendable {
     public var pendings: [Entry] = []
     public var candidates: [Candidate] = []
     public var replaced: [Replaced] = []
+    public var unresolved: UnresolvedChange?
 
-    public init(current: Entry? = nil, pendings: [Entry] = [], candidates: [Candidate] = [], replaced: [Replaced] = []) {
+    public init(
+        current: Entry? = nil, pendings: [Entry] = [], candidates: [Candidate] = [], replaced: [Replaced] = [],
+        unresolved: UnresolvedChange? = nil
+    ) {
         self.current = current
         self.pendings = pendings
         self.candidates = candidates
         self.replaced = replaced
+        self.unresolved = unresolved
     }
 
     /// A record was confirmed: no replaced record can come back through its operation's late answer any more.
@@ -95,10 +103,11 @@ public struct PhoneRecords: Equatable, Sendable {
         }
         let b = JsonBuilder().uint("v", Self.format)
         if let current { b.raw("current", current.json().bytes()) }
-        return b.raw("pendings", JsonBuilder.array(pendings.map { $0.json().build() }))
+        b.raw("pendings", JsonBuilder.array(pendings.map { $0.json().build() }))
             .raw("candidates", JsonBuilder.array(candidates))
             .raw("replaced", JsonBuilder.array(replaced))
-            .bytes()
+        if let unresolved { b.raw("unresolved", unresolved.json()) }
+        return b.bytes()
     }
 
     /// The format number of [b], without parsing the rest: an app that meets a format it does not know refuses to use
@@ -127,9 +136,59 @@ public struct PhoneRecords: Equatable, Sendable {
             throw CryptoError.format("phone records")
         }
         return PhoneRecords(
-            current: try o.optObj("current").map(Entry.parse), pendings: pendings, candidates: candidates, replaced: replaced
+            current: try o.optObj("current").map(Entry.parse), pendings: pendings, candidates: candidates, replaced: replaced,
+            unresolved: try o.optObj("unresolved").map(UnresolvedChange.parse)
         )
     }
+}
+
+/// A change of PIN or password sent and not yet decided (VAULT-MESSAGING §11.14.9 "A lost answer" step 1): its type,
+/// inner id, the blob version the request carries and its `exp`, and for a PIN change the operation of its candidate
+/// record. It holds no PIN, password or secret. Stored form (chosen; not in the spec):
+/// `{"type","id","version","exp","operation"?}`, `exp` in Unix ms.
+public struct UnresolvedChange: Equatable, Sendable {
+    public let type: ChangeType
+    public let id: String
+    public let version: Int64
+    public let exp: Date
+    /// The operation of the PIN change's candidate record (``PhoneRecords/Candidate/operation``).
+    public let operation: String?
+
+    public init(type: ChangeType, id: String, version: Int64, exp: Date, operation: String? = nil) {
+        self.type = type
+        self.id = id
+        self.version = version
+        // Stored in ms.
+        self.exp = Date(timeIntervalSince1970: (exp.timeIntervalSince1970 * 1000).rounded(.down) / 1000)
+        self.operation = operation
+    }
+
+    /// The same change, for the PIN change's candidate [operation].
+    public func with(operation: String) -> UnresolvedChange {
+        UnresolvedChange(type: type, id: id, version: version, exp: exp, operation: operation)
+    }
+
+    func json() -> [UInt8] {
+        let b = JsonBuilder().string("type", type.rawValue).string("id", id).uint("version", UInt64(max(0, version)))
+            .uint("exp", UInt64(max(0, (exp.timeIntervalSince1970 * 1000).rounded(.down))))
+        if let operation { b.string("operation", operation) }
+        return b.bytes()
+    }
+
+    static func parse(_ o: JsonObject) throws -> UnresolvedChange {
+        guard let type = ChangeType(rawValue: try o.string("type")) else { throw CryptoError.format("unresolved change type") }
+        let exp = try o.uint("exp", min: 0, max: StrictJson.maxSafeInteger)
+        return UnresolvedChange(
+            type: type, id: try o.string("id"), version: Int64(try o.uint("version", min: 0, max: StrictJson.maxSafeInteger)),
+            exp: Date(timeIntervalSince1970: Double(exp) / 1000), operation: try o.optString("operation")
+        )
+    }
+}
+
+/// The two changes whose lost answer is decided rather than repeated (VAULT-MESSAGING §11.14.9 "A lost answer").
+public enum ChangeType: String, Equatable, Sendable {
+    case pin = "pin.change"
+    case password = "credential.password.change"
 }
 
 /// An answer of the vault that the phone's records react to: `vault.unlock`'s result (VAULT-MESSAGING §11.4), or a

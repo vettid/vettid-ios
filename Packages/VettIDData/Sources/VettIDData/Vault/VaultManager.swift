@@ -92,6 +92,23 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored var pinChangeOperation: String?
     /// TEST ONLY: replaces making the record of a confirmed `pin.change` current (a write that fails).
     @ObservationIgnored var confirmPinChangeOverride: (@MainActor (String) throws -> Void)?
+    /// (VAULT-MESSAGING §11.14.9 "A lost answer") Where the decision of a change whose answer was lost stands.
+    public internal(set) var changeCheck: ChangeCheck?
+    /// (§11.14.9 step 5) Which PIN the unlock asks for while a PIN change is unresolved.
+    public internal(set) var unlockPinStep: UnlockPinStep = .pin
+    /// The unresolved change's request, to send again as the same request. In memory only, never on disk.
+    @ObservationIgnored var heldChange: HeldRequest?
+    /// The decision running now, and the next one after a pause.
+    @ObservationIgnored var deciding: Task<Void, Never>?
+    @ObservationIgnored var recheck: Task<Void, Never>?
+    /// The previous PIN was answered `device_secret`: the unlock asks for the new one.
+    @ObservationIgnored var newPinAsked = false
+    /// A change of PIN or password is on its way in this process (its first send and resends): not decided meanwhile.
+    @ObservationIgnored var sendingChange = false
+    /// Bumped by a wipe or a forget: a decision that began before acts on nothing.
+    @ObservationIgnored var changeGeneration = 0
+    /// The change screen waiting for the decision, if any: the shell's notice leaves the decision to it.
+    @ObservationIgnored weak var changeCheckWaiter: AnyObject?
     /// The wipe of this phone (nil: this build cannot wipe), and what it resets in memory besides the manager's own.
     @ObservationIgnored let wiper: LocalWipe?
     @ObservationIgnored var wipeHooks: [@MainActor () async -> Void] = []
@@ -140,7 +157,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         ownerChecks = OwnerCheckManager(
             ops: {
                 guard let m = ref.manager else { throw VaultFailure(.other, code: "session_dropped") }
-                return VaultOwnerCheckOps(api: try m.openApi(try await m.openSession()))
+                return VaultOwnerCheckOps(api: try m.openApi(try await m.openSession())) { try await ref.manager?.decideFirst() }
             },
             load: { try checkFile.load() },
             // Nothing is written while a wipe runs or after one that did not finish.
@@ -181,7 +198,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         ProfileManager(
             ops: {
                 guard let m = ref.manager else { throw VaultFailure(.other, code: "session_dropped") }
-                return VaultProfileOps(api: try m.openApi(try await m.openSession()))
+                return VaultProfileOps(api: try m.openApi(try await m.openSession())) { try await ref.manager?.decideFirst() }
             },
             onRequest: { r, since in ref.manager?.keepNameRequest(r, since: since) },
             checksLeft: {
@@ -274,7 +291,10 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         let member = member
         let source = canary.store
         let generation = sessionGeneration
-        let task = Task { try await Self.makeSession(c, member, source) }
+        // §11.14.9 "A lost answer": checked again under the credential lock, where a change that began after an
+        // operation's own check is seen.
+        let gate: @Sendable () async throws -> Void = { [weak self] in try await self?.credentialGate() }
+        let task = Task { try await Self.makeSession(c, member, source, gate: gate) }
         opening = task
         defer { opening = nil }
         let s = try await task.value
@@ -289,11 +309,14 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         // foreground does (IOS-PLAN §6.6).
         if !backgrounded { s.device.start() }
         observe(s)
+        // A start or a reconnection: a change whose answer was lost is decided first (§11.14.9 step 2).
+        kickChangeCheck()
         return s
     }
 
     private nonisolated static func makeSession(
-        _ c: VaultManagerConfig, _ member: MemberApiClient, _ canary: CanaryManifestStore
+        _ c: VaultManagerConfig, _ member: MemberApiClient, _ canary: CanaryManifestStore,
+        gate: @escaping @Sendable () async throws -> Void
     ) async throws -> VaultSession {
         // A wipe cancels an opening: nothing more is made or written from here.
         try Task.checkCancellation()
@@ -316,7 +339,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         let device = if let restored { restored } else { try await VaultDevice.create(cfg, secrets: secrets) }
         try Task.checkCancellation()
         // IOS-PLAN ID8: every vault this app holds is of release R, whose passwords are normalized to NFC (§11.14.7).
-        let api = VaultApi(device: device) { true }
+        let api = VaultApi(device: device, normalizePasswords: { true }, credentialGate: gate)
         let alt = AltChannelFlow(api: member, trust: c.trust, now: c.now, canary: canary, verifyEnclave: c.enclaveCheck)
         return VaultSession(device: device, api: api, alt: alt)
     }
@@ -373,6 +396,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         try phoneSecrets.delete()
         usesPhoneSecret = false
         pinChangeOperation = nil
+        forgetChangeCheck()
         unlockWindow = nil
         try record.update(since: record.generation) {
             $0.setupComplete = false
@@ -449,6 +473,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         }
         try prepared()
         usesPhoneSecret = phoneSecrets.inUse
+        // §11.14.9 step 5: a PIN change left unresolved by an earlier run makes the unlock ask for the previous PIN.
+        refreshPinStep()
         recoveryOffered = ReleasePath.recoveryOffered(record.value.capabilities)
         let local = record.value
         // Nothing redeemed on this phone: the welcome screen.

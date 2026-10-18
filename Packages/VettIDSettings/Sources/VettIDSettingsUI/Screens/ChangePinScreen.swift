@@ -93,9 +93,12 @@ public struct ChangePinContent: View {
                     .disabled(state.busy)
                     .accessibilityIdentifier("change_pin_password")
                 }
+                if let check = state.check, let text = Self.text(check) {
+                    // VAULT-MESSAGING §11.14.9 "A lost answer": no failure while the change is decided.
+                    NoticeCard(.info, title: PinStrings.pinTitle, message: text).accessibilityIdentifier("change_check")
+                }
                 if let error = state.error {
-                    let text = state.mayHaveChanged ? PinStrings.pinUnanswered : error.message
-                    NoticeCard(.urgent, title: PinStrings.pinTitle, message: text).accessibilityIdentifier("error")
+                    NoticeCard(.urgent, title: PinStrings.pinTitle, message: error.message).accessibilityIdentifier("error")
                 }
             }
         }
@@ -108,6 +111,16 @@ public struct ChangePinContent: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.protectedDataWillBecomeUnavailableNotification)) { _ in
             forget()
+        }
+    }
+
+    /// The text of a lost answer's decision shown on the form.
+    static func text(_ check: ChangeCheck.Status) -> String? {
+        switch check {
+        case .checking: PinStrings.pinChecking
+        case .unreachable: PinStrings.pinUnreachable
+        case .notApplied: PinStrings.pinNotChanged
+        default: nil
         }
     }
 

@@ -84,16 +84,21 @@ extension FakeVaultService {
         set { locked { epochAdvancedValue = newValue } }
     }
 
-    /// Whether `pin.change` is answered: false stores the change and loses its answer (the app gets none).
+    /// Whether `pin.change` is answered: false stores the change and loses its answer (the app gets none; it stays in
+    /// the response cache, which a resend of the same request reaches).
     public var answerPinChange: Bool {
-        get { locked { answerPinChangeValue } }
-        set { locked { answerPinChangeValue = newValue } }
+        get { locked { !lostAnswerTypes.contains("pin.change") } }
+        set { locked { if newValue { lostAnswerTypes.remove("pin.change") } else { lostAnswerTypes.insert("pin.change") } } }
     }
 
     /// Whether `credential.password.change` is answered: false makes the change and loses its answer.
     public var answerPasswordChange: Bool {
-        get { locked { answerPasswordChangeValue } }
-        set { locked { answerPasswordChangeValue = newValue } }
+        get { locked { !lostAnswerTypes.contains("credential.password.change") } }
+        set {
+            locked {
+                if newValue { lostAnswerTypes.remove("credential.password.change") } else { lostAnswerTypes.insert("credential.password.change") }
+            }
+        }
     }
 
     // MARK: - The requests
@@ -187,8 +192,7 @@ extension FakeVaultService {
             return try reply(m.type, #"{"reason":"\#(reason)"}"#, re: m.id, error: "weak_password")
         }
         vaultPassword = seen.newPassword
-        let answer = try rotated() + "}"
-        if answerPasswordChangeValue { try reply(m.type, answer, re: m.id) }
+        try reply(m.type, try rotated() + "}", re: m.id)
     }
 
     /// Release R `pin.change` (§11.14.9): checked as an owner check; the new PIN and the next epoch's secret stored, the
@@ -202,8 +206,7 @@ extension FakeVaultService {
         guard seen.newUnlockSecret.count == 32, seen.newPin.count >= 6 else { return try reply(m.type, "{}", re: m.id, error: "bad_request") }
         vaultPin = seen.newPin
         vaultSecret = seen.newUnlockSecret
-        let answer = try rotated() + (epochAdvancedValue ? #","epoch_advanced":true}"# : "}")
-        if answerPinChangeValue { try reply(m.type, answer, re: m.id) }
+        try reply(m.type, try rotated() + (epochAdvancedValue ? #","epoch_advanced":true}"# : "}"), re: m.id)
     }
 }
 

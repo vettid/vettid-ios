@@ -21,12 +21,23 @@ public struct VaultApi: Sendable {
     /// are normalized to NFC before they are sealed. False sends every password exactly as typed, as before release R.
     let normalizePasswords: @Sendable () -> Bool
 
-    public init(device: VaultDevice, normalizePasswords: @escaping @Sendable () -> Bool = { false }) {
+    /// Checked under the credential lock before every credential operation with the blob, and again before its
+    /// `stale_credential` retry: it throws to refuse the operation (VAULT-MESSAGING §11.14.9 "A lost answer": nothing
+    /// credential-bearing while a change of PIN or password is on its way or unresolved).
+    let credentialGate: @Sendable () async throws -> Void
+
+    public init(
+        device: VaultDevice, normalizePasswords: @escaping @Sendable () -> Bool = { false },
+        credentialGate: @escaping @Sendable () async throws -> Void = {}
+    ) {
         self.device = device
         self.normalizePasswords = normalizePasswords
+        self.credentialGate = credentialGate
     }
 
-    var credential: CredentialOps { CredentialOps(device: device, normalizePasswords: normalizePasswords) }
+    var credential: CredentialOps {
+        CredentialOps(device: device, normalizePasswords: normalizePasswords, gate: credentialGate)
+    }
 
     private func op(_ type: String, _ body: JsonBuilder? = nil) async throws -> [UInt8] {
         try await device.op(type, body: body?.bytes() ?? VaultJSON.empty)

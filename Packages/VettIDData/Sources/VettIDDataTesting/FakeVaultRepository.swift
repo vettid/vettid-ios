@@ -95,6 +95,12 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var moveNotDone = false
     public var rotateOffered = false
     public var movedAway = false
+    /// (VAULT-MESSAGING §11.14.9 "A lost answer") Where the decision of a lost change stands, set by a test.
+    public var changeCheck: ChangeCheck?
+    /// Which PIN the unlock asks for; ``UnlockAttempt/newPinNeeded`` moves it to ``UnlockPinStep/new``.
+    public var unlockPinStep: UnlockPinStep = .pin
+    /// The change screen waiting for the decision (held weakly).
+    @ObservationIgnored public weak var changeCheckWaiter: AnyObject?
 
     // OwnerCheckRepository.
     public var ownerCheck: OwnerCheckView?

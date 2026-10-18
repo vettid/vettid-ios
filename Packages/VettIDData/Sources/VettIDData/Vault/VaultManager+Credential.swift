@@ -60,6 +60,7 @@ extension VaultManager {
 
     public func openUnlockWindow(password: String) async throws {
         try await guarded {
+            try await decideFirst()
             let exp = try await openApi(try await openSession()).credentialUnlock(password: password)
             unlockWindow = OwnerCheckManager.instant(exp)
         }
@@ -78,31 +79,22 @@ extension VaultManager {
         throw VaultFailure(.notSupported, code: ReleasePath.codeReleaseTooOld)
     }
 
-    /// (Release R, §11.14.9) With the PIN, which the vault verifies; the change closes the recovery generation. No answer
-    /// (``codeChangeUnanswered``): the vault may have made the change; the next credential operation fetches the rotated
-    /// blob (`stale_credential`). The rotation offered after it (ANDROID-PLAN "Transfer") comes with the rotation.
+    /// (Release R, §11.14.9) With the PIN, which the vault verifies; the change closes the recovery generation. The rotation
+    /// offered after it (ANDROID-PLAN "Transfer") comes with the rotation. A lost answer is decided, not repeated
+    /// (§11.14.9 "A lost answer", ``changing(_:_:)``): the marker is stored before the send.
     public func changePassword(_ password: String, newPassword: String, pin: String?) async throws {
         guard let pin else { throw VaultFailure(.notSupported, code: ReleasePath.codeReleaseTooOld) }
-        try await unanswered {
-            try await guarded {
-                let api = try openApi(try await openSession())
-                try await api.credentialChangePassword(password: password, newPassword: newPassword, pin: pin)
+        try await guarded {
+            try await decideFirst()
+            let api = try openApi(try await openSession())
+            let (change, marker) = try await newChange(.password, api)
+            try await changing(marker) {
+                try phoneSecrets.setUnresolved(marker)
+                try await api.credentialChangePassword(password: password, newPassword: newPassword, pin: pin, change: change)
+                try? phoneSecrets.clearUnresolved(id: marker.id)
             }
         }
     }
-
-    /// A change (of the PIN or the password) that got no answer: the vault may have made it. Its failure carries
-    /// ``codeChangeUnanswered`` (chosen; not in the spec).
-    private func unanswered(_ body: () async throws -> Void) async throws {
-        do {
-            try await body()
-        } catch let f as VaultFailure where f.kind == .noResponse || f.kind == .network {
-            throw VaultFailure(f.kind, code: Self.codeChangeUnanswered, cause: f)
-        }
-    }
-
-    /// The code of a change of the PIN or the password that got no answer (chosen; not in the spec).
-    public nonisolated static let codeChangeUnanswered = "change_unanswered"
 
     public func setBackup(_ on: Bool) async throws {
         try await guarded { try await setSetting(try await openSession(), Self.keyBackup, on ? "true" : "false") }
@@ -116,30 +108,29 @@ extension VaultManager {
     // MARK: - The PIN (release R)
 
     /// `pin.change` (release R, §11.14.9): the current PIN, the new one, the password and the phone's next secret. The
-    /// next epoch's record is written before the request is built (IOS-PLAN §6.3 item 1); it becomes current only with
-    /// the answer's `epoch_advanced`, and a lost answer is caught by the next unlock. A retry after a failure reuses it
-    /// (item 2); a new record is made only for a new change after one was confirmed. The rotation offered after it
-    /// (ANDROID-PLAN "Transfer") comes with the rotation.
+    /// next epoch's record is written before the request is built (IOS-PLAN §6.3 item 1), with the unresolved change in
+    /// the same write (§11.14.9 "A lost answer"); it becomes current with the answer's `epoch_advanced`, or when the
+    /// change is decided as applied. A retry after a refusal reuses it (item 2); a new record is made only for a new change
+    /// after one was confirmed. The rotation offered after it (ANDROID-PLAN "Transfer") comes with the rotation.
     ///
-    /// No answer (``codeChangeUnanswered``): the vault may hold the new PIN already; the record stays a candidate for
-    /// the next unlock. While this change is on its way a second one is refused (``FailureKind/busy``). A record that
-    /// cannot be made current after `epoch_advanced` is a success all the same: it stays a candidate, and the next unlock
-    /// confirms it.
+    /// No answer is not a failure: the change is decided (``changing(_:_:)``), and refused as
+    /// ``FailureKind/changeUnresolved`` while undecided. While this change is on its way a second one is refused
+    /// (``FailureKind/busy``). A record that cannot be made current after `epoch_advanced` is a success all the same.
     public func changePin(pin: String, newPin: String, password: String) async throws {
-        try await unanswered {
-            try await guarded {
-                guard phoneSecrets.inUse else { throw VaultFailure(.notSupported, code: Self.codeNoPhoneSecret) }
-                let api = try openApi(try await openSession())
-                let operation = try pinOperation()
-                let advanced = try await phoneSecrets.change(operation: operation, send: { next in
-                    try await api.pinChange(pin: pin, newPin: newPin, password: password, newUnlockSecret: next)
+        try await guarded {
+            guard phoneSecrets.inUse else { throw VaultFailure(.notSupported, code: Self.codeNoPhoneSecret) }
+            try await decideFirst()
+            let api = try openApi(try await openSession())
+            let (change, unmarked) = try await newChange(.pin, api)
+            // No await from here to the send's start: a second change is refused by ``changing(_:_:)``.
+            let operation = try pinOperation()
+            let marker = unmarked.with(operation: operation)
+            try await changing(marker) {
+                let advanced = try await phoneSecrets.change(operation: operation, unresolved: marker, send: { next in
+                    try await api.pinChange(pin: pin, newPin: newPin, password: password, newUnlockSecret: next, change: change)
                 }, confirmed: { _ in false })
-                guard advanced else { return }
-                // The vault holds the new secret: a new change makes a new record, whether or not this one is current yet.
-                pinChangeOperation = nil
-                if let override = confirmPinChangeOverride { try? override(operation) } else {
-                    try? phoneSecrets.confirmChange(operation: operation)
-                }
+                confirmApplied(marker, epochAdvanced: advanced)
+                refreshPinStep()
             }
         }
     }

@@ -131,6 +131,9 @@ public struct VaultManagerConfig: Sendable {
     /// (iPhone) Told whether no vault made or being made here can hold an App Attest key of this phone, from the account
     /// record (``AttestStartOver``); nil where nothing listens.
     public var attestStartOver: AttestStartOver?
+    /// The pause before a change whose answer was lost is checked again (VAULT-MESSAGING §11.14.9 "A lost answer": 30 s,
+    /// doubling up to 5 minutes), in seconds.
+    public var changeCheckSleep: @Sendable (TimeInterval) async throws -> Void
 
     public init(
         apiOrigin: String,
@@ -153,7 +156,8 @@ public struct VaultManagerConfig: Sendable {
         lockTiming: LockTiming = LockTiming(),
         wipeTargets: (any WipeTargets)? = nil,
         environment: String = "",
-        now: @escaping @Sendable () -> Date = { Date() }
+        now: @escaping @Sendable () -> Date = { Date() },
+        changeCheckSleep: @escaping @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) }
     ) {
         self.apiOrigin = apiOrigin.hasSuffix("/") ? String(apiOrigin.dropLast()) : apiOrigin
         self.manifestURL = manifestURL
@@ -176,6 +180,7 @@ public struct VaultManagerConfig: Sendable {
         self.wipeTargets = wipeTargets
         self.environment = environment
         self.now = now
+        self.changeCheckSleep = changeCheckSleep
     }
 
     /// An encrypted file of the vault manager in [directory].

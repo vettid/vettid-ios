@@ -89,6 +89,17 @@
         }
       }
     },
+    "data_failure_change_unresolved": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID is still checking whether your last change went through. Try again when your vault can be reached."
+          }
+        }
+      }
+    },
     "data_failure_clock": {
       "extractionState": "manual",
       "localizations": {
@@ -250,6 +261,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "This invitation is no longer available: it was used, cancelled or has expired. Ask for a new one."
+          }
+        }
+      }
+    },
+    "data_failure_ios_change_checking": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID is still checking whether your last change went through. Try again in a few minutes."
           }
         }
       }

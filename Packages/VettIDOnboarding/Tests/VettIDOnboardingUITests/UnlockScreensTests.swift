@@ -52,6 +52,8 @@ import VettIDUI
             "transfer incomplete": with { $0.message = .failed(.transferIncomplete, code: "transfer_incomplete") },
             "release unknown": unknown,
             "recovery pending": with { $0.recoveryPending = true },
+            "previous pin": with { $0.pinStep = .previous },
+            "new pin": with { $0.pinStep = .new },
         ]
     }
 
@@ -130,6 +132,11 @@ import VettIDUI
         #expect(OnboardingStrings.rootLongUnreachable == "VettID has not reached your vault for 7 days or more.")
         #expect(OnboardingStrings.rootStartOverBody.hasSuffix("could afterwards get back into it only with a recovery."))
         #expect(!OnboardingStrings.unlockRecoverOnlyBody.contains("  "))
+        // ANDROID-PLAN 0.1.45 "A lost answer to a PIN or password change".
+        #expect(OnboardingStrings.unlockPreviousPin == "Enter your previous PIN")
+        #expect(OnboardingStrings.unlockPreviousPinBody
+            == "Your last PIN change got no answer. If it went through, VettID will ask for your new PIN next.")
+        #expect(OnboardingStrings.unlockNewPin == "Your PIN change went through. Enter your new PIN.")
     }
 
     /// The root's stuck screens: the way out of each failure, confirmed; recover-or-erase where the vault is long out of

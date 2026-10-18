@@ -33,9 +33,10 @@ public struct ChangePinState: Equatable, Sendable, CustomStringConvertible, Cust
     /// Opened from a notice about recovery attempts ("if that was not you"): the screen says first that changing only the
     /// PIN gives whoever is guessing ten new tries at the same password (ANDROID-PLAN "Change PIN").
     public var fromAttempts = false
-    /// The last change got no answer: the vault may hold the new PIN already. The new PIN is kept for a resend
-    /// (chosen; not in the spec).
-    public var mayHaveChanged = false
+    /// (VAULT-MESSAGING §11.14.9 "A lost answer") The last change got no answer and is being decided
+    /// (``ChangeCheck/Status/checking``, ``ChangeCheck/Status/unreachable``), or was decided as not applied
+    /// (``ChangeCheck/Status/notApplied``). No failure is shown meanwhile, and the new PIN is kept.
+    public var check: ChangeCheck.Status?
 
     public init(withPassword: Bool = false, fromAttempts: Bool = false) {
         self.withPassword = withPassword
@@ -61,13 +62,49 @@ public final class ChangePinViewModel {
 
     @ObservationIgnored private let vault: any VaultRepository
     @ObservationIgnored private let work = Work()
+    @ObservationIgnored private let followers = TaskBag()
 
     public init(vault: any VaultRepository, fromAttempts: Bool = false) {
         self.vault = vault
         state = ChangePinState(withPassword: vault.usesPhoneSecret, fromAttempts: fromAttempts)
+        followers.add(follow(self, read: { $0.vault.changeCheck }, apply: { $0.decided($1) }))
     }
 
-    deinit { work.cancelAll() }
+    deinit {
+        work.cancelAll()
+        followers.cancelAll()
+    }
+
+    /// The decision of a PIN change whose answer was lost (§11.14.9 "A lost answer"), as it arrives: applied is the
+    /// usual success; not applied keeps the new PIN for the next attempt; a refusal is shown as it is, with the entry
+    /// that was wrong cleared. A decision shown here is not shown again; one this screen did not wait for is the shell's
+    /// (``ChangeCheckNotice``).
+    private func decided(_ c: ChangeCheck?) {
+        guard let c, c.type == .pin, !state.busy else { return }
+        if !c.undecided, state.check != .checking, state.check != .unreachable {
+            // Not this screen's wait (an earlier one, the screen closed meanwhile): the shell's notice tells it.
+            return
+        }
+        switch c.status {
+        case .checking, .unreachable:
+            state.check = c.status
+            vault.waitForChangeCheck(self)
+            return
+        case .applied:
+            state = ChangePinState(withPassword: state.withPassword)
+            state.done = true
+        case .notApplied:
+            state.check = .notApplied
+        case .refused(let kind, _):
+            state.check = nil
+            failed(kind, kept: state)
+        case .ended:
+            state.check = nil
+            state.error = .other
+        }
+        vault.waitForChangeCheck(nil)
+        vault.acknowledgeChangeCheck()
+    }
 
     private static func digits(_ v: String) -> String { String(v.filter { $0.isASCII && $0.isNumber }.prefix(PinPolicy.maxLength)) }
 
@@ -101,7 +138,7 @@ public final class ChangePinViewModel {
         switch state.step {
         case .current:
             guard !state.current.isEmpty else { return }
-            // After a change that got no answer, the same new PIN goes again: it is only confirmed.
+            // After a change that was not applied, or a wrong PIN, the new PIN kept goes again: it is only confirmed.
             state.step = state.pin.isEmpty ? .new : .confirm
         case .new:
             if let p = PinPolicy.check(state.pin) {
@@ -146,7 +183,9 @@ public final class ChangePinViewModel {
             state.password = ""
             return
         }
+        let check = state.check
         state = ChangePinState(withPassword: state.withPassword, fromAttempts: state.fromAttempts)
+        state.check = check
     }
 
     public func submit() {
@@ -175,6 +214,7 @@ public final class ChangePinViewModel {
     private func send(_ s: ChangePinState) {
         state.busy = true
         state.error = nil
+        state.check = nil
         let vault = vault
         work.launch { [weak self] in
             var failed: VaultFailure?
@@ -188,22 +228,55 @@ public final class ChangePinViewModel {
                 failed = error as? VaultFailure ?? VaultFailure(.other)
             }
             guard let self else { return }
-            if let failed {
-                // Every entry is typed again, from the current PIN (on the iPhone's keypad steps; vettid-android clears
-                // the current PIN and the password): chosen; not in the spec. Without an answer the new PIN is kept, so
-                // that a resend carries the same one.
-                var next = ChangePinState(withPassword: s.withPassword, fromAttempts: s.fromAttempts)
-                next.error = failed.kind
-                if failed.code == VaultManager.codeChangeUnanswered {
-                    next.mayHaveChanged = true
-                    next.pin = s.pin
-                }
-                state = next
-            } else {
+            guard let failed else {
                 state = ChangePinState(withPassword: s.withPassword)
                 state.done = true
+                vault.acknowledgeChangeCheck()
+                return
+            }
+            if let check = vault.changeCheck, check.type == .pin, check.undecided, failed.kind == .changeUnresolved {
+                // §11.14.9 step 2: no failure; the new PIN is kept while the change is decided.
+                state = Self.kept(s, current: false)
+                state.check = check.status
+                vault.waitForChangeCheck(self)
+            } else if failed.code == VaultManager.codeChangeNotApplied {
+                state = Self.kept(s, current: false)
+                state.check = .notApplied
+                vault.acknowledgeChangeCheck()
+            } else {
+                self.failed(failed.kind, kept: s)
+                vault.acknowledgeChangeCheck()
             }
         }
+    }
+
+    /// A new form keeping [s]'s new PIN (and its confirmation), and the current PIN when [current].
+    private static func kept(_ s: ChangePinState, current: Bool) -> ChangePinState {
+        var next = ChangePinState(withPassword: s.withPassword, fromAttempts: s.fromAttempts)
+        next.pin = s.pin
+        next.confirm = s.confirm
+        if current { next.current = s.current }
+        return next
+    }
+
+    /// A refusal shown as it is (§11.14.9 step 4), with the entry that was wrong cleared: a wrong PIN clears the current
+    /// PIN, a wrong password the password (the confirmation is typed again on the keypad with it); the new PIN stays. Any
+    /// other failure has every entry typed again, from the current PIN (on the iPhone's keypad steps; vettid-android
+    /// clears the current PIN and the password): chosen; not in the spec.
+    private func failed(_ kind: FailureKind, kept s: ChangePinState) {
+        var next: ChangePinState
+        switch kind {
+        case .badPin:
+            next = Self.kept(s, current: false)
+        case .badPassword:
+            next = Self.kept(s, current: true)
+            next.confirm = ""
+            next.step = .confirm
+        default:
+            next = ChangePinState(withPassword: s.withPassword, fromAttempts: s.fromAttempts)
+        }
+        next.error = kind
+        state = next
     }
 
     /// TEST ONLY: returns once the work started has run.

@@ -94,9 +94,13 @@ public final class ProfileManager: ProfileRepository {
 /// The vault calls of ``ProfileManager``.
 struct VaultProfileOps: ProfileOps {
     let api: VaultApi
+    /// Runs before the change is sent: refuses it while a change of PIN or password is unresolved (VAULT-MESSAGING
+    /// §11.14.9 "A lost answer").
+    var gate: @Sendable () async throws -> Void = {}
 
     func accountNameSet(pin: String, password: String, firstName: String, lastName: String) async throws -> NameRequest {
-        try await api.accountNameSet(pin: pin, password: password, firstName: firstName, lastName: lastName)
+        try await gate()
+        return try await api.accountNameSet(pin: pin, password: password, firstName: firstName, lastName: lastName)
     }
 }
 

@@ -162,8 +162,17 @@ public final class FakeVaultService: @unchecked Sendable {
     var criticalItemsValue = 0
     var unlockTtl = 300
     var windowUntil: Date?
-    var answerPinChangeValue = true
-    var answerPasswordChangeValue = true
+    // A lost answer (FakeVaultService+Replay.swift), under ``cond``.
+    /// Answers cached by the request's inner id (§8.2: 24 hours; here for the fake's life).
+    var responses: [String: Inner] = [:]
+    var seenRequests: Set<String> = []
+    var lostAnswerTypes: Set<String> = []
+    var lostRequestTypes: Set<String> = []
+    var stampsOnVaultClockValue = false
+    var requestsSeenValue: [String] = []
+    /// Requests that reached the vault's mailbox while it was locked, handled after the next unlock (subject to `exp`).
+    var lockedRequests: [Inner] = []
+    var lastExpValue: [String: Date] = [:]
 
     public init() throws {
         etk = try KemPrivateKey.generate()
@@ -384,8 +393,8 @@ public final class FakeVaultService: @unchecked Sendable {
         return try Inner.parse(try Padding.unpadFixed(padded, Padding.altChannelRequest), .sealed)
     }
 
-    static func sealResult(_ kem: KemPublicKey, _ type: String, _ requestID: String, _ body: String) throws -> [UInt8] {
-        let inner = Inner(id: Ulid.new(), type: type, ts: Date(), re: requestID, status: Inner.statusOK, body: Array(body.utf8))
+    static func sealResult(_ kem: KemPublicKey, _ type: String, _ requestID: String, _ body: String, ts: Date = Date()) throws -> [UInt8] {
+        let inner = Inner(id: Ulid.new(), type: type, ts: ts, re: requestID, status: Inner.statusOK, body: Array(body.utf8))
         return try Envelope.sealSealed(kem, senderKid: Kid.anonymous, padded: try Padding.padFixed(try inner.marshal(.sealed), Padding.altChannel)).0
     }
 }

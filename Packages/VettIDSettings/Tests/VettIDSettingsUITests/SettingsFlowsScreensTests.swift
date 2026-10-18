@@ -23,8 +23,25 @@ import VettIDUI
         #expect(NameStrings.invalid == "Use letters, spaces and ' ’ . - only, starting with a letter.")
         #expect(PinStrings.pinDoneRecovery
             == "Your PIN was changed. Your vault's recovery now has 10 new attempts for the new PIN and your password.")
-        #expect(PinStrings.pinUnanswered.hasPrefix("Your vault did not answer, so your PIN may already be the new one."))
-        #expect(CredentialStrings.passwordUnanswered.hasPrefix("Your vault did not answer, so your password may already be the new one."))
+        // ANDROID-PLAN 0.1.45 "A lost answer to a PIN or password change".
+        for texts in [
+            ["PIN", PinStrings.pinChecking, PinStrings.pinNotChanged, PinStrings.pinUnreachable],
+            ["password", CredentialStrings.passwordChecking, CredentialStrings.passwordNotChanged, CredentialStrings.passwordUnreachable],
+        ] {
+            let what = texts[0]
+            #expect(texts[1] == "Your vault hasn't answered yet, so VettID is checking whether your \(what) was changed. "
+                + "Keep your new \(what) at hand.")
+            #expect(texts[2] == "Your \(what) was not changed. You can try again.")
+            #expect(texts[3] == "VettID can't reach your vault right now, so it doesn't know yet whether your \(what) was "
+                + "changed. It will check as soon as it can. Keep both your old and your new \(what) at hand.")
+        }
+        // The shell's notice of a decision reached while the screen was closed.
+        #expect(ChangeCheckNotice.text(ChangeCheck(.pin, .checking)) == nil)
+        #expect(ChangeCheckNotice.text(ChangeCheck(.pin, .applied)) == PinStrings.pinDone)
+        #expect(ChangeCheckNotice.text(ChangeCheck(.password, .applied)) == CredentialStrings.changeDone)
+        #expect(ChangeCheckNotice.text(ChangeCheck(.password, .notApplied)) == CredentialStrings.passwordNotChanged)
+        #expect(ChangeCheckNotice.text(ChangeCheck(.pin, .refused(.badPin, code: "bad_pin"))) == FailureKind.badPin.message)
+        #expect(ChangeCheckNotice.urgent(ChangeCheck(.pin, .ended)) && !ChangeCheckNotice.urgent(ChangeCheck(.pin, .applied)))
         #expect(PinStrings.vaultPin == "Change vault PIN" && PinStrings.securityCredential == "Credential")
         #expect(CredentialStrings.windowOpenUntil("3:00 PM") == "Open until 3:00 PM")
         #expect(CredentialStrings.ttlSeconds(45) == "45 seconds")
@@ -109,10 +126,11 @@ import VettIDUI
         confirm.mismatch = true
         confirm.error = .badPin
         states.append(confirm)
-        var unanswered = ChangePinState(withPassword: true)
-        unanswered.error = .noResponse
-        unanswered.mayHaveChanged = true
-        states.append(unanswered)
+        for check in [ChangeCheck.Status.checking, .unreachable, .notApplied] {
+            var lost = ChangePinState(withPassword: true)
+            lost.check = check
+            states.append(lost)
+        }
         var done = ChangePinState(withPassword: true)
         done.done = true
         states.append(done)
@@ -146,7 +164,13 @@ import VettIDUI
         pw.error = .badPin
         var done = ChangePasswordState(askPin: true)
         done.done = true
-        for s in [pw, done, ChangePasswordState()] {
+        var lost = [ChangePasswordState]()
+        for check in [ChangeCheck.Status.checking, .unreachable, .notApplied] {
+            var l = ChangePasswordState(askPin: true)
+            l.check = check
+            lost.append(l)
+        }
+        for s in [pw, done, ChangePasswordState()] + lost {
             #expect(height(ChangePasswordContent(state: s)) > 0)
         }
         #expect(height(BackupOffSheet(onConfirm: {}, onDismiss: {})) > 0)

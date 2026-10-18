@@ -161,56 +161,6 @@ import VettIDDataTesting
         #expect(try m.phoneSecrets.records().candidates.isEmpty && service.currentPin == "518293")
     }
 
-    /// The answer lost after the vault stored the change: the record stays a candidate, and the next unlock, refused
-    /// `device_secret` with the current record, opens with the candidate and makes it current (§11.14.1 rule 5).
-    @Test func aLostAnswerIsCaughtByTheNextUnlock() async throws {
-        defer { phone.close() }
-        try await setUp()
-        service.answerPinChange = false
-        #expect(await vaultFailure { try await m.changePin(pin: pin, newPin: "518293", password: password) }?.code
-            == VaultManager.codeChangeUnanswered)
-        #expect(try m.phoneSecrets.records().candidates.count == 1)
-        service.answerPinChange = true
-        try await m.lock()
-        #expect(try await m.unlock(pin: "518293") == .success)
-        #expect(try m.phoneSecrets.currentSecret() == service.currentSecret)
-        #expect(try m.phoneSecrets.records().candidates.isEmpty)
-    }
-
-    /// The answer lost, then a retry before any unlock: the same record goes again; the vault, which already holds the new
-    /// PIN, answers `bad_pin`; the record stays a candidate, and an unlock with the new PIN confirms it.
-    @Test func aRetryAfterALostAnswerReusesTheRecord() async throws {
-        defer { phone.close() }
-        try await setUp()
-        service.answerPinChange = false
-        _ = await vaultFailure { try await m.changePin(pin: pin, newPin: "518293", password: password) }
-        service.answerPinChange = true
-        #expect(await vaultFailure { try await m.changePin(pin: pin, newPin: "518293", password: password) }?.code == "bad_pin")
-        // The retry is sent twice: first with the blob the lost answer rotated (`stale_credential`), then with the fetched one.
-        let secrets = Set(service.pinChanges.map(\.newUnlockSecret))
-        #expect(service.pinChanges.count == 3 && secrets.count == 1)
-        #expect(try m.phoneSecrets.records().candidates.count == 1)
-        try await m.lock()
-        #expect(try await m.unlock(pin: "518293") == .success)
-        #expect(try m.phoneSecrets.records().candidates.isEmpty && m.phoneSecrets.currentSecret() == service.currentSecret)
-    }
-
-    /// The answer lost, then a restart: a new change makes a new record (from the current one), the stale blob is fetched
-    /// again, and the unlock after it opens with the newest PIN and secret.
-    @Test func aLostAnswerThenARestartThenANewChange() async throws {
-        defer { phone.close() }
-        try await setUp()
-        service.answerPinChange = false
-        _ = await vaultFailure { try await m.changePin(pin: pin, newPin: "518293", password: password) }
-        service.answerPinChange = true
-        try phone.restart()
-        try await m.refresh()
-        try await m.changePin(pin: "518293", newPin: "640213", password: password)
-        #expect(try m.phoneSecrets.records().candidates.isEmpty && m.phoneSecrets.currentSecret() == service.currentSecret)
-        try await m.lock()
-        #expect(try await m.unlock(pin: "640213") == .success)
-    }
-
     /// Without `epoch_advanced` the record stays a candidate; the next unlock decides.
     @Test func noEpochAdvancedLeavesACandidate() async throws {
         defer { phone.close() }
@@ -264,17 +214,10 @@ import VettIDDataTesting
         #expect(try service.pinChanges.count == 4 && m.phoneSecrets.records().candidates.count == 4)
     }
 
-    /// The password change's answer lost: said as such; the vault made it, and the next change fetches the rotated blob
-    /// (`stale_credential`) and goes through with the new password.
-    @Test func aLostPasswordChangeAnswer() async throws {
+    /// The password change without the PIN is not the iPhone app's (IOS-PLAN ID8).
+    @Test func thePasswordChangeNeedsThePin() async throws {
         defer { phone.close() }
         try await setUp()
-        service.answerPasswordChange = false
-        let lost = await vaultFailure { try await m.changePassword(password, newPassword: "a brand new passphrase", pin: pin) }
-        #expect(lost?.code == VaultManager.codeChangeUnanswered)
-        service.answerPasswordChange = true
-        try await m.changePassword("a brand new passphrase", newPassword: "another new passphrase", pin: pin)
-        #expect(service.passwordChanges.last?.password == "a brand new passphrase")
         #expect(await vaultFailure { try await m.changePassword(password, newPassword: "x y z w", pin: nil) }?.kind == .notSupported)
         #expect(await vaultFailure { try await m.changePassword(password, newPassword: "x y z w") }?.kind == .notSupported)
     }

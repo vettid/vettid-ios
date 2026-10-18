@@ -160,6 +160,23 @@ public protocol VaultRepository: AnyObject, Observable, Sendable {
     /// (Release R) Whether this phone holds a phone secret for its vault (a vault of release R).
     var usesPhoneSecret: Bool { get }
 
+    /// (VAULT-MESSAGING §11.14.9 "A lost answer") Where the decision of a change of PIN or password whose answer was lost
+    /// stands; nil when there is none to show. Default: nil.
+    var changeCheck: ChangeCheck? { get }
+
+    /// The screen showed the decision (applied, not applied, refused, ended): it is not shown again.
+    func acknowledgeChangeCheck()
+
+    /// A change screen waits for the decision ([waiter], held weakly; nil: no longer). Default: nothing.
+    func waitForChangeCheck(_ waiter: AnyObject?)
+
+    /// Whether a change screen waits for the decision: the shell's notice stays hidden then. Default: false.
+    var changeCheckAwaited: Bool { get }
+
+    /// (§11.14.9 step 5) Which PIN the unlock asks for: the previous PIN while a PIN change is unresolved, the new one
+    /// after the vault answered `device_secret` to it. Default: ``UnlockPinStep/pin``.
+    var unlockPinStep: UnlockPinStep { get }
+
     /// This phone received its vault by a direct transfer and has not left onboarding yet.
     var movedIn: Bool { get }
 
@@ -276,6 +293,11 @@ public extension VaultRepository {
     func changePin(pin: String, newPin: String, password: String) async throws { throw VaultFailure(.notSupported) }
     func renewPhoneSecret(pin: String, password: String) async throws { throw VaultFailure(.notSupported) }
     var usesPhoneSecret: Bool { false }
+    var changeCheck: ChangeCheck? { nil }
+    func acknowledgeChangeCheck() {}
+    func waitForChangeCheck(_ waiter: AnyObject?) {}
+    var changeCheckAwaited: Bool { false }
+    var unlockPinStep: UnlockPinStep { .pin }
     var movedIn: Bool { false }
     var recoveryOffered: Bool { true }
     var transferKeptSince: Date? { nil }

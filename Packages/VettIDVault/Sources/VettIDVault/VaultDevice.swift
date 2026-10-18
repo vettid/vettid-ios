@@ -47,6 +47,12 @@ public struct DeviceConfig: Sendable {
     public let collectMode: MailboxCollector.Mode
     public let pollWait: TimeInterval
     public let requestTimeout: TimeInterval
+    /// The phone's monotonic clock in seconds, counting the time the phone sleeps (the vault's clock as last seen is the
+    /// newest answer's `ts` plus the time elapsed on it since, VAULT-MESSAGING §11.14.9 "A lost answer").
+    public let uptime: @Sendable () -> TimeInterval
+
+    /// `CLOCK_MONOTONIC`, which on Apple's systems keeps counting while the phone sleeps (`systemUptime` does not).
+    @Sendable public static func monotonicNow() -> TimeInterval { Double(clock_gettime_nsec_np(CLOCK_MONOTONIC)) / 1e9 }
 
     public init(
         role: String = roleApp,
@@ -58,7 +64,8 @@ public struct DeviceConfig: Sendable {
         now: @escaping @Sendable () -> Date = { Date() },
         collectMode: MailboxCollector.Mode = .longPoll,
         pollWait: TimeInterval = RelayClient.defaultWait,
-        requestTimeout: TimeInterval = defaultTimeout
+        requestTimeout: TimeInterval = defaultTimeout,
+        uptime: @escaping @Sendable () -> TimeInterval = DeviceConfig.monotonicNow
     ) {
         self.role = role
         self.name = name
@@ -70,6 +77,7 @@ public struct DeviceConfig: Sendable {
         self.collectMode = collectMode
         self.pollWait = pollWait
         self.requestTimeout = requestTimeout
+        self.uptime = uptime
     }
 }
 
@@ -144,6 +152,8 @@ public final class VaultDevice: @unchecked Sendable {
     var stopped = true
     /// Set by ``forget()``: nothing is written to the store any more.
     var forgotten = false
+    /// The newest `ts` of a message from the vault and the monotonic time it arrived (in memory only).
+    var vaultClock: (ts: Date, at: TimeInterval)?
 
     init(cfg: DeviceConfig, secrets: DeviceSecrets, st: DeviceState) throws {
         self.cfg = cfg

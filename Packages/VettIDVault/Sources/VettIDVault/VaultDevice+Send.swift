@@ -149,20 +149,28 @@ extension VaultDevice {
     /// for a request the member retries as the same request (§8.2). A request that throws may still be delivered from
     /// the outbox later: a caller that tries again does so with the same [innerID] (``newRequestID()``), never a fresh
     /// one, or the vault may act twice.
+    /// [exp]: the vault drops the request after it, unanswered (§5.3).
     public func request(
-        _ type: String, body: [UInt8] = VaultJSON.empty, timeout: TimeInterval? = nil, innerID: String? = nil
+        _ type: String, body: [UInt8] = VaultJSON.empty, timeout: TimeInterval? = nil, innerID: String? = nil, exp: Date? = nil
+    ) async throws -> VaultMessage {
+        try await request(type, body: body, timeout: timeout, innerID: innerID, exp: exp, retries: Self.appRetries)
+    }
+
+    /// ``request(_:body:timeout:innerID:exp:)`` with at most [retries] re-sends of the same id.
+    func request( // swiftlint:disable:this function_parameter_count
+        _ type: String, body: [UInt8], timeout: TimeInterval?, innerID: String?, exp: Date?, retries: Int
     ) async throws -> VaultMessage {
         let id = innerID ?? Ulid.new(now())
         let d = OneShot<Inner>()
         mem.withLock { pending[id] = d }
         defer { mem.withLock { _ = pending.removeValue(forKey: id) } }
-        _ = try await lock.withLock { try await sendLocked(id: id, type: type, body: body, re: nil, status: nil, exp: nil) }
-        for attempt in 0...Self.appRetries {
+        _ = try await lock.withLock { try await sendLocked(id: id, type: type, body: body, re: nil, status: nil, exp: exp) }
+        for attempt in 0...retries {
             if let inner = await d.wait(timeout: timeout ?? cfg.requestTimeout) { return VaultMessage(inner: inner) }
             // No answer: the collection may have ended (the answer would then wait in the mailbox unread).
             ensureCollecting()
-            if attempt < Self.appRetries {
-                _ = try await lock.withLock { try await sendLocked(id: id, type: type, body: body, re: nil, status: nil, exp: nil) }
+            if attempt < retries {
+                _ = try await lock.withLock { try await sendLocked(id: id, type: type, body: body, re: nil, status: nil, exp: exp) }
             }
         }
         throw VaultStateError(message: "\(type): no response")
