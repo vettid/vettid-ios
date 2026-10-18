@@ -41,6 +41,22 @@ jobs:
           git diff --exit-code -- VettID.xcodeproj App/Info.plist
       - name: SwiftLint
         run: swiftlint lint --strict
+      - name: TEMPORARY diagnose the VettIDKeys build
+        run: |
+          set +e
+          cd Packages/VettIDKeys
+          b() { echo "::group::$1"; s=$(date +%s); perl -e 'alarm 300; exec @ARGV' swift build --target VettIDKeys "${@:2}" 2>&1 | grep -vE "^\[[0-9]+/[0-9]+\] (Compiling VettIDCrypto|Write|Copying)" | tail -40; echo "rc=${PIPESTATUS[0]} $(( $(date +%s)-s ))s"; echo "::endgroup::"; pkill -f swift-frontend; rm -rf .build/debug/VettIDKeys.build; }
+          b threshold -Xswiftc -Xfrontend -Xswiftc -solver-expression-time-threshold=20 -Xswiftc -Xfrontend -Xswiftc -warn-long-function-bodies=500
+          git fetch -q --depth=1 origin master
+          git show FETCH_HEAD:Packages/VettIDKeys/Sources/VettIDKeys/Keychain.swift > /tmp/k.swift
+          cp Sources/VettIDKeys/Keychain.swift /tmp/k-new.swift
+          mv Sources/VettIDKeys/AppLockKeys.swift /tmp/a.swift
+          b without-applock
+          mv /tmp/a.swift Sources/VettIDKeys/AppLockKeys.swift
+          cp /tmp/k.swift Sources/VettIDKeys/Keychain.swift
+          b old-keychain-with-applock
+          cp /tmp/k-new.swift Sources/VettIDKeys/Keychain.swift
+          exit 1
       - name: pure packages (swift test on macOS)
         run: |
           for p in VettIDCrypto VettIDAttestation VettIDRelay VettIDAltChan VettIDVault VettIDKeys VettIDTesting; do
