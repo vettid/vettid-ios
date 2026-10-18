@@ -155,7 +155,7 @@ public final class CanaryManifestManager: CanaryManifestRepository {
             throw Self.refusal(error)
         }
         let used = try await seenSerial()
-        let publishedSerial = await self.publishedSerial()
+        let publishedSerial = try await self.publishedSerial()
         do {
             return try CanaryManifests.check(verifier: verifier, served: served, seen: used, published: publishedSerial)
         } catch {
@@ -171,13 +171,24 @@ public final class CanaryManifestManager: CanaryManifestRepository {
         }
     }
 
-    /// The published manifest's serial, nil when it cannot be read and verified: §11.10.1 applies the "already
-    /// published" refusal only when the app can read and verify the published manifest (a 404 before a channel's first
-    /// release, no connection, or a document that fails verification all install), as vettid-android does. A published
-    /// manifest that fails verification still fails every enroll and unlock, which the canary never masks.
-    private func publishedSerial() async -> UInt64? {
-        guard let doc = try? await published() else { return nil }
-        return try? verifier.verify(doc).serial
+    /// The published manifest's serial; nil only when nothing is published yet (a 404, before a channel's first
+    /// release). Any other failure to read it, or a published manifest that fails verification, refuses the
+    /// installation ("It could not be checked. Try again."): the check is what keeps a stale canary out (the owner's
+    /// decision, vettid-ios #67; §11.10.1 would install, and vettid-android is changed to match).
+    private func publishedSerial() async throws -> UInt64? {
+        let doc: [UInt8]
+        do {
+            doc = try await published()
+        } catch let e as MemberApiError where e.status == 404 && e.code == MemberApiError.manifestUnavailable {
+            return nil
+        } catch {
+            throw Self.refused(CanaryManifestCodes.unchecked, cause: error)
+        }
+        do {
+            return try verifier.verify(doc).serial
+        } catch {
+            throw Self.refused(CanaryManifestCodes.unchecked, cause: error)
+        }
     }
 
     private static func refused(_ code: String, cause: (any Error)? = nil) -> VaultFailure {

@@ -28,6 +28,12 @@ public extension FakeVaultService {
         set { locked { manifestOfflineValue = newValue } }
     }
 
+    /// The published manifest is served but does not verify (bytes that are not a signed manifest).
+    var manifestBroken: Bool {
+        get { locked { manifestBrokenValue } }
+        set { locked { manifestBrokenValue = newValue } }
+    }
+
     /// How many times the published manifest was fetched.
     var manifestFetches: Int { locked { manifestFetchesValue } }
 
@@ -42,6 +48,7 @@ extension FakeVaultService {
     func manifestAnswer() -> FakeHTTPServer.Answer {
         manifestFetchesValue += 1
         if manifestOfflineValue { return .failure(.notConnectedToInternet) }
+        if manifestBrokenValue { return .bytes(200, Array("not a manifest".utf8)) }
         guard let serial = publishedSerialValue else { return .json(404, #"{"error":"not_found"}"#) }
         return (try? servedManifest(serial: serial)).map { .bytes(200, $0) } ?? .empty(500)
     }

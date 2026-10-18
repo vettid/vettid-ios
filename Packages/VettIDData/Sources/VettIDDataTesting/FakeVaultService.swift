@@ -81,6 +81,7 @@ public final class FakeVaultService: @unchecked Sendable {
     var publishedSerialValue: UInt64? = 7
     var manifestFetchesValue = 0
     var manifestOfflineValue = false
+    var manifestBrokenValue = false
     /// The highest manifest serial the vault was sent (its sealed header's, §11.10.4).
     var vaultManifestSerial: UInt64 = 7
 
