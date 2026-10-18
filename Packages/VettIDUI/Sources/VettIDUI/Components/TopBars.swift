@@ -112,7 +112,7 @@ public struct VettIDTopAppBar<Actions: View>: View {
 
     public var body: some View {
         HStack(spacing: 0) {
-            IconButton(.menu, label: UIStrings.openMenu, action: onMenu)
+            IconButton(.menu, label: UIStrings.openMenu, action: onMenu).accessibilityIdentifier("top_bar_menu")
             Spacer().frame(width: Spacing.s)
             Text(title)
                 .vettIDFont(.titleLarge)
@@ -134,6 +134,7 @@ public struct VettIDTopAppBar<Actions: View>: View {
             .buttonStyle(.plain)
             .padding(.trailing, Spacing.s)
             .accessibilityLabel(UIStrings.account(accountName))
+            .accessibilityIdentifier("top_bar_account")
         }
         .padding(.horizontal, Spacing.xs)
         .frame(minHeight: 72)

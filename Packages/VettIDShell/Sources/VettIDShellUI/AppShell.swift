@@ -108,6 +108,9 @@ public struct AppShell: View {
                             }
                     }
                 }
+                // The open app, for UI tests (a container: what is inside keeps its own identifiers).
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("app_shell")
             }
             // While the asked check is shown, nothing of the vault under it is visible or reachable, VoiceOver included
             // (VAULT-MESSAGING §3.6.5).

@@ -1,0 +1,32 @@
+{
+  "configurations" : [
+    {
+      "id" : "5B0C3E52-6C7A-4D1E-9A57-2F4E1B7C8D01",
+      "name" : "Staging",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "preferredScreenCaptureFormat" : "screenshots",
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:VettID.xcodeproj",
+      "identifier" : "8E7B383155AA2840971E1D41",
+      "name" : "VettID"
+    }
+  },
+  "testTargets" : [
+    {
+      "skippedTests" : [
+        "GalleryScreenshots"
+      ],
+      "target" : {
+        "containerPath" : "container:VettID.xcodeproj",
+        "identifier" : "A425F235B5986E4656DD8A8F",
+        "name" : "VettIDAppUITests"
+      }
+    }
+  ],
+  "version" : 1
+}

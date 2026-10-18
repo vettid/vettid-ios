@@ -80,7 +80,9 @@ public struct PinKeypad: View {
                 }
             }
             .accessibilityElement()
+            .accessibilityLabel(UIStrings.keypadEntered)
             .accessibilityValue("\(buffer.count)")
+            .accessibilityIdentifier("pin_dots")
             Grid(horizontalSpacing: Spacing.l, verticalSpacing: Spacing.m) {
                 ForEach(0..<3) { row in
                     GridRow { ForEach(1...3, id: \.self) { col in key(row * 3 + col) } }

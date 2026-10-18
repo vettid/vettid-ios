@@ -123,7 +123,8 @@ targets:
       - target: VettID
       - package: VettIDTesting
 
-  # Screenshots of the debug gallery for review (VettIDScreenshots scheme; not run by CI).
+  # UI tests, never part of an archive: screenshots of the debug gallery (VettIDScreenshots scheme) and the
+  # staging end-to-end tests on a real iPhone (VettIDStagingUITests scheme, scripts/staging-ui-test.sh). Not run by CI.
   VettIDAppUITests:
     type: bundle.ui-testing
     platform: iOS
@@ -191,4 +192,29 @@ schemes:
     test:
       config: Debug
       targets:
-        - VettIDAppUITests
+        - name: VettIDAppUITests
+          skippedTests: [StagingTests]
+
+  # The staging end-to-end tests (STAGING-TESTING §3, §5) against the Staging build on a real iPhone, through
+  # scripts/staging-ui-test.sh; each test is skipped without its inputs. The UI test bundle is built for testing only,
+  # never archived.
+  VettIDStagingUITests:
+    build:
+      targets:
+        VettID: all
+        VettIDAppUITests: [test]
+    run:
+      config: Staging
+    test:
+      config: Staging
+      # The test plan sets the screen capture to screenshots: XCTest's screen recording would make the app's capture
+      # hiding (IOS-PLAN §6.4, always on) cover the whole app. It runs VettIDAppUITests without GalleryScreenshots.
+      testPlans:
+        - path: AppUITests/StagingUITests.xctestplan
+          defaultPlan: true
+    profile:
+      config: Staging
+    analyze:
+      config: Staging
+    archive:
+      config: Staging

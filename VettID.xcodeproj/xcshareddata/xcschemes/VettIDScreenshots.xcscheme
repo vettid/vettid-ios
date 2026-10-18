@@ -63,6 +63,11 @@
                BlueprintName = "VettIDAppUITests"
                ReferencedContainer = "container:VettID.xcodeproj">
             </BuildableReference>
+            <SkippedTests>
+               <Test
+                  Identifier = "StagingTests">
+               </Test>
+            </SkippedTests>
          </TestableReference>
       </Testables>
       <CommandLineArguments>

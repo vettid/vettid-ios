@@ -371,6 +371,7 @@ public struct DoneScreen: View {
             // (iOS) A failed finishSetup is shown here; vettid-android's done screen shows none.
             ErrorNotice(state: state)
         }
+        .accessibilityIdentifier("onboarding_done")
     }
 }
 #endif

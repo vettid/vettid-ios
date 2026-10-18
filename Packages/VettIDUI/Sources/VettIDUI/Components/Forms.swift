@@ -425,6 +425,7 @@ public struct FormScaffold<Header: View, Content: View, TopActions: View>: View 
                 if let primaryLabel {
                     PrimaryButton(primaryLabel, busy: busy, destructive: destructive, action: onPrimary)
                         .disabled(!primaryEnabled || busy)
+                        .accessibilityIdentifier("form_primary")
                 }
                 if let secondaryLabel {
                     Button(action: onSecondary) {
@@ -435,11 +436,15 @@ public struct FormScaffold<Header: View, Content: View, TopActions: View>: View 
                     }
                     .buttonStyle(.plain)
                     .disabled(busy)
+                    .accessibilityIdentifier("form_secondary")
                 }
             }
             .padding(.horizontal, Spacing.xl)
             .padding(.vertical, Spacing.l)
         }
+        // A container: a screen's identifier on the scaffold is the container's own, and every identifier inside (the
+        // buttons, the notices, the fields) keeps its own (UI tests find them).
+        .accessibilityElement(children: .contain)
         .background(colors.background)
     }
 }

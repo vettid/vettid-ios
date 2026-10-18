@@ -86,6 +86,7 @@ public struct SetupScanScreen: View {
             TextLink(OnboardingStrings.setupOpenSite, action: onOpenAccountSite).padding(.top, Spacing.l)
             DevHintNotice(state: state)
         }
+        .accessibilityIdentifier("setup_scan")
     }
 }
 

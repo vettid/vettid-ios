@@ -146,7 +146,9 @@ public struct PinEntry: View {
     public var body: some View {
         VStack(spacing: Spacing.m) {
             Text(label).vettIDFont(.labelLarge).foregroundStyle(colors.onSurfaceVariant)
+            // A container: the label and identifier are the keypad's own, and each key keeps its digit and `pin_<d>`.
             PinKeypad(buffer: buffer, length: PinPolicy.minLength)
+                .accessibilityElement(children: .contain)
                 .accessibilityLabel(label)
                 .accessibilityIdentifier(identifier)
             if let error {
