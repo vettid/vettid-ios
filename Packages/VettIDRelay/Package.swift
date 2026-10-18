@@ -7,8 +7,11 @@ let package = Package(
     products: [
         .library(name: "VettIDRelay", targets: ["VettIDRelay"]),
     ],
+    dependencies: [
+        .package(path: "../VettIDCrypto"),
+    ],
     targets: [
-        .target(name: "VettIDRelay"),
-        .testTarget(name: "VettIDRelayTests", dependencies: ["VettIDRelay"]),
+        .target(name: "VettIDRelay", dependencies: ["VettIDCrypto"]),
+        .testTarget(name: "VettIDRelayTests", dependencies: ["VettIDRelay", "VettIDCrypto"]),
     ]
 )
