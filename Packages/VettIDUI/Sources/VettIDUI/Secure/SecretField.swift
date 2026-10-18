@@ -76,33 +76,55 @@ public struct SecretField: View {
 }
 
 /// A secret the member must see while typing it (a recovery phrase, a setup or transfer code): visible, ASCII-capable
-/// keyboard, the same keyboard settings as ``SecretField``. Mirrors vettid-android `visibleSecretKeyboard`.
+/// keyboard, the same keyboard settings as ``SecretField``. [placeholder] replaces the label inside the empty field;
+/// [capitalization] (none by default) and [monospaced] suit a code; [isError] outlines it in the error colour. Mirrors
+/// vettid-android `visibleSecretKeyboard`.
 public struct VisibleSecretField: View {
     @Binding private var text: String
     private let label: String
+    private let style: SecretTextInput.Style
+    private let isError: Bool
     private let onSubmit: () -> Void
     @Environment(\.vettIDColors) private var colors
 
-    public init(_ label: String, text: Binding<String>, onSubmit: @escaping () -> Void = {}) {
+    public init(
+        _ label: String,
+        text: Binding<String>,
+        placeholder: String? = nil,
+        capitalization: UITextAutocapitalizationType = .none,
+        monospaced: Bool = false,
+        isError: Bool = false,
+        onSubmit: @escaping () -> Void = {}
+    ) {
         self.label = label
         _text = text
+        style = SecretTextInput.Style(placeholder: placeholder ?? label, capitalization: capitalization, monospaced: monospaced)
+        self.isError = isError
         self.onSubmit = onSubmit
     }
 
     public var body: some View {
-        SecretTextInput(text: $text, placeholder: label, visible: true, onSubmit: onSubmit)
+        SecretTextInput(text: $text, placeholder: style.placeholder, visible: true, style: style, onSubmit: onSubmit)
             .frame(minHeight: Spacing.touchTarget)
             .padding(.horizontal, Spacing.l)
-            .overlay(RoundedRectangle(cornerRadius: VettIDShape.small).stroke(colors.outline))
+            .overlay(RoundedRectangle(cornerRadius: VettIDShape.small).stroke(isError ? colors.error : colors.outline))
             .accessibilityLabel(label)
     }
 }
 
 /// The `UITextField` behind the secret fields.
 struct SecretTextInput: UIViewRepresentable {
+    /// How a visible code field looks: what the empty field shows, its capitalization, a monospaced font.
+    struct Style {
+        var placeholder: String
+        var capitalization: UITextAutocapitalizationType = .none
+        var monospaced = false
+    }
+
     @Binding var text: String
     let placeholder: String
     let visible: Bool
+    var style: Style?
     let onSubmit: () -> Void
 
     final class Coordinator: NSObject, UITextFieldDelegate {
@@ -124,6 +146,14 @@ struct SecretTextInput: UIViewRepresentable {
         let f = UITextField()
         SecretInput.configure(f, visible: visible)
         f.placeholder = placeholder
+        if let style {
+            f.autocapitalizationType = style.capitalization
+            if style.monospaced {
+                // Title 3 at the default text size, scaled with the member's text size.
+                f.font = UIFontMetrics(forTextStyle: .title3).scaledFont(for: .monospacedSystemFont(ofSize: 20, weight: .regular))
+                f.adjustsFontForContentSizeCategory = true
+            }
+        }
         f.delegate = context.coordinator
         f.addTarget(context.coordinator, action: #selector(Coordinator.changed(_:)), for: .editingChanged)
         f.setContentHuggingPriority(.defaultLow, for: .horizontal)

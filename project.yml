@@ -41,6 +41,8 @@ packages:
     path: Packages/VettIDNotify
   VettIDUI:
     path: Packages/VettIDUI
+  VettIDOnboarding:
+    path: Packages/VettIDOnboarding
   # TEST ONLY: linked by test targets, never by the app (release check).
   VettIDTesting:
     path: Packages/VettIDTesting
@@ -68,6 +70,8 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
+        # The camera for QR codes (chosen; not in the spec: vettid-android has no such text).
+        INFOPLIST_KEY_NSCameraUsageDescription: "VettID uses the camera only to scan QR codes, such as your setup code. Nothing is recorded."
         MARKETING_VERSION: 2.0.0
         CURRENT_PROJECT_VERSION: 1
     dependencies:
@@ -81,6 +85,7 @@ targets:
       - package: VettIDMedia
       - package: VettIDNotify
       - package: VettIDUI
+      - package: VettIDOnboarding
 
   VettIDTests:
     type: bundle.unit-test
@@ -128,6 +133,8 @@ schemes:
         - package: VettIDMedia/VettIDMediaTests
         - package: VettIDNotify/VettIDNotifyTests
         - package: VettIDUI/VettIDUITests
+        - package: VettIDOnboarding/VettIDOnboardingTests
+        - package: VettIDOnboarding/VettIDOnboardingUITests
         - package: VettIDTesting/VettIDTestingTests
     profile:
       config: Release

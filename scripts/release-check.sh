@@ -26,7 +26,9 @@ SELF_TEST=0
 # The deterministic randomness hook of VettIDCrypto (debug builds only) and VettIDDataTesting's fake carry
 # "VETTID TEST ONLY".
 TEST_MARKERS=("VettIDTesting" "VettIDDataTesting" "TESTTEAM00" "VETTID TEST ONLY")
-DEV_ONLY=("127.0.0.1" "relay.vettid.test" "vettid.start" "vettid.theme" "Component gallery" "Screen catalog")
+# "Scan: another environment" is a title of the onboarding screen catalog (App/Debug, debug builds only).
+DEV_ONLY=("127.0.0.1" "relay.vettid.test" "vettid.start" "vettid.theme" "Component gallery" "Screen catalog"
+  "Scan: another environment")
 
 PRODUCTION_HOSTS=("account.vettid.org")
 STAGING_HOSTS=("staging.vettid.org")
@@ -183,6 +185,8 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
   plant Release check_release "VETTID TEST ONLY: the repository-level fake"
   plant Release check_release "VETTID TEST ONLY: deterministic randomness drew the wrong size"
   plant Release check_release "account.staging.vettid.org"
+  plant Release check_release "Scan: another environment"
+  plant Staging check_staging "Scan: another environment"
   plant Staging check_staging "TESTTEAM00.com.vettid.app"
   plant Staging check_staging "127.0.0.1"
 fi

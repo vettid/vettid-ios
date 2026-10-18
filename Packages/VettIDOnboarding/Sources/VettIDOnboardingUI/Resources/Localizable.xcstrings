@@ -1,0 +1,974 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "move_cd_qr_scanner": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Camera view for scanning the code"
+          }
+        }
+      }
+    },
+    "onboarding_backup_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose where your credential lives. You can change this later in Credential."
+          }
+        }
+      }
+    },
+    "onboarding_backup_off": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Backup off"
+          }
+        }
+      }
+    },
+    "onboarding_backup_off_ack": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I understand that without this phone my vault cannot be recovered"
+          }
+        }
+      }
+    },
+    "onboarding_backup_off_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your credential lives only on this phone. No copy exists anywhere else."
+          }
+        }
+      }
+    },
+    "onboarding_backup_off_warning_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If this phone is lost, broken, reset or replaced without a transfer, your vault cannot be recovered. It can only be deleted and replaced by a new one, and everything in it is lost."
+          }
+        }
+      }
+    },
+    "onboarding_backup_off_warning_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No recovery without this phone"
+          }
+        }
+      }
+    },
+    "onboarding_backup_on": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Backup on (recommended)"
+          }
+        }
+      }
+    },
+    "onboarding_backup_on_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault keeps a copy sealed to it and to your password. If you lose this phone, a recovery restores your vault on a new one."
+          }
+        }
+      }
+    },
+    "onboarding_backup_submit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set up my vault"
+          }
+        }
+      }
+    },
+    "onboarding_backup_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep a sealed backup?"
+          }
+        }
+      }
+    },
+    "onboarding_confirm_account_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You are setting up a vault for %@. Only continue if this is your own account and you got the code yourself."
+          }
+        }
+      }
+    },
+    "onboarding_confirm_account_hint_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account"
+          }
+        }
+      }
+    },
+    "onboarding_confirm_account_no": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That is not my account"
+          }
+        }
+      }
+    },
+    "onboarding_confirm_account_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Is this your account?"
+          }
+        }
+      }
+    },
+    "onboarding_confirm_account_yes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yes, continue"
+          }
+        }
+      }
+    },
+    "onboarding_continue": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue"
+          }
+        }
+      }
+    },
+    "onboarding_dev_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Development build"
+          }
+        }
+      }
+    },
+    "onboarding_done_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault is enrolled, this phone holds its credential, and only your PIN opens it."
+          }
+        }
+      }
+    },
+    "onboarding_done_go": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Go to VettID"
+          }
+        }
+      }
+    },
+    "onboarding_done_next_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invite someone with a QR code or a link, compare the safety code, and start messaging."
+          }
+        }
+      }
+    },
+    "onboarding_done_next_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next: your first connection"
+          }
+        }
+      }
+    },
+    "onboarding_done_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault is ready"
+          }
+        }
+      }
+    },
+    "onboarding_elsewhere_anyway": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set up a new vault anyway"
+          }
+        }
+      }
+    },
+    "onboarding_elsewhere_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A vault has exactly one app, which holds its credential. Another phone is that app. Move VettID to this phone from there, or recover the vault if that phone is lost."
+          }
+        }
+      }
+    },
+    "onboarding_elsewhere_open": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open the account site"
+          }
+        }
+      }
+    },
+    "onboarding_elsewhere_recover": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recover my vault"
+          }
+        }
+      }
+    },
+    "onboarding_elsewhere_recovery_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start a recovery on the account site. After 24 hours it shows a code that this phone scans; then your PIN and credential password move the vault here, and the old phone erases VettID the next time it reaches your vault."
+          }
+        }
+      }
+    },
+    "onboarding_elsewhere_recovery_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lost it?"
+          }
+        }
+      }
+    },
+    "onboarding_elsewhere_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your account already has a vault"
+          }
+        }
+      }
+    },
+    "onboarding_elsewhere_transfer": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move from my old phone"
+          }
+        }
+      }
+    },
+    "onboarding_elsewhere_transfer_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move VettID with a direct transfer: the other phone shows a code, this phone scans it, and you approve there with your PIN and credential password. No waiting."
+          }
+        }
+      }
+    },
+    "onboarding_elsewhere_transfer_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Still have the other phone?"
+          }
+        }
+      }
+    },
+    "onboarding_other_code": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use a different setup code"
+          }
+        }
+      }
+    },
+    "onboarding_password_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "It protects your Protean Credential and your critical items, and VettID asks for it at every critical action. Make it different from your PIN. Nobody, VettID included, can reset it."
+          }
+        }
+      }
+    },
+    "onboarding_password_confirm_label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Password again"
+          }
+        }
+      }
+    },
+    "onboarding_password_label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credential password"
+          }
+        }
+      }
+    },
+    "onboarding_password_mismatch": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The passwords do not match."
+          }
+        }
+      }
+    },
+    "onboarding_password_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create your credential password"
+          }
+        }
+      }
+    },
+    "onboarding_pin_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your PIN unlocks your vault. Only your vault's sealed enclave ever checks it, and wrong guesses are slowed down. Use at least 6 digits; avoid dates and simple patterns."
+          }
+        }
+      }
+    },
+    "onboarding_pin_confirm_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter the same PIN again."
+          }
+        }
+      }
+    },
+    "onboarding_pin_confirm_label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault PIN again"
+          }
+        }
+      }
+    },
+    "onboarding_pin_confirm_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm your vault PIN"
+          }
+        }
+      }
+    },
+    "onboarding_pin_label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault PIN"
+          }
+        }
+      }
+    },
+    "onboarding_pin_mismatch": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The PINs do not match. Try again."
+          }
+        }
+      }
+    },
+    "onboarding_pin_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose your vault PIN"
+          }
+        }
+      }
+    },
+    "onboarding_progress_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This takes a moment. Keep VettID open."
+          }
+        }
+      }
+    },
+    "onboarding_progress_edit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change my choices"
+          }
+        }
+      }
+    },
+    "onboarding_progress_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Setup stopped"
+          }
+        }
+      }
+    },
+    "onboarding_progress_retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try again"
+          }
+        }
+      }
+    },
+    "onboarding_progress_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Setting up your vault"
+          }
+        }
+      }
+    },
+    "onboarding_setup_code_hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "8 characters, like ABCD-EFGH"
+          }
+        }
+      }
+    },
+    "onboarding_setup_code_invalid": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codes have 8 characters and never contain 0, 1, I, L or O."
+          }
+        }
+      }
+    },
+    "onboarding_setup_code_label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Setup code"
+          }
+        }
+      }
+    },
+    "onboarding_setup_email_invalid": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a valid email address."
+          }
+        }
+      }
+    },
+    "onboarding_setup_email_label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Email address of your account"
+          }
+        }
+      }
+    },
+    "onboarding_setup_invalid": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That code did not work. It may be mistyped, used already, or older than 5 minutes, or the email may not be your account's. Get a new code on the account site."
+          }
+        }
+      }
+    },
+    "onboarding_setup_not_code": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That is not a VettID setup code. Scan the QR code the account site shows under Set up your vault."
+          }
+        }
+      }
+    },
+    "onboarding_setup_open_site": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open the account site"
+          }
+        }
+      }
+    },
+    "onboarding_setup_other_environment": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That code is from another VettID environment (%@), not the one this app uses. Get a code from this app's account site."
+          }
+        }
+      }
+    },
+    "onboarding_setup_recovery_code": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That is a recovery code. To recover your vault, go back and choose \"I lost my phone\"."
+          }
+        }
+      }
+    },
+    "onboarding_setup_redeeming": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking your code"
+          }
+        }
+      }
+    },
+    "onboarding_setup_redeeming_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One moment."
+          }
+        }
+      }
+    },
+    "onboarding_setup_refused_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not a setup code"
+          }
+        }
+      }
+    },
+    "onboarding_setup_scan_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On the account site (Vault, then Set up your vault), get a setup code and scan its QR code with this phone. It works once, for 5 minutes."
+          }
+        }
+      }
+    },
+    "onboarding_setup_scan_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan your setup code"
+          }
+        }
+      }
+    },
+    "onboarding_setup_type": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type the code instead"
+          }
+        }
+      }
+    },
+    "onboarding_setup_type_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter your account's email address and the 8 characters shown under the QR code on the account site."
+          }
+        }
+      }
+    },
+    "onboarding_setup_type_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type your setup code"
+          }
+        }
+      }
+    },
+    "onboarding_step_backup": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saving your backup choice"
+          }
+        }
+      }
+    },
+    "onboarding_step_confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirming your vault"
+          }
+        }
+      }
+    },
+    "onboarding_step_credential": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Creating your Protean Credential"
+          }
+        }
+      }
+    },
+    "onboarding_step_enroll": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verifying the vault service and this phone"
+          }
+        }
+      }
+    },
+    "onboarding_step_handshake": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecting securely"
+          }
+        }
+      }
+    },
+    "onboarding_step_wait": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Creating your vault"
+          }
+        }
+      }
+    },
+    "onboarding_welcome_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID keeps your messages, connections and most important secrets in a vault that only you can open."
+          }
+        }
+      }
+    },
+    "onboarding_welcome_point_keys": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your keys stay on this phone and in your vault's sealed enclave."
+          }
+        }
+      }
+    },
+    "onboarding_welcome_point_member": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You need a VettID membership: the account site gives you a code to set up your vault here."
+          }
+        }
+      }
+    },
+    "onboarding_welcome_recover": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I lost my phone: recover my vault"
+          }
+        }
+      }
+    },
+    "onboarding_welcome_start": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Get started"
+          }
+        }
+      }
+    },
+    "onboarding_welcome_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault, only with you"
+          }
+        }
+      }
+    },
+    "onboarding_welcome_transfer": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move from my old phone"
+          }
+        }
+      }
+    },
+    "recover_scan_allow": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow the camera"
+          }
+        }
+      }
+    },
+    "recover_scan_no_camera_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This phone has no camera that VettID can use. Type the code instead."
+          }
+        }
+      }
+    },
+    "recover_scan_no_camera_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No camera"
+          }
+        }
+      }
+    },
+    "recover_scan_permission_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID uses the camera only to read the code; nothing is recorded."
+          }
+        }
+      }
+    },
+    "recover_scan_permission_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Camera access"
+          }
+        }
+      }
+    },
+    "unlock_pin_label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault PIN"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}
