@@ -16,14 +16,26 @@ let package = Package(
         .package(path: "../VettIDCrypto"),
         .package(path: "../VettIDAltChan"),
         .package(path: "../VettIDVault"),
+        .package(path: "../VettIDKeys"),
     ],
     targets: [
         .target(
             name: "VettIDData",
-            dependencies: ["VettIDCrypto", "VettIDAltChan", "VettIDVault"],
+            dependencies: ["VettIDCrypto", "VettIDAltChan", "VettIDVault", .product(name: "VettIDKeys", package: "VettIDKeys")],
             resources: [.process("Resources/Localizable.xcstrings")]
         ),
         .target(name: "VettIDDataTesting", dependencies: ["VettIDData", "VettIDAltChan"]),
-        .testTarget(name: "VettIDDataTests", dependencies: ["VettIDData", "VettIDDataTesting", "VettIDAltChan", "VettIDVault"]),
+        .testTarget(
+            name: "VettIDDataTests",
+            dependencies: [
+                "VettIDData", "VettIDDataTesting", "VettIDAltChan", "VettIDVault",
+                .product(name: "VettIDKeys", package: "VettIDKeys"),
+                // TEST ONLY: the software phone key.
+                .product(name: "VettIDKeysTesting", package: "VettIDKeys"),
+            ],
+            // The Go reference's values of the iPhone's unlock secret (Resources/reference/SOURCE.md), read from the
+            // source tree like Localizable.xcstrings: a resource bundle here would shadow VettIDData's `Bundle.module`.
+            exclude: ["Resources"]
+        ),
     ]
 )

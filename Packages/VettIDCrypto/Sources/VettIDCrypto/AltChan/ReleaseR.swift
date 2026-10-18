@@ -128,7 +128,7 @@ public enum PhoneSecretIOS {
 
 /// One epoch's record of the iPhone's unlock secret (VAULT-MESSAGING §11.14.1 "On an iPhone"):
 /// `(key_vault, epoch, pub(E_e), check_e)`. It holds nothing secret by itself: without the Secure Enclave key, `pub(E_e)`
-/// gives nothing. The record store (VettIDKeys, I1.4) keeps the current record and up to four candidates in the
+/// gives nothing. VettIDData's `PhoneSecrets` keeps the current record and up to four candidates in the
 /// encrypted file store, never in Caches or tmp.
 public struct PhoneSecretRecord: Equatable, Sendable {
     public let keyVault: String
@@ -156,8 +156,10 @@ public struct PhoneSecretRecord: Equatable, Sendable {
             .bytes()
     }
 
-    public static func parse(_ b: [UInt8]) throws -> PhoneSecretRecord {
-        let o = try StrictJson.parseObject(b)
+    public static func parse(_ b: [UInt8]) throws -> PhoneSecretRecord { try parse(try StrictJson.parseObject(b)) }
+
+    /// The stored form as an object (a record nested in the records file, VettIDData `PhoneRecords`).
+    public static func parse(_ o: JsonObject) throws -> PhoneSecretRecord {
         _ = try o.uint("v", min: 1, max: 1)
         let keyVault = try o.string("key_vault")
         guard !keyVault.utf8.contains(0) else { throw CryptoError.format("phone secret record") }
