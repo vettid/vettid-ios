@@ -26,6 +26,21 @@ public struct Release: Equatable, Sendable {
     public let notes: String
 
     public var measurements: Measurements { Measurements(pcr0: pcr0, pcr1: pcr1, pcr2: pcr2) }
+
+    public init(
+        number: UInt64, pcr0: String, pcr1: String, pcr2: String, sealKey: String, status: ReleaseStatus, publishedAt: Date,
+        endsAt: Date? = nil, notes: String
+    ) {
+        self.number = number
+        self.pcr0 = pcr0
+        self.pcr1 = pcr1
+        self.pcr2 = pcr2
+        self.sealKey = sealKey
+        self.status = status
+        self.publishedAt = publishedAt
+        self.endsAt = endsAt
+        self.notes = notes
+    }
 }
 
 /// VettID's signed release manifest (VAULT-MESSAGING §11.10.1, 0.10.0), parsed strictly from its exact bytes: compact

@@ -124,6 +124,8 @@ public final class VaultDevice: @unchecked Sendable {
     }
 
     var awaiting: [Awaiting] = []
+    /// The unlock built and not yet answered (§11.4): what its result is opened and applied with.
+    var pendingUnlock: PendingUnlock?
     var pending: [String: OneShot<Inner>] = [:]
     var inbox: [VaultMessage] = []
     var inboxWaiters: [OneShot<Bool>] = []
