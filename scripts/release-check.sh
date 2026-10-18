@@ -4,8 +4,8 @@
 #
 # Archives the Release and Staging configurations unsigned and fails when
 # either app carries:
-#   - a TEST-only marker (the VettIDTesting package, the TEST attester's
-#     App ID),
+#   - a TEST-only marker (the VettIDTesting package, VettIDData's
+#     VettIDDataTesting target, the TEST attester's App ID),
 #   - a dev-stack address or a debug-only tool,
 #   - the other environment's hosts,
 # or lacks its own account host, or has another bundle id.
@@ -23,8 +23,9 @@ SELF_TEST=0
 [[ "${1:-}" == "--self-test" ]] && SELF_TEST=1
 
 # Strings no Release or Staging app may contain.
-# The deterministic randomness hook of VettIDCrypto (debug builds only) carries this string.
-TEST_MARKERS=("VettIDTesting" "TESTTEAM00" "VETTID TEST ONLY")
+# The deterministic randomness hook of VettIDCrypto (debug builds only) and VettIDDataTesting's fake carry
+# "VETTID TEST ONLY".
+TEST_MARKERS=("VettIDTesting" "VettIDDataTesting" "TESTTEAM00" "VETTID TEST ONLY")
 DEV_ONLY=("127.0.0.1" "relay.vettid.test" "vettid.start" "vettid.theme" "Component gallery" "Screen catalog")
 
 PRODUCTION_HOSTS=("account.vettid.org")
@@ -178,6 +179,8 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
     echo "self-test: ${config} refuses a planted '${planted}'"
   }
   plant Release check_release "VettIDTesting"
+  plant Release check_release "VettIDDataTesting"
+  plant Release check_release "VETTID TEST ONLY: the repository-level fake"
   plant Release check_release "VETTID TEST ONLY: deterministic randomness drew the wrong size"
   plant Release check_release "account.staging.vettid.org"
   plant Staging check_staging "TESTTEAM00.com.vettid.app"
