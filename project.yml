@@ -123,7 +123,7 @@ targets:
       - target: VettID
       - package: VettIDTesting
 
-  # UI tests, never part of an archive: screenshots of the debug gallery for review (VettIDScreenshots scheme) and the
+  # UI tests, never part of an archive: screenshots of the debug gallery (VettIDScreenshots scheme) and the
   # staging end-to-end tests on a real iPhone (VettIDStagingUITests scheme, scripts/staging-ui-test.sh). Not run by CI.
   VettIDAppUITests:
     type: bundle.ui-testing
