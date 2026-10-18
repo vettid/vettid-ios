@@ -28,6 +28,7 @@ final class StagingTests: XCTestCase {
 
     override func setUp() {
         continueAfterFailure = false
+        MainActor.assumeIsolated { Self.savePasswordSeen = false }
     }
 
     // MARK: - Tests
@@ -83,14 +84,15 @@ final class StagingTests: XCTestCase {
         confirmField.tap()
         confirmField.typeText(password)
         let primary = app.buttons["form_primary"]
-        if !primary.isEnabled {
+        if !waitUntil(timeout: 10, { primary.isEnabled }) {
             let rule = shown(app)["password_rule"] ?? ""
             return fail(app, "The password was not accepted: \(rule)")
         }
         if primary.isHittable { primary.tap() } else { confirmField.typeText("\n") }
 
-        // The backup (on, the default) and the enrollment.
+        // The backup (on, the default) and the enrollment. No "Save Password?" may follow the password (IOS-PLAN §6.5).
         expect(app, "backup_on", timeout: 30)
+        failOnSavePassword(app)
         tapPrimary(app)
         expect(app, "onboarding_done", timeout: Self.enrollment)
         tapPrimary(app)
@@ -145,7 +147,7 @@ final class StagingTests: XCTestCase {
         case "owner_check":
             ownerCheck(app, pin: pin, password: password)
         case "app_shell":
-            break
+            failOnSavePassword(app)
         default:
             fail(app, "The vault did not open.")
         }
@@ -164,6 +166,7 @@ final class StagingTests: XCTestCase {
             tapPrimary(app)
         }
         expect(app, "app_shell", timeout: Self.network)
+        failOnSavePassword(app)
     }
 
     /// "Lock vault" from the account sheet, then the unlock screen once the vault has confirmed the lock.
@@ -173,8 +176,11 @@ final class StagingTests: XCTestCase {
         tap(app.buttons["top_bar_account"])
         tap(app.buttons["account_lock_vault"])
         expect(app, "unlock", timeout: Self.network)
-        // "Locking…" until the vault confirms; a lock it could not confirm fails the test (the vault may still be open).
-        _ = waitUntil(timeout: Self.network) { shown(app)["unlock_lock_locking"] == nil }
+        // "Locking…" until the vault confirms; only a confirmed lock passes (a vault left open keeps its host running,
+        // STAGING-TESTING §5).
+        if !waitUntil(timeout: Self.network, { shown(app)["unlock_lock_locking"] == nil }) {
+            return fail(app, "The lock was not confirmed within \(Int(Self.network)) s: the screen still says it is locking.")
+        }
         if let why = failureText(in: shown(app)) { fail(app, "The lock was not confirmed: \(why)") }
     }
 
@@ -182,8 +188,8 @@ final class StagingTests: XCTestCase {
 
     @MainActor
     private func launch() -> XCUIApplication {
-        // A system alert met while the test acts on the app (the camera, a "Save Password?" that should never show) is
-        // answered so that the run goes on.
+        // A system alert met while the test acts on the app (the camera) is answered so that the run goes on; a "Save
+        // Password?" is dismissed and remembered, and fails the test (``failOnSavePassword``).
         addUIInterruptionMonitor(withDescription: "System alert") { alert in
             Self.answer(alert)
         }
@@ -200,13 +206,34 @@ final class StagingTests: XCTestCase {
         if alert.waitForExistence(timeout: 5) { _ = Self.answer(alert) }
     }
 
+    /// A "Save Password?" prompt was met (IOS-PLAN §6.5: there must never be one).
+    @MainActor private static var savePasswordSeen = false
+
     @MainActor
     private static func answer(_ alert: XCUIElement) -> Bool {
-        for label in ["Allow", "OK", "Allow While Using App", "Not Now"] where alert.buttons[label].exists {
+        if alert.buttons["Save Password"].exists || alert.label.localizedCaseInsensitiveContains("password") {
+            savePasswordSeen = true
+            if alert.buttons["Not Now"].exists { alert.buttons["Not Now"].tap() }
+            return true
+        }
+        for label in ["Allow", "OK", "Allow While Using App"] where alert.buttons[label].exists {
             alert.buttons[label].tap()
             return true
         }
         return false
+    }
+
+    /// Fails, with a screenshot of the whole screen, when a "Save Password?" prompt showed or shows (IOS-PLAN §6.5).
+    @MainActor
+    private func failOnSavePassword(_ app: XCUIApplication) {
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let shows = app.buttons["Save Password"].exists || springboard.buttons["Save Password"].exists
+        guard shows || Self.savePasswordSeen else { return }
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "save-password"
+        shot.lifetime = .keepAlways
+        add(shot)
+        XCTFail("iOS offered to save a password (IOS-PLAN §6.5 forbids it).")
     }
 
     @MainActor

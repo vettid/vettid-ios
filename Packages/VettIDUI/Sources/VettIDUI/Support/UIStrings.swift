@@ -29,6 +29,8 @@ enum UIStrings {
     }
     /// iOS-only: the PIN keypad's delete key (IOS-PLAN ID11; Android types the PIN on the system keyboard).
     static var keypadDelete: String { String(localized: "ios_keypad_delete", defaultValue: "Delete", bundle: .module) }
+    /// iOS-only: the keypad's dots, read with how many digits are typed ("Digits entered, 3"; chosen; not in the spec).
+    static var keypadEntered: String { String(localized: "ios_keypad_entered", defaultValue: "Digits entered", bundle: .module) }
     static var back: String { String(localized: "core_ui_cd_back", defaultValue: "Back", bundle: .module) }
     static var logo: String { String(localized: "core_ui_cd_logo", defaultValue: "VettID", bundle: .module) }
     static var cancel: String { String(localized: "core_ui_cancel", defaultValue: "Cancel", bundle: .module) }

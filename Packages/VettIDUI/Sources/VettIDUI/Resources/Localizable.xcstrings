@@ -390,6 +390,17 @@
         }
       }
     },
+    "ios_keypad_entered": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Digits entered"
+          }
+        }
+      }
+    },
     "ios_keypad_delete": {
       "extractionState": "manual",
       "localizations": {

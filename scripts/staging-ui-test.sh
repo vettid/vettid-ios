@@ -10,20 +10,21 @@
 #   --device <id>     the iPhone (`xcrun devicectl list devices`)
 #   --test <test>     testStagingEnroll or testStagingUnlockLock
 #   --inputs <file>   a private file outside the repository (chmod 600) with lines NAME=value for
-#                     VETTID_STAGING_EMAIL, VETTID_STAGING_CODE, VETTID_STAGING_PIN, VETTID_STAGING_PASSWORD; without it
-#                     they are read from the environment of the same names. Prefer the file: nothing lands in the shell
-#                     history. Values in the file override the environment.
-#   --fresh           remove VettID Staging from the iPhone first (its vault keys go with it): for testStagingEnroll
+#                     VETTID_STAGING_EMAIL, VETTID_STAGING_CODE, VETTID_STAGING_PIN, VETTID_STAGING_PASSWORD (quotes
+#                     around a value and CRLF line ends are stripped); only the file is read then. Without it they are
+#                     read from the environment of the same names. Prefer the file: nothing lands in the shell history.
+#   --fresh           remove VettID Staging from the iPhone first, and its vault keys with it: only for
+#                     testStagingEnroll with all four inputs set; asks y/N on a terminal
 #   --skip-build      reuse the last build-for-testing
 #   --keep-result     keep the result bundle (it holds what was typed) in the private cache directory
 #
-# A test without its inputs is skipped. The inputs are handed over as TEST_RUNNER_<NAME> (xcodebuild passes them to the
-# runner as <NAME>), never on a command line; xcodebuild's output is shown with them (and the keypad's digits) redacted;
-# the result bundle is deleted unless --keep-result. The build and results live under
-# ${XDG_CACHE_HOME:-~/Library/Caches}/vettid-ios/staging-ui-test (mode 700).
+# A test without its inputs is skipped. The inputs reach only the test step, as TEST_RUNNER_<NAME> (xcodebuild passes
+# them to the runner as <NAME>), never a command line or the build; xcodebuild's output is shown with them (and the
+# keypad's digits) redacted; the result bundle is deleted, an interrupted run's too, unless --keep-result. The build and
+# results live under ${XDG_CACHE_HOME:-~/Library/Caches}/vettid-ios/staging-ui-test (mode 700).
 #
 # Example (enrollment; the code was issued a minute ago and is in the private file):
-#   scripts/staging-ui-test.sh --device <id> --test testStagingEnroll --inputs ~/private/vettid-ios15.env --fresh
+#   scripts/staging-ui-test.sh --device <id> --test testStagingEnroll --inputs <private file> --fresh
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -53,6 +54,13 @@ case "${TEST}" in
   *) echo "--test must be testStagingEnroll or testStagingUnlockLock" >&2; usage ;;
 esac
 
+# The inputs are kept in IN_<NAME>, unexported, and the variables of the same names leave the environment: nothing the
+# build runs sees them.
+for n in "${NAMES[@]}"; do
+  if [[ -z "${INPUTS}" ]]; then printf -v "IN_${n}" '%s' "${!n:-}"; else printf -v "IN_${n}" '%s' ""; fi
+  unset "${n}"
+done
+
 # The private input file: outside the repository (so that it can never be committed), readable by its owner only.
 if [[ -n "${INPUTS}" ]]; then
   [[ -f "${INPUTS}" ]] || { echo "no such input file: ${INPUTS}" >&2; exit 1; }
@@ -67,21 +75,33 @@ if [[ -n "${INPUTS}" ]]; then
   fi
   # NAME=value lines, read as data (never sourced); blank lines and # comments are ignored.
   while IFS= read -r line || [[ -n "${line}" ]]; do
+    line=${line%$'\r'}
     [[ -z "${line//[[:space:]]/}" || "${line}" =~ ^[[:space:]]*# ]] && continue
     name=${line%%=*}
     value=${line#*=}
+    if [[ ${#value} -ge 2 && ( ( "${value:0:1}" == '"' && "${value: -1}" == '"' ) ||
+      ( "${value:0:1}" == "'" && "${value: -1}" == "'" ) ) ]]; then
+      value=${value:1:${#value}-2}
+    fi
     known=0
     for n in "${NAMES[@]}"; do [[ "${name}" == "${n}" ]] && known=1; done
     [[ ${known} -eq 1 ]] || { echo "unknown name in the input file: ${name}" >&2; exit 1; }
-    printf -v "${name}" '%s' "${value}"
-    export "${name?}"
+    printf -v "IN_${name}" '%s' "${value}"
   done <"${file}"
 fi
 
 missing=()
-for n in "${NAMES[@]}"; do [[ -n "${!n:-}" ]] || missing+=("${n}"); done
+for n in "${NAMES[@]}"; do v="IN_${n}"; [[ -n "${!v}" ]] || missing+=("${n}"); done
 if [[ ${#missing[@]} -gt 0 ]]; then
   echo "note: not set: ${missing[*]} (a test without its inputs is skipped)"
+fi
+
+# --fresh deletes the app's vault keys: only for an enrollment that will run.
+if [[ ${FRESH} -eq 1 ]]; then
+  if [[ "${TEST}" != testStagingEnroll || ${#missing[@]} -gt 0 ]]; then
+    echo "refusing --fresh: it is only for testStagingEnroll with all four inputs set" >&2
+    exit 1
+  fi
 fi
 
 CACHE="${XDG_CACHE_HOME:-${HOME}/Library/Caches}/vettid-ios/staging-ui-test"
@@ -98,17 +118,40 @@ if [[ ${SKIP_BUILD} -eq 0 ]]; then
 fi
 
 if [[ ${FRESH} -eq 1 ]]; then
-  echo "== removing ${BUNDLE_ID} from the iPhone"
-  xcrun devicectl device uninstall app --device "${DEVICE}" "${BUNDLE_ID}" >/dev/null 2>&1 ||
-    echo "(it was not installed)"
+  name=$(xcrun devicectl list devices 2>/dev/null | grep -F -- "${DEVICE}" | head -1 | sed -E 's/ {2,}.*//' || true)
+  apps=$(xcrun devicectl device info apps --device "${DEVICE}" --bundle-id "${BUNDLE_ID}" 2>&1) || {
+    echo "could not list the apps on the iPhone:" >&2
+    echo "${apps}" >&2
+    exit 1
+  }
+  if grep -qF -- "${BUNDLE_ID}" <<<"${apps}"; then
+    echo "== removing ${BUNDLE_ID} (and its vault keys) from the iPhone \"${name:-unknown}\""
+    if [[ -t 0 ]]; then
+      read -r -p "Remove it? [y/N] " answer
+      [[ "${answer}" == [yY] || "${answer}" == [yY][eE][sS] ]] || { echo "not removed; stopping"; exit 1; }
+    fi
+    out=$(xcrun devicectl device uninstall app --device "${DEVICE}" "${BUNDLE_ID}" 2>&1) || {
+      echo "removing the app failed:" >&2
+      echo "${out}" >&2
+      exit 1
+    }
+  else
+    echo "== ${BUNDLE_ID} is not installed on the iPhone \"${name:-unknown}\""
+  fi
 fi
 
-# The runner's inputs, through the environment only.
+# The runner's inputs, from here on and through the environment only.
 for n in "${NAMES[@]}"; do
-  if [[ -n "${!n:-}" ]]; then export "TEST_RUNNER_${n}=${!n}"; fi
+  v="IN_${n}"
+  if [[ -n "${!v}" ]]; then export "TEST_RUNNER_${n}=${!v}"; fi
 done
 
 RESULT="${CACHE}/results/${TEST}-$(date +%Y%m%d-%H%M%S).xcresult"
+if [[ ${KEEP} -eq 0 ]]; then
+  # The bundle holds what was typed: it goes however the run ends.
+  trap 'rm -rf "${RESULT}"' EXIT
+  trap 'exit 130' INT TERM
+fi
 echo "== ${TEST} on the iPhone"
 set +e
 xcodebuild test-without-building \
@@ -117,7 +160,10 @@ xcodebuild test-without-building \
   -only-testing:"VettIDAppUITests/StagingTests/${TEST}" \
   -resultBundlePath "${RESULT}" 2>&1 |
   perl -pe '
-    BEGIN { @s = grep { length } map { $ENV{$_} // "" } qw(VETTID_STAGING_EMAIL VETTID_STAGING_CODE VETTID_STAGING_PIN VETTID_STAGING_PASSWORD) }
+    BEGIN {
+      @s = grep { length } map { $ENV{"TEST_RUNNER_$_"} // "" }
+        qw(VETTID_STAGING_EMAIL VETTID_STAGING_CODE VETTID_STAGING_PIN VETTID_STAGING_PASSWORD)
+    }
     for my $v (@s) { s/\Q$v\E/<redacted>/g }
     s/Type .*? into/Type <redacted> into/g;
     s/pin_[0-9]/pin_#/g;
@@ -127,7 +173,5 @@ set -e
 
 if [[ ${KEEP} -eq 1 ]]; then
   echo "result bundle (private; it holds what was typed): ${RESULT}"
-else
-  rm -rf "${RESULT}"
 fi
 exit "${status}"

@@ -439,11 +439,12 @@ public struct FormScaffold<Header: View, Content: View, TopActions: View>: View 
                     .accessibilityIdentifier("form_secondary")
                 }
             }
-            // A container, so that a screen's own identifier does not replace the buttons' (UI tests find them).
-            .accessibilityElement(children: .contain)
             .padding(.horizontal, Spacing.xl)
             .padding(.vertical, Spacing.l)
         }
+        // A container: a screen's identifier on the scaffold is the container's own, and every identifier inside (the
+        // buttons, the notices, the fields) keeps its own (UI tests find them).
+        .accessibilityElement(children: .contain)
         .background(colors.background)
     }
 }
