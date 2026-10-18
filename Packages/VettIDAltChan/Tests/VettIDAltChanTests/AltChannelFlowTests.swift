@@ -67,8 +67,8 @@ final class TestParty: AltParty, @unchecked Sendable {
     func manifestSerialSeen() -> UInt64 { lock.withLock { state.manifestSerial } }
     func vaultIDForUnlock() -> String? { lock.withLock { vaultID } }
 
-    func prepareEnroll(userGuid: String, pin: String, enclave: VerifiedEnclave, manifest: ReleaseManifest, attester: Attester, unlockSecret: [UInt8]?) async throws -> SealedRequest { // swiftlint:disable:this function_parameter_count
-        let b = try AltRequests.buildEnroll(userGuid: userGuid, pin: pin, enclave: enclave, manifest: manifest, attester: attester, app: app, openToken: "v4.public.open", state: lock.withLock { state }, now: Date(), unlockSecret: unlockSecret)
+    func prepareEnroll(userGuid: String, pin: String, enclave: VerifiedEnclave, manifest: ReleaseManifest, attester: Attester, unlockSecret: [UInt8]?, vaultID: String) async throws -> SealedRequest { // swiftlint:disable:this function_parameter_count
+        let b = try AltRequests.buildEnroll(userGuid: userGuid, pin: pin, enclave: enclave, manifest: manifest, attester: attester, app: app, openToken: "v4.public.open", state: lock.withLock { state }, now: Date(), unlockSecret: unlockSecret, vaultID: vaultID)
         lock.withLock { state = b.state }
         return b.request
     }

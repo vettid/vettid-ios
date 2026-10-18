@@ -243,6 +243,30 @@
         }
       }
     },
+    "data_failure_ios_enrollment_started": {
+      "comment": "iPhone only: no Android text; for the owner to approve.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This phone may already have set up your vault. You can start over later."
+          }
+        }
+      }
+    },
+    "data_failure_ios_enrollment_started_after": {
+      "comment": "iPhone only: no Android text; for the owner to approve.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This phone may already have set up your vault. You can start over after %@."
+          }
+        }
+      }
+    },
     "data_failure_limit": {
       "extractionState": "manual",
       "localizations": {
@@ -404,6 +428,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "The vault software release your vault is sealed to has ended. The vault can no longer be opened."
+          }
+        }
+      }
+    },
+    "data_failure_release_too_old": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This vault's release is too old for the iPhone app. It will be updated soon; try again later."
           }
         }
       }

@@ -1,13 +1,17 @@
 # gitleaks configuration for vettid-ios. Extends the default ruleset.
 #
-# The only allowlisted values are the fixed, test-only VAULT-MESSAGING §16 vector values that vettid-vault and
-# vettid-android allowlist too (their .gitleaks.toml): HPKE intermediate values derived from the public all-0x05 key
-# seed and all-0x07 encapsulation randomness (hpke.json shared_secret_hex, key_hex, exporter_secret_hex), and the
-# PUBLIC keys (SPKI) of the release-update test keys (release.json) and of the test app key (appkey.json), which the
-# generic rule mistakes for keys; release R's derived values from the fixed test inputs (unlock.json unlock keys and
-# secret checks, recovery.json's browser public key and secrets hash) and the example passwords of verdicts.json. They live in Packages/VettIDCrypto/Tests/VettIDCryptoTests/Resources/vectors (copied
-# from vettid-vault, IOS-PLAN §7) and in the tests; and the iPhone unlock secrets, unlock keys and secret checks of
-# the phone_ios.json reference (VettIDData tests), derived from fixed repeating-byte test keys (scripts/phone-ios-reference). Reviewed findings in the v1 history are in .gitleaksignore.
+# The only allowlisted values are public or fixed test-only values the generic rule mistakes for keys:
+# - VAULT-MESSAGING §16 vector values that vettid-vault and vettid-android allowlist too (their .gitleaks.toml): HPKE
+#   intermediate values derived from the public all-0x05 key seed and all-0x07 encapsulation randomness (hpke.json
+#   shared_secret_hex, key_hex, exporter_secret_hex); the PUBLIC keys (SPKI) of the release-update test keys
+#   (release.json) and of the test app key (appkey.json); release R's derived values from the fixed test inputs
+#   (unlock.json unlock keys and secret checks, recovery.json's browser public key and secrets hash) and the example
+#   passwords of verdicts.json. They live in Packages/VettIDCrypto/Tests/VettIDCryptoTests/Resources/vectors (copied
+#   from vettid-vault, IOS-PLAN §7) and in the tests.
+# - The iPhone unlock secrets, unlock keys and secret checks of the phone_ios.json reference (VettIDData tests),
+#   derived from fixed repeating-byte test keys (scripts/phone-ios-reference).
+# - The PUBLIC staging release-manifest key A (SPKI) in Config/Debug.xcconfig and Config/Staging.xcconfig.
+# Reviewed findings in the v1 history are in .gitleaksignore.
 [extend]
 useDefault = true
 
@@ -29,6 +33,7 @@ regexes = [
   '''6286862e0e08397dc6b79b2b39f3e37ea03fd8a21ca6c1d09bf33fe9d89e5452''',
   '''QWERTY123456''',
   '''violet-Kestrel-91-moss''',
+  '''MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEok8gqeC5VcGx4KL''',
   '''f3bdc50cabb32a8a89b614ca518b946b4fe255e31dff4b6ac411a9e62b160edd''',
   '''c62a381da79b90f73004b06e83e5c50102f0c1af6cef9dade936acf71a87a5e0''',
   '''b25667bbca0901faa080ace5d92f317d46adbb0b0543ae227da0f78367526b69''',

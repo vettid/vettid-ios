@@ -2,8 +2,9 @@ import Foundation
 import VettIDCrypto
 
 /// One function per VAULT-MESSAGING §10.2 and §10.3 type the app sends, plus the events it receives (§10.1 `sync.event`,
-/// §10.2 `vault.held`). Errors are ``VaultOpError`` with the spec's code. The other §10 sections (connections,
-/// messaging, items, credential operations, …) come with the phases that use them. Mirrors vettid-android `VaultApi`.
+/// §10.2 `vault.held`), and the credential calls of enrollment (§10.6, ``credentialCreate(password:pin:)``). Errors are
+/// ``VaultOpError`` with the spec's code. The other §10 sections (connections, messaging, items, the other credential
+/// operations, …) come with the phases that use them. Mirrors vettid-android `VaultApi`.
 public struct VaultApi: Sendable {
     /// How long the app waits for the vault's answer to `vault.lock`.
     public static let lockAnswer: TimeInterval = 10
@@ -16,8 +17,16 @@ public struct VaultApi: Sendable {
     ]
 
     public let device: VaultDevice
+    /// (VAULT-MESSAGING §11.14.7) Whether the vault is of release R, asked at each credential operation: its passwords
+    /// are normalized to NFC before they are sealed. False sends every password exactly as typed, as before release R.
+    let normalizePasswords: @Sendable () -> Bool
 
-    public init(device: VaultDevice) { self.device = device }
+    public init(device: VaultDevice, normalizePasswords: @escaping @Sendable () -> Bool = { false }) {
+        self.device = device
+        self.normalizePasswords = normalizePasswords
+    }
+
+    var credential: CredentialOps { CredentialOps(device: device, normalizePasswords: normalizePasswords) }
 
     private func op(_ type: String, _ body: JsonBuilder? = nil) async throws -> [UInt8] {
         try await device.op(type, body: body?.bytes() ?? VaultJSON.empty)

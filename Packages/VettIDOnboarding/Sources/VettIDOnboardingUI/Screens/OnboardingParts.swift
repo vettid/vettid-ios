@@ -14,11 +14,19 @@ struct ErrorNotice: View {
 
     var body: some View {
         if let kind = state.error {
-            let text = override != nil && kind == override ? overrideText ?? kind.message : kind.message
+            let text = override != nil && kind == override ? overrideText ?? kind.message : Self.message(kind, state.errorRetryAt)
             NoticeCard(.urgent, title: OnboardingStrings.progressFailed, message: text)
                 .padding(.top, Spacing.l)
                 .accessibilityIdentifier("error")
         }
+    }
+}
+
+extension ErrorNotice {
+    /// The failure's text; a refused start-over (iPhone only) says from when it is possible.
+    static func message(_ kind: FailureKind, _ retryAt: Date?) -> String {
+        if kind == .enrollmentStarted, let retryAt { return FailureKind.enrollmentStartedText(after: retryAt) }
+        return kind.message
     }
 }
 

@@ -13,6 +13,15 @@ import VettIDUI
 /// rule; here ``OnboardingState/canContinueBackup``, which the screen uses as is, is checked in the model's tests.)
 @MainActor
 @Suite struct OnboardingScreensTests {
+    /// iPhone only: a refused start-over says from when it is possible; without a time, the general text.
+    @Test func aRefusedStartOverSaysWhen() {
+        let at = Date(timeIntervalSince1970: 1_800_000_000)
+        let text = ErrorNotice.message(.enrollmentStarted, at)
+        #expect(text == FailureKind.enrollmentStartedText(after: at) && text.contains("start over after"))
+        #expect(ErrorNotice.message(.enrollmentStarted, nil) == FailureKind.enrollmentStarted.message)
+        #expect(ErrorNotice.message(.network, at) == FailureKind.network.message)
+    }
+
     /// Every key of the package's `Localizable.xcstrings` resolves, in the built bundle, to its own non-empty text.
     @Test func everyStringResolves() throws {
         let url = URL(fileURLWithPath: #filePath)

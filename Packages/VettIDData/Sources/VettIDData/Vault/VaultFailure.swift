@@ -28,6 +28,13 @@ public enum FailureKind: Equatable, Sendable, CaseIterable {
     /// (VAULT-MESSAGING §11.10.9) The vault's instance lacks `recovery_r` although this phone has seen release R for
     /// the vault: refused like a rollback, nothing sent.
     case capabilityRollback
+    /// (iPhone, IOS-PLAN ID8) The vault's instance lacks `recovery_r` (VAULT-MESSAGING §11.10.9): the iPhone app supports
+    /// only vaults of release R, so nothing is sent to it. Temporary: the vault's release is updated.
+    case releaseTooOld
+    /// (iPhone) A start-over, or another vault's setup code, refused while this phone may already have set up a vault
+    /// (an enrollment whose outcome is not known): its keys are kept. ``VaultFailure/retryAfterSeconds`` says when the
+    /// start-over becomes possible, when that is known.
+    case enrollmentStarted
     /// The release manifest did not verify (signature, key, format, serial), or the vault refused the app's.
     case manifest
     /// The release manifest could not be loaded (the server answered, but not with the document).

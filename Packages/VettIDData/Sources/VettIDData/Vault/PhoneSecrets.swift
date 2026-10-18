@@ -12,7 +12,7 @@ import VettIDKeys
 /// - Every record is written **before** the request that carries its secret is built, and a retry reuses its record.
 /// - A new key never overwrites one a record names, and nothing is deleted before a later record is confirmed: a new
 ///   epoch 1 (enrollment, transfer, recovery) waits as the **pending** record beside the others until its operation
-///   succeeds (``confirmCreate(keyVault:)``) or an unlock proves it.
+///   succeeds (``confirmCreate(id:)``, ``confirmPending(keyVault:)``) or an unlock proves it.
 /// - Besides the current record, up to four candidates (changes whose answer did not arrive); a fifth change is refused
 ///   before anything is sent, and no candidate is ever dropped to make room.
 /// - A candidate becomes current on its operation's answer (even after an unlock made it a replaced record), or when an
@@ -144,6 +144,50 @@ public final class PhoneSecrets: @unchecked Sendable {
             guard let i = recs.pendings.firstIndex(where: { $0.keyID == id }) else { return false }
             promotePending(&recs, at: i)
             try write(recs)
+            return true
+        }
+    }
+
+    /// The vault proved that an enrollment carrying an epoch-1 secret for [keyVault] was accepted (its `vault.enrolled`
+    /// pinned the vault on this device) while the enrollment's own answer, and so the record's id, was lost (a crash, a
+    /// lost answer): the pending epoch-1 record of [keyVault] becomes current as ``confirmCreate(id:)`` makes it, but only
+    /// when exactly one such record is pending, since with two it cannot tell which secret the vault holds (chosen; not in
+    /// the spec). Pending records whose key is definitively gone are dropped first. True when a record was confirmed;
+    /// false when none is pending. Throws ``FailureKind/localState`` (code ``codeAmbiguousEpochOne``) with more than
+    /// one; they then stay pending (an unlock proves the right one).
+    @discardableResult
+    public func confirmPending(keyVault: String) throws -> Bool {
+        try store.exclusive {
+            var recs = try readRecords()
+            try dropDeadPendings(&recs)
+            let matching = recs.pendings.indices.filter {
+                recs.pendings[$0].record.epoch == 1 && recs.pendings[$0].record.keyVault == keyVault
+            }
+            guard !matching.isEmpty else { return false }
+            guard matching.count == 1 else { throw VaultFailure(.localState, code: Self.codeAmbiguousEpochOne) }
+            promotePending(&recs, at: matching[0])
+            try write(recs)
+            return true
+        }
+    }
+
+    public static let codeAmbiguousEpochOne = "ambiguous_epoch_one"
+
+    /// Whether an epoch-1 record is pending: an enrollment, a transfer or a recovery that may have reached a vault and
+    /// whose answer did not confirm it yet. Throws ``FailureKind/phoneLocked`` while the records cannot be read now and
+    /// ``FailureKind/localState`` for a file in a format this app does not know.
+    public func hasPending() throws -> Bool { try store.exclusive { try readRecords().pendings.isEmpty == false } }
+
+    /// Drops the pending epoch-1 record [id] and deletes its key: its operation was refused for certain, or never reached
+    /// the vault, so no vault holds its secret. Only a record never confirmed; false when none pending has that id.
+    @discardableResult
+    public func dropPending(id: String) throws -> Bool {
+        try store.exclusive {
+            var recs = try readRecords()
+            guard let i = recs.pendings.firstIndex(where: { $0.keyID == id }) else { return false }
+            let p = recs.pendings.remove(at: i)
+            try write(recs)
+            try? keys.delete(keyVault: p.record.keyVault, keyID: p.keyID)
             return true
         }
     }

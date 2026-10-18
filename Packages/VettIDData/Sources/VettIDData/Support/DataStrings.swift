@@ -261,6 +261,37 @@ enum DataStrings {
         )
     }
 
+    /// IOS-PLAN §14, "Release too old (ID8)" (iPhone only; no Android counterpart).
+    static var failureReleaseTooOld: String {
+        String(
+            localized: "data_failure_release_too_old",
+            defaultValue: "This vault's release is too old for the iPhone app. It will be updated soon; try again later.",
+            bundle: .module
+        )
+    }
+
+    /// iPhone only (no Android or IOS-PLAN §14 text; for the owner): a start-over refused while an enrollment's outcome
+    /// is unknown.
+    static var failureEnrollmentStarted: String {
+        String(
+            localized: "data_failure_ios_enrollment_started",
+            defaultValue: "This phone may already have set up your vault. You can start over later.",
+            bundle: .module
+        )
+    }
+
+    /// The same with the time from which the start-over is possible.
+    static func failureEnrollmentStartedAfter(_ time: String) -> String {
+        String(
+            format: String(
+                localized: "data_failure_ios_enrollment_started_after",
+                defaultValue: "This phone may already have set up your vault. You can start over after %@.",
+                bundle: .module
+            ),
+            time
+        )
+    }
+
     /// IOS-PLAN §14, "Phone locked during a request" (iPhone only; no Android counterpart).
     static var failurePhoneLocked: String {
         String(localized: "data_failure_phone_locked", defaultValue: "Unlock your iPhone, then try again.", bundle: .module)

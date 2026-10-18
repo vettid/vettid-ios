@@ -32,8 +32,10 @@ public protocol AltParty: Sendable {
     /// The highest manifest serial this device has seen for its vault.
     func manifestSerialSeen() -> UInt64
     func vaultIDForUnlock() -> String?
+    /// [vaultID]: the vault this request enrolls (the redeem's); kept with the request's nonce.
     func prepareEnroll( // swiftlint:disable:this function_parameter_count
-        userGuid: String, pin: String, enclave: VerifiedEnclave, manifest: ReleaseManifest, attester: Attester, unlockSecret: [UInt8]?
+        userGuid: String, pin: String, enclave: VerifiedEnclave, manifest: ReleaseManifest, attester: Attester, unlockSecret: [UInt8]?,
+        vaultID: String
     ) async throws -> SealedRequest
     func openEnrollResult(_ raw: [UInt8], requestID: String) async throws -> EnrollResult
     func prepareUnlock( // swiftlint:disable:this function_parameter_count
@@ -148,6 +150,12 @@ public struct AltChannelFlow: Sendable {
         return s.status == Slot.expired || s.code == Slot.etkUnknown
     }
 
+    /// A posted request that certainly never reached the enclave's processing (`instance_moved`, `etk_unknown`).
+    private static func unprocessed(_ e: Error?, _ s: Slot?) -> Bool {
+        if let e = e as? MemberApiError { return e.code == MemberApiError.instanceMoved }
+        return s?.code == Slot.etkUnknown
+    }
+
     /// Posts [request] with [post] and polls its slot; a member API error is returned, not thrown, for the retry rules.
     private func postAndPoll(_ post: () async throws -> Void, _ requestID: String) async throws -> (Error?, Slot?) {
         do {
@@ -168,10 +176,16 @@ public struct AltChannelFlow: Sendable {
     /// Enrolls this app (§11.3) into [vaultID], the vault the setup code's redeem named (§11.12.1). Success also arrives
     /// as vault.enrolled over the relay. (0.34.0, release R) [unlockSecretFor] is given the verified instance's
     /// capabilities (§11.10.9) before each request is built: it returns the phone's unlock secret for release R's shape,
-    /// nil for the earlier one, or throws, and then nothing is sent.
+    /// nil for the earlier one, or throws, and then nothing is sent. [onPosting] runs right before each request is
+    /// posted (a failure after it may have reached the vault); its throw sends nothing. [onUnprocessed] runs for a
+    /// posted request that certainly never reached the enclave's processing: the API refused it (`instance_moved`) or
+    /// the enclave could not decrypt it (`etk_unknown`). An `expired` slot is not one: the parent also writes it when the
+    /// enclave did not answer (§11.5).
     public func enroll(
         party: AltParty, vaultID: String, userGuid: String, pin: String, attester: Attester,
-        unlockSecretFor: @Sendable ([String]) async throws -> [UInt8]? = { _ in nil }
+        unlockSecretFor: @Sendable ([String]) async throws -> [UInt8]? = { _ in nil },
+        onPosting: @Sendable () async throws -> Void = {},
+        onUnprocessed: @Sendable () async -> Void = {}
     ) async throws -> EnrollOutcome {
         var m = try await manifest(seen: party.manifestSerialSeen())
         var refetched = false
@@ -183,13 +197,17 @@ public struct AltChannelFlow: Sendable {
             do {
                 defer { if secret != nil { Bytes.wipe(&secret!) } }
                 req = try await party.prepareEnroll(
-                    userGuid: userGuid, pin: pin, enclave: e, manifest: m, attester: attester, unlockSecret: secret
+                    userGuid: userGuid, pin: pin, enclave: e, manifest: m, attester: attester, unlockSecret: secret,
+                    vaultID: vaultID
                 )
             }
+            // From here the request may reach the vault: the caller records that before it is posted.
+            try await onPosting()
             var vid = ""
             let (err, slot) = try await postAndPoll(
                 { vid = try await api.enroll(vaultID: vaultID, instanceID: info.instanceID, req) }, req.requestID
             )
+            if Self.unprocessed(err, slot) { await onUnprocessed() }
             if Self.retryable(err, slot), attempt < Self.maxAttempts {
                 attempt += 1
                 continue

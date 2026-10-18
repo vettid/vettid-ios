@@ -5,6 +5,10 @@ VETTID_APP_BUNDLE_ID = com.vettid.app.dev
 VETTID_DISPLAY_NAME = VettID Dev
 VETTID_ENVIRONMENT = debug
 VETTID_ACCOUNT_HOST = account.staging.vettid.org
+VETTID_RELAY_HOST = relay.vettid.org
+VETTID_MANIFEST_HOST = staging.vettid.org
+// The staging channel's manifest key A, as Staging pins it.
+VETTID_MANIFEST_KEYS = MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEok8gqeC5VcGx4KL+B5fL7UgENBXf+59RigkR0TZ0NqjiWM2VK6V1+paNoqRTBx7nXXN3L/2ehjsTb31GGVkEAw==
 
 // Staging for now; the choice between staging and the dev stack at launch
 // comes with the transport (I1).

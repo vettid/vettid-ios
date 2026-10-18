@@ -22,5 +22,11 @@
 	<string>$(VETTID_ACCOUNT_HOST)</string>
 	<key>VettIDEnvironment</key>
 	<string>$(VETTID_ENVIRONMENT)</string>
+	<key>VettIDManifestHost</key>
+	<string>$(VETTID_MANIFEST_HOST)</string>
+	<key>VettIDManifestKeys</key>
+	<string>$(VETTID_MANIFEST_KEYS)</string>
+	<key>VettIDRelayHost</key>
+	<string>$(VETTID_RELAY_HOST)</string>
 </dict>
 </plist>
