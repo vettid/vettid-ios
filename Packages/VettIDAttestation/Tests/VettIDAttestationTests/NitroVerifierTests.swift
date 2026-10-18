@@ -116,6 +116,19 @@ import VettIDCrypto
         let m = try CborValue.decode([0xBF, 0x61, 0x61, 0x9F, 0x01, 0xFF, 0xFF])
         #expect(m.lookup("a") == .array([.uint(1)]))
     }
+
+    @Test func cborDecodePrefixReadsExactlyOneItem() throws {
+        let map = CborEncoder().map(1).text("k").uint(7).encoded()
+        let (v, n) = try CborValue.decodePrefix(map + [0x01, 0x02])
+        #expect(v.lookup("k") == .uint(7))
+        #expect(n == map.count)
+        #expect(try CborValue.decodePrefix(map).length == map.count)
+        // The same rules as decode: empty, truncated, duplicate keys.
+        let dup = CborEncoder().map(2).text("a").uint(1).text("a").uint(2).encoded()
+        for bad: [UInt8] in [[], Array(map.dropLast()), dup + [0x00]] {
+            expectAttestation(.format, "\(Bytes.hex(bad))") { _ = try CborValue.decodePrefix(bad) }
+        }
+    }
 }
 
 // swiftlint:enable line_length

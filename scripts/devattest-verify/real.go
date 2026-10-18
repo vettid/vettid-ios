@@ -182,9 +182,11 @@ func errOrOK(err error, ok string) string {
 
 func attestedAuthData(att []byte) []byte { return must(must(cbor.Decode(att)).BytesAt("authData")) }
 
-// notes prints what the authenticator data carries beyond what the verifier reads: the flags and, when the extension
-// data flag (ED, 0x80; WebAuthn §6.1) is set, the names of the extensions (never their values), so that a refusal of
-// the format says why.
+// notes prints what the authenticator data carries beyond the key, the counter and the App ID: the flags and, when the
+// extension data flag (ED, 0x80; WebAuthn §6.1) is set, the names of the extensions (never their values). iOS 27 sets
+// ED in the attestation and in every assertion and appends a CBOR map of Apple's extensions; vms/devattest accepts it
+// since vettid-vault #118 (exactly one definite-length map, nothing after it) without interpreting it, the nonce and
+// the signature covering it.
 func notes(what string, ad []byte, attested bool) {
 	if len(ad) < 37 {
 		fmt.Printf("note  %s: authenticator data of %d bytes\n", what, len(ad))
@@ -194,13 +196,9 @@ func notes(what string, ad []byte, attested bool) {
 	if attested && len(rest) >= 18 {
 		n := int(rest[16])<<8 | int(rest[17])
 		if len(rest) >= 18+n {
-			rest = rest[18+n:]
-			// The COSE key, then the extensions: split where both halves decode.
-			for i := 1; i <= len(rest); i++ {
-				if _, err := cbor.Decode(rest[:i]); err == nil {
-					rest = rest[i:]
-					break
-				}
+			// Exactly one item, the COSE key, then the extensions.
+			if _, r, err := cbor.DecodePrefix(rest[18+n:]); err == nil {
+				rest = r
 			}
 		}
 	}

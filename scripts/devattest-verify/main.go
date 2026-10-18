@@ -1,10 +1,13 @@
 // Command devattest-verify checks the iPhone TEST attester's output (VettIDAltChanTesting's TestIOSAttester, IOS-PLAN
-// §8 I1.3) with vettid-vault's own code: the fixture that the Swift tests write and reproduce
-// (Packages/VettIDAltChan/Tests/VettIDAltChanTests/Resources/appattest/test-app-attest.json) must pass
+// §8 I1.3) with vettid-vault's own code: a fixture that the Swift tests write and reproduce
+// (Packages/VettIDAltChan/Tests/VettIDAltChanTests/Resources/appattest/test-app-attest.json or test-app-attest-ed.json) must pass
 // vms/devattest.VerifyAttest and VerifyAssertion under the dev enclave's TEST policy (internal/enclavetest.Policy),
 // and everything in it that is not an ECDSA signature must equal what internal/enclavetest builds for the same key and
 // challenge: the TEST Apple CA's root and intermediate tbsCertificate, the credential certificate's tbsCertificate
 // (serial 1001, the first in a process), the authenticator data, the receipt and each assertion's authenticator data.
+// A fixture with "apple_extensions": true (test-app-attest-ed.json) is compared with what internal/enclavetest builds
+// with IOSAppleExtensions, the form iOS 27 sends (flags 0xc0 and the 62-byte extensions map, accepted since
+// vettid-vault #118); one without it with IOSOptions{}.
 // It also checks that the verifier refuses the fixture with another challenge, a replayed counter and another App ID.
 // With --real it checks a real iPhone's App Attest objects against Apple's root instead (real.go).
 //
@@ -32,6 +35,7 @@ import (
 
 type fixture struct {
 	AppID        string          `json:"app_id"`
+	AppleExt     bool            `json:"apple_extensions"`
 	KeySeed      int             `json:"key_seed"`
 	PublicKeyHex string          `json:"public_key_hex"`
 	KeyIDHex     string          `json:"key_id_hex"`
@@ -125,7 +129,11 @@ func main() {
 
 	// What enclavetest builds for the same key and challenge (its first credential serial in this process is 1001).
 	goKey := enclavetest.TestKey(elliptic.P256(), byte(f.KeySeed))
-	goAttester := enclavetest.NewIOSAttester(byte(f.KeySeed), enclavetest.IOSOptions{})
+	opts := enclavetest.IOSOptions{}
+	if f.AppleExt {
+		opts = enclavetest.IOSAppleExtensions(opts)
+	}
+	goAttester := enclavetest.NewIOSAttester(byte(f.KeySeed), opts)
 	goAttest := must(goAttester.Attest(ch))
 	goAtt := decodeAttestation(goAttest.Attestation)
 
@@ -136,6 +144,7 @@ func main() {
 	sw := decodeAttestation(d.Attestation)
 	check(sw.fmt == goAtt.fmt, "fmt %q", sw.fmt)
 	check(bytes.Equal(sw.authData, goAtt.authData), "authData byte for byte (%d bytes)", len(sw.authData))
+	checkExtensions("authData", sw.authData, f.AppleExt)
 	check(bytes.Equal(sw.receipt, goAtt.receipt), "receipt byte for byte")
 	check(len(sw.x5c) == 2 && len(goAtt.x5c) == 2, "x5c holds the credential and the intermediate")
 	check(f.Serial == 1001, "credential serial %d is enclavetest's first", f.Serial)
@@ -174,8 +183,11 @@ func main() {
 		default:
 			s = devattest.ForChallenge(challenge32(a.ChallengeHex))
 		}
-		goAssert := decodeAssertionAD(enclavetest.IOSAssert(goKey, f.AppID, a.Counter, s.ClientDataHash))
+		ao := opts
+		ao.AppID = f.AppID
+		goAssert := decodeAssertionAD(enclavetest.IOSAssertWith(goKey, ao, a.Counter, s.ClientDataHash))
 		check(bytes.Equal(decodeAssertionAD(da.Assertion), goAssert), "assertion %d (%s): authenticatorData byte for byte", i+1, a.ClientData)
+		checkExtensions(fmt.Sprintf("assertion %d", i+1), decodeAssertionAD(da.Assertion), f.AppleExt)
 		nb, err := devattest.VerifyAssertion(policy, b, da, s, b.Counter, now, nil)
 		check(err == nil, "assertion %d (%s, counter %d): devattest.VerifyAssertion: %v", i+1, a.ClientData, a.Counter, err)
 		if err != nil {
@@ -191,6 +203,21 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println("the TEST iOS attester's fixture passes vettid-vault devattest")
+}
+
+// checkExtensions checks the flags and the tail of authenticator data: 0xc0 (AT|ED) ending with
+// enclavetest.AppleExtensions() for the form iOS 27 sends, and no ED flag otherwise.
+func checkExtensions(what string, ad []byte, apple bool) {
+	if len(ad) < 37 {
+		check(false, "%s: %d bytes", what, len(ad))
+		return
+	}
+	if apple {
+		x := enclavetest.AppleExtensions()
+		check(ad[32] == 0xc0 && len(x) == 62 && bytes.HasSuffix(ad, x), "%s: flags 0x%02x (AT|ED), ends with the 62-byte extensions map", what, ad[32])
+		return
+	}
+	check(ad[32]&0x80 == 0, "%s: flags 0x%02x, no ED", what, ad[32])
 }
 
 func decodeAssertionAD(b []byte) []byte {
