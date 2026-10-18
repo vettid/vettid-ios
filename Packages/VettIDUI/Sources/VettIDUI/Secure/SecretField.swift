@@ -1,0 +1,145 @@
+import SwiftUI
+import UIKit
+
+/// How a secret field's keyboard is set up (IOS-PLAN §6.5, ID11): no AutoFill and no "Save Password?", no
+/// autocorrection, spell checking, smart quotes, dashes or inserts, no inline predictions, no capitalization.
+///
+/// AutoFill and the save prompt: iOS offers them for a field whose `textContentType` is a credential type (`.password`,
+/// `.newPassword`, `.username`) and for a secure field next to a username-like field. These fields set the content type
+/// to an empty type (not nil, which lets iOS guess), never stand beside a username field, and are emptied when they
+/// leave the screen (the save prompt comes from a secure field that disappears with text in it). The device test of
+/// §6.5 (submit each secret screen and check that neither the AutoFill bar nor the save prompt appears) records which
+/// technique holds: this one first, then `.oneTimeCode`; `isSecureTextEntry` stays (it keeps the text out of captures
+/// and the keyboard from learning), manual masking being the last resort. Not yet run on an iPhone.
+@MainActor
+public enum SecretInput {
+    /// Applies the secret-input settings to [field]. [visible]: a secret the member reads while typing it (a recovery
+    /// or setup code): an ASCII-capable keyboard; otherwise a masked field.
+    public static func configure(_ field: UITextField, visible: Bool) {
+        field.textContentType = UITextContentType(rawValue: "")
+        field.passwordRules = nil
+        field.autocorrectionType = .no
+        field.spellCheckingType = .no
+        field.smartQuotesType = .no
+        field.smartDashesType = .no
+        field.smartInsertDeleteType = .no
+        field.autocapitalizationType = .none
+        field.inlinePredictionType = .no
+        field.keyboardType = .asciiCapable
+        field.isSecureTextEntry = !visible
+        field.clearsOnBeginEditing = false
+    }
+}
+
+/// A secret text field (the credential password): masked, with a show/hide button, and none of AutoFill, the save
+/// prompt, autocorrection or keyboard learning (``SecretInput``). Callers keep the value in view-model state only.
+/// Mirrors vettid-android `SecretField` (the PIN has its own keypad on iOS, ``PinKeypad``).
+public struct SecretField: View {
+    @Binding private var text: String
+    private let label: String
+    private let error: String?
+    private let supporting: String?
+    private let onSubmit: () -> Void
+    @State private var shown = false
+    @Environment(\.vettIDColors) private var colors
+
+    public init(
+        _ label: String, text: Binding<String>, error: String? = nil, supporting: String? = nil, onSubmit: @escaping () -> Void = {}
+    ) {
+        self.label = label
+        _text = text
+        self.error = error
+        self.supporting = supporting
+        self.onSubmit = onSubmit
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            HStack(spacing: Spacing.s) {
+                SecretTextInput(text: $text, placeholder: label, visible: shown, onSubmit: onSubmit)
+                    .frame(minHeight: Spacing.touchTarget)
+                    .accessibilityLabel(label)
+                Button { shown.toggle() } label: {
+                    Image(systemName: shown ? "eye.slash" : "eye").foregroundStyle(colors.onSurfaceVariant)
+                }
+                .frame(width: Spacing.touchTarget, height: Spacing.touchTarget)
+                .accessibilityLabel(shown ? UIStrings.hideSecret(label) : UIStrings.showSecret(label))
+            }
+            .padding(.leading, Spacing.l)
+            .overlay(RoundedRectangle(cornerRadius: VettIDShape.small).stroke(error == nil ? colors.outline : colors.error))
+            if let error {
+                Text(error).vettIDFont(.bodySmall).foregroundStyle(colors.error).accessibilityAddTraits(.updatesFrequently)
+            }
+            if let supporting { Text(supporting).vettIDFont(.bodySmall).foregroundStyle(colors.onSurfaceVariant) }
+        }
+    }
+}
+
+/// A secret the member must see while typing it (a recovery phrase, a setup or transfer code): visible, ASCII-capable
+/// keyboard, the same keyboard settings as ``SecretField``. Mirrors vettid-android `visibleSecretKeyboard`.
+public struct VisibleSecretField: View {
+    @Binding private var text: String
+    private let label: String
+    private let onSubmit: () -> Void
+    @Environment(\.vettIDColors) private var colors
+
+    public init(_ label: String, text: Binding<String>, onSubmit: @escaping () -> Void = {}) {
+        self.label = label
+        _text = text
+        self.onSubmit = onSubmit
+    }
+
+    public var body: some View {
+        SecretTextInput(text: $text, placeholder: label, visible: true, onSubmit: onSubmit)
+            .frame(minHeight: Spacing.touchTarget)
+            .padding(.horizontal, Spacing.l)
+            .overlay(RoundedRectangle(cornerRadius: VettIDShape.small).stroke(colors.outline))
+            .accessibilityLabel(label)
+    }
+}
+
+/// The `UITextField` behind the secret fields.
+struct SecretTextInput: UIViewRepresentable {
+    @Binding var text: String
+    let placeholder: String
+    let visible: Bool
+    let onSubmit: () -> Void
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        var parent: SecretTextInput
+
+        init(_ parent: SecretTextInput) { self.parent = parent }
+
+        @objc func changed(_ field: UITextField) { parent.text = field.text ?? "" }
+
+        func textFieldShouldReturn(_ field: UITextField) -> Bool {
+            parent.onSubmit()
+            return true
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIView(context: Context) -> UITextField {
+        let f = UITextField()
+        SecretInput.configure(f, visible: visible)
+        f.placeholder = placeholder
+        f.delegate = context.coordinator
+        f.addTarget(context.coordinator, action: #selector(Coordinator.changed(_:)), for: .editingChanged)
+        f.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        return f
+    }
+
+    func updateUIView(_ f: UITextField, context: Context) {
+        context.coordinator.parent = self
+        if f.isSecureTextEntry == visible {
+            // Switching secure entry makes iOS clear the field on the next keystroke; setting the text again keeps it.
+            f.isSecureTextEntry = !visible
+            f.text = text
+        }
+        if f.text != text { f.text = text }
+    }
+
+    /// Leaves no text behind in a secure field that goes (the save prompt's trigger).
+    static func dismantleUIView(_ f: UITextField, coordinator: Coordinator) { f.text = "" }
+}

@@ -1,9 +1,13 @@
 import SwiftUI
+import VettIDData
 import VettIDUI
 
 @main
 struct VettIDApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var themeMode: ThemeMode = Self.initialThemeMode
+    /// "Allow screenshots" (ID10): on from the start only in the development builds, whose screens are screenshotted.
+    @State private var screenshots = ScreenshotAllowance(onByDefault: AppEnvironment.current.kind.screenshotsByDefault)
 
     private static var initialThemeMode: ThemeMode {
         #if DEBUG
@@ -19,6 +23,8 @@ struct VettIDApp: App {
         WindowGroup {
             RootView(environment: .current, themeMode: $themeMode)
                 .vettIDTheme(themeMode)
+                .environment(screenshots)
+                .privacyShield()
         }
     }
 }

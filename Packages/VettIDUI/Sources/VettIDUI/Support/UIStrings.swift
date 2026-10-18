@@ -13,6 +13,18 @@ enum UIStrings {
     static func account(_ name: String) -> String {
         String(localized: "core_ui_cd_account", defaultValue: "Account: \(name)", bundle: .module)
     }
+    static func showSecret(_ label: String) -> String {
+        String(localized: "core_ui_cd_show_secret", defaultValue: "Show \(label)", bundle: .module)
+    }
+    static func hideSecret(_ label: String) -> String {
+        String(localized: "core_ui_cd_hide_secret", defaultValue: "Hide \(label)", bundle: .module)
+    }
+    /// iOS-only (IOS-PLAN §14 "Capture hiding").
+    static var captureHidden: String {
+        String(localized: "ios_capture_hidden", defaultValue: "Hidden while your screen is being recorded or shared.", bundle: .module)
+    }
+    /// iOS-only: the PIN keypad's delete key (IOS-PLAN ID11; Android types the PIN on the system keyboard).
+    static var keypadDelete: String { String(localized: "ios_keypad_delete", defaultValue: "Delete", bundle: .module) }
     static var back: String { String(localized: "core_ui_cd_back", defaultValue: "Back", bundle: .module) }
     static var logo: String { String(localized: "core_ui_cd_logo", defaultValue: "VettID", bundle: .module) }
     static var cancel: String { String(localized: "core_ui_cancel", defaultValue: "Cancel", bundle: .module) }
