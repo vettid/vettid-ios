@@ -222,6 +222,8 @@ public final class VaultDevice: @unchecked Sendable {
     public var utkCount: Int { mem.withLock { st.utks.count } }
     /// The credential version this app holds, or nil.
     public var credentialVersion: Int64? { mem.withLock { st.credential?.version } }
+    /// The credential blob this app holds (§3.5.3), sent with every credential operation; nil before one.
+    var credentialBlob: String? { mem.withLock { st.credential?.blob } }
 
     /// Starts [vaultRefusals] again (after a sealed unlock result: the enclave knows this device).
     public func clearVaultRefusals() { resetRefusals() }

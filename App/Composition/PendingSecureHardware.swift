@@ -42,3 +42,14 @@ struct PendingSecureHardware: AppKeyStore, SeedWrapKeySource, PhoneSecretSource,
     func attest(_ challenge: [UInt8]) throws -> DeviceAttest { throw KeysError.noSecureHardware }
     func assert(_ signed: AttestSigned) throws -> DeviceAssertion { throw KeysError.noSecureHardware }
 }
+
+/// The app-lock key until the Secure Enclave keys arrive (I1.4b; ``SecureEnclaveAppLockKeys`` is ready behind
+/// ``AppLockKeys``, its use on the iPhone is accepted with them): no key can be made, so the app lock cannot be turned
+/// on and stays off. Never in place of the PIN or the password either way (IOS-PLAN ID17).
+struct PendingAppLockKeys: AppLockKeys {
+    func create(_ method: AppLockMethod) throws { throw KeysError.noSecureHardware }
+    func exists() -> Bool { false }
+    func seal(_ plaintext: [UInt8]) throws -> [UInt8] { throw KeysError.noSecureHardware }
+    func open(_ sealed: [UInt8], reason: String) async throws -> [UInt8] { throw AppLockKeyError.invalidated }
+    func delete() throws {}
+}

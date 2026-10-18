@@ -7,7 +7,7 @@ import VettIDData
 /// ``fail`` makes the next call of a name throw; the unlock outcomes are scripted in ``unlockResults``. Observable, as
 /// the real repositories are, so a view model's observation of ``phase`` and the other states can be tested. (VettID's
 /// vault tests have a protocol-level `FakeVault`; this one stands in for the repositories.) Mirrors vettid-android
-/// `FakeVault` without its owner-check and profile parts, which come with those repositories.
+/// `FakeVault` without its profile part, which comes with that repository.
 @MainActor
 @Observable
 public final class FakeVaultRepository: CustomStringConvertible {
@@ -80,6 +80,20 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var moveNotDone = false
     public var rotateOffered = false
     public var movedAway = false
+
+    // OwnerCheckRepository.
+    public var ownerCheck: OwnerCheckView?
+    public var lockedByOwnerCheck = false
+    public var unlockCheckOutcome: OwnerCheckOutcome?
+    public var notices: [OwnerCheckNotice] = []
+    public var presenceUnrecorded = false
+    public var checkAfterCancel = false
+    /// Scripted answers to ``check(pin:password:holdOff:)`` (default: passed).
+    public var checkResults: [OwnerCheckOutcome] = []
+    public var lastHoldOff: HoldOff?
+    public var lastInterval: Int64?
+    /// What ``clearAppData()`` answers.
+    public var clearAppDataResult = true
 
     // CredentialRepository.
     public var alarm: CredentialAlarm?
@@ -200,6 +214,70 @@ extension FakeVaultRepository: AccountRepository {
         try call("eraseThisPhone")
         account = nil
         phase = .signedOut
+    }
+
+    public func clearAppData() async -> Bool {
+        calls.append("clearAppData")
+        if clearAppDataResult {
+            account = nil
+            phase = .signedOut
+        }
+        return clearAppDataResult
+    }
+}
+
+extension FakeVaultRepository: OwnerCheckRepository {
+    private func passed() -> OwnerCheckOutcome {
+        if var v = ownerCheck {
+            v.state = .ok
+            v.deadline = Date().addingTimeInterval(86_400)
+            v.failures = 0
+            v.waiting = nil
+            ownerCheck = v
+        }
+        return .passed
+    }
+
+    public func refreshOwnerCheck() async throws { try call("refreshOwnerCheck") }
+
+    public func check(pin: String, password: String, holdOff: HoldOff?) async throws -> OwnerCheckOutcome {
+        try call("check")
+        lastPin = pin
+        lastPassword = password
+        lastHoldOff = holdOff
+        let r = checkResults.isEmpty ? passed() : checkResults.removeFirst()
+        if r == .passed, let holdOff, var v = ownerCheck {
+            v.hold = false
+            v.holdOffUntil = holdOff.until
+            ownerCheck = v
+        }
+        return r
+    }
+
+    public func setCheckInterval(seconds: Int64) async throws {
+        try call("setCheckInterval")
+        lastInterval = seconds
+        ownerCheck?.intervalSeconds = seconds
+    }
+
+    public func turnHoldOn() async throws {
+        try call("turnHoldOn")
+        ownerCheck?.hold = true
+        ownerCheck?.holdOffUntil = nil
+    }
+
+    public func consumeUnlockCheckOutcome() { unlockCheckOutcome = nil }
+
+    public func consumeCheckAfterCancel() { checkAfterCancel = false }
+
+    public func dismissNotices() async throws {
+        try call("dismissNotices")
+        notices = []
+    }
+
+    /// The outcome of the check an unlock past the deadline sent (``unlockWithCheck(pin:password:approve:cancelRecovery:)``).
+    func checkAfterUnlock() {
+        unlockCheckOutcome = checkResults.isEmpty ? passed() : checkResults.removeFirst()
     }
 }
 

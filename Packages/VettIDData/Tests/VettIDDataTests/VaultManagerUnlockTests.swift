@@ -176,17 +176,16 @@ func eventually(_ condition: @MainActor () -> Bool) async -> Bool {
         #expect(m.holder?.count == 0 && m.phase == .locked)
     }
 
-    /// The sealed answers decided before the PIN: a recovery pending, the signer refused, an unknown device (a proof of
-    /// replacement, given to the wipe of I1.7b).
+    /// The sealed answers decided before the PIN: a recovery pending, the signer refused, a rollback of the vault's state
+    /// (an unknown device, the proof of a replacement, wipes the phone: `VaultManagerWipeTests`).
     @Test func sealedRefusalsBeforeThePin() async throws {
         defer { phone.close() }
         try await lockedVault()
-        service.unlockAnswers(.sealed("recovery_pending"), .sealed("signer_refused"), .sealed("state_rollback"), .sealed("unknown_device"))
+        service.unlockAnswers(.sealed("recovery_pending"), .sealed("signer_refused"), .sealed("state_rollback"))
         #expect(try await m.unlock(pin: pin) == .recoveryPending)
         #expect(try await m.unlock(pin: pin) == .signerRefused)
         #expect(try await m.unlock(pin: pin) == .stateRollback)
-        #expect(try await m.unlock(pin: pin) == .failed(.other, code: "unknown_device"))
-        #expect(m.holder?.count == 1)
+        #expect(m.holder?.count == 0)
         #expect(service.pinFailureCount == 0, "none of these counts as a wrong PIN")
         // The cancel of a recovery travels with the unlock.
         #expect(try await m.unlock(pin: pin, approve: nil, cancelRecovery: true) == .success)

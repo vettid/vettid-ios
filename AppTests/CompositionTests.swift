@@ -29,6 +29,26 @@ import VettIDTesting
         }
     }
 
+    /// IOS-PLAN ID17: until the Secure Enclave keys arrive the app lock cannot be turned on, and it is off.
+    @Test func theAppLockIsOffUntilTheSecureEnclaveArrives() async {
+        let c = AppComposition.shared
+        c.startAppLock()
+        #expect(c.appLock.state == .disabled)
+        await #expect(throws: KeysError.noSecureHardware) { _ = try await c.appLock.enable(.biometrics, reason: "Unlock VettID") }
+        #expect(c.appLock.state == .disabled)
+    }
+
+    /// A wipe erases the app's data directory (the wipe's marker in it), its caches and temporary files, and every
+    /// keychain item and key; the first-run cleanup's marker stays.
+    @Test func theWipeErasesTheAppsDirectoriesAndKeys() throws {
+        let data = try AppDirectories.data()
+        let t = AppWipeTargets(data: data, hardware: [PendingSecureHardware(sourceID: "test")])
+        #expect(t.dirs == [data] && t.scratch.count == 4)
+        #expect(t.marker.deletingLastPathComponent() == data)
+        #expect(t.kept == [data.appendingPathComponent(FirstRunCleanup.markerName)])
+        #expect(t.erasers.first is KeychainEraser)
+    }
+
     @Test func theSecureHardwarePlaceholderRefusesEverything() {
         let h = PendingSecureHardware(sourceID: "test")
         #expect(throws: KeysError.noSecureHardware) { _ = try (h as any AppKeyStore).getOrCreate() }

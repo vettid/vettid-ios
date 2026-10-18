@@ -115,12 +115,17 @@ extension FakeVaultService {
         if !vaultOpen { return }
         let body = try StrictJson.parseObject(m.body)
         if let refusal = refusal(m.type) { return try reply(m.type, "{}", re: m.id, error: refusal) }
+        // §3.6.3: the owner check's clock before each batch, then its gate on the app.
+        try ownerCheckTick()
+        if !holdAllows(m.type) { return try reply(m.type, "{}", re: m.id, error: "owner_check_required") }
         switch m.type {
         case "credential.utk.get": try reply(m.type, #"{"utks":\#(try issueUTKs(3))}"#, re: m.id)
         case "credential.create": try create(m, body)
-        case "credential.get": try reply(m.type, #"{"credential":"AQID","version":1,"updated_at":"2026-10-18T00:00:00Z"}"#, re: m.id)
+        case "credential.get": try reply(m.type, #"{"credential":"\#(Self.blob(credentialVersion))","version":\#(credentialVersion),"updated_at":"2026-10-18T00:00:00Z"}"#, re: m.id)
+        case "vault.status": try status(m)
+        case Self.typeOwnerCheck: try ownerCheck(m, body)
         case "credential.ack": try reply(m.type, "{}", re: m.id)
-        case "settings.get": try reply(m.type, #"{"version":\#(settingsVersion),"settings":{"credential.backup":\#(backup),"credential.unlock_ttl_seconds":300}}"#, re: m.id)
+        case "settings.get": try reply(m.type, #"{"version":\#(settingsVersion),"settings":{"credential.backup":\#(backup),"credential.unlock_ttl_seconds":300,"owner_check.interval_seconds":\#(Int(checkInterval)),"owner_check.hold":\#(!holdOffValue)}}"#, re: m.id)
         case "settings.set": try settingsSet(m, body)
         case "vault.lock": try relayLock(m)
         case "vault.enroll.confirm":
@@ -143,7 +148,10 @@ extension FakeVaultService {
         guard try body.uint("version", min: 0, max: StrictJson.maxSafeInteger) == settingsVersion else {
             return try reply(m.type, "{}", re: m.id, error: "conflict")
         }
-        if let set = try body.optObj("set"), case .bool(_, let on)? = set["credential.backup"] { backup = on }
+        if let set = try body.optObj("set") {
+            if case .bool(_, let on)? = set["credential.backup"] { backup = on }
+            try ownerCheckSettings(set)
+        }
         settingsVersion += 1
         try reply(m.type, #"{"version":\#(settingsVersion)}"#, re: m.id)
     }
@@ -162,11 +170,15 @@ extension FakeVaultService {
         }
         createsValue.append((try p.optString("pin"), try p.string("password")))
         hasCredential = true
-        try reply(m.type, #"{"credential":"AQID","version":1,"key":"k","utks":\#(try issueUTKs(2))}"#, re: m.id)
+        vaultPassword = try p.string("password")
+        credentialVersion = 1
+        // §3.6.1: the first credential.create starts the owner check's clock.
+        startCheckClock()
+        try reply(m.type, #"{"credential":"\#(Self.blob(credentialVersion))","version":1,"key":"k","utks":\#(try issueUTKs(2))}"#, re: m.id)
     }
 
     /// [n] fresh UTKs (§3.5.4), their private keys kept. Callers hold ``cond``.
-    private func issueUTKs(_ n: Int) throws -> String {
+    func issueUTKs(_ n: Int) throws -> String {
         var items: [String] = []
         for _ in 0..<n {
             let k = try KemPrivateKey.generate()

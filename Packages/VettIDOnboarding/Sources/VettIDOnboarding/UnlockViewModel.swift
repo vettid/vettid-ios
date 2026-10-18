@@ -7,8 +7,9 @@ import VettIDData
 /// enclave's answer and its backoff (§11.8), the recovery-pending refusal (§11.11.4) and the state-rollback warning
 /// (§13.2). An unlock the vault did not recognise (an unreadable result), or a phone that no longer holds the vault's keys
 /// (`device_secret`), offers "Erase VettID from this phone", only after a confirmation; a phone sent here by repeated
-/// relay refusals is told so, and the refusals alone offer nothing. Mirrors vettid-android `UnlockViewModel` (What's new
-/// comes with I1.8, the owner check with I1.7b).
+/// relay refusals is told so, and the refusals alone offer nothing. A vault past its owner-check deadline, or locked after
+/// ten failed checks, asks for the password with the PIN (§3.6.5). Mirrors vettid-android `UnlockViewModel` (What's new
+/// comes with I1.8).
 @MainActor
 @Observable
 public final class UnlockViewModel: UnlockActions {
@@ -28,7 +29,10 @@ public final class UnlockViewModel: UnlockActions {
     public init(
         vault: any VaultRepository,
         account: any AccountRepository,
-        tick: @escaping @Sendable () async throws -> Void = { try await Task.sleep(for: .seconds(1)) }
+        ownerCheck: (any OwnerCheckRepository)? = nil,
+        now: @escaping @Sendable () -> Date = { Date() },
+        tick: @escaping @Sendable () async throws -> Void = { try await Task.sleep(for: .seconds(1)) },
+        recheck: @escaping @Sendable () async throws -> Void = { try await Task.sleep(for: .seconds(15)) }
     ) {
         self.vault = vault
         self.account = account
@@ -40,6 +44,25 @@ public final class UnlockViewModel: UnlockActions {
         followers.add(follow(self, read: { $0.vault.lockNotice }, apply: { $0.state.lock = $1 }))
         followers.add(follow(self, read: { $0.vault.transferKeptSince }, apply: { $0.state.keptTransfer = $1 != nil }))
         followers.add(follow(self, read: { $0.vault.finishMoveFailure }, apply: { $0.state.moveFailure = $1 }))
+        if let ownerCheck {
+            followers.add(follow(
+                ownerCheck,
+                read: { OwnerCheckFlags(due: $0.ownerCheck?.gated(now()) == true, locked: $0.lockedByOwnerCheck) },
+                apply: { [weak self] _, f in self?.ownerCheck(due: f.due, lockedByChecks: f.locked) }
+            ))
+            // The deadline passes by itself while the screen is open: the password is then asked for too.
+            followers.add(Task { @MainActor [weak self, weak ownerCheck] in
+                while !Task.isCancelled {
+                    do {
+                        try await recheck()
+                    } catch {
+                        return
+                    }
+                    guard let self, let repo = ownerCheck else { return }
+                    self.ownerCheck(due: repo.ownerCheck?.gated(now()) == true, lockedByChecks: repo.lockedByOwnerCheck)
+                }
+            })
+        }
     }
 
     deinit {
@@ -47,7 +70,7 @@ public final class UnlockViewModel: UnlockActions {
         countdowns.cancelAll()
     }
 
-    /// I1.7b: the owner check's state, from its repository (the vault past its deadline, or locked after ten checks).
+    /// The owner check's state, from its repository (the vault past its deadline, or locked after ten checks).
     func ownerCheck(due: Bool, lockedByChecks: Bool) {
         state.checkDue = due || lockedByChecks
         state.lockedByOwnerCheck = lockedByChecks
@@ -264,9 +287,8 @@ public final class UnlockViewModel: UnlockActions {
     /// erase VettID here too.
     static func notRecognised(after r: UnlockAttempt, before: Bool) -> Bool {
         guard case .failed(let kind, let code, _) = r else { return false }
-        // (iPhone, until I1.7b brings the wipe) a sealed `unknown_device`, the proof of a replacement that would erase this
-        // phone, is shown as not recognised, with the member's erase, rather than as a dead end.
-        if code == HolderPolicy.codeUnknownDevice { return true }
+        // A sealed `unknown_device` is not here: it is the proof of a replacement, and the phone was wiped already
+        // (``HolderPolicy``).
         return code == UnlockState.codeUnreadable || kind == .unauthorized || before
     }
 
@@ -320,4 +342,10 @@ public final class UnlockViewModel: UnlockActions {
         countdowns.add(task)
         return task
     }
+}
+
+/// What the unlock screen follows of the owner check.
+private struct OwnerCheckFlags: Equatable, Sendable {
+    let due: Bool
+    let locked: Bool
 }

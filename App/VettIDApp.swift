@@ -3,6 +3,7 @@ import SwiftUI
 import UIKit
 import VettIDAltChan
 import VettIDData
+import VettIDOnboarding
 import VettIDOnboardingUI
 import VettIDUI
 
@@ -33,21 +34,30 @@ struct VettIDApp: App {
     }
 }
 
-/// The root: onboarding while nothing is set up or setup is under way (IOS-PLAN §8 I1.6), the unlock and the stuck
-/// screens (I1.7), the placeholder for the app's shell (I1.8). Debug builds can open the debug catalog from it.
+/// The root: onboarding while nothing is set up or setup is under way (IOS-PLAN §8 I1.6), the unlock, the owner check and
+/// the stuck screens (I1.7), the placeholder for the app's shell (I1.8), all under the app lock (ID17). Debug builds can
+/// open the debug catalog from it.
 struct RootView: View {
     let environment: AppEnvironment
     let composition: AppComposition
     @Binding var themeMode: ThemeMode
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
-        #if DEBUG
-        DebugCatalog(themeMode: $themeMode) {
+        AppLockGate(lock: composition.appLock, themeMode: themeMode) {
+            #if DEBUG
+            DebugCatalog(themeMode: $themeMode) {
+                AppRoot(environment: environment, vault: composition.vault, inbox: composition.inbox)
+            }
+            #else
             AppRoot(environment: environment, vault: composition.vault, inbox: composition.inbox)
+            #endif
         }
-        #else
-        AppRoot(environment: environment, vault: composition.vault, inbox: composition.inbox)
-        #endif
+        // The app lock's settings could not be read at launch (the iPhone not unlocked since it started): read again.
+        .onChange(of: scenePhase) { _, now in if now == .active { composition.startAppLock() } }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.protectedDataDidBecomeAvailableNotification)) { _ in
+            composition.startAppLock()
+        }
     }
 }
 
@@ -76,7 +86,11 @@ struct AppRoot: View {
                     break
                 }
             }
-            .onReceive(Self.protectedDataAvailable) { _ in retryRefresh() }
+            .onReceive(Self.protectedDataAvailable) { _ in
+                // What could not be read before the first unlock (the owner check kept on the phone) is read now.
+                vault.reloadLocalState()
+                retryRefresh()
+            }
             .onOpenURL { url in
                 if SetupCodes.isSetupLink(url.absoluteString) { inbox.offer(url.absoluteString) }
             }
@@ -133,10 +147,40 @@ struct AppRoot: View {
         case .unreachable:
             UnreachableFlow(account: vault) { openPortal() }
         case .locked:
-            UnlockFlow(vault: vault, account: vault) { openPortal() }
+            UnlockFlow(vault: vault, account: vault, ownerCheck: vault.ownerChecks) { openPortal() }
         // The app's shell comes with I1.8.
         case .unlocked:
-            Placeholder(environment: environment)
+            OwnerCheckGateView(vault: vault) { Placeholder(environment: environment) }
+        }
+    }
+}
+
+/// The daily owner check before any other use of the open app (VAULT-MESSAGING §3.6.5): past the deadline (re-read as
+/// time passes, so that the deadline gates on its own) or after an unlock that cancelled a recovery whose check did not
+/// pass, the check screen comes first, never dismissible; otherwise [content]. The shell's banners (the early warning,
+/// the hold-off indicator, the presence notice) come with it (I1.8). Mirrors vettid-android `OwnerCheckGate`.
+struct OwnerCheckGateView<Content: View>: View {
+    let vault: VaultManager
+    @ViewBuilder let content: () -> Content
+    /// The check screen was opened and is not done yet: it stays until the member goes on, so that a check that passed
+    /// with the presence not recorded shows its notice (§11.14.5), as vettid-android's route does until `onDone`.
+    @State private var checking = false
+
+    /// How often the deadline is compared with the clock (vettid-android: 15 s).
+    static var tick: TimeInterval { 15 }
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: Self.tick)) { context in
+            let checks = vault.ownerChecks
+            if checking || OwnerCheckGate.of(checks.ownerCheck, now: context.date).gated || checks.checkAfterCancel {
+                OwnerCheckFlow(mode: .gated, repo: checks, vault: vault) {
+                    checking = false
+                    checks.consumeCheckAfterCancel()
+                }
+                .onAppear { checking = true }
+            } else {
+                content()
+            }
         }
     }
 }

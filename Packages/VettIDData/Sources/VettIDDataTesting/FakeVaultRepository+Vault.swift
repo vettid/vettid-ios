@@ -102,6 +102,7 @@ extension FakeVaultRepository: VaultRepository {
         lastPassword = password
         let r = try await unlock(pin: pin, approve: approve, cancelRecovery: cancelRecovery)
         calls.append("unlockWithCheck")
+        if r == .success { checkAfterUnlock() }
         return r
     }
 

@@ -1,6 +1,7 @@
 #if DEBUG
 import Foundation
 import VettIDCrypto
+import VettIDRelay
 import VettIDTesting
 
 // Fixtures (JSON bodies of the fake vault) stay on one line each.
@@ -30,6 +31,8 @@ extension FakeVaultService {
         case sealed(String)
         /// The member API cannot be reached.
         case offline
+        /// The member API answers `503 vault_unavailable`.
+        case unavailable
         /// The vault's rules decide, but the slot stays queued until ``releaseHeldUnlock()``: the answer is on its way.
         case held
     }
@@ -108,6 +111,32 @@ extension FakeVaultService {
         }
     }
 
+    /// How a `device.unlinked` reaches this phone: as the vault sends it, with its sealed bytes altered (a forgery), from
+    /// another relay key than the vault's, or twice (the same message replayed).
+    public enum UnlinkDelivery: Sendable { case asSent, tampered, wrongSender, twice }
+
+    /// The vault tells this phone it is no longer its app (`device.unlinked{reason}`, §6.7.1 step 4, §11.11.5 step 3).
+    public func unlinkThisPhone(reason: String, delivery: UnlinkDelivery = .asSent) {
+        locked {
+            guard let epoch = keyring.current() else { return }
+            let inner = Inner(id: Ulid.new(), type: "device.unlinked", ts: Date(), body: Array(#"{"reason":"\#(reason)"}"#.utf8))
+            guard var payload = try? epoch.seal(inner) else { return }
+            switch delivery {
+            case .asSent: queue(payload)
+            case .tampered:
+                payload[payload.count - 1] ^= 0x01
+                queue(payload)
+            case .wrongSender:
+                let other = Ed25519PrivateKey.generate()
+                queued.append(RelayMessage(msgID: Ulid.new(), depositedAt: "", sender: RelayAuth.encodeKey(other.publicKey), jti: nil, payload: payload))
+                cond.broadcast()
+            case .twice:
+                queue(payload)
+                queue(payload)
+            }
+        }
+    }
+
     // MARK: - The member API's routes
 
     /// `POST /api/vault/unlock`: the sealed `vault.unlock` opened with the ETK and answered in its slot. Callers hold
@@ -115,6 +144,7 @@ extension FakeVaultService {
     func unlock(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer {
         let answer = unlockAnswers.isEmpty ? UnlockAnswer.vault : unlockAnswers.removeFirst()
         if case .offline = answer { return .failure(.notConnectedToInternet) }
+        if case .unavailable = answer { return .json(503, #"{"error":"vault_unavailable"}"#) }
         guard let o = try? StrictJson.parseObject(r.body), let rid = try? o.string("request_id"), let env = try? o.base64("envelope"),
               let request = try? openRequest(env), let body = try? StrictJson.parseObject(request.body), let kem = device?.kem
         else { return .json(400, #"{"error":"bad_request"}"#) }
@@ -134,7 +164,7 @@ extension FakeVaultService {
             slots[rid] = try? Self.sealResult(kem, "vault.unlock.result", rid, #"{"ok":false,"code":"\#(code)","header_seq":\#(headerSeq)}"#)
         case .held:
             heldSlots[rid] = try? Self.sealResult(kem, "vault.unlock.result", rid, unlockResult(pin: pin, secret: secret))
-        case .vault, .answerLost, .offline:
+        case .vault, .answerLost, .offline, .unavailable:
             slots[rid] = try? Self.sealResult(kem, "vault.unlock.result", rid, unlockResult(pin: pin, secret: secret))
             if case .answerLost = answer { lostSlots.insert(rid) }
         }
@@ -198,7 +228,7 @@ extension FakeVaultService {
     }
 
     /// The vault stops: it no longer runs and the member API says so. Callers hold ``cond``.
-    private func close() {
+    func close() {
         vaultOpen = false
         statusState = Self.locked
     }

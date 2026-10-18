@@ -41,6 +41,7 @@ import VettIDKeys
     /// The vault manager's data files are the cleanup's: their presence refuses it.
     @Test func theManagersFilesRefuseTheCleanup() {
         let dir = URL(fileURLWithPath: "/data")
-        #expect(VaultFiles.all(in: dir).map(\.lastPathComponent) == ["account", "vault-device", "phone-secrets", "lock-record"])
+        let names = VaultFiles.all(in: dir).map(\.lastPathComponent)
+        #expect(names == ["account", "vault-device", "phone-secrets", "lock-record", "owner-check"])
     }
 }

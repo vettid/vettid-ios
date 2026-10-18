@@ -1881,6 +1881,606 @@
           }
         }
       }
+    },
+    "app_lock_prompt_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock VettID"
+          }
+        }
+      }
+    },
+    "app_lock_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID is locked"
+          }
+        }
+      }
+    },
+    "app_lock_unlock": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock"
+          }
+        }
+      }
+    },
+    "ios_app_lock_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use Face ID, Touch ID or your iPhone passcode to open VettID."
+          }
+        }
+      }
+    },
+    "ios_app_lock_body_passcode": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use your iPhone passcode to open VettID."
+          }
+        }
+      }
+    },
+    "ios_root_clear_data_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This removes everything VettID keeps on this iPhone. VettID then starts afresh."
+          }
+        }
+      }
+    },
+    "ios_root_clear_data_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID could not erase its data. Remove VettID from this iPhone and install it again."
+          }
+        }
+      }
+    },
+    "ownercheck_backoff": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too many wrong entries. Wait a few minutes, then try again."
+          }
+        }
+      }
+    },
+    "ownercheck_backoff_wait": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too many wrong entries. Try again in %@."
+          }
+        }
+      }
+    },
+    "ownercheck_bad_password": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wrong credential password."
+          }
+        }
+      }
+    },
+    "ownercheck_bad_pin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wrong PIN."
+          }
+        }
+      }
+    },
+    "ownercheck_body_gated": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault asks for your PIN and your credential password together at least once every %@. Until you check, the app shows nothing from your vault."
+          }
+        }
+      }
+    },
+    "ownercheck_body_hold_off": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turning the hold off is part of a check: enter your PIN and your credential password."
+          }
+        }
+      }
+    },
+    "ownercheck_body_voluntary": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter your PIN and your credential password. Your next check is then due %@ from now."
+          }
+        }
+      }
+    },
+    "ownercheck_cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        }
+      }
+    },
+    "ownercheck_checks_left": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld wrong check left before your vault locks."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld wrong checks left before your vault locks."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "ownercheck_due_note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The hold is off: your desktops and agents keep running. This phone needs the check first."
+          }
+        }
+      }
+    },
+    "ownercheck_held_note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault is held: it keeps receiving for you, but your desktops and agents wait for your check and calls do not ring."
+          }
+        }
+      }
+    },
+    "ownercheck_hold_off_1d": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "After 1 day"
+          }
+        }
+      }
+    },
+    "ownercheck_hold_off_1w": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "After 1 week"
+          }
+        }
+      }
+    },
+    "ownercheck_hold_off_30d": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "After 30 days"
+          }
+        }
+      }
+    },
+    "ownercheck_hold_off_3d": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "After 3 days"
+          }
+        }
+      }
+    },
+    "ownercheck_hold_off_never": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When I turn it back on"
+          }
+        }
+      }
+    },
+    "ownercheck_hold_off_until": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn the hold back on"
+          }
+        }
+      }
+    },
+    "ownercheck_hold_off_warning": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When a check is late, your vault normally holds: your desktops and agents stop, calls do not ring and you do not appear online. With the hold off they keep running until the hold is back on, your vault locks or you check. Someone with your unlocked phone could keep a desktop or agent working for you. This phone still asks for the check before you can use it."
+          }
+        }
+      }
+    },
+    "ownercheck_hold_off_warning_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What this gives up"
+          }
+        }
+      }
+    },
+    "ownercheck_hours": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld hour"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld hours"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "ownercheck_lock": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lock vault"
+          }
+        }
+      }
+    },
+    "ownercheck_password_label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credential password"
+          }
+        }
+      }
+    },
+    "ownercheck_pin_label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault PIN"
+          }
+        }
+      }
+    },
+    "ownercheck_presence_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If this stays for three days, your vault is no longer protected against a recovery started by someone else. Try again later. If it does not go away, contact VettID."
+          }
+        }
+      }
+    },
+    "ownercheck_presence_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault could not record that you were here."
+          }
+        }
+      }
+    },
+    "ownercheck_submit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check"
+          }
+        }
+      }
+    },
+    "ownercheck_submit_hold_off": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check and turn the hold off"
+          }
+        }
+      }
+    },
+    "ownercheck_title_gated": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Daily check"
+          }
+        }
+      }
+    },
+    "ownercheck_title_hold_off": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn the hold off"
+          }
+        }
+      }
+    },
+    "ownercheck_title_voluntary": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check now"
+          }
+        }
+      }
+    },
+    "ownercheck_waiting_calls": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld missed call"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld missed calls"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "ownercheck_waiting_messages": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld new message"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld new messages"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "ownercheck_waiting_none": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing new has arrived since your check was due."
+          }
+        }
+      }
+    },
+    "ownercheck_waiting_other": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld other update"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld other updates"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "ownercheck_waiting_requests": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld connection request"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld connection requests"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "ownercheck_waiting_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting in your vault"
+          }
+        }
+      }
+    },
+    "ownercheck_waiting_unknown": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking what is waiting… Something may have arrived since your check was due; your vault has not said yet."
+          }
+        }
+      }
+    },
+    "root_clear_data": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erase VettID's data on this phone"
+          }
+        }
+      }
+    },
+    "root_clear_data_confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erase"
+          }
+        }
+      }
+    },
+    "root_clear_data_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erase VettID's data?"
+          }
+        }
+      }
+    },
+    "ios_app_lock_locked_out": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock your iPhone with its passcode, then try again."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

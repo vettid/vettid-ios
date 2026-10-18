@@ -25,6 +25,21 @@ extension VaultApi {
         _ = try await credential.sealedOp("credential.create", fields)
     }
 
+    /// The daily owner check (§3.6.1): the PIN and the credential password sealed together to one UTK, with the blob (a
+    /// credential operation: the CEK rotates and the new blob is kept and acknowledged). [hold] `false` with an optional
+    /// [holdOffUntil] (RFC 3339, at most 30 days ahead) turns the hold off (§3.6.7); `true` turns it on. Mirrors
+    /// vettid-android `VaultApi.ownerCheck`.
+    public func ownerCheck(pin: String, password: String, hold: Bool? = nil, holdOffUntil: String? = nil) async throws -> OwnerCheckPassed {
+        var fields: [SealedField] = [.string("pin", pin), .string("password", password)]
+        if let hold { fields.append(.bool("hold", hold)) }
+        if let holdOffUntil { fields.append(.string("hold_off_until", holdOffUntil)) }
+        return try VaultJSON.decode(OwnerCheckPassed.self, try await credential.credOp(Self.typeOwnerCheck, fields))
+    }
+
+    /// The owner check's message type (§3.6.1, §10.2; `vault.owner_check` before VAULT-MESSAGING 0.15.2). Settings keys,
+    /// error codes, feed kinds and `owner_check` members keep their underscores.
+    public static let typeOwnerCheck = "vault.owner-check"
+
     /// `credential.get`: the latest blob the vault holds, kept and acknowledged (the holder only).
     public func credentialFetch() async throws { try await credential.fetch() }
 

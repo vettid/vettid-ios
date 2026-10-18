@@ -149,6 +149,5 @@ func vaultFailure(_ body: @MainActor () async throws -> Void) async -> VaultFail
         defer { phone.close() }
         #expect(await vaultFailure { _ = try await m.status() }?.kind == .notSupported)
         #expect(await vaultFailure { _ = try await m.overview() }?.kind == .notSupported)
-        #expect(await vaultFailure { try await m.eraseThisPhone() }?.kind == .notSupported)
     }
 }

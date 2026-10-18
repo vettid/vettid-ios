@@ -8,12 +8,14 @@ import VettIDUI
 /// an account service that says the account has no vault, and stored keys that cannot be read say so in the title; the
 /// last two also offer a confirmed way out. The account service no longer accepting this phone, or a vault unreachable
 /// for 7 days ([longUnreachable]), offers recover-or-erase: "Recover your vault" first, the erase second, "Try again"
-/// below them. Nothing is forgotten or erased by itself. Mirrors vettid-android `UnreachableScreen` (its "Erase VettID's
-/// data on this phone" after a wipe that did not finish comes with I1.7b).
+/// below them. A wipe of this phone that did not finish offers "Erase VettID's data on this phone" ([clearFailed]: it could
+/// not erase everything, and the member is told to remove the app). Nothing is forgotten or erased by itself. Mirrors
+/// vettid-android `UnreachableScreen`.
 public struct UnreachableScreen: View {
     let kind: FailureKind?
     let longUnreachable: Bool
     let busy: Bool
+    let clearFailed: Bool
     let onRetry: @MainActor () -> Void
     let onStartOver: @MainActor (WayOut) -> Void
     let onRecover: @MainActor () -> Void
@@ -26,6 +28,7 @@ public struct UnreachableScreen: View {
         longUnreachable: Bool = false,
         busy: Bool,
         confirming: Bool = false,
+        clearFailed: Bool = false,
         onRetry: @escaping @MainActor () -> Void,
         onStartOver: @escaping @MainActor (WayOut) -> Void,
         onRecover: @escaping @MainActor () -> Void
@@ -33,6 +36,7 @@ public struct UnreachableScreen: View {
         self.kind = kind
         self.longUnreachable = longUnreachable
         self.busy = busy
+        self.clearFailed = clearFailed
         self.onRetry = onRetry
         self.onStartOver = onStartOver
         self.onRecover = onRecover
@@ -70,12 +74,18 @@ public struct UnreachableScreen: View {
                     TextLink(OnboardingStrings.rootRetry, identifier: "retry_button", action: onRetry).disabled(busy)
                 }
             }
+            if clearFailed && way == .clearData {
+                Text(OnboardingStrings.rootClearDataFailed)
+                    .vettIDFont(.bodyLarge)
+                    .foregroundStyle(colors.error)
+                    .accessibilityIdentifier("clear_data_failed")
+            }
         }
         .confirmDialog(
             isPresented: Binding(get: { confirm && way != nil }, set: { confirm = $0 }),
             title: way.map(Self.confirmTitle) ?? "",
             message: way.map(Self.confirmBody) ?? "",
-            confirmLabel: way.map(Self.label) ?? "",
+            confirmLabel: way.map(Self.confirmLabel) ?? "",
             destructive: true,
             onConfirm: {
                 confirm = false
@@ -86,15 +96,29 @@ public struct UnreachableScreen: View {
     }
 
     static func label(_ way: WayOut) -> String {
-        way == .startOver ? OnboardingStrings.rootStartOver : OnboardingStrings.rootErase
+        switch way {
+        case .startOver: OnboardingStrings.rootStartOver
+        case .clearData: OnboardingStrings.rootClearData
+        case .erase, .eraseOrRecover: OnboardingStrings.rootErase
+        }
     }
 
+    static func confirmLabel(_ way: WayOut) -> String { way == .clearData ? OnboardingStrings.rootClearDataConfirm : label(way) }
+
     static func confirmTitle(_ way: WayOut) -> String {
-        way == .startOver ? OnboardingStrings.rootStartOverTitle : OnboardingStrings.rootEraseTitle
+        switch way {
+        case .startOver: OnboardingStrings.rootStartOverTitle
+        case .clearData: OnboardingStrings.rootClearDataTitle
+        case .erase, .eraseOrRecover: OnboardingStrings.rootEraseTitle
+        }
     }
 
     static func confirmBody(_ way: WayOut) -> String {
-        way == .startOver ? OnboardingStrings.rootStartOverBody : OnboardingStrings.erasePhoneBody
+        switch way {
+        case .startOver: OnboardingStrings.rootStartOverBody
+        case .clearData: OnboardingStrings.rootClearDataBody
+        case .erase, .eraseOrRecover: OnboardingStrings.erasePhoneBody
+        }
     }
 }
 
@@ -112,7 +136,7 @@ public struct UnreachableFlow: View {
     public var body: some View {
         let (kind, long): (FailureKind?, Bool) = if case .unreachable(let k, let l) = account.phase { (k, l) } else { (nil, false) }
         UnreachableScreen(
-            kind: kind, longUnreachable: long, busy: model?.retrying ?? false,
+            kind: kind, longUnreachable: long, busy: model?.retrying ?? false, clearFailed: model?.clearDataFailed ?? false,
             onRetry: { model?.retry() }, onStartOver: { model?.startOver($0) }, onRecover: onRecover
         )
         .onAppear {

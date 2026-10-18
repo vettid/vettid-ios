@@ -22,6 +22,22 @@ import VettIDDataTesting
         #expect(vault.calls == ["refresh"] && !vm.retrying)
     }
 
+    /// A wipe that did not finish offers "Erase VettID's data on this phone": local only; when it cannot finish the member
+    /// is told to remove the app.
+    @Test func aFailedWipeOffersToEraseTheData() async {
+        #expect(WayOut.of(.eraseFailed) == .clearData)
+        let vault = FakeVaultRepository(.unreachable(.eraseFailed))
+        vault.clearAppDataResult = false
+        let vm = UnreachableViewModel(account: vault)
+        vm.startOver(.clearData)
+        await settle()
+        #expect(vault.calls == ["clearAppData"] && vm.clearDataFailed)
+        vault.clearAppDataResult = true
+        vm.startOver(.clearData)
+        await settle()
+        #expect(vault.phase == .signedOut)
+    }
+
     @Test func aWayOutActsOnlyWhileThePhaseOffersIt() async {
         let vault = FakeVaultRepository(.unreachable(.noVault))
         let vm = UnreachableViewModel(account: vault)

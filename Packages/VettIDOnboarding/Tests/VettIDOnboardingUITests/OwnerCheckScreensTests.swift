@@ -1,0 +1,112 @@
+#if os(iOS)
+import Foundation
+import SwiftUI
+import Testing
+import UIKit
+import VettIDData
+import VettIDOnboarding
+@testable import VettIDOnboardingUI
+import VettIDUI
+
+/// The owner-check screen, the held screen's waiting card, the app lock's screen and the way out of a wipe that did not
+/// finish: texts, secret input and every state rendered.
+@MainActor
+@Suite struct OwnerCheckScreensTests {
+    let now = Date(timeIntervalSince1970: 1_791_384_000)
+
+    var held: OwnerCheckScreenState {
+        OwnerCheckScreenState(
+            mode: .gated,
+            view: OwnerCheckView(
+                state: .held, deadline: now.addingTimeInterval(-60), failures: 2, waiting: WaitingCounts(messages: 3, calls: 1)
+            )
+        )
+    }
+
+    /// IOS-PLAN §6.5: the PIN on the keypad, never a keyboard; the one text field is the password's, with no AutoFill, no
+    /// save prompt and no keyboard learning.
+    @Test func thePinIsOnTheKeypadAndThePasswordFieldIsASecretOne() throws {
+        let window = host(OwnerCheckScreen(state: held, actions: NoOwnerCheckActions(), now: now))
+        let fields = textFields(in: window)
+        #expect(fields.count == 1)
+        let field = try #require(fields.first)
+        #expect(field.isSecureTextEntry && field.textContentType?.rawValue == "")
+        #expect(field.autocorrectionType == .no && field.spellCheckingType == .no && field.inlinePredictionType == .no)
+        window.isHidden = true
+    }
+
+    @Test func everyStateRenders() {
+        var states: [OwnerCheckScreenState] = [held, OwnerCheckScreenState(mode: .voluntary), OwnerCheckScreenState(mode: .holdOff)]
+        for m in [OwnerCheckMessage.badPin(checksLeft: 2), .badPassword(checksLeft: 8), .backoff, .failed(.network, code: nil)] {
+            var s = held
+            s.message = m
+            states.append(s)
+        }
+        var waiting = held
+        waiting.waitSeconds = 30
+        var presence = held
+        presence.presenceUnrecorded = true
+        var passed = presence
+        passed.passedUnrecorded = true
+        states += [waiting, presence, passed]
+        for s in states { #expect(height(OwnerCheckScreen(state: s, actions: NoOwnerCheckActions(), now: now)) > 0) }
+        #expect(height(AppLockScreen(passcodeOnly: false) {}) > 0)
+        #expect(height(AppLockScreen(passcodeOnly: true) {}) > 0)
+        #expect(height(AppLockScreen(passcodeOnly: false, lockedOut: true) {}) > 0)
+        #expect(OnboardingStrings.appLockLockedOut == "Unlock your iPhone with its passcode, then try again.")
+    }
+
+    /// `vault.held`'s counts as the held screen shows them: unknown is never "nothing new"; the hold's note.
+    @Test func theWaitingCardSaysWhatWaits() {
+        #expect(WaitingCard.text(WaitingCardModel(counts: WaitingCounts(messages: 3, calls: 1), held: true))
+            == "3 new messages\n1 missed call\n\n" + OnboardingStrings.ownerCheckHeldNote)
+        #expect(WaitingCard.text(WaitingCardModel(counts: WaitingCounts(), held: false))
+            == "Nothing new has arrived since your check was due.\n\n" + OnboardingStrings.ownerCheckDueNote)
+        #expect(WaitingCard.text(WaitingCardModel(counts: nil, held: nil)) == OnboardingStrings.ownerCheckWaitingUnknown)
+    }
+
+    @Test func theTextsAreAndroids() {
+        #expect(OnboardingStrings.ownerCheckBodyGated(OnboardingStrings.ownerCheckHours(24)) == "Your vault asks for your PIN and "
+            + "your credential password together at least once every 24 hours. Until you check, the app shows nothing from your vault.")
+        #expect(OnboardingStrings.ownerCheckHours(1) == "1 hour")
+        #expect(OnboardingStrings.ownerCheckChecksLeft(1) == "1 wrong check left before your vault locks.")
+        #expect(OnboardingStrings.ownerCheckChecksLeft(8) == "8 wrong checks left before your vault locks.")
+        #expect(OnboardingStrings.ownerCheckWaitingRequests(1) == "1 connection request")
+        #expect(OnboardingStrings.ownerCheckWaitingOther(2) == "2 other updates")
+        #expect(OnboardingStrings.ownerCheckBackoffWait(formatWait(272)) == "Too many wrong entries. Try again in 4:32.")
+        #expect(OnboardingStrings.ownerCheckHoldOffWarning.hasSuffix("This phone still asks for the check before you can use it."))
+        #expect(OnboardingStrings.appLockTitle == "VettID is locked" && AppLockTexts.reason == "Unlock VettID")
+        #expect(OnboardingStrings.rootClearData == "Erase VettID's data on this phone")
+    }
+
+    /// A wipe that did not finish: "Erase VettID's data on this phone", confirmed; when it could not finish, how to go on.
+    @Test func theWayOutOfAFailedWipe() {
+        #expect(UnreachableScreen.label(.clearData) == "Erase VettID's data on this phone")
+        #expect(UnreachableScreen.confirmLabel(.clearData) == "Erase")
+        #expect(UnreachableScreen.confirmTitle(.clearData) == "Erase VettID's data?")
+        #expect(UnreachableScreen.title(.eraseFailed) == OnboardingStrings.rootEraseFailedTitle)
+        for failed in [false, true] {
+            let screen = UnreachableScreen(
+                kind: .eraseFailed, busy: false, clearFailed: failed, onRetry: {}, onStartOver: { _ in }, onRecover: {}
+            )
+            #expect(height(screen) > 0)
+        }
+    }
+
+    private func height(_ view: some View) -> CGFloat {
+        UIHostingController(rootView: view.vettIDTheme()).sizeThatFits(in: CGSize(width: 390, height: 844)).height
+    }
+
+    private func host(_ view: some View) -> UIWindow {
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.rootViewController = UIHostingController(rootView: view.vettIDTheme())
+        window.isHidden = false
+        window.layoutIfNeeded()
+        return window
+    }
+
+    private func views(in view: UIView) -> [UIView] { [view] + view.subviews.flatMap { views(in: $0) } }
+
+    private func textFields(in view: UIView) -> [UITextField] { views(in: view).compactMap { $0 as? UITextField } }
+}
+#endif
