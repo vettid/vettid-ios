@@ -96,6 +96,7 @@
 		6F5368FB72882F025DA4BD0A /* VettIDUI */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDUI; path = Packages/VettIDUI; sourceTree = SOURCE_ROOT; };
 		71AE8F8E7897AD5D65BC1557 /* VettIDRelay */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDRelay; path = Packages/VettIDRelay; sourceTree = SOURCE_ROOT; };
 		727E92D6080D834DD959858F /* VettIDAppUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = VettIDAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		73029356B90552AC0C29EE9F /* StagingUITests.xctestplan */ = {isa = PBXFileReference; path = StagingUITests.xctestplan; sourceTree = "<group>"; };
 		73DDC346A3EF2FEF621FF3BD /* VettIDSettings */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDSettings; path = Packages/VettIDSettings; sourceTree = SOURCE_ROOT; };
 		7E77B96EF99D2D40E1073B67 /* VettIDKeys */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDKeys; path = Packages/VettIDKeys; sourceTree = SOURCE_ROOT; };
 		7F2EA67554B107444FF813EF /* CanaryManifestFiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanaryManifestFiles.swift; sourceTree = "<group>"; };
@@ -176,6 +177,7 @@
 			children = (
 				CEAFD630960C3CA7D7885DEB /* GalleryScreenshots.swift */,
 				A34C0ED8CB57521C8F3EF6D6 /* StagingTests.swift */,
+				73029356B90552AC0C29EE9F /* StagingUITests.xctestplan */,
 			);
 			path = AppUITests;
 			sourceTree = "<group>";

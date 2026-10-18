@@ -207,9 +207,11 @@ schemes:
       config: Staging
     test:
       config: Staging
-      targets:
-        - name: VettIDAppUITests
-          skippedTests: [GalleryScreenshots]
+      # The test plan sets the screen capture to screenshots: XCTest's screen recording would make the app's capture
+      # hiding (IOS-PLAN §6.4, always on) cover the whole app. It runs VettIDAppUITests without GalleryScreenshots.
+      testPlans:
+        - path: AppUITests/StagingUITests.xctestplan
+          defaultPlan: true
     profile:
       config: Staging
     analyze:

@@ -43,6 +43,12 @@
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES"
       onlyGenerateCoverageForSpecifiedTargets = "NO">
+      <TestPlans>
+         <TestPlanReference
+            default = "YES"
+            reference = "container:AppUITests/StagingUITests.xctestplan">
+         </TestPlanReference>
+      </TestPlans>
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
@@ -53,22 +59,6 @@
          </BuildableReference>
       </MacroExpansion>
       <Testables>
-         <TestableReference
-            skipped = "NO"
-            parallelizable = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "A425F235B5986E4656DD8A8F"
-               BuildableName = "VettIDAppUITests.xctest"
-               BlueprintName = "VettIDAppUITests"
-               ReferencedContainer = "container:VettID.xcodeproj">
-            </BuildableReference>
-            <SkippedTests>
-               <Test
-                  Identifier = "GalleryScreenshots">
-               </Test>
-            </SkippedTests>
-         </TestableReference>
       </Testables>
       <CommandLineArguments>
       </CommandLineArguments>
