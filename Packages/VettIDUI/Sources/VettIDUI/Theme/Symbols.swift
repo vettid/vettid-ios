@@ -43,6 +43,9 @@ public enum VettIDSymbol: String, CaseIterable, Sendable {
     case warning = "exclamationmark.triangle" // WarningAmber
     case reportProblem = "exclamationmark.octagon" // ReportProblem
     case radioUnchecked = "circle" // RadioButtonUnchecked
+    case radioChecked = "largecircle.fill.circle" // RadioButtonChecked
+    case checkBox = "checkmark.square.fill" // CheckBox
+    case checkBoxOutline = "square" // CheckBoxOutlineBlank
 
     public var image: Image { Image(systemName: rawValue) }
 }
