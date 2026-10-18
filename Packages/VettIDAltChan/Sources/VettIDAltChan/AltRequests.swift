@@ -158,7 +158,7 @@ public enum AltRequests {
             let s = try AltChannel.approvalSigningString(
                 vaultID: vaultID, requestID: rid, fromPcr0: rel.pcr0, toPcr0: a.toPcr0, toRelease: a.toRelease, serial: manifest.serial
             )
-            return UnlockRequest.ReleaseUpdate(to: a.toPcr0, toRelease: a.toRelease, approval: try attester.assert(Array(s.utf8)))
+            return UnlockRequest.ReleaseUpdate(to: a.toPcr0, toRelease: a.toRelease, approval: try attester.assert(.string(s)))
         }
         let minHeader = state.headerSeq[rel.pcr0] ?? 0
         let signing = try AltChannel.unlockSigningString(AltChannel.UnlockFields(
@@ -269,7 +269,7 @@ public enum AltRequests {
         let t = ms(now)
         let tss = Timestamps.formatMillis(t)
         let rid = Ulid.new(t)
-        let assertion = try attester.assert(try AltChannel.devattChallenge(requestID: rid, vaultID: vaultID, ts: tss))
+        let assertion = try attester.assert(.challenge(try AltChannel.devattChallenge(requestID: rid, vaultID: vaultID, ts: tss)))
         var secrets = try Passwords.recoverySecrets(pin: pin, password: password)
         let signing: String
         do {
@@ -292,7 +292,7 @@ public enum AltRequests {
 
     /// The unlock's assertion over [challenge], with the device key's chain when [withChain] and there is a usable one.
     static func unlockAssertion(_ attester: Attester, _ challenge: [UInt8], withChain: Bool) throws -> DeviceAssertion {
-        let a = try attester.assert(challenge)
+        let a = try attester.assert(.challenge(challenge))
         guard withChain, case .android(let sig, _) = a,
               let chain = attester.chain(), (1...DeviceAttest.maxChain).contains(chain.count),
               !chain.contains(where: { $0.isEmpty || $0.count > maxCert })

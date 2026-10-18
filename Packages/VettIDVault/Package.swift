@@ -19,7 +19,11 @@ let package = Package(
         .target(name: "VettIDVault", dependencies: ["VettIDCrypto", "VettIDAttestation", "VettIDRelay", "VettIDAltChan"]),
         .testTarget(
             name: "VettIDVaultTests",
-            dependencies: ["VettIDVault", "VettIDCrypto", "VettIDAttestation", "VettIDRelay", "VettIDAltChan", "VettIDTesting"]
+            dependencies: [
+                "VettIDVault", "VettIDCrypto", "VettIDAttestation", "VettIDRelay", "VettIDAltChan", "VettIDTesting",
+                // TEST ONLY: the TEST iOS attester and the dev stack's helpers (the dev stack test).
+                .product(name: "VettIDAltChanTesting", package: "VettIDAltChan"),
+            ]
         ),
     ]
 )
