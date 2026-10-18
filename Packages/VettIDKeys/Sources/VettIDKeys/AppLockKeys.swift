@@ -113,7 +113,10 @@ public final class SecureEnclaveAppLockKeys: AppLockKeys, @unchecked Sendable {
 
     /// The method byte, then the domain state (if any).
     static func record(_ method: AppLockMethod, _ state: Data?) -> [UInt8] {
-        [method == .biometrics ? 1 : 2] + (state.map { Array($0) } ?? [])
+        let kind: UInt8 = method == .biometrics ? 1 : 2
+        var out: [UInt8] = [kind]
+        if let state { out.append(contentsOf: state) }
+        return out
     }
 
     /// Whether the key, as it was made, can still open: the same method and, for Face ID or Touch ID, the same enrolled set.
