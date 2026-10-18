@@ -149,13 +149,20 @@ import VettIDKeys
         await expectRefused(CanaryManifestCodes.published, try service.canaryDocument(serial: 8))
     }
 
-    /// §11.10.1: the "already published" refusal applies only when the published manifest can be read and verified;
-    /// otherwise (no connection, a document that does not verify) the canary installs, as on Android.
-    @Test func anUnreadablePublishedManifestDoesNotStopTheInstallation() async throws {
+    /// A published manifest that cannot be read (other than a 404) or does not verify refuses the installation: the
+    /// check is what keeps a stale canary out (the owner's decision, vettid-ios #67).
+    @Test func anUnreadablePublishedManifestRefuses() async throws {
         defer { phone.close() }
         service.manifestOffline = true
-        let v = try await canary.installCanaryManifest(try service.canaryDocument(serial: 8))
-        #expect(v.serial == 8 && canary.canaryManifest == v && fileExists)
+        await expectRefused(CanaryManifestCodes.unchecked, try service.canaryDocument(serial: 8))
+        #expect(canary.canaryManifest == nil && !fileExists)
+    }
+
+    @Test func aPublishedManifestThatDoesNotVerifyRefuses() async throws {
+        defer { phone.close() }
+        service.manifestBroken = true
+        await expectRefused(CanaryManifestCodes.unchecked, try service.canaryDocument(serial: 8))
+        #expect(canary.canaryManifest == nil && !fileExists)
     }
 
     /// The serial this phone used cannot be read (its device state is not readable now): nothing is installed (chosen;
@@ -204,7 +211,7 @@ import VettIDKeys
                 ref.manager?.forget()
                 return 0
             },
-            published: { throw URLError(.notConnectedToInternet) }
+            published: { throw MemberApiError(status: 404, code: MemberApiError.manifestUnavailable) }
         )
         ref.manager = mgr
         await #expect(throws: VaultFailure.self) { try await mgr.installCanaryManifest(try service.canaryDocument(serial: 8)) }

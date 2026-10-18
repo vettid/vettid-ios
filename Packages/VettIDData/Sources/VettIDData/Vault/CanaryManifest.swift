@@ -62,9 +62,9 @@ public enum CanaryManifestCodes {
     public static let published = "canary_published"
     /// Larger than a served manifest may be (§11.10.1: 90,112 bytes).
     public static let tooLarge = "canary_too_large"
-    /// (iPhone) The serial this phone has used for its vault could not be read (its device state cannot be read now), so
-    /// the "older" rule cannot be checked and nothing is installed (chosen; not in the spec). The published manifest's
-    /// serial is checked only when it can be read and verified (§11.10.1).
+    /// The serial rules could not be checked, so nothing is installed: the serial this phone has used for its vault could
+    /// not be read (chosen; not in the spec), or the published manifest could not be read (other than a 404: nothing
+    /// published yet) or did not verify (the owner's decision, vettid-ios #67).
     public static let unchecked = "canary_unchecked"
 }
 
