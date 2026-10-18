@@ -17,7 +17,7 @@ import VettIDRelay
 
     struct Attest: Attester {
         func attest(_ challenge: [UInt8]) throws -> DeviceAttest { try DeviceAttest.androidChain([[1]]) }
-        func assert(_ message: [UInt8]) throws -> DeviceAssertion { try DeviceAssertion.androidSignature([2]) }
+        func assert(_ signed: AttestSigned) throws -> DeviceAssertion { try DeviceAssertion.androidSignature([2]) }
     }
 
     static let pcr0 = String(repeating: "a3", count: 48)

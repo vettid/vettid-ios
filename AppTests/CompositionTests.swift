@@ -35,7 +35,7 @@ import VettIDTesting
         #expect(throws: KeysError.noSecureHardware) { _ = try (h as any SeedWrapKeySource).getOrCreate() }
         #expect(throws: KeysError.noSecureHardware) { _ = try h.create(keyVault: "v") }
         #expect(throws: KeysError.noSecureHardware) { _ = try h.attest([1]) }
-        #expect(throws: KeysError.noSecureHardware) { _ = try h.assert([1]) }
+        #expect(throws: KeysError.noSecureHardware) { _ = try h.assert(.challenge([1])) }
     }
 
     /// A setup code is refused with "This phone cannot keep your vault's keys in its secure hardware." and nothing

@@ -12,7 +12,7 @@ import VettIDTesting
 /// An attester with a chain (an Android key), to check when the chain travels.
 struct ChainAttester: Attester {
     func attest(_ challenge: [UInt8]) throws -> DeviceAttest { try DeviceAttest.androidChain([[1, 2, 3]]) }
-    func assert(_ message: [UInt8]) throws -> DeviceAssertion { try DeviceAssertion.androidSignature([4, 5, 6]) }
+    func assert(_ signed: AttestSigned) throws -> DeviceAssertion { try DeviceAssertion.androidSignature([4, 5, 6]) }
     func chain() -> [[UInt8]]? { [[7, 7, 7], [8, 8]] }
 }
 

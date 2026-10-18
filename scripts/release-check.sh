@@ -6,7 +6,9 @@
 # either app carries:
 #   - a TEST-only marker (the VettIDTesting package, VettIDData's
 #     VettIDDataTesting target, VettIDKeys's VettIDKeysTesting target with
-#     the software phone key, the TEST attester's App ID),
+#     the software phone key, VettIDAltChan's VettIDAltChanTesting target
+#     with the TEST iOS attester and the dev stack's helpers, the TEST
+#     attester's App ID),
 #   - a dev-stack address or a debug-only tool,
 #   - the other environment's hosts,
 # or lacks its own account host, or has another bundle id.
@@ -24,9 +26,10 @@ SELF_TEST=0
 [[ "${1:-}" == "--self-test" ]] && SELF_TEST=1
 
 # Strings no Release or Staging app may contain.
-# The deterministic randomness hook of VettIDCrypto (debug builds only), VettIDDataTesting's fake and VettIDKeysTesting's
-# software keys (IOS-PLAN §6.3: no software phone key in Release or Staging) carry "VETTID TEST ONLY".
-TEST_MARKERS=("VettIDTesting" "VettIDDataTesting" "VettIDKeysTesting" "TESTTEAM00" "VETTID TEST ONLY")
+# The deterministic randomness hook of VettIDCrypto (debug builds only), VettIDDataTesting's fake, VettIDKeysTesting's
+# software keys (IOS-PLAN §6.3: no software phone key in Release or Staging) and VettIDAltChanTesting's TEST iOS
+# attester (IOS-PLAN §6.2) carry "VETTID TEST ONLY".
+TEST_MARKERS=("VettIDTesting" "VettIDDataTesting" "VettIDKeysTesting" "VettIDAltChanTesting" "TESTTEAM00" "VETTID TEST ONLY")
 # "Scan: another environment" is a title of the onboarding screen catalog (App/Debug, debug builds only).
 DEV_ONLY=("127.0.0.1" "relay.vettid.test" "vettid.start" "vettid.theme" "Component gallery" "Screen catalog"
   "Scan: another environment")
@@ -189,6 +192,11 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
   plant Release check_release "VETTID TEST ONLY: software keys instead of the Secure Enclave"
   plant Staging check_staging "VettIDKeysTesting"
   plant Staging check_staging "VETTID TEST ONLY: software keys instead of the Secure Enclave"
+  plant Release check_release "VettIDAltChanTesting"
+  plant Release check_release "VETTID TEST ONLY: the TEST App Attest attester"
+  plant Staging check_staging "VettIDAltChanTesting"
+  plant Staging check_staging "VETTID TEST ONLY: the TEST App Attest attester"
+  plant Release check_release "VETTID TEST ONLY: the local dev stack's helpers"
   plant Release check_release "account.staging.vettid.org"
   plant Release check_release "Scan: another environment"
   plant Staging check_staging "Scan: another environment"

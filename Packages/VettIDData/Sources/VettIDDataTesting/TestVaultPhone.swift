@@ -17,8 +17,8 @@ public struct TestAttester: Attester {
         try DeviceAttest.iosAttestation(keyID: Bytes.sha256(challenge), attestation: Array("test-attestation".utf8))
     }
 
-    public func assert(_ message: [UInt8]) throws -> DeviceAssertion {
-        try DeviceAssertion.iosAssertion(Bytes.sha256(message))
+    public func assert(_ signed: AttestSigned) throws -> DeviceAssertion {
+        try DeviceAssertion.iosAssertion(Bytes.sha256(signed.clientDataHash))
     }
 }
 

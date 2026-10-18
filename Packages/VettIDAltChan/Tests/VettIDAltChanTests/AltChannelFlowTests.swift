@@ -45,7 +45,7 @@ struct FakeEnclave {
 /// TEST-ONLY attester with Android-shaped answers (the fake enclave does not check them).
 struct SoftAttester: Attester {
     func attest(_ challenge: [UInt8]) throws -> DeviceAttest { try DeviceAttest.androidChain([[1, 2, 3]]) }
-    func assert(_ message: [UInt8]) throws -> DeviceAssertion { try DeviceAssertion.androidSignature([4, 5, 6]) }
+    func assert(_ signed: AttestSigned) throws -> DeviceAssertion { try DeviceAssertion.androidSignature([4, 5, 6]) }
 }
 
 /// A minimal device: what VettIDVault's VaultDevice does for the alternate channel.

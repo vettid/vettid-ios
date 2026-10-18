@@ -62,7 +62,7 @@ public struct VaultManagerConfig: Sendable {
     /// The app's data directory.
     public var directory: URL
     public var keys: VaultKeys
-    /// The device attestation (§11.7): App Attest on the iPhone (I1.4b), the TEST attester on the dev stack (I1.3).
+    /// The device attestation (§11.7): App Attest on the iPhone (I1.4b), the TEST attester on the dev stack (VettIDAltChanTesting).
     public var attester: any Attester
     public var protectedData: any ProtectedData
     /// How `vault.enrolled`'s attestation is checked (§11.3): ``EnrolledAttestation/nitro(roots:)`` in the app.

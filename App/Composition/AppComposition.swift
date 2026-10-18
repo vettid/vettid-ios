@@ -44,7 +44,7 @@ final class AppComposition {
             manifestURL: environment.manifestURL,
             relayURL: environment.relayURL,
             trust: trust,
-            // The dev stack's relay address mapping (DevStack only) comes with I1.3.
+            // The dev stack's relay address mapping (DevStack only) comes with the DevStack app target.
             transport: HTTPTransport(session: URLSession(configuration: .ephemeral)),
             directory: directory,
             keys: keys,
