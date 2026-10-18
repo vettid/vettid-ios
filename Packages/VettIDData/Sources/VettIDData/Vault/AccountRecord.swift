@@ -27,6 +27,14 @@ struct LocalAccount: Codable, Equatable, Sendable {
     /// When an enrollment request whose outcome is not known was first started (Unix ms): it may have made a provisional
     /// vault, so its keys are kept until a definite answer or ``VaultManager/unknownEnrollmentKept`` after this.
     var enrollStartedMs: Int64?
+    /// The last time this phone reached the vault service (a status read), written at most hourly
+    /// (``StuckScreens/writeContact(_:nowMs:)``), Unix ms.
+    var lastContactMs: Int64?
+    /// The enclave's time of the last successful unlock result (its inner `ts`, Unix ms): a `vault.locking` not later than
+    /// it is stale after a restart too (``LockNotices``).
+    var lastOpenedMs: Int64?
+    /// The lock's own file (``LockRecordFile``) was written once: from then on a missing file says a lock is pending.
+    var lockFileInUse = false
 
     enum CodingKeys: String, CodingKey {
         case userGuid = "user_guid"
@@ -39,6 +47,9 @@ struct LocalAccount: Codable, Equatable, Sendable {
         case enrollConfirmed = "enroll_confirmed"
         case enrolledHere = "enrolled_here"
         case enrollStartedMs = "enroll_started_ms"
+        case lastContactMs = "last_contact_ms"
+        case lastOpenedMs = "last_opened_ms"
+        case lockFileInUse = "lock_file_in_use"
     }
 
     init() {}
@@ -61,6 +72,9 @@ struct LocalAccount: Codable, Equatable, Sendable {
         enrollConfirmed = try c.decodeIfPresent(Bool.self, forKey: .enrollConfirmed) ?? false
         enrolledHere = try c.decodeIfPresent(Bool.self, forKey: .enrolledHere) ?? false
         enrollStartedMs = try c.decodeIfPresent(Int64.self, forKey: .enrollStartedMs)
+        lastContactMs = try c.decodeIfPresent(Int64.self, forKey: .lastContactMs)
+        lastOpenedMs = try c.decodeIfPresent(Int64.self, forKey: .lastOpenedMs)
+        lockFileInUse = try c.decodeIfPresent(Bool.self, forKey: .lockFileInUse) ?? false
     }
 
     /// The account as the screens see it before the vault sent a snapshot: the masked email only.
@@ -112,6 +126,24 @@ final class AccountRecord {
         }
         return true
     }
+
+    /// This phone reached the vault service at [nowMs]: written into the record of [since] when it is worth it
+    /// (``StuckScreens/writeContact(_:nowMs:)``). False when nothing was written.
+    @discardableResult
+    func contacted(since: Int, nowMs: Int64) throws -> Bool {
+        guard since == generation, StuckScreens.writeContact(value.lastContactMs, nowMs: nowMs) else { return false }
+        return try update(since: since) { $0.lastContactMs = nowMs }
+    }
+
+    /// A successful unlock answered at [atMs] (the enclave's clock): kept when it is later than the last one.
+    func opened(since: Int, atMs: Int64) throws {
+        guard value.lastOpenedMs.map({ atMs > $0 }) ?? true else { return }
+        try update(since: since) { $0.lastOpenedMs = atMs }
+    }
+
+    /// Drops the writes on their way for the record as it was (the member's lock: what an operation that began before it
+    /// would write is not wanted any more). The record itself is unchanged.
+    func bumpGeneration() { generation += 1 }
 
     /// A record of its own ([a]: none, or a new setup's): the writes still on their way for the one before are dropped.
     func reset(_ a: LocalAccount) throws {

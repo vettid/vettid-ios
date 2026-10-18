@@ -56,7 +56,8 @@ extension FakeVaultService {
         cond.lock()
         defer { cond.unlock() }
         let deadline = Date().addingTimeInterval(Self.collectHold)
-        while queued.isEmpty, cond.wait(until: deadline) {}
+        while queued.isEmpty || holdMessagesValue, cond.wait(until: deadline) {}
+        if holdMessagesValue { return .json(200, #"{"messages":[]}"#) }
         let msgs = queued.map { JsonBuilder().string("msg_id", $0.msgID).string("sender", $0.sender).base64("payload", $0.payload).build() }
         queued.removeAll()
         return .json(200, #"{"messages":\#(JsonBuilder.array(msgs))}"#)
@@ -109,7 +110,9 @@ extension FakeVaultService {
     }
 
     /// The requests of enrollment (§3.5.7, §10.6, §10.8). Callers hold ``cond``.
-    private func request(_ m: Inner) throws {
+    private func request(_ m: Inner) throws { // swiftlint:disable:this cyclomatic_complexity
+        // A locked vault does not collect: nothing sent to it is answered (§12.1).
+        if !vaultOpen { return }
         let body = try StrictJson.parseObject(m.body)
         if let refusal = refusal(m.type) { return try reply(m.type, "{}", re: m.id, error: refusal) }
         switch m.type {
@@ -119,6 +122,7 @@ extension FakeVaultService {
         case "credential.ack": try reply(m.type, "{}", re: m.id)
         case "settings.get": try reply(m.type, #"{"version":\#(settingsVersion),"settings":{"credential.backup":\#(backup),"credential.unlock_ttl_seconds":300}}"#, re: m.id)
         case "settings.set": try settingsSet(m, body)
+        case "vault.lock": try relayLock(m)
         case "vault.enroll.confirm":
             confirmedValue = true
             try reply(m.type, "{}", re: m.id)

@@ -29,13 +29,15 @@ import VettIDUI
             .appendingPathComponent("Sources/VettIDOnboardingUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 88)
+        #expect(keys.count == 171)
         let missing = "\u{0}missing"
+        // vettid-android's names: the onboarding feature's, its unlock screen's, the app's root screens', core/ui's erase
+        // text; and the iPhone's own (`ios_`).
+        let prefixes = ["onboarding_", "recover_scan_", "unlock_", "root_", "core_ui_", "ios_", "move_cd_"]
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)
             #expect(!text.isEmpty && text != key && text != missing, "\(key)")
-            let shared = ["unlock_pin_label", "move_cd_qr_scanner"]
-            #expect(key.hasPrefix("onboarding_") || key.hasPrefix("recover_scan_") || shared.contains(key))
+            #expect(prefixes.contains { key.hasPrefix($0) }, "\(key)")
         }
     }
 

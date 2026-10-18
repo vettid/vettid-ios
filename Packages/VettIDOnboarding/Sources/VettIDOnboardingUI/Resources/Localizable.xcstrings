@@ -1,6 +1,28 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "core_ui_erase_phone_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Everything VettID keeps on this phone is erased, including its keys for your vault, and VettID goes back to the start. Your vault itself is not changed.\n\nTo get back into it you then need a recovery from the account site (it takes 24 hours and needs your PIN and credential password, and the credential backup must be on), or a move from another phone that still holds your vault."
+          }
+        }
+      }
+    },
+    "ios_unlock_earlier_secret": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try this phone's earlier keys"
+          }
+        }
+      }
+    },
     "move_cd_qr_scanner": {
       "extractionState": "manual",
       "localizations": {
@@ -360,6 +382,61 @@
           "stringUnit": {
             "state": "translated",
             "value": "Still have the other phone?"
+          }
+        }
+      }
+    },
+    "onboarding_finish_move_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finish the move"
+          }
+        }
+      }
+    },
+    "onboarding_kept_transfer": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finish the move on your new phone. This phone keeps your vault's keys until your new phone has finished the move, for at most 7 days. Before you give this phone away, remove VettID from it or reset it."
+          }
+        }
+      }
+    },
+    "onboarding_move_back_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault could not be opened from this phone. Contact VettID within a day of the failed move: it may be repairable."
+          }
+        }
+      }
+    },
+    "onboarding_move_didnt_finish": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The move didn't finish"
+          }
+        }
+      }
+    },
+    "onboarding_move_didnt_finish_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use this if your new phone cannot open your vault. If your new phone opens the vault, ignore this."
           }
         }
       }
@@ -958,6 +1035,479 @@
         }
       }
     },
+    "root_clock_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check this phone's date and time"
+          }
+        }
+      }
+    },
+    "root_erase": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erase VettID from this phone"
+          }
+        }
+      }
+    },
+    "root_erase_failed_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID could not erase this phone"
+          }
+        }
+      }
+    },
+    "root_erase_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erase VettID from this phone?"
+          }
+        }
+      }
+    },
+    "root_local_state_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID cannot read its keys on this phone"
+          }
+        }
+      }
+    },
+    "root_long_unreachable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID has not reached your vault for 7 days or more."
+          }
+        }
+      }
+    },
+    "root_no_vault_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your account has no vault"
+          }
+        }
+      }
+    },
+    "root_recover": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recover your vault"
+          }
+        }
+      }
+    },
+    "root_recover_line": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Before you erase VettID here, check on your account site that your vault can be recovered, and start the recovery there. When it is ready, erase VettID and choose \"I lost my phone: recover my vault\"."
+          }
+        }
+      }
+    },
+    "root_retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try again"
+          }
+        }
+      }
+    },
+    "root_start_over": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start over on this phone"
+          }
+        }
+      }
+    },
+    "root_start_over_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID asks the account service once more. If it still says that your account has no vault, VettID forgets its keys for that vault on this phone and goes back to the start, where you can set up a new vault with a setup code.\n\nOnly do this if you deleted your vault or closed your account. If the vault still exists, this phone could afterwards get back into it only with a recovery."
+          }
+        }
+      }
+    },
+    "root_start_over_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start over on this phone?"
+          }
+        }
+      }
+    },
+    "root_starting": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opening VettID"
+          }
+        }
+      }
+    },
+    "root_unreachable_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID cannot connect"
+          }
+        }
+      }
+    },
+    "unlock_bad_pin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That PIN is not correct."
+          }
+        }
+      }
+    },
+    "unlock_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter your vault PIN."
+          }
+        }
+      }
+    },
+    "unlock_body_account": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter the vault PIN for %@."
+          }
+        }
+      }
+    },
+    "unlock_checking": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking your vault's software"
+          }
+        }
+      }
+    },
+    "unlock_contact_support": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contact support"
+          }
+        }
+      }
+    },
+    "unlock_enclave_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault's software could not be verified"
+          }
+        }
+      }
+    },
+    "unlock_erase": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erase VettID from this phone"
+          }
+        }
+      }
+    },
+    "unlock_erase_confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erase"
+          }
+        }
+      }
+    },
+    "unlock_erase_confirm_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This erases VettID's data on this phone only: its keys, your account details and the app's settings. Nothing else on the phone is touched, and it works without a connection.\n\nIt cannot be undone. If this phone still holds your vault, you will need a recovery on another phone to use it again."
+          }
+        }
+      }
+    },
+    "unlock_erase_confirm_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erase VettID from this phone?"
+          }
+        }
+      }
+    },
+    "unlock_erasing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erasing VettID from this phone…"
+          }
+        }
+      }
+    },
+    "unlock_lock_confirmed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault is locked."
+          }
+        }
+      }
+    },
+    "unlock_lock_locking": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Locking your vault…"
+          }
+        }
+      }
+    },
+    "unlock_lock_ok": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
+          }
+        }
+      }
+    },
+    "unlock_lock_try_again": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try again"
+          }
+        }
+      }
+    },
+    "unlock_lock_unconfirmed_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault could not be reached, so it may still be open. This phone is locked, and VettID keeps trying to lock the vault."
+          }
+        }
+      }
+    },
+    "unlock_lock_unconfirmed_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault may still be open"
+          }
+        }
+      }
+    },
+    "unlock_no_user_guid": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This phone cannot unlock your vault yet: it was moved here while your vault ran an older release. It can unlock once your vault is updated."
+          }
+        }
+      }
+    },
+    "unlock_not_recognised_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This phone may have been replaced by a recovery or a transfer while it was offline. If your vault now works on another phone, you can erase VettID from this one."
+          }
+        }
+      }
+    },
+    "unlock_not_recognised_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault did not recognise this phone"
+          }
+        }
+      }
+    },
+    "unlock_offer_approve": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approve the update with this unlock"
+          }
+        }
+      }
+    },
+    "unlock_offer_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault runs release %lld. Release %lld (fingerprint %@) is available. Anyone can rebuild it and compare the fingerprint."
+          }
+        }
+      }
+    },
+    "unlock_offer_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update available: release %lld"
+          }
+        }
+      }
+    },
+    "unlock_owner_check_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter your credential password too: the app sends the check right after the unlock."
+          }
+        }
+      }
+    },
+    "unlock_owner_check_locked_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault locked itself after ten wrong daily checks in a row. Unlock it with your PIN; it then asks for the check again."
+          }
+        }
+      }
+    },
+    "unlock_owner_check_locked_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Locked after ten wrong checks"
+          }
+        }
+      }
+    },
+    "unlock_owner_check_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your daily check is due"
+          }
+        }
+      }
+    },
+    "unlock_password_label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credential password"
+          }
+        }
+      }
+    },
     "unlock_pin_label": {
       "extractionState": "manual",
       "localizations": {
@@ -965,6 +1515,369 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vault PIN"
+          }
+        }
+      }
+    },
+    "unlock_recover": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recover your vault"
+          }
+        }
+      }
+    },
+    "unlock_recover_only_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erasing VettID from this phone would not help. Recover your vault from your account site, or contact VettID support at support@vettid.org."
+          }
+        }
+      }
+    },
+    "unlock_recovery_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Someone started a recovery of this vault from the account site, so it is locked for this phone. If that was you on a new phone, let it finish there. If it was not you, cancel it now: unlocking here with your PIN cancels the recovery."
+          }
+        }
+      }
+    },
+    "unlock_recovery_cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel the recovery and unlock"
+          }
+        }
+      }
+    },
+    "unlock_recovery_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A recovery is in progress"
+          }
+        }
+      }
+    },
+    "unlock_refused_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Messages from this phone to your vault keep being refused. If you moved VettID to another phone, this one may have been replaced. Enter your PIN to check with your vault."
+          }
+        }
+      }
+    },
+    "unlock_refused_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault is refusing this phone"
+          }
+        }
+      }
+    },
+    "unlock_release_unknown_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This app does not know your vault's release"
+          }
+        }
+      }
+    },
+    "unlock_retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try again"
+          }
+        }
+      }
+    },
+    "unlock_rollback_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault is served by release %lld, older than release %lld that this phone last used. VettID will not send your PIN to it."
+          }
+        }
+      }
+    },
+    "unlock_rollback_state_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The vault's stored state is older than state this phone has already seen. Someone may have restored an old copy. Contact VettID support before you continue."
+          }
+        }
+      }
+    },
+    "unlock_rollback_state_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault's state is older than expected"
+          }
+        }
+      }
+    },
+    "unlock_rollback_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Older vault software"
+          }
+        }
+      }
+    },
+    "unlock_service_wait": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try again in %@."
+          }
+        }
+      }
+    },
+    "unlock_signer_refused_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This vault no longer accepts this installation of VettID. Update the app, or recover your vault with a current version."
+          }
+        }
+      }
+    },
+    "unlock_signer_refused_help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How to recover your vault"
+          }
+        }
+      }
+    },
+    "unlock_signer_refused_help_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "First update VettID from where you installed it and try again: your PIN was not counted as wrong.\n\nIf that does not help, recover your vault. Start a recovery on the account site, install a current version of VettID (on this phone after removing this one, or on another phone) and choose \"I lost my phone: recover my vault\" on its first screen, then scan or type the recovery code. A recovery takes 24 hours and needs your PIN and your credential password.\n\nMoving your vault to a new phone directly is not possible while this phone cannot open it."
+          }
+        }
+      }
+    },
+    "unlock_signer_refused_help_hide": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide"
+          }
+        }
+      }
+    },
+    "unlock_signer_refused_help_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovering or moving your vault"
+          }
+        }
+      }
+    },
+    "unlock_signer_refused_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This installation is not accepted"
+          }
+        }
+      }
+    },
+    "unlock_status_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update to the newest release to keep your vault working."
+          }
+        }
+      }
+    },
+    "unlock_status_body_ends": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "It ends on %@. Update to keep your vault working."
+          }
+        }
+      }
+    },
+    "unlock_status_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Release %lld is %@"
+          }
+        }
+      }
+    },
+    "unlock_stuck_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This phone no longer holds your vault's keys. Before you erase VettID here, check on your account site that your vault can be recovered, and start the recovery there. When it is ready, erase VettID and choose \"I lost my phone: recover my vault\"."
+          }
+        }
+      }
+    },
+    "unlock_stuck_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This phone cannot open your vault"
+          }
+        }
+      }
+    },
+    "unlock_submit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock"
+          }
+        }
+      }
+    },
+    "unlock_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock your vault"
+          }
+        }
+      }
+    },
+    "unlock_unreadable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault did not recognise this phone. It may have been replaced by a recovery or a transfer."
+          }
+        }
+      }
+    },
+    "unlock_update_refused": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The update was refused (%@). Your vault stayed on its current release."
+          }
+        }
+      }
+    },
+    "unlock_updated_ack": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue"
+          }
+        }
+      }
+    },
+    "unlock_updated_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault now runs release %lld (fingerprint %@); this phone last used release %lld. Another of your devices approved this update. Continue only if you expected it."
+          }
+        }
+      }
+    },
+    "unlock_updated_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault software was updated"
+          }
+        }
+      }
+    },
+    "unlock_wait": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too many wrong PINs. Try again in %@."
           }
         }
       }

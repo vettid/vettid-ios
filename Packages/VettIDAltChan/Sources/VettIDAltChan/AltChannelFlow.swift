@@ -274,7 +274,9 @@ public struct AltChannelFlow: Sendable {
     public func preflight(_ state: AltState, release: String? = nil) async throws -> UnlockPreflight {
         let m = try await manifest(seen: state.manifestSerial)
         let (_, e) = try await enclave(release: release, manifest: m, enroll: false)
-        return UnlockPreflight.of(state, routed: e.release, manifest: m)
+        var p = UnlockPreflight.of(state, routed: e.release, manifest: m)
+        p.capabilities = e.descriptor.capabilities
+        return p
     }
 
     /// Asks the leaseholder to lock the vault and waits for the slot: until it is no longer queued, or for [atMost]. An
@@ -337,6 +339,8 @@ public struct UnlockPreflight: Equatable, Sendable {
     public let offer: Release?
     /// The manifest's releases between the routed one and [offer] (What's new lists their summaries).
     public let between: [Release]
+    /// The routed instance's capabilities (§11.10.9), from its verified descriptor; empty when not known.
+    public var capabilities: [String] = []
 
     /// Older than the release this device last unlocked into: the app MUST NOT send the PIN.
     public var rollback: Bool { lastNumber != 0 && routed.number < lastNumber }

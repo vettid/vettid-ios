@@ -87,6 +87,12 @@ extension FakeVaultRepository: VaultRepository {
         return r
     }
 
+    public func unlockWithEarlierSecret(pin: String) async throws -> UnlockAttempt {
+        let r = try await unlock(pin: pin, approve: nil, cancelRecovery: false)
+        calls.append("unlockWithEarlierSecret")
+        return r
+    }
+
     public func unlockCancellingRecovery(pin: String, password: String, approve: ReleaseView?) async throws -> UnlockAttempt {
         lastCancelCheckPassword = password
         return try await unlock(pin: pin, approve: approve, cancelRecovery: true)

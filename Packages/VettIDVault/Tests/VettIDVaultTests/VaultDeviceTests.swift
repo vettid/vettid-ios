@@ -150,6 +150,8 @@ import VettIDTesting
     @Test func refusedDepositsToTheVaultAreCountedUntilTheVaultSpeaks() async throws {
         let (d, v) = try await pairedDevice()
         let api = VaultApi(device: d)
+        // Every change of the count is told (the vault manager's refusal watch follows it).
+        var counts = d.vaultRefusalCounts().makeAsyncIterator()
         relay.refuseDeposits = RelayError.tokenRevoked
         for _ in 0..<3 { await #expect(throws: RelayError.self) { _ = try await api.status() } }
         #expect(d.vaultRefusals == 3)
@@ -164,6 +166,10 @@ import VettIDTesting
         #expect(d.vaultRefusals == 1)
         d.clearVaultRefusals()
         #expect(d.vaultRefusals == 0)
+        d.clearVaultRefusals() // no change: nothing told
+        var told: [Int] = []
+        for _ in 0..<6 { if let n = await counts.next() { told.append(n) } }
+        #expect(told == [1, 2, 3, 0, 1, 0])
     }
 
     /// A refused answer to the vault is counted, neither thrown nor repeated (its msg_id is saved with the refusal).

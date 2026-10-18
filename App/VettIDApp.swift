@@ -33,8 +33,8 @@ struct VettIDApp: App {
     }
 }
 
-/// The root: onboarding while nothing is set up or setup is under way (IOS-PLAN §8 I1.6), the placeholder for the
-/// screens of the later rows otherwise. Debug builds can open the debug catalog from it.
+/// The root: onboarding while nothing is set up or setup is under way (IOS-PLAN §8 I1.6), the unlock and the stuck
+/// screens (I1.7), the placeholder for the app's shell (I1.8). Debug builds can open the debug catalog from it.
 struct RootView: View {
     let environment: AppEnvironment
     let composition: AppComposition
@@ -66,7 +66,15 @@ struct AppRoot: View {
             // A start before the first unlock (or while the iPhone was locked) read nothing: read again once the app is
             // active and protected data is available (IOS-PLAN §6.1, §6.3).
             .onChange(of: scenePhase) { _, now in
-                if now == .active { retryRefresh() }
+                switch now {
+                case .active:
+                    vault.onForeground()
+                    retryRefresh()
+                case .background:
+                    leaveForeground()
+                default:
+                    break
+                }
             }
             .onReceive(Self.protectedDataAvailable) { _ in retryRefresh() }
             .onOpenURL { url in
@@ -91,16 +99,57 @@ struct AppRoot: View {
         Task { try? await vault.refresh() }
     }
 
+    /// IOS-PLAN §6.6: what is in flight (a lock's first attempt, the outbox) is finished in a background task, within the
+    /// time iOS gives it, then the collection stops (not when the app came back meanwhile). At the task's expiration the
+    /// work is cancelled and the task ended. Nothing assumes it ran longer.
+    private func leaveForeground() {
+        let app = UIApplication.shared
+        let background = BackgroundTask()
+        let remaining = app.backgroundTimeRemaining
+        // A margin before iOS's own end, and never more than half a minute (chosen; not in the spec).
+        let seconds = remaining.isFinite ? min(max(remaining - 5, 1), 25) : 25
+        let work = Task { @MainActor in
+            await vault.onBackground(budget: .seconds(seconds))
+            background.end(app)
+        }
+        background.id = app.beginBackgroundTask(withName: "vault-background") {
+            MainActor.assumeIsolated {
+                work.cancel()
+                background.end(app)
+            }
+        }
+    }
+
+    private func openPortal() {
+        if let url = URL(string: environment.apiOrigin) { openURL(url) }
+    }
+
     @ViewBuilder private var content: some View {
         switch vault.phase {
         case .signedOut, .setup:
-            OnboardingFlow(account: vault, vault: vault, inbox: inbox, routes: .pending) {
-                if let url = URL(string: environment.apiOrigin) { openURL(url) }
-            }
-        // The unlock, the stuck screens and the app's shell come with I1.7 and I1.8.
-        case .starting, .unreachable, .locked, .unlocked:
+            OnboardingFlow(account: vault, vault: vault, inbox: inbox, routes: .pending) { openPortal() }
+        case .starting:
+            StartingScreen()
+        case .unreachable:
+            UnreachableFlow(account: vault) { openPortal() }
+        case .locked:
+            UnlockFlow(vault: vault, account: vault) { openPortal() }
+        // The app's shell comes with I1.8.
+        case .unlocked:
             Placeholder(environment: environment)
         }
+    }
+}
+
+/// One background task's identifier, ended once.
+@MainActor
+final class BackgroundTask {
+    var id: UIBackgroundTaskIdentifier = .invalid
+
+    func end(_ app: UIApplication) {
+        guard id != .invalid else { return }
+        app.endBackgroundTask(id)
+        id = .invalid
     }
 }
 

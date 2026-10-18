@@ -18,10 +18,12 @@ struct VaultSession: Sendable {
 /// client and the alternate channel. Implements the repositories the features use; nothing in a feature touches
 /// transport or crypto. One instance per process, on the main actor; the work it waits for runs off it.
 ///
-/// This slice (IOS-PLAN §8 I1.6) is the part onboarding needs: the phase at start, the setup code, enrollment with the
-/// phone's unlock secret of epoch 1 (§11.14.1 "On an iPhone"), the first handshake, the credential and Finish setup.
-/// Every other operation keeps its protocol default or refuses with ``FailureKind/notSupported`` until the row that
-/// brings it (`VaultManager+Later.swift`). Mirrors vettid-android `VaultManager`.
+/// The slices so far (IOS-PLAN §8): what onboarding needs (I1.6: the phase at start, the setup code, enrollment with the
+/// phone's unlock secret of epoch 1, §11.14.1 "On an iPhone", the first handshake, the credential and Finish setup), and
+/// the unlock and the member's lock (I1.7a: §11.4 with the phone secret, VAULT-LOCK as vettid-android implements it, the
+/// vault events they follow). Every other operation keeps its protocol default or refuses with
+/// ``FailureKind/notSupported`` until the row that brings it (`VaultManager+Later.swift`). Mirrors vettid-android
+/// `VaultManager`.
 @MainActor
 @Observable
 public final class VaultManager: AccountRepository, VaultRepository, CredentialRepository {
@@ -38,8 +40,11 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     // VaultRepository.
     public internal(set) var usesPhoneSecret = false
     public internal(set) var recoveryOffered = true
-    /// The relay's refusals are followed with the unlock (I1.7, `RefusalWatch`).
+    /// The relay kept refusing this phone's messages to the vault while it was open (``RefusalWatch``).
     public internal(set) var refusedByVault = false
+    /// (iPhone, IOS-PLAN §6.3 item 5) The earlier-secret step opened the vault: a new phone secret is to be asked for at
+    /// once (the prompt and the History entry come with I1.8).
+    public internal(set) var renewSecretSuggested = false
 
     // CredentialRepository: the alarm and the unlock window come with the credential screen (I1.8).
     public internal(set) var alarm: CredentialAlarm?
@@ -57,6 +62,24 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// Bumped by every change of ``phase``: a refresh that started before one does not overwrite it.
     @ObservationIgnored private var phaseChanges = 0
 
+    // The member's lock (VAULT-LOCK as vettid-android implements it) and what follows the vault's events.
+    @ObservationIgnored let lockPorts: ManagerLockPorts
+    @ObservationIgnored let lockGuard: LockGuard
+    @ObservationIgnored let locking: LockSequence
+    @ObservationIgnored let lockNotices = LockNotices()
+    /// Bumped by every lock the member asks for: an unlock or a refresh that began before it publishes no open phase.
+    @ObservationIgnored var lockGeneration = 0
+    /// The pending lock found at the start was taken up (once, after the first-run cleanup and the record).
+    @ObservationIgnored private var lockResumed = false
+    @ObservationIgnored private(set) var holder: HolderWatch?
+    @ObservationIgnored private(set) var refusals: RefusalWatch?
+    /// The tasks that follow the open session's events and refusals.
+    @ObservationIgnored var observers: [Task<Void, Never>] = []
+    /// Bumped by every return to the foreground: a background task that began before one does not stop the collection.
+    @ObservationIgnored var foregrounds = 0
+    /// The app left the foreground and its background work stopped the collection.
+    @ObservationIgnored var backgrounded = false
+
     public init(config: VaultManagerConfig) {
         self.config = config
         apiOrigin = config.apiOrigin
@@ -67,6 +90,28 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             auth: .appKey(StoredAppKeySigner(store: config.keys.appKeys), vaultID: { ids.current })
         )
         phoneSecrets = PhoneSecrets(keys: config.keys.phone, store: config.file(VaultFiles.phoneSecrets), now: config.now)
+        let timing = config.lockTiming
+        let rec = record
+        let lockFile = LockRecordFile(
+            file: config.file(VaultFiles.lock),
+            inUse: { rec.value.lockFileInUse },
+            onFirstSave: { _ = try? rec.update(since: rec.generation) { $0.lockFileInUse = true } },
+            now: config.now
+        )
+        lockPorts = ManagerLockPorts(timing: timing)
+        lockGuard = LockGuard(ports: lockPorts, now: config.now, sleep: timing.sleep) { attempt in
+            LockKeeper(
+                store: lockFile, attempt: attempt, now: config.now, backoff: timing.backoff, relayMargin: timing.relayMargin,
+                sleep: timing.sleep
+            )
+        }
+        locking = LockSequence(sleep: timing.sleep)
+        lockPorts.manager = self
+        holder = HolderWatch { [weak self] in await self?.wipeReplacedPhone() }
+        refusals = RefusalWatch { [weak self] in
+            self?.phase = .locked
+            self?.refusedByVault = true
+        }
     }
 
     // MARK: - Failures
@@ -105,6 +150,12 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         try record.load()
         memberVault.set(recorded: record.value.vaultID)
         if account == nil { account = record.value.info }
+        if !lockResumed {
+            lockResumed = true
+            // A lock that was pending when the process ended: locked from the start, and tried again at once.
+            lockGuard.keeper.resume()
+            lockNotices.opened(at: record.value.lastOpenedMs.map { Date(timeIntervalSince1970: Double($0) / 1000) })
+        }
     }
 
     /// A record of its own (a redeem, or none after "that is not my account").
@@ -135,7 +186,10 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         guard generation == sessionGeneration else { throw VaultFailure(.other, code: "session_dropped") }
         session = s
         memberVault.set(device: s.device)
-        s.device.start()
+        // In the background nothing starts the collection again (a lock's retry opens the session): the return to the
+        // foreground does (IOS-PLAN §6.6).
+        if !backgrounded { s.device.start() }
+        observe(s)
         return s
     }
 
@@ -191,6 +245,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         session = nil
         sessionGeneration += 1
         memberVault.set(device: nil)
+        stopObserving()
         guard forget else {
             s?.device.stop()
             return
@@ -203,6 +258,9 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             $0.setupComplete = false
             $0.capabilities = []
         }
+        // The vault is no longer this phone's: nothing to lock from here. Only once the forget succeeded: a forget that
+        // failed leaves the phone holding the vault, and its pending lock with it.
+        lockGuard.keeper.abandon()
     }
 
     private nonisolated static func forgetKeys(_ c: VaultManagerConfig) async throws {
@@ -230,6 +288,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         session = nil
         sessionGeneration += 1
         memberVault.set(device: nil)
+        stopObserving()
     }
 
     // MARK: - The phase
@@ -237,17 +296,24 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     public func refresh() async throws {
         let gen = record.generation
         let changes = phaseChanges
+        let locks = lockGeneration
         let p: AppPhase
         do {
             p = try await guarded { try await evaluate() }
         } catch let f as VaultFailure {
-            // What the phone stores for the vault could not be read: said as that, with the way out (I1.7), rather
-            // than as "cannot connect".
-            p = .unreachable(f.code == VaultFailures.codeKeystore ? .localState : f.kind)
+            // What the phone stores for the vault could not be read: said as that, with the way out, rather than as
+            // "cannot connect".
+            let kind = f.code == VaultFailures.codeKeystore ? FailureKind.localState : f.kind
+            // Nothing has reached the vault service for a long time: erase-or-recover beside "Try again".
+            let last = [record.value.lastContactMs, record.value.lastOpenedMs].compactMap { $0 }.max()
+            p = .unreachable(kind, longUnreachable: StuckScreens.longUnreachable(kind, lastContactMs: last, nowMs: nowMs))
         }
-        // A reset, or a newer phase set by an operation meanwhile, wins.
-        if gen == record.generation, changes == phaseChanges { phase = p }
+        // A reset, a lock, or a newer phase set by an operation meanwhile, wins.
+        if gen == record.generation, changes == phaseChanges, locks == lockGeneration { phase = p }
     }
+
+    /// The phone's clock, in Unix ms.
+    var nowMs: Int64 { Int64((config.now().timeIntervalSince1970 * 1000).rounded(.down)) }
 
     private func evaluate() async throws -> AppPhase {
         try prepared()
@@ -268,14 +334,31 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             // A redeemed code: enroll. The enrollment itself answers vault_exists for a vault this phone does not hold.
             return local.userGuid.isEmpty ? .signedOut : .setup(.newVault)
         }
+        return try await pairedPhase(s, local)
+    }
+
+    /// The phase of a paired phone: from the member API's status, unless a lock is pending.
+    private func pairedPhase(_ s: VaultSession, _ local: LocalAccount) async throws -> AppPhase {
+        let d = s.device
         let status: VaultStatus?
+        let rec = record.generation
+        // Taken before the status is awaited: an answer produced while an unlock ran confirms no lock (``LockKeeper``).
+        let mark = lockGuard.keeper.evidenceMark
         do {
             status = try await vaultStatus()
-        } catch let e as MemberApiError where e.code == MemberApiError.unauthorized {
-            // The API no longer accepts this phone's app key: the unlock screen says so (I1.7); only the enclave's own
-            // answer erases anything.
-            return .locked
+            // The last contact, for the stuck screen: a record that cannot be written now changes nothing here.
+            _ = try? record.contacted(since: rec, nowMs: nowMs)
+        } catch {
+            // A lock is pending and the vault cannot be reached: the unlock screen, with its notice (never the open app,
+            // and not "cannot connect" either: the member has to see that the lock is not confirmed).
+            if lockGuard.lockedWhatever(unlocked: nil) { return .locked }
+            // The API no longer accepts this phone's app key: the unlock screen says so; only the enclave's own answer
+            // erases anything.
+            if let e = error as? MemberApiError, e.code == MemberApiError.unauthorized { return .locked }
+            throw error
         }
+        // A lock is pending: locked on this phone whatever the status says, and confirmed if it says so.
+        if lockGuard.lockedWhatever(unlocked: status?.state == Self.stateUnlocked, since: mark) { return .locked }
         // The API says, explicitly, that the account has no vault: the member decides (``forgetMissingVault()``).
         guard let status else { return .unreachable(.noVault) }
         if d.recovering { return .setup(.recovering) }

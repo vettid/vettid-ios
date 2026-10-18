@@ -227,6 +227,18 @@ public protocol VaultRepository: AnyObject, Observable, Sendable {
 
     func lock() async throws
 
+    /// (iPhone, IOS-PLAN §6.3 item 5) The earlier-secret step opened the vault: the app asks at once for a new phone
+    /// secret (`vault.secret.renew`). Default: false.
+    var renewSecretSuggested: Bool { get }
+
+    /// (iPhone, IOS-PLAN §6.3 item 5) Whether the earlier-secret step can be offered on the "this phone no longer holds
+    /// the keys" screen: a replaced phone-secret record exists. Default: false.
+    var earlierSecretOffered: Bool { get }
+
+    /// (iPhone, IOS-PLAN §6.3 item 5) The earlier-secret step, only on the member's tap: an unlock with [pin] and each
+    /// replaced record of the phone secret, newest first, each once. Default: ``FailureKind/notSupported``.
+    func unlockWithEarlierSecret(pin: String) async throws -> UnlockAttempt
+
     func overview() async throws -> VaultOverview
 
     /// `pin.change` (§10.6).
@@ -245,6 +257,9 @@ public extension VaultRepository {
     var lockNotice: LockNotice { .none }
     func retryLock() {}
     func dismissLockNotice() {}
+    var earlierSecretOffered: Bool { false }
+    var renewSecretSuggested: Bool { false }
+    func unlockWithEarlierSecret(pin: String) async throws -> UnlockAttempt { throw VaultFailure(.notSupported) }
     var pendingDeletion: DeletionView? { nil }
     func cancelDeletion() async throws -> Bool { false }
 

@@ -1,0 +1,323 @@
+import Foundation
+import Observation
+import VettIDData
+
+/// The vault unlock (VAULT-MESSAGING §11.4): first the release check (§11.10.6: refuse an older release, announce a newer
+/// one before the PIN, offer the newest active release; IOS-PLAN ID8: refuse a release before R), then the PIN, the
+/// enclave's answer and its backoff (§11.8), the recovery-pending refusal (§11.11.4) and the state-rollback warning
+/// (§13.2). An unlock the vault did not recognise (an unreadable result), or a phone that no longer holds the vault's keys
+/// (`device_secret`), offers "Erase VettID from this phone", only after a confirmation; a phone sent here by repeated
+/// relay refusals is told so, and the refusals alone offer nothing. Mirrors vettid-android `UnlockViewModel` (What's new
+/// comes with I1.8, the owner check with I1.7b).
+@MainActor
+@Observable
+public final class UnlockViewModel: UnlockActions {
+    public private(set) var state: UnlockState
+
+    @ObservationIgnored let vault: any VaultRepository
+    @ObservationIgnored let account: any AccountRepository
+    /// One second of a countdown (a virtual clock in the tests).
+    @ObservationIgnored private let tick: @Sendable () async throws -> Void
+    @ObservationIgnored private let followers = TaskBag()
+    @ObservationIgnored private let countdowns = TaskBag()
+    @ObservationIgnored private var ticker: Task<Void, Never>?
+    @ObservationIgnored private var serviceTicker: Task<Void, Never>?
+    @ObservationIgnored private var work: [Int: Task<Void, Never>] = [:]
+    @ObservationIgnored private var nextWork = 0
+
+    public init(
+        vault: any VaultRepository,
+        account: any AccountRepository,
+        tick: @escaping @Sendable () async throws -> Void = { try await Task.sleep(for: .seconds(1)) }
+    ) {
+        self.vault = vault
+        self.account = account
+        self.tick = tick
+        let hint = account.account?.emailHint
+        state = UnlockState(email: hint?.isEmpty == false ? hint : nil, phoneSecret: vault.usesPhoneSecret)
+        retryPreflight()
+        followers.add(follow(self, read: { $0.vault.refusedByVault }, apply: { $0.state.refused = $1 }))
+        followers.add(follow(self, read: { $0.vault.lockNotice }, apply: { $0.state.lock = $1 }))
+        followers.add(follow(self, read: { $0.vault.transferKeptSince }, apply: { $0.state.keptTransfer = $1 != nil }))
+        followers.add(follow(self, read: { $0.vault.finishMoveFailure }, apply: { $0.state.moveFailure = $1 }))
+    }
+
+    deinit {
+        followers.cancelAll()
+        countdowns.cancelAll()
+    }
+
+    /// I1.7b: the owner check's state, from its repository (the vault past its deadline, or locked after ten checks).
+    func ownerCheck(due: Bool, lockedByChecks: Bool) {
+        state.checkDue = due || lockedByChecks
+        state.lockedByOwnerCheck = lockedByChecks
+    }
+
+    // MARK: - Tasks
+
+    private func launch(_ body: @escaping @MainActor () async -> Void) {
+        let id = nextWork
+        nextWork += 1
+        work[id] = Task { [weak self] in
+            await body()
+            self?.work[id] = nil
+        }
+    }
+
+    /// TEST ONLY: returns once the model's tasks and the reactions to the repositories' changes have run.
+    func settle() async {
+        for _ in 0..<50 {
+            await Task.yield()
+            while let (id, task) = work.first {
+                await task.value
+                work[id] = nil
+            }
+        }
+    }
+
+    // MARK: - The release check
+
+    public func retryPreflight() {
+        if state.serviceWaitSeconds > 0 { return }
+        // The result of an earlier check goes too: no PIN is asked for until this one has verified the vault's software.
+        // So does an open erase confirmation: it does not come back by itself.
+        state.loading = true
+        state.preflightError = nil
+        state.preflight = nil
+        state.keysGone = false
+        state.earlierSecret = false
+        state.eraseConfirm = false
+        launch { [self] in
+            do {
+                let p = try await vault.preflight()
+                state.loading = false
+                state.preflight = p
+            } catch let e as VaultFailure {
+                state.loading = false
+                state.preflightError = e.kind
+                if e.kind == .servicePaused { startServiceWait(e.retryAfterSeconds) }
+            } catch {
+                state.loading = false
+            }
+        }
+    }
+
+    public func acknowledgeUpdate() { state.updateAcknowledged = true }
+
+    public func setApproveOffer(_ approve: Bool) { state.approveOffer = approve }
+
+    // MARK: - The PIN and the password
+
+    public func setPin(_ v: String) {
+        state.pin = String(v.filter { $0.isASCII && $0.isNumber }.prefix(UnlockState.maxPin))
+        state.message = nil
+    }
+
+    public func setPassword(_ v: String) {
+        state.password = v
+        state.message = nil
+    }
+
+    public func forgetSecrets() {
+        state.pin = ""
+        state.password = ""
+    }
+
+    public func submit() { attempt(.unlock(cancelRecovery: false)) }
+
+    public func cancelRecoveryAndUnlock() {
+        guard state.cancelAllowed else { return }
+        attempt(.unlock(cancelRecovery: true))
+    }
+
+    public func submitEarlierSecret() {
+        guard state.keysGone, state.earlierSecret else {
+            state.pin = ""
+            return
+        }
+        attempt(.earlierSecret)
+    }
+
+    public func showSignerHelp(_ show: Bool) { state.signerHelp = show && state.signerRefused }
+
+    // MARK: - The erase
+
+    public func askErase() {
+        if state.eraseOffered && !state.erasing { state.eraseConfirm = true }
+    }
+
+    public func dismissErase() { state.eraseConfirm = false }
+
+    public func confirmErase() {
+        let s = state
+        guard s.eraseConfirm, s.eraseOffered, !s.erasing else { return }
+        state.eraseConfirm = false
+        state.erasing = true
+        state.pin = ""
+        // The phase becomes signed out at the end: the root shows the welcome screen and drops this screen.
+        launch { [self] in
+            do {
+                try await account.eraseThisPhone()
+            } catch let e as VaultFailure {
+                // (iPhone) A failed erase is said here; the screen stays as it was.
+                state.erasing = false
+                state.message = .failed(e.kind, code: e.code)
+            } catch {
+                state.erasing = false
+            }
+        }
+    }
+
+    // MARK: - The lock and the move
+
+    public func retryLock() { vault.retryLock() }
+
+    public func dismissLockNotice() { vault.dismissLockNotice() }
+
+    public func dismissMoveFailure() { vault.acknowledgeFinishMoveFailure() }
+
+    // MARK: - One unlock
+
+    private enum Kind {
+        case unlock(cancelRecovery: Bool)
+        case earlierSecret
+    }
+
+    private func attempt(_ kind: Kind) {
+        let s = state
+        guard s.submitAllowed, !s.erasing else {
+            // Refused here: the PIN handed over for it does not stay in memory.
+            if !s.recoveryPending { state.pin = "" }
+            return
+        }
+        state.busy = true
+        state.message = nil
+        launch { [self] in
+            let r = await send(kind, s)
+            // §3.6.5: the password is not kept beyond the unlock and the check that follows it.
+            state.password = ""
+            state.notRecognised = Self.notRecognised(after: r, before: state.notRecognised)
+            state.signerRefused = Self.signerRefused(after: r, before: state.signerRefused)
+            state.keysGone = Self.keysGone(after: r, before: state.keysGone)
+            state.earlierSecret = state.keysGone && vault.earlierSecretOffered
+            apply(r, keptTransfer: s.keptTransfer)
+        }
+    }
+
+    /// The request [kind] asks for; every failure is an ``UnlockAttempt``.
+    private func send(_ kind: Kind, _ s: UnlockState) async -> UnlockAttempt {
+        let offer = s.approveOffer ? s.preflight?.offer : nil
+        do {
+            switch kind {
+            case .earlierSecret:
+                return try await vault.unlockWithEarlierSecret(pin: s.pin)
+            case .unlock(let cancelRecovery) where cancelRecovery && s.phoneSecret:
+                // Release R: after a cancel from the app, the owner check at once, which records the member's presence.
+                return try await vault.unlockCancellingRecovery(pin: s.pin, password: s.password, approve: offer)
+            case .unlock(let cancelRecovery) where s.checkDue:
+                return try await vault.unlockWithCheck(pin: s.pin, password: s.password, approve: offer, cancelRecovery: cancelRecovery)
+            case .unlock(let cancelRecovery):
+                return try await vault.unlock(pin: s.pin, approve: offer, cancelRecovery: cancelRecovery)
+            }
+        } catch let e as VaultFailure {
+            return .failed(e.kind, code: e.code, retryAfterSeconds: e.retryAfterSeconds)
+        } catch {
+            return .failed(.other, code: nil)
+        }
+    }
+
+    private func apply(_ r: UnlockAttempt, keptTransfer: Bool) {
+        state.busy = false
+        switch r {
+        // §11.7.1: not a PIN failure: no "wrong PIN" text, no count, no backoff. The notice says what to do.
+        case .signerRefused:
+            state.pin = ""
+        case .success:
+            state.pin = ""
+            state.recoveryPending = false
+        case .badPin(let wait):
+            state.pin = ""
+            state.message = .badPin
+            startBackoff(wait)
+        case .backoff(let wait):
+            state.pin = ""
+            startBackoff(wait)
+        // The PIN stays in memory so that "Cancel the recovery and unlock" can send it again.
+        case .recoveryPending:
+            state.recoveryPending = true
+        case .stateRollback:
+            state.pin = ""
+            state.stateRollback = true
+        case .updateRefused(let code):
+            state.pin = ""
+            state.message = .updateRefused(code: code)
+        case .failed(let kind, let code, let wait):
+            state.pin = ""
+            state.message = UnlockMessage.of(kind, code: code, keptTransfer: keptTransfer)
+            // A paused service (503, never proof of anything): wait as it asked, no automatic retry.
+            if kind == .servicePaused { startServiceWait(wait) }
+        }
+    }
+
+    /// An unreadable answer: the vault may not know this phone. A sealed answer shows that it does; other failures say
+    /// nothing either way. The member API refusing this phone's app key (`401`) is no proof either, but the member may then
+    /// erase VettID here too.
+    static func notRecognised(after r: UnlockAttempt, before: Bool) -> Bool {
+        guard case .failed(let kind, let code, _) = r else { return false }
+        // (iPhone, until I1.7b brings the wipe) a sealed `unknown_device`, the proof of a replacement that would erase this
+        // phone, is shown as not recognised, with the member's erase, rather than as a dead end.
+        if code == HolderPolicy.codeUnknownDevice { return true }
+        return code == UnlockState.codeUnreadable || kind == .unauthorized || before
+    }
+
+    /// The keys-gone offer: set by `device_secret`, kept through failures that never reached the vault, cleared by any
+    /// other answer of the vault.
+    static func keysGone(after r: UnlockAttempt, before: Bool) -> Bool {
+        guard case .failed(let kind, _, _) = r else { return false }
+        if kind == .deviceSecret { return true }
+        return UnlockMessage.transientFailures.contains(kind) ? before : false
+    }
+
+    /// The `signer_refused` notice: set by that answer, cleared by any other sealed answer, kept through failures.
+    static func signerRefused(after r: UnlockAttempt, before: Bool) -> Bool {
+        switch r {
+        case .signerRefused: true
+        case .failed: before
+        default: false
+        }
+    }
+
+    // MARK: - Countdowns
+
+    private func startBackoff(_ seconds: Int64) {
+        guard seconds > 0 else { return }
+        ticker?.cancel()
+        state.waitSeconds = seconds
+        ticker = countdown(\.waitSeconds)
+    }
+
+    /// Counts ``UnlockState/serviceWaitSeconds`` down; the member tries again when it reaches 0.
+    private func startServiceWait(_ seconds: Int64) {
+        guard seconds > 0 else { return }
+        serviceTicker?.cancel()
+        state.serviceWaitSeconds = seconds
+        serviceTicker = countdown(\.serviceWaitSeconds)
+    }
+
+    private func countdown(_ field: WritableKeyPath<UnlockState, Int64> & Sendable) -> Task<Void, Never> {
+        let tick = tick
+        let task = Task { @MainActor [weak self] in
+            while (self?.state[keyPath: field] ?? 0) > 0 {
+                do {
+                    try await tick()
+                } catch {
+                    return
+                }
+                guard let self else { return }
+                state[keyPath: field] = max(state[keyPath: field] - 1, 0)
+            }
+        }
+        countdowns.add(task)
+        return task
+    }
+}
