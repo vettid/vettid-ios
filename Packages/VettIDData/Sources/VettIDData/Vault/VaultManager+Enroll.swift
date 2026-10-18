@@ -167,6 +167,7 @@ extension VaultManager {
     public func createCredential(
         password: String, backup: Bool, pin: String?, onStep: @MainActor (EnrollStep) -> Void
     ) async throws {
+        let locks = lockGeneration
         try await guarded {
             guard let pin, !pin.isEmpty else { throw VaultFailure(.other, code: Self.codePinRequired) }
             let s = try await openSession()
@@ -180,7 +181,8 @@ extension VaultManager {
             try record.update(since: record.generation) { $0.backupChoice = backup }
             if s.device.credentialVersion == nil { try await createOrFetch(s, password: password, pin: pin) }
             try await confirmEnrollment(s, backup: backup, onStep: onStep)
-            phase = .setup(.finishing)
+            // A lock asked for meanwhile wins: the phone stays locked.
+            if locks == lockGeneration, !lockGuard.pending { phase = .setup(.finishing) }
         }
     }
 
@@ -190,7 +192,7 @@ extension VaultManager {
         onStep(.backup)
         if let backup { try await setSetting(s, Self.keyBackup, backup ? "true" : "false") }
         onStep(.confirm)
-        try await s.api.enrollConfirm()
+        try await openApi(s).enrollConfirm()
         try record.update(since: record.generation) { $0.enrollConfirmed = true }
     }
 
@@ -199,24 +201,25 @@ extension VaultManager {
     /// every vault of this app is of release R).
     private func createOrFetch(_ s: VaultSession, password: String, pin: String) async throws {
         do {
-            try await s.api.credentialCreate(password: password, pin: pin)
+            try await openApi(s).credentialCreate(password: password, pin: pin)
         } catch let e as VaultOpError where e.code == Self.codeExists {
-            try await s.api.credentialFetch()
+            try await openApi(s).credentialFetch()
         }
     }
 
     /// Sets one setting to [json] unless it already has that value.
     private func setSetting(_ s: VaultSession, _ key: String, _ json: String) async throws {
-        let current = try await s.api.settingsGet()
+        let current = try await openApi(s).settingsGet()
         if current.values[key] == json { return }
-        _ = try await s.api.settingsSet(version: current.version, set: [(key, json)])
+        _ = try await openApi(s).settingsSet(version: current.version, set: [(key, json)])
     }
 
-    /// Leaves onboarding for the open app: only from ``SetupStage/finishing`` (``FinishSetupGate``), and never before
-    /// `vault.enroll.confirm` was answered. The lock and "Finish the move" that also hold it come with I1.7 and I3.3.
+    /// Leaves onboarding for the open app: only from ``SetupStage/finishing`` (``FinishSetupGate``), never while a lock is
+    /// pending, and never before `vault.enroll.confirm` was answered. "Finish the move", which also holds it, comes with
+    /// I3.3.
     public func finishSetup() async throws {
         let rec = record.generation
-        guard FinishSetupGate.allows(phase, lockPending: false, finishingMove: false) else { return }
+        guard FinishSetupGate.allows(phase, lockPending: lockGuard.pending, finishingMove: false) else { return }
         guard record.value.enrollConfirmed else { throw VaultFailure(.other, code: Self.codeEnrollUnconfirmed) }
         try guardedSync { try record.update(since: rec) { $0.setupComplete = true } }
         phase = .unlocked

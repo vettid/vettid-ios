@@ -55,6 +55,8 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var lastBackup: Bool?
     public var lastApproved: ReleaseView?
     public var lastCancelRecovery = false
+    /// (iPhone, IOS-PLAN §6.3 item 5) Whether a replaced phone-secret record exists for the earlier-secret step.
+    public var earlierSecretOffered = false
 
     // Release R.
     /// This phone holds a phone secret (a vault of release R).

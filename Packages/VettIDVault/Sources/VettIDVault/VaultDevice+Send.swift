@@ -101,9 +101,12 @@ extension VaultDevice {
     /// A deposit to this device's vault under the vault's current token that the relay refused with `token_revoked`
     /// counts towards ``vaultRefusals`` (§7.4). A refusal by any other mailbox, or under another token, does not.
     func countRefusal(_ x: RelayError, mailbox: String, token: String) {
-        mem.withLock {
-            if x.code == RelayError.tokenRevoked, let v = st.vault, mailbox == v.mailbox, token == v.token { refusals += 1 }
+        let count: Int? = mem.withLock {
+            guard x.code == RelayError.tokenRevoked, let v = st.vault, mailbox == v.mailbox, token == v.token else { return nil }
+            refusals += 1
+            return refusals
         }
+        if let count { refusalBroadcast.emit(count) }
     }
 
     /// A deposit straight to the vault (handshake messages, outside the outbox), its refusal counted as deliver's.

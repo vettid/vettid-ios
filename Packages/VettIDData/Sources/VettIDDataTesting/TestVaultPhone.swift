@@ -96,6 +96,11 @@ public final class TestVaultPhone {
             pollWait: 1,
             requestTimeout: 5,
             enrolledGrace: 0.5,
+            // A lock's waits, short: the relay's answer, a relay lock's validity and margin, the retries.
+            lockTiming: LockTiming(
+                relayAnswer: 0.5, relayValid: 0.3, memberWait: 0.3, relayMargin: .milliseconds(50),
+                backoff: { _ in .milliseconds(100) }
+            ),
             now: { clock.now }
         )
     }

@@ -134,6 +134,7 @@ public final class VaultDevice: @unchecked Sendable {
     let eventBroadcast = Broadcast<VaultMessage>()
     let timeDropBroadcast = Broadcast<String>()
     let ownerCheckBroadcast = Broadcast<String>()
+    let refusalBroadcast = Broadcast<Int>()
     var isPaired: Bool
     var sas: String?
     var refusals = 0
@@ -183,6 +184,10 @@ public final class VaultDevice: @unchecked Sendable {
     /// The types of requests the vault answered `owner_check_required` (§3.6.3, 0.13.0).
     public func ownerCheckRequired() -> AsyncStream<String> { ownerCheckBroadcast.stream() }
 
+    /// Each change of ``vaultRefusals``: a new count after a refusal, 0 when the vault spoke to this device or a sealed
+    /// unlock result cleared it (vettid-android's `vaultRefusals` flow).
+    public func vaultRefusalCounts() -> AsyncStream<Int> { refusalBroadcast.stream() }
+
     /// True once device.paired arrived: the session with the vault is up.
     public var paired: Bool { mem.withLock { isPaired } }
     public var vaultID: String? { mem.withLock { st.vaultID } }
@@ -219,7 +224,16 @@ public final class VaultDevice: @unchecked Sendable {
     public var credentialVersion: Int64? { mem.withLock { st.credential?.version } }
 
     /// Starts [vaultRefusals] again (after a sealed unlock result: the enclave knows this device).
-    public func clearVaultRefusals() { mem.withLock { refusals = 0 } }
+    public func clearVaultRefusals() { resetRefusals() }
+
+    /// Sets the refusal count back to 0, and says so when it was not.
+    func resetRefusals() {
+        let was: Int = mem.withLock {
+            defer { refusals = 0 }
+            return refusals
+        }
+        if was != 0 { refusalBroadcast.emit(0) }
+    }
 
     // MARK: - Helpers (callers hold ``mem`` where they touch state)
 

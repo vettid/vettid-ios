@@ -105,6 +105,25 @@ public final class FakeVaultService: @unchecked Sendable {
     var createsValue: [(pin: String?, password: String)] = []
     var confirmedValue = false
 
+    // The unlock and the lock (FakeVaultService+Unlock.swift), under ``cond``.
+    /// Whether the vault itself runs (the enclave's truth; ``statusState`` is the member API's view of it).
+    var vaultOpen = true
+    var vaultPin: String?
+    var vaultSecret: [UInt8]?
+    var pinFailures = 0
+    var backoffUntil: Date?
+    var headerSeq: UInt64 = 1
+    var stateSeq: UInt64 = 2
+    var vaultClockAhead: TimeInterval = 0
+    var unlockAnswers: [UnlockAnswer] = []
+    var unlocksValue: [UnlockSeen] = []
+    var relayLockAnswerValue: RelayLockAnswer = .lock
+    var memberLockAnswerValue: MemberLockAnswer = .lock
+    var heldSlots: [String: [UInt8]] = [:]
+    var holdMessagesValue = false
+    var relayLocksValue = 0
+    var memberLocksValue = 0
+
     public init() throws {
         etk = try KemPrivateKey.generate()
         kem = try KemPrivateKey.generate()
@@ -213,7 +232,7 @@ public final class FakeVaultService: @unchecked Sendable {
 
     // MARK: - The member API
 
-    private func answerAPI(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer {
+    private func answerAPI(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer { // swiftlint:disable:this cyclomatic_complexity
         locked {
             if r.path == MemberApiClient.manifestPath { return (try? servedManifest()).map { .bytes(200, $0) } ?? .empty(500) }
             // Every vault route is signed by the app key (§11.12.2).
@@ -222,6 +241,8 @@ public final class FakeVaultService: @unchecked Sendable {
             case ("POST", "/api/vault/enroll/redeem"): return redeem(r)
             case ("GET", "/api/vault/enclave"): return enclave()
             case ("POST", "/api/vault/enroll"): return enroll(r)
+            case ("POST", "/api/vault/unlock"): return unlock(r)
+            case ("POST", "/api/vault/lock"): return memberLock(r)
             case ("GET", "/api/vault/status"):
                 if noVault { return .json(200, #"{"vault":null}"#) }
                 return .json(200, #"{"vault":{"vault_id":"\#(vaultID)","state":"\#(statusState)"}}"#)
@@ -285,6 +306,8 @@ public final class FakeVaultService: @unchecked Sendable {
         } else {
             device = (appKem, addr)
             vaultMade = true
+            vaultPin = enrollsValue.last?.pin
+            vaultSecret = enrollsValue.last?.unlockSecret
             do {
                 if case .answerLostEnrolledLate = answer {
                     lateEnrolled = LateEnrolled(kem: appKem, relay: addr, nonce: nonce)
@@ -312,7 +335,7 @@ public final class FakeVaultService: @unchecked Sendable {
         return true
     }
 
-    private func openRequest(_ env: [UInt8]) throws -> Inner {
+    func openRequest(_ env: [UInt8]) throws -> Inner {
         let (padded, _) = try Envelope.openSealed(try Envelope.parse(env), key: etk)
         return try Inner.parse(try Padding.unpadFixed(padded, Padding.altChannelRequest), .sealed)
     }

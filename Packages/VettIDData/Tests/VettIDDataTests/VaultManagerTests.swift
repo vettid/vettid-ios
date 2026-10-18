@@ -147,10 +147,8 @@ func vaultFailure(_ body: @MainActor () async throws -> Void) async -> VaultFail
     /// Every operation of a later row refuses instead of acting on half an implementation.
     @Test func laterOperationsAreNotSupportedYet() async throws {
         defer { phone.close() }
-        #expect(await vaultFailure { _ = try await m.unlock(pin: "402817") }?.kind == .notSupported)
-        #expect(await vaultFailure { try await m.lock() }?.kind == .notSupported)
-        #expect(await vaultFailure { _ = try await m.preflight() }?.kind == .notSupported)
         #expect(await vaultFailure { _ = try await m.status() }?.kind == .notSupported)
+        #expect(await vaultFailure { _ = try await m.overview() }?.kind == .notSupported)
         #expect(await vaultFailure { try await m.eraseThisPhone() }?.kind == .notSupported)
     }
 }

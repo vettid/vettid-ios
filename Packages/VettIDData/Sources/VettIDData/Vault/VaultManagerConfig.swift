@@ -34,16 +34,50 @@ public struct VaultKeys: Sendable {
 }
 
 /// The vault manager's files in the app's data directory (`Application Support/VettID`, excluded from backups, IOS-PLAN
-/// §6.1): the account record, the device state and the phone-secret records. Their presence refuses the first-run
+/// §6.1): the account record, the device state, the phone-secret records and the lock's record. Their presence refuses the first-run
 /// cleanup (``FirstRunCleanup``'s `dataFiles`).
 public enum VaultFiles {
     public static let account = "account"
     public static let device = "vault-device"
     public static let phoneSecrets = "phone-secrets"
+    public static let lock = "lock-record"
 
     /// Every data file of the vault manager in [directory].
     public static func all(in directory: URL) -> [URL] {
-        [account, device, phoneSecrets].map { directory.appendingPathComponent($0) }
+        [account, device, phoneSecrets, lock].map { directory.appendingPathComponent($0) }
+    }
+}
+
+/// How the member's lock waits (VAULT-LOCK as vettid-android implements it): the app's values by default; the tests
+/// shorten them.
+public struct LockTiming: Sendable {
+    /// How long the relay's `vault.lock` waits for the vault's answer.
+    public var relayAnswer: TimeInterval
+    /// How long after it was asked a `vault.lock` may still be acted on (its `exp`).
+    public var relayValid: TimeInterval
+    /// How long a lock through the member API waits for its slot (vettid-android: 12 s).
+    public var memberWait: TimeInterval
+    /// Added to a relay lock's validity before an unlock may follow it.
+    public var relayMargin: Duration
+    /// The wait before each retry of a pending lock.
+    public var backoff: @Sendable (Int) -> Duration
+    /// How the lock waits (``realLockSleep`` in the app).
+    public var sleep: LockSleep
+
+    public init(
+        relayAnswer: TimeInterval = VaultApi.lockAnswer,
+        relayValid: TimeInterval = VaultApi.lockValid,
+        memberWait: TimeInterval = 12,
+        relayMargin: Duration = LockKeeper.relayMargin,
+        backoff: @escaping @Sendable (Int) -> Duration = LockKeeper.defaultBackoff,
+        sleep: @escaping LockSleep = realLockSleep
+    ) {
+        self.relayAnswer = relayAnswer
+        self.relayValid = relayValid
+        self.memberWait = memberWait
+        self.relayMargin = relayMargin
+        self.backoff = backoff
+        self.sleep = sleep
     }
 }
 
@@ -81,6 +115,8 @@ public struct VaultManagerConfig: Sendable {
     /// it sends another or reports `vault_exists` as another phone's vault (chosen; not in the spec: 15 s, a relay
     /// round trip with margin).
     public var enrolledGrace: TimeInterval
+    /// How the member's lock waits.
+    public var lockTiming: LockTiming
     public var now: @Sendable () -> Date
 
     public init(
@@ -101,6 +137,7 @@ public struct VaultManagerConfig: Sendable {
         pollWait: TimeInterval = RelayClient.defaultWait,
         requestTimeout: TimeInterval = DeviceConfig.defaultTimeout,
         enrolledGrace: TimeInterval = 15,
+        lockTiming: LockTiming = LockTiming(),
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.apiOrigin = apiOrigin.hasSuffix("/") ? String(apiOrigin.dropLast()) : apiOrigin
@@ -120,6 +157,7 @@ public struct VaultManagerConfig: Sendable {
         self.pollWait = pollWait
         self.requestTimeout = requestTimeout
         self.enrolledGrace = enrolledGrace
+        self.lockTiming = lockTiming
         self.now = now
     }
 

@@ -69,7 +69,7 @@ extension VaultDevice {
             }
             return
         }
-        mem.withLock { refusals = 0 } // the vault spoke to this device under its session
+        resetRefusals() // the vault spoke to this device under its session
         if inner.type == Self.typeHsInit {
             try await handleRekey(raw, epoch: ep, sender: sender, t)
             return
