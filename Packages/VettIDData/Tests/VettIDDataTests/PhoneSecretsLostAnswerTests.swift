@@ -250,4 +250,38 @@ import VettIDKeysTesting
         #expect(try t.records == recs)
         try await expectReachable()
     }
+
+    // MARK: - A lost answer to a PIN change (VAULT-MESSAGING §11.14.9)
+
+    /// While a change is unresolved, an unlock's `ok` with the current record never demotes that change's candidate (its
+    /// request may still reach the vault); another candidate, not in flight, becomes a replaced record as before.
+    @Test func theUnresolvedChangesCandidateIsNeverDemoted() async throws {
+        _ = try? await t.secrets.change(operation: "op-a", send: { s in try vault.change(s, .neverArrived) }, confirmed: { $0.ok })
+        _ = try? await t.secrets.change(operation: "op-b", send: { s in try vault.change(s, .neverArrived) }, confirmed: { $0.ok })
+        try t.secrets.setUnresolved(UnresolvedChange(type: .pin, id: "req-a", version: 1, exp: Date(), operation: "op-a"))
+        #expect(try await t.secrets.unlock(attempt: { s in vault.unlock(s) }) == .opened)
+        #expect(try t.records.candidates.map(\.operation) == ["op-a"])
+        #expect(try t.records.replaced.compactMap(\.operation) == ["op-b"])
+    }
+
+    /// The new-PIN step tries only the unresolved change's candidate, not an older one nor a pending record.
+    @Test func theNewPinStepTriesOnlyItsCandidate() async throws {
+        _ = try? await t.secrets.change(operation: "op-a", send: { s in try vault.change(s, .neverArrived) }, confirmed: { $0.ok })
+        _ = try? await t.secrets.change(operation: "op-b", send: { s in try vault.change(s, .neverArrived) }, confirmed: { $0.ok })
+        var tries = 0
+        let answer = try await t.secrets.unlock(tries: .candidate(operation: "op-a")) { s -> UnlockAnswer in
+            tries += 1
+            return vault.unlock(s)
+        }
+        #expect(answer == .refused(UnlockEpoch.deviceSecret) && tries == 1)
+        #expect(try t.records.candidates.count == 2)
+    }
+
+    /// The marker is cleared, and a records file written, only when it matched: a confirmation for another id after a
+    /// wipe writes nothing.
+    @Test func aConfirmationClearsOnlyItsOwnMarker() throws {
+        try t.secrets.delete()
+        #expect(try t.secrets.confirmChange(operation: "op-x", clearing: "req-x") == false)
+        #expect(!FileManager.default.fileExists(atPath: t.url.path))
+    }
 }

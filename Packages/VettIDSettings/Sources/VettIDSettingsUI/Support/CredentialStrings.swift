@@ -273,12 +273,33 @@ enum CredentialStrings {
         String(localized: "credential_change_pin", defaultValue: "Vault PIN", bundle: .module)
     }
 
-    static var passwordUnanswered: String {
+    // ANDROID-PLAN 0.1.45 "A lost answer to a PIN or password change" (VAULT-MESSAGING §11.14.9), shared with the
+    // Android app.
+
+    static var passwordChecking: String {
         String(
-            localized: "ios_credential_password_unanswered",
+            localized: "credential_password_checking",
             defaultValue: """
-                Your vault did not answer, so your password may already be the new one. Use the new password the next time \
-                you are asked for it. If it is not accepted, use your current password and try again.
+                Your vault hasn't answered yet, so VettID is checking whether your password was changed. Keep your new \
+                password at hand.
+                """,
+            bundle: .module
+        )
+    }
+
+    static var passwordNotChanged: String {
+        String(
+            localized: "credential_password_not_changed", defaultValue: "Your password was not changed. You can try again.",
+            bundle: .module
+        )
+    }
+
+    static var passwordUnreachable: String {
+        String(
+            localized: "credential_password_unreachable",
+            defaultValue: """
+                VettID can't reach your vault right now, so it doesn't know yet whether your password was changed. It will \
+                check as soon as it can. Keep both your old and your new password at hand.
                 """,
             bundle: .module
         )

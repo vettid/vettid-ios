@@ -129,6 +129,16 @@ public struct UnlockScreen: View {
 
     /// The keypad, the countdown and, with a check due, the password (§3.6.5: one screen for both).
     @ViewBuilder private var pinEntry: some View {
+        // VAULT-MESSAGING §11.14.9 "A lost answer" step 5: the previous PIN first, the new one after `device_secret`.
+        switch state.pinStep {
+        case .pin: EmptyView()
+        case .previous:
+            NoticeCard(.info, title: OnboardingStrings.unlockPreviousPin, message: OnboardingStrings.unlockPreviousPinBody)
+                .accessibilityIdentifier("unlock_previous_pin")
+        case .new:
+            NoticeCard(.info, title: OnboardingStrings.unlockTitle, message: OnboardingStrings.unlockNewPin)
+                .accessibilityIdentifier("unlock_new_pin")
+        }
         PinEntry(
             label: OnboardingStrings.unlockPinLabel,
             buffer: pin,

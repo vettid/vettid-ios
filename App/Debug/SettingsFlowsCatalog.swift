@@ -68,13 +68,18 @@ extension ShellCatalog {
         confirm.mismatch = true
         var failed = ChangePinState(withPassword: true)
         failed.error = .badPin
-        var unanswered = ChangePinState(withPassword: true)
-        unanswered.error = .noResponse
-        unanswered.mayHaveChanged = true
+        var checking = ChangePinState(withPassword: true)
+        checking.check = .checking
+        var unreachable = ChangePinState(withPassword: true)
+        unreachable.check = .unreachable
+        var notChanged = ChangePinState(withPassword: true)
+        notChanged.check = .notApplied
         var done = ChangePinState(withPassword: true)
         done.done = true
         return [
-            Entry(id: "pin_unanswered", title: "Change PIN: no answer", screen: .changePin(unanswered)),
+            Entry(id: "pin_checking", title: "Change PIN: no answer, checking", screen: .changePin(checking)),
+            Entry(id: "pin_unreachable", title: "Change PIN: no answer, vault unreachable", screen: .changePin(unreachable)),
+            Entry(id: "pin_not_changed", title: "Change PIN: not changed", screen: .changePin(notChanged)),
             Entry(id: "pin_current", title: "Change PIN: current", screen: .changePin(ChangePinState(withPassword: true))),
             Entry(id: "pin_attempts", title: "Change PIN: after recovery attempts", screen: .changePin(
                 ChangePinState(withPassword: true, fromAttempts: true)

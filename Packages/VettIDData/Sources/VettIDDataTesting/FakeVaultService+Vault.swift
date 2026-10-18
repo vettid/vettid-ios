@@ -102,18 +102,29 @@ extension FakeVaultService {
     }
 
     /// Sends [type] in the session: an event, or with [re] the answer to a request. Callers hold ``cond``.
+    /// An answer is cached under its request's id (§8.2), and lost on its way when the test asked for that
+    /// (``loseAnswers(_:)``).
     func reply(_ type: String, _ body: String, re: String? = nil, error: String? = nil) throws {
         guard let epoch = keyring.current() else { return }
-        let inner = error.map { Inner(id: Ulid.new(), type: type, ts: Date(), re: re, status: Inner.statusError, error: InnerError($0), body: Array(body.utf8)) }
-            ?? Inner(id: Ulid.new(), type: type, ts: Date(), re: re, status: re == nil ? nil : Inner.statusOK, body: Array(body.utf8))
+        let ts = stampNow
+        let inner = error.map { Inner(id: Ulid.new(), type: type, ts: ts, re: re, status: Inner.statusError, error: InnerError($0), body: Array(body.utf8)) }
+            ?? Inner(id: Ulid.new(), type: type, ts: ts, re: re, status: re == nil ? nil : Inner.statusOK, body: Array(body.utf8))
+        if let re { responses[re] = inner }
+        if re != nil, lostAnswerTypes.contains(type) { return }
         queue(try epoch.seal(inner))
     }
 
     /// The requests of enrollment (§3.5.7, §10.6, §10.8), and those of Settings (``settingsRequest(_:_:)``). Callers hold
     /// ``cond``.
     private func request(_ m: Inner) throws { // swiftlint:disable:this cyclomatic_complexity
-        // A locked vault does not collect: nothing sent to it is answered (§12.1).
-        if !vaultOpen { return }
+        // A locked vault does not collect: what is sent to it waits in its mailbox until the next unlock (§12.1).
+        if !vaultOpen {
+            lockedRequests.append(m)
+            return
+        }
+        // §5.3, §8.2: an expired request is dropped unanswered (``stampsOnVaultClock``); a retransmission gets the cached
+        // answer, never run again.
+        guard try arrives(m) else { return }
         let body = try StrictJson.parseObject(m.body)
         if let refusal = refusal(m.type) { return try reply(m.type, "{}", re: m.id, error: refusal) }
         // §3.6.3: the owner check's clock before each batch, then its gate on the app.
@@ -133,6 +144,17 @@ extension FakeVaultService {
             confirmedValue = true
             try reply(m.type, "{}", re: m.id)
         default: try settingsRequest(m, body)
+        }
+    }
+
+    /// The vault opened: what waited in its mailbox is handled now, in order; a request whose `exp` has passed is dropped
+    /// (§5.3). Callers hold ``cond``.
+    func handleWhileLockedRequests() {
+        let waiting = lockedRequests
+        lockedRequests = []
+        for m in waiting {
+            if let exp = m.exp, stampNow > exp { continue }
+            try? request(m)
         }
     }
 

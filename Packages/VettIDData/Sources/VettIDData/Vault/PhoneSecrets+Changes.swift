@@ -26,12 +26,14 @@ extension PhoneSecrets {
     /// before anything is made or sent (``FailureKind/busy``), so the vault can never store two changes whose answers
     /// then arrive in the other order. A retry of the same operation is allowed. In memory only: after a process restart
     /// nothing is in flight.
-    /// Internal: the only public entry is ``change(isolation:operation:send:confirmed:)``, which always frees the slot.
-    func beginChange(operation: String) throws -> [UInt8] {
+    /// Internal: the only public entry is ``change(isolation:operation:unresolved:send:confirmed:)``, which always frees
+    /// the slot. [unresolved] is stored in the same atomic write as the candidate (VAULT-MESSAGING §11.14.9 "A lost
+    /// answer" step 1).
+    func beginChange(operation: String, unresolved: UnresolvedChange? = nil) throws -> [UInt8] {
         let reserved = ChangesInFlight.reserve(store.url, operation)
         guard reserved != .refused else { throw VaultFailure(.busy, code: "change_in_flight") }
         do {
-            return try prepareChange(operation: operation)
+            return try prepareChange(operation: operation, unresolved: unresolved)
         } catch {
             // A retry that fails leaves its earlier send in flight; a new operation that fails frees the slot.
             if reserved == .reserved { ChangesInFlight.end(store.url, operation) }
@@ -39,17 +41,30 @@ extension PhoneSecrets {
         }
     }
 
-    private func prepareChange(operation: String) throws -> [UInt8] {
+    private func prepareChange(operation: String, unresolved: UnresolvedChange?) throws -> [UInt8] {
         try store.exclusive {
             var recs = try readRecords()
             guard let cur = recs.current else { throw Self.lost }
-            if let again = recs.candidates.first(where: { $0.operation == operation }) { return try secret(of: again.entry) }
+            if let again = recs.candidates.first(where: { $0.operation == operation }) {
+                var s = try secret(of: again.entry)
+                if let unresolved {
+                    recs.unresolved = unresolved
+                    do {
+                        try write(recs)
+                    } catch {
+                        Bytes.wipe(&s)
+                        throw error
+                    }
+                }
+                return s
+            }
             guard recs.candidates.count < Self.maxCandidates else {
                 throw VaultFailure(.unconfirmedChanges, code: "unconfirmed_changes")
             }
             var made = try newEpoch(try phoneKey(cur), keyVault: cur.record.keyVault, epoch: cur.record.epoch + 1, creating: false)
             let entry = PhoneRecords.Entry(keyID: cur.keyID, record: made.record)
             recs.candidates.append(PhoneRecords.Candidate(operation: operation, entry: entry))
+            if let unresolved { recs.unresolved = unresolved }
             do {
                 try write(recs)
             } catch {
@@ -71,12 +86,17 @@ extension PhoneSecrets {
     /// result): its record becomes current, and the record it replaces and every other candidate become replaced
     /// records. The vault's own answer also proves a record that only an unlock's `ok` made a replaced record, so it is
     /// found there too; never one that a later confirmed record displaced (a late or repeated answer of an older change).
-    /// False when no record can be made current that way.
+    /// False when no record can be made current that way. [clearing]: the unresolved change of that id is cleared in the
+    /// same write.
     @discardableResult
-    public func confirmChange(operation: String) throws -> Bool {
+    public func confirmChange(operation: String, clearing: String? = nil) throws -> Bool {
         try store.exclusive {
             defer { ChangesInFlight.end(store.url, operation) }
             var recs = try readRecords()
+            // Only a marker that matched is cleared, and only then is anything written without a record made current
+            // (never an empty file after a wipe).
+            let cleared = clearing != nil && recs.unresolved?.id == clearing
+            if cleared { recs.unresolved = nil }
             if let i = recs.candidates.firstIndex(where: { $0.operation == operation }) {
                 promote(&recs, candidate: i)
             } else if let i = recs.replaced.lastIndex(where: { $0.operation == operation && $0.byUnlock }) {
@@ -84,6 +104,7 @@ extension PhoneSecrets {
                 recs.candidates.insert(PhoneRecords.Candidate(operation: operation, entry: back.entry), at: 0)
                 promote(&recs, candidate: 0)
             } else {
+                if cleared { try write(recs) }
                 return false
             }
             try write(recs)
@@ -91,18 +112,43 @@ extension PhoneSecrets {
         }
     }
 
+    // MARK: - The unresolved change (§11.14.9 "A lost answer")
+
+    /// The change of PIN or password sent and not yet decided, if any.
+    public func unresolvedChange() throws -> UnresolvedChange? { try store.exclusive { try readRecords().unresolved } }
+
+    /// Stores [change] as the unresolved change (a password change, which makes no record), before its request is sent.
+    public func setUnresolved(_ change: UnresolvedChange) throws {
+        try store.exclusive {
+            var recs = try readRecords()
+            recs.unresolved = change
+            try write(recs)
+        }
+    }
+
+    /// The change [id] is decided (or was never sent): it is no longer unresolved. Its candidate stays as it is.
+    public func clearUnresolved(id: String) throws {
+        try store.exclusive {
+            var recs = try readRecords()
+            guard recs.unresolved?.id == id else { return }
+            recs.unresolved = nil
+            try write(recs)
+        }
+    }
+
     /// A change: [send] carries the next epoch's secret (written as a candidate first) and awaits the vault's answer;
     /// when [confirmed] says the answer is the operation's own, the candidate becomes current. Any other answer, an error,
     /// no answer or a cancellation leaves it a candidate (VAULT-MESSAGING §11.14.1 rule 5). The in-flight slot is held
     /// only while [send] runs and is freed however it ends (throw or cancellation included). A retry passes the same
-    /// [operation].
+    /// [operation]. [unresolved] is stored with the candidate, in the same write.
     public func change<Answer>(
         isolation: isolated (any Actor)? = #isolation,
         operation: String,
+        unresolved: UnresolvedChange? = nil,
         send: ([UInt8]) async throws -> Answer,
         confirmed: (Answer) -> Bool
     ) async throws -> Answer {
-        var next = try beginChange(operation: operation)
+        var next = try beginChange(operation: operation, unresolved: unresolved)
         defer {
             Bytes.wipe(&next)
             endChange(operation: operation)
@@ -120,12 +166,23 @@ extension PhoneSecrets {
     /// answer decided before the secret check ends the tries with the records unchanged. `ok` with the current record
     /// makes the candidates that existed when its secret was taken, and are not in flight, replaced records (the vault
     /// holds none of them); a candidate written or sent meanwhile stays. Returns the answer that decided.
+    ///
+    /// [tries] (VAULT-MESSAGING §11.14.9 "A lost answer" step 5, while a PIN change is unresolved): ``UnlockTries/current``
+    /// sends only the current record (with the previous PIN), whose `device_secret` is then the answer;
+    /// ``UnlockTries/candidate(operation:)`` sends only that change's candidate (with the new PIN), or tries as
+    /// ``UnlockTries/all`` when it is no longer a candidate.
     public func unlock<Answer: SecretCheckedAnswer>(
         isolation: isolated (any Actor)? = #isolation,
+        tries only: UnlockTries = .all,
         attempt: ([UInt8]) async throws -> Answer
     ) async throws -> Answer {
         let snapshot = try records()
         let tries: [PhoneRecords.Entry] = snapshot.candidates.reversed().map(\.entry) + snapshot.pendings.reversed()
+        if case .candidate(let op) = only, let own = snapshot.candidates.first(where: { $0.operation == op }) {
+            let outcome = try await tryInTurn([own.entry], attempt)
+            guard let answer = outcome.decided ?? outcome.last else { throw Self.lost }
+            return answer
+        }
         guard let cur = snapshot.current else {
             let outcome = try await tryInTurn(tries, attempt)
             guard let answer = outcome.decided ?? outcome.last else { throw Self.lost }
@@ -136,7 +193,7 @@ extension PhoneSecrets {
             try settle(openedWith: cur, candidatesThen: snapshot.candidates)
             return first
         }
-        guard first.code == UnlockEpoch.deviceSecret else { return first }
+        guard first.code == UnlockEpoch.deviceSecret, only != .current else { return first }
         return try await tryInTurn(tries, attempt).decided ?? first
     }
 
@@ -239,7 +296,8 @@ extension PhoneSecrets {
         try store.exclusive {
             var recs = try readRecords()
             guard recs.current == record else { return }
-            let inFlight = ChangesInFlight.current(store.url)
+            // The unresolved change's candidate is in flight too: its request may still reach the vault after this unlock.
+            let inFlight = ChangesInFlight.current(store.url).union([recs.unresolved?.operation].compactMap { $0 })
             let settles = { (c: PhoneRecords.Candidate) in then.contains(c) && !inFlight.contains(c.operation) }
             let settled = recs.candidates.filter(settles)
             guard !settled.isEmpty else { return }
@@ -273,6 +331,16 @@ extension PhoneSecrets {
             try write(recs)
         }
     }
+}
+
+/// Which records an unlock tries (``PhoneSecrets/unlock(isolation:tries:attempt:)``).
+public enum UnlockTries: Equatable, Sendable {
+    /// The current record, then on `device_secret` the candidates and the pending records.
+    case all
+    /// The current record only.
+    case current
+    /// The candidate of this change only (``all`` when it is no longer a candidate).
+    case candidate(operation: String)
 }
 
 /// The change operations in flight, per records file, for the whole process (in memory: nothing after a restart).

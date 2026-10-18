@@ -123,10 +123,22 @@ import VettIDDataTesting
         #expect(!m.state.refused)
     }
 
-    /// No answer: the password may already be the new one (the iPhone's text); leaving meanwhile stays busy.
-    @Test func noAnswerMayHaveChanged() async {
+    /// The new password typed with the PIN and sent.
+    func sendPassword(_ m: ChangePasswordViewModel) async {
+        m.setPin("975310")
+        m.setCurrent("old password 1")
+        m.setPassword("a much better passphrase here")
+        m.setConfirm("a much better passphrase here")
+        m.submit()
+        await m.settle()
+    }
+
+    /// VAULT-MESSAGING §11.14.9 "A lost answer": no answer is no failure; leaving meanwhile stays busy; the new password is
+    /// kept while the change is decided, and the decision arrives (applied: the usual success).
+    @Test func noAnswerIsCheckedNotFailed() async {
         repo.phoneSecret = true
-        repo.fail["changePassword"] = FakeVaultRepository.failure(.noResponse, code: VaultManager.codeChangeUnanswered)
+        repo.fail["changePassword"] = FakeVaultRepository.failure(.changeUnresolved, code: VaultManager.codeChangeUnresolved)
+        repo.changeCheck = ChangeCheck(.password, .unreachable)
         let m = ChangePasswordViewModel(repo: repo, vault: repo)
         m.setPin("975310")
         m.setCurrent("old password 1")
@@ -136,7 +148,43 @@ import VettIDDataTesting
         m.forgetSecrets()
         #expect(m.state.busy && m.state.password.isEmpty)
         await m.settle()
-        #expect(m.state.mayHaveChanged && m.state.error == .noResponse && !m.state.done)
+        #expect(m.state.check == .unreachable && m.state.error == nil && !m.state.done)
+        repo.fail["changePassword"] = FakeVaultRepository.failure(.changeUnresolved, code: VaultManager.codeChangeUnresolved)
+        await sendPassword(m)
+        #expect(m.state.check == .unreachable && m.state.password == "a much better passphrase here" && m.state.current.isEmpty)
+        repo.changeCheck = ChangeCheck(.password, .applied)
+        for _ in 0..<100 where !m.state.done { try? await Task.sleep(for: .milliseconds(20)) }
+        #expect(m.state.done && repo.changeCheck == nil)
+    }
+
+    /// Decided not applied: "not changed", the new password kept.
+    @Test func notAppliedKeepsTheNewPassword() async {
+        repo.phoneSecret = true
+        repo.fail["changePassword"] = FakeVaultRepository.failure(.other, code: VaultManager.codeChangeNotApplied)
+        let m = ChangePasswordViewModel(repo: repo, vault: repo)
+        await sendPassword(m)
+        #expect(m.state.check == .notApplied && m.state.error == nil && m.state.password == "a much better passphrase here")
+    }
+
+    /// A refusal decided while the screen waits shows as it is, the wrong entry cleared.
+    @Test func aLaterRefusalIsShownAsItIs() async {
+        repo.phoneSecret = true
+        repo.fail["changePassword"] = FakeVaultRepository.failure(.changeUnresolved, code: VaultManager.codeChangeUnresolved)
+        repo.changeCheck = ChangeCheck(.password, .checking)
+        let m = ChangePasswordViewModel(repo: repo, vault: repo)
+        await sendPassword(m)
+        repo.changeCheck = ChangeCheck(.password, .refused(.badPassword, code: "bad_password"))
+        for _ in 0..<100 where m.state.error == nil { try? await Task.sleep(for: .milliseconds(20)) }
+        #expect(m.state.error == .badPassword && m.state.check == nil && m.state.current.isEmpty)
+    }
+
+    /// §11.14.9 step 4: a wrong PIN clears the PIN and keeps the passwords.
+    @Test func aWrongPinClearsThePin() async {
+        repo.phoneSecret = true
+        repo.fail["changePassword"] = FakeVaultRepository.failure(.badPin, code: "bad_pin")
+        let m = ChangePasswordViewModel(repo: repo, vault: repo)
+        await sendPassword(m)
+        #expect(m.state.error == .badPin && m.state.pin.isEmpty && m.state.current == "old password 1")
     }
 
     @Test func aFailureIsShown() async {
@@ -149,6 +197,6 @@ import VettIDDataTesting
         m.setConfirm("a much better passphrase here")
         m.submit()
         await m.settle()
-        #expect(m.state.error == .badPin && !m.state.done && m.state.current.isEmpty && m.state.pin.isEmpty)
+        #expect(m.state.error == .badPin && !m.state.done && m.state.pin.isEmpty)
     }
 }

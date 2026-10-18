@@ -109,6 +109,12 @@ public enum FailureKind: Equatable, Sendable, CaseIterable {
     /// The vault's answer was too large to send to this phone (`response_too_large`, VAULT-MESSAGING §8.1): an answer
     /// is never silence. Nothing changed; a list asked for again in smaller pages may fit.
     case responseTooLarge
+    /// (VAULT-MESSAGING §11.14.9 "A lost answer") A change of PIN or password got no answer and is not decided yet, and
+    /// the vault cannot be reached to decide it: no other change, owner check or credential operation is sent until it is.
+    case changeUnresolved
+    /// (§11.14.9 "A lost answer") The same, while the vault answers but has not shown yet whether the change applied:
+    /// refused for now, without saying the vault cannot be reached.
+    case changeChecking
     case other
 }
 

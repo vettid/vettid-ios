@@ -187,8 +187,10 @@ public struct ChangePasswordState: Equatable, Sendable, CustomStringConvertible,
     public var busy = false
     public var error: FailureKind?
     public var done = false
-    /// The last change got no answer: the password may be the new one already (chosen; not in the spec).
-    public var mayHaveChanged = false
+    /// (VAULT-MESSAGING §11.14.9 "A lost answer") The last change got no answer and is being decided
+    /// (``ChangeCheck/Status/checking``, ``ChangeCheck/Status/unreachable``), or was decided as not applied
+    /// (``ChangeCheck/Status/notApplied``). No failure is shown meanwhile, and the new password is kept.
+    public var check: ChangeCheck.Status?
 
     public init(askPin: Bool = false) { self.askPin = askPin }
 
@@ -215,14 +217,52 @@ public final class ChangePasswordViewModel {
     public private(set) var state: ChangePasswordState
 
     @ObservationIgnored private let repo: any CredentialRepository
+    @ObservationIgnored private let vault: any VaultRepository
     @ObservationIgnored private let work = Work()
+    @ObservationIgnored private let followers = TaskBag()
 
     public init(repo: any CredentialRepository, vault: any VaultRepository) {
         self.repo = repo
+        self.vault = vault
         state = ChangePasswordState(askPin: vault.usesPhoneSecret)
+        followers.add(follow(self, read: { $0.vault.changeCheck }, apply: { $0.decided($1) }))
     }
 
-    deinit { work.cancelAll() }
+    deinit {
+        work.cancelAll()
+        followers.cancelAll()
+    }
+
+    /// The decision of a password change whose answer was lost (§11.14.9 "A lost answer"), as it arrives: applied is the
+    /// usual success; not applied keeps the new password for the next attempt; a refusal is shown as it is, with the
+    /// entry that was wrong cleared. A decision shown here is not shown again; one this screen did not wait for is the
+    /// shell's (``ChangeCheckNotice``).
+    private func decided(_ c: ChangeCheck?) {
+        guard let c, c.type == .password, !state.busy else { return }
+        if !c.undecided, state.check != .checking, state.check != .unreachable {
+            // Not this screen's wait (an earlier one, the screen closed meanwhile): the shell's notice tells it.
+            return
+        }
+        switch c.status {
+        case .checking, .unreachable:
+            state.check = c.status
+            vault.waitForChangeCheck(self)
+            return
+        case .applied:
+            state = ChangePasswordState(askPin: state.askPin)
+            state.done = true
+        case .notApplied:
+            state.check = .notApplied
+        case .refused(let kind, _):
+            state.check = nil
+            refused(VaultFailure(kind))
+        case .ended:
+            state.check = nil
+            state.error = .other
+        }
+        vault.waitForChangeCheck(nil)
+        vault.acknowledgeChangeCheck()
+    }
 
     /// The PIN from the keypad, handed over once, right before ``submit()``; "Don't use your PIN as your password."
     /// follows it.
@@ -254,8 +294,10 @@ public final class ChangePasswordViewModel {
     public func forgetSecrets() {
         guard !state.done else { return }
         let busy = state.busy
+        let check = state.check
         state = ChangePasswordState(askPin: state.askPin)
         state.busy = busy
+        state.check = check
     }
 
     public func submit() {
@@ -282,8 +324,9 @@ public final class ChangePasswordViewModel {
     private func send(_ s: ChangePasswordState) {
         state.busy = true
         state.error = nil
-        state.mayHaveChanged = false
+        state.check = nil
         let repo = repo
+        let vault = vault
         work.launch { [weak self] in
             var failure: VaultFailure?
             do {
@@ -295,20 +338,42 @@ public final class ChangePasswordViewModel {
             guard let failure else {
                 state = ChangePasswordState(askPin: s.askPin)
                 state.done = true
+                vault.acknowledgeChangeCheck()
                 return
             }
-            // weak_password (§11.14.7): its reason under the new password, in the same words as the app's.
             state.busy = false
-            state.current = ""
-            state.pin = ""
-            state.mayHaveChanged = failure.code == VaultManager.codeChangeUnanswered
-            if failure.kind == .weakPassword {
-                state.rule = PasswordRule.fromVault(failure.weakPasswordReason)
-                state.refused = true
-                state.error = nil
+            if let check = vault.changeCheck, check.type == .password, check.undecided, failure.kind == .changeUnresolved {
+                // §11.14.9 step 2: no failure; the new password is kept while the change is decided.
+                state.current = ""
+                state.pin = ""
+                state.check = check.status
+                vault.waitForChangeCheck(self)
+            } else if failure.code == VaultManager.codeChangeNotApplied {
+                state.current = ""
+                state.pin = ""
+                state.check = .notApplied
+                vault.acknowledgeChangeCheck()
             } else {
-                state.error = failure.kind
+                refused(failure)
+                vault.acknowledgeChangeCheck()
             }
+        }
+    }
+
+    /// A refusal shown as it is (§11.14.9 step 4): a wrong PIN clears the PIN, a wrong password the current password;
+    /// any other failure both (chosen; not in the spec); the new password stays. `weak_password` (§11.14.7): its reason
+    /// under the new password, in the same words as the app's.
+    private func refused(_ failure: VaultFailure) {
+        state.busy = false
+        state.check = nil
+        if failure.kind != .badPassword { state.pin = "" }
+        if failure.kind != .badPin { state.current = "" }
+        if failure.kind == .weakPassword {
+            state.rule = PasswordRule.fromVault(failure.weakPasswordReason)
+            state.refused = true
+            state.error = nil
+        } else {
+            state.error = failure.kind
         }
     }
 

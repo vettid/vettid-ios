@@ -441,6 +441,17 @@
         }
       }
     },
+    "credential_password_checking": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault hasn't answered yet, so VettID is checking whether your password was changed. Keep your new password at hand."
+          }
+        }
+      }
+    },
     "credential_password_confirm": {
       "extractionState": "manual",
       "localizations": {
@@ -496,6 +507,17 @@
         }
       }
     },
+    "credential_password_not_changed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your password was not changed. You can try again."
+          }
+        }
+      }
+    },
     "credential_password_same": {
       "extractionState": "manual",
       "localizations": {
@@ -503,6 +525,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Choose a password different from the current one."
+          }
+        }
+      }
+    },
+    "credential_password_unreachable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID can't reach your vault right now, so it doesn't know yet whether your password was changed. It will check as soon as it can. Keep both your old and your new password at hand."
           }
         }
       }
@@ -793,17 +826,6 @@
         }
       }
     },
-    "ios_credential_password_unanswered": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Your vault did not answer, so your password may already be the new one. Use the new password the next time you are asked for it. If it is not accepted, use your current password and try again."
-          }
-        }
-      }
-    },
     "ios_settings_attestation_body": {
       "extractionState": "manual",
       "localizations": {
@@ -954,17 +976,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Continue"
-          }
-        }
-      }
-    },
-    "ios_settings_pin_unanswered": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Your vault did not answer, so your PIN may already be the new one. Lock your vault and unlock it with the new PIN. If the new PIN does not work, unlock with your current PIN and try again."
           }
         }
       }
@@ -1928,6 +1939,17 @@
         }
       }
     },
+    "settings_pin_checking": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault hasn't answered yet, so VettID is checking whether your PIN was changed. Keep your new PIN at hand."
+          }
+        }
+      }
+    },
     "settings_pin_confirm": {
       "extractionState": "manual",
       "localizations": {
@@ -1994,6 +2016,17 @@
         }
       }
     },
+    "settings_pin_not_changed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your PIN was not changed. You can try again."
+          }
+        }
+      }
+    },
     "settings_pin_password": {
       "extractionState": "manual",
       "localizations": {
@@ -2045,6 +2078,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Change your vault PIN"
+          }
+        }
+      }
+    },
+    "settings_pin_unreachable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID can't reach your vault right now, so it doesn't know yet whether your PIN was changed. It will check as soon as it can. Keep both your old and your new PIN at hand."
           }
         }
       }

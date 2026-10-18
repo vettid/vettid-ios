@@ -12,6 +12,22 @@ extension OnboardingStrings {
     static func unlockBodyAccount(_ email: String) -> String {
         String(localized: "unlock_body_account", defaultValue: "Enter the vault PIN for \(email).", bundle: .module)
     }
+    /// ANDROID-PLAN 0.1.45 "A lost answer to a PIN or password change" (shared with the Android app): the unlock's first
+    /// step while a PIN change is unresolved.
+    static var unlockPreviousPin: String {
+        String(localized: "unlock_previous_pin", defaultValue: "Enter your previous PIN", bundle: .module)
+    }
+    static var unlockPreviousPinBody: String {
+        String(
+            localized: "unlock_previous_pin_body",
+            defaultValue: "Your last PIN change got no answer. If it went through, VettID will ask for your new PIN next.",
+            bundle: .module
+        )
+    }
+    /// The same, after the vault answered `device_secret` to the previous PIN.
+    static var unlockNewPin: String {
+        String(localized: "unlock_new_pin", defaultValue: "Your PIN change went through. Enter your new PIN.", bundle: .module)
+    }
     static var unlockSubmit: String {
         String(localized: "unlock_submit", defaultValue: "Unlock", bundle: .module)
     }

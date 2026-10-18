@@ -1794,6 +1794,39 @@
         }
       }
     },
+    "unlock_new_pin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your PIN change went through. Enter your new PIN."
+          }
+        }
+      }
+    },
+    "unlock_previous_pin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter your previous PIN"
+          }
+        }
+      }
+    },
+    "unlock_previous_pin_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your last PIN change got no answer. If it went through, VettID will ask for your new PIN next."
+          }
+        }
+      }
+    },
     "unlock_submit": {
       "extractionState": "manual",
       "localizations": {

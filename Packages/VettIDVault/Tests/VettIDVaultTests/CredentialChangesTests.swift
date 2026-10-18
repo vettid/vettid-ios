@@ -78,7 +78,7 @@ import VettIDCrypto
         let h = try await holder()
         let (d, v, api, utks, keys) = (h.d, h.v, h.api, h.utks, h.keys)
         let secret = [UInt8](repeating: 0x5A, count: 32)
-        let change = Task { try await api.pinChange(pin: "975310", newPin: "864201", password: "pw", newUnlockSecret: secret) }
+        let change = Task { try await api.pinChange(pin: "975310", newPin: "864201", password: "pw", newUnlockSecret: secret, change: try await api.newChange()) }
         try await ops.answer(v, d, "credential.utk.get", utks)
         let req = try await ops.answer(v, d, "pin.change", #"{"credential":"BAUG","version":2,"epoch_advanced":true}"#)
         #expect(try StrictJson.parseObject(req.body).string("credential") == "AQID")
@@ -88,7 +88,7 @@ import VettIDCrypto
         #expect(try p.base64("new_unlock_secret") == secret)
         try await ops.answer(v, d, "credential.ack")
         #expect(try await change.value)
-        let second = Task { try await api.pinChange(pin: "864201", newPin: "975310", password: "pw", newUnlockSecret: secret) }
+        let second = Task { try await api.pinChange(pin: "864201", newPin: "975310", password: "pw", newUnlockSecret: secret, change: try await api.newChange()) }
         try await ops.answer(v, d, "pin.change", #"{"credential":"BwgJ","version":3}"#)
         try await ops.answer(v, d, "credential.ack")
         #expect(try await second.value == false, "no epoch_advanced: not moved on")
@@ -98,7 +98,7 @@ import VettIDCrypto
     @Test func aPasswordChangeCarriesThePin() async throws {
         let h = try await holder()
         let (d, v, api, utks, keys) = (h.d, h.v, h.api, h.utks, h.keys)
-        let change = Task { try await api.credentialChangePassword(password: "Cafe\u{301} one", newPassword: "Cafe\u{301} two", pin: "975310") }
+        let change = Task { try await api.credentialChangePassword(password: "Cafe\u{301} one", newPassword: "Cafe\u{301} two", pin: "975310", change: try await api.newChange()) }
         try await ops.answer(v, d, "credential.utk.get", utks)
         let req = try await ops.answer(v, d, "credential.password.change", #"{"credential":"BAUG","version":2}"#)
         let p = try ops.payload(req, v.vaultID, keys)
@@ -106,7 +106,7 @@ import VettIDCrypto
         #expect(try p.string("password") == "Caf\u{e9} one" && p.string("new_password") == "Caf\u{e9} two" && p.string("pin") == "975310")
         try await ops.answer(v, d, "credential.ack")
         try await change.value
-        let without = Task { try await api.credentialChangePassword(password: "a", newPassword: "b") }
+        let without = Task { try await api.credentialChangePassword(password: "a", newPassword: "b", change: try await api.newChange()) }
         let req2 = try await ops.answer(v, d, "credential.password.change", #"{"credential":"BwgJ","version":3}"#)
         #expect(try ops.payload(req2, v.vaultID, keys).members.map(\.name) == ["password", "new_password"])
         try await ops.answer(v, d, "credential.ack")

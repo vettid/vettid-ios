@@ -93,5 +93,7 @@ extension VaultManager {
     /// The vault opened (an unlock, the end of onboarding, a start while open): the account is read again.
     func onOpened() {
         Task { [weak self] in await self?.refreshAccount() }
+        // A change whose answer was lost is decided as soon as the vault runs (§11.14.9 step 2).
+        kickChangeCheck()
     }
 }

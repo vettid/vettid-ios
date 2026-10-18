@@ -1,7 +1,7 @@
 import Foundation
 
 /// The PIN change's texts and the Settings rows of IOS-PLAN §8 I1.8b (vettid-android `feature/settings` `strings.xml`, word
-/// for word; `ios_` keys are the iPhone's own: the keypad's steps).
+/// for word; `ios_` keys are the iPhone's own: the keypad's steps). The lost-answer texts are ANDROID-PLAN 0.1.45's.
 enum PinStrings {
     static var vaultPin: String {
         String(localized: "settings_vault_pin", defaultValue: "Change vault PIN", bundle: .module)
@@ -79,12 +79,29 @@ enum PinStrings {
         String(localized: "ios_settings_pin_continue", defaultValue: "Continue", bundle: .module)
     }
 
-    static var pinUnanswered: String {
+    // ANDROID-PLAN 0.1.45 "A lost answer to a PIN or password change" (VAULT-MESSAGING §11.14.9), shared with the
+    // Android app.
+
+    static var pinChecking: String {
         String(
-            localized: "ios_settings_pin_unanswered",
+            localized: "settings_pin_checking",
             defaultValue: """
-                Your vault did not answer, so your PIN may already be the new one. Lock your vault and unlock it with the \
-                new PIN. If the new PIN does not work, unlock with your current PIN and try again.
+                Your vault hasn't answered yet, so VettID is checking whether your PIN was changed. Keep your new PIN at hand.
+                """,
+            bundle: .module
+        )
+    }
+
+    static var pinNotChanged: String {
+        String(localized: "settings_pin_not_changed", defaultValue: "Your PIN was not changed. You can try again.", bundle: .module)
+    }
+
+    static var pinUnreachable: String {
+        String(
+            localized: "settings_pin_unreachable",
+            defaultValue: """
+                VettID can't reach your vault right now, so it doesn't know yet whether your PIN was changed. It will check \
+                as soon as it can. Keep both your old and your new PIN at hand.
                 """,
             bundle: .module
         )

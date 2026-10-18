@@ -80,6 +80,9 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     public var phoneSecret = false
     /// (Release R, §11.14.10) Why the last "Finish the move" did not open the vault.
     public var moveFailure: FailureKind?
+    /// (VAULT-MESSAGING §11.14.9 "A lost answer" step 5) Which PIN is asked for: while a PIN change is unresolved, the
+    /// previous PIN, then the new one after the vault showed that it holds the change.
+    public var pinStep: UnlockPinStep = .pin
 
     public init(loading: Bool = true, email: String? = nil, phoneSecret: Bool = false) {
         self.loading = loading

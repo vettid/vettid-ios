@@ -169,7 +169,7 @@ extension FakeVaultService {
         case .held:
             heldSlots[rid] = try? Self.sealResult(kem, "vault.unlock.result", rid, unlockResult(pin: pin, secret: secret))
         case .vault, .answerLost, .offline, .unavailable:
-            slots[rid] = try? Self.sealResult(kem, "vault.unlock.result", rid, unlockResult(pin: pin, secret: secret))
+            slots[rid] = try? Self.sealResult(kem, "vault.unlock.result", rid, unlockResult(pin: pin, secret: secret), ts: stampNow)
             if case .answerLost = answer { lostSlots.insert(rid) }
         }
         return .json(202, "{}")
@@ -193,6 +193,7 @@ extension FakeVaultService {
         backoffUntil = nil
         vaultOpen = true
         statusState = Self.unlocked
+        handleWhileLockedRequests()
         let token = device.flatMap { try? self.token($0.relay) } ?? ""
         return #"{"ok":true,"state_seq":\#(stateSeq),"header_seq":\#(headerSeq),"token":"\#(token)","release":"\#(Self.pcr0)","release_number":3,"release_status":"active","manifest_serial":\#(vaultManifestSerial)}"#
     }
