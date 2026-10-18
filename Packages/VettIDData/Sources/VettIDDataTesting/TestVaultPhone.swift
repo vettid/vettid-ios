@@ -9,17 +9,33 @@ import VettIDRelay
 import VettIDVault
 
 /// TEST ONLY. A device attestation the fake enclave does not check (the TEST iOS attester of I1.3 replaces it): an
-/// iOS-shaped attestation and assertion over the challenge.
-public struct TestAttester: Attester {
+/// iOS-shaped attestation and assertion over the challenge, whose key id is SHA-256 of the challenge. It records the
+/// keys it attested and what the app confirmed and discarded (IOS-PLAN §6.2).
+public final class TestAttester: Attester, @unchecked Sendable {
+    private let lock = NSLock()
+    private var attestedKeys: [[UInt8]] = []
+    private var confirmedKeys: [[UInt8]] = []
+    private var discardedKeys: [[UInt8]] = []
+
     public init() {}
 
+    /// The key ids attested, in order.
+    public var attested: [[UInt8]] { lock.withLock { attestedKeys } }
+    public var confirmed: [[UInt8]] { lock.withLock { confirmedKeys } }
+    public var discarded: [[UInt8]] { lock.withLock { discardedKeys } }
+
     public func attest(_ challenge: [UInt8]) throws -> DeviceAttest {
-        try DeviceAttest.iosAttestation(keyID: Bytes.sha256(challenge), attestation: Array("test-attestation".utf8))
+        let k = Bytes.sha256(challenge)
+        lock.withLock { attestedKeys.append(k) }
+        return try DeviceAttest.iosAttestation(keyID: k, attestation: Array("test-attestation".utf8))
     }
 
     public func assert(_ signed: AttestSigned) throws -> DeviceAssertion {
         try DeviceAssertion.iosAssertion(Bytes.sha256(signed.clientDataHash))
     }
+
+    public func confirm(keyID: [UInt8]) throws { lock.withLock { confirmedKeys.append(keyID) } }
+    public func discard(keyID: [UInt8]) throws { lock.withLock { discardedKeys.append(keyID) } }
 }
 
 /// TEST ONLY. One iPhone running the app against a ``FakeVaultService``: software keys behind the Secure Enclave's
@@ -35,6 +51,10 @@ public final class TestVaultPhone {
     public let phoneKeys = SoftwarePhoneSecretSource()
     public let fileKeys = InMemoryFileKeyHolder()
     public let protectedData = ProtectedDataFlag(available: true)
+    /// The device attestation, kept across a restart.
+    public let attester: TestAttester
+    /// What the manager says of a damaged App Attest key record (``AttestStartOver``).
+    public let attestStartOver: AttestStartOver
     public let directory: URL
     /// What the first-run gate answers; a test sets it to make it refuse ("Unlock your iPhone").
     public var prepareFailure: (any Error & Sendable)? {
@@ -59,17 +79,36 @@ public final class TestVaultPhone {
         wipeTargets = TestWipeTargets(
             directory: directory, appKeys: appKeys, seedWrap: seedWrap, wrapped: wrapped, phoneKeys: phoneKeys, fileKeys: fileKeys
         )
-        manager = VaultManager(config: try Self.config(
-            service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock, wipeTargets
+        let attester = TestAttester()
+        let startOver = AttestStartOver()
+        self.attester = attester
+        attestStartOver = startOver
+        manager = VaultManager(config: try Self.configured(
+            service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock, wipeTargets,
+            attester, startOver
         ))
     }
 
     /// The app killed and started again: a new manager over the same keys and files.
     public func restart() throws {
         manager.stopCollecting()
-        manager = VaultManager(config: try Self.config(
-            service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock, wipeTargets
+        manager = VaultManager(config: try Self.configured(
+            service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock, wipeTargets,
+            attester, attestStartOver
         ))
+    }
+
+    // swiftlint:disable:next function_parameter_count
+    private static func configured(
+        _ service: FakeVaultService, _ appKeys: SoftwareAppKeyStore, _ seedWrap: SoftwareSeedWrapKeySource,
+        _ wrapped: InMemoryWrappedKeyStore, _ phoneKeys: SoftwarePhoneSecretSource, _ fileKeys: InMemoryFileKeyHolder,
+        _ protectedData: ProtectedDataFlag, _ directory: URL, _ gate: PrepareSwitch, _ clock: TestPhoneClock,
+        _ wipeTargets: TestWipeTargets, _ attester: TestAttester, _ startOver: AttestStartOver
+    ) throws -> VaultManagerConfig {
+        var c = try config(service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock, wipeTargets)
+        c.attester = attester
+        c.attestStartOver = startOver
+        return c
     }
 
     /// Stops the mailbox collection (the end of a test).

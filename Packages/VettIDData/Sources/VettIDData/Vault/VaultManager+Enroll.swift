@@ -130,6 +130,8 @@ extension VaultManager {
     /// An enrollment that made no vault: its nonces are dropped (a later `vault.enrolled` for it is not accepted), its
     /// pending epoch-1 record and key deleted, and a start-over allowed again.
     private func abandonEnrollment(_ s: VaultSession, _ epochID: String?) async throws {
+        // No request of it made a vault: none of the App Attest keys they attested is bound (IOS-PLAN §6.2).
+        for k in s.device.altState.enrollAttempts.compactMap(\.attestKeyID) { try config.attester.discard(keyID: k) }
         try await s.device.abandonEnrollment()
         if let epochID { try phoneSecrets.dropPending(id: epochID) }
         try record.update(since: record.generation) { $0.enrollStartedMs = nil }
@@ -146,6 +148,10 @@ extension VaultManager {
     /// With two such records left (their keys alive), it cannot tell: both stay pending, an unlock proves the right
     /// one, and setup carries on.
     func confirmEnrolledSecret(_ local: LocalAccount, _ d: VaultDevice) throws {
+        // The App Attest key of the request whose vault.enrolled arrived is the one the vault bound (IOS-PLAN §6.2). Best
+        // effort, at every start: a key already current changes nothing and writes nothing, and a record that cannot be
+        // written now never stops the start (the unlock's fallback finds the bound key).
+        if d.vaultID != nil, let k = d.altState.enrolledAttestKeyID { try? config.attester.confirm(keyID: k) }
         if d.vaultID != nil, !d.recovering, !local.vaultID.isEmpty {
             do {
                 try phoneSecrets.confirmPending(keyVault: local.vaultID)

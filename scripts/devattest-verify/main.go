@@ -6,6 +6,7 @@
 // challenge: the TEST Apple CA's root and intermediate tbsCertificate, the credential certificate's tbsCertificate
 // (serial 1001, the first in a process), the authenticator data, the receipt and each assertion's authenticator data.
 // It also checks that the verifier refuses the fixture with another challenge, a replayed counter and another App ID.
+// With --real it checks a real iPhone's App Attest objects against Apple's root instead (real.go).
 //
 // The file is compiled inside the vettid-vault module (it imports internal/enclavetest), through `go run -overlay`, so
 // the clone is never modified: run.sh does it.
@@ -108,8 +109,12 @@ func decodeAttestation(b []byte) attestation {
 func tbs(der []byte) []byte { return must(x509.ParseCertificate(der)).RawTBSCertificate }
 
 func main() {
+	if len(os.Args) == 4 && os.Args[1] == "--real" {
+		realMain(os.Args[2], os.Args[3])
+		return
+	}
 	if len(os.Args) != 2 {
-		fmt.Fprintln(os.Stderr, "usage: devattest-verify FIXTURE")
+		fmt.Fprintln(os.Stderr, "usage: devattest-verify FIXTURE | --real EXPORT TEAM_ID")
 		os.Exit(2)
 	}
 	var f fixture

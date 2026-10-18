@@ -9,7 +9,8 @@ import VettIDTesting
 @testable import VettID
 
 /// The app's wiring (IOS-PLAN §5, §6.1): the vault manager talks to this build's environment, the first-run cleanup ran
-/// at launch, and until the Secure Enclave and App Attest arrive (I1.4b) every setup is refused before anything is sent.
+/// at launch, the keys are the Secure Enclave's and App Attest where the device has them, and without them (the
+/// simulator) every setup is refused before anything is sent.
 @MainActor
 @Suite struct CompositionTests {
     @Test func theManagerUsesTheBuildsEnvironment() {
@@ -29,8 +30,28 @@ import VettIDTesting
         }
     }
 
-    /// IOS-PLAN ID17: until the Secure Enclave keys arrive the app lock cannot be turned on, and it is off.
-    @Test func theAppLockIsOffUntilTheSecureEnclaveArrives() async {
+    /// The Secure Enclave's keys and App Attest wherever the device has a Secure Enclave (App Attest refuses each call
+    /// itself where it is unsupported); the refusing placeholder elsewhere.
+    @Test func theKeysAreTheSecureEnclavesWhereThereIsOne() {
+        let h = AppComposition.shared.hardware
+        #if targetEnvironment(simulator)
+        #expect(!HardwareKeys.available)
+        #else
+        #expect(HardwareKeys.available == SecureEnclave.isAvailable)
+        #endif
+        if HardwareKeys.available {
+            #expect(h.appKeys is SecureEnclaveAppKeyStore && h.seedWrap is SecureEnclaveSeedWrapKeySource)
+            #expect(h.phone is SecureEnclavePhoneSecretSource && h.phone.sourceID == SecureEnclavePhoneSecretSource.tag)
+            #expect(h.attester is AppAttestAttester && h.appLock is SecureEnclaveAppLockKeys)
+        } else {
+            #expect(h.appKeys is NoSecureHardware && h.attester is NoSecureHardware && h.appLock is NoAppLockKeys)
+        }
+    }
+
+    /// IOS-PLAN ID17: without a Secure Enclave the app lock cannot be turned on, and it is off. (On an iPhone turning it on
+    /// shows Face ID: the owner's manual checklist.)
+    @Test(.enabled(if: !HardwareKeys.available))
+    func theAppLockIsOffWithoutASecureEnclave() async {
         let c = AppComposition.shared
         c.startAppLock()
         #expect(c.appLock.state == .disabled)
@@ -42,15 +63,29 @@ import VettIDTesting
     /// keychain item and key; the first-run cleanup's marker stays.
     @Test func theWipeErasesTheAppsDirectoriesAndKeys() throws {
         let data = try AppDirectories.data()
-        let t = AppWipeTargets(data: data, hardware: [PendingSecureHardware(sourceID: "test")])
+        let t = AppWipeTargets(data: data, hardware: [NoSecureHardware(sourceID: "test")])
         #expect(t.dirs == [data] && t.scratch.count == 4)
         #expect(t.marker.deletingLastPathComponent() == data)
         #expect(t.kept == [data.appendingPathComponent(FirstRunCleanup.markerName)])
         #expect(t.erasers.first is KeychainEraser)
     }
 
+    /// The placeholder never declares keys missing on an iPhone (where it may stand in for keys it cannot see): its
+    /// lookups are refused for now there, and missing only on the simulator.
+    @Test func thePlaceholderNeverDeclaresKeysMissingOnAnIPhone() throws {
+        let h = NoSecureHardware(sourceID: "test")
+        #if targetEnvironment(simulator)
+        #expect(isMissing((h as any AppKeyStore).lookup()) && isMissing(h.lookup(keyVault: "v", keyID: "k")))
+        #expect(try h.keyNames().isEmpty)
+        #else
+        #expect(isUnavailable((h as any AppKeyStore).lookup()) && isUnavailable(h.lookup(keyVault: "v", keyID: "k")))
+        #expect(throws: KeysError.unavailable("phone keys")) { _ = try h.keyNames() }
+        #expect(KeysUsableCheck.appKey(h) == .unavailable)
+        #endif
+    }
+
     @Test func theSecureHardwarePlaceholderRefusesEverything() {
-        let h = PendingSecureHardware(sourceID: "test")
+        let h = NoSecureHardware(sourceID: "test")
         #expect(throws: KeysError.noSecureHardware) { _ = try (h as any AppKeyStore).getOrCreate() }
         #expect(throws: KeysError.noSecureHardware) { _ = try (h as any SeedWrapKeySource).getOrCreate() }
         #expect(throws: KeysError.noSecureHardware) { _ = try h.create(keyVault: "v") }
@@ -63,7 +98,7 @@ import VettIDTesting
     @Test func aSetupIsRefusedBeforeAnythingIsSent() async throws {
         let server = FakeHTTPServer()
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("vettid-composition-tests/\(UUID().uuidString)")
-        let h = PendingSecureHardware(sourceID: "test-\(UUID().uuidString)")
+        let h = NoSecureHardware(sourceID: "test-\(UUID().uuidString)")
         let on = ProtectedDataFlag(available: true)
         let m = VaultManager(config: VaultManagerConfig(
             apiOrigin: server.baseURL, manifestURL: server.baseURL + MemberApiClient.manifestPath, relayURL: server.baseURL,

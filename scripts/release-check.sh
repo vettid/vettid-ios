@@ -11,7 +11,8 @@
 #     attester's App ID),
 #   - a dev-stack address or a debug-only tool,
 #   - the other environment's hosts,
-# or lacks its own account host, or has another bundle id.
+# or lacks its own account host or the Secure Enclave phone key, or has
+# another bundle id, or is not signed for App Attest's production environment.
 #
 #   scripts/release-check.sh              build both, check both
 #   scripts/release-check.sh --self-test  also plant a TEST string and a
@@ -102,17 +103,38 @@ check_app() {
   echo "${app}: ${#forbidden[@]} forbidden strings absent, ${#required[@]} required present"
 }
 
+# The Secure Enclave phone key, the only phone key a Release or Staging app may hold (IOS-PLAN §6.3), and the real
+# App Attest service (IOS-PLAN §6.2) are linked.
+HARDWARE_KEYS=("SecureEnclavePhoneSecretSource" "DeviceCheckAppAttestService")
+
 check_release() {
-  check_app "$1" com.vettid.app "${PRODUCTION_HOSTS[@]}" \
+  check_app "$1" com.vettid.app "${PRODUCTION_HOSTS[@]}" "${HARDWARE_KEYS[@]}" \
     -- "${TEST_MARKERS[@]}" "${DEV_ONLY[@]}" "${STAGING_HOSTS[@]}" "${STAGING_KEYS[@]}"
 }
 
 check_staging() {
-  check_app "$1" com.vettid.app.staging "account.staging.vettid.org" \
+  check_app "$1" com.vettid.app.staging "account.staging.vettid.org" "${HARDWARE_KEYS[@]}" \
     -- "${TEST_MARKERS[@]}" "${DEV_ONLY[@]}" "${PRODUCTION_HOSTS[@]}"
 }
 
 app_of() { echo "${OUT}/$1.xcarchive/Products/Applications/VettID.app"; }
+
+# The archives are unsigned, so their entitlements are checked at the source: Release and Staging sign with the
+# production App Attest environment (IOS-PLAN §6.2; the vault accepts only it).
+check_entitlements_file() {
+  local what=$1 file=$2 env
+  [[ -n "${file}" && -f "${file}" ]] || { echo "${what}: no entitlements file" >&2; return 1; }
+  env=$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.devicecheck.appattest-environment' "${file}" 2>/dev/null || true)
+  [[ "${env}" == "production" ]] || { echo "${what}: App Attest environment '${env}', expected production" >&2; return 1; }
+  echo "${what}: App Attest environment production (${file})"
+}
+
+check_entitlements() {
+  local config=$1 file
+  file=$(xcodebuild -showBuildSettings -project VettID.xcodeproj -target VettID -configuration "${config}" 2>/dev/null |
+    sed -n 's/^ *CODE_SIGN_ENTITLEMENTS = //p')
+  check_entitlements_file "${config}" "${file}"
+}
 
 # The test-only hooks of the pure packages are compiled into debug builds only (#if DEBUG). The app may not link a
 # package's code yet (it is then dead-stripped and the scan above proves nothing), so the packages are also built on
@@ -151,6 +173,8 @@ check_package_hooks() {
 }
 
 check_package_hooks VettIDCrypto "VETTID TEST ONLY"
+check_entitlements Release
+check_entitlements Staging
 
 rm -rf "${OUT}/Release.xcarchive" "${OUT}/Staging.xcarchive"
 archive Release
@@ -209,6 +233,35 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
   plant Staging check_staging "Installed from: Xcode (development)"
   plant Release check_release "Drawer open"
   plant Staging check_staging "Drawer open"
+  # An entitlements file for the development environment, or none, must be refused.
+  dev="${OUT}/planted/development.entitlements"
+  mkdir -p "$(dirname "${dev}")"
+  sed 's|<string>production</string>|<string>development</string>|' Config/VettID-production.entitlements >"${dev}"
+  for f in "${dev}" "${OUT}/planted/none.entitlements"; do
+    if check_entitlements_file planted "${f}" >/dev/null 2>&1; then
+      echo "self-test FAILED: the entitlement check accepted ${f}" >&2
+      exit 1
+    fi
+  done
+  echo "self-test: the entitlement check refuses the development environment and a missing file"
+  # A required string removed (renamed in place, same length) from a copy of each app must fail the check.
+  unplant() {
+    local config=$1 checker=$2 required=$3
+    local copy="${OUT}/planted/${config}-without/VettID.app"
+    rm -rf "${OUT}/planted/${config}-without"
+    mkdir -p "$(dirname "${copy}")"
+    cp -R "$(app_of "${config}")" "${copy}"
+    find "${copy}" -type f -exec perl -0777 -pi -e "s/\Q${required}\E/'X' x length('${required}')/ge" {} +
+    if "${checker}" "${copy}" 2>/dev/null; then
+      echo "self-test FAILED: ${config} accepted an app without '${required}'" >&2
+      exit 1
+    fi
+    echo "self-test: ${config} refuses an app without '${required}'"
+  }
+  for key in "${HARDWARE_KEYS[@]}"; do
+    unplant Release check_release "${key}"
+    unplant Staging check_staging "${key}"
+  done
 fi
 
 echo "release check passed"

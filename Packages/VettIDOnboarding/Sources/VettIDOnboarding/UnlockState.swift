@@ -16,8 +16,8 @@ public extension UnlockMessage {
     /// they keep the keys-gone offer as it was.
     static let transientFailures: Set<FailureKind> = [
         .network, .servicePaused, .vaultUnavailable, .noResponse, .rateLimited, .busy, .retry, .clock, .manifestUnavailable,
-        // iPhone (IOS-PLAN §6.3): a locked iPhone says nothing about the keys either.
-        .phoneLocked,
+        // iPhone (IOS-PLAN §6.3): a locked iPhone says nothing about the keys either, nor does Apple unreachable (§6.2).
+        .phoneLocked, .appleUnreachable,
     ]
 
     /// The message of a failed unlock: on an old phone that keeps its keys after approving a transfer ([keptTransfer])

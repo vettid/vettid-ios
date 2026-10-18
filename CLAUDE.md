@@ -65,9 +65,15 @@ and then rewrite it against the spec with its tests.
 
   swiftlint lint --strict
 
-  # on the connected iPhone (device id from `xcrun devicectl list devices`)
-  xcodebuild test -project VettID.xcodeproj -scheme VettID -configuration Debug \
+  # on the connected iPhone (device id from `xcrun devicectl list devices`):
+  # the app-hosted tests only (VettIDDevice scheme), since package test
+  # bundles cannot run on a device
+  xcodebuild test -project VettID.xcodeproj -scheme VettIDDevice -configuration Debug \
     -destination 'platform=iOS,id=<device id>' -allowProvisioningUpdates
+  # optional, through TEST_RUNNER_<name>: VETTID_TEST_LOCK_WAIT=<seconds>
+  # (lock and unlock the phone when asked), VETTID_TEST_APPATTEST_EXPORT=1
+  # (then scripts/devattest-verify/run.sh --real, VA1), VETTID_TEST_ERASE_KEYCHAIN=1
+  # (erases every keychain item and key of the dev app, a dev vault's included)
   ```
 
 - **The Xcode project is generated** from `project.yml` with XcodeGen.

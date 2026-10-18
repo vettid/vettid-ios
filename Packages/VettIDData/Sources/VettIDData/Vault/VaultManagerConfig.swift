@@ -5,7 +5,7 @@ import VettIDKeys
 import VettIDRelay
 import VettIDVault
 
-/// The keys behind their protocols (IOS-PLAN §6.1): the Secure Enclave and App Attest on the iPhone (I1.4b), software
+/// The keys behind their protocols (IOS-PLAN §6.1): the Secure Enclave and App Attest on the iPhone, software
 /// keys in tests.
 public struct VaultKeys: Sendable {
     /// The app key (VAULT-MESSAGING §11.12.2), which signs every member API request.
@@ -98,7 +98,7 @@ public struct VaultManagerConfig: Sendable {
     /// The app's data directory.
     public var directory: URL
     public var keys: VaultKeys
-    /// The device attestation (§11.7): App Attest on the iPhone (I1.4b), the TEST attester on the dev stack (VettIDAltChanTesting).
+    /// The device attestation (§11.7): App Attest on the iPhone, the TEST attester on the dev stack (VettIDAltChanTesting).
     public var attester: any Attester
     public var protectedData: any ProtectedData
     /// How `vault.enrolled`'s attestation is checked (§11.3): ``EnrolledAttestation/nitro(roots:)`` in the app.
@@ -125,6 +125,9 @@ public struct VaultManagerConfig: Sendable {
     /// The build's environment as Settings → Attestation names it (`production`, `staging`, …).
     public var environment: String
     public var now: @Sendable () -> Date
+    /// (iPhone) Told whether no vault made or being made here can hold an App Attest key of this phone, from the account
+    /// record (``AttestStartOver``); nil where nothing listens.
+    public var attestStartOver: AttestStartOver?
 
     public init(
         apiOrigin: String,

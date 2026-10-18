@@ -292,6 +292,15 @@ enum DataStrings {
         )
     }
 
+    /// IOS-PLAN §14, "Apple unreachable at attestation" (iPhone only; no Android counterpart).
+    static var failureAppleUnreachable: String {
+        String(
+            localized: "data_failure_apple_unreachable",
+            defaultValue: "VettID couldn't reach Apple to confirm this is the genuine VettID app. Check your connection and try again.",
+            bundle: .module
+        )
+    }
+
     /// IOS-PLAN §14, "Phone locked during a request" (iPhone only; no Android counterpart).
     static var failurePhoneLocked: String {
         String(localized: "data_failure_phone_locked", defaultValue: "Unlock your iPhone, then try again.", bundle: .module)

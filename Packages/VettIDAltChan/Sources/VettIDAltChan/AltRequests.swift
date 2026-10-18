@@ -111,6 +111,8 @@ public enum AltRequests {
     ) throws -> BuiltEnroll {
         let t = ms(now)
         let rid = Ulid.new(t)
+        // IOS-PLAN §6.2: only the keys of the requests the state still keeps can be bound by a later vault.enrolled.
+        try attester.prune(keeping: state.enrollAttempts.compactMap(\.attestKeyID))
         let attest = try attester.attest(try AltChannel.devattChallenge(requestID: rid, vaultID: "", ts: Timestamps.formatMillis(t)))
         let nonce = Randomness.bytes(nonceSize)
         let request = EnrollRequest(
@@ -124,11 +126,17 @@ public enum AltRequests {
         let env = try AltChannel.sealRequest(etk: enclave.descriptor.etk, type: AltChannel.typeEnroll, requestID: rid, ts: t, body: body)
         // The earlier requests of this enrollment stay acceptable: one whose answer was lost may have made the vault.
         let next = state.startingEnrollRequest(
-            nonce: nonce, pcrs: enclave.measurements.joined(), number: enclave.release.number, vaultID: vaultID
+            nonce: nonce, pcrs: enclave.measurements.joined(), number: enclave.release.number, vaultID: vaultID,
+            attestKeyID: attest.iosKeyID
         )
+        // A request dropped from the kept ones (the oldest, or every one of another vault's enrollment) can no longer be
+        // answered by vault.enrolled: its key is never confirmed (IOS-PLAN §6.2).
+        let kept = Set(next.enrollAttempts.compactMap(\.attestKeyID))
+        for k in state.enrollAttempts.compactMap(\.attestKeyID) where !kept.contains(k) { try attester.discard(keyID: k) }
         return BuiltEnroll(
             request: SealedRequest(
-                requestID: rid, etkKid: enclave.descriptor.kid.description, envelope: env, manifestSHA256: manifest.sha256Hex
+                requestID: rid, etkKid: enclave.descriptor.kid.description, envelope: env, manifestSHA256: manifest.sha256Hex,
+                attestedKeyID: attest.iosKeyID
             ),
             state: next
         )
@@ -256,7 +264,10 @@ public enum AltRequests {
         let body = JsonBuilder().string("user_guid", userGuid).string("vault_id", code.vaultID).string("request_id", rid)
             .string("recovery_id", code.recoveryID).string("code", code.code).raw("app", appObj.build()).bytes()
         let env = try AltChannel.sealRequest(etk: enclave.descriptor.etk, type: typeRecoveryRegister, requestID: rid, ts: t, body: body)
-        return SealedRequest(requestID: rid, etkKid: enclave.descriptor.kid.description, envelope: env, manifestSHA256: nil)
+        return SealedRequest(
+            requestID: rid, etkKid: enclave.descriptor.kid.description, envelope: env, manifestSHA256: nil,
+            attestedKeyID: attest.iosKeyID
+        )
     }
 
     /// `vault.recovery.open` (§11.14.6, release R): the registered phone's PIN, password (NFC) and unlock secret, an open

@@ -1,6 +1,17 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "data_failure_apple_unreachable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID couldn't reach Apple to confirm this is the genuine VettID app. Check your connection and try again."
+          }
+        }
+      }
+    },
     "data_failure_attestation": {
       "extractionState": "manual",
       "localizations": {

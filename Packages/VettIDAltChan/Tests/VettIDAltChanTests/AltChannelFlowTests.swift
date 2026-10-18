@@ -48,6 +48,63 @@ struct SoftAttester: Attester {
     func assert(_ signed: AttestSigned) throws -> DeviceAssertion { try DeviceAssertion.androidSignature([4, 5, 6]) }
 }
 
+struct TestWriteFailure: Error {}
+
+/// A thread-safe counter: the number of calls before this one.
+final class Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var n = 0
+
+    func next() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        n += 1
+        return n - 1
+    }
+}
+
+/// An iOS-shaped attester that records what the flow confirms and discards: key n is [n].
+final class RecordingIOSAttester: Attester, @unchecked Sendable {
+    private let lock = NSLock()
+    private var made: UInt8 = 0
+    private var entries: [String] = []
+
+    var log: [String] { lock.withLock { entries } }
+
+    func attest(_ challenge: [UInt8]) throws -> DeviceAttest {
+        lock.lock()
+        made += 1
+        let n = made
+        lock.unlock()
+        return try DeviceAttest.iosAttestation(keyID: [n], attestation: [0xA1])
+    }
+
+    func assert(_ signed: AttestSigned) throws -> DeviceAssertion { try DeviceAssertion.iosAssertion([1]) }
+    /// How many other keys ``nextCandidate()`` offers.
+    var candidates = 0
+    /// Confirmations fail to be recorded.
+    var failConfirm = false
+
+    func confirm(keyID: [UInt8]) throws {
+        if failConfirm { throw TestWriteFailure() }
+        lock.withLock { entries.append("confirm \(keyID[0])") }
+    }
+    func discard(keyID: [UInt8]) { lock.withLock { entries.append("discard \(keyID[0])") } }
+    func confirmInUse() throws {
+        if failConfirm { throw TestWriteFailure() }
+        lock.withLock { entries.append("confirm in use") }
+    }
+
+    func nextCandidate() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        entries.append("next")
+        guard candidates > 0 else { return false }
+        candidates -= 1
+        return true
+    }
+}
+
 /// A minimal device: what VettIDVault's VaultDevice does for the alternate channel.
 final class TestParty: AltParty, @unchecked Sendable {
     let lock = NSLock()
@@ -143,6 +200,8 @@ final class FakeAltAPI: @unchecked Sendable {
                 return .json(200, #"{"instance_id":"\#(e.instanceID)","release":"\#(FakeEnclave.pcr0)","descriptor":"\#(Base64s.encodeStd(e.descriptor))","attestation":"AA=="}"#)
             case "/api/vault/enroll", "/api/vault/unlock":
                 return sealed(r, e, enroll: r.path.hasSuffix("enroll"))
+            case "/api/vault/recovery/register":
+                return sealed(r, e, enroll: false, type: AltResults.typeRecoveryResult)
             case "/api/vault/lock":
                 let rid = (try? StrictJson.parseObject(r.body).string("request_id")) ?? ""
                 slots[rid] = #"{"status":"done"}"#
@@ -158,7 +217,7 @@ final class FakeAltAPI: @unchecked Sendable {
         }
     }
 
-    private func sealed(_ r: FakeHTTPServer.Request, _ e: FakeEnclave, enroll: Bool) -> FakeHTTPServer.Answer {
+    private func sealed(_ r: FakeHTTPServer.Request, _ e: FakeEnclave, enroll: Bool, type recovery: String? = nil) -> FakeHTTPServer.Answer {
         guard let o = try? StrictJson.parseObject(r.body), let iid = try? o.string("instance_id"), let rid = try? o.string("request_id"),
               let env = try? Base64s.decodeStd(try o.string("envelope")), let kem = party?.kem.publicKey
         else { return .json(400, #"{"error":"bad_request"}"#) }
@@ -170,18 +229,8 @@ final class FakeAltAPI: @unchecked Sendable {
         }
         guard env.count == AltChannel.requestEnvelopeSize, let inner = try? e.open(env), inner.id == rid else { return .json(400, #"{"error":"bad_request"}"#) }
         if enroll, let vid = try? o.string("vault_id") { enrolledVaultIDs.append(vid) }
-        let result: String
-        if manifestFailFirst {
-            manifestFailFirst = false
-            result = enroll ? #"{"ok":false,"code":"manifest"}"# : #"{"ok":false,"code":"manifest","header_seq":0,"retry_after":0}"#
-        } else if let custom = resultFor?(r.path, inner) {
-            result = custom
-        } else if enroll {
-            result = #"{"ok":true,"vault_id":"0123456789abcdef0123456789abcdef"}"#
-        } else {
-            result = #"{"ok":true,"state_seq":5,"header_seq":3,"token":"v4.public.t","release":"\#(FakeEnclave.pcr0)","release_number":3,"release_status":"active","manifest_serial":\#(manifestSerial)}"#
-        }
-        let type = enroll ? AltResults.typeEnrollResult : AltResults.typeUnlockResult
+        let result = answer(r.path, inner, enroll: enroll, recovery: recovery != nil)
+        let type = recovery ?? (enroll ? AltResults.typeEnrollResult : AltResults.typeUnlockResult)
         guard let sealed = try? FakeEnclave.sealResult(kem, type, rid, result) else { return .empty(500) }
         if !slotOverrides.isEmpty {
             slots[rid] = slotOverrides.removeFirst() == "expired" ? #"{"status":"expired"}"# : #"{"status":"done","code":"etk_unknown"}"#
@@ -190,6 +239,18 @@ final class FakeAltAPI: @unchecked Sendable {
             slots[rid] = #"{"status":"done","envelope":"\#(Base64s.encodeStd(sealed))"\#(code)}"#
         }
         return .json(202, #"{"vault_id":"0123456789abcdef0123456789abcdef","request_id":"\#(rid)"}"#)
+    }
+
+    /// The sealed result of one request.
+    private func answer(_ path: String, _ inner: Inner, enroll: Bool, recovery: Bool) -> String {
+        if manifestFailFirst {
+            manifestFailFirst = false
+            return enroll ? #"{"ok":false,"code":"manifest"}"# : #"{"ok":false,"code":"manifest","header_seq":0,"retry_after":0}"#
+        }
+        if let custom = resultFor?(path, inner) { return custom }
+        if recovery { return #"{"ok":true}"# }
+        if enroll { return #"{"ok":true,"vault_id":"0123456789abcdef0123456789abcdef"}"# }
+        return #"{"ok":true,"state_seq":5,"header_seq":3,"token":"v4.public.t","release":"\#(FakeEnclave.pcr0)","release_number":3,"release_status":"active","manifest_serial":\#(manifestSerial)}"#
     }
 
     /// The request bodies the enclave opened, by path.
@@ -254,6 +315,105 @@ final class FakeAltAPI: @unchecked Sendable {
         let out = try await f.enroll(party: p, vaultID: "0123456789abcdef0123456789abcdef", userGuid: "guid-1", pin: "246802", attester: SoftAttester())
         #expect(out.ok)
         #expect(api.requests.filter { $0.path == MemberApiClient.manifestPath }.count == 2)
+    }
+
+    /// IOS-PLAN §6.2: the vault's answer to each enrollment request confirms or discards the App Attest key it attested
+    /// (a `manifest` refusal discards the first, the accepted retry confirms the second).
+    @Test func theEnrollmentAnswerConfirmsOrDiscardsTheAttestedKey() async throws {
+        let (api, p, f) = try setUp()
+        api.manifestFailFirst = true
+        let attester = RecordingIOSAttester()
+        let out = try await f.enroll(party: p, vaultID: "0123456789abcdef0123456789abcdef", userGuid: "guid-1", pin: "246802", attester: attester)
+        #expect(out.ok)
+        #expect(attester.log == ["discard 1", "confirm 2"])
+    }
+
+    /// IOS-PLAN §6.2: A expires (it may have made the vault), B never reaches the vault (`etk_unknown`), C is refused
+    /// (`vault_exists`): B and C are discarded, A is kept.
+    @Test func aRequestThatNeverReachedTheVaultDiscardsItsKey() async throws {
+        let (api, p, f) = try setUp()
+        api.slotOverrides = ["expired", "etk"]
+        api.resultFor = { path, _ in path.hasSuffix("enroll") ? #"{"ok":false,"code":"vault_exists"}"# : nil }
+        let attester = RecordingIOSAttester()
+        let out = try await f.enroll(party: p, vaultID: "0123456789abcdef0123456789abcdef", userGuid: "guid-1", pin: "246802", attester: attester)
+        #expect(!out.ok && out.code == "vault_exists")
+        #expect(attester.log == ["discard 2", "discard 3"])
+        // Each kept request names its key: vault.enrolled for A's names key 1.
+        #expect(p.state.enrollAttempts.map(\.attestKeyID) == [[3], [2], [1]])
+        #expect(p.state.applyingEnrolled(stateSeq: 1, attempt: p.state.enrollAttempts.last).enrolledAttestKeyID == [1])
+    }
+
+    /// IOS-PLAN §6.2: a request dropped from the kept ones can never be confirmed: its key is discarded. Two tries of
+    /// four expired requests: the state keeps the five newest, so keys 1 to 3 go.
+    @Test func aRequestNoLongerKeptDiscardsItsKey() async throws {
+        let (api, p, f) = try setUp()
+        api.slotOverrides = Array(repeating: "expired", count: 8)
+        let attester = RecordingIOSAttester()
+        for _ in 0 ..< 2 {
+            _ = try? await f.enroll(party: p, vaultID: "0123456789abcdef0123456789abcdef", userGuid: "guid-1", pin: "246802", attester: attester)
+        }
+        #expect(attester.log == ["discard 1", "discard 2", "discard 3"])
+        #expect(p.state.enrollAttempts.map(\.attestKeyID) == [[8], [7], [6], [5], [4]])
+    }
+
+    /// A confirmation that cannot be recorded never turns what the vault did into a failure (the unlock's fallback and
+    /// vault.enrolled confirm the key later).
+    @Test func aFailedConfirmationIsNotAFailure() async throws {
+        let (_, p, f) = try setUp()
+        let attester = RecordingIOSAttester()
+        attester.failConfirm = true
+        let out = try await f.enroll(party: p, vaultID: "0123456789abcdef0123456789abcdef", userGuid: "guid-1", pin: "246802", attester: attester)
+        #expect(out.ok)
+        p.vaultID = out.vaultID
+        p.state = p.state.applyingEnrolled(stateSeq: 1)
+        #expect(try await f.unlock(party: p, userGuid: "guid-1", pin: "246802", attester: attester).ok)
+    }
+
+    /// An unlock refused for its assertion while no key is confirmed tries the next unconfirmed key; the accepted one is
+    /// confirmed.
+    @Test func anUnlockRefusedForItsAssertionTriesTheNextKey() async throws {
+        let (api, p, f) = try setUp()
+        p.vaultID = "0123456789abcdef0123456789abcdef"
+        let refused = Counter()
+        api.resultFor = { path, _ in
+            guard path.hasSuffix("unlock"), refused.next() == 0 else { return nil }
+            return #"{"ok":false,"code":"attestation","header_seq":0,"retry_after":0}"#
+        }
+        let attester = RecordingIOSAttester()
+        attester.candidates = 1
+        let u = try await f.unlock(party: p, userGuid: "guid-1", pin: "246802", attester: attester)
+        #expect(u.ok)
+        #expect(attester.log == ["next", "confirm in use"])
+        // No other key: the refusal is the answer.
+        let again = Counter()
+        api.resultFor = { path, _ in
+            guard path.hasSuffix("unlock"), again.next() < 9 else { return nil }
+            return #"{"ok":false,"code":"attestation","header_seq":0,"retry_after":0}"#
+        }
+        let none = RecordingIOSAttester()
+        let r = try await f.unlock(party: p, userGuid: "guid-1", pin: "246802", attester: none)
+        #expect(!r.ok && r.result.code == "attestation" && none.log == ["next"])
+    }
+
+    /// IOS-PLAN §6.2: a recovery's register confirms the key it attested on `ok` and discards it on a sealed refusal or
+    /// when it never reached the vault.
+    @Test func aRecoveryRegisterConfirmsOrDiscardsItsKey() async throws {
+        let (api, p, f) = try setUp()
+        let attester = RecordingIOSAttester()
+        let code = RecoveryCode(vaultID: "0123456789abcdef0123456789abcdef", recoveryID: "01JA0RECVERY0000000000001X", code: "AbCdEfGhIjKlMnOpQrStUv")
+        let app = p.app
+        func register() async throws -> RecoveryResult {
+            try await f.recoveryRegister(vaultID: code.vaultID, attester: attester, build: { e in
+                try AltRequests.buildRecoveryRegister(userGuid: "guid-1", code: code, enclave: e, attester: attester, app: app, now: Date())
+            }, open: { raw, rid in
+                try RecoveryResult.parse(try AltResults.open(raw, kem: p.kem, type: AltResults.typeRecoveryResult, requestID: rid))
+            })
+        }
+        #expect(try await register().ok)
+        api.slotOverrides = ["etk"]
+        api.resultFor = { path, _ in path.hasSuffix("register") ? #"{"ok":false,"code":"recovery_unknown"}"# : nil }
+        #expect(try await !register().ok)
+        #expect(attester.log == ["confirm 1", "discard 2", "discard 3"])
     }
 
     /// A served manifest older than one already seen is refused before anything is sealed (§11.10.1).

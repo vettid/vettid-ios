@@ -96,6 +96,9 @@ public enum FailureKind: Equatable, Sendable, CaseIterable {
     case weakPassword
     /// The phone cannot keep its keys in secure hardware: no enrollment, transfer to it or recovery.
     case hardwareKeys
+    /// (iPhone, IOS-PLAN §6.2) Apple's App Attest service could not be reached at an attestation: nothing was sent; the
+    /// member checks the connection and tries again.
+    case appleUnreachable
     /// (iPhone, IOS-PLAN §6.3) The iPhone is locked, or has not been unlocked since it started, so its keys or records
     /// cannot be used now: temporary, never "this phone no longer holds the keys". Every key and record is kept; the
     /// member unlocks the iPhone and tries again.

@@ -55,6 +55,7 @@ public extension FailureKind {
         case .storedMismatch: DataStrings.failureStoredMismatch
         case .weakPassword: DataStrings.failureWeakPassword
         case .hardwareKeys: DataStrings.failureHardwareKeys
+        case .appleUnreachable: DataStrings.failureAppleUnreachable
         case .phoneLocked: DataStrings.failurePhoneLocked
         case .unconfirmedChanges: DataStrings.failureUnconfirmedChanges
         case .capabilityRollback: DataStrings.failureCapabilityRollback
@@ -116,6 +117,7 @@ public extension FailureKind {
         case .storedMismatch: "data_failure_stored_mismatch"
         case .weakPassword: "data_failure_weak_password"
         case .hardwareKeys: "data_failure_hardware_keys"
+        case .appleUnreachable: "data_failure_apple_unreachable"
         case .phoneLocked: "data_failure_phone_locked"
         case .unconfirmedChanges: "data_failure_unconfirmed_changes"
         case .capabilityRollback: "data_failure_capability_rollback"

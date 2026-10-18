@@ -14,12 +14,16 @@ public struct AltState: Equatable, Sendable, CustomStringConvertible {
         public let number: UInt64
         /// The vault the request enrolled (the redeem's `vault_id`): only its `vault.enrolled` answers it.
         public let vaultID: String
+        /// (iOS) The App Attest key id the request attested: the key the vault binds if this request made it (IOS-PLAN
+        /// §6.2; chosen; not in the spec).
+        public let attestKeyID: [UInt8]?
 
-        public init(nonce: [UInt8], pcrs: String, number: UInt64, vaultID: String) {
+        public init(nonce: [UInt8], pcrs: String, number: UInt64, vaultID: String, attestKeyID: [UInt8]? = nil) {
             self.nonce = nonce
             self.pcrs = pcrs
             self.number = number
             self.vaultID = vaultID
+            self.attestKeyID = attestKeyID
         }
     }
 
@@ -40,6 +44,11 @@ public struct AltState: Equatable, Sendable, CustomStringConvertible {
     public var enrollNumber: UInt64 = 0
     /// The vault the pending enrollment's newest request enrolled.
     public var enrollVaultID = ""
+    /// (iOS) The App Attest key id the pending enrollment's newest request attested.
+    public var enrollAttestKeyID: [UInt8]?
+    /// (iOS) The App Attest key id of the request whose `vault.enrolled` arrived: the key the vault bound, which the app
+    /// confirms (IOS-PLAN §6.2; chosen; not in the spec).
+    public var enrolledAttestKeyID: [UInt8]?
     /// Earlier requests of the same enrollment, oldest first (at most ``maxPriorEnrolls``): a request whose answer was
     /// lost may still have made the vault, and its `vault.enrolled` arrives after a retry replaced the newest nonce.
     public var enrollPrior: [EnrollAttempt] = []
@@ -55,13 +64,18 @@ public struct AltState: Equatable, Sendable, CustomStringConvertible {
         if let n = enrollNonce { b.base64("enroll_nonce", n) }
         b.string("enroll_pcrs", enrollPcrs).uint("enroll_number", enrollNumber)
         if !enrollVaultID.isEmpty { b.string("enroll_vault_id", enrollVaultID) }
+        if let k = enrollAttestKeyID { b.base64("enroll_attest_key_id", k) }
+        if let k = enrolledAttestKeyID { b.base64("enrolled_attest_key_id", k) }
         if !enrollPrior.isEmpty {
-            b.raw("enroll_prior", JsonBuilder.array(enrollPrior.map {
-                JsonBuilder().base64("nonce", $0.nonce).string("pcrs", $0.pcrs).uint("number", $0.number)
-                    .string("vault_id", $0.vaultID).build()
-            }))
+            b.raw("enroll_prior", JsonBuilder.array(enrollPrior.map(Self.priorJSON)))
         }
         return b.build()
+    }
+
+    private static func priorJSON(_ a: EnrollAttempt) -> String {
+        let o = JsonBuilder().base64("nonce", a.nonce).string("pcrs", a.pcrs).uint("number", a.number).string("vault_id", a.vaultID)
+        if let k = a.attestKeyID { o.base64("attest_key_id", k) }
+        return o.build()
     }
 
     /// Applies vault.enrolled to the app state (§11.3 "App state"): the release the enrollment was sealed to, and its
@@ -77,7 +91,9 @@ public struct AltState: Equatable, Sendable, CustomStringConvertible {
             s.releaseNumber = a.number
         }
         if let n = stateSeq, n > s.stateSeq { s.stateSeq = n }
-        return s.withoutEnrollment()
+        s = s.withoutEnrollment()
+        if let k = attempt?.attestKeyID { s.enrolledAttestKeyID = k }
+        return s
     }
 
     /// The pending enrollment, newest request first then the earlier ones, newest first.
@@ -85,7 +101,9 @@ public struct AltState: Equatable, Sendable, CustomStringConvertible {
 
     /// The newest request of the pending enrollment.
     public var currentEnroll: EnrollAttempt? {
-        enrollNonce.map { EnrollAttempt(nonce: $0, pcrs: enrollPcrs, number: enrollNumber, vaultID: enrollVaultID) }
+        enrollNonce.map {
+            EnrollAttempt(nonce: $0, pcrs: enrollPcrs, number: enrollNumber, vaultID: enrollVaultID, attestKeyID: enrollAttestKeyID)
+        }
     }
 
     /// Without a pending enrollment: nothing of it is accepted any more (a refused or abandoned enrollment).
@@ -95,6 +113,7 @@ public struct AltState: Equatable, Sendable, CustomStringConvertible {
         s.enrollPcrs = ""
         s.enrollNumber = 0
         s.enrollVaultID = ""
+        s.enrollAttestKeyID = nil
         s.enrollPrior = []
         return s
     }
@@ -102,13 +121,16 @@ public struct AltState: Equatable, Sendable, CustomStringConvertible {
     /// A new request of the enrollment of [vaultID]: the newest one is kept among the earlier ones (bounded); the
     /// requests of an enrollment of another vault are dropped (the app refuses a new vault while one of them may have
     /// made a vault).
-    func startingEnrollRequest(nonce: [UInt8], pcrs: String, number: UInt64, vaultID: String) -> AltState {
+    func startingEnrollRequest(
+        nonce: [UInt8], pcrs: String, number: UInt64, vaultID: String, attestKeyID: [UInt8]? = nil
+    ) -> AltState {
         var s = enrollAttempts.contains(where: { $0.vaultID != vaultID }) ? withoutEnrollment() : self
         if let cur = s.currentEnroll { s.enrollPrior = Array((s.enrollPrior + [cur]).suffix(Self.maxPriorEnrolls)) }
         s.enrollNonce = nonce
         s.enrollPcrs = pcrs
         s.enrollNumber = number
         s.enrollVaultID = vaultID
+        s.enrollAttestKeyID = attestKeyID
         return s
     }
 
@@ -130,11 +152,14 @@ public struct AltState: Equatable, Sendable, CustomStringConvertible {
         a.enrollPcrs = try o.optString("enroll_pcrs") ?? ""
         a.enrollNumber = try o.optUint("enroll_number", min: 0, max: max) ?? 0
         a.enrollVaultID = try o.optString("enroll_vault_id") ?? ""
+        a.enrollAttestKeyID = try o.optString("enroll_attest_key_id").map { try Base64s.decodeStd($0) }
+        a.enrolledAttestKeyID = try o.optString("enrolled_attest_key_id").map { try Base64s.decodeStd($0) }
         for v in try o.optArray("enroll_prior") ?? [] {
             let e = try v.asObject()
             a.enrollPrior.append(EnrollAttempt(
                 nonce: try e.base64("nonce"), pcrs: try e.string("pcrs"), number: try e.uint("number", min: 0, max: max),
-                vaultID: try e.optString("vault_id") ?? ""
+                vaultID: try e.optString("vault_id") ?? "",
+                attestKeyID: try e.optString("attest_key_id").map { try Base64s.decodeStd($0) }
             ))
         }
         a.enrollPrior = Array(a.enrollPrior.suffix(maxPriorEnrolls))

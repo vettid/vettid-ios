@@ -17,21 +17,27 @@ final class AppComposition {
     let inbox = SetupLinkInbox()
     let firstRun: FirstRunGate
     let vault: VaultManager
-    /// The app lock (ANDROID-PLAN D6, IOS-PLAN ID17): off until the Secure Enclave keys arrive (``PendingAppLockKeys``).
+    /// The app lock (ANDROID-PLAN D6, IOS-PLAN ID17): its key in the Secure Enclave; off where there is none
+    /// (``NoAppLockKeys``).
     let appLock: AppLock
+    /// The Secure Enclave keys and App Attest, or the refusing placeholder without them.
+    let hardware: HardwareKeys
 
     init(environment: AppEnvironment) {
         self.environment = environment
         let directory = Self.dataDirectory()
-        let hardware = PendingSecureHardware()
+        // Whether a damaged App Attest key record may start over: the vault manager keeps it current.
+        let startOver = AttestStartOver()
+        let hardware = HardwareKeys.current(protectedData: protectedData, startOver: startOver)
+        self.hardware = hardware
         let keys = VaultKeys(
-            appKeys: hardware, seedWrap: hardware, wrapped: KeychainWrappedKeyStore(protectedData: protectedData),
-            phone: hardware, files: KeychainFileKeyHolder(protectedData: protectedData)
+            appKeys: hardware.appKeys, seedWrap: hardware.seedWrap, wrapped: KeychainWrappedKeyStore(protectedData: protectedData),
+            phone: hardware.phone, files: KeychainFileKeyHolder(protectedData: protectedData)
         )
         // §6.1: every VettID keychain item, then each key source through its protocol; refused while the vault
         // manager's files exist.
         firstRun = FirstRunGate(FirstRunCleanup(
-            directory: directory, protectedData: protectedData, erasers: [KeychainEraser(), hardware],
+            directory: directory, protectedData: protectedData, erasers: [KeychainEraser()] + hardware.erasers,
             dataFiles: VaultFiles.all(in: directory)
         ))
         let trust: AltTrust
@@ -41,7 +47,7 @@ final class AppComposition {
             preconditionFailure("the build's manifest keys do not parse")
         }
         let gate = firstRun
-        vault = VaultManager(config: VaultManagerConfig(
+        var config = VaultManagerConfig(
             apiOrigin: environment.apiOrigin,
             manifestURL: environment.manifestURL,
             relayURL: environment.relayURL,
@@ -50,20 +56,22 @@ final class AppComposition {
             transport: HTTPTransport(session: URLSession(configuration: .ephemeral)),
             directory: directory,
             keys: keys,
-            attester: hardware,
+            attester: hardware.attester,
             protectedData: protectedData,
             enrolledAttestation: .nitro(roots: trust.nitroRoots),
             deviceName: UIDevice.current.model,
             prepare: { try gate.ensure() },
-            wipeTargets: AppWipeTargets(data: directory, hardware: [hardware]),
+            wipeTargets: AppWipeTargets(data: directory, hardware: hardware.erasers),
             // Settings → Attestation names the environment this build talks to as vettid-android does (`PRODUCTION`, …).
             environment: environment.kind.rawValue.uppercased()
-        ))
+        )
+        config.attestStartOver = startOver
+        vault = VaultManager(config: config)
         appLock = AppLock(
             store: FileAppLockStore(
                 directory: directory, keys: KeychainFileKeyHolder(protectedData: protectedData), protectedData: protectedData
             ),
-            keys: PendingAppLockKeys()
+            keys: hardware.appLock
         )
         // A wipe resets what lives in memory: the app lock, and a setup link waiting for the welcome screen.
         let lock = appLock

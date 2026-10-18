@@ -56,8 +56,8 @@ public extension AppLockKeys {
 
 /// The app-lock key in the Secure Enclave: a P-256 key whose private half needs `.biometryCurrentSet` (a new face or
 /// finger invalidates it) or `.devicePasscode`, `WhenUnlockedThisDeviceOnly`, never synchronizable; the data key sealed
-/// to it with ECIES (`eciesEncryptionCofactorVariableIVX963SHA256AESGCM`). Its use on the iPhone is accepted with the
-/// Secure Enclave keys (IOS-PLAN §8 I1.4); the app uses a refusing placeholder until then.
+/// to it with ECIES (`eciesEncryptionCofactorVariableIVX963SHA256AESGCM`). The app uses it wherever it has the Secure
+/// Enclave keys (IOS-PLAN §8 I1.4), a refusing placeholder elsewhere.
 public final class SecureEnclaveAppLockKeys: AppLockKeys, @unchecked Sendable {
     public static let tag = "com.vettid.applock.v1"
     static let algorithm = SecKeyAlgorithm.eciesEncryptionCofactorVariableIVX963SHA256AESGCM
