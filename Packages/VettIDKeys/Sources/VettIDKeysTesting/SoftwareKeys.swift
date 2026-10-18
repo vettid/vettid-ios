@@ -343,13 +343,8 @@ public final class SoftwareAppLockKeys: AppLockKeys, @unchecked Sendable, Custom
     }
 
     public func open(_ sealed: [UInt8], reason: String) async throws -> [UInt8] {
-        lock.lock()
-        opensValue += 1
-        let held = key
-        let prompt: Prompt = promptsValue.first ?? .succeed
-        if !promptsValue.isEmpty { promptsValue.removeFirst() }
-        lock.unlock()
-        guard let key = held else { throw AppLockKeyError.invalidated }
+        let prompt = takePrompt()
+        guard let key = lock.withLock({ key }) else { throw AppLockKeyError.invalidated }
         switch prompt {
         case .cancel: throw AppLockKeyError.cancelled
         case .fail: throw AppLockKeyError.failed
@@ -362,6 +357,16 @@ public final class SoftwareAppLockKeys: AppLockKeys, @unchecked Sendable, Custom
         } catch {
             throw AppLockKeyError.invalidated
         }
+    }
+
+    /// Counts a prompt and returns how it ends.
+    private func takePrompt() -> Prompt {
+        lock.lock()
+        defer { lock.unlock() }
+        opensValue += 1
+        let prompt: Prompt = promptsValue.first ?? .succeed
+        if !promptsValue.isEmpty { promptsValue.removeFirst() }
+        return prompt
     }
 
     public func delete() throws { lock.withLock { key = nil } }
