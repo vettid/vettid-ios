@@ -108,6 +108,7 @@ public final class TestVaultPhone {
                 backoff: { _ in .milliseconds(100) }
             ),
             wipeTargets: wipeTargets,
+            environment: "test",
             now: { clock.now }
         )
     }

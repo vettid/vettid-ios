@@ -19,6 +19,7 @@ public enum VettIDSymbol: String, CaseIterable, Sendable {
     case vault = "archivebox" // Inventory2
     case history = "clock.arrow.circlepath" // History
     case settings = "gearshape" // Settings
+    case help = "questionmark.circle" // HelpOutline
 
     // Actions
     case star = "star.fill" // Star
@@ -35,6 +36,23 @@ public enum VettIDSymbol: String, CaseIterable, Sendable {
     case verifiedUser = "checkmark.shield" // VerifiedUser
     case lock = "lock" // Lock
     case storage = "externaldrive" // Storage
+    case lockOpen = "lock.open" // LockOpen
+    case faceID = "faceid" // Fingerprint (the app lock with Face ID or Touch ID)
+    case passcode = "circle.grid.3x3" // Pin (the app lock with the passcode)
+    case timer = "timer" // Timer
+    case schedule = "clock" // Schedule
+    case pauseCircle = "pause.circle" // PauseCircleOutline
+    case openInNew = "arrow.up.forward.square" // OpenInNew
+    case tag = "number" // Tag
+    case update = "arrow.triangle.2.circlepath" // Update
+    case restore = "arrow.counterclockwise" // Restore
+    case devices = "laptopcomputer.and.iphone" // Devices
+    case person = "person" // Person
+    case email = "envelope" // Email
+    case groups = "person.3" // Groups
+    case cardMembership = "creditcard" // CardMembership
+    case gavel = "building.columns" // Gavel
+    case howToVote = "checkmark.rectangle" // HowToVote
 
     // States
     case info = "info.circle" // Info

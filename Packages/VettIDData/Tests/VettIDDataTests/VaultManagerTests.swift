@@ -148,6 +148,6 @@ func vaultFailure(_ body: @MainActor () async throws -> Void) async -> VaultFail
     @Test func laterOperationsAreNotSupportedYet() async throws {
         defer { phone.close() }
         #expect(await vaultFailure { _ = try await m.status() }?.kind == .notSupported)
-        #expect(await vaultFailure { _ = try await m.overview() }?.kind == .notSupported)
+        #expect(await vaultFailure { try await m.changePin(pin: "402817", newPin: "518293") }?.kind == .notSupported)
     }
 }

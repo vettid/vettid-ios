@@ -113,6 +113,7 @@ extension FakeVaultRepository: VaultRepository {
 
     public func overview() async throws -> VaultOverview {
         try call("overview")
+        if let overviewGate { try await overviewGate.value() }
         return overviewValue
     }
 
@@ -135,18 +136,7 @@ extension FakeVaultRepository: VaultRepository {
 
     public func attestationInfo() async throws -> AttestationInfo {
         try call("attestationInfo")
-        return AttestationInfo(
-            environment: "test",
-            keyPresent: true,
-            keyLevel: "STRONG_BOX",
-            strongBoxAvailable: true,
-            attestationVersion: 300,
-            verifiedBoot: "SelfSigned",
-            deviceLocked: true,
-            bootKeyFingerprint: "4e8e e8f7",
-            lastRelease: 3,
-            lastReleaseFingerprint: "aaaa bbbb"
-        )
+        return attestationValue
     }
 }
 

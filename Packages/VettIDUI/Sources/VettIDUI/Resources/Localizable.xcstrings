@@ -379,6 +379,17 @@
         }
       }
     },
+    "ios_core_ui_cd_close_menu": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close navigation menu"
+          }
+        }
+      }
+    },
     "ios_keypad_delete": {
       "extractionState": "manual",
       "localizations": {

@@ -50,6 +50,21 @@ public final class FakeVaultRepository: CustomStringConvertible {
         connections: 0
     )
     public var recoveryValue: RecoveryView?
+    /// Set: ``overview()`` waits for it (a status read still under way).
+    public var overviewGate: TestDeferred<Void>?
+    /// What ``attestationInfo()`` answers: an Android phone's, by default.
+    public var attestationValue = AttestationInfo(
+        environment: "test",
+        keyPresent: true,
+        keyLevel: "STRONG_BOX",
+        strongBoxAvailable: true,
+        attestationVersion: 300,
+        verifiedBoot: "SelfSigned",
+        deviceLocked: true,
+        bootKeyFingerprint: "4e8e e8f7",
+        lastRelease: 3,
+        lastReleaseFingerprint: "aaaa bbbb"
+    )
     public var lastPin: String?
     public var lastPassword: String?
     public var lastBackup: Bool?

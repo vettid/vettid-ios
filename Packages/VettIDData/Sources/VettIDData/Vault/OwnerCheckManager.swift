@@ -385,7 +385,7 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     }
 
     /// An RFC 3339 instant of the vault (with or without fractional seconds); nil when absent or unreadable.
-    nonisolated static func instant(_ s: String?) -> Date? {
+    public nonisolated static func instant(_ s: String?) -> Date? {
         guard let s else { return nil }
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

@@ -11,17 +11,11 @@ extension VaultManager {
     /// with I1.8 (History, New phone secret).
     func earlierSecretRestored() { renewSecretSuggested = true }
 
-    /// I1.8: Settings → Vault status.
-    public func overview() async throws -> VaultOverview { throw VaultFailure(.notSupported) }
-
     /// I1.8: Change PIN (release R: `changePin(pin:newPin:password:)`, which keeps its protocol default until then).
     public func changePin(pin: String, newPin: String) async throws { throw VaultFailure(.notSupported) }
 
     /// I1.8: deleting the vault from Settings (§12.5).
     public func deleteVault(pin: String, password: String) async throws { throw VaultFailure(.notSupported) }
-
-    /// I1.8: Settings → Vault status, with "Installed from" (ID15).
-    public func attestationInfo() async throws -> AttestationInfo { throw VaultFailure(.notSupported) }
 
     // MARK: - CredentialRepository (I1.8: the credential screen)
 

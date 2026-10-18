@@ -186,8 +186,26 @@ import VettIDDataTesting
     /// The shell's gate: past the deadline by the vault's state or by the phone's clock.
     @Test func theGateFollowsTheClock() {
         let v = OwnerCheckView(state: .ok, deadline: now.addingTimeInterval(1_800))
-        #expect(OwnerCheckGate.of(v, now: now) == OwnerCheckGate(gated: false, warning: true, holdOff: false))
+        #expect(OwnerCheckGate.of(v, now: now) == OwnerCheckGate(gated: false, warning: true, holdOff: false, deadline: v.deadline))
         #expect(OwnerCheckGate.of(v, now: now.addingTimeInterval(1_800)).gated)
         #expect(!OwnerCheckGate.of(nil, now: now).gated)
+    }
+
+    /// The shell's banners (vettid-android `OwnerCheckBanners`): the early warning only before the deadline, the hold-off
+    /// indicator with its end, the notices and the presence notice; nothing for a vault that has not reported its check.
+    @Test func theBannersFollowTheGate() {
+        let soon = OwnerCheckView(state: .ok, deadline: now.addingTimeInterval(1_800))
+        #expect(OwnerCheckGate.of(soon, now: now).warningShown && OwnerCheckGate.of(soon, now: now).bannerShown)
+        #expect(!OwnerCheckGate.of(soon, now: now.addingTimeInterval(1_800)).warningShown, "past the deadline the check gates")
+        #expect(!OwnerCheckGate.of(soon, now: now.addingTimeInterval(-3_600)).bannerShown, "more than an hour ahead")
+        let until = now.addingTimeInterval(86_400)
+        let off = OwnerCheckView(state: .ok, deadline: now.addingTimeInterval(7_200), hold: false, holdOffUntil: until)
+        let gate = OwnerCheckGate.of(off, now: now)
+        #expect(gate.holdOff && gate.holdOffUntil == until && gate.bannerShown && !gate.warningShown)
+        #expect(!OwnerCheckGate.of(off, now: until).holdOff, "the end date passed: the hold is back on")
+        #expect(!OwnerCheckGate.of(nil, now: now).bannerShown)
+        #expect(OwnerCheckGate.of(nil, now: now, presenceUnrecorded: true).bannerShown)
+        let notice = OwnerCheckNotice(itemID: "1", kind: "owner_check.failed", ref: "pin", at: now, urgent: true)
+        #expect(OwnerCheckGate.of(nil, now: now, notices: [notice]).bannerShown)
     }
 }

@@ -262,7 +262,7 @@ public final class FakeVaultService: @unchecked Sendable {
             case ("POST", "/api/vault/lock"): return memberLock(r)
             case ("GET", "/api/vault/status"):
                 if noVault { return .json(200, #"{"vault":null}"#) }
-                return .json(200, #"{"vault":{"vault_id":"\#(vaultID)","state":"\#(statusState)"}}"#)
+                return .json(200, #"{"vault":{"vault_id":"\#(vaultID)","state":"\#(statusState)","release":{"number":3,"status":"active"}}}"#)
             default:
                 if r.method == "GET", r.path.hasPrefix("/api/vault/requests/") { return slot(String(r.path.dropFirst("/api/vault/requests/".count))) }
                 return .json(404, #"{"error":"not_found"}"#)

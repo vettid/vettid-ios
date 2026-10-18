@@ -55,7 +55,9 @@ final class AppComposition {
             enrolledAttestation: .nitro(roots: trust.nitroRoots),
             deviceName: UIDevice.current.model,
             prepare: { try gate.ensure() },
-            wipeTargets: AppWipeTargets(data: directory, hardware: [hardware])
+            wipeTargets: AppWipeTargets(data: directory, hardware: [hardware]),
+            // Settings → Attestation names the environment this build talks to as vettid-android does (`PRODUCTION`, …).
+            environment: environment.kind.rawValue.uppercased()
         ))
         appLock = AppLock(
             store: FileAppLockStore(
