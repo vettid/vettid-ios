@@ -35,7 +35,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 REPO="$(pwd)"
 
-# The vettid-vault commit scripts/devattest-verify checks against (the App Attest extensions of vettid-vault #118).
+# The vettid-vault commit the dev stack runs: #118 or later, which accepts the App Attest extensions map the TEST attester sends by default.
 VAULT_REF="${VAULT_REF:-ed8929818d776e278bcb8b5756add909572f8838}"
 CACHE="${XDG_CACHE_HOME:-$HOME/.cache}"
 DATA="${DEVSTACK_DATA:-${CACHE}/vettid-devstack}"
