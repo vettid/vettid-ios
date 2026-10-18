@@ -61,7 +61,9 @@ public final class FakeVaultService: @unchecked Sendable {
     let instanceID = "i-0123456789abcdef0"
 
     let cond = NSCondition()
-    let manifestSigner = P256.Signing.PrivateKey()
+    /// The VAULT-MESSAGING §16 TEST manifest key (private scalar 32 × 0x21, public; key_id 1edbb48b6669decd), which no
+    /// build pins.
+    let manifestSigner = FakeVaultService.testManifestSigner
     let etk: KemPrivateKey
     let ik = Ed25519PrivateKey.generate()
     let kem: KemPrivateKey
@@ -75,6 +77,12 @@ public final class FakeVaultService: @unchecked Sendable {
     var weakPasswordReason: String?
     var statusState = "unlocked"
     var noVault = false
+    /// The published manifest's serial; nil: nothing is published (404).
+    var publishedSerialValue: UInt64? = 7
+    var manifestFetchesValue = 0
+    var manifestOfflineValue = false
+    /// The highest manifest serial the vault was sent (its sealed header's, §11.10.4).
+    var vaultManifestSerial: UInt64 = 7
 
     // The state of the fake (under ``cond``).
     var slots: [String: [UInt8]] = [:]
@@ -256,18 +264,21 @@ public final class FakeVaultService: @unchecked Sendable {
         return VerifiedEnclave(descriptor: d, measurements: r.measurements, release: r)
     }
 
-    func servedManifest() throws -> [UInt8] {
+    /// The served manifest of [serial], listing this service's release 3 `active`, signed by [signer] (the TEST key).
+    public func servedManifest(serial: UInt64 = 7, signer: P256.Signing.PrivateKey? = nil) throws -> [UInt8] {
         let entry = JsonBuilder().uint("release", 3).string("pcr0", Self.pcr0).string("pcr1", Self.pcr1).string("pcr2", Self.pcr2).string("seal_key", "arn:aws:kms:us-east-1:000000000000:key/test").string("status", "active").string("published_at", "2026-09-01T00:00:00Z").string("notes", "https://vettid.org/releases/3").build()
-        let m = JsonBuilder().uint("v", 1).uint("serial", 7).string("issued_at", "2026-10-02T12:00:00Z").raw("releases", JsonBuilder.array([entry])).bytes()
-        let sig = try manifestSigner.signature(for: Array(ReleaseManifest.label.utf8) + [0] + m).rawRepresentation
-        return JsonBuilder().base64("manifest", m).base64("sig", Array(sig)).string("key_id", try manifestKey.keyID).bytes()
+        let m = JsonBuilder().uint("v", 1).uint("serial", serial).string("issued_at", "2026-10-02T12:00:00Z").raw("releases", JsonBuilder.array([entry])).bytes()
+        let key = signer ?? manifestSigner
+        let sig = try key.signature(for: Array(ReleaseManifest.label.utf8) + [0] + m).rawRepresentation
+        let keyID = try ManifestKey(spki: Array(key.publicKey.derRepresentation)).keyID
+        return JsonBuilder().base64("manifest", m).base64("sig", Array(sig)).string("key_id", keyID).bytes()
     }
 
     // MARK: - The member API
 
     private func answerAPI(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer { // swiftlint:disable:this cyclomatic_complexity
         locked {
-            if r.path == MemberApiClient.manifestPath { return (try? servedManifest()).map { .bytes(200, $0) } ?? .empty(500) }
+            if r.path == MemberApiClient.manifestPath { return manifestAnswer() }
             // Every vault route is signed by the app key (§11.12.2).
             guard r.header(AppRequestSigning.header) != nil else { return .json(401, #"{"error":"unauthorized"}"#) }
             switch (r.method, r.path) {

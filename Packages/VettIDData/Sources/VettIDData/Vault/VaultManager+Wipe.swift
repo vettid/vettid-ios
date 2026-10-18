@@ -71,6 +71,8 @@ extension VaultManager {
             wipeDevice = nil
         }
         ownerChecks.clear()
+        // The canary manifest's file is in the data directory the wipe erases.
+        canary.forget()
         try? phoneSecrets.delete()
         usesPhoneSecret = false
         renewSecretSuggested = false
@@ -101,6 +103,7 @@ extension VaultManager {
         await wiper.resetMemory()
         guard wiper.clearAll() else { return false }
         ownerChecks.clear()
+        canary.forget()
         record.endWipe(complete: true)
         wipeEnded(.signedOut)
         return true

@@ -1,5 +1,6 @@
 #if os(iOS)
 import SwiftUI
+import UniformTypeIdentifiers
 import VettIDData
 import VettIDSettings
 import VettIDUI
@@ -129,20 +130,45 @@ public struct VaultStatusRoute: View {
     }
 }
 
-/// Attestation with its view model. Mirrors vettid-android's `AttestationRoute` destination.
+/// Attestation with its view model. [canary] and [canaryInbox]: the canary manifest, shown when one is installed, and
+/// the file importer that hands a picked file to the root's dialog (``CanaryManifestHost``), which asks before anything
+/// is installed. The importer's row is shown to every member (chosen; not in the spec: vettid-android has no picker, only
+/// the share intent). Mirrors vettid-android's `AttestationRoute` destination.
 public struct AttestationRoute: View {
     private let vault: any VaultRepository
+    private let canary: (any CanaryManifestRepository)?
+    private let canaryInbox: CanaryManifestInbox?
     private let onBack: @MainActor () -> Void
     @State private var model: AttestationViewModel?
+    @State private var importing = false
 
-    public init(vault: any VaultRepository, onBack: @escaping @MainActor () -> Void) {
+    public init(
+        vault: any VaultRepository,
+        canary: (any CanaryManifestRepository)? = nil,
+        canaryInbox: CanaryManifestInbox? = nil,
+        onBack: @escaping @MainActor () -> Void
+    ) {
         self.vault = vault
+        self.canary = canary
+        self.canaryInbox = canaryInbox
         self.onBack = onBack
     }
 
     public var body: some View {
-        AttestationContent(state: model?.state ?? LoadState(), onBack: onBack)
-            .onAppear { if model == nil { model = AttestationViewModel(vault: vault) } }
+        AttestationContent(
+            state: model?.state ?? LoadState(), onBack: onBack, canary: model?.canary, onRemoveCanary: { model?.removeCanary() },
+            onLoadCanary: canaryInbox == nil ? nil : { importing = true }
+        )
+        .onAppear { if model == nil { model = AttestationViewModel(vault: vault, canary: canary) } }
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
+            guard let inbox = canaryInbox else { return }
+            let url = try? result.get()
+            Task { @MainActor in
+                // Read off the main actor, bounded; a file that cannot be read is said so ("It could not be checked").
+                let doc = await Task.detached { url.flatMap { try? CanaryManifestInbox.readBounded($0) } }.value
+                if let doc { inbox.offer(doc) } else if url != nil { inbox.offerUnreadable() }
+            }
+        }
     }
 }
 #endif

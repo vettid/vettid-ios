@@ -84,6 +84,9 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// The account's names (VAULT-MESSAGING §10.8): the name change, which counts as an owner check for its PIN and
     /// password (§3.6.4).
     @ObservationIgnored public let profiles: ProfileManager
+    /// The canary manifest installed out of band (VAULT-RELEASES §10.1 step 9, VAULT-MESSAGING §11.10.1): used by the
+    /// alternate channel instead of the published manifest only while it is newer.
+    @ObservationIgnored public let canary: CanaryManifestManager
     /// The `pin.change` the member started and whose answer has not confirmed it: a retry reuses its next-epoch record
     /// (IOS-PLAN §6.3 item 2). In memory only.
     @ObservationIgnored var pinChangeOperation: String?
@@ -114,6 +117,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             auth: .appKey(StoredAppKeySigner(store: config.keys.appKeys), vaultID: { ids.current })
         )
         phoneSecrets = PhoneSecrets(keys: config.keys.phone, store: config.file(VaultFiles.phoneSecrets), now: config.now)
+        let ref = ManagerRef()
+        canary = Self.canaryManifests(config, member, ref)
         let timing = config.lockTiming
         let rec = record
         let lockFile = LockRecordFile(
@@ -131,7 +136,6 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             )
         }
         locking = LockSequence(sleep: timing.sleep)
-        let ref = ManagerRef()
         let checkFile = config.file(VaultFiles.ownerCheck)
         ownerChecks = OwnerCheckManager(
             ops: {
@@ -154,6 +158,15 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         lockPorts.manager = self
         holder = HolderWatch { [weak self] in await self?.wipeReplacedPhone() }
         refusals = RefusalWatch { [weak self] in self?.refusedOnRelay() }
+    }
+
+    /// The canary manifest in its encrypted file, checked against the serial this phone used and the published manifest.
+    private static func canaryManifests(_ config: VaultManagerConfig, _ api: MemberApiClient, _ ref: ManagerRef) -> CanaryManifestManager {
+        CanaryManifestManager(
+            store: CanaryManifestStore(file: config.file(VaultFiles.canary)), trust: config.trust,
+            seen: { try await ref.manager?.manifestSerialUsed() ?? 0 },
+            published: { try await api.manifest() }
+        )
     }
 
     /// The relay kept refusing this phone's messages to the vault (``RefusalWatch``): the unlock screen, which says so.
@@ -216,6 +229,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         try record.refuseWhileClosed()
         try record.load()
         ownerChecks.loadIfNeeded()
+        canary.loadIfNeeded()
         memberVault.set(recorded: record.value.vaultID)
         if account == nil { account = record.value.info }
         if !lockResumed {
@@ -258,8 +272,9 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         try prepared()
         let c = config
         let member = member
+        let source = canary.store
         let generation = sessionGeneration
-        let task = Task { try await Self.makeSession(c, member) }
+        let task = Task { try await Self.makeSession(c, member, source) }
         opening = task
         defer { opening = nil }
         let s = try await task.value
@@ -277,7 +292,9 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         return s
     }
 
-    private nonisolated static func makeSession(_ c: VaultManagerConfig, _ member: MemberApiClient) async throws -> VaultSession {
+    private nonisolated static func makeSession(
+        _ c: VaultManagerConfig, _ member: MemberApiClient, _ canary: CanaryManifestStore
+    ) async throws -> VaultSession {
         // A wipe cancels an opening: nothing more is made or written from here.
         try Task.checkCancellation()
         let keys = DeviceKeys(wrapper: SeedWrapper(source: c.keys.seedWrap), store: c.keys.wrapped)
@@ -300,7 +317,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         try Task.checkCancellation()
         // IOS-PLAN ID8: every vault this app holds is of release R, whose passwords are normalized to NFC (§11.14.7).
         let api = VaultApi(device: device) { true }
-        let alt = AltChannelFlow(api: member, trust: c.trust, now: c.now, verifyEnclave: c.enclaveCheck)
+        let alt = AltChannelFlow(api: member, trust: c.trust, now: c.now, canary: canary, verifyEnclave: c.enclaveCheck)
         return VaultSession(device: device, api: api, alt: alt)
     }
 
@@ -375,6 +392,12 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
 
     /// The code of a start-over refused because the phone may hold a vault (``mayHoldVault(_:)``).
     public nonisolated static let codeEnrollmentStarted = "enrollment_started"
+
+    /// The highest manifest serial this phone has used for its vault (§11.10.1), 0 without a device: the canary
+    /// manifest's installation check.
+    func manifestSerialUsed() async throws -> UInt64 {
+        try await storedSession()?.device.manifestSerialSeen() ?? 0
+    }
 
     /// The session when this phone has a device: the open one, or the one its stored state restores. Nil when it has
     /// none (nothing to protect, and no mailbox registered for nothing).

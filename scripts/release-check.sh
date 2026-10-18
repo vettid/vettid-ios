@@ -11,8 +11,11 @@
 #     attester's App ID),
 #   - a dev-stack address or a debug-only tool,
 #   - the other environment's hosts,
-# or lacks its own account host or the Secure Enclave phone key, or has
-# another bundle id, or is not signed for App Attest's production environment.
+#   - the VAULT-MESSAGING §16 TEST manifest key (a canary manifest is
+#     accepted only under the keys the build pins),
+# or lacks its own account host, the Secure Enclave phone key or the JSON
+# document type a canary manifest is opened with, or has another bundle id,
+# or is not signed for App Attest's production environment.
 #
 #   scripts/release-check.sh              build both, check both
 #   scripts/release-check.sh --self-test  also plant a TEST string and a
@@ -43,6 +46,11 @@ STAGING_HOSTS=("staging.vettid.org")
 # The staging channel's manifest key A (its SPKI and its key id): pinned by Staging and Debug builds only (ID10 of the
 # manifest pins; VettIDAttestation's ManifestKeys holds only the production keys).
 STAGING_KEYS=("MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEok8gqeC5VcGx4KL+B5fL7UgENBXf" "e9b3a403423120ac")
+# The VAULT-MESSAGING §16 TEST manifest key (private scalar 32 x 0x21, public; its SPKI and key id): the tests sign canary
+# manifests with it; no build may pin it, or anyone could sign a canary manifest that build accepts.
+TEST_MANIFEST_KEY=("MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERi26GuT8GpaLTazyDN1tvh" "1edbb48b6669decd")
+# The document type a canary manifest is opened with (VAULT-RELEASES §10.1 step 9): it works in Release and Staging too.
+DOCUMENT_TYPES=("public.json")
 
 archive() {
   local config=$1
@@ -108,13 +116,13 @@ check_app() {
 HARDWARE_KEYS=("SecureEnclavePhoneSecretSource" "DeviceCheckAppAttestService")
 
 check_release() {
-  check_app "$1" com.vettid.app "${PRODUCTION_HOSTS[@]}" "${HARDWARE_KEYS[@]}" \
-    -- "${TEST_MARKERS[@]}" "${DEV_ONLY[@]}" "${STAGING_HOSTS[@]}" "${STAGING_KEYS[@]}"
+  check_app "$1" com.vettid.app "${PRODUCTION_HOSTS[@]}" "${HARDWARE_KEYS[@]}" "${DOCUMENT_TYPES[@]}" \
+    -- "${TEST_MARKERS[@]}" "${DEV_ONLY[@]}" "${STAGING_HOSTS[@]}" "${STAGING_KEYS[@]}" "${TEST_MANIFEST_KEY[@]}"
 }
 
 check_staging() {
-  check_app "$1" com.vettid.app.staging "account.staging.vettid.org" "${HARDWARE_KEYS[@]}" \
-    -- "${TEST_MARKERS[@]}" "${DEV_ONLY[@]}" "${PRODUCTION_HOSTS[@]}"
+  check_app "$1" com.vettid.app.staging "account.staging.vettid.org" "${HARDWARE_KEYS[@]}" "${DOCUMENT_TYPES[@]}" \
+    -- "${TEST_MARKERS[@]}" "${DEV_ONLY[@]}" "${PRODUCTION_HOSTS[@]}" "${TEST_MANIFEST_KEY[@]}"
 }
 
 app_of() { echo "${OUT}/$1.xcarchive/Products/Applications/VettID.app"; }
@@ -233,6 +241,10 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
   plant Staging check_staging "Installed from: Xcode (development)"
   plant Release check_release "Drawer open"
   plant Staging check_staging "Drawer open"
+  for key in "${TEST_MANIFEST_KEY[@]}"; do
+    plant Release check_release "${key}"
+    plant Staging check_staging "${key}"
+  done
   # An entitlements file for the development environment, or none, must be refused.
   dev="${OUT}/planted/development.entitlements"
   mkdir -p "$(dirname "${dev}")"
@@ -258,7 +270,7 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
     fi
     echo "self-test: ${config} refuses an app without '${required}'"
   }
-  for key in "${HARDWARE_KEYS[@]}"; do
+  for key in "${HARDWARE_KEYS[@]}" "${DOCUMENT_TYPES[@]}"; do
     unplant Release check_release "${key}"
     unplant Staging check_staging "${key}"
   done

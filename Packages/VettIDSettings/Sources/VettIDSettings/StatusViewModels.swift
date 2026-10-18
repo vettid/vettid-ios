@@ -56,26 +56,33 @@ public final class VaultStatusViewModel {
     func settle() async { await work.settle() }
 }
 
-/// Attestation details: this phone's key and the enclave release last verified. vettid-android's canary manifest
-/// (VAULT-RELEASES §10.1 step 9, VettID's test phones only) is not part of the iPhone app yet. Mirrors vettid-android
-/// `AttestationViewModel`.
+/// Attestation details: this phone's key and the enclave release last verified, and the canary manifest when one is
+/// installed (VAULT-RELEASES §10.1 step 9: only on VettID's test phones). Mirrors vettid-android `AttestationViewModel`.
 @MainActor
 @Observable
 public final class AttestationViewModel {
     public private(set) var state = LoadState<AttestationInfo>()
 
     @ObservationIgnored private let vault: any VaultRepository
+    @ObservationIgnored private let canaryManifests: (any CanaryManifestRepository)?
     @ObservationIgnored private let work = Work()
 
     deinit { work.cancelAll() }
 
-    public init(vault: any VaultRepository) {
+    public init(vault: any VaultRepository, canary: (any CanaryManifestRepository)? = nil) {
         self.vault = vault
+        canaryManifests = canary
         work.launch { [weak self] in
             let s = await LoadState.of { try await vault.attestationInfo() }
             self?.state = s
         }
     }
+
+    /// The installed canary manifest, or nil (then nothing about it is shown).
+    public var canary: CanaryManifestView? { canaryManifests?.canaryManifest }
+
+    /// Stops using the canary manifest: the published one is used again.
+    public func removeCanary() { canaryManifests?.removeCanaryManifest() }
 
     /// TEST ONLY: returns once the work started has run.
     func settle() async { await work.settle() }

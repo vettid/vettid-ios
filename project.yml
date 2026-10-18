@@ -68,6 +68,16 @@ targets:
         VettIDRelayHost: $(VETTID_RELAY_HOST)
         VettIDManifestHost: $(VETTID_MANIFEST_HOST)
         VettIDManifestKeys: $(VETTID_MANIFEST_KEYS)
+        # A canary manifest (VAULT-RELEASES §10.1 step 9, VAULT-MESSAGING §11.10.1) is opened with VettID from Files, the
+        # share sheet or AirDrop, in every configuration (the canary phone runs the release build). JSON is declared at
+        # rank Alternate (VettID is never the default app for JSON) as a viewer; an opened file is copied in (not opened
+        # in place), only verified and shown, and installed only after the member confirms (App/CanaryManifestFiles.swift).
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: VettID release manifest
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [public.json]
+        LSSupportsOpeningDocumentsInPlace: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(VETTID_APP_BUNDLE_ID)

@@ -27,6 +27,7 @@
 		8F0C6136B60FB2202ED10C8F /* VettIDTesting in Frameworks */ = {isa = PBXBuildFile; productRef = CDD27B7550D27193C8607EDA /* VettIDTesting */; };
 		91EB5DA7D60B53E6CE50FCE0 /* GalleryScreenshots.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEAFD630960C3CA7D7885DEB /* GalleryScreenshots.swift */; };
 		926662D958BB0CF0087EB183 /* AppEnvironmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D78BD3F6C3BB2643C264466A /* AppEnvironmentTests.swift */; };
+		944241F35F84B24040C3C97F /* CanaryManifestFilesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6026316F2864710BB7DFBBCB /* CanaryManifestFilesTests.swift */; };
 		9AFDE19700D4376ECAACFF6B /* OwnerCheckCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABB2FC11CCF6AAD6F6399524 /* OwnerCheckCatalog.swift */; };
 		A360D45B8318FDF8128CA89C /* OnboardingCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABC062C8E50CF3A935F64F87 /* OnboardingCatalogTests.swift */; };
 		A3AE95670EF0C2711A08679E /* UnlockCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA46D6F62E13C2404BDC26A2 /* UnlockCatalog.swift */; };
@@ -34,6 +35,7 @@
 		A65E5E4EFA6A74AF7B884B2E /* AppAttestDeviceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D2B5CA030BC6FA62B3EEF7D /* AppAttestDeviceTests.swift */; };
 		AA35614CE1F4D97BC627B12F /* VettIDApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5C81B56C71C53452A052D2A /* VettIDApp.swift */; };
 		AA5AD3F7057CFA0BB16F4515 /* ShellCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2C4EF17933B13C37D62C1ED /* ShellCatalog.swift */; };
+		ADB09CCE535DE329A04819EC /* CanaryManifestFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F2EA67554B107444FF813EF /* CanaryManifestFiles.swift */; };
 		AE50D9820C7612104F1F51CF /* CompositionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EBB51B3CAEFFF548475E972 /* CompositionTests.swift */; };
 		AF0565C4247366AAC4EA95B8 /* InstalledFromBuild.swift in Sources */ = {isa = PBXBuildFile; fileRef = E19B16C3C80D7D44FEA75D72 /* InstalledFromBuild.swift */; };
 		B80076DE16F2BEDB9AC3AE54 /* SecureEnclaveDeviceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0D14B2DBE5EF0620ED73CEC /* SecureEnclaveDeviceTests.swift */; };
@@ -86,6 +88,7 @@
 		5CBB4C9A8E482B333CED7362 /* AppLockGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLockGate.swift; sourceTree = "<group>"; };
 		5EBB51B3CAEFFF548475E972 /* CompositionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompositionTests.swift; sourceTree = "<group>"; };
 		5ED10BF94762CACAFBE88704 /* VettIDAltChan */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDAltChan; path = Packages/VettIDAltChan; sourceTree = SOURCE_ROOT; };
+		6026316F2864710BB7DFBBCB /* CanaryManifestFilesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanaryManifestFilesTests.swift; sourceTree = "<group>"; };
 		6811EFFD31D5D0CCE485BD70 /* VettIDShell */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDShell; path = Packages/VettIDShell; sourceTree = SOURCE_ROOT; };
 		68A8C5609514F8561E9D7D9F /* VettID.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = VettID.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6D75FFA4B7346B22CB1CD254 /* VettIDAttestation */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDAttestation; path = Packages/VettIDAttestation; sourceTree = SOURCE_ROOT; };
@@ -94,6 +97,7 @@
 		727E92D6080D834DD959858F /* VettIDAppUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = VettIDAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		73DDC346A3EF2FEF621FF3BD /* VettIDSettings */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDSettings; path = Packages/VettIDSettings; sourceTree = SOURCE_ROOT; };
 		7E77B96EF99D2D40E1073B67 /* VettIDKeys */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDKeys; path = Packages/VettIDKeys; sourceTree = SOURCE_ROOT; };
+		7F2EA67554B107444FF813EF /* CanaryManifestFiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanaryManifestFiles.swift; sourceTree = "<group>"; };
 		8EA490A99EEA3D46D0CCDA5B /* VettIDOnboarding */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDOnboarding; path = Packages/VettIDOnboarding; sourceTree = SOURCE_ROOT; };
 		93AFC9E49CAEEB5D0ABC86DF /* SettingsFlowsCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsFlowsCatalog.swift; sourceTree = "<group>"; };
 		99011BCFDF16002458067C88 /* ShellCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellCatalogTests.swift; sourceTree = "<group>"; };
@@ -179,6 +183,7 @@
 				9D2B5CA030BC6FA62B3EEF7D /* AppAttestDeviceTests.swift */,
 				D78BD3F6C3BB2643C264466A /* AppEnvironmentTests.swift */,
 				EB1D13186B27047D3E39486C /* AppLockWindowTests.swift */,
+				6026316F2864710BB7DFBBCB /* CanaryManifestFilesTests.swift */,
 				5EBB51B3CAEFFF548475E972 /* CompositionTests.swift */,
 				9B4477541F907F6E92A131BB /* KeychainTests.swift */,
 				E07961C2D265B2A813664FD6 /* LockedPhoneDeviceTests.swift */,
@@ -226,6 +231,7 @@
 				18D27D877D6472CB1E622763 /* AppDelegate.swift */,
 				412ACBC39A6E3761D83FDE48 /* AppEnvironment.swift */,
 				5CBB4C9A8E482B333CED7362 /* AppLockGate.swift */,
+				7F2EA67554B107444FF813EF /* CanaryManifestFiles.swift */,
 				E19B16C3C80D7D44FEA75D72 /* InstalledFromBuild.swift */,
 				B5C81B56C71C53452A052D2A /* VettIDApp.swift */,
 			);
@@ -407,6 +413,7 @@
 				CFBE64FEEE60DFB5A0D4D48D /* AppEnvironment.swift in Sources */,
 				F21B6E1EA994ED4C1AC65DEE /* AppLockGate.swift in Sources */,
 				732235F0D7CDBADC340E6D41 /* AppWipeTargets.swift in Sources */,
+				ADB09CCE535DE329A04819EC /* CanaryManifestFiles.swift in Sources */,
 				0847C4526D3C1991B627B07F /* DebugCatalog.swift in Sources */,
 				E47F8A336CA8647AB9653FFA /* GalleryScreen.swift in Sources */,
 				AF0565C4247366AAC4EA95B8 /* InstalledFromBuild.swift in Sources */,
@@ -429,6 +436,7 @@
 				A65E5E4EFA6A74AF7B884B2E /* AppAttestDeviceTests.swift in Sources */,
 				926662D958BB0CF0087EB183 /* AppEnvironmentTests.swift in Sources */,
 				48C14D9734DD1B7FCF3CF6B0 /* AppLockWindowTests.swift in Sources */,
+				944241F35F84B24040C3C97F /* CanaryManifestFilesTests.swift in Sources */,
 				AE50D9820C7612104F1F51CF /* CompositionTests.swift in Sources */,
 				07487421CFD203C6665CF8A6 /* KeychainTests.swift in Sources */,
 				87ED7C9081CC9E7EE5314F6F /* LockedPhoneDeviceTests.swift in Sources */,

@@ -15,6 +15,8 @@ final class AppComposition {
     let environment: AppEnvironment
     let protectedData = ProtectedDataMonitor()
     let inbox = SetupLinkInbox()
+    /// A canary manifest opened with VettID or picked in Settings → Attestation, waiting for the root's dialog.
+    let canaryInbox = CanaryManifestInbox()
     let firstRun: FirstRunGate
     let vault: VaultManager
     /// The app lock (ANDROID-PLAN D6, IOS-PLAN ID17): its key in the Secure Enclave; off where there is none
@@ -73,12 +75,19 @@ final class AppComposition {
             ),
             keys: hardware.appLock
         )
-        // A wipe resets what lives in memory: the app lock, and a setup link waiting for the welcome screen.
+        resetOnWipe()
+    }
+
+    /// A wipe resets what lives in memory: the app lock, a setup link waiting for the welcome screen, and a canary
+    /// manifest waiting for its dialog or shown in it.
+    private func resetOnWipe() {
         let lock = appLock
         let inbox = inbox
+        let canaryInbox = canaryInbox
         vault.onWipe {
             lock.reset()
             inbox.consume()
+            canaryInbox.reset()
         }
     }
 
@@ -87,6 +96,7 @@ final class AppComposition {
     /// started).
     func launch() {
         protectedData.start()
+        CanaryManifestFiles.sweepInbox()
         _ = try? firstRun.ensure()
         // A wipe a crash interrupted is finished before anything reads a local file (the app lock's included).
         if firstRun.isOpen { vault.resumePendingWipe() }

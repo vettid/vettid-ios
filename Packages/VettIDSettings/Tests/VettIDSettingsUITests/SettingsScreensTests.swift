@@ -21,12 +21,12 @@ import VettIDUI
             .appendingPathComponent("Sources/VettIDSettingsUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 207)
+        #expect(keys.count == 230)
         let missing = "\u{0}missing"
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)
             #expect(!text.isEmpty && text != key && text != missing, "\(key)")
-            let prefixes = ["settings_", "credential_", "ios_settings_", "ios_credential_", "ios_app_lock_"]
+            let prefixes = ["settings_", "credential_", "canary_", "ios_settings_", "ios_credential_", "ios_app_lock_"]
             #expect(prefixes.contains { key.hasPrefix($0) }, "\(key)")
         }
     }
@@ -42,6 +42,40 @@ import VettIDUI
         #expect(SettingsStrings.attestationReleaseValue(3, "a3a3 a3a3") == "Release 3 · a3a3 a3a3")
         #expect(VaultStatusContent.recoveryLine(.armed(used: 0)) == "Recovery: on. Attempts used: 0 of 10.")
         #expect(VaultStatusContent.recoveryLine(.unknown) == "Recovery: cannot be checked right now.")
+    }
+
+    /// The canary manifest's texts are vettid-android's, word for word (VAULT-RELEASES §10.1 step 9).
+    @Test func theCanaryTextsAreAndroids() {
+        let v = CanaryManifestView(
+            serial: 2, keyID: "4353463f85c4012f", sha256: "",
+            releases: [
+                ReleaseView(number: 1, pcr0: "", status: "deprecated", endsAt: nil, notes: ""),
+                ReleaseView(number: 2, pcr0: "", status: "active", endsAt: nil, notes: ""),
+            ]
+        )
+        let expected = """
+            This file is a list of vault releases signed by VettID (serial 2, key 4353463f85c4012f) that VettID has not \
+            published yet. It lists release 1 (deprecated), release 2 (active). Use it only if VettID asked you to test a new \
+            vault release. The app uses it instead of the published list until VettID publishes this list or a newer one.
+            """
+        #expect(CanaryManifestDialog.message(.confirm(v)) == expected)
+        #expect(CanaryManifestDialog.message(.installed(v))
+            == "The app now uses the test release manifest (serial 2). You can stop using it in Settings, Attestation.")
+        #expect(CanaryManifestDialog.title(.refused(code: nil)) == "This file cannot be used")
+        let refusals: [(String?, String)] = [
+            (CanaryManifestCodes.signature, "It is not signed with a key this app trusts."),
+            (CanaryManifestCodes.older, "It is older than the release list this phone already uses."),
+            (CanaryManifestCodes.published, "VettID has already published this release list or a newer one, so it is not needed."),
+            (CanaryManifestCodes.format, "It is not a VettID release manifest."),
+            (CanaryManifestCodes.tooLarge, "It is not a VettID release manifest."),
+            (CanaryManifestCodes.unchecked, "It could not be checked. Try again."),
+            (nil, "It could not be checked. Try again."),
+        ]
+        for (code, text) in refusals { #expect(CanaryManifestDialog.message(.refused(code: code)) == text) }
+        #expect(CanaryStrings.serialValue(2, "4353463f85c4012f") == "Serial 2 · key 4353463f85c4012f")
+        #expect(CanaryStrings.settingsReleases(v) == "release 1 (deprecated), release 2 (active)")
+        #expect(CanaryStrings.remove == "Stop using the test manifest")
+        #expect(CanaryStrings.removeBody.hasPrefix("VettID's published release list is used again."))
     }
 
     /// IOS-PLAN ID15 and §14: the release and staging builds' line, the development builds' line from the app, and the
@@ -123,8 +157,15 @@ import VettIDUI
             LoadState(), LoadState(loading: false, value: iPhone), LoadState(loading: false, value: android),
             LoadState(loading: false, error: .other),
         ]
+        let canary = CanaryManifestView(
+            serial: 8, keyID: "1edbb48b6669decd", sha256: String(repeating: "ab", count: 32),
+            releases: [
+                ReleaseView(number: 3, pcr0: String(repeating: "a3", count: 48), status: "active", endsAt: nil, notes: "https://x/3"),
+            ]
+        )
         for s in attestations {
             #expect(height(AttestationContent(state: s)) > 0)
+            #expect(height(AttestationContent(state: s, canary: canary, onLoadCanary: {})) > 0)
         }
     }
 

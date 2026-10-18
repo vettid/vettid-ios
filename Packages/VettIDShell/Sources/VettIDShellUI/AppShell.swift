@@ -27,10 +27,13 @@ public struct AppShell: View {
     private let version: AppVersion
     private let installedFrom: InstalledFrom
     private let promptReason: String
+    private let canary: (any CanaryManifestRepository)?
+    private let canaryInbox: CanaryManifestInbox?
     private let onOpenPortal: @MainActor () -> Void
 
     /// [model]: where the member is, owned above the owner check's gate. [gate]: the owner check at [now] (the root re-reads
     /// it as time passes). [promptReason]: what the Face ID, Touch ID or passcode prompt says when the app lock is turned on.
+    /// [canary] and [canaryInbox]: the canary manifest on Settings → Attestation (VAULT-RELEASES §10.1 step 9).
     public init(
         account: any AccountRepository,
         vault: any VaultRepository,
@@ -44,6 +47,8 @@ public struct AppShell: View {
         version: AppVersion,
         installedFrom: InstalledFrom,
         promptReason: String,
+        canary: (any CanaryManifestRepository)? = nil,
+        canaryInbox: CanaryManifestInbox? = nil,
         onOpenPortal: @escaping @MainActor () -> Void
     ) {
         self.account = account
@@ -58,6 +63,8 @@ public struct AppShell: View {
         self.version = version
         self.installedFrom = installedFrom
         self.promptReason = promptReason
+        self.canary = canary
+        self.canaryInbox = canaryInbox
         self.onOpenPortal = onOpenPortal
     }
 
@@ -136,7 +143,7 @@ public struct AppShell: View {
         case .vaultStatus:
             VaultStatusRoute(vault: vault, installedFrom: installedFrom) { model.pop() }
         case .attestation:
-            AttestationRoute(vault: vault) { model.pop() }
+            AttestationRoute(vault: vault, canary: canary, canaryInbox: canaryInbox) { model.pop() }
         case .changeName:
             ChangeNameRoute(accounts: account, profiles: profiles) { model.pop() }
         case .changePin(let fromAttempts):
