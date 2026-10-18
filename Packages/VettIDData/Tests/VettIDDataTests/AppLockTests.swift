@@ -264,7 +264,7 @@ final class MemoryAppLockStore: AppLockStore, @unchecked Sendable {
         #expect(l.state == .disabled)
     }
 
-    /// No Secure Enclave (the app's placeholder until I1.4b): the lock cannot be turned on, and stays off.
+    /// No Secure Enclave (the app's placeholder on the simulator): the lock cannot be turned on, and stays off.
     @Test func withoutSecureHardwareTheLockCannotBeTurnedOn() async {
         let l = AppLock(store: store, keys: NoAppLockKeys())
         l.start()

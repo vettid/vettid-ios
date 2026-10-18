@@ -32,6 +32,7 @@ enum VaultFailures {
         case let r as RelayError: VaultFailure(.network, cause: r)
         case let u as URLError: VaultFailure(.network, cause: u)
         case let k as KeysError: keys(k)
+        case let a as AppAttestError: appAttest(a)
         case let m as MemberApiMalformed: VaultFailure(.other, code: "malformed", cause: m)
         case let c as CryptoError: VaultFailure(.other, code: "crypto", cause: c)
         default: VaultFailure(.other, cause: e)
@@ -55,6 +56,18 @@ enum VaultFailures {
         case .unavailable: VaultFailure(.phoneLocked, code: "phone_locked", cause: k)
         case .noSecureHardware: VaultFailure(.hardwareKeys, code: "secure_hardware", cause: k)
         case .missing, .invalid, .corrupt, .unknownFormat: VaultFailure(.other, code: codeKeystore, cause: k)
+        }
+    }
+
+    /// App Attest (IOS-PLAN §6.2): Apple unreachable after the retries; the attested key gone at an assertion is "this
+    /// phone no longer holds the keys" (``FailureKind/deviceSecret``); any other refusal is tried again.
+    private static func appAttest(_ a: AppAttestError) -> VaultFailure {
+        switch a {
+        case .appleUnreachable: VaultFailure(.appleUnreachable, code: "app_attest_unreachable", cause: a)
+        case .keyGone: VaultFailure(.deviceSecret, code: VaultFailure.codeAppAttestKeyGone, cause: a)
+        // Temporary: the next enrollment request first forgets the keys no kept request names (``Attester/prune``).
+        case .pendingFull: VaultFailure(.retry, code: "app_attest_pending_full", cause: a)
+        case .failed: VaultFailure(.other, code: "app_attest", cause: a)
         }
     }
 
@@ -160,4 +173,10 @@ enum ReleasePath {
     static func recoveryOffered(_ capabilities: [String]) -> Bool {
         !capabilities.contains(Capabilities.recoveryR) || capabilities.contains(Capabilities.recoveryOffered)
     }
+}
+
+public extension VaultFailure {
+    /// (iPhone, IOS-PLAN §6.2) The attested App Attest key is gone: "this phone no longer holds the keys", which an
+    /// earlier phone secret cannot help.
+    static let codeAppAttestKeyGone = "app_attest_key_gone"
 }

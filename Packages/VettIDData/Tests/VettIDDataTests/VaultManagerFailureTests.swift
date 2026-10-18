@@ -235,6 +235,35 @@ import VettIDKeysTesting
         #expect(service.enrolls.first?.unlockSecret == (try m.phoneSecrets.currentSecret()))
     }
 
+    /// IOS-PLAN §6.2 (chosen; not in the spec): the first request's answer lost, the retry refused `vault_exists`; the
+    /// first request's `vault.enrolled` confirms the App Attest key it attested, and the refused retry's key is
+    /// discarded.
+    @Test func vaultEnrolledConfirmsTheKeyOfTheRequestThatMadeTheVault() async throws {
+        defer { phone.close() }
+        try await redeemed()
+        #expect(phone.attestStartOver.value, "no vault can hold a key yet")
+        service.enrollAnswers(.answerLostEnrolledLate)
+        _ = await vaultFailure { try await m.enroll(pin: "402817") { _ in } }
+        #expect(!phone.attestStartOver.value, "an enrollment's outcome is unknown")
+        try await m.enroll(pin: "402817") { _ in }
+        let a = phone.attester.attested
+        #expect(a.count == 2)
+        #expect(phone.attester.discarded == [a[1]])
+        #expect(phone.attester.confirmed.first == a[0] && !phone.attester.confirmed.contains(a[1]))
+        #expect(!phone.attestStartOver.value)
+    }
+
+    /// An enrollment that certainly made no vault (`etk_unknown`, then a refusal) discards every key it attested.
+    @Test func anAbandonedEnrollmentDiscardsItsKeys() async throws {
+        defer { phone.close() }
+        try await redeemed()
+        service.enrollAnswers(.etkUnknown, .refused("attestation"))
+        _ = await vaultFailure { try await m.enroll(pin: "402817") { _ in } }
+        let a = phone.attester.attested
+        #expect(a.count == 2 && Set(phone.attester.discarded) == Set(a) && phone.attester.confirmed.isEmpty)
+        #expect(phone.attestStartOver.value, "nothing can hold a key: a damaged record may start over")
+    }
+
     /// The app crashed after the vault made the vault and before the enrollment's answer confirmed the record: at the
     /// next start `vault.enrolled` confirms it (``PhoneSecrets/confirmPending(keyVault:)``), and setup resumes with the
     /// credential.

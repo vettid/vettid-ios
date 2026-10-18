@@ -80,6 +80,18 @@ public typealias EnclaveCheck = @Sendable ([UInt8], [UInt8], ReleaseManifest, Bo
 public struct AltChannelFlow: Sendable {
     public static let maxAttempts = 4
     public static let codeManifest = "manifest"
+    /// The vault refused the device attestation or assertion (§11.7).
+    public static let codeAttestation = "attestation"
+    /// How many other unconfirmed App Attest keys one unlock tries after `attestation` (IOS-PLAN §6.2; chosen; not in
+    /// the spec: the App Attest key's bound on pending keys).
+    public static let maxKeySwitches = 8
+
+    /// The sealed answer to [req]: `ok` confirms the key it attested (best effort: the vault already acted, and
+    /// `vault.enrolled` or the unlock's fallback confirms it later), anything else discards it.
+    static func settle(_ attester: Attester, _ req: SealedRequest, ok: Bool) throws {
+        guard let k = req.attestedKeyID else { return }
+        if ok { try? attester.confirm(keyID: k) } else { try attester.discard(keyID: k) }
+    }
 
     private let api: MemberApiClient
     private let manifests: ManifestVerifier
@@ -207,13 +219,20 @@ public struct AltChannelFlow: Sendable {
             let (err, slot) = try await postAndPoll(
                 { vid = try await api.enroll(vaultID: vaultID, instanceID: info.instanceID, req) }, req.requestID
             )
-            if Self.unprocessed(err, slot) { await onUnprocessed() }
+            if Self.unprocessed(err, slot) {
+                await onUnprocessed()
+                // It never reached the vault's processing: its key was never bound (IOS-PLAN §6.2).
+                if let k = req.attestedKeyID { try attester.discard(keyID: k) }
+            }
             if Self.retryable(err, slot), attempt < Self.maxAttempts {
                 attempt += 1
                 continue
             }
             if let err { throw err }
             let r = try await party.openEnrollResult(try Self.answered(slot, "enrollment"), requestID: req.requestID)
+            // The vault's sealed answer to this request says whether it bound the key this request attested (IOS-PLAN
+            // §6.2): `ok` binds it, any other sealed answer does not.
+            try Self.settle(attester, req, ok: r.ok)
             if !r.ok, r.code == Self.codeManifest, !refetched {
                 refetched = true
                 m = try await manifest(seen: party.manifestSerialSeen())
@@ -234,6 +253,7 @@ public struct AltChannelFlow: Sendable {
         var m = try await manifest(seen: party.manifestSerialSeen())
         var refetched = false
         var attempt = 1
+        var switched = 0
         while true {
             let (info, e) = try await enclave(release: release, manifest: m, enroll: false, onStarting: onStarting)
             // With a callback, its answer decides (nil: the earlier shape, no secret); without, the caller's.
@@ -260,6 +280,16 @@ public struct AltChannelFlow: Sendable {
             }
             if let err { throw err }
             let r = try await party.openUnlockResult(try Self.answered(slot, "unlock"))
+            // IOS-PLAN §6.2: an accepted assertion proves the key in use is the bound one; a refused one, while no key is
+            // confirmed, tries the next unconfirmed key (bounded; chosen; not in the spec).
+            // Best effort: the vault already opened, which a failed write must not turn into a failed unlock.
+            if r.ok { try? attester.confirmInUse() }
+            // A sealed `attestation` is decided before the PIN is checked (vettid-vault `vault/unlock.go`): a retry with
+            // another key never costs a PIN attempt.
+            if !r.ok, r.code == Self.codeAttestation, switched < Self.maxKeySwitches, try attester.nextCandidate() {
+                switched += 1
+                continue
+            }
             if !r.ok, r.code == Self.codeManifest, !refetched {
                 refetched = true
                 m = try await manifest(seen: party.manifestSerialSeen())
@@ -289,8 +319,10 @@ public struct AltChannelFlow: Sendable {
 
     /// Registers this app for a recovery (§11.11.3) with the portal's code. [build] seals the request to the verified
     /// enclave; [open] opens vault.recovery.result.
+    /// [attester] hears whether the vault bound the key the request attested (IOS-PLAN §6.2), as for an enrollment.
     public func recoveryRegister(
         vaultID: String,
+        attester: Attester? = nil,
         build: @Sendable (VerifiedEnclave) async throws -> SealedRequest,
         open: @Sendable ([UInt8], String) async throws -> RecoveryResult
     ) async throws -> RecoveryResult {
@@ -302,12 +334,15 @@ public struct AltChannelFlow: Sendable {
             let (err, slot) = try await postAndPoll(
                 { try await api.recoveryRegister(vaultID: vaultID, instanceID: info.instanceID, req) }, req.requestID
             )
+            if Self.unprocessed(err, slot), let attester, let k = req.attestedKeyID { try attester.discard(keyID: k) }
             if Self.retryable(err, slot), attempt < Self.maxAttempts {
                 attempt += 1
                 continue
             }
             if let err { throw err }
-            return try await open(try Self.answered(slot, "recovery"), req.requestID)
+            let r = try await open(try Self.answered(slot, "recovery"), req.requestID)
+            if let attester { try Self.settle(attester, req, ok: r.ok) }
+            return r
         }
     }
 

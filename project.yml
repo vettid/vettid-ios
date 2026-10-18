@@ -83,6 +83,9 @@ targets:
         INFOPLIST_KEY_NSFaceIDUsageDescription: "VettID uses Face ID only to open the app when you turn on the app lock."
         MARKETING_VERSION: 2.0.0
         CURRENT_PROJECT_VERSION: 1
+        # App Attest's production environment in every configuration (IOS-PLAN §6.2): the vault refuses the development
+        # one, and TestFlight and App Store builds are always production.
+        CODE_SIGN_ENTITLEMENTS: Config/VettID-production.entitlements
     dependencies:
       - package: VettIDCrypto
       - package: VettIDAttestation
@@ -157,6 +160,18 @@ schemes:
       config: Debug
     archive:
       config: Release
+
+  # The app-hosted tests alone, for a real iPhone (the package test bundles cannot run on a device): the Secure Enclave
+  # and App Attest tests, skipped where there is no such hardware.
+  VettIDDevice:
+    build:
+      targets:
+        VettID: all
+        VettIDTests: [test]
+    test:
+      config: Debug
+      targets:
+        - VettIDTests
 
   VettIDScreenshots:
     build:

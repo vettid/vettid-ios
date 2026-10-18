@@ -93,6 +93,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         self.config = config
         apiOrigin = config.apiOrigin
         record = AccountRecord(store: config.file(VaultFiles.account))
+        if let gate = config.attestStartOver { record.onChange = { gate.set($0.noVaultHoldsAttestKey) } }
         let ids = memberVault
         member = MemberApiClient(
             apiBase: config.apiOrigin, manifestURL: config.manifestURL, transport: config.transport,
@@ -232,6 +233,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         guard generation == sessionGeneration else { throw VaultFailure(.other, code: "session_dropped") }
         session = s
         memberVault.set(device: s.device)
+        // A phone registered for a recovery holds the key the vault bound at the register (IOS-PLAN §6.2).
+        config.attestStartOver?.set(recovering: s.device.recovering)
         // In the background nothing starts the collection again (a lock's retry opens the session): the return to the
         // foreground does (IOS-PLAN §6.6).
         if !backgrounded { s.device.start() }
@@ -392,6 +395,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         if local.userGuid.isEmpty && !local.transferIn { return .signedOut }
         let s = try await openSession()
         let d = s.device
+        config.attestStartOver?.set(recovering: d.recovering)
         // vault.enrolled pinned the vault: the epoch-1 secret it holds is this phone's (a crash or a lost answer
         // before the enrollment's own answer confirmed it).
         try confirmEnrolledSecret(local, d)

@@ -107,4 +107,14 @@ import VettIDDataTesting
         #expect(vault.calls.contains("unlockWithEarlierSecret"))
         #expect(vault.phase == .unlocked && !vm.state.keysGone && !vm.state.earlierSecret)
     }
+
+    /// (iPhone, IOS-PLAN §6.2) The App Attest key gone: the keys-gone screen without the earlier-secret offer, which
+    /// cannot help.
+    @Test func noEarlierSecretWhenTheAppAttestKeyIsGone() async {
+        vault.earlierSecretOffered = true
+        vault.unlockResults = [.failed(.deviceSecret, code: VaultFailure.codeAppAttestKeyGone)]
+        let vm = await vm()
+        await submit(vm)
+        #expect(vm.state.keysGone && !vm.state.earlierSecret)
+    }
 }

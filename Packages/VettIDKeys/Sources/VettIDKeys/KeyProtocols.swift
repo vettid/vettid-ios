@@ -2,10 +2,10 @@ import CryptoKit
 import Foundation
 import VettIDCrypto
 
-// The keys behind protocols (IOS-PLAN §6.1): the Secure Enclave and App Attest on the iPhone (I1.4b), software keys
-// of VettIDKeysTesting in tests and on the simulator. Every implementation is nonisolated and Sendable, and its errors
-// are ``KeysError``s that never carry key material. Mirrors vettid-android `:core:keystore` (`AppApiKey`,
-// `PhoneKeyHandle`, `SeedWrapKey`).
+// The keys behind protocols (IOS-PLAN §6.1): the Secure Enclave and App Attest on the iPhone (SecureEnclaveKeys.swift,
+// AppAttest.swift), software keys of VettIDKeysTesting in tests and on the simulator. Every implementation is
+// nonisolated and Sendable, and its errors are ``KeysError``s that never carry key material. Mirrors vettid-android
+// `:core:keystore` (`AppApiKey`, `PhoneKeyHandle`, `SeedWrapKey`).
 
 /// The app key (VAULT-MESSAGING §11.12.2): a P-256 signing key that signs every app request to the member API. On the
 /// iPhone a Secure Enclave key with `.privateKeyUsage` only, `AfterFirstUnlockThisDeviceOnly`, so that a lock and the

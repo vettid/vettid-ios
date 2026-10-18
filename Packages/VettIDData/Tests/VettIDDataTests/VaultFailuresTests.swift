@@ -64,6 +64,13 @@ import VettIDRelay
     @Test func theKeysFailures() {
         #expect(kind(KeysError.unavailable("phone key")) == .phoneLocked)
         #expect(kind(KeysError.noSecureHardware) == .hardwareKeys)
+        #expect(kind(AppAttestError.appleUnreachable) == .appleUnreachable)
+        #expect(FailureKind.appleUnreachable.message.hasPrefix("VettID couldn't reach Apple to confirm"))
+        let a = VaultFailures.map(AppAttestError.failed(7)) as? VaultFailure
+        #expect(a?.kind == .other && a?.code == "app_attest")
+        let gone = VaultFailures.map(AppAttestError.keyGone) as? VaultFailure
+        #expect(gone?.kind == .deviceSecret && gone?.code == "app_attest_key_gone")
+        #expect(kind(AppAttestError.pendingFull) == .retry, "temporary: the next request frees the slots")
         let f = VaultFailures.map(KeysError.corrupt("account record")) as? VaultFailure
         #expect(f?.kind == .other && f?.code == VaultFailures.codeKeystore)
         #expect(VaultFailures.map(CancellationError()) is CancellationError)

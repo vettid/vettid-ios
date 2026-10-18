@@ -26,6 +26,12 @@ public enum DeviceAttest: Equatable, Sendable {
         }
     }
 
+    /// The App Attest key id of an iOS attestation; nil for Android.
+    public var iosKeyID: [UInt8]? {
+        if case .ios(let keyID, _) = self { return keyID }
+        return nil
+    }
+
     /// An Android chain, leaf first: 1–10 non-empty DER certificates of at most 16 KiB each.
     public static func androidChain(_ chain: [[UInt8]]) throws -> DeviceAttest {
         guard !chain.isEmpty, chain.count <= maxChain, chain.allSatisfy({ !$0.isEmpty && $0.count <= maxBlob }) else {

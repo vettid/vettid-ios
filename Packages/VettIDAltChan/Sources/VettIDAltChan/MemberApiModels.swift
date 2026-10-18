@@ -152,11 +152,14 @@ public struct SealedRequest: Sendable {
     public let etkKid: String
     public let envelope: [UInt8]
     public let manifestSHA256: String?
+    /// The App Attest key id the request's `device_attest` carries (iOS; nil otherwise), for ``Attester/confirm(keyID:)``.
+    public let attestedKeyID: [UInt8]?
 
-    public init(requestID: String, etkKid: String, envelope: [UInt8], manifestSHA256: String?) {
+    public init(requestID: String, etkKid: String, envelope: [UInt8], manifestSHA256: String?, attestedKeyID: [UInt8]? = nil) {
         self.requestID = requestID
         self.etkKid = etkKid
         self.envelope = envelope
         self.manifestSHA256 = manifestSHA256
+        self.attestedKeyID = attestedKeyID
     }
 }

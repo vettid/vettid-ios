@@ -6,6 +6,10 @@ import VettIDKeys
 /// file store; members this build does not know are ignored when read. Mirrors the fields of vettid-android
 /// `LocalAccount` that onboarding uses; the later rows add theirs (the account snapshot, the move, the lock, recovery).
 struct LocalAccount: Codable, Equatable, Sendable {
+    /// Whether no vault made, being made or moved to this phone can hold one of its App Attest keys (``AttestStartOver``;
+    /// chosen; not in the spec).
+    var noVaultHoldsAttestKey: Bool { !enrolledHere && enrollStartedMs == nil && !transferIn && !setupComplete }
+
     var userGuid = ""
     var vaultID = ""
     var emailHint = ""
@@ -99,6 +103,9 @@ final class AccountRecord {
     /// one completes.
     private(set) var eraseFailed = false
 
+    /// Hears the record each time it is read or changed.
+    var onChange: ((LocalAccount) -> Void)?
+
     init(store: EncryptedFileStore) {
         self.store = store
     }
@@ -117,6 +124,7 @@ final class AccountRecord {
             value = LocalAccount()
         }
         loaded = true
+        onChange?(value)
     }
 
     /// Whether a wipe runs or did not finish: the guard of ``WipeRun``.
@@ -143,6 +151,7 @@ final class AccountRecord {
             value = LocalAccount()
             loaded = true
             eraseFailed = false
+            onChange?(value)
         } else {
             eraseFailed = true
         }
@@ -160,6 +169,7 @@ final class AccountRecord {
         if a != value {
             try save(a)
             value = a
+            onChange?(a)
         }
         return true
     }
@@ -189,6 +199,7 @@ final class AccountRecord {
         try save(a)
         value = a
         loaded = true
+        onChange?(a)
     }
 
     private func save(_ a: LocalAccount) throws {

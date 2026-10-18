@@ -13,6 +13,27 @@ public protocol Attester: Sendable {
     /// The bound key's certificate chain, for an Android unlock while the vault has not shown this app its signer
     /// (§11.7.1). Nil on iOS: App Attest has no signer.
     func chain() -> [[UInt8]]?
+
+    /// The vault bound the key [keyID] (iOS: the App Attest key id): its request was answered `ok`, or its
+    /// `vault.enrolled` arrived. Later assertions use that key (IOS-PLAN §6.2; chosen; not in the spec). A failure to
+    /// record it is thrown.
+    func confirm(keyID: [UInt8]) throws
+
+    /// The request that carried the attestation of [keyID] certainly did not bind it: a sealed refusal, or a request
+    /// that never reached the vault's processing. A failure to record it is thrown.
+    func discard(keyID: [UInt8]) throws
+
+    /// No unconfirmed key may be added (all slots taken): forget the unconfirmed keys outside [keyIDs], which no kept
+    /// request names any more, so their `vault.enrolled` would never be accepted. A failure is thrown.
+    func prune(keeping keyIDs: [[UInt8]]) throws
+
+    /// The vault accepted an assertion of the key in use (an unlock answered `ok`): without a confirmed key, that one is
+    /// the bound key.
+    func confirmInUse() throws
+
+    /// The vault refused an assertion of the key in use (`attestation`) while no key is confirmed: the next untried
+    /// unconfirmed key, newest first, is used instead. False when none is left.
+    func nextCandidate() throws -> Bool
 }
 
 /// What the device key signs (VAULT-MESSAGING §11.7, §11.10.3), as vettid-vault `devattest.Signed` carries it
@@ -45,4 +66,9 @@ public enum AttestSigned: Equatable, Sendable {
 
 extension Attester {
     public func chain() -> [[UInt8]]? { nil }
+    public func confirm(keyID: [UInt8]) throws {}
+    public func discard(keyID: [UInt8]) throws {}
+    public func prune(keeping keyIDs: [[UInt8]]) throws {}
+    public func confirmInUse() throws {}
+    public func nextCandidate() throws -> Bool { false }
 }

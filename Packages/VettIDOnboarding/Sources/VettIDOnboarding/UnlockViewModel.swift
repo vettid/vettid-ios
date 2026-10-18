@@ -222,7 +222,7 @@ public final class UnlockViewModel: UnlockActions {
             state.notRecognised = Self.notRecognised(after: r, before: state.notRecognised)
             state.signerRefused = Self.signerRefused(after: r, before: state.signerRefused)
             state.keysGone = Self.keysGone(after: r, before: state.keysGone)
-            state.earlierSecret = state.keysGone && vault.earlierSecretOffered
+            state.earlierSecret = state.keysGone && vault.earlierSecretOffered && Self.earlierSecretHelps(r)
             apply(r, keptTransfer: s.keptTransfer)
         }
     }
@@ -298,6 +298,13 @@ public final class UnlockViewModel: UnlockActions {
         guard case .failed(let kind, _, _) = r else { return false }
         if kind == .deviceSecret { return true }
         return UnlockMessage.transientFailures.contains(kind) ? before : false
+    }
+
+    /// Whether an earlier phone secret could help (IOS-PLAN §6.3 item 5): not when the App Attest key is gone (§6.2),
+    /// which no secret replaces.
+    static func earlierSecretHelps(_ r: UnlockAttempt) -> Bool {
+        guard case .failed(_, let code, _) = r else { return true }
+        return code != VaultFailure.codeAppAttestKeyGone
     }
 
     /// The `signer_refused` notice: set by that answer, cleared by any other sealed answer, kept through failures.

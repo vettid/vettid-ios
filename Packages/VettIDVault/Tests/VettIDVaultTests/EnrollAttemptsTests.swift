@@ -89,8 +89,14 @@ import VettIDRelay
             b.enrollNonce = [UInt8](repeating: UInt8(i), count: 32)
             b.enrollPcrs = Self.pcrs
             b.enrollVaultID = "v1"
+            b.enrollAttestKeyID = [UInt8(i)]
             a = b
         }
+        // IOS-PLAN §6.2: each kept request names the App Attest key it attested; the one vault.enrolled answers is kept.
+        #expect(a.enrollAttempts.map(\.attestKeyID) == [[7], [6], [5], [4], [3]])
+        let enrolled = a.applyingEnrolled(stateSeq: 1, attempt: a.enrollAttempts[2])
+        #expect(enrolled.enrolledAttestKeyID == [5] && enrolled.enrollAttempts.isEmpty)
+        #expect(try AltState.parse(StrictJson.parseObject(enrolled.marshal())) == enrolled)
         #expect(a.enrollPrior.count == AltState.maxPriorEnrolls && a.enrollAttempts.count == 5)
         let back = try AltState.parse(try StrictJson.parseObject(a.marshal()))
         #expect(back == a)
