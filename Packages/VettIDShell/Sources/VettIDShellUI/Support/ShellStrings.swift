@@ -66,6 +66,14 @@ enum ShellStrings {
         String(localized: "account_names_none", defaultValue: "Shown once your vault has heard from your account", bundle: .module)
     }
 
+    static var accountChangeName: String {
+        String(localized: "account_change_name", defaultValue: "Change name", bundle: .module)
+    }
+
+    static var accountChangeNameBody: String {
+        String(localized: "account_change_name_body", defaultValue: "Only here, in the app, with your PIN and password", bundle: .module)
+    }
+
     static var accountVaultStatus: String {
         String(localized: "account_vault_status", defaultValue: "Vault status", bundle: .module)
     }

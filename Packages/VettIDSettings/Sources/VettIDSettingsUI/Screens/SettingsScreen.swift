@@ -13,6 +13,8 @@ public struct SettingsActions {
     public var vaultStatus: @MainActor () -> Void = {}
     public var lockVault: @MainActor () -> Void = {}
     public var attestation: @MainActor () -> Void = {}
+    public var changePin: @MainActor () -> Void = {}
+    public var credential: @MainActor () -> Void = {}
     public var setAppLock: @MainActor (Bool) -> Void = { _ in }
     public var setAppLockMethod: @MainActor (AppLockMethod) -> Void = { _ in }
     public var setTimeout: @MainActor (AppLockTimeout) -> Void = { _ in }
@@ -26,11 +28,11 @@ public struct SettingsActions {
 
 /// Settings (ANDROID-PLAN §4 "Screens", Settings): the account card, then Vault, Security and Account, in vettid-android's
 /// order; grouped cards (Proton); the vault's lock confirms first. A row is shown only once its feature works; the rest
-/// come with the rows of IOS-PLAN §8 that bring them: Update available (I1.8c, RELEASE-UPDATES §2), Change vault PIN and
-/// New phone secret (I1.8b, VAULT-MESSAGING §11.14.9), Credential (I1.8b, VAULT-MESSAGING §3.5), Allow screenshots
-/// (I1.8b, IOS-PLAN §4) and Delete vault (I1.8b, VAULT-MESSAGING §12.5), Theme (I1.8c), Notifications (phase P, IOS-PLAN
-/// §6.7), Move to a new phone and Recovery (I3, VAULT-MESSAGING §6.7.1, §11.11), and the Privacy section (shared
-/// profile, sharing rules: I2 and I3, VAULT-MESSAGING §10.8). Mirrors vettid-android `SettingsContent`.
+/// come with the rows of IOS-PLAN §8 that bring them: Update available (I1.8c, RELEASE-UPDATES §2), New phone secret
+/// (I1.8, VAULT-MESSAGING §11.14.9), Allow screenshots (I1.8, IOS-PLAN §4) and Delete vault (I1.8, VAULT-MESSAGING §12.5),
+/// Theme (I1.8c), Notifications (phase P, IOS-PLAN §6.7), Move to a new phone and Recovery (I3, VAULT-MESSAGING §6.7.1,
+/// §11.11), and the Privacy section (shared profile, sharing rules: I2 and I3, VAULT-MESSAGING §10.8). Mirrors
+/// vettid-android `SettingsContent`.
 public struct SettingsContent: View {
     @Environment(\.vettIDColors) private var colors
     let state: SettingsState
@@ -66,6 +68,12 @@ public struct SettingsContent: View {
                     vaultSection
                     SettingsSectionHeader(SettingsStrings.sectionSecurity)
                     SettingsGroup {
+                        SettingsRow(
+                            PinStrings.securityCredential, icon: .key, supporting: PinStrings.securityCredentialBody,
+                            action: actions.credential
+                        )
+                        .accessibilityIdentifier("credential_row")
+                        SettingsDivider()
                         SettingsRow(SettingsStrings.securityAttestation, icon: .verifiedUser, action: actions.attestation)
                             .accessibilityIdentifier("attestation")
                         OwnerCheckSettingsRows(state: ownerCheck, actions: ownerCheckActions, now: now)
@@ -133,6 +141,9 @@ public struct SettingsContent: View {
                     SettingsStrings.vaultLock, icon: .lock, supporting: SettingsStrings.vaultLockBody, showChevron: false
                 ) { confirmLock = true }
                 .accessibilityIdentifier("lock_vault")
+                SettingsDivider()
+                SettingsRow(PinStrings.vaultPin, icon: .password, action: actions.changePin)
+                    .accessibilityIdentifier("change_pin")
             }
         }
     }

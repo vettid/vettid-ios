@@ -7,7 +7,7 @@ import VettIDData
 /// ``fail`` makes the next call of a name throw; the unlock outcomes are scripted in ``unlockResults``. Observable, as
 /// the real repositories are, so a view model's observation of ``phase`` and the other states can be tested. (VettID's
 /// vault tests have a protocol-level `FakeVault`; this one stands in for the repositories.) Mirrors vettid-android
-/// `FakeVault` without its profile part, which comes with that repository.
+/// `FakeVault`, of whose profile part only the name change so far.
 @MainActor
 @Observable
 public final class FakeVaultRepository: CustomStringConvertible {
@@ -124,6 +124,14 @@ public final class FakeVaultRepository: CustomStringConvertible {
         criticalItems: 0
     )
     public var lastNewPassword: String?
+    /// The last release R `pin.change`: the current PIN and the password (``lastPin`` is the new PIN).
+    public var lastPinChange: (pin: String, password: String)?
+
+    // ProfileRepository.
+    /// Scripted answers to ``changeName(pin:password:firstName:lastName:)`` (default: a pending request with the next seq).
+    public var nameResults: [NameChangeOutcome] = []
+    public var lastNames: (first: String, last: String)?
+    var nameSeq: Int64 = 0
 
     // MoveRepository: recovery.
     public var recoveryStageValue: RecoveryStage = .code

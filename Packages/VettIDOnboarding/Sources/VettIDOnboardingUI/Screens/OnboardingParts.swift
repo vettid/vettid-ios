@@ -127,15 +127,23 @@ struct LabeledField<Field: View>: View {
     }
 }
 
-/// The label over a PIN keypad and, when there is one, the problem under it.
-struct PinEntry: View {
+/// The label over a PIN keypad and, when there is one, the problem under it. Every PIN entry of the app (IOS-PLAN §6.5):
+/// onboarding's, the unlock's, the owner check's and those of Settings.
+public struct PinEntry: View {
     @Environment(\.vettIDColors) private var colors
     let label: String
     let buffer: PinBuffer
     var error: String?
     let identifier: String
 
-    var body: some View {
+    public init(label: String, buffer: PinBuffer, error: String? = nil, identifier: String) {
+        self.label = label
+        self.buffer = buffer
+        self.error = error
+        self.identifier = identifier
+    }
+
+    public var body: some View {
         VStack(spacing: Spacing.m) {
             Text(label).vettIDFont(.labelLarge).foregroundStyle(colors.onSurfaceVariant)
             PinKeypad(buffer: buffer, length: PinPolicy.minLength)

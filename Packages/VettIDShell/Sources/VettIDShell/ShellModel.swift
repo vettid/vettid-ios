@@ -39,6 +39,12 @@ public final class ShellModel {
 
     public func push(_ r: ShellRoute) { path.append(r) }
 
+    /// "Change name" from the avatar sheet: the sheet closes and the name change opens over the current screen.
+    public func changeName() {
+        showAccount = false
+        push(.changeName)
+    }
+
     public func pop() {
         if !path.isEmpty { path.removeLast() }
     }

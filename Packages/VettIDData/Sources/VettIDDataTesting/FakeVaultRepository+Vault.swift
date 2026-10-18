@@ -122,6 +122,12 @@ extension FakeVaultRepository: VaultRepository {
         lastPin = newPin
     }
 
+    public func changePin(pin: String, newPin: String, password: String) async throws {
+        try call("changePin")
+        lastPinChange = (pin, password)
+        lastPin = newPin
+    }
+
     public func deleteVault(pin: String, password: String) async throws {
         try call("deleteVault")
         lastPin = pin

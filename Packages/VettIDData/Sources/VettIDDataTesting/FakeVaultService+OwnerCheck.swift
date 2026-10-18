@@ -149,7 +149,7 @@ extension FakeVaultService {
     // MARK: - vault.owner-check
 
     /// Steps 2–8 of §3.6.1, in vettid-vault's order. Callers hold ``cond``.
-    func ownerCheck(_ m: Inner, _ body: JsonObject) throws { // swiftlint:disable:this cyclomatic_complexity
+    func ownerCheck(_ m: Inner, _ body: JsonObject) throws {
         let utk = try body.string("utk_id")
         guard let ltk = utks.removeValue(forKey: utk) else { return try reply(m.type, "{}", re: m.id, error: "utk_invalid") }
         let pt = try CredentialSeal.openPayload(ltk: ltk, vaultID: vaultID, utkID: utk, type: m.type, innerID: m.id, sealed: try body.base64("sealed"))
@@ -169,29 +169,7 @@ extension FakeVaultService {
             }
             untilDate = t
         }
-        // Step 3: the blob.
-        guard sentBlob == Self.blob(credentialVersion) else { return try reply(m.type, "{}", re: m.id, error: "stale_credential") }
-        // Steps 4–5: the PIN under the §11.8 backoff (the unlock's).
-        if let b = backoffUntil, now < b { return try backoff(m, b.timeIntervalSince(now)) }
-        guard pin == vaultPin else {
-            pinFailures += 1
-            headerSeq += 1
-            let wait = pinFailures < 3 ? 0 : Self.backoffDelays[min(pinFailures - 3, Self.backoffDelays.count - 1)]
-            backoffUntil = wait > 0 ? now.addingTimeInterval(wait) : nil
-            return try failedCheck(m, "bad_pin")
-        }
-        pinFailures = 0
-        backoffUntil = nil
-        // Steps 6–7: the password under its own backoff.
-        if let b = passwordNotBefore, now < b { return try backoff(m, b.timeIntervalSince(now)) }
-        guard password == vaultPassword else {
-            passwordFailures += 1
-            let n = passwordFailures - Self.passwordBackoffAfter
-            if n >= 0 { passwordNotBefore = now.addingTimeInterval(Self.backoffDelays[min(n, Self.backoffDelays.count - 1)]) }
-            return try failedCheck(m, "bad_password")
-        }
-        passwordFailures = 0
-        passwordNotBefore = nil
+        guard try checkSecrets(m, pin: pin, password: password, blob: sentBlob) else { return }
         // Step 8: the CEK rotates, the check is recorded, the hold change applied and a hold ended.
         credentialVersion += 1
         startCheckClock()
@@ -205,6 +183,48 @@ extension FakeVaultService {
         if holdOffValue, let u = holdOffUntilValue { answer += #","hold_off_until":"\#(Timestamps.formatMillis(u))""# }
         answer += #","recovery":{"state":"armed","present_recorded":\#(presentRecordedValue)}}"#
         try reply(m.type, answer, re: m.id)
+    }
+
+    /// Steps 3–7 of §3.6.1, as every holder operation checked like an owner check runs them (`openChecked`): the blob,
+    /// the PIN under the §11.8 backoff (the unlock's), then the password under its own; a wrong PIN or password is a
+    /// failed check. False when refused (the refusal is answered). Callers hold ``cond``.
+    func checkSecrets(_ m: Inner, pin: String, password: String, blob: String?) throws -> Bool {
+        let now = vaultNow
+        // Step 3: the blob.
+        guard blob == Self.blob(credentialVersion) else {
+            try reply(m.type, "{}", re: m.id, error: "stale_credential")
+            return false
+        }
+        // Steps 4–5: the PIN.
+        if let b = backoffUntil, now < b {
+            try backoff(m, b.timeIntervalSince(now))
+            return false
+        }
+        guard pin == vaultPin else {
+            pinFailures += 1
+            headerSeq += 1
+            let wait = pinFailures < 3 ? 0 : Self.backoffDelays[min(pinFailures - 3, Self.backoffDelays.count - 1)]
+            backoffUntil = wait > 0 ? now.addingTimeInterval(wait) : nil
+            try failedCheck(m, "bad_pin")
+            return false
+        }
+        pinFailures = 0
+        backoffUntil = nil
+        // Steps 6–7: the password.
+        if let b = passwordNotBefore, now < b {
+            try backoff(m, b.timeIntervalSince(now))
+            return false
+        }
+        guard password == vaultPassword else {
+            passwordFailures += 1
+            let n = passwordFailures - Self.passwordBackoffAfter
+            if n >= 0 { passwordNotBefore = now.addingTimeInterval(Self.backoffDelays[min(n, Self.backoffDelays.count - 1)]) }
+            try failedCheck(m, "bad_password")
+            return false
+        }
+        passwordFailures = 0
+        passwordNotBefore = nil
+        return true
     }
 
     private func backoff(_ m: Inner, _ left: TimeInterval) throws {

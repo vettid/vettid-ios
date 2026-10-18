@@ -141,6 +141,22 @@ public final class FakeVaultService: @unchecked Sendable {
     var presentRecordedValue = true
     var ownerChecksValue: [OwnerCheckSeen] = []
 
+    // Settings (FakeVaultService+Settings.swift), under ``cond``.
+    var snapshotJSON: String?
+    var snapshotVersion = 0
+    var nameRequestJSON: String?
+    var nameSeq: Int64 = 0
+    var nameAllowedAfter: Date?
+    var nameSetsValue: [NameSetSeen] = []
+    var pinChangesValue: [PinChangeSeen] = []
+    var passwordChangesValue: [PasswordChangeSeen] = []
+    var epochAdvancedValue = true
+    var criticalItemsValue = 0
+    var unlockTtl = 300
+    var windowUntil: Date?
+    var answerPinChangeValue = true
+    var answerPasswordChangeValue = true
+
     public init() throws {
         etk = try KemPrivateKey.generate()
         kem = try KemPrivateKey.generate()

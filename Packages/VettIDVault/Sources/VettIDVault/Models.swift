@@ -90,8 +90,9 @@ public struct AccountView: Decodable, Equatable, Sendable {
     public let nameRequest: NameRequest?
 }
 
-/// The member API's account snapshot as the vault keeps it (§11.13), display only.
-public struct AccountSnapshot: Decodable, Equatable, Sendable {
+/// The member API's account snapshot as the vault keeps it (§11.13), display only. Encodable as well: the account record
+/// keeps the last one.
+public struct AccountSnapshot: Codable, Equatable, Sendable {
     public let v: Int?
     public let asOf: String?
     public let emailHint: String?
@@ -107,13 +108,20 @@ public struct AccountSnapshot: Decodable, Equatable, Sendable {
     /// The account's names (0.18.0): what every connection sees in the shared profile's core (§10.8).
     public let firstName: String?
     public let lastName: String?
+    /// (0.18.0) When the next name change may be applied (§10.8).
+    public let nameChange: AccountNameChange?
 }
 
-public struct AccountTerms: Decodable, Equatable, Sendable {
+/// The snapshot's `name_change` (§11.13): `allowed_after`, null when a change may be applied now.
+public struct AccountNameChange: Codable, Equatable, Sendable {
+    public let allowedAfter: String?
+}
+
+public struct AccountTerms: Codable, Equatable, Sendable {
     public let needsAcceptance: Bool?
 }
 
-public struct AccountSubscription: Decodable, Equatable, Sendable {
+public struct AccountSubscription: Codable, Equatable, Sendable {
     public let typeName: String?
     /// `trial`, `active`, `expired` or `canceled`.
     public let status: String?
@@ -121,14 +129,52 @@ public struct AccountSubscription: Decodable, Equatable, Sendable {
     public let expiresAt: String?
 }
 
-/// An `account.name.set` request (0.18.0, §10.8).
-public struct NameRequest: Decodable, Equatable, Sendable {
+/// An `account.name.set` request (0.18.0, §10.8). Encodable as well: the account record keeps the latest one.
+public struct NameRequest: Codable, Equatable, Sendable {
     public let seq: Int64
     public let firstName: String
     public let lastName: String
     public let requestedAt: String?
     public let state: String
     public let reason: String?
+
+    public init(seq: Int64, firstName: String, lastName: String, requestedAt: String?, state: String, reason: String? = nil) {
+        self.seq = seq
+        self.firstName = firstName
+        self.lastName = lastName
+        self.requestedAt = requestedAt
+        self.state = state
+        self.reason = reason
+    }
+}
+
+/// `credential.version` (§10.6): whether the vault holds a credential, its version, key and last change, and an open
+/// clone alarm (§3.5.9).
+public struct CredentialInfo: Decodable, Equatable, Sendable {
+    public let exists: Bool
+    public let version: Int64?
+    public let key: String?
+    public let updatedAt: String?
+    public let alarm: CredentialAlarmInfo?
+}
+
+/// `credential.version`'s `alarm` (§3.5.9).
+public struct CredentialAlarmInfo: Decodable, Equatable, Sendable {
+    public let alarmID: String?
+    public let state: String?
+    public let at: String?
+
+    enum CodingKeys: String, CodingKey {
+        case alarmID = "alarmId"
+        case state, at
+    }
+}
+
+/// One page of `item.list` (§10.7) as the credential screen counts it: how many items the page holds and the cursor of
+/// the next page. The items themselves come with the Vault screens (IOS-PLAN §8 I3.1).
+public struct ItemCountPage: Equatable, Sendable {
+    public let count: Int
+    public let next: String?
 }
 
 /// `device.pair.create`'s answer (§10.3): the link a desktop or an agent scans.

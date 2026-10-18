@@ -125,5 +125,14 @@ struct NoticeAction: View {
 enum SettingsTimes {
     /// A full date and time (details, expiries).
     static func full(_ d: Date) -> String { d.formatted(date: .abbreviated, time: .shortened) }
+
+    /// A day (the next name change, VAULT-MESSAGING §10.8: "on <allowed_after>").
+    static func day(_ d: Date) -> String { d.formatted(date: .abbreviated, time: .omitted) }
+
+    /// A time of today (the unlock window's end).
+    static func time(_ d: Date) -> String { d.formatted(date: .omitted, time: .shortened) }
+
+    /// A wait as m:ss.
+    static func wait(_ seconds: Int64) -> String { String(format: "%d:%02d", seconds / 60, seconds % 60) }
 }
 #endif

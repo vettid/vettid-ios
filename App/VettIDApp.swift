@@ -169,7 +169,8 @@ struct AppRoot: View {
             // that nothing of it comes back for a moment afterwards.
             OwnerCheckGateView(vault: vault, onGated: { shell.shown() }) { gate, now in
                 AppShell(
-                    account: vault, vault: vault, ownerChecks: vault.ownerChecks, appLock: appLock, model: shell, gate: gate, now: now,
+                    account: vault, vault: vault, ownerChecks: vault.ownerChecks, credential: vault, profiles: vault.profiles,
+                    appLock: appLock, model: shell, gate: gate, now: now,
                     version: .of(Bundle.main.infoDictionary ?? [:]), installedFrom: InstalledFromBuild.current,
                     promptReason: AppLockTexts.reason
                 ) { openPortal() }

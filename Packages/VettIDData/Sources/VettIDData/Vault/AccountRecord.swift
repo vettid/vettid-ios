@@ -1,10 +1,11 @@
 import Foundation
 import VettIDKeys
+import VettIDVault
 
 /// What this phone knows of its member without signing in (VAULT-MESSAGING §11.12.1): the `user_guid` and `vault_id`
 /// from the setup code's redeem, the masked email to show, and where setting the vault up stands. Kept in the encrypted
 /// file store; members this build does not know are ignored when read. Mirrors the fields of vettid-android
-/// `LocalAccount` that onboarding uses; the later rows add theirs (the account snapshot, the move, the lock, recovery).
+/// `LocalAccount` that onboarding, the lock and Settings use; the later rows add theirs (the move, recovery).
 struct LocalAccount: Codable, Equatable, Sendable {
     /// Whether no vault made, being made or moved to this phone can hold one of its App Attest keys (``AttestStartOver``;
     /// chosen; not in the spec).
@@ -39,6 +40,10 @@ struct LocalAccount: Codable, Equatable, Sendable {
     var lastOpenedMs: Int64?
     /// The lock's own file (``LockRecordFile``) was written once: from then on a missing file says a lock is pending.
     var lockFileInUse = false
+    /// The last account snapshot (`account.get`, VAULT-MESSAGING §11.13), display only; nil before one arrived.
+    var snapshot: AccountSnapshot?
+    /// The latest name change (`account.get`'s `name_request`, §10.8), or the one this phone just asked for.
+    var nameRequest: NameRequest?
 
     enum CodingKeys: String, CodingKey {
         case userGuid = "user_guid"
@@ -54,6 +59,8 @@ struct LocalAccount: Codable, Equatable, Sendable {
         case lastContactMs = "last_contact_ms"
         case lastOpenedMs = "last_opened_ms"
         case lockFileInUse = "lock_file_in_use"
+        case snapshot
+        case nameRequest = "name_request"
     }
 
     init() {}
@@ -79,10 +86,23 @@ struct LocalAccount: Codable, Equatable, Sendable {
         lastContactMs = try c.decodeIfPresent(Int64.self, forKey: .lastContactMs)
         lastOpenedMs = try c.decodeIfPresent(Int64.self, forKey: .lastOpenedMs)
         lockFileInUse = try c.decodeIfPresent(Bool.self, forKey: .lockFileInUse) ?? false
+        // Display only: a snapshot or request this build cannot read is no snapshot, never an unreadable record.
+        snapshot = try? c.decodeIfPresent(AccountSnapshot.self, forKey: .snapshot)
+        nameRequest = try? c.decodeIfPresent(NameRequest.self, forKey: .nameRequest)
     }
 
-    /// The account as the screens see it before the vault sent a snapshot: the masked email only.
-    var info: AccountInfo? { emailHint.isEmpty ? nil : AccountInfo(emailHint: emailHint) }
+    /// The account as the screens see it: from the last snapshot, or, before one arrived, the masked email only; with
+    /// the latest name request. Mirrors vettid-android `LocalAccount.toInfo`.
+    var info: AccountInfo? {
+        var a: AccountInfo?
+        if let snapshot {
+            a = AccountSnapshots.info(snapshot, fallbackHint: emailHint)
+        } else if !emailHint.isEmpty {
+            a = AccountInfo(emailHint: emailHint)
+        }
+        a?.nameRequest = nameRequest.flatMap(NameRequestView.of)
+        return a
+    }
 }
 
 /// The account record and the writes the vault manager makes to it. Read only after the first-run cleanup (IOS-PLAN
@@ -186,6 +206,17 @@ final class AccountRecord {
     func opened(since: Int, atMs: Int64) throws {
         guard value.lastOpenedMs.map({ atMs > $0 }) ?? true else { return }
         try update(since: since) { $0.lastOpenedMs = atMs }
+    }
+
+    /// What `account.get` brought (``AccountSnapshots/update(stored:storedRequest:view:)``), for the record of [since]:
+    /// the snapshot and its masked email, and the name request. False when dropped.
+    @discardableResult
+    func refreshed(since: Int, _ u: AccountUpdate) throws -> Bool {
+        try update(since: since) {
+            $0.snapshot = u.snapshot
+            $0.emailHint = u.snapshot?.emailHint ?? $0.emailHint
+            $0.nameRequest = u.nameRequest
+        }
     }
 
     /// Drops the writes on their way for the record as it was (the member's lock: what an operation that began before it

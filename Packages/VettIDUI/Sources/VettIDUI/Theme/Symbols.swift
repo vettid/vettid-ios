@@ -53,6 +53,11 @@ public enum VettIDSymbol: String, CaseIterable, Sendable {
     case cardMembership = "creditcard" // CardMembership
     case gavel = "building.columns" // Gavel
     case howToVote = "checkmark.rectangle" // HowToVote
+    case password = "rectangle.and.pencil.and.ellipsis" // Password
+    case shield = "shield" // Shield
+    case sync = "arrow.2.circlepath" // Sync
+    case lockClock = "lock.badge.clock" // LockClock
+    case backup = "icloud.and.arrow.up" // Backup
 
     // States
     case info = "info.circle" // Info
