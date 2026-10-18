@@ -41,20 +41,6 @@ jobs:
           git diff --exit-code -- VettID.xcodeproj App/Info.plist
       - name: SwiftLint
         run: swiftlint lint --strict
-      - name: TEMPORARY diagnose the VettIDKeys build
-        run: |
-          set +e
-          cd Packages/VettIDKeys
-          b() { echo "::group::$1"; s=$(date +%s); perl -e 'alarm 300; exec @ARGV' swift build "${@:2}" -Xswiftc -Xfrontend -Xswiftc -solver-expression-time-threshold=20 2>&1 | grep -vE "^\[[0-9]+/[0-9]+\] (Compiling VettIDCrypto|Write|Copying)" | tail -40; rc=${PIPESTATUS[0]}; echo "rc=$rc $(( $(date +%s)-s ))s"; echo "::endgroup::"; pkill -f swift-frontend; return $rc; }
-          f=Sources/VettIDKeysTesting/SoftwareKeys.swift
-          cp $f /tmp/fixed.swift
-          git fetch -q --depth=1 origin 28395c5f7055bcfde7dedbdb1c0757afc309faf2
-          git show FETCH_HEAD:Packages/VettIDKeys/$f > $f
-          b testing-before --target VettIDKeysTesting
-          cp /tmp/fixed.swift $f
-          rm -rf .build/debug/VettIDKeysTesting.build
-          b testing-fixed --target VettIDKeysTesting || exit 1
-          b tests-fixed --build-tests || exit 1
       - name: pure packages (swift test on macOS)
         run: |
           for p in VettIDCrypto VettIDAttestation VettIDRelay VettIDAltChan VettIDVault VettIDKeys VettIDTesting; do
