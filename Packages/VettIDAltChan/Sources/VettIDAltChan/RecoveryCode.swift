@@ -78,6 +78,13 @@ public enum RecoveryCodes {
     public static let group = 4
     private static let alphabetBytes = Set(alphabet.utf8)
 
+    /// A typed recovery code's locator (VAULT-MESSAGING §11.11.10): 12 characters of the alphabet.
+    public static let locatorLength = 12
+
+    public static func isLocator(_ s: String) -> Bool {
+        s.utf8.count == locatorLength && s.utf8.allSatisfy(alphabetBytes.contains)
+    }
+
     public static func isValid(_ code: String) -> Bool {
         code.utf8.count == length && code.utf8.allSatisfy(alphabetBytes.contains)
     }

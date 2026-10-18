@@ -9,9 +9,11 @@ let package = Package(
     ],
     dependencies: [
         .package(path: "../VettIDCrypto"),
+        // TEST ONLY: the fake HTTP server of the tests.
+        .package(path: "../VettIDTesting"),
     ],
     targets: [
         .target(name: "VettIDRelay", dependencies: ["VettIDCrypto"]),
-        .testTarget(name: "VettIDRelayTests", dependencies: ["VettIDRelay", "VettIDCrypto"]),
+        .testTarget(name: "VettIDRelayTests", dependencies: ["VettIDRelay", "VettIDCrypto", "VettIDTesting"]),
     ]
 )
