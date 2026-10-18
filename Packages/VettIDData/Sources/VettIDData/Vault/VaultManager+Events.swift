@@ -2,7 +2,8 @@ import Foundation
 import VettIDVault
 
 // What the vault sends that the unlock and the lock follow (VAULT-MESSAGING §10.1, §11.4, §12): `vault.locking`,
-// `vault.held`, the credential's alarm, `device.unlinked`, and the relay's refusals of this phone's deposits.
+// `vault.held`, the credential's alarm, `device.unlinked`, `account.changed`, and the relay's refusals of this phone's
+// deposits.
 extension VaultManager {
     static let typeHeld = "vault.held"
     static let typeAlarm = "credential.alarm"
@@ -106,6 +107,7 @@ extension VaultManager {
             raiseAlarm(m)
         case Self.typeSync:
             syncAlarm(m)
+            syncAccount(m)
         // `transferred` (§6.7.1 step 4) and `replaced` (§11.11.5 step 3) mean this phone was replaced; another reason is
         // re-read like any change of the vault.
         case HolderPolicy.deviceUnlinked:

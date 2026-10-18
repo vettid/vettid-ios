@@ -19,9 +19,10 @@ struct VaultSession: Sendable {
 /// transport or crypto. One instance per process, on the main actor; the work it waits for runs off it.
 ///
 /// The slices so far (IOS-PLAN §8): what onboarding needs (I1.6: the phase at start, the setup code, enrollment with the
-/// phone's unlock secret of epoch 1, §11.14.1 "On an iPhone", the first handshake, the credential and Finish setup), and
+/// phone's unlock secret of epoch 1, §11.14.1 "On an iPhone", the first handshake, the credential and Finish setup),
 /// the unlock and the member's lock (I1.7a: §11.4 with the phone secret, VAULT-LOCK as vettid-android implements it, the
-/// vault events they follow). Every other operation keeps its protocol default or refuses with
+/// vault events they follow), and Settings (I1.8: the account snapshot, the name change, the credential screen, the PIN
+/// change). Every other operation keeps its protocol default or refuses with
 /// ``FailureKind/notSupported`` until the row that brings it (`VaultManager+Later.swift`). Mirrors vettid-android
 /// `VaultManager`.
 @MainActor
@@ -29,7 +30,11 @@ struct VaultSession: Sendable {
 public final class VaultManager: AccountRepository, VaultRepository, CredentialRepository {
     // AccountRepository.
     public internal(set) var phase: AppPhase = .starting {
-        didSet { phaseChanges += 1 }
+        didSet {
+            phaseChanges += 1
+            // The account is read again whenever the vault opens (an unlock, the end of onboarding, a start while open).
+            if phase == .unlocked, oldValue != .unlocked { onOpened() }
+        }
     }
     public internal(set) var account: AccountInfo?
     public internal(set) var servicePaused = false
@@ -43,11 +48,12 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// The relay kept refusing this phone's messages to the vault while it was open (``RefusalWatch``).
     public internal(set) var refusedByVault = false
     /// (iPhone, IOS-PLAN §6.3 item 5) The earlier-secret step opened the vault: a new phone secret is to be asked for at
-    /// once (the prompt and the History entry come with I1.8).
+    /// once (the prompt and the History entry come with New phone secret).
     public internal(set) var renewSecretSuggested = false
 
-    // CredentialRepository: the alarm and the unlock window come with the credential screen (I1.8).
+    // CredentialRepository.
     public internal(set) var alarm: CredentialAlarm?
+    /// Until when the unlock window is open (§3.5.3), as this app opened it.
     public internal(set) var unlockWindow: Date?
 
     @ObservationIgnored let config: VaultManagerConfig
@@ -75,6 +81,14 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored private(set) var refusals: RefusalWatch?
     /// The daily owner check (VAULT-MESSAGING §3.6): its state, the check, the interval and the hold.
     @ObservationIgnored public let ownerChecks: OwnerCheckManager
+    /// The account's names (VAULT-MESSAGING §10.8): the name change, which counts as an owner check for its PIN and
+    /// password (§3.6.4).
+    @ObservationIgnored public let profiles: ProfileManager
+    /// The `pin.change` the member started and whose answer has not confirmed it: a retry reuses its next-epoch record
+    /// (IOS-PLAN §6.3 item 2). In memory only.
+    @ObservationIgnored var pinChangeOperation: String?
+    /// TEST ONLY: replaces making the record of a confirmed `pin.change` current (a write that fails).
+    @ObservationIgnored var confirmPinChangeOverride: (@MainActor (String) throws -> Void)?
     /// The wipe of this phone (nil: this build cannot wipe), and what it resets in memory besides the manager's own.
     @ObservationIgnored let wiper: LocalWipe?
     @ObservationIgnored var wipeHooks: [@MainActor () async -> Void] = []
@@ -134,14 +148,35 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             mark: { rec.generation },
             sleep: timing.sleep
         )
+        profiles = Self.profiles(ref, checks: ownerChecks, record: rec)
         wiper = config.wipeTargets.map { LocalWipe(targets: $0, hooks: [{ await ref.manager?.runWipeHooks() }]) }
         ref.manager = self
         lockPorts.manager = self
         holder = HolderWatch { [weak self] in await self?.wipeReplacedPhone() }
-        refusals = RefusalWatch { [weak self] in
-            self?.phase = .locked
-            self?.refusedByVault = true
-        }
+        refusals = RefusalWatch { [weak self] in self?.refusedOnRelay() }
+    }
+
+    /// The relay kept refusing this phone's messages to the vault (``RefusalWatch``): the unlock screen, which says so.
+    private func refusedOnRelay() {
+        phase = .locked
+        refusedByVault = true
+    }
+
+    /// The name change over this manager's session: the request kept with the account record it was sent for, the checks
+    /// left read again after a wrong PIN or password.
+    private static func profiles(_ ref: ManagerRef, checks: OwnerCheckManager, record rec: AccountRecord) -> ProfileManager {
+        ProfileManager(
+            ops: {
+                guard let m = ref.manager else { throw VaultFailure(.other, code: "session_dropped") }
+                return VaultProfileOps(api: try m.openApi(try await m.openSession()))
+            },
+            onRequest: { r, since in ref.manager?.keepNameRequest(r, since: since) },
+            checksLeft: {
+                try? await checks.refreshOwnerCheck()
+                return checks.ownerCheck?.checksLeft
+            },
+            mark: { rec.generation }
+        )
     }
 
     // MARK: - Failures
@@ -320,6 +355,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         try await Self.forgetKeys(config)
         try phoneSecrets.delete()
         usesPhoneSecret = false
+        pinChangeOperation = nil
+        unlockWindow = nil
         try record.update(since: record.generation) {
             $0.setupComplete = false
             $0.capabilities = []

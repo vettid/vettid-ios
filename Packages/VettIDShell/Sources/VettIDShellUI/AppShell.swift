@@ -18,6 +18,8 @@ public struct AppShell: View {
     private let account: any AccountRepository
     private let vault: any VaultRepository
     private let ownerChecks: any OwnerCheckRepository
+    private let credential: any CredentialRepository
+    private let profiles: any ProfileRepository
     private let appLock: any AppLockSettings
     @Bindable private var model: ShellModel
     private let gate: OwnerCheckGate
@@ -33,6 +35,8 @@ public struct AppShell: View {
         account: any AccountRepository,
         vault: any VaultRepository,
         ownerChecks: any OwnerCheckRepository,
+        credential: any CredentialRepository,
+        profiles: any ProfileRepository,
         appLock: any AppLockSettings,
         model: ShellModel,
         gate: OwnerCheckGate,
@@ -45,6 +49,8 @@ public struct AppShell: View {
         self.account = account
         self.vault = vault
         self.ownerChecks = ownerChecks
+        self.credential = credential
+        self.profiles = profiles
         self.appLock = appLock
         self.model = model
         self.gate = gate
@@ -99,6 +105,7 @@ public struct AppShell: View {
             AccountSheet(
                 account: account.account,
                 onLockVault: { Task { await model.lockVault() } },
+                onChangeName: { model.changeName() },
                 onOpenPortal: onOpenPortal
             )
         }
@@ -130,6 +137,17 @@ public struct AppShell: View {
             VaultStatusRoute(vault: vault, installedFrom: installedFrom) { model.pop() }
         case .attestation:
             AttestationRoute(vault: vault) { model.pop() }
+        case .changeName:
+            ChangeNameRoute(accounts: account, profiles: profiles) { model.pop() }
+        case .changePin(let fromAttempts):
+            ChangePinRoute(vault: vault, fromAttempts: fromAttempts) { model.pop() }
+        case .credential:
+            CredentialRoute(
+                repo: credential, onBack: { model.pop() }, onChangePassword: { model.push(.changePassword) },
+                onOwnerCheck: { model.ownerCheck(holdOff: false) }
+            )
+        case .changePassword:
+            ChangePasswordRoute(repo: credential, vault: vault) { model.pop() }
         }
     }
 
@@ -142,6 +160,8 @@ public struct AppShell: View {
         h.onOpenAccountSite = onOpenPortal
         h.onVaultStatus = { model.push(.vaultStatus) }
         h.onAttestation = { model.push(.attestation) }
+        h.onChangePin = { model.push(.changePin(fromAttempts: false)) }
+        h.onCredential = { model.push(.credential) }
         h.onOwnerCheck = { holdOff in model.ownerCheck(holdOff: holdOff) }
         return h
     }

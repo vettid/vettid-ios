@@ -13,7 +13,7 @@ public struct VaultSettings: Sendable {
     }
 }
 
-// The credential calls of enrollment (§3.5.5, §3.5.7, §10.6) and the settings (§10.8).
+// The credential calls (§3.5.5, §3.5.7, §10.6), the settings (§10.8) and the count of critical items (§10.7).
 extension VaultApi {
     /// `credential.create`: creates the Protean Credential under [password] and keeps the blob (enrollment, §3.5.7).
     /// (Release R, §11.14.9) With [pin] the vault verifies it against its unlock key and arms recovery; a weak password
@@ -42,6 +42,42 @@ extension VaultApi {
 
     /// `credential.get`: the latest blob the vault holds, kept and acknowledged (the holder only).
     public func credentialFetch() async throws { try await credential.fetch() }
+
+    /// `credential.version` (§10.6): whether the vault holds a credential, its version and key, and an open clone alarm.
+    public func credentialVersion() async throws -> CredentialInfo {
+        try VaultJSON.decode(CredentialInfo.self, try await device.op("credential.version"))
+    }
+
+    /// `credential.unlock`: opens the unlock window (§3.5.3) with the password (a credential operation); returns its
+    /// `expires_at` ("" when the vault did not say).
+    public func credentialUnlock(password: String) async throws -> String {
+        let body = try await credential.credOp("credential.unlock", [.string("password", password)])
+        return VaultJSON.string(VaultJSON.object(body), "expires_at") ?? ""
+    }
+
+    /// `credential.lock`: closes the unlock window.
+    public func credentialLock() async throws { _ = try await device.op("credential.lock") }
+
+    /// `credential.password.change` (§10.6): the current password and the new one, sealed with the blob. (Release R,
+    /// §11.14.9) With [pin], which the vault verifies; the change closes the recovery generation and arms the next.
+    public func credentialChangePassword(password: String, newPassword: String, pin: String? = nil) async throws {
+        var fields: [SealedField] = []
+        if let pin { fields.append(.string("pin", pin)) }
+        fields.append(.string("password", password))
+        fields.append(.string("new_password", newPassword))
+        _ = try await credential.credOp("credential.password.change", fields)
+    }
+
+    /// One page of `item.list` (§10.7) filtered by [sensitivity], counted (the credential screen's critical items).
+    public func itemCount(sensitivity: String, after: String? = nil, limit: Int? = nil) async throws -> ItemCountPage {
+        let b = JsonBuilder().string("sensitivity", sensitivity)
+        if let after { b.string("after", after) }
+        if let limit { b.uint("limit", UInt64(limit)) }
+        let o = try StrictJson.parseObject(try await device.op("item.list", body: b.bytes()))
+        // The last page has no `next`, or `null`.
+        let next: String? = if case .string(_, let n)? = o["next"] { n } else { nil }
+        return ItemCountPage(count: try o.optArray("items")?.count ?? 0, next: next)
+    }
 
     public func settingsGet() async throws -> VaultSettings {
         let o = try StrictJson.parseObject(try await device.op("settings.get"))

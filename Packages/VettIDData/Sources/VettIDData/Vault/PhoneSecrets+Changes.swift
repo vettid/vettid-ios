@@ -60,6 +60,9 @@ extension PhoneSecrets {
         }
     }
 
+    /// Whether the change [operation] is on its way now (in this process).
+    public func inFlight(operation: String) -> Bool { ChangesInFlight.current(store.url).contains(operation) }
+
     /// The change [operation] is no longer in flight: its request failed before sending, got no answer, or was
     /// abandoned. Its candidate stays a candidate.
     func endChange(operation: String) { ChangesInFlight.end(store.url, operation) }

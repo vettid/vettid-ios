@@ -214,7 +214,7 @@ extension VaultManager {
     }
 
     /// Sets one setting to [json] unless it already has that value.
-    private func setSetting(_ s: VaultSession, _ key: String, _ json: String) async throws {
+    func setSetting(_ s: VaultSession, _ key: String, _ json: String) async throws {
         let current = try await openApi(s).settingsGet()
         if current.values[key] == json { return }
         _ = try await openApi(s).settingsSet(version: current.version, set: [(key, json)])

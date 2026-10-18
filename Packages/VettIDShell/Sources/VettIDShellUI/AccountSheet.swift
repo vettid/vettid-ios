@@ -1,29 +1,33 @@
 #if os(iOS)
 import SwiftUI
 import VettIDData
+import VettIDSettingsUI
 import VettIDShell
 import VettIDUI
 
 /// The avatar sheet (ANDROID-PLAN §4 "Screens"): "Lock vault" first, right under the name; the name on the member's VettID
 /// account (read-only, from the vault's account snapshot: every connection sees it); the address; the membership and
 /// subscription (read-only, VAULT-MESSAGING §11.13); vault status and the account portal, where the other changes are made. The app
-/// never signs in: no sign-out. "Change name" with its status lines (VAULT-MESSAGING §10.8) and the shared profile come with I1.8b and
-/// I2. Mirrors vettid-android `AccountSheet`.
+/// never signs in: no sign-out. "Change name", the only place the names change, with the state of a requested change
+/// (VAULT-MESSAGING §10.8); the shared profile comes with I2.5. Mirrors vettid-android `AccountSheet`.
 public struct AccountSheet: View {
     let account: AccountInfo?
     let now: Date
     let onLockVault: @MainActor () -> Void
+    let onChangeName: @MainActor () -> Void
     let onOpenPortal: @MainActor () -> Void
 
     public init(
         account: AccountInfo?,
         now: Date = Date(),
         onLockVault: @escaping @MainActor () -> Void,
+        onChangeName: @escaping @MainActor () -> Void = {},
         onOpenPortal: @escaping @MainActor () -> Void
     ) {
         self.account = account
         self.now = now
         self.onLockVault = onLockVault
+        self.onChangeName = onChangeName
         self.onOpenPortal = onOpenPortal
     }
 
@@ -35,7 +39,9 @@ public struct AccountSheet: View {
             detail: AccountHeader.detailEmail(account) ?? Self.membershipLine(MembershipLine.of(account)),
             optionsHeader: ShellStrings.accountOptions
         ) {
-            AccountSheetOptions(account: account, now: now, onLockVault: onLockVault, onOpenPortal: onOpenPortal)
+            AccountSheetOptions(
+                account: account, now: now, onLockVault: onLockVault, onChangeName: onChangeName, onOpenPortal: onOpenPortal
+            )
         }
     }
 
@@ -50,13 +56,14 @@ public struct AccountSheet: View {
     }
 }
 
-/// The avatar sheet's option groups, in order: lock, the name, the address, membership, vault and portal. Mirrors
+/// The avatar sheet's option groups, in order: lock, the names, the address, membership, vault and portal. Mirrors
 /// vettid-android `AccountSheetOptions`.
 struct AccountSheetOptions: View {
     @Environment(\.vettIDColors) private var colors
     let account: AccountInfo?
     let now: Date
     let onLockVault: @MainActor () -> Void
+    let onChangeName: @MainActor () -> Void
     let onOpenPortal: @MainActor () -> Void
 
     var body: some View {
@@ -67,9 +74,15 @@ struct AccountSheetOptions: View {
             )
             .accessibilityIdentifier("account_lock_vault")
         }
+        // The account's names (VAULT-MESSAGING §10.8 "What the app shows"): read-only, "Your connections see this name",
+        // the state of a requested change, and "Change name" (vettid-android `AccountNamesGroup`).
         SettingsGroup {
             SettingsInfoRow(ShellStrings.accountNames, value: account?.fullName ?? ShellStrings.accountNamesNone, icon: .person)
-            note(ShellStrings.accountNamesNote)
+            note([ShellStrings.accountNamesNote, NameStatus.text(account, now: now)].compactMap { $0 }.joined(separator: "\n"))
+                .accessibilityIdentifier("account_names_note")
+            SettingsDivider()
+            SettingsRow(ShellStrings.accountChangeName, icon: .edit, supporting: ShellStrings.accountChangeNameBody, action: onChangeName)
+                .accessibilityIdentifier("account_change_name")
         }
         .accessibilityIdentifier("account_names")
         if let email = account?.displayEmail {

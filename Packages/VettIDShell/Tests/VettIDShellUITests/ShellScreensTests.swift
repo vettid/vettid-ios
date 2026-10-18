@@ -26,7 +26,7 @@ import VettIDUI
             .appendingPathComponent("Sources/VettIDShellUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 61)
+        #expect(keys.count == 63)
         let missing = "\u{0}missing"
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)
@@ -43,6 +43,7 @@ import VettIDUI
         #expect(ShellStrings.ownerCheckNoticeMore("A daily check failed: wrong PIN.", 2) == "A daily check failed: wrong PIN. And 2 more.")
         #expect(ShellStrings.accountSubscriptionTrialUntil("Annual", "Dec 1") == "Annual: trial until Dec 1")
         #expect(ShellStrings.accountEmailNote == "Only you see this address.")
+        #expect(ShellStrings.accountChangeNameBody == "Only here, in the app, with your PIN and password")
     }
 
     /// vettid-android `OwnerCheckBanners`: the warning names the deadline's time, the hold-off its end; a notice says when
@@ -77,7 +78,9 @@ import VettIDUI
             subscription: SubscriptionInfo(typeName: "Annual", status: "trial", paid: false, expiresAt: now.addingTimeInterval(86_400)),
             firstName: "Ada", lastName: "Lovelace"
         )
-        for a in [nil, AccountInfo(emailHint: "a***@example.com"), member] {
+        var pending = member
+        pending.nameRequest = NameRequestView(seq: 1, firstName: "Ada", lastName: "King", requestedAt: nil, state: .pending)
+        for a in [nil, AccountInfo(emailHint: "a***@example.com"), member, pending] {
             #expect(height(AccountSheet(account: a, now: now, onLockVault: {}, onOpenPortal: {})) > 0)
         }
         let notice = OwnerCheckNotice(itemID: "1", kind: "owner_check.hold_changed", ref: "off", at: now, urgent: false)
@@ -90,7 +93,7 @@ import VettIDUI
         let repo = FakeVaultRepository(.unlocked)
         repo.account = member
         let shell = AppShell(
-            account: repo, vault: repo, ownerChecks: repo, appLock: StillAppLock(),
+            account: repo, vault: repo, ownerChecks: repo, credential: repo, profiles: repo, appLock: StillAppLock(),
             model: ShellModel(account: repo, vault: repo, ownerChecks: repo), gate: gate, now: now,
             version: AppVersion(name: "2.0.0", build: 1), installedFrom: .apple, promptReason: "Unlock VettID"
         ) {}

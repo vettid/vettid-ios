@@ -1,6 +1,28 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "account_change_name": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change name"
+          }
+        }
+      }
+    },
+    "account_change_name_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only here, in the app, with your PIN and password"
+          }
+        }
+      }
+    },
     "account_email": {
       "extractionState": "manual",
       "localizations": {

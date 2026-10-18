@@ -10,8 +10,8 @@ import VettIDShellUI
 import VettIDUI
 
 /// Debug only: the app's shell (the drawer, the owner check's banners, the avatar sheet, a destination still to come) and
-/// Settings with Vault status and Attestation, in each of their states with sample data, for the screen catalog and the
-/// previews. Fixed states with actions that do nothing. The release check refuses its strings.
+/// Settings with Vault status, Attestation, the name change, the PIN change and the Credential screen, in each of their
+/// states with sample data, for the screen catalog and the previews. Fixed states with actions that do nothing. The release check refuses its strings.
 enum ShellCatalog {
     struct Entry: Identifiable, Sendable {
         let id: String
@@ -27,6 +27,10 @@ enum ShellCatalog {
         case settings(SettingsState, OwnerCheckSettingsState)
         case vaultStatus(LoadState<VaultOverview>, InstalledFrom)
         case attestation(LoadState<AttestationInfo>)
+        case changeName(ChangeNameState)
+        case changePin(ChangePinState)
+        case credential(CredentialState)
+        case changePassword(ChangePasswordState)
     }
 
     static let now = Date(timeIntervalSince1970: 1_791_384_000)
@@ -48,7 +52,7 @@ enum ShellCatalog {
 
     static let ownerCheck = OwnerCheckView(state: .ok, deadline: now.addingTimeInterval(20 * 3_600), intervalSeconds: 86_400)
 
-    static let entries: [Entry] = shellEntries + settingsEntries
+    static let entries: [Entry] = shellEntries + settingsEntries + flowEntries
 
     private static var shellEntries: [Entry] {
         let notice = OwnerCheckNotice(itemID: "1", kind: "owner_check.failed", ref: "pin", at: now, urgent: true)
@@ -123,6 +127,8 @@ enum ShellCatalog {
             VaultStatusContent(state: state, installedFrom: installedFrom)
         case .attestation(let state):
             AttestationContent(state: state)
+        case .changeName, .changePin, .credential, .changePassword:
+            flowScreen(entry.screen)
         }
     }
 }

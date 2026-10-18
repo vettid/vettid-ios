@@ -12,6 +12,9 @@ public struct SettingsHost {
     public var onOpenAccountSite: @MainActor () -> Void = {}
     public var onVaultStatus: @MainActor () -> Void = {}
     public var onAttestation: @MainActor () -> Void = {}
+    public var onChangePin: @MainActor () -> Void = {}
+    /// Settings → Security → Credential.
+    public var onCredential: @MainActor () -> Void = {}
     /// Opens the owner check (VAULT-MESSAGING §3.6.5): [holdOff] true turns the hold off with it (VAULT-MESSAGING §3.6.7).
     public var onOwnerCheck: @MainActor (_ holdOff: Bool) -> Void = { _ in }
 
@@ -79,6 +82,8 @@ public struct SettingsRoute: View {
         a.account = host.onAccount
         a.vaultStatus = host.onVaultStatus
         a.attestation = host.onAttestation
+        a.changePin = host.onChangePin
+        a.credential = host.onCredential
         a.accountSite = host.onOpenAccountSite
         a.lockVault = { m.lockVault() }
         a.setAppLock = { m.setAppLock($0) }
@@ -138,6 +143,165 @@ public struct AttestationRoute: View {
     public var body: some View {
         AttestationContent(state: model?.state ?? LoadState(), onBack: onBack)
             .onAppear { if model == nil { model = AttestationViewModel(vault: vault) } }
+    }
+}
+#endif
+
+#if os(iOS)
+/// The name change with its view model, made when it first appears. [onClose] leaves the flow. Mirrors vettid-android's
+/// `ChangeNameRoute` destination: back from the PIN and password returns to the names; from the names (or the result) it
+/// leaves.
+public struct ChangeNameRoute: View {
+    private let accounts: any AccountRepository
+    private let profiles: any ProfileRepository
+    private let onClose: @MainActor () -> Void
+    @State private var model: ChangeNameViewModel?
+
+    public init(accounts: any AccountRepository, profiles: any ProfileRepository, onClose: @escaping @MainActor () -> Void) {
+        self.accounts = accounts
+        self.profiles = profiles
+        self.onClose = onClose
+    }
+
+    public var body: some View {
+        ChangeNameContent(state: model?.state ?? ChangeNameState(account: accounts.account), actions: actions)
+            .onAppear { if model == nil { model = ChangeNameViewModel(accounts: accounts, profiles: profiles) } }
+    }
+
+    private var actions: ChangeNameActions {
+        var a = ChangeNameActions()
+        let m = model
+        let onClose = onClose
+        a.onFirst = { m?.setFirst($0) }
+        a.onLast = { m?.setLast($0) }
+        a.onNext = { m?.next() }
+        a.onPassword = { m?.setPassword($0) }
+        a.onSubmit = { pin in
+            m?.setPin(pin)
+            m?.submit()
+        }
+        a.onBackToNames = { m?.back() }
+        a.onForgetSecrets = { m?.cancel() }
+        a.onClose = {
+            m?.cancel()
+            onClose()
+        }
+        return a
+    }
+}
+
+/// Settings → Vault → Change vault PIN with its view model. [fromAttempts]: opened from a notice about recovery
+/// attempts (the warning first). Mirrors vettid-android's `ChangePinRoute` destination.
+public struct ChangePinRoute: View {
+    private let vault: any VaultRepository
+    private let fromAttempts: Bool
+    private let onClose: @MainActor () -> Void
+    @State private var model: ChangePinViewModel?
+
+    public init(vault: any VaultRepository, fromAttempts: Bool = false, onClose: @escaping @MainActor () -> Void) {
+        self.vault = vault
+        self.fromAttempts = fromAttempts
+        self.onClose = onClose
+    }
+
+    public var body: some View {
+        ChangePinContent(
+            state: model?.state ?? ChangePinState(withPassword: vault.usesPhoneSecret, fromAttempts: fromAttempts), actions: actions
+        )
+        .onAppear { if model == nil { model = ChangePinViewModel(vault: vault, fromAttempts: fromAttempts) } }
+    }
+
+    private var actions: ChangePinActions {
+        var a = ChangePinActions()
+        let m = model
+        a.onCurrent = { m?.setCurrent($0) }
+        a.onPin = { m?.setPin($0) }
+        a.onConfirm = { m?.setConfirm($0) }
+        a.onPassword = { m?.setPassword($0) }
+        a.onNext = { m?.next() }
+        a.onStepBack = { m?.back() }
+        a.onForgetSecrets = { m?.forgetSecrets() }
+        a.onClose = onClose
+        return a
+    }
+}
+
+/// Settings → Security → Credential with its view model. [onOwnerCheck]: turning the backup on asks for the PIN and the
+/// password at once (the owner check), so that the sealed copy exists (VAULT-MESSAGING §3.5.6). Mirrors vettid-android's
+/// `CredentialRoute` destination.
+public struct CredentialRoute: View {
+    private let repo: any CredentialRepository
+    private let onBack: @MainActor () -> Void
+    private let onChangePassword: @MainActor () -> Void
+    private let onOwnerCheck: @MainActor () -> Void
+    @State private var model: CredentialViewModel?
+
+    public init(
+        repo: any CredentialRepository,
+        onBack: @escaping @MainActor () -> Void,
+        onChangePassword: @escaping @MainActor () -> Void,
+        onOwnerCheck: @escaping @MainActor () -> Void
+    ) {
+        self.repo = repo
+        self.onBack = onBack
+        self.onChangePassword = onChangePassword
+        self.onOwnerCheck = onOwnerCheck
+    }
+
+    public var body: some View {
+        CredentialContent(state: model?.state ?? CredentialState(), actions: actions)
+            .onAppear { if model == nil { model = CredentialViewModel(repo: repo) } }
+            .onChange(of: model?.state.notice) { _, notice in if notice == .backupOn { onOwnerCheck() } }
+    }
+
+    private var actions: CredentialActions {
+        var a = CredentialActions()
+        let m = model
+        a.back = onBack
+        a.retry = { m?.refresh() }
+        a.showWindowDialog = { m?.showWindowDialog($0) }
+        a.setWindowPassword = { m?.setWindowPassword($0) }
+        a.openWindow = { m?.openWindow() }
+        a.closeWindow = { m?.closeWindow() }
+        a.setTtl = { m?.setTtl($0) }
+        a.setBackup = { m?.setBackup($0) }
+        a.dismissNotice = { m?.dismissNotice() }
+        a.changePassword = onChangePassword
+        return a
+    }
+}
+
+/// Credential → Change password with its view model. Mirrors vettid-android's `CredentialPasswordRoute` destination.
+public struct ChangePasswordRoute: View {
+    private let repo: any CredentialRepository
+    private let vault: any VaultRepository
+    private let onBack: @MainActor () -> Void
+    @State private var model: ChangePasswordViewModel?
+
+    public init(repo: any CredentialRepository, vault: any VaultRepository, onBack: @escaping @MainActor () -> Void) {
+        self.repo = repo
+        self.vault = vault
+        self.onBack = onBack
+    }
+
+    public var body: some View {
+        ChangePasswordContent(state: model?.state ?? ChangePasswordState(askPin: vault.usesPhoneSecret), actions: actions)
+            .onAppear { if model == nil { model = ChangePasswordViewModel(repo: repo, vault: vault) } }
+    }
+
+    private var actions: ChangePasswordActions {
+        var a = ChangePasswordActions()
+        let m = model
+        a.onCurrent = { m?.setCurrent($0) }
+        a.onPassword = { m?.setPassword($0) }
+        a.onConfirm = { m?.setConfirm($0) }
+        a.onSubmit = { pin in
+            if let pin { m?.setPin(pin) }
+            m?.submit()
+        }
+        a.onForgetSecrets = { m?.forgetSecrets() }
+        a.onBack = onBack
+        return a
     }
 }
 #endif

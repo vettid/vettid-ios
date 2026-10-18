@@ -109,7 +109,8 @@ extension FakeVaultService {
         queue(try epoch.seal(inner))
     }
 
-    /// The requests of enrollment (§3.5.7, §10.6, §10.8). Callers hold ``cond``.
+    /// The requests of enrollment (§3.5.7, §10.6, §10.8), and those of Settings (``settingsRequest(_:_:)``). Callers hold
+    /// ``cond``.
     private func request(_ m: Inner) throws { // swiftlint:disable:this cyclomatic_complexity
         // A locked vault does not collect: nothing sent to it is answered (§12.1).
         if !vaultOpen { return }
@@ -125,13 +126,13 @@ extension FakeVaultService {
         case "vault.status": try status(m)
         case Self.typeOwnerCheck: try ownerCheck(m, body)
         case "credential.ack": try reply(m.type, "{}", re: m.id)
-        case "settings.get": try reply(m.type, #"{"version":\#(settingsVersion),"settings":{"credential.backup":\#(backup),"credential.unlock_ttl_seconds":300,"owner_check.interval_seconds":\#(Int(checkInterval)),"owner_check.hold":\#(!holdOffValue)}}"#, re: m.id)
+        case "settings.get": try reply(m.type, #"{"version":\#(settingsVersion),"settings":{"credential.backup":\#(backup),"credential.unlock_ttl_seconds":\#(unlockTtl),"owner_check.interval_seconds":\#(Int(checkInterval)),"owner_check.hold":\#(!holdOffValue)}}"#, re: m.id)
         case "settings.set": try settingsSet(m, body)
         case "vault.lock": try relayLock(m)
         case "vault.enroll.confirm":
             confirmedValue = true
             try reply(m.type, "{}", re: m.id)
-        default: try reply(m.type, "{}", re: m.id, error: "unsupported_type")
+        default: try settingsRequest(m, body)
         }
     }
 
@@ -150,6 +151,7 @@ extension FakeVaultService {
         }
         if let set = try body.optObj("set") {
             if case .bool(_, let on)? = set["credential.backup"] { backup = on }
+            if let ttl = try set.optUint("credential.unlock_ttl_seconds", min: 30, max: 3_600) { unlockTtl = Int(ttl) }
             try ownerCheckSettings(set)
         }
         settingsVersion += 1

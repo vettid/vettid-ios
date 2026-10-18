@@ -1,6 +1,633 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "credential_alarm_card_frozen": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Another copy of your credential was presented. Credential use is frozen until you answer."
+          }
+        }
+      }
+    },
+    "credential_alarm_card_rotate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rotate your credential to end the alert."
+          }
+        }
+      }
+    },
+    "credential_alarm_card_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credential alert"
+          }
+        }
+      }
+    },
+    "credential_backup": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sealed backup"
+          }
+        }
+      }
+    },
+    "credential_backup_off_ack": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I understand that without this phone my vault cannot be recovered"
+          }
+        }
+      }
+    },
+    "credential_backup_off_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If this phone is lost, broken, reset or replaced without a transfer, your vault <b>cannot be recovered</b>. It can only be deleted and replaced by a new one, and <b>everything in it is lost</b>."
+          }
+        }
+      }
+    },
+    "credential_backup_off_confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn off"
+          }
+        }
+      }
+    },
+    "credential_backup_off_done": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The sealed backup is off."
+          }
+        }
+      }
+    },
+    "credential_backup_off_notice": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No recovery: if this phone is lost, broken, reset or replaced without a transfer, your vault cannot be recovered."
+          }
+        }
+      }
+    },
+    "credential_backup_off_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn the sealed backup off?"
+          }
+        }
+      }
+    },
+    "credential_backup_on_done": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The backup is on. Confirm with your PIN and password now: recovery is possible from then on."
+          }
+        }
+      }
+    },
+    "credential_backup_supporting_off": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No recovery: only this phone holds your credential"
+          }
+        }
+      }
+    },
+    "credential_backup_supporting_on": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault keeps a sealed copy for recovery"
+          }
+        }
+      }
+    },
+    "credential_cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        }
+      }
+    },
+    "credential_change_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your credential is sealed again under the new password. Nobody, VettID included, can reset it, so keep it safe."
+          }
+        }
+      }
+    },
+    "credential_change_done": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your credential password was changed."
+          }
+        }
+      }
+    },
+    "credential_change_password": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change password"
+          }
+        }
+      }
+    },
+    "credential_change_pin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault PIN"
+          }
+        }
+      }
+    },
+    "credential_change_submit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change password"
+          }
+        }
+      }
+    },
+    "credential_change_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change your credential password"
+          }
+        }
+      }
+    },
+    "credential_critical_items": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Critical items"
+          }
+        }
+      }
+    },
+    "credential_done": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done"
+          }
+        }
+      }
+    },
+    "credential_empty_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your Protean Credential is created when you enroll your vault"
+          }
+        }
+      }
+    },
+    "credential_empty_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No credential yet"
+          }
+        }
+      }
+    },
+    "credential_key": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credential key"
+          }
+        }
+      }
+    },
+    "credential_loading": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading your credential"
+          }
+        }
+      }
+    },
+    "credential_open": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open"
+          }
+        }
+      }
+    },
+    "credential_password_confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New password again"
+          }
+        }
+      }
+    },
+    "credential_password_current": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Current password"
+          }
+        }
+      }
+    },
+    "credential_password_label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credential password"
+          }
+        }
+      }
+    },
+    "credential_password_mismatch": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The passwords do not match."
+          }
+        }
+      }
+    },
+    "credential_password_new": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New password"
+          }
+        }
+      }
+    },
+    "credential_password_same": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a password different from the current one."
+          }
+        }
+      }
+    },
+    "credential_retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try again"
+          }
+        }
+      }
+    },
+    "credential_section_protect": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Protection"
+          }
+        }
+      }
+    },
+    "credential_section_status": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Protean Credential"
+          }
+        }
+      }
+    },
+    "credential_section_window": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock window"
+          }
+        }
+      }
+    },
+    "credential_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credential"
+          }
+        }
+      }
+    },
+    "credential_ttl_15m": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "15 minutes"
+          }
+        }
+      }
+    },
+    "credential_ttl_1h": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 hour"
+          }
+        }
+      }
+    },
+    "credential_ttl_1m": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 minute"
+          }
+        }
+      }
+    },
+    "credential_ttl_30s": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "30 seconds"
+          }
+        }
+      }
+    },
+    "credential_ttl_5m": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5 minutes"
+          }
+        }
+      }
+    },
+    "credential_ttl_seconds": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld seconds"
+          }
+        }
+      }
+    },
+    "credential_ttl_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock window length"
+          }
+        }
+      }
+    },
+    "credential_unknown": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown"
+          }
+        }
+      }
+    },
+    "credential_updated": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last changed"
+          }
+        }
+      }
+    },
+    "credential_version": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version"
+          }
+        }
+      }
+    },
+    "credential_window_close": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close it now"
+          }
+        }
+      }
+    },
+    "credential_window_closed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Closed"
+          }
+        }
+      }
+    },
+    "credential_window_dialog_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter your credential password."
+          }
+        }
+      }
+    },
+    "credential_window_dialog_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open the unlock window"
+          }
+        }
+      }
+    },
+    "credential_window_length": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Window length"
+          }
+        }
+      }
+    },
+    "credential_window_open": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open the unlock window"
+          }
+        }
+      }
+    },
+    "credential_window_open_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lets signing actions (member authentication, agents) use your credential key without asking each time."
+          }
+        }
+      }
+    },
+    "credential_window_open_until": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open until %@"
+          }
+        }
+      }
+    },
+    "credential_window_state": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Status"
+          }
+        }
+      }
+    },
     "ios_app_lock_enable_failed": {
       "extractionState": "manual",
       "localizations": {
@@ -19,6 +646,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Face ID and Touch ID are not set up on this iPhone. Choose iPhone passcode under Unlock with to use the app lock with the passcode."
+          }
+        }
+      }
+    },
+    "ios_credential_password_unanswered": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault did not answer, so your password may already be the new one. Use the new password the next time you are asked for it. If it is not accepted, use your current password and try again."
           }
         }
       }
@@ -140,6 +778,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "The iPhone passcode only, never Face ID or Touch ID"
+          }
+        }
+      }
+    },
+    "ios_settings_pin_continue": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue"
+          }
+        }
+      }
+    },
+    "ios_settings_pin_unanswered": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault did not answer, so your PIN may already be the new one. Lock your vault and unlock it with the new PIN. If the new PIN does not work, unlock with your current PIN and try again."
           }
         }
       }
@@ -430,6 +1090,370 @@
         }
       }
     },
+    "settings_name_applied_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your account name is now %@. Your connections get the new name from your vault."
+          }
+        }
+      }
+    },
+    "settings_name_applied_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your name was changed"
+          }
+        }
+      }
+    },
+    "settings_name_back": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back"
+          }
+        }
+      }
+    },
+    "settings_name_backoff": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too many wrong tries. Wait a moment, then try again."
+          }
+        }
+      }
+    },
+    "settings_name_bad_password": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That password is not correct."
+          }
+        }
+      }
+    },
+    "settings_name_bad_pin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That PIN is not correct."
+          }
+        }
+      }
+    },
+    "settings_name_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every connection sees the name on your VettID account. You can change it once every 30 days; VettID applies the change, then your connections get the new name."
+          }
+        }
+      }
+    },
+    "settings_name_checks_left": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld more wrong try locks your vault."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld more wrong tries lock your vault."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "settings_name_confirm_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault checks your PIN and your credential password, as in the daily check, then asks VettID to change your name to %@."
+          }
+        }
+      }
+    },
+    "settings_name_confirm_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm with your PIN and password"
+          }
+        }
+      }
+    },
+    "settings_name_continue": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue"
+          }
+        }
+      }
+    },
+    "settings_name_done": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done"
+          }
+        }
+      }
+    },
+    "settings_name_empty": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a name."
+          }
+        }
+      }
+    },
+    "settings_name_first": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "First name"
+          }
+        }
+      }
+    },
+    "settings_name_invalid": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use letters, spaces and ' ’ . - only, starting with a letter."
+          }
+        }
+      }
+    },
+    "settings_name_last": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last name"
+          }
+        }
+      }
+    },
+    "settings_name_password": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credential password"
+          }
+        }
+      }
+    },
+    "settings_name_pin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault PIN"
+          }
+        }
+      }
+    },
+    "settings_name_refused_account": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your account cannot change its name right now."
+          }
+        }
+      }
+    },
+    "settings_name_refused_invalid": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID did not accept the name. Use letters, spaces and ' ’ . - only, at most 40 characters each."
+          }
+        }
+      }
+    },
+    "settings_name_refused_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your name was not changed"
+          }
+        }
+      }
+    },
+    "settings_name_requested_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID changes the name on your account to %@. Your connections see the new name once it is applied; this can take a moment."
+          }
+        }
+      }
+    },
+    "settings_name_requested_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name change requested"
+          }
+        }
+      }
+    },
+    "settings_name_rule": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Letters, spaces and ' ’ . - only, at most 40 characters."
+          }
+        }
+      }
+    },
+    "settings_name_same": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is already the name on your account."
+          }
+        }
+      }
+    },
+    "settings_name_status_pending": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name change requested: %@"
+          }
+        }
+      }
+    },
+    "settings_name_submit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change name"
+          }
+        }
+      }
+    },
+    "settings_name_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change your name"
+          }
+        }
+      }
+    },
+    "settings_name_too_long": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "At most 40 characters."
+          }
+        }
+      }
+    },
+    "settings_name_too_soon": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can change your name once every 30 days. You can change it again on %@."
+          }
+        }
+      }
+    },
+    "settings_name_too_soon_undated": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can change your name once every 30 days."
+          }
+        }
+      }
+    },
+    "settings_name_wait": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too many wrong tries. Try again in %@."
+          }
+        }
+      }
+    },
     "settings_no": {
       "extractionState": "manual",
       "localizations": {
@@ -640,6 +1664,138 @@
         }
       }
     },
+    "settings_pin_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault re-derives its key from the new PIN. Use at least 6 digits."
+          }
+        }
+      }
+    },
+    "settings_pin_confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New PIN again"
+          }
+        }
+      }
+    },
+    "settings_pin_current": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Current PIN"
+          }
+        }
+      }
+    },
+    "settings_pin_done": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault PIN was changed."
+          }
+        }
+      }
+    },
+    "settings_pin_done_recovery": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your PIN was changed. Your vault's recovery now has 10 new attempts for the new PIN and your password."
+          }
+        }
+      }
+    },
+    "settings_pin_mismatch": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The PINs do not match."
+          }
+        }
+      }
+    },
+    "settings_pin_new": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New PIN"
+          }
+        }
+      }
+    },
+    "settings_pin_password": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credential password"
+          }
+        }
+      }
+    },
+    "settings_pin_password_too": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changing only the PIN gives whoever is guessing ten new tries at the same password. Change your password too."
+          }
+        }
+      }
+    },
+    "settings_pin_same": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a PIN different from the current one."
+          }
+        }
+      }
+    },
+    "settings_pin_submit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change PIN"
+          }
+        }
+      }
+    },
+    "settings_pin_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change your vault PIN"
+          }
+        }
+      }
+    },
     "settings_recovery_not_offered": {
       "extractionState": "manual",
       "localizations": {
@@ -790,6 +1946,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Attestation"
+          }
+        }
+      }
+    },
+    "settings_security_credential": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credential"
+          }
+        }
+      }
+    },
+    "settings_security_credential_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Password, rotation, backup, unlock window"
           }
         }
       }
@@ -1087,6 +2265,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Locks your vault now. You need your PIN to open it again."
+          }
+        }
+      }
+    },
+    "settings_vault_pin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change vault PIN"
           }
         }
       }

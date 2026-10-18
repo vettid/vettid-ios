@@ -39,10 +39,17 @@ public enum TopLevelDestination: String, CaseIterable, Sendable {
     public var available: Bool { self == .settings }
 }
 
-/// The screens pushed over a top-level screen so far (vettid-android's routes of `feature/settings`).
+/// The screens pushed over a top-level screen so far (vettid-android's routes of `feature/settings` and
+/// `feature/credential`).
 public enum ShellRoute: Hashable, Sendable {
     case vaultStatus
     case attestation
+    /// The account's name change (VAULT-MESSAGING §10.8), from the avatar sheet.
+    case changeName
+    /// [fromAttempts]: from a notice about recovery attempts.
+    case changePin(fromAttempts: Bool)
+    case credential
+    case changePassword
 }
 
 /// This build's version as the drawer's footer shows it ("VettID 2.0.0 (1)", vettid-android `drawer_version`).

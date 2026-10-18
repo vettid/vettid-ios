@@ -77,6 +77,7 @@ extension VaultManager {
         refusedByVault = false
         alarm = nil
         unlockWindow = nil
+        pinChangeOperation = nil
         account = nil
         await wiper.resetMemory()
         var done = wiper.erase()
