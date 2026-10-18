@@ -43,6 +43,9 @@ public enum VaultFiles {
     public static let lock = "lock-record"
     /// The owner check as this phone last learnt it (``OwnerCheckManager``).
     public static let ownerCheck = "owner-check"
+    /// The canary manifest installed out of band (``CanaryManifestManager``). Not one of ``all(in:)``: it holds nothing
+    /// of a vault, so its presence alone does not refuse the first-run cleanup (chosen; not in the spec).
+    public static let canary = "canary-manifest"
 
     /// Every data file of the vault manager in [directory].
     public static func all(in directory: URL) -> [URL] {

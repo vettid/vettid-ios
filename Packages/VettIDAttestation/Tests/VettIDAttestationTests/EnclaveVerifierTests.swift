@@ -186,6 +186,20 @@ import VettIDCrypto
         }
     }
 
+    /// A document signed with the staging channel's key (staging.vettid.org's serial 17, as a canary of serial 17 would
+    /// be) installs under the staging pin while it is newer than the published one and nothing newer was used; the
+    /// production pins (a Release build) refuse it.
+    @Test func aStagingSignedCanaryInstallsUnderTheStagingPinOnly() throws {
+        let staging = ManifestVerifier(pinned: [try ManifestKey(base64: ManifestKeysTests.stagingKeyA)])
+        let doc = try resource("manifest", "staging-pcr-manifest-serial17.json")
+        #expect(try CanaryManifests.check(verifier: staging, served: doc, seen: 16, published: 16).serial == 17)
+        #expect(try CanaryManifests.check(verifier: staging, served: doc, seen: 0, published: nil).serial == 17)
+        #expect(throws: CanaryManifestError.published) { _ = try CanaryManifests.check(verifier: staging, served: doc, seen: 0, published: 17) }
+        #expect(throws: CanaryManifestError.older) { _ = try CanaryManifests.check(verifier: staging, served: doc, seen: 18, published: nil) }
+        let production = ManifestVerifier(pinned: ManifestKeys.production)
+        expectAttestation(.manifestKey) { _ = try CanaryManifests.check(verifier: production, served: doc, seen: 0, published: nil) }
+    }
+
     @Test func theHigherSerialIsChosen() throws {
         let p = try verifier.verify(try served(7))
         let c = try verifier.verify(try served(8))

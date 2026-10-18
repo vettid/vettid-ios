@@ -151,6 +151,10 @@ extension FakeVaultService {
         let pin = (try? body.string("pin")) ?? ""
         let secret = try? body.base64("unlock_secret")
         let cancel = body.has("cancel_recovery")
+        // The vault records the highest manifest serial it was sent (§11.10.4) and answers it.
+        if let sent = (try? body.optUint("manifest_serial", min: 0, max: StrictJson.maxSafeInteger)) ?? nil {
+            vaultManifestSerial = max(vaultManifestSerial, sent)
+        }
         unlocksValue.append(UnlockSeen(pin: pin, unlockSecret: secret, cancelRecovery: cancel))
         // procHost.Open: a running vault is locked first, as for an owner request, whatever the unlock is answered.
         if vaultOpen {
@@ -190,7 +194,7 @@ extension FakeVaultService {
         vaultOpen = true
         statusState = Self.unlocked
         let token = device.flatMap { try? self.token($0.relay) } ?? ""
-        return #"{"ok":true,"state_seq":\#(stateSeq),"header_seq":\#(headerSeq),"token":"\#(token)","release":"\#(Self.pcr0)","release_number":3,"release_status":"active","manifest_serial":7}"#
+        return #"{"ok":true,"state_seq":\#(stateSeq),"header_seq":\#(headerSeq),"token":"\#(token)","release":"\#(Self.pcr0)","release_number":3,"release_status":"active","manifest_serial":\#(vaultManifestSerial)}"#
     }
 
     private func refused(_ code: String, retryAfter: TimeInterval = 0) -> String {

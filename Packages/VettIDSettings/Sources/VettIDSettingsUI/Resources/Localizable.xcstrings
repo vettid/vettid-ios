@@ -1,6 +1,149 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "canary_confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use it"
+          }
+        }
+      }
+    },
+    "canary_confirm_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file is a list of vault releases signed by VettID (serial %lld, key %@) that VettID has not published yet. It lists %@. Use it only if VettID asked you to test a new vault release. The app uses it instead of the published list until VettID publishes this list or a newer one."
+          }
+        }
+      }
+    },
+    "canary_confirm_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use a test release manifest?"
+          }
+        }
+      }
+    },
+    "canary_installed_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The app now uses the test release manifest (serial %lld). You can stop using it in Settings, Attestation."
+          }
+        }
+      }
+    },
+    "canary_installed_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Test release manifest in use"
+          }
+        }
+      }
+    },
+    "canary_ok": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
+          }
+        }
+      }
+    },
+    "canary_refused_format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "It is not a VettID release manifest."
+          }
+        }
+      }
+    },
+    "canary_refused_older": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "It is older than the release list this phone already uses."
+          }
+        }
+      }
+    },
+    "canary_refused_other": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "It could not be checked. Try again."
+          }
+        }
+      }
+    },
+    "canary_refused_published": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID has already published this release list or a newer one, so it is not needed."
+          }
+        }
+      }
+    },
+    "canary_refused_signature": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "It is not signed with a key this app trusts."
+          }
+        }
+      }
+    },
+    "canary_refused_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file cannot be used"
+          }
+        }
+      }
+    },
+    "canary_release": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "release %lld (%@)"
+          }
+        }
+      }
+    },
     "credential_alarm_card_frozen": {
       "extractionState": "manual",
       "localizations": {
@@ -716,6 +859,28 @@
         }
       }
     },
+    "ios_settings_canary_load": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Load a test release manifest"
+          }
+        }
+      }
+    },
+    "ios_settings_canary_load_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only if VettID asked you to test a new vault release: choose the file VettID sent you, or open it with VettID from Files or AirDrop."
+          }
+        }
+      }
+    },
     "ios_settings_installed_app_attest": {
       "extractionState": "manual",
       "localizations": {
@@ -1042,6 +1207,94 @@
           "stringUnit": {
             "state": "translated",
             "value": "Attestation version"
+          }
+        }
+      }
+    },
+    "settings_canary_release": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "release %lld (%@)"
+          }
+        }
+      }
+    },
+    "settings_canary_releases": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Releases it lists"
+          }
+        }
+      }
+    },
+    "settings_canary_remove": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop using the test manifest"
+          }
+        }
+      }
+    },
+    "settings_canary_remove_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID's published release list is used again. A vault on a release that is not published yet cannot be unlocked from this phone until VettID publishes it."
+          }
+        }
+      }
+    },
+    "settings_canary_remove_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop using the test manifest?"
+          }
+        }
+      }
+    },
+    "settings_canary_serial": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Serial and signing key"
+          }
+        }
+      }
+    },
+    "settings_canary_serial_value": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Serial %lld · key %@"
+          }
+        }
+      }
+    },
+    "settings_canary_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Test release manifest"
           }
         }
       }

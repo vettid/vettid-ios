@@ -6,6 +6,7 @@ import VettIDData
 import VettIDOnboarding
 import VettIDOnboardingUI
 import VettIDSettings
+import VettIDSettingsUI
 import VettIDShell
 import VettIDShellUI
 import VettIDUI
@@ -49,11 +50,9 @@ struct RootView: View {
     var body: some View {
         AppLockGate(lock: composition.appLock, themeMode: themeMode) {
             #if DEBUG
-            DebugCatalog(themeMode: $themeMode) {
-                AppRoot(environment: environment, vault: composition.vault, inbox: composition.inbox, appLock: composition.appLock)
-            }
+            DebugCatalog(themeMode: $themeMode) { appRoot }
             #else
-            AppRoot(environment: environment, vault: composition.vault, inbox: composition.inbox, appLock: composition.appLock)
+            appRoot
             #endif
         }
         // The app lock's settings could not be read at launch (the iPhone not unlocked since it started): read again.
@@ -61,6 +60,13 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.protectedDataDidBecomeAvailableNotification)) { _ in
             composition.startAppLock()
         }
+    }
+
+    private var appRoot: some View {
+        AppRoot(
+            environment: environment, vault: composition.vault, inbox: composition.inbox, canaryInbox: composition.canaryInbox,
+            appLock: composition.appLock
+        )
     }
 }
 
@@ -70,22 +76,25 @@ struct AppRoot: View {
     let environment: AppEnvironment
     let vault: VaultManager
     let inbox: SetupLinkInbox
+    let canaryInbox: CanaryManifestInbox
     let appLock: AppLock
     /// Where the member is in the open app, kept while the check past the deadline takes the shell's place.
     @State private var shell: ShellModel
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
 
-    init(environment: AppEnvironment, vault: VaultManager, inbox: SetupLinkInbox, appLock: AppLock) {
+    init(environment: AppEnvironment, vault: VaultManager, inbox: SetupLinkInbox, canaryInbox: CanaryManifestInbox, appLock: AppLock) {
         self.environment = environment
         self.vault = vault
         self.inbox = inbox
+        self.canaryInbox = canaryInbox
         self.appLock = appLock
         _shell = State(initialValue: ShellModel(account: vault, vault: vault, ownerChecks: vault.ownerChecks))
     }
 
     var body: some View {
-        content
+        // A canary manifest handed to the app is asked about over whatever is shown (VAULT-RELEASES §10.1 step 9).
+        CanaryManifestHost(inbox: canaryInbox, repo: vault.canary) { content }
             .task { try? await vault.refresh() }
             // A start before the first unlock (or while the iPhone was locked) read nothing: read again once the app is
             // active and protected data is available (IOS-PLAN §6.1, §6.3).
@@ -108,7 +117,12 @@ struct AppRoot: View {
             // A lock (or anything that leaves the open app) starts the next open afresh, as vettid-android's new shell does.
             .onChange(of: vault.phase) { _, now in if now != .unlocked { shell.reset() } }
             .onOpenURL { url in
-                if SetupCodes.isSetupLink(url.absoluteString) { inbox.offer(url.absoluteString) }
+                if SetupCodes.isSetupLink(url.absoluteString) {
+                    inbox.offer(url.absoluteString)
+                } else if let doc = CanaryManifestFiles.receive(url) {
+                    // A file opened with VettID: only verified and shown; nothing is installed before the member confirms.
+                    canaryInbox.offer(doc)
+                }
             }
     }
 
@@ -172,7 +186,7 @@ struct AppRoot: View {
                     account: vault, vault: vault, ownerChecks: vault.ownerChecks, credential: vault, profiles: vault.profiles,
                     appLock: appLock, model: shell, gate: gate, now: now,
                     version: .of(Bundle.main.infoDictionary ?? [:]), installedFrom: InstalledFromBuild.current,
-                    promptReason: AppLockTexts.reason
+                    promptReason: AppLockTexts.reason, canary: vault.canary, canaryInbox: canaryInbox
                 ) { openPortal() }
             }
         }

@@ -27,6 +27,10 @@ enum ShellCatalog {
         case settings(SettingsState, OwnerCheckSettingsState)
         case vaultStatus(LoadState<VaultOverview>, InstalledFrom)
         case attestation(LoadState<AttestationInfo>)
+        /// Attestation on a canary phone (VAULT-RELEASES §10.1 step 9): the installed test release manifest.
+        case attestationCanary(LoadState<AttestationInfo>, CanaryManifestView)
+        /// The canary manifest dialog over the shell.
+        case canaryDialog(CanaryManifestPrompt)
         case changeName(ChangeNameState)
         case changePin(ChangePinState)
         case credential(CredentialState)
@@ -52,7 +56,39 @@ enum ShellCatalog {
 
     static let ownerCheck = OwnerCheckView(state: .ok, deadline: now.addingTimeInterval(20 * 3_600), intervalSeconds: 86_400)
 
-    static let entries: [Entry] = shellEntries + settingsEntries + flowEntries
+    static let entries: [Entry] = shellEntries + settingsEntries + canaryEntries + flowEntries
+
+    /// A canary manifest of serial 2 signed by production key A, listing release 1 deprecated and release 2 active.
+    static let canary = CanaryManifestView(
+        serial: 2, keyID: "4353463f85c4012f", sha256: String(repeating: "ab", count: 32),
+        releases: [release(1, "deprecated"), release(2, "active")]
+    )
+
+    private static func release(_ n: UInt64, _ status: String) -> ReleaseView {
+        ReleaseView(
+            number: n, pcr0: String(repeating: n < 10 ? "0\(n)" : String(n % 100), count: 48), status: status, endsAt: nil,
+            notes: "https://vettid.org/security/releases/\(n)/"
+        )
+    }
+
+    private static var canaryEntries: [Entry] {
+        let production = AttestationInfo.iPhone(
+            environment: "PRODUCTION", appAttest: AppAttestInfo(accepted: true), lastRelease: 1,
+            lastReleaseFingerprint: "0101 0101 0101 0101"
+        )
+        return [
+            Entry(
+                id: "attestation_canary", title: "Attestation: test release manifest",
+                screen: .attestationCanary(LoadState(loading: false, value: production), canary)
+            ),
+            Entry(id: "canary_confirm", title: "Test release manifest: confirm", screen: .canaryDialog(.confirm(canary))),
+            Entry(
+                id: "canary_refused", title: "Test release manifest: refused",
+                screen: .canaryDialog(.refused(code: CanaryManifestCodes.signature))
+            ),
+            Entry(id: "canary_installed", title: "Test release manifest: installed", screen: .canaryDialog(.installed(canary))),
+        ]
+    }
 
     private static var shellEntries: [Entry] {
         let notice = OwnerCheckNotice(itemID: "1", kind: "owner_check.failed", ref: "pin", at: now, urgent: true)
@@ -126,7 +162,11 @@ enum ShellCatalog {
         case .vaultStatus(let state, let installedFrom):
             VaultStatusContent(state: state, installedFrom: installedFrom)
         case .attestation(let state):
-            AttestationContent(state: state)
+            AttestationContent(state: state, onLoadCanary: {})
+        case .attestationCanary(let state, let canary):
+            AttestationContent(state: state, canary: canary, onLoadCanary: {})
+        case .canaryDialog(let prompt):
+            ComingLaterScreen(destination: .messages, chrome: chrome).canaryManifestDialog(prompt, onConfirm: {}, onDismiss: {})
         case .changeName, .changePin, .credential, .changePassword:
             flowScreen(entry.screen)
         }
