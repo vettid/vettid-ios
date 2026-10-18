@@ -322,17 +322,54 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
 }
 
 /// What the app's shell shows of the daily owner check (§3.6.5) at one moment: re-read as time passes, so that the deadline
-/// gates on its own. The banners (the early warning, the hold-off indicator, the presence notice, the feed's notices)
-/// come with the shell (IOS-PLAN §8 I1.8). Mirrors vettid-android `OwnerCheckGateState`.
+/// gates on its own. Mirrors vettid-android `OwnerCheckGateState`.
 public struct OwnerCheckGate: Equatable, Sendable {
     /// Past the deadline: the check comes before any other use of the app (never over an action in progress).
-    public let gated: Bool
+    public var gated: Bool
     /// Within the hour before the deadline: the early warning, with "check now".
-    public let warning: Bool
-    /// The hold is off (§3.6.7).
-    public let holdOff: Bool
+    public var warning: Bool
+    /// The hold is off (§3.6.7): the persistent indicator, with its end date if any.
+    public var holdOff: Bool
+    public var deadline: Date?
+    public var holdOffUntil: Date?
+    /// Unread `owner_check.*` feed items (the feed comes with I2.3).
+    public var notices: [OwnerCheckNotice]
+    /// (Release R, §11.14.5) The vault could not record that the member was here: the presence notice.
+    public var presenceUnrecorded: Bool
 
-    public static func of(_ v: OwnerCheckView?, now: Date) -> OwnerCheckGate {
-        OwnerCheckGate(gated: v?.gated(now) == true, warning: v?.warning(now) == true, holdOff: v?.holdOff(now) == true)
+    public init(
+        gated: Bool,
+        warning: Bool,
+        holdOff: Bool,
+        deadline: Date? = nil,
+        holdOffUntil: Date? = nil,
+        notices: [OwnerCheckNotice] = [],
+        presenceUnrecorded: Bool = false
+    ) {
+        self.gated = gated
+        self.warning = warning
+        self.holdOff = holdOff
+        self.deadline = deadline
+        self.holdOffUntil = holdOffUntil
+        self.notices = notices
+        self.presenceUnrecorded = presenceUnrecorded
     }
+
+    public static func of(
+        _ v: OwnerCheckView?,
+        now: Date,
+        notices: [OwnerCheckNotice] = [],
+        presenceUnrecorded: Bool = false
+    ) -> OwnerCheckGate {
+        OwnerCheckGate(
+            gated: v?.gated(now) == true, warning: v?.warning(now) == true, holdOff: v?.holdOff(now) == true,
+            deadline: v?.deadline, holdOffUntil: v?.holdOffUntil, notices: notices, presenceUnrecorded: presenceUnrecorded
+        )
+    }
+
+    /// The early warning shows: within the hour before the deadline, not past it.
+    public var warningShown: Bool { warning && !gated }
+
+    /// Whether the shell's owner-check banners show anything (vettid-android `bannerShown`).
+    public var bannerShown: Bool { !notices.isEmpty || warningShown || holdOff || presenceUnrecorded }
 }

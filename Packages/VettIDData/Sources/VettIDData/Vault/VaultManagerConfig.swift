@@ -122,6 +122,8 @@ public struct VaultManagerConfig: Sendable {
     /// What a wipe of this phone erases (``LocalWipe``); nil: this build cannot wipe (``AccountRepository/eraseThisPhone()``
     /// refuses with ``FailureKind/notSupported``).
     public var wipeTargets: (any WipeTargets)?
+    /// The build's environment as Settings → Attestation names it (`production`, `staging`, …).
+    public var environment: String
     public var now: @Sendable () -> Date
 
     public init(
@@ -144,6 +146,7 @@ public struct VaultManagerConfig: Sendable {
         enrolledGrace: TimeInterval = 15,
         lockTiming: LockTiming = LockTiming(),
         wipeTargets: (any WipeTargets)? = nil,
+        environment: String = "",
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.apiOrigin = apiOrigin.hasSuffix("/") ? String(apiOrigin.dropLast()) : apiOrigin
@@ -165,6 +168,7 @@ public struct VaultManagerConfig: Sendable {
         self.enrolledGrace = enrolledGrace
         self.lockTiming = lockTiming
         self.wipeTargets = wipeTargets
+        self.environment = environment
         self.now = now
     }
 
@@ -218,7 +222,19 @@ final class MemberVaultID: @unchecked Sendable {
     func set(recorded: String?) { lock.withLock { self.recorded = recorded?.isEmpty == true ? nil : recorded } }
 
     var current: String? {
-        let (d, r) = lock.withLock { (device, recorded) }
-        return d?.vaultID ?? r
+        let d = currentDevice()
+        return d?.vaultID ?? currentRecorded()
+    }
+
+    private func currentDevice() -> VaultDevice? {
+        lock.lock()
+        defer { lock.unlock() }
+        return device
+    }
+
+    private func currentRecorded() -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return recorded
     }
 }

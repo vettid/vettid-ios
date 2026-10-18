@@ -30,10 +30,12 @@ SELF_TEST=0
 # software keys (IOS-PLAN §6.3: no software phone key in Release or Staging) and VettIDAltChanTesting's TEST iOS
 # attester (IOS-PLAN §6.2) carry "VETTID TEST ONLY".
 TEST_MARKERS=("VettIDTesting" "VettIDDataTesting" "VettIDKeysTesting" "VettIDAltChanTesting" "TESTTEAM00" "VETTID TEST ONLY")
-# "Scan: another environment", "Keys gone, earlier keys to try" and "Held: messages and a call waiting" are titles of the
-# onboarding, unlock and owner-check screen catalogs (App/Debug, debug builds only).
+# "Scan: another environment", "Keys gone, earlier keys to try", "Held: messages and a call waiting" and "Drawer open"
+# are titles of the onboarding, unlock, owner-check and shell screen catalogs (App/Debug, debug builds only); "Xcode
+# (development)" is the development builds' "Installed from" line (IOS-PLAN ID15, App/InstalledFromBuild.swift).
 DEV_ONLY=("127.0.0.1" "relay.vettid.test" "vettid.start" "vettid.theme" "Component gallery" "Screen catalog"
-  "Scan: another environment" "Keys gone, earlier keys to try" "Held: messages and a call waiting")
+  "Scan: another environment" "Keys gone, earlier keys to try" "Held: messages and a call waiting" "Drawer open"
+  "Xcode (development)")
 
 PRODUCTION_HOSTS=("account.vettid.org")
 STAGING_HOSTS=("staging.vettid.org")
@@ -203,6 +205,10 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
   plant Staging check_staging "Scan: another environment"
   plant Staging check_staging "TESTTEAM00.com.vettid.app"
   plant Staging check_staging "127.0.0.1"
+  plant Release check_release "Installed from: Xcode (development)"
+  plant Staging check_staging "Installed from: Xcode (development)"
+  plant Release check_release "Drawer open"
+  plant Staging check_staging "Drawer open"
 fi
 
 echo "release check passed"

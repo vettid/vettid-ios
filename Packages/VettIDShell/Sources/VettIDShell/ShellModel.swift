@@ -1,0 +1,87 @@
+import Foundation
+import Observation
+import VettIDData
+import VettIDOnboarding
+
+/// What the shell shows and where the member is: the destination, the screens pushed over it, the drawer, the avatar
+/// sheet, and the owner check the member asked for. Owned above the owner check's gate (VAULT-MESSAGING §3.6.5), so that
+/// a check past the deadline, which takes the place of the whole shell, leaves the member where they were. Mirrors the
+/// state of vettid-android `AppShell` (its NavController, drawer state, `showAccount` and `asked`).
+@MainActor
+@Observable
+public final class ShellModel {
+    public private(set) var destination = TopLevelDestination.start
+    public var path: [ShellRoute] = []
+    public var drawerOpen = false
+    public var showAccount = false
+    /// The voluntary check or the hold-off check, shown over the shell; nil: none.
+    public private(set) var asked: OwnerCheckMode?
+
+    @ObservationIgnored private let account: any AccountRepository
+    @ObservationIgnored private let vault: any VaultRepository
+    @ObservationIgnored private let ownerChecks: any OwnerCheckRepository
+
+    public init(account: any AccountRepository, vault: any VaultRepository, ownerChecks: any OwnerCheckRepository) {
+        self.account = account
+        self.vault = vault
+        self.ownerChecks = ownerChecks
+    }
+
+    /// Drawer navigation: one copy of each top-level screen, its pushed screens dropped, the drawer closed.
+    public func navigate(_ d: TopLevelDestination) {
+        path = []
+        destination = d
+        drawerOpen = false
+    }
+
+    /// Settings' back arrow: the start destination, as vettid-android's back stack returns to it.
+    public func back() { navigate(.start) }
+
+    public func push(_ r: ShellRoute) { path.append(r) }
+
+    public func pop() {
+        if !path.isEmpty { path.removeLast() }
+    }
+
+    /// "Check now" (the banner, Settings) or, with [holdOff], turning the hold off, which only a check may do
+    /// (VAULT-MESSAGING §3.6.7). The sheet and the drawer close.
+    public func ownerCheck(holdOff: Bool) {
+        asked = holdOff ? .holdOff : .voluntary
+        showAccount = false
+        drawerOpen = false
+    }
+
+    /// The asked check passed or was cancelled.
+    public func ownerCheckDone() { asked = nil }
+
+    /// The check past the deadline took the shell's place: nothing the shell had open (the drawer, the sheet, an asked
+    /// check) comes back with it.
+    public func shown() {
+        asked = nil
+        showAccount = false
+        drawerOpen = false
+    }
+
+    /// The vault was locked or left: the next open starts afresh, as vettid-android's new shell does.
+    public func reset() {
+        shown()
+        path = []
+        destination = .start
+    }
+
+    /// "Lock vault" from the avatar sheet: the sheet closes, the phone is locked at once (the root shows the unlock
+    /// screen). A lock that fails reads the phase again, as vettid-android's `RootViewModel.lockVault` does.
+    public func lockVault() async {
+        showAccount = false
+        do {
+            try await vault.lock()
+        } catch {
+            try? await account.refresh()
+        }
+    }
+
+    /// The hold-off indicator's "Turn on": a failure leaves the indicator; Settings shows it when the member tries there.
+    public func turnHoldOn() async { try? await ownerChecks.turnHoldOn() }
+
+    public func dismissNotices() async { try? await ownerChecks.dismissNotices() }
+}

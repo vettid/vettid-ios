@@ -397,9 +397,10 @@ public struct RecoveryView: Equatable, Sendable {
     }
 }
 
-/// What Settings shows about attestation: this device's key and the enclave last verified. The fields are Android's;
-/// on iOS [keyLevel] names the Secure Enclave and the boot fields stay nil (chosen; not in the spec). Mirrors
-/// vettid-android `AttestationInfo`.
+/// What Settings shows about attestation: this device's key and the enclave last verified. The device fields are
+/// Android's (hardware key attestation, VAULT-MESSAGING §11.7); an iPhone has none of them (App Attest reports no key
+/// level, boot state or signer, §11.7 "iOS (App Attest)") and fills [appAttest] instead, its Android fields left empty
+/// (chosen; not in the spec). Mirrors vettid-android `AttestationInfo`.
 public struct AttestationInfo: Equatable, Sendable {
     public var environment: String
     public var keyPresent: Bool
@@ -413,6 +414,8 @@ public struct AttestationInfo: Equatable, Sendable {
     public var bootKeyFingerprint: String?
     public var lastRelease: UInt64
     public var lastReleaseFingerprint: String?
+    /// (iPhone) What the app knows of its App Attest key; nil on Android.
+    public var appAttest: AppAttestInfo?
 
     public init(
         environment: String,
@@ -424,7 +427,8 @@ public struct AttestationInfo: Equatable, Sendable {
         deviceLocked: Bool?,
         bootKeyFingerprint: String?,
         lastRelease: UInt64,
-        lastReleaseFingerprint: String?
+        lastReleaseFingerprint: String?,
+        appAttest: AppAttestInfo? = nil
     ) {
         self.environment = environment
         self.keyPresent = keyPresent
@@ -436,5 +440,29 @@ public struct AttestationInfo: Equatable, Sendable {
         self.bootKeyFingerprint = bootKeyFingerprint
         self.lastRelease = lastRelease
         self.lastReleaseFingerprint = lastReleaseFingerprint
+        self.appAttest = appAttest
+    }
+
+    /// The iPhone's attestation: the vault side as on Android, the device side as ``AppAttestInfo``.
+    public static func iPhone(environment: String, appAttest: AppAttestInfo, lastRelease: UInt64, lastReleaseFingerprint: String?)
+        -> AttestationInfo {
+        AttestationInfo(
+            environment: environment, keyPresent: appAttest.accepted, keyLevel: nil, strongBoxAvailable: false,
+            attestationVersion: nil, verifiedBoot: nil, deviceLocked: nil, bootKeyFingerprint: nil, lastRelease: lastRelease,
+            lastReleaseFingerprint: lastReleaseFingerprint, appAttest: appAttest
+        )
+    }
+}
+
+/// (iPhone) The App Attest side of ``AttestationInfo`` (VAULT-MESSAGING §11.7): App Attest keeps its key in the Secure
+/// Enclave and reports nothing else about the phone, so the app can say only whether the vault accepted this iPhone's
+/// attestation (it did when this phone enrolled or recovered the vault and was paired with it, §11.3). (Chosen; not in
+/// the spec.)
+public struct AppAttestInfo: Equatable, Sendable {
+    /// The vault accepted this iPhone's App Attest key: the phone is paired with the vault.
+    public var accepted: Bool
+
+    public init(accepted: Bool) {
+        self.accepted = accepted
     }
 }

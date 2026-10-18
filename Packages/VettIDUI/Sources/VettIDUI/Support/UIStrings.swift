@@ -4,6 +4,10 @@ import Foundation
 /// (vettid-android `core/ui/src/main/res/values/strings.xml`); the English values are the same.
 enum UIStrings {
     static var openMenu: String { String(localized: "core_ui_cd_open_menu", defaultValue: "Open navigation menu", bundle: .module) }
+    /// iPhone only: Android's drawer takes Material's own text.
+    static var closeMenu: String {
+        String(localized: "ios_core_ui_cd_close_menu", defaultValue: "Close navigation menu", bundle: .module)
+    }
     static var search: String { String(localized: "core_ui_cd_search", defaultValue: "Search", bundle: .module) }
     static var closeSearch: String { String(localized: "core_ui_cd_close_search", defaultValue: "Close search", bundle: .module) }
     static var dismiss: String { String(localized: "core_ui_cd_dismiss", defaultValue: "Dismiss", bundle: .module) }

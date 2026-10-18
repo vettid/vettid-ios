@@ -5,6 +5,9 @@ import VettIDAltChan
 import VettIDData
 import VettIDOnboarding
 import VettIDOnboardingUI
+import VettIDSettings
+import VettIDShell
+import VettIDShellUI
 import VettIDUI
 
 @main
@@ -35,8 +38,8 @@ struct VettIDApp: App {
 }
 
 /// The root: onboarding while nothing is set up or setup is under way (IOS-PLAN §8 I1.6), the unlock, the owner check and
-/// the stuck screens (I1.7), the placeholder for the app's shell (I1.8), all under the app lock (ID17). Debug builds can
-/// open the debug catalog from it.
+/// the stuck screens (I1.7), the app's shell (I1.8), all under the app lock (ID17). Debug builds can open the debug catalog
+/// from it.
 struct RootView: View {
     let environment: AppEnvironment
     let composition: AppComposition
@@ -47,10 +50,10 @@ struct RootView: View {
         AppLockGate(lock: composition.appLock, themeMode: themeMode) {
             #if DEBUG
             DebugCatalog(themeMode: $themeMode) {
-                AppRoot(environment: environment, vault: composition.vault, inbox: composition.inbox)
+                AppRoot(environment: environment, vault: composition.vault, inbox: composition.inbox, appLock: composition.appLock)
             }
             #else
-            AppRoot(environment: environment, vault: composition.vault, inbox: composition.inbox)
+            AppRoot(environment: environment, vault: composition.vault, inbox: composition.inbox, appLock: composition.appLock)
             #endif
         }
         // The app lock's settings could not be read at launch (the iPhone not unlocked since it started): read again.
@@ -67,8 +70,19 @@ struct AppRoot: View {
     let environment: AppEnvironment
     let vault: VaultManager
     let inbox: SetupLinkInbox
+    let appLock: AppLock
+    /// Where the member is in the open app, kept while the check past the deadline takes the shell's place.
+    @State private var shell: ShellModel
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
+
+    init(environment: AppEnvironment, vault: VaultManager, inbox: SetupLinkInbox, appLock: AppLock) {
+        self.environment = environment
+        self.vault = vault
+        self.inbox = inbox
+        self.appLock = appLock
+        _shell = State(initialValue: ShellModel(account: vault, vault: vault, ownerChecks: vault.ownerChecks))
+    }
 
     var body: some View {
         content
@@ -91,6 +105,8 @@ struct AppRoot: View {
                 vault.reloadLocalState()
                 retryRefresh()
             }
+            // A lock (or anything that leaves the open app) starts the next open afresh, as vettid-android's new shell does.
+            .onChange(of: vault.phase) { _, now in if now != .unlocked { shell.reset() } }
             .onOpenURL { url in
                 if SetupCodes.isSetupLink(url.absoluteString) { inbox.offer(url.absoluteString) }
             }
@@ -148,22 +164,33 @@ struct AppRoot: View {
             UnreachableFlow(account: vault) { openPortal() }
         case .locked:
             UnlockFlow(vault: vault, account: vault, ownerCheck: vault.ownerChecks) { openPortal() }
-        // The app's shell comes with I1.8.
         case .unlocked:
-            OwnerCheckGateView(vault: vault) { Placeholder(environment: environment) }
+            // The check past the deadline closes whatever the shell had open (the drawer, the sheet, an asked check), so
+            // that nothing of it comes back for a moment afterwards.
+            OwnerCheckGateView(vault: vault, onGated: { shell.shown() }) { gate, now in
+                AppShell(
+                    account: vault, vault: vault, ownerChecks: vault.ownerChecks, appLock: appLock, model: shell, gate: gate, now: now,
+                    version: .of(Bundle.main.infoDictionary ?? [:]), installedFrom: InstalledFromBuild.current,
+                    promptReason: AppLockTexts.reason
+                ) { openPortal() }
+            }
         }
     }
 }
 
 /// The daily owner check before any other use of the open app (VAULT-MESSAGING §3.6.5): past the deadline (re-read as
 /// time passes, so that the deadline gates on its own) or after an unlock that cancelled a recovery whose check did not
-/// pass, the check screen comes first, never dismissible; otherwise [content]. The shell's banners (the early warning,
-/// the hold-off indicator, the presence notice) come with it (I1.8). Mirrors vettid-android `OwnerCheckGate`.
+/// pass, the check screen takes the shell's place (so that nothing of the vault under it is visible or reachable, and the
+/// shell's sheets and dialogs close), never dismissible; otherwise [content], with the owner check at that moment for the
+/// shell's banners (the early warning, the hold-off indicator, the notices, the presence notice). Where the member was
+/// is kept above it (``ShellModel``). Mirrors vettid-android `OwnerCheckGate`.
 struct OwnerCheckGateView<Content: View>: View {
     let vault: VaultManager
-    @ViewBuilder let content: () -> Content
+    /// The check took the shell's place.
+    var onGated: @MainActor () -> Void = {}
+    @ViewBuilder let content: (OwnerCheckGate, Date) -> Content
     /// The check screen was opened and is not done yet: it stays until the member goes on, so that a check that passed
-    /// with the presence not recorded shows its notice (§11.14.5), as vettid-android's route does until `onDone`.
+    /// with the presence not recorded shows its notice (VAULT-MESSAGING §11.14.5), as vettid-android's route does until `onDone`.
     @State private var checking = false
 
     /// How often the deadline is compared with the clock (vettid-android: 15 s).
@@ -172,14 +199,20 @@ struct OwnerCheckGateView<Content: View>: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: Self.tick)) { context in
             let checks = vault.ownerChecks
-            if checking || OwnerCheckGate.of(checks.ownerCheck, now: context.date).gated || checks.checkAfterCancel {
+            let gate = OwnerCheckGate.of(
+                checks.ownerCheck, now: context.date, notices: checks.notices, presenceUnrecorded: checks.presenceUnrecorded
+            )
+            if checking || gate.gated || checks.checkAfterCancel {
                 OwnerCheckFlow(mode: .gated, repo: checks, vault: vault) {
                     checking = false
                     checks.consumeCheckAfterCancel()
                 }
-                .onAppear { checking = true }
+                .onAppear {
+                    checking = true
+                    onGated()
+                }
             } else {
-                content()
+                content(gate, context.date)
             }
         }
     }
@@ -194,22 +227,5 @@ final class BackgroundTask {
         guard id != .invalid else { return }
         app.endBackgroundTask(id)
         id = .invalid
-    }
-}
-
-/// Placeholder until the screens of IOS-PLAN §4 arrive.
-struct Placeholder: View {
-    let environment: AppEnvironment
-    @Environment(\.vettIDColors) private var colors
-
-    var body: some View {
-        VStack(spacing: Spacing.l) {
-            RookLogo(height: 72)
-            Text(verbatim: environment.kind.rawValue)
-                .vettIDFont(.bodyMedium)
-                .foregroundStyle(colors.onSurfaceVariant)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(colors.background)
     }
 }

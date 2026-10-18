@@ -201,6 +201,50 @@
             parallelizable = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
+               BlueprintIdentifier = "VettIDSettingsTests"
+               BuildableName = "VettIDSettingsTests"
+               BlueprintName = "VettIDSettingsTests"
+               ReferencedContainer = "container:Packages/VettIDSettings">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "VettIDSettingsUITests"
+               BuildableName = "VettIDSettingsUITests"
+               BlueprintName = "VettIDSettingsUITests"
+               ReferencedContainer = "container:Packages/VettIDSettings">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "VettIDShellTests"
+               BuildableName = "VettIDShellTests"
+               BlueprintName = "VettIDShellTests"
+               ReferencedContainer = "container:Packages/VettIDShell">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "VettIDShellUITests"
+               BuildableName = "VettIDShellUITests"
+               BlueprintName = "VettIDShellUITests"
+               ReferencedContainer = "container:Packages/VettIDShell">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
                BlueprintIdentifier = "VettIDTestingTests"
                BuildableName = "VettIDTestingTests"
                BlueprintName = "VettIDTestingTests"
