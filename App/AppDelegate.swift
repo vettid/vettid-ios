@@ -16,13 +16,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         Self.allows(id)
     }
 
-    static func allows(_ id: UIApplication.ExtensionPointIdentifier) -> Bool { id != .keyboard }
+    nonisolated static func allows(_ id: UIApplication.ExtensionPointIdentifier) -> Bool { id != .keyboard }
 
     /// §6.1: data excluded from backups (vettid-android `allowBackup=false`): the directories the app writes to are
     /// marked, so that nothing the app keeps reaches iCloud or a computer's backup. Failures are not fatal: the data is
     /// encrypted under keys that are never backed up. Nothing sensitive goes in UserDefaults (Library/Preferences is
     /// backed up); stores live under these directories.
-    static func excludeFromBackup(_ fm: FileManager = .default) {
+    nonisolated static func excludeFromBackup(_ fm: FileManager = .default) {
         for dir in [FileManager.SearchPathDirectory.applicationSupportDirectory, .documentDirectory] {
             guard var url = try? fm.url(for: dir, in: .userDomainMask, appropriateFor: nil, create: true) else { continue }
             var values = URLResourceValues()
