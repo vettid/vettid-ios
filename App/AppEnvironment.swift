@@ -9,6 +9,9 @@ struct AppEnvironment: Equatable, Sendable {
         case staging
         case debug
         case devstack
+
+        /// The development builds (Debug, DevStack) allow screenshots from the start (ID10, the screen catalog).
+        var screenshotsByDefault: Bool { self == .debug || self == .devstack }
     }
 
     let kind: Kind
