@@ -102,6 +102,49 @@ import VettIDCrypto
     }
 }
 
+/// A real staging enclave response (IOS-PLAN §8 I0.9 acceptance; issue #49): one `GET /api/vault/enclave` answer of
+/// staging release 15, fetched 2026-10-18T00:50:36Z. Its attestation verifies against the pinned AWS Nitro root at the
+/// document's own timestamp, binds the descriptor (user_data), and names the descriptor's release as PCR0. The staging
+/// manifest served then (serial 17) does not list release 15 yet (a canary candidate), so the full check refuses it as
+/// a release the manifest does not list, with the document itself verified.
+@Suite struct StagingEnclaveTests {
+    let descriptor: [UInt8]
+    let attestation: [UInt8]
+    let release: String
+
+    init() throws {
+        let o = try resourceObject("nitro", "staging-enclave-2026-10-18.json")
+        descriptor = try o.base64("descriptor")
+        attestation = try o.base64("attestation")
+        release = try o.string("release")
+    }
+
+    @Test func theDocumentVerifiesAgainstThePinnedRootAndBindsTheDescriptor() throws {
+        let d = try NitroVerifier().verify(attestation)
+        #expect(d.moduleID.hasPrefix("i-0a91921ab7de639a3-enc"))
+        #expect(d.timestamp == (try Timestamps.parseMillis("2026-10-17T22:22:02.227Z")))
+        try d.checkUserData(AltChannel.etkUserData(descriptor))
+        #expect(d.measurements.pcr0 == release && !d.measurements.isDebug)
+        let ds = try Descriptor.parse(descriptor)
+        #expect(ds.release == release && ds.instanceID == "i-0a91921ab7de639a3")
+        // A test root does not anchor it; a flipped byte of the descriptor breaks the binding.
+        expectAttestation(.chain) { _ = try NitroVerifier(roots: [try TestPki.load().root]).verify(attestation) }
+        var other = descriptor
+        other[other.count - 2] ^= 1
+        expectAttestation(.userData) { try d.checkUserData(AltChannel.etkUserData(other)) }
+    }
+
+    @Test func theFullCheckRefusesAReleaseTheServedManifestDoesNotList() throws {
+        let staging = ManifestVerifier(pinned: [try ManifestKey(base64: ManifestKeysTests.stagingKeyA)])
+        let m17 = try staging.verify(try resource("manifest", "staging-pcr-manifest-serial17.json"))
+        let t = try NitroVerifier().verify(attestation).timestamp.addingTimeInterval(60)
+        let e = expectAttestation(.release) { _ = try EnclaveVerifier().verifyEnclave(descriptor: descriptor, attestation: attestation, manifest: m17, enroll: false, now: t) }
+        #expect(e == .release("not listed", unknown: true))
+        // Too late for it: the attestation is more than 26 h old.
+        expectAttestation(.stale) { _ = try EnclaveVerifier().verifyEnclave(descriptor: descriptor, attestation: attestation, manifest: m17, enroll: false, now: t.addingTimeInterval(27 * 3600)) }
+    }
+}
+
 /// The canary manifest's installation checks and the choice between it and the published one (VAULT-RELEASES §10.1).
 /// Mirrors the installation part of vettid-android `CanaryManifestTest`; its use by the alternate channel comes with
 /// the transport (I1).
