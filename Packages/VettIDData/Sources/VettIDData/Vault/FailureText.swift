@@ -58,6 +58,8 @@ public extension FailureKind {
         case .phoneLocked: DataStrings.failurePhoneLocked
         case .unconfirmedChanges: DataStrings.failureUnconfirmedChanges
         case .capabilityRollback: DataStrings.failureCapabilityRollback
+        case .releaseTooOld: DataStrings.failureReleaseTooOld
+        case .enrollmentStarted: DataStrings.failureEnrollmentStarted
         case .responseTooLarge: DataStrings.failureResponseTooLarge
         case .other: DataStrings.failureOther
         }
@@ -117,9 +119,18 @@ public extension FailureKind {
         case .phoneLocked: "data_failure_phone_locked"
         case .unconfirmedChanges: "data_failure_unconfirmed_changes"
         case .capabilityRollback: "data_failure_capability_rollback"
+        case .releaseTooOld: "data_failure_release_too_old"
+        case .enrollmentStarted: "data_failure_ios_enrollment_started"
         case .responseTooLarge: "data_failure_response_too_large"
         case .other: "data_failure_other"
         }
+    }
+}
+
+public extension FailureKind {
+    /// ``enrollmentStarted``'s text with the time from which the start-over is possible (iPhone only, no Android text).
+    static func enrollmentStartedText(after: Date) -> String {
+        DataStrings.failureEnrollmentStartedAfter(after.formatted(date: .abbreviated, time: .shortened))
     }
 }
 

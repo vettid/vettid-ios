@@ -212,3 +212,45 @@ import VettIDKeysTesting
             """)
     }
 }
+
+/// `vault.enrolled` as the enrollment's answer (``PhoneSecrets/confirmPending(keyVault:)``): only a single pending
+/// epoch-1 record of that `key_vault` is confirmed.
+@Suite struct PhoneSecretsConfirmPendingTests {
+    @Test func theOnePendingRecordIsConfirmed() throws {
+        let phone = try TestPhone()
+        let made = try phone.secrets.create(keyVault: "v1")
+        #expect(try !phone.secrets.confirmPending(keyVault: "other"))
+        #expect(try phone.secrets.confirmPending(keyVault: "v1"))
+        #expect(try phone.secrets.currentSecret() == made.secret)
+        #expect(try phone.records.pendings.isEmpty)
+        #expect(try !phone.secrets.confirmPending(keyVault: "v1"), "nothing pending any more")
+    }
+
+    /// A pending record whose key is gone for good is not counted: the one left is confirmed.
+    @Test func aDeadPendingIsNotCounted() throws {
+        let phone = try TestPhone()
+        let dead = try phone.secrets.create(keyVault: "v1")
+        let alive = try phone.secrets.create(keyVault: "v1")
+        try phone.keys.delete(keyVault: "v1", keyID: dead.id)
+        #expect(try phone.secrets.confirmPending(keyVault: "v1"))
+        #expect(try phone.secrets.currentSecret() == alive.secret)
+    }
+
+    /// A record whose operation was refused for certain is dropped with its key.
+    @Test func aRefusedRecordIsDropped() throws {
+        let phone = try TestPhone()
+        let made = try phone.secrets.create(keyVault: "v1")
+        #expect(try phone.secrets.dropPending(id: made.id))
+        #expect(try !phone.secrets.hasPending() && phone.keys.count == 0)
+        #expect(try !phone.secrets.dropPending(id: made.id))
+    }
+
+    @Test func twoPendingRecordsAreNeverGuessed() throws {
+        let phone = try TestPhone()
+        _ = try phone.secrets.create(keyVault: "v1")
+        _ = try phone.secrets.create(keyVault: "v1")
+        #expect(failureKind { try phone.secrets.confirmPending(keyVault: "v1") } == .localState)
+        #expect(try phone.records.pendings.count == 2 && phone.records.current == nil)
+        #expect(try phone.secrets.hasPending())
+    }
+}

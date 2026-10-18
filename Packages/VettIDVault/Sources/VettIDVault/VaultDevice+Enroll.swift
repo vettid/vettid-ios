@@ -1,4 +1,5 @@
 import Foundation
+import VettIDAltChan
 import VettIDCrypto
 import VettIDRelay
 
@@ -30,8 +31,8 @@ extension VaultDevice {
         guard try bo.uint("v", min: 1, max: 1) == 1, try bo.uint("suite", min: 2, max: 2) == 2 else { return }
         let pr = try Principal.parse(bo)
         guard Ed25519.equalPublic(sender, pr.relay.pk) else { return }
-        guard checkEnrolledAttestation(try o.optString("attestation"), bundle: bundle, t) else { return }
         let vid = try o.string("vault_id")
+        guard let attempt = enrolledAttempt(try o.optString("attestation"), bundle: bundle, vaultID: vid, t) else { return }
         let tok = try o.string("token")
         let stateSeq = try o.optUint("state_seq", min: 0, max: StrictJson.maxSafeInteger)
         let ok: Bool = mem.withLock {
@@ -44,34 +45,52 @@ extension VaultDevice {
             st.vault?.tokenExpMs = Self.ms(exp)
             st.vaultID = vid
             let a = alt()
-            if a.enrollNonce != nil { setAlt(a.applyingEnrolled(stateSeq: stateSeq)) }
+            if a.enrollNonce != nil { setAlt(a.applyingEnrolled(stateSeq: stateSeq, attempt: attempt)) }
             return true
         }
         if ok { publish(VaultMessage(inner: inner)) }
     }
 
-    /// §11.3: nonce = the app's, user_data over the vault bundle, the PCRs the request was sealed to, fresh.
-    func checkEnrolledAttestation(_ attestationB64: String?, bundle: [UInt8], _ t: Date) -> Bool {
+    /// §11.3: nonce = the app's, user_data over the vault bundle, the PCRs the request was sealed to, fresh. Checked
+    /// against the newest request of the pending enrollment and then its earlier ones (``AltState/enrollAttempts``):
+    /// the request whose answer was lost may be the one that made the vault. Returns the request it answers (the
+    /// newest when the check is skipped, or when no enrollment is pending and no vault is pinned yet), nil when none
+    /// passes. Only a request of the vault [vaultID] names is answered by it.
+    func enrolledAttempt(_ attestationB64: String?, bundle: [UInt8], vaultID: String, _ t: Date) -> AltState.EnrollAttempt?? {
+        let a = mem.withLock { alt() }
         let check: EnrolledAttestationCheck
         switch cfg.enrolledAttestation {
         case .verify(let c): check = c
         #if DEBUG
-        case .skipForTests: return true
+        case .skipForTests:
+            guard let cur = a.currentEnroll else { return .some(nil) }
+            return cur.vaultID == vaultID ? .some(cur) : nil
         #endif
         }
-        let a = mem.withLock { alt() }
-        guard let nonce = a.enrollNonce, let b64 = attestationB64, a.enrollPcrs.utf8.count == Self.pcrHex * 3,
-              let doc = try? Base64s.decodeStd(b64)
-        else { return false }
-        let p = Array(a.enrollPcrs)
-        let pcrs = EnrolledPCRs(
-            pcr0: String(p[0..<Self.pcrHex]), pcr1: String(p[Self.pcrHex..<(2 * Self.pcrHex)]), pcr2: String(p[(2 * Self.pcrHex)...])
-        )
-        do {
-            try check(doc, bundle, nonce, pcrs, t)
-            return true
-        } catch {
-            return false
+        guard let b64 = attestationB64, let doc = try? Base64s.decodeStd(b64) else { return nil }
+        for attempt in a.enrollAttempts where attempt.pcrs.utf8.count == Self.pcrHex * 3 && attempt.vaultID == vaultID {
+            let p = Array(attempt.pcrs)
+            let pcrs = EnrolledPCRs(
+                pcr0: String(p[0..<Self.pcrHex]), pcr1: String(p[Self.pcrHex..<(2 * Self.pcrHex)]),
+                pcr2: String(p[(2 * Self.pcrHex)...])
+            )
+            if (try? check(doc, bundle, attempt.nonce, pcrs, t)) != nil { return .some(attempt) }
+        }
+        return nil
+    }
+
+    /// Drops the pending enrollment (a refused one, or one that never reached the member API): a later
+    /// `vault.enrolled` for it is not accepted. Only while no vault is pinned.
+    public func abandonEnrollment() async throws {
+        try await lock.withLock {
+            let changed: Bool = mem.withLock {
+                guard st.vault == nil else { return false }
+                let a = alt()
+                guard a.currentEnroll != nil || !a.enrollPrior.isEmpty else { return false }
+                setAlt(a.withoutEnrollment())
+                return true
+            }
+            if changed { try save() }
         }
     }
 

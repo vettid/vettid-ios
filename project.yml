@@ -61,6 +61,9 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         VettIDEnvironment: $(VETTID_ENVIRONMENT)
         VettIDAccountHost: $(VETTID_ACCOUNT_HOST)
+        VettIDRelayHost: $(VETTID_RELAY_HOST)
+        VettIDManifestHost: $(VETTID_MANIFEST_HOST)
+        VettIDManifestKeys: $(VETTID_MANIFEST_KEYS)
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(VETTID_APP_BUNDLE_ID)

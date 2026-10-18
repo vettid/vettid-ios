@@ -111,6 +111,8 @@ public final class VaultDevice: @unchecked Sendable {
     let secrets: DeviceSecrets
     let st: DeviceState
     let lock = AsyncLock()
+    /// Serializes the credential operations (§3.5.3): one UTK taken, sealed and answered at a time.
+    let credentialLock = AsyncLock()
     let mem = NSLock()
     let own: RelayClient
     var relays: [String: RelayClient] = [:]

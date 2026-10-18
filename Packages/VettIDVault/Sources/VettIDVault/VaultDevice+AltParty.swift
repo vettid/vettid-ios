@@ -20,14 +20,15 @@ extension VaultDevice: AltParty {
     }
 
     public func prepareEnroll( // swiftlint:disable:this function_parameter_count
-        userGuid: String, pin: String, enclave: VerifiedEnclave, manifest: ReleaseManifest, attester: Attester, unlockSecret: [UInt8]?
+        userGuid: String, pin: String, enclave: VerifiedEnclave, manifest: ReleaseManifest, attester: Attester, unlockSecret: [UInt8]?,
+        vaultID: String
     ) async throws -> SealedRequest {
         try await lock.withLock {
             // §7.1: the app's open token for the vault's first deposit, ≤ 10 min.
             let open = try own.mintOpenToken(audience: cfg.relayURL, ttl: Self.openTokenTTL)
             let b = try AltRequests.buildEnroll(
                 userGuid: userGuid, pin: pin, enclave: enclave, manifest: manifest, attester: attester, app: appIdentity(),
-                openToken: open, state: mem.withLock { alt() }, now: now(), unlockSecret: unlockSecret
+                openToken: open, state: mem.withLock { alt() }, now: now(), unlockSecret: unlockSecret, vaultID: vaultID
             )
             mem.withLock {
                 st.signerSeen = false // a new attestation is a new key (§11.7.1)

@@ -107,7 +107,7 @@ public enum AltRequests {
     /// nonce, the app's open token for the vault's first deposit, and the verified manifest by hash and serial.
     public static func buildEnroll( // swiftlint:disable:this function_parameter_count
         userGuid: String, pin: String, enclave: VerifiedEnclave, manifest: ReleaseManifest, attester: Attester,
-        app: AppIdentity, openToken: String, state: AltState, now: Date, unlockSecret: [UInt8]? = nil
+        app: AppIdentity, openToken: String, state: AltState, now: Date, unlockSecret: [UInt8]? = nil, vaultID: String = ""
     ) throws -> BuiltEnroll {
         let t = ms(now)
         let rid = Ulid.new(t)
@@ -122,10 +122,10 @@ public enum AltRequests {
         request.wipe()
         defer { Bytes.wipe(&body) }
         let env = try AltChannel.sealRequest(etk: enclave.descriptor.etk, type: AltChannel.typeEnroll, requestID: rid, ts: t, body: body)
-        var next = state
-        next.enrollNonce = nonce
-        next.enrollPcrs = enclave.measurements.joined()
-        next.enrollNumber = enclave.release.number
+        // The earlier requests of this enrollment stay acceptable: one whose answer was lost may have made the vault.
+        let next = state.startingEnrollRequest(
+            nonce: nonce, pcrs: enclave.measurements.joined(), number: enclave.release.number, vaultID: vaultID
+        )
         return BuiltEnroll(
             request: SealedRequest(
                 requestID: rid, etkKid: enclave.descriptor.kid.description, envelope: env, manifestSHA256: manifest.sha256Hex

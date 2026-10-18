@@ -1,12 +1,13 @@
 import UIKit
 
-/// The app delegate's two jobs (IOS-PLAN §6.1, §6.5): refusing third-party keyboards app-wide, and keeping the app's
-/// data out of backups.
+/// The app delegate's jobs (IOS-PLAN §6.1, §6.5): refusing third-party keyboards app-wide, keeping the app's data out
+/// of backups, and the first-run cleanup before anything else touches a key.
 final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(
         _ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         Self.excludeFromBackup()
+        AppComposition.shared.launch()
         return true
     }
 

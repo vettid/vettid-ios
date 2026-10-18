@@ -97,6 +97,8 @@ public struct OnboardingState: Equatable, Sendable, CustomStringConvertible, Cus
     public var busy = false
     public var error: FailureKind?
     public var errorCode: String?
+    /// When the failed action becomes possible, when the failure says (``FailureKind/enrollmentStarted``).
+    public var errorRetryAt: Date?
     public var devHint: String?
 
     public init(step: OnboardingStep = .welcome, devHint: String? = nil) {

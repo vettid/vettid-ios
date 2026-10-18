@@ -82,11 +82,13 @@ public final class OnboardingViewModel: OnboardingActions {
             case .needsCredential:
                 if s.step != .progress && s.step != .backup {
                     enrolled = true
-                    let askPin = vault.usesPhoneSecret
                     state.step = .password
                     state.credentialOnly = true
                     state.busy = false
-                    state.askPin = askPin && state.pin.isEmpty
+                    // IOS-PLAN ID8: every vault of the iPhone app is of release R, whose credential.create carries the
+                    // PIN (§11.14.9): it is asked for whenever it is not in memory, also while the phone secret cannot
+                    // be read (vettid-android asks only when the phone holds one).
+                    state.askPin = state.pin.isEmpty
                 }
             // A recovery or a transfer shows its own "your vault is connected to this phone now".
             case .finishing:
@@ -174,6 +176,8 @@ public final class OnboardingViewModel: OnboardingActions {
                 state.busy = false
                 state.error = e.kind
                 state.errorCode = e.code
+                state.errorRetryAt = e.kind == .enrollmentStarted && e.retryAfterSeconds > 0
+                    ? Date().addingTimeInterval(Double(e.retryAfterSeconds)) : nil
                 onFailure()
             } catch {
                 // Only a cancellation gets here: every repository failure is a VaultFailure.
@@ -317,8 +321,16 @@ public final class OnboardingViewModel: OnboardingActions {
         launch { [self] in
             do {
                 try await account.forgetSetupCode()
+            } catch let e as VaultFailure where e.code == VaultManager.codeEnrollmentStarted {
+                // iPhone only (vettid-android starts over whatever the answer): an enrollment may already have made a
+                // vault whose keys this phone must keep, so the flow stays where it is and says why.
+                state.busy = false
+                state.error = e.kind
+                state.errorCode = e.code
+                state.errorRetryAt = e.retryAfterSeconds > 0 ? Date().addingTimeInterval(Double(e.retryAfterSeconds)) : nil
+                return
             } catch {
-                // As vettid-android: whatever the answer, the flow starts over.
+                // As vettid-android: whatever else the answer, the flow starts over.
             }
             enrolled = false
             state = OnboardingState(devHint: account.devHint)

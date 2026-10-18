@@ -156,6 +156,28 @@ import VettIDDataTesting
         #expect(vm.state.step == .welcome)
     }
 
+    /// iPhone only (vettid-android starts over whatever the answer): a start-over the manager refuses because an
+    /// enrollment may already have made a vault (`enrollment_started`) leaves the flow where it is, with the failure's
+    /// text; any other failure still starts over.
+    @Test func aRefusedStartOverStaysWhereItIs() async throws {
+        vault.phase = .setup(.newVault)
+        let vm = vm()
+        await vm.settle()
+        #expect(vm.state.step == .confirmAccount)
+        vault.fail["forgetSetupCode"] = VaultFailure(.enrollmentStarted, code: VaultManager.codeEnrollmentStarted, retryAfterSeconds: 3600)
+        vm.useAnotherCode()
+        await vm.settle()
+        #expect(vm.state.step == .confirmAccount && !vm.state.busy)
+        #expect(vm.state.error == .enrollmentStarted && vm.state.errorCode == VaultManager.codeEnrollmentStarted)
+        // When the start-over becomes possible, for the text (``FailureKind/enrollmentStartedText(after:)``).
+        let after = try #require(vm.state.errorRetryAt)
+        #expect(abs(after.timeIntervalSinceNow - 3600) < 60)
+        vault.fail["forgetSetupCode"] = FakeVaultRepository.failure(.network)
+        vm.useAnotherCode()
+        await vm.settle()
+        #expect(vm.state.step == .welcome && vm.state.error == nil && vm.state.errorRetryAt == nil)
+    }
+
     @Test func backupOffNeedsTheAcknowledgement() async {
         vault.phase = .setup(.newVault)
         let vm = vm()
@@ -255,17 +277,20 @@ import VettIDDataTesting
         #expect(vault.lastCredentialPin == "40281795")
     }
 
-    /// Before release R nothing asks for the PIN again and none is sent.
-    @Test func beforeReleaseRNeedsCredentialAsksNoPin() async {
+    /// IOS-PLAN ID8: the iPhone asks for the PIN after a restart even when its phone secret cannot be read now (every
+    /// vault of the iPhone app is of release R), so credential.create never goes without it.
+    @Test func theIPhoneAlwaysAsksForThePinAfterARestart() async {
         vault.phase = .setup(.needsCredential)
         let vm = vm()
         await vm.settle()
-        #expect(!vm.state.askPin)
+        #expect(vm.state.askPin)
         vm.setPassword(goodPassword); vm.setPasswordConfirm(goodPassword); vm.submitPassword()
+        #expect(vm.state.step == .password, "not without the PIN")
+        vm.setPin("40281795")
+        vm.submitPassword()
         vm.submitBackup()
         await vm.settle()
         #expect(vault.calls.contains("createCredential"))
-        #expect(vault.lastCredentialPin == nil)
     }
 
     @Test func recoverFromTheWelcomeScreenNeedsNoSignIn() async {
@@ -372,6 +397,7 @@ import VettIDDataTesting
         vault.fail["createCredential"] = VaultFailure(.weakPassword, code: "weak_password", cause: op)
         let vm = vm()
         await vm.settle()
+        vm.setPin("40281795") // asked after a restart (ID8)
         vm.setPassword(goodPassword); vm.setPasswordConfirm(goodPassword); vm.submitPassword()
         vm.submitBackup()
         await vm.settle()

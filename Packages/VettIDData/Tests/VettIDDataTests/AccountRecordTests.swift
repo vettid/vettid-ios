@@ -1,0 +1,56 @@
+import Foundation
+import Testing
+@testable import VettIDData
+import VettIDKeys
+import VettIDKeysTesting
+
+/// The account record (vettid-android `AccountRecordTest`): read only when asked, members it does not know ignored, a
+/// record that does not read never taken for "no account", and a write for a record that a reset replaced dropped.
+@MainActor
+@Suite struct AccountRecordTests {
+    let keys = InMemoryFileKeyHolder()
+    let url = FileManager.default.temporaryDirectory.appendingPathComponent("vettid-record-tests/\(UUID().uuidString)/account")
+
+    func store(_ available: Bool = true) -> EncryptedFileStore {
+        EncryptedFileStore(
+            url: url, purpose: VaultFiles.account, keys: keys, protectedData: ProtectedDataFlag(available: available)
+        )
+    }
+
+    @Test func aMissingRecordIsNoAccountAndAWrittenOneIsReadBack() throws {
+        let r = AccountRecord(store: store())
+        try r.load()
+        #expect(r.value == LocalAccount() && r.value.info == nil)
+        try r.reset(LocalAccount(userGuid: "u", vaultID: "v", emailHint: "m***@example.com"))
+        try r.update(since: r.generation) { $0.capabilities = ["recovery_r"] }
+        let again = AccountRecord(store: store())
+        try again.load()
+        #expect(again.value.userGuid == "u" && again.value.vaultID == "v" && again.value.capabilities == ["recovery_r"])
+        #expect(again.value.info == AccountInfo(emailHint: "m***@example.com"))
+    }
+
+    /// Members of a later build are ignored; a missing member takes its default.
+    @Test func unknownMembersAreIgnored() throws {
+        try store().save(Array(#"{"user_guid":"u","snapshot":{"x":1},"setup_complete":true}"#.utf8))
+        let r = AccountRecord(store: store())
+        try r.load()
+        #expect(r.value.userGuid == "u" && r.value.setupComplete && r.value.vaultID.isEmpty)
+    }
+
+    /// A record that does not parse, or cannot be read while the iPhone is locked, is never "no account".
+    @Test func anUnreadableRecordIsNotEmpty() throws {
+        try store().save(Array("not json".utf8))
+        #expect(throws: KeysError.corrupt("account record")) { try AccountRecord(store: self.store()).load() }
+        #expect(throws: KeysError.self) { try AccountRecord(store: self.store(false)).load() }
+    }
+
+    /// A write for the record an operation started with is dropped once a reset replaced it.
+    @Test func aWriteAfterAResetIsDropped() throws {
+        let r = AccountRecord(store: store())
+        try r.reset(LocalAccount(userGuid: "u", vaultID: "v", emailHint: "h"))
+        let since = r.generation
+        try r.reset(LocalAccount())
+        #expect(try !r.update(since: since) { $0.vaultID = "other" })
+        #expect(r.value == LocalAccount())
+    }
+}
