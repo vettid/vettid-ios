@@ -1,0 +1,261 @@
+import Foundation
+import Observation
+import VettIDAltChan
+import VettIDData
+
+/// TEST ONLY. An in-memory account, vault and credential for view-model tests: every call is recorded in ``calls``;
+/// ``fail`` makes the next call of a name throw; the unlock outcomes are scripted in ``unlockResults``. Observable, as
+/// the real repositories are, so a view model's observation of ``phase`` and the other states can be tested. (VettID's
+/// vault tests have a protocol-level `FakeVault`; this one stands in for the repositories.) Mirrors vettid-android
+/// `FakeVault` without its owner-check and profile parts, which come with those repositories.
+@MainActor
+@Observable
+public final class FakeVaultRepository: CustomStringConvertible {
+    /// A string only this TEST ONLY target contains; `scripts/release-check.sh` refuses it in Release and Staging.
+    public nonisolated static let testOnlyMarker = "VETTID TEST ONLY: the repository-level fake"
+
+    /// Every call, by name, in order.
+    public var calls: [String] = []
+    /// A failure the next call of that name throws (once).
+    public var fail: [String: VaultFailure] = [:]
+    /// What the unlocks answer, in order; an empty queue answers ``UnlockAttempt/success``.
+    public var unlockResults: [UnlockAttempt] = []
+
+    // AccountRepository.
+    public var phase: AppPhase
+    public var account: AccountInfo?
+    public let devHint: String? = nil
+    public let apiOrigin = "https://account.vettid.org"
+    /// MEMBER-API 1.2.0: the vault service paused (the banner).
+    public var servicePaused = false
+    /// What ``redeemSetupCode(_:)`` answers (`email_hint`); the phase it moves to.
+    public var emailHint = "m***@example.com"
+    public var phaseAfterRedeem: AppPhase = .setup(.newVault)
+    public var lastRedeemed: SetupCodeInput?
+
+    // VaultRepository.
+    /// Set by a test: the open app was sent to the unlock screen after repeated relay refusals.
+    public var refusedByVault = false
+    public var lockNotice: LockNotice = .none
+    public var pendingDeletion: DeletionView?
+    public var preflightInfo = PreflightInfo(routed: release(3), lastNumber: 3, softwareUpdated: false, rollback: false, offer: nil)
+    public var overviewValue = VaultOverview(
+        vaultID: "0123456789abcdef0123456789abcdef",
+        state: "unlocked",
+        release: nil,
+        lastRelease: 3,
+        recoveryState: nil,
+        provisional: false,
+        devices: 1,
+        connections: 0
+    )
+    public var recoveryValue: RecoveryView?
+    public var lastPin: String?
+    public var lastPassword: String?
+    public var lastBackup: Bool?
+    public var lastApproved: ReleaseView?
+    public var lastCancelRecovery = false
+
+    // Release R.
+    /// This phone holds a phone secret (a vault of release R).
+    public var phoneSecret = false
+    /// The vault came here by a direct transfer (``movedIn``).
+    public var movedInFlag = false
+    /// (§11.10.9) Whether the vault's release offers recovery.
+    public var recoveryOfferedValue = true
+    /// The PIN the last `credential.create` and `credential.password.change` carried (release R).
+    public var lastCredentialPin: String?
+    public var lastPasswordChangePin: String?
+    /// The password the last unlock that cancelled a recovery sent with its owner check (release R).
+    public var lastCancelCheckPassword: String?
+    /// The PIN and password of the last `vault.secret.renew` (release R).
+    public var lastRenew: (pin: String, password: String)?
+    public var transferKeptSince: Date?
+    public var finishMovePending = false
+    public var finishingMove = false
+    public var finishMoveFailure: FailureKind?
+    public var movedBack = false
+    public var moveNotDone = false
+    public var rotateOffered = false
+    public var movedAway = false
+
+    // CredentialRepository.
+    public var alarm: CredentialAlarm?
+    public var unlockWindow: Date?
+    public var credential = CredentialStatus(
+        exists: true,
+        version: 2,
+        keyFingerprint: "abc",
+        updatedAt: "2026-10-04T12:00:00Z",
+        alarm: nil,
+        backup: true,
+        unlockTtlSeconds: 300,
+        criticalItems: 0
+    )
+    public var lastNewPassword: String?
+
+    // MoveRepository: recovery.
+    public var recoveryStageValue: RecoveryStage = .code
+    /// What the registrations answer, in order; an empty queue answers ``RecoveryRegistration/registered(emailHint:)``.
+    public var registrations: [RecoveryRegistration] = []
+    public var lastRegistered: RecoveryCode?
+    /// The typed code last given to ``registerTypedRecovery(_:)``, and the recovery its claim "named" for a refusal.
+    public var lastTyped: TypedRecoveryCode?
+    public var typedRecoveryID: String? = "01JA0RECVERY0000000000001X"
+    public var recoveryUnlockResults: [UnlockAttempt] = []
+    public var recoverOutcome: RecoverOutcome = .recovered
+    /// The recovery unlock's `credential_backup` (nil: an older vault that does not send it).
+    public var recoveryCredentialBackupValue: Bool?
+    /// What ``recoveryOpen(pin:password:)`` answers, in order; an empty queue answers `ok`.
+    public var recoveryOpenOutcomes: [RecoveryOpenOutcome] = []
+    public var recoveryOpenedValue = false
+    public var recoveryAttemptsUsed: Int?
+    /// What ``resumeLostOk(pin:)`` answers, in order; an empty queue answers `ok`.
+    public var lostOkOutcomes: [RecoveryOpenOutcome] = []
+
+    // MoveRepository: transfer.
+    public var transferSas = "042817"
+    /// What ``awaitTransferIn()`` answers: false as from a vault release that sends no `user_guid`.
+    public var transferGaveUserGuid = true
+    /// When set, the new phone's wait for the vault's `hs.resp` (and so the SAS) lasts until it completes.
+    public var transferHsResp: TestDeferred<String>?
+    public var lastTransferCode: String?
+    /// Completes (or fails) the new phone's wait for the old phone's approval.
+    public var transferApproval = TestDeferred<Void>()
+    public var offer = TransferOfferView(
+        transferID: "01JTRANSFER000000000000000",
+        qrPayload: #"{"v":2,"t":"p"}"#,
+        link: "eyJ2Ijoy",
+        expiresAt: FakeVaultRepository.date("2026-10-05T12:10:00Z")
+    )
+    /// Completes the old phone's wait for `device.transfer.pending` (nil: the code expired).
+    public var pendingTransfer = TestDeferred<TransferPendingView?>()
+    public var lastTransferApproved: String?
+    public var lastTransferRejected: String?
+    /// Whether the vault's `device.unlinked{transferred}` follows an approval (and wipes this phone).
+    public var transferConfirmed = true
+    /// The class the vault wants confirmed (`device.transfer.pending.signer_changed`, VAULT-MESSAGING §11.7.1): as
+    /// vettid-vault, an approval that does not name it is answered `signer_unconfirmed` before anything is checked or
+    /// counted, and one that names a class the new app does not have is refused the same way.
+    public var transferSignerRequired: String?
+    /// The new app's class when the vault names one without requiring it (same signer).
+    public var transferSignerClass: String?
+    /// The `signer` of every approval sent, in order (nil: the member was absent).
+    public var transferSigners: [String?] = []
+
+    public nonisolated var description: String { Self.testOnlyMarker }
+
+    public init(_ initial: AppPhase = .signedOut) {
+        phase = initial
+    }
+
+    /// Records [name] and throws its scripted failure, if any.
+    func call(_ name: String) throws {
+        calls.append(name)
+        if let f = fail.removeValue(forKey: name) { throw f }
+    }
+
+    /// A release whose PCR0 is its number, two digits at least, repeated.
+    public nonisolated static func release(_ n: UInt64, status: String = "active") -> ReleaseView {
+        let digits = String(n)
+        let pcr0 = String(repeating: digits.count < 2 ? "0" + digits : digits, count: 48)
+        return ReleaseView(number: n, pcr0: pcr0, status: status, endsAt: nil, notes: "https://vettid.org/releases/\(n)")
+    }
+
+    public nonisolated static func failure(_ kind: FailureKind, code: String? = nil, retry: Int64 = 0) -> VaultFailure {
+        VaultFailure(kind, code: code, retryAfterSeconds: retry)
+    }
+
+    /// An ISO 8601 instant of the fixtures.
+    public nonisolated static func date(_ iso: String) -> Date {
+        (try? Date(iso, strategy: .iso8601)) ?? Date(timeIntervalSince1970: 0)
+    }
+}
+
+extension FakeVaultRepository: AccountRepository {
+    public func refresh() async throws { try call("refresh") }
+
+    public func redeemSetupCode(_ code: SetupCodeInput) async throws -> String {
+        try call("redeemSetupCode")
+        lastRedeemed = code
+        account = AccountInfo(emailHint: emailHint)
+        phase = phaseAfterRedeem
+        return emailHint
+    }
+
+    public func forgetSetupCode() async throws {
+        try call("forgetSetupCode")
+        account = nil
+        phase = .signedOut
+    }
+
+    public func forgetMissingVault() async throws {
+        try call("forgetMissingVault")
+        phase = .signedOut
+    }
+
+    public func eraseThisPhone() async throws {
+        try call("eraseThisPhone")
+        account = nil
+        phase = .signedOut
+    }
+}
+
+extension FakeVaultRepository: CredentialRepository {
+    public func status() async throws -> CredentialStatus {
+        try call("status")
+        var c = credential
+        c.alarm = alarm
+        return c
+    }
+
+    public func openUnlockWindow(password: String) async throws {
+        try call("openUnlockWindow")
+        lastPassword = password
+        unlockWindow = Self.date("2026-10-04T12:05:00Z")
+    }
+
+    public func closeUnlockWindow() async throws {
+        try call("closeUnlockWindow")
+        unlockWindow = nil
+    }
+
+    public func changePassword(_ password: String, newPassword: String) async throws {
+        try call("changePassword")
+        lastPassword = newPassword
+    }
+
+    public func changePassword(_ password: String, newPassword: String, pin: String?) async throws {
+        lastPasswordChangePin = phoneSecret ? pin : nil
+        try await changePassword(password, newPassword: newPassword)
+    }
+
+    public func rotate(password: String) async throws {
+        try call("rotate")
+        lastPassword = password
+        alarm = nil
+    }
+
+    public func newCredential(pin: String, password: String, newPassword: String) async throws {
+        try call("newCredential")
+        lastPin = pin
+        lastPassword = password
+        lastNewPassword = newPassword
+    }
+
+    public func setBackup(_ on: Bool) async throws {
+        try call("setBackup")
+        lastBackup = on
+        credential.backup = on
+    }
+
+    public func setUnlockTtl(seconds: Int) async throws {
+        try call("setUnlockTtl")
+        credential.unlockTtlSeconds = seconds
+    }
+
+    public func confirmAlarm(mine: Bool) async throws {
+        try call("confirmAlarm")
+        alarm?.state = CredentialAlarm.stateRotationRequired
+    }
+}

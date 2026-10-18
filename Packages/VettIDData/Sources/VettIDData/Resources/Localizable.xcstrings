@@ -1,0 +1,1161 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "data_failure_attestation": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This phone could not be verified. VettID needs a phone with hardware key attestation and a locked, verified boot."
+          }
+        }
+      }
+    },
+    "data_failure_backoff": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too many wrong attempts. Wait before trying again."
+          }
+        }
+      }
+    },
+    "data_failure_bad_password": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That credential password is not correct."
+          }
+        }
+      }
+    },
+    "data_failure_bad_pin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That PIN is not correct."
+          }
+        }
+      }
+    },
+    "data_failure_blocked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You blocked the vault that sent this invitation. Unblock it first to connect."
+          }
+        }
+      }
+    },
+    "data_failure_busy": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The service is busy right now. Nothing was used or changed. Try again in a minute."
+          }
+        }
+      }
+    },
+    "data_failure_capability_rollback": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This vault's software is older than the software this phone last used with it. Contact VettID."
+          }
+        }
+      }
+    },
+    "data_failure_clock": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID's account service refused this phone's requests because the phone's date and time are more than a few minutes off. Turn on automatic date and time in the phone's settings, then try again."
+          }
+        }
+      }
+    },
+    "data_failure_conflict": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This changed on another device. Look again and retry."
+          }
+        }
+      }
+    },
+    "data_failure_connection_unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This connection cannot be reached right now. Try again later."
+          }
+        }
+      }
+    },
+    "data_failure_counter_unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "We cannot check the attempt record now. Nothing was used or changed. Try again later."
+          }
+        }
+      }
+    },
+    "data_failure_credential_locked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your credential is locked. Enter your credential password to continue."
+          }
+        }
+      }
+    },
+    "data_failure_device_secret": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This phone no longer holds the keys of your vault. That happens when the app's data was cleared or the phone was set up again from a backup. Nothing was disclosed. Whether you can get back into the vault depends on one of its settings. If its credential backup was on (the usual case), you can recover it: start a recovery on the account site. It takes one to three days, and you need your PIN and your password. If you had turned credential backup off, this vault cannot be brought back; you can delete it on the account site and start a new one. If you still have a phone on which VettID works, use 'Move to a new phone' there instead. The account site tells you which of these applies."
+          }
+        }
+      }
+    },
+    "data_failure_enclave": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault's software could not be verified. Nothing was sent to it: not your PIN, nor anything else. Try again; if this keeps happening, do not enter your PIN anywhere else and contact VettID support."
+          }
+        }
+      }
+    },
+    "data_failure_erase_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID could not remove your vault's keys from this phone. Try again. If it keeps failing, erase VettID's data on this phone. Your vault itself is not affected: afterwards you can set VettID up again or recover your vault from your account."
+          }
+        }
+      }
+    },
+    "data_failure_frozen": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your credential is frozen after a clone alert. Answer the alert first."
+          }
+        }
+      }
+    },
+    "data_failure_hardware_keys": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This phone cannot keep your vault's keys in its secure hardware."
+          }
+        }
+      }
+    },
+    "data_failure_in_use": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A sharing rule uses this tag. Change or delete the rule first."
+          }
+        }
+      }
+    },
+    "data_failure_invite_expired": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This invitation has expired. Ask for a new one."
+          }
+        }
+      }
+    },
+    "data_failure_invite_invalid": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That is not a VettID invitation. Check the link or code and try again."
+          }
+        }
+      }
+    },
+    "data_failure_invite_not_connection": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That code is not a connection invitation."
+          }
+        }
+      }
+    },
+    "data_failure_invite_unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This invitation is no longer available: it was used, cancelled or has expired. Ask for a new one."
+          }
+        }
+      }
+    },
+    "data_failure_limit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A limit was reached. Remove something first."
+          }
+        }
+      }
+    },
+    "data_failure_local_state": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID could not read the keys it keeps on this phone for your vault. Nothing was deleted or changed. Try again, or restart the phone and open VettID again. If it stays like this, this phone cannot open your vault any more, and the way back is to erase VettID here and recover your vault."
+          }
+        }
+      }
+    },
+    "data_failure_manifest": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The vault software list could not be verified. Try again later."
+          }
+        }
+      }
+    },
+    "data_failure_manifest_unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The list of vault releases could not be loaded, so your vault's software could not be checked. Nothing was sent to your vault. Check your connection and try again."
+          }
+        }
+      }
+    },
+    "data_failure_network": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID could not reach the service. Check your connection and try again."
+          }
+        }
+      }
+    },
+    "data_failure_no_response": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault did not answer in time. Try again."
+          }
+        }
+      }
+    },
+    "data_failure_no_vault": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID's account service says that your account has no vault. That is what it says after a vault was deleted or an account closed, and it can also be a fault of the service. If you did not delete your vault, do not start over: try again later."
+          }
+        }
+      }
+    },
+    "data_failure_not_found": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing was found."
+          }
+        }
+      }
+    },
+    "data_failure_not_supported": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault's software release does not support this yet."
+          }
+        }
+      }
+    },
+    "data_failure_other": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Something went wrong. Try again."
+          }
+        }
+      }
+    },
+    "data_failure_owner_check_required": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your daily check is due. What you entered is kept: the check opens when you leave this screen."
+          }
+        }
+      }
+    },
+    "data_failure_rate_limited": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too many attempts. Wait a little and try again."
+          }
+        }
+      }
+    },
+    "data_failure_rejected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rejected on your phone."
+          }
+        }
+      }
+    },
+    "data_failure_release_ended": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The vault software release your vault is sealed to has ended. The vault can no longer be opened."
+          }
+        }
+      }
+    },
+    "data_failure_release_unknown": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault runs a release that is not in this app's list of vault releases, so VettID did not ask for your PIN and sent nothing. The app loads the list again each time you try. Try again; if this keeps happening, update VettID."
+          }
+        }
+      }
+    },
+    "data_failure_response_too_large": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault's answer was too large to send to this phone. Nothing was changed. Try again later."
+          }
+        }
+      }
+    },
+    "data_failure_retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The service was too slow just now. Nothing was used or changed. Try again."
+          }
+        }
+      }
+    },
+    "data_failure_rollback": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The vault is served by an older software release than this phone last used. VettID did not send your PIN."
+          }
+        }
+      }
+    },
+    "data_failure_rotation_required": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your credential must be rotated before it can be used again."
+          }
+        }
+      }
+    },
+    "data_failure_service_paused": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The vault service is paused for maintenance. Try again later."
+          }
+        }
+      }
+    },
+    "data_failure_setup_code": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That setup code did not work. Get a new one on the account site."
+          }
+        }
+      }
+    },
+    "data_failure_signer_refused": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This vault no longer accepts this installation of VettID. Update the app, or recover your vault with a current version."
+          }
+        }
+      }
+    },
+    "data_failure_stored_mismatch": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The vault's stored data could not be opened. Contact VettID."
+          }
+        }
+      }
+    },
+    "data_failure_terms": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accept the current membership terms on the account site first."
+          }
+        }
+      }
+    },
+    "data_failure_transfer_incomplete": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The move to this phone did not finish. Approve it again on your old phone."
+          }
+        }
+      }
+    },
+    "data_failure_unauthorized": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID's account service does not accept this phone for your vault any more. If you moved VettID to another phone, this one was replaced. If a setup took longer than an hour, start again with a new code."
+          }
+        }
+      }
+    },
+    "data_failure_vault_exists": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your account already has a vault, held by another app."
+          }
+        }
+      }
+    },
+    "data_failure_vault_unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The vault service is not available yet. Try again later."
+          }
+        }
+      }
+    },
+    "data_failure_weak_password": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This password is not strong enough."
+          }
+        }
+      }
+    },
+    "data_limit_action_invocations": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too many actions are waiting (at most %@). Try again later."
+          }
+        }
+      }
+    },
+    "data_limit_agent_grants": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This agent has the most permissions it can have (%@)."
+          }
+        }
+      }
+    },
+    "data_limit_app_settings": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This app keeps at most %@ settings in your vault."
+          }
+        }
+      }
+    },
+    "data_limit_auth_challenges": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too many identity checks are waiting for this connection (at most %@)."
+          }
+        }
+      }
+    },
+    "data_limit_blocks": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your block list is full: it holds at most %@ entries."
+          }
+        }
+      }
+    },
+    "data_limit_catalog_requests": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too many lists of shared items are being fetched (at most %@). Try again later."
+          }
+        }
+      }
+    },
+    "data_limit_connection_requests": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You have sent the most connection requests you can (%@ waiting)."
+          }
+        }
+      }
+    },
+    "data_limit_credential_size": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your credential is full: it holds at most %@ KB."
+          }
+        }
+      }
+    },
+    "data_limit_credential_size_of": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your credential is full: this would make it %1$@ KB, and it holds at most %2$@ KB."
+          }
+        }
+      }
+    },
+    "data_limit_critical_items": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your credential is full: it holds at most %@ critical items."
+          }
+        }
+      }
+    },
+    "data_limit_critical_use_requests": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too many requests to use critical items are waiting (at most %@)."
+          }
+        }
+      }
+    },
+    "data_limit_grant_fetches": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too many shared items are being fetched (at most %@). Try again later."
+          }
+        }
+      }
+    },
+    "data_limit_grant_requests": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You have asked for the most items you can (%@ requests)."
+          }
+        }
+      }
+    },
+    "data_limit_grants_given": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You share the most items you can (%@). Stop sharing some first."
+          }
+        }
+      }
+    },
+    "data_limit_held_approvals": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too many requests are waiting for your approval (at most %@)."
+          }
+        }
+      }
+    },
+    "data_limit_introductions": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You have the most open introductions you can (%@)."
+          }
+        }
+      }
+    },
+    "data_limit_item_size": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This item is too large: an item holds at most %@ KB."
+          }
+        }
+      }
+    },
+    "data_limit_item_size_of": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This item is too large: %1$@ KB, and an item holds at most %2$@ KB."
+          }
+        }
+      }
+    },
+    "data_limit_items": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault is full: it holds at most %@ items. Delete some first."
+          }
+        }
+      }
+    },
+    "data_limit_location_requests": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You asked this connection for their location a short while ago. Try again later."
+          }
+        }
+      }
+    },
+    "data_limit_location_shares": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You share your location with the most connections you can (%@)."
+          }
+        }
+      }
+    },
+    "data_limit_profile_items": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your shared profile is full: it holds at most %@ items."
+          }
+        }
+      }
+    },
+    "data_limit_profile_size": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your shared profile is too large: it holds at most %@ KB."
+          }
+        }
+      }
+    },
+    "data_limit_profile_size_of": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your shared profile is too large: this would make it %1$@ KB, and it holds at most %2$@ KB."
+          }
+        }
+      }
+    },
+    "data_limit_share_pending": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too many items are waiting for your sharing decision (at most %@). Decide some first."
+          }
+        }
+      }
+    },
+    "data_limit_share_rules": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault has the most share rules it can have (%@). Delete one first."
+          }
+        }
+      }
+    },
+    "data_limit_share_rules_subject": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This connection has the most share rules it can have (%@)."
+          }
+        }
+      }
+    },
+    "data_limit_tag_registry": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault keeps at most %@ tags. Delete one first."
+          }
+        }
+      }
+    },
+    "data_limit_wallet_addresses": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This wallet has the most addresses it can have (%@)."
+          }
+        }
+      }
+    },
+    "data_limit_wallets": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You have the most wallets you can (%@)."
+          }
+        }
+      }
+    },
+    "data_password_problem_control": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove tabs and other control characters."
+          }
+        }
+      }
+    },
+    "data_password_problem_long": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This password is too long."
+          }
+        }
+      }
+    },
+    "data_password_problem_pin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Do not reuse your PIN."
+          }
+        }
+      }
+    },
+    "data_password_problem_short": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use at least 8 characters."
+          }
+        }
+      }
+    },
+    "data_password_problem_weak": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Make it stronger: longer, or a few unrelated words."
+          }
+        }
+      }
+    },
+    "data_password_rule_common": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That is a very common password."
+          }
+        }
+      }
+    },
+    "data_password_rule_guessable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is easy to guess. Add more words or make it less predictable."
+          }
+        }
+      }
+    },
+    "data_password_rule_guessable_hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avoid names, dates and keyboard runs."
+          }
+        }
+      }
+    },
+    "data_password_rule_ok": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Strong enough."
+          }
+        }
+      }
+    },
+    "data_password_rule_pin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Don't use your PIN as your password."
+          }
+        }
+      }
+    },
+    "data_password_rule_repeated": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That is one character repeated."
+          }
+        }
+      }
+    },
+    "data_password_rule_short": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use at least 12 characters."
+          }
+        }
+      }
+    },
+    "data_pin_problem_common": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This PIN is too common."
+          }
+        }
+      }
+    },
+    "data_pin_problem_digits": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use digits only."
+          }
+        }
+      }
+    },
+    "data_pin_problem_long": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use at most %lld digits."
+          }
+        }
+      }
+    },
+    "data_pin_problem_pattern": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avoid repeated patterns like 121212."
+          }
+        }
+      }
+    },
+    "data_pin_problem_repeated": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Do not repeat one digit."
+          }
+        }
+      }
+    },
+    "data_pin_problem_sequence": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avoid runs like 123456."
+          }
+        }
+      }
+    },
+    "data_pin_problem_short": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use at least %lld digits."
+          }
+        }
+      }
+    },
+    "data_strength_fair": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fair"
+          }
+        }
+      }
+    },
+    "data_strength_good": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Good"
+          }
+        }
+      }
+    },
+    "data_strength_strong": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Strong"
+          }
+        }
+      }
+    },
+    "data_strength_too_short": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too short"
+          }
+        }
+      }
+    },
+    "data_strength_weak": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weak"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}
