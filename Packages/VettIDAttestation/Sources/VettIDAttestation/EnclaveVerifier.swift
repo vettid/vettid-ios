@@ -6,6 +6,12 @@ public struct VerifiedEnclave: Sendable {
     public let descriptor: Descriptor
     public let measurements: Measurements
     public let release: Release
+
+    public init(descriptor: Descriptor, measurements: Measurements, release: Release) {
+        self.descriptor = descriptor
+        self.measurements = measurements
+        self.release = release
+    }
 }
 
 /// The app's checks of an enclave before it seals anything to it (§11.2, §11.3), as vettid-vault's reference client

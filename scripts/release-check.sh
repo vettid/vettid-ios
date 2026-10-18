@@ -29,6 +29,9 @@ DEV_ONLY=("127.0.0.1" "relay.vettid.test" "vettid.start" "vettid.theme" "Compone
 
 PRODUCTION_HOSTS=("account.vettid.org")
 STAGING_HOSTS=("staging.vettid.org")
+# The staging channel's manifest key A (its SPKI and its key id): pinned by Staging and Debug builds only (ID10 of the
+# manifest pins; VettIDAttestation's ManifestKeys holds only the production keys).
+STAGING_KEYS=("MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEok8gqeC5VcGx4KL+B5fL7UgENBXf" "e9b3a403423120ac")
 
 archive() {
   local config=$1
@@ -91,7 +94,7 @@ check_app() {
 
 check_release() {
   check_app "$1" com.vettid.app "${PRODUCTION_HOSTS[@]}" \
-    -- "${TEST_MARKERS[@]}" "${DEV_ONLY[@]}" "${STAGING_HOSTS[@]}"
+    -- "${TEST_MARKERS[@]}" "${DEV_ONLY[@]}" "${STAGING_HOSTS[@]}" "${STAGING_KEYS[@]}"
 }
 
 check_staging() {
