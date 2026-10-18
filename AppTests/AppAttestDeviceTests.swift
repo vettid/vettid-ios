@@ -12,7 +12,10 @@ import XCTest
 /// App Attest on a real iPhone (IOS-PLAN §6.2, §8 I1.4): a fresh key attested over a challenge, then assertions over an
 /// unlock challenge and over SHA-256 of an approval string, with the clientDataHash rules of the TEST attester. Skipped
 /// where App Attest is unsupported (the simulator, CI). The objects are checked here as the vault's verifier reads them
-/// (the certificate chain itself is VA1's: `scripts/devattest-verify/run.sh --real`). Nothing is logged: with
+/// (the certificate chain itself is VA1's: `scripts/devattest-verify/run.sh --real`). iOS 27 sets the extension data
+/// flag (ED, 0x80) and appends a CBOR map of Apple's extensions to the authenticator data of the attestation and of
+/// every assertion; vettid-vault `vms/devattest` accepts it since vettid-vault #118, and the authenticator data is
+/// split here the same way (``AuthenticatorData``). Nothing is logged: with
 /// `VETTID_TEST_APPATTEST_EXPORT=1` the attestation and the assertions are written to the app's temporary directory as
 /// ``exportName``, for VA1 on the Mac, and nowhere else.
 final class AppAttestDeviceTests: XCTestCase {
@@ -80,6 +83,7 @@ final class AppAttestDeviceTests: XCTestCase {
             guard case .ios(let assertion) = a else { return XCTFail("not an iOS assertion") }
             let (ad, sig) = try Self.assertionParts(assertion)
             XCTAssertEqual(Array(ad.prefix(32)), parsed.rpIDHash, "the same App ID")
+            XCTAssertEqual(try AuthenticatorData(ad, attested: false).flags & 0x80, parsed.flags & 0x80, "ED as in the attestation")
             let c = UInt32(ad[33]) << 24 | UInt32(ad[34]) << 16 | UInt32(ad[35]) << 8 | UInt32(ad[36])
             XCTAssertGreaterThan(c, counter)
             counter = c
@@ -168,7 +172,40 @@ final class AppAttestDeviceTests: XCTestCase {
 
     static func assertionParts(_ assertion: [UInt8]) throws -> (authenticatorData: [UInt8], signature: [UInt8]) {
         let v = try CborValue.decode(assertion)
-        return (try v.bytes(at: "authenticatorData"), try v.bytes(at: "signature"))
+        let ad = try v.bytes(at: "authenticatorData")
+        _ = try AuthenticatorData(ad, attested: false)
+        return (ad, try v.bytes(at: "signature"))
+    }
+}
+
+/// App Attest authenticator data split as vettid-vault `vms/devattest` `parseAuthData` splits it: rpIdHash (32), flags
+/// (1), counter (4); in an attestation the aaguid (16), the credential id's length (2), the credential id and exactly
+/// one CBOR item, the COSE key; then, if the ED flag (0x80) is set, exactly one definite-length CBOR map of extensions
+/// (iOS 27 sets it in the attestation and in every assertion); nothing after. The extensions are not interpreted.
+struct AuthenticatorData {
+    let flags: UInt8
+    let extensions: [UInt8]?
+
+    init(_ ad: [UInt8], attested: Bool) throws {
+        guard ad.count >= 37 else { throw TestError("short authenticator data") }
+        flags = ad[32]
+        var rest = Array(ad[37...])
+        if attested {
+            guard flags & 0x40 != 0, rest.count >= 18 else { throw TestError("no attested credential data") }
+            let n = Int(rest[16]) << 8 | Int(rest[17])
+            guard n > 0, rest.count - 18 >= n else { throw TestError("credential id") }
+            let tail = Array(rest[(18 + n)...])
+            rest = Array(tail[try CborValue.decodePrefix(tail).length...])
+        }
+        if flags & 0x80 != 0 {
+            let x = try CborValue.decodePrefix(rest)
+            guard x.value.entries != nil, rest[0] & 0x1F != 31 else { throw TestError("the extensions are not a definite map") }
+            extensions = Array(rest[..<x.length])
+            rest = Array(rest[x.length...])
+        } else {
+            extensions = nil
+        }
+        guard rest.isEmpty else { throw TestError("data after the authenticator data") }
     }
 }
 
@@ -186,6 +223,7 @@ private struct Attested {
         guard case .array(let certs)? = v.lookup("attStmt")?.lookup("x5c") else { throw TestError("no x5c") }
         x5c = certs.compactMap { if case .bytes(let b) = $0 { b } else { nil } }
         guard authData.count > 55 else { throw TestError("short authData") }
+        _ = try AuthenticatorData(authData, attested: true)
     }
 
     var rpIDHash: [UInt8] { Array(authData[0 ..< 32]) }

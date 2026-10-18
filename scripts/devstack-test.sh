@@ -35,8 +35,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 REPO="$(pwd)"
 
-# The vettid-vault commit of the other references (scripts/phone-ios-reference, scripts/devattest-verify).
-VAULT_REF="${VAULT_REF:-057236379992e48e7f356b4994fc2d11c174d365}"
+# The vettid-vault commit scripts/devattest-verify checks against (the App Attest extensions of vettid-vault #118).
+VAULT_REF="${VAULT_REF:-ed8929818d776e278bcb8b5756add909572f8838}"
 CACHE="${XDG_CACHE_HOME:-$HOME/.cache}"
 DATA="${DEVSTACK_DATA:-${CACHE}/vettid-devstack}"
 STATE="${CACHE}/vettid-ios-devstack"

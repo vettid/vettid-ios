@@ -5,7 +5,8 @@
 #   scripts/devattest-verify/run.sh [FIXTURE]
 #   scripts/devattest-verify/run.sh --real EXPORT
 #
-# FIXTURE defaults to VettIDAltChan's committed fixture. --real checks a real
+# FIXTURE defaults to VettIDAltChan's committed fixture without extensions (pass
+# test-app-attest-ed.json next to it for the one with them). --real checks a real
 # iPhone's App Attest attestation and assertions (VA1): EXPORT is the file the
 # device test AppAttestDeviceTests writes with VETTID_TEST_APPATTEST_EXPORT=1
 # (copied from the phone with `xcrun devicectl device copy from`); it is
@@ -21,8 +22,8 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "${HERE}/../.." && pwd -P)"
-# The vettid-vault commit the fixture was verified against (SOURCE.md next to the fixture).
-VAULT_COMMIT=057236379992e48e7f356b4994fc2d11c174d365
+# The vettid-vault commit the fixtures were verified against (SOURCE.md next to the fixtures).
+VAULT_COMMIT=ed8929818d776e278bcb8b5756add909572f8838
 VAULT_SRC="${VAULT_SRC:-${REPO}/../vettid-vault}"
 MODE=()
 if [[ "${1:-}" == "--real" ]]; then

@@ -30,6 +30,7 @@ import VettIDRelay
         try #require(await stack.reachable(), "the dev stack does not answer at \(stack.control)")
         let trust = try await stack.trust()
         let guid = "ios-" + Ulid.new().lowercased()
+        // The attester's default form: ED and Apple's extensions map, as a real iPhone sends them on iOS 27.
         let attester = TestIOSAttester()
         let appKey = SoftwareAppKey()
         let generated = try DeviceSecrets.generate()

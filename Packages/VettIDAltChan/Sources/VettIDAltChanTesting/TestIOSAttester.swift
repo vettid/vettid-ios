@@ -13,13 +13,20 @@ import VettIDCrypto
 /// The formats are VAULT-MESSAGING §11.7's iOS forms, as Apple defines them:
 ///
 /// - **attestation**: CBOR `{"fmt": "apple-appattest", "attStmt": {"x5c": [credential, intermediate], "receipt": …},
-///   "authData": …}`; authData = SHA-256(App ID) ‖ flags `0x41` ‖ counter 0 ‖ aaguid `appattest` + 7 zero bytes (the
-///   production environment) ‖ the key id's length and the key id ‖ the COSE EC2 P-256 key. The credential
-///   certificate's nonce extension is SHA-256(authData ‖ clientDataHash), and clientDataHash is the challenge.
-/// - **assertion**: CBOR `{"signature": …, "authenticatorData": …}`; authenticatorData = SHA-256(App ID) ‖ flags `0x01`
-///   ‖ counter; the signature is ECDSA P-256 over SHA-256(nonce), nonce = SHA-256(authenticatorData ‖ clientDataHash),
-///   the counter increasing from 1.
+///   "authData": …}`; authData = SHA-256(App ID) ‖ flags ‖ counter 0 ‖ aaguid `appattest` + 7 zero bytes (the
+///   production environment) ‖ the key id's length and the key id ‖ the COSE EC2 P-256 key ‖ the extensions map. The
+///   credential certificate's nonce extension is SHA-256(authData ‖ clientDataHash), and clientDataHash is the
+///   challenge.
+/// - **assertion**: CBOR `{"signature": …, "authenticatorData": …}`; authenticatorData = SHA-256(App ID) ‖ flags ‖
+///   counter ‖ the extensions map; the signature is ECDSA P-256 over SHA-256(nonce), nonce =
+///   SHA-256(authenticatorData ‖ clientDataHash), the counter increasing from 1.
 /// - **key id**: SHA-256 of the uncompressed public point.
+///
+/// By default the authenticator data is shaped as a real iPhone on iOS 27 sends it (vettid-vault `IOSAppleExtensions`):
+/// flags `0xC0` (AT and ED, in the attestation and in every assertion) and ``appleExtensions()`` appended, so that tests
+/// and the dev stack take the path real iPhones take. With `appleExtensions: false` it is the form without extensions
+/// (`IOSOptions{}`): flags `0x41` in the attestation, `0x01` in an assertion, nothing appended. vettid-vault
+/// `vms/devattest` accepts both.
 public final class TestIOSAttester: Attester, CustomStringConvertible, @unchecked Sendable {
     /// The marker the release check refuses in a Release or Staging app (IOS-PLAN §5).
     public static let testOnlyMarker = "VETTID TEST ONLY: the TEST App Attest attester"
@@ -29,10 +36,15 @@ public final class TestIOSAttester: Attester, CustomStringConvertible, @unchecke
     public static let aaguidProduction = Array("appattest".utf8) + [UInt8](repeating: 0, count: 7)
     static let flagsAttested: UInt8 = 0x41
     static let flagsAsserted: UInt8 = 0x01
+    /// AT (0x40) and ED (0x80), in the attestation and in every assertion, as iOS 27 sends them (vettid-vault
+    /// `iosFlags` with `ED`): UP is not set, and AT is set in assertions too, which carry no attested credential data.
+    static let flagsExtensions: UInt8 = 0xC0
     static let receipt = Array("TEST receipt".utf8)
     static let hashSize = 32
 
     public let appID: String
+    /// Whether the authenticator data carries ED and ``appleExtensions()``, as a real iPhone's (the default).
+    public let sendsAppleExtensions: Bool
     /// The marker, so that it stays in any binary that links this type.
     public var description: String { Self.testOnlyMarker }
     private let signer: P256.Signing.PrivateKey
@@ -41,10 +53,21 @@ public final class TestIOSAttester: Attester, CustomStringConvertible, @unchecke
     private var counter: UInt32 = 0
 
     /// A fresh random key, or with [seed] vettid-vault's `NewIOSAttester(seed, …)` key (`TestKey(P-256, seed)`).
-    public init(seed: UInt8? = nil, appID: String = TestIOSAttester.testAppID, ca: TestAppleCA = .shared) {
+    /// [appleExtensions] is vettid-vault's `IOSAppleExtensions(IOSOptions{})` (true) or `IOSOptions{}` (false).
+    public init(
+        seed: UInt8? = nil, appID: String = TestIOSAttester.testAppID, ca: TestAppleCA = .shared, appleExtensions: Bool = true
+    ) {
         signer = seed.map(TestKey.p256) ?? P256.Signing.PrivateKey()
         self.appID = appID
         self.ca = ca
+        sendsAppleExtensions = appleExtensions
+    }
+
+    /// A TEST extensions map shaped like the one iOS 27 appends to App Attest authenticator data: a 62-byte
+    /// definite-length CBOR map with Apple's two keys, the values made up (vettid-vault `enclavetest.AppleExtensions`).
+    public static func appleExtensions() -> [UInt8] {
+        CborEncoder().map(2).text("apple_bundle_version_01").text("1.0").text("apple_validation_category_01").text("01")
+            .encoded()
     }
 
     /// The uncompressed public point (65 bytes).
@@ -80,7 +103,7 @@ public final class TestIOSAttester: Attester, CustomStringConvertible, @unchecke
     /// The attestation object over [clientDataHash] with the credential certificate's [serial].
     public func attestation(clientDataHash: [UInt8], serial: Int64) throws -> [UInt8] {
         guard clientDataHash.count == Self.hashSize else { throw CryptoError.format("clientDataHash") }
-        let ad = Self.attestedAuthData(appID: appID, point: publicPoint)
+        let ad = Self.attestedAuthData(appID: appID, point: publicPoint, appleExtensions: sendsAppleExtensions)
         let nonce = Bytes.sha256(ad, clientDataHash)
         let leaf = try ca.issueCredential(publicKey: signer.publicKey, nonce: nonce, serial: serial)
         let e = CborEncoder()
@@ -94,7 +117,7 @@ public final class TestIOSAttester: Attester, CustomStringConvertible, @unchecke
     /// The assertion over [clientDataHash] with [counter]. ECDSA is randomized: only the signature varies.
     public func assertion(clientDataHash: [UInt8], counter: UInt32) throws -> [UInt8] {
         guard clientDataHash.count == Self.hashSize else { throw CryptoError.format("clientDataHash") }
-        let ad = Self.assertionAuthData(appID: appID, counter: counter)
+        let ad = Self.assertionAuthData(appID: appID, counter: counter, appleExtensions: sendsAppleExtensions)
         let nonce = Bytes.sha256(ad, clientDataHash)
         // App Attest signs nonce with ECDSA-SHA256, so the signed digest is SHA-256(nonce).
         let sig = try signer.signature(for: nonce)
@@ -103,23 +126,27 @@ public final class TestIOSAttester: Attester, CustomStringConvertible, @unchecke
         return e.encoded()
     }
 
-    /// The attested key's authenticator data: rpIdHash, flags `0x41`, counter 0, the production aaguid, the key id as
-    /// credential id and the COSE key.
-    public static func attestedAuthData(appID: String, point: [UInt8]) -> [UInt8] {
+    /// The attested key's authenticator data: rpIdHash, flags (`0xC0` with [appleExtensions], else `0x41`), counter 0,
+    /// the production aaguid, the key id as credential id, the COSE key and, with [appleExtensions],
+    /// ``appleExtensions()``.
+    public static func attestedAuthData(appID: String, point: [UInt8], appleExtensions: Bool) -> [UInt8] {
         let keyID = Bytes.sha256(point)
         var ad = Bytes.sha256(Array(appID.utf8))
-        ad.append(flagsAttested)
+        ad.append(appleExtensions ? flagsExtensions : flagsAttested)
         ad += bigEndian(UInt32(0))
         ad += aaguidProduction
         ad += [UInt8(keyID.count >> 8), UInt8(keyID.count & 0xFF)]
         ad += keyID
         ad += coseKey(point)
+        if appleExtensions { ad += Self.appleExtensions() }
         return ad
     }
 
-    /// An assertion's authenticator data: rpIdHash, flags `0x01`, the counter.
-    public static func assertionAuthData(appID: String, counter: UInt32) -> [UInt8] {
-        Bytes.sha256(Array(appID.utf8)) + [flagsAsserted] + bigEndian(counter)
+    /// An assertion's authenticator data: rpIdHash, flags (`0xC0` with [appleExtensions], else `0x01`), the counter
+    /// and, with [appleExtensions], ``appleExtensions()``.
+    public static func assertionAuthData(appID: String, counter: UInt32, appleExtensions: Bool) -> [UInt8] {
+        Bytes.sha256(Array(appID.utf8)) + [appleExtensions ? flagsExtensions : flagsAsserted] + bigEndian(counter)
+            + (appleExtensions ? Self.appleExtensions() : [])
     }
 
     /// The COSE_Key `{1: 2, 3: -7, -1: 1, -2: x, -3: y}` (EC2, ES256, P-256), in enclavetest's order.

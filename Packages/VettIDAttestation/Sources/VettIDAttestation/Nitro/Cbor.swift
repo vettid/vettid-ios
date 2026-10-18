@@ -26,6 +26,16 @@ public indirect enum CborValue: Equatable, Sendable {
         return v
     }
 
+    /// Decodes exactly one item from the start of [b] and returns it with the number of bytes it takes, for formats
+    /// that concatenate CBOR items with other data (App Attest authenticator data: the COSE key, then the extensions
+    /// map). The item is decoded under the same rules as ``decode(_:)``; only the trailing-data check is left to the
+    /// caller. As vettid-vault `cbor.DecodePrefix`. Empty input is truncated.
+    public static func decodePrefix(_ b: [UInt8]) throws -> (value: CborValue, length: Int) {
+        var d = CborDecoder(b: b)
+        let v = try d.item(depth: 0)
+        return (v, d.off)
+    }
+
     /// Removes tag [tag] if present.
     public func untag(_ tag: UInt64) -> CborValue {
         if case .tag(let t, let item) = self, t == tag { return item }
