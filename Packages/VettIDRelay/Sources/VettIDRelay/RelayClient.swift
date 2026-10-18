@@ -78,6 +78,14 @@ public struct RelayMessage: Sendable, CustomStringConvertible {
     public let jti: String?
     public let payload: [UInt8]
 
+    public init(msgID: String, depositedAt: String, sender: String, jti: String?, payload: [UInt8]) {
+        self.msgID = msgID
+        self.depositedAt = depositedAt
+        self.sender = sender
+        self.jti = jti
+        self.payload = payload
+    }
+
     /// The sender's raw relay key, or nil if malformed.
     public var senderKey: [UInt8]? { RelayAuth.decodeKey(sender) }
 
