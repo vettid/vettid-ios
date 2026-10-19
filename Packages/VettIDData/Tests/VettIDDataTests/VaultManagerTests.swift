@@ -143,11 +143,4 @@ func vaultFailure(_ body: @MainActor () async throws -> Void) async -> VaultFail
         try await m.refresh()
         #expect(m.phase == .signedOut)
     }
-
-    /// Every operation of a later row refuses instead of acting on half an implementation.
-    @Test func laterOperationsAreNotSupportedYet() async throws {
-        defer { phone.close() }
-        #expect(await vaultFailure { try await m.rotate(password: "pw") }?.kind == .notSupported)
-        #expect(await vaultFailure { try await m.confirmAlarm(mine: true) }?.kind == .notSupported)
-    }
 }

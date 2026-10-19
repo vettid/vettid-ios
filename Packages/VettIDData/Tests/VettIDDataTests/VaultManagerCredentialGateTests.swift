@@ -237,4 +237,64 @@ import VettIDDataTesting
         }
         #expect(count("credential.unlock") == 0)
     }
+
+    /// A new credential (`credential.reset`) replaces the password, so it counts as a secret sent: a rotation that passed
+    /// its check, then queued on the lock behind the reset, is refused once the reset was answered, with nothing sent (it
+    /// carries the password the reset replaced).
+    @Test func aRotationQueuedBehindAnAnsweredResetIsRefused() async throws {
+        defer { phone.close() }
+        try await setUp()
+        try await m.decideFirst()
+        let api = try m.openApi(try await m.openSession())
+        let lock = try await takeLock()
+        let (pin, password, newPassword) = (pin, password, newPassword)
+        let reset = Task { try await m.newCredential(pin: pin, password: password, newPassword: newPassword) }
+        #expect(await eventually { lock.waiting == 1 })
+        let testTurn = Task { await lock.acquire() }
+        #expect(await eventually { lock.waiting == 2 })
+        let op = Task { () -> (any Error)? in
+            do {
+                try await api.credentialRotate(password: password)
+                return nil
+            } catch {
+                return error
+            }
+        }
+        #expect(await eventually { lock.waiting == 3 })
+        lock.release()
+        try await reset.value
+        await testTurn.value
+        #expect(service.resets.count == 1 && service.currentPassword == newPassword)
+        lock.release()
+        let error = await op.value
+        #expect(error is CredentialUnsettled, "\(String(describing: error))")
+        #expect(service.rotations.isEmpty && service.passwordFailureCount == 0)
+    }
+
+    /// The same for an operation that began while the reset was out (the count already moved for its send): refused
+    /// when it gets the lock, with nothing sent, so the replaced password never goes.
+    @Test func anUnlockWindowQueuedWhileAResetIsOutIsRefused() async throws {
+        defer { phone.close() }
+        try await setUp()
+        let api = try m.openApi(try await m.openSession())
+        let lock = try #require(m.session?.device.credentialLock)
+        let (pin, password, newPassword) = (pin, password, newPassword)
+        service.holdMessages = true
+        let reset = Task { try await m.newCredential(pin: pin, password: password, newPassword: newPassword) }
+        #expect(await eventually { service.resets.count == 1 })
+        let op = Task { () -> (any Error)? in
+            do {
+                _ = try await api.credentialUnlock(password: password)
+                return nil
+            } catch {
+                return error
+            }
+        }
+        #expect(await eventually { lock.waiting == 1 })
+        service.holdMessages = false
+        _ = try? await reset.value
+        let error = await op.value
+        #expect(error is CredentialUnsettled, "\(String(describing: error))")
+        #expect(count("credential.unlock") == 0 && service.passwordFailureCount == 0)
+    }
 }

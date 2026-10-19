@@ -6,7 +6,7 @@ import VettIDDataTesting
 @testable import VettIDVault
 
 /// The Credential screen and the password change (VAULT-MESSAGING §3.5, §10.6, §11.14.9). Mirrors vettid-android
-/// `CredentialViewModelsTest` (the rotation and the clone alarm come with their screens).
+/// `CredentialViewModelsTest` (the rotation and the clone alarm: ``RotateViewModelTests``).
 @MainActor
 @Suite struct CredentialViewModelTests {
     let repo = FakeVaultRepository(.unlocked)

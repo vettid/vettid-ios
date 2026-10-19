@@ -108,7 +108,7 @@ extension FakeVaultService {
         switch m.type {
         case "account.get": try accountGet(m)
         case "account.name.set": try nameSet(m, body)
-        case "credential.version": try reply(m.type, #"{"exists":\#(hasCredential),"version":\#(credentialVersion),"key":"\#(Self.credentialKeyID)","updated_at":"2026-10-04T12:00:00Z"}"#, re: m.id)
+        case "credential.version": try reply(m.type, #"{"exists":\#(hasCredential),"version":\#(credentialVersion),"key":"\#(credentialKeyValue)","updated_at":"2026-10-04T12:00:00Z"\#(alarmMember)}"#, re: m.id)
         case "credential.unlock": try credentialUnlock(m, body)
         case "credential.lock":
             windowUntil = nil
@@ -141,7 +141,7 @@ extension FakeVaultService {
     /// The rotated CEK's answer members (`credential`, `version`, `utks`), without the closing brace.
     func rotated() throws -> String {
         credentialVersion += 1
-        return #"{"credential":"\#(Self.blob(credentialVersion))","version":\#(credentialVersion),"utks":\#(try issueUTKs(2))"#
+        return #"{"credential":"\#(currentBlob)","version":\#(credentialVersion),"utks":\#(try issueUTKs(2))"#
     }
 
     /// `account.name.set` in vettid-vault's order (§10.8): the UTK, `too_soon`, the names (`bad_request`, nothing
@@ -172,8 +172,16 @@ extension FakeVaultService {
     /// `credential.unlock`: the blob and the password; the window open for the setting's length and the CEK rotated.
     private func credentialUnlock(_ m: Inner, _ body: JsonObject) throws {
         guard let p = try opened(m, body) else { return }
-        guard try body.optString("credential") == Self.blob(credentialVersion) else { return try reply(m.type, "{}", re: m.id, error: "stale_credential") }
-        guard (try? p.string("password")) == vaultPassword else { return try reply(m.type, "{}", re: m.id, error: "bad_password") }
+        guard try checkBlob(m, try body.optString("credential")) else { return }
+        // As vettid-vault's `openChecked`: the password backoff first, and a wrong password counted in it.
+        if let b = passwordNotBefore, vaultNow < b {
+            return try reply(m.type, #"{"retry_after":\#(max(Int(b.timeIntervalSince(vaultNow).rounded(.up)), 1))}"#, re: m.id, error: "backoff")
+        }
+        guard (try? p.string("password")) == vaultPassword else {
+            passwordFailures += 1
+            return try reply(m.type, "{}", re: m.id, error: "bad_password")
+        }
+        passwordFailures = 0
         let until = vaultNow.addingTimeInterval(TimeInterval(unlockTtl))
         windowUntil = until
         // As vettid-vault's `credential.unlock` (`respond`): the CEK rotates, the new blob and UTKs beside the expiry.

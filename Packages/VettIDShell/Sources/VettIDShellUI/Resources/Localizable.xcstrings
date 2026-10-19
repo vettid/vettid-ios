@@ -770,6 +770,50 @@
           }
         }
       }
+    },
+    "credential_alarm_banner": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your credential was presented by another device"
+          }
+        }
+      }
+    },
+    "credential_alarm_review": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Review"
+          }
+        }
+      }
+    },
+    "rotate_offer": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can now rotate your vault's keys: every older copy of your credential stops working."
+          }
+        }
+      }
+    },
+    "rotate_offer_action": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rotate now"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

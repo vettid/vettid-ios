@@ -3060,6 +3060,391 @@
           }
         }
       }
+    },
+    "credential_rotate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rotate the credential key"
+          }
+        }
+      }
+    },
+    "credential_rotate_supporting": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recommended at least once a year"
+          }
+        }
+      }
+    },
+    "credential_rotate_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rotate your credential key"
+          }
+        }
+      }
+    },
+    "credential_rotate_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault makes a new credential key, re-keys every critical item and rotates its own identity keys. Connections that know your key receive a signed rotation statement. Every older copy of your credential stops working."
+          }
+        }
+      }
+    },
+    "credential_rotate_submit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rotate now"
+          }
+        }
+      }
+    },
+    "credential_rotate_done": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your credential key was rotated."
+          }
+        }
+      }
+    },
+    "credential_alarm_review": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Review"
+          }
+        }
+      }
+    },
+    "credential_alarm_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Was that you?"
+          }
+        }
+      }
+    },
+    "credential_alarm_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "At %@, %@ presented a copy of your Protean Credential. Your vault refused it and froze credential use. Messaging, connections and your other items keep working."
+          }
+        }
+      }
+    },
+    "credential_alarm_presenter_holder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "this phone's session"
+          }
+        }
+      }
+    },
+    "credential_alarm_presenter_other": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "another device"
+          }
+        }
+      }
+    },
+    "credential_alarm_presenter_unknown": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a device"
+          }
+        }
+      }
+    },
+    "credential_alarm_mine": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That was me"
+          }
+        }
+      }
+    },
+    "credential_alarm_mine_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For example, you restored this phone from a backup. A rotation still follows, so that no second copy stays alive."
+          }
+        }
+      }
+    },
+    "credential_alarm_not_mine": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That was not me"
+          }
+        }
+      }
+    },
+    "credential_alarm_confirm_mine_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm: that was you?"
+          }
+        }
+      }
+    },
+    "credential_alarm_confirm_not_mine_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm: that was not you?"
+          }
+        }
+      }
+    },
+    "credential_alarm_confirm_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Either way, you rotate your credential next. Every other copy stops working."
+          }
+        }
+      }
+    },
+    "credential_alarm_confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm"
+          }
+        }
+      }
+    },
+    "credential_alarm_rotate_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rotate your credential"
+          }
+        }
+      }
+    },
+    "credential_alarm_rotate_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter your credential password to make a new credential key. Every other copy, including the one presented, stops working."
+          }
+        }
+      }
+    },
+    "credential_alarm_not_mine_advice_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Someone may have your credential"
+          }
+        }
+      }
+    },
+    "credential_alarm_not_mine_advice": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "After the rotation, change your credential password and your vault PIN. If this phone is lost or compromised, start a recovery on the account site."
+          }
+        }
+      }
+    },
+    "credential_alarm_resolved": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The alert is resolved. Your credential works again."
+          }
+        }
+      }
+    },
+    "credential_new_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New credential"
+          }
+        }
+      }
+    },
+    "credential_new_supporting": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replaces your credential; every critical item is destroyed"
+          }
+        }
+      }
+    },
+    "credential_new_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault PIN and your current credential password confirm it is you; the new password protects the new credential."
+          }
+        }
+      }
+    },
+    "credential_new_warning_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every critical item is destroyed"
+          }
+        }
+      }
+    },
+    "credential_new_warning": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A new credential replaces the current one. Every critical item in it is destroyed for good, on every device; nobody, VettID included, can bring them back. Your other items, connections and messages stay."
+          }
+        }
+      }
+    },
+    "credential_new_pin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault PIN"
+          }
+        }
+      }
+    },
+    "credential_new_ack": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I understand that every critical item is destroyed."
+          }
+        }
+      }
+    },
+    "credential_new_submit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replace credential"
+          }
+        }
+      }
+    },
+    "credential_new_confirm_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replace your credential?"
+          }
+        }
+      }
+    },
+    "credential_new_done": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New credential ready"
+          }
+        }
+      }
+    },
+    "credential_new_done_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use the new password from now on. Your daily check starts again from now."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

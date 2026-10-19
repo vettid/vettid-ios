@@ -330,6 +330,8 @@ import VettIDVault
         await m.checkUnresolvedChange(evenLocked: true)
         let marker = try m.phoneSecrets.unresolvedChange()
         #expect(m.changeCheck == ChangeCheck(.pin, .ended) && marker == nil)
+        // The latest blob was fetched and kept.
+        #expect(m.session?.device.credentialVersion == service.vaultCredentialVersion)
     }
 
     /// A confirmation that cannot be written is still a success; the marker goes alone, so the next unlock asks for the

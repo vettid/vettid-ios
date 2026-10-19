@@ -26,12 +26,15 @@ import VettIDUI
             .appendingPathComponent("Sources/VettIDShellUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 70)
+        #expect(keys.count == 74)
         let missing = "\u{0}missing"
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)
             #expect(!text.isEmpty && text != key && text != missing, "\(key)")
-            let prefixes = ["nav_", "drawer_", "account_", "owner_check_", "ownercheck_", "settings_", "ios_", "release_banner_"]
+            let prefixes = [
+                "nav_", "drawer_", "account_", "owner_check_", "ownercheck_", "settings_", "ios_", "release_banner_", "credential_alarm_",
+                "rotate_offer",
+            ]
             #expect(prefixes.contains { key.hasPrefix($0) }, "\(key)")
         }
     }
@@ -46,6 +49,9 @@ import VettIDUI
         #expect(ShellStrings.accountEmailNote == "Only you see this address.")
         #expect(ShellStrings.renewPromptAction == "New phone secret")
         #expect(ShellStrings.accountChangeNameBody == "Only here, in the app, with your PIN and password")
+        #expect(ShellStrings.alarmBanner == "Your credential was presented by another device")
+        #expect(ShellStrings.rotateOffer == "You can now rotate your vault's keys: every older copy of your credential stops working.")
+        #expect(ShellStrings.rotateOfferAction == "Rotate now")
     }
 
     /// vettid-android `OwnerCheckBanners`: the warning names the deadline's time, the hold-off its end; a notice says when
