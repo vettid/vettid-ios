@@ -15,6 +15,21 @@
 # answering on the control port (vettid-android's devstack/devstack.sh, for
 # example) is used as it is and left running.
 #
+# The dev enclave's vault processes need Linux, so on macOS the stack runs in
+# a Linux container (golang:<GO_VERSION>, --network host, named
+# vettid-ios-devstack) on Docker or colima; the data directory and this
+# script's state directory are mounted at the same paths, so run/ready.json
+# and the logs land on the Mac, and the Go module and build caches live in
+# the named volumes vettid-gomod and vettid-gocache. colima forwards the
+# ports the container listens on to the Mac's 127.0.0.1, and shares only the
+# home directory with its VM: the data directory, the state directory and
+# VAULT_SRC must be under it. The container cannot start LocalStack itself:
+# an endpoint in DEVSTACK_LOCALSTACK is used, else one already answering on
+# 127.0.0.1:4566, else this script starts vettid-vault's
+# integration/docker-compose.yml from the Mac (project vettid-ios-devstack)
+# and stops it with the stack. Elsewhere (Linux), or with DEVSTACK_NATIVE=1,
+# the stack runs natively with `go run`.
+#
 # Environment:
 #   VAULT_REF            vettid-vault commit to run (default below)
 #   VAULT_SRC            run ./cmd/devstack from this vettid-vault checkout instead
@@ -22,14 +37,18 @@
 #                        without it the stack starts LocalStack with podman or
 #                        docker compose
 #   KEEP_STACK=1         leave the stack running after the test
+#   DEVSTACK_NATIVE=1    on macOS, run the stack natively anyway (it cannot enroll)
+#   GO_VERSION           the golang image tag of the container (default 1.26)
 #
-# Requirements: Go 1.26, podman or docker with compose (or DEVSTACK_LOCALSTACK),
-# network access the first time (module and relay builds), Xcode for the
-# simulator run. Every key in the stack is TEST-ONLY, and no vault survives a
+# Requirements: on macOS, Docker with compose (colima, for example) and
+# Xcode for the simulator run; on Linux, Go 1.26 and podman or docker with
+# compose (or DEVSTACK_LOCALSTACK); network access the first time (module and
+# relay builds). Every key in the stack is TEST-ONLY, and no vault survives a
 # restart of the stack. What stays on the Mac: ~/.cache/vettid-devstack (the
 # stack's built binaries, run/ready.json and run/logs/), ~/.cache/vettid-ios-devstack
-# (this script's pid file and devstack.log), the Go module and build caches,
-# and the LocalStack container image.
+# (this script's pid file and devstack.log), the Go module and build caches
+# (on macOS the volumes vettid-gomod and vettid-gocache), and the golang and
+# LocalStack container images.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -42,16 +61,69 @@ DATA="${DEVSTACK_DATA:-${CACHE}/vettid-devstack}"
 STATE="${CACHE}/vettid-ios-devstack"
 CTL=http://127.0.0.1:18082
 
-healthy() { curl -sf --max-time 3 "${CTL}/dev/health" >/dev/null 2>&1; }
-running() { [[ -f "${STATE}/pid" ]] && kill -0 "$(cat "${STATE}/pid")" 2>/dev/null; }
+CONTAINER=vettid-ios-devstack
+LOCALSTACK=http://127.0.0.1:4566
+GO_IMAGE="golang:${GO_VERSION:-1.26}"
+if [[ "$(uname -s)" == Darwin && "${DEVSTACK_NATIVE:-}" != 1 ]]; then MODE=container; else MODE=native; fi
 
-up() {
-  if healthy; then
-    echo "a dev stack already answers on ${CTL}" >&2
-    return 0
+healthy() { curl -sf --max-time 3 "${CTL}/dev/health" >/dev/null 2>&1; }
+running() {
+  if [[ "${MODE}" == container ]]; then
+    [[ -n "$(docker ps -q --filter "name=^${CONTAINER}\$" 2>/dev/null)" ]]
+  else
+    [[ -f "${STATE}/pid" ]] && kill -0 "$(cat "${STATE}/pid")" 2>/dev/null
   fi
-  mkdir -p "${STATE}"
-  rm -f "${DATA}/run/ready.json"
+}
+
+# The LocalStack endpoint for the container (see the top of this file).
+container_localstack() {
+  if [[ -n "${DEVSTACK_LOCALSTACK:-}" ]]; then echo "${DEVSTACK_LOCALSTACK}"; return; fi
+  if curl -sf --max-time 3 "${LOCALSTACK}/_localstack/health" >/dev/null 2>&1; then
+    echo "using the LocalStack already answering on ${LOCALSTACK}" >&2
+    echo "${LOCALSTACK}"; return
+  fi
+  local file
+  if [[ -n "${VAULT_SRC:-}" ]]; then
+    file="$(cat "${VAULT_SRC}/integration/docker-compose.yml")"
+  else
+    # The compose file of VAULT_REF, from the module cache volume.
+    file="$(docker run --rm -v vettid-gomod:/go/pkg/mod "${GO_IMAGE}" sh -c \
+      'd="$(go mod download -json "$0" | sed -n "s/^[[:space:]]*\"Dir\": \"\(.*\)\",\$/\1/p")" && cat "${d}/integration/docker-compose.yml"' \
+      "github.com/vettid/vettid-vault@${VAULT_REF}")"
+  fi
+  echo "starting LocalStack (compose project ${CONTAINER})" >&2
+  printf '%s\n' "${file}" | docker compose -p "${CONTAINER}" -f - up -d --wait >&2
+  touch "${STATE}/localstack"
+  echo "${LOCALSTACK}"
+}
+
+container_up() {
+  local path
+  for path in "${DATA}" "${STATE}" ${VAULT_SRC:+"${VAULT_SRC}"}; do
+    case "${path}" in
+      "${HOME}"/*) ;;
+      *) echo "${path} is outside ${HOME}: colima does not share it with its VM" >&2; exit 1 ;;
+    esac
+  done
+  docker info >/dev/null 2>&1 || { echo "docker does not answer (start colima)" >&2; exit 1; }
+  docker rm -f "${CONTAINER}" >/dev/null 2>&1 || true
+  mkdir -p "${DATA}"
+  # colima's VM has a few GB of memory, under devstack's default -wait-free-mem of 8.
+  local args=(-data "${DATA}" -mem-wait 10m -wait-free-mem 2 -localstack "$(container_localstack)")
+  local run=(go run -tags devenclave "github.com/vettid/vettid-vault/cmd/devstack@${VAULT_REF}")
+  local src=()
+  if [[ -n "${VAULT_SRC:-}" ]]; then
+    src=(-v "${VAULT_SRC}:${VAULT_SRC}:ro" -w "${VAULT_SRC}")
+    run=(go run -tags devenclave ./cmd/devstack)
+  fi
+  docker run -d --rm --init --name "${CONTAINER}" --network host \
+    -v "${DATA}:${DATA}" -v "${STATE}:${STATE}" \
+    -v vettid-gomod:/go/pkg/mod -v vettid-gocache:/root/.cache/go-build \
+    -e GOMAXPROCS=2 -e GOFLAGS=-p=2 ${src[@]+"${src[@]}"} "${GO_IMAGE}" \
+    sh -c 'exec "$@" >"$0" 2>&1' "${STATE}/devstack.log" "${run[@]}" "${args[@]}" >/dev/null
+}
+
+native_up() {
   local args=(-data "${DATA}" -mem-wait 10m)
   [[ -n "${DEVSTACK_LOCALSTACK:-}" ]] && args+=(-localstack "${DEVSTACK_LOCALSTACK}")
   (
@@ -65,6 +137,16 @@ up() {
     fi
     echo $! >"${STATE}/pid"
   )
+}
+
+up() {
+  if healthy; then
+    echo "a dev stack already answers on ${CTL}" >&2
+    return 0
+  fi
+  mkdir -p "${STATE}"
+  rm -f "${DATA}/run/ready.json"
+  if [[ "${MODE}" == container ]]; then container_up; else native_up; fi
   echo "starting vettid-vault ${VAULT_SRC:-@${VAULT_REF}} (log: ${STATE}/devstack.log)" >&2
   for _ in $(seq 1 900); do
     [[ -f "${DATA}/run/ready.json" ]] && healthy && break
@@ -80,6 +162,19 @@ up() {
 }
 
 down() {
+  if [[ "${MODE}" == container ]]; then
+    if running; then
+      # --init: SIGTERM reaches `go run`, and devstack stops once its go parent is gone.
+      docker stop -t 60 "${CONTAINER}" >/dev/null 2>&1 || true
+      echo "stopped" >&2
+    fi
+    if [[ -f "${STATE}/localstack" ]]; then
+      docker compose -p "${CONTAINER}" down >/dev/null 2>&1 || true
+      rm -f "${STATE}/localstack"
+      echo "stopped LocalStack" >&2
+    fi
+    return 0
+  fi
   if [[ -f "${STATE}/pid" ]]; then
     local pid
     pid="$(cat "${STATE}/pid")"
@@ -99,6 +194,9 @@ status() {
     echo "running"; curl -sf "${CTL}/dev/info" || true
   else
     echo "not running"
+  fi
+  if [[ "${MODE}" == container ]] && running; then
+    echo "container ${CONTAINER}: $(docker ps --filter "name=^${CONTAINER}\$" --format '{{.Status}}')"
   fi
 }
 
