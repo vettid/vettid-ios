@@ -66,14 +66,31 @@ struct ChainAttester: Attester {
         struct Held: Error {}
         let (api, p, f) = try setUp()
         p.vaultID = "0123456789abcdef0123456789abcdef"
+        // Passes the check before the build, refused by the one right before the post.
         await #expect(throws: Held.self) {
-            _ = try await f.unlock(party: p, userGuid: "guid-1", pin: "246802", attester: SoftAttester(), beforePost: { throw Held() })
+            _ = try await f.unlock(party: p, userGuid: "guid-1", pin: "246802", attester: SoftAttester(), beforePost: {
+                if p.prepared > 0 { throw Held() }
+            })
         }
         #expect(api.requests.filter { $0.path == "/api/vault/unlock" }.isEmpty)
         #expect(p.abandoned.count == 1 && p.pending == nil)
         // A request that goes is not abandoned.
         #expect(try await f.unlock(party: p, userGuid: "guid-1", pin: "246802", attester: SoftAttester(), beforePost: {}).ok)
         #expect(p.abandoned.count == 1)
+    }
+
+    /// A pass after a retry asks first, before anything is built: a refusal then builds nothing more.
+    @Test func aRetryPassHeldBackBuildsNothing() async throws {
+        struct Held: Error {}
+        let (api, p, f) = try setUp()
+        p.vaultID = "0123456789abcdef0123456789abcdef"
+        api.slotOverrides = ["expired"]
+        await #expect(throws: Held.self) {
+            _ = try await f.unlock(party: p, userGuid: "guid-1", pin: "246802", attester: SoftAttester(), beforePost: {
+                if !api.requests.filter({ $0.path == "/api/vault/unlock" }).isEmpty { throw Held() }
+            })
+        }
+        #expect(p.prepared == 1 && p.abandoned.isEmpty)
     }
 
     /// A canary manifest is used only while nothing is published (404) or it is newer; a server error is not "nothing

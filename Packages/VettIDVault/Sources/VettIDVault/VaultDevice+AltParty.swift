@@ -57,6 +57,7 @@ extension VaultDevice: AltParty {
             let issuedBefore = mem.withLock { st.issuedExpMs }
             // A recovering app does not know the vault's relay key yet: an open token for its mailbox (§11.11.5).
             let tok = recovering ? try own.mintOpenToken(audience: cfg.relayURL, ttl: Self.openTokenTTL) : try mintForVault()
+            let issuedNow = mem.withLock { st.issuedExpMs }
             // §11.7.1: the device key's chain goes with every unlock until the vault has shown this app its signer (an
             // Android key; an iOS attester has no chain, so nothing is added).
             var opts = options
@@ -67,7 +68,7 @@ extension VaultDevice: AltParty {
             )
             mem.withLock {
                 pendingUnlock = b.pending
-                preparedUnlock = (b.pending.requestID, issuedBefore)
+                preparedUnlock = PreparedUnlock(requestID: b.pending.requestID, before: issuedBefore, minted: issuedNow)
             }
             try save()
             return b
@@ -80,10 +81,12 @@ extension VaultDevice: AltParty {
                 guard let p = preparedUnlock, p.requestID == built.pending.requestID else { return false }
                 preparedUnlock = nil
                 if pendingUnlock?.requestID == p.requestID { pendingUnlock = nil }
-                st.issuedExpMs = p.issuedExpMs
+                // Only the build's own mint is undone: a token issued since (a refresh while the request waited) stays.
+                if st.issuedExpMs == p.minted { st.issuedExpMs = p.before }
                 return true
             }
-            // Kept as the build kept it; a failed write leaves the expiry recorded later, which only renews it sooner.
+            // Kept as the build kept it. A failed write leaves the build's later expiry in the store: after a restart the
+            // token is renewed later than it should be. The refusal that held the request back is what the caller reports.
             if restored { try? save() }
         }
     }

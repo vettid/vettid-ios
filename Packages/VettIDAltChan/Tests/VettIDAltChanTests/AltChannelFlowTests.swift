@@ -113,6 +113,7 @@ final class TestParty: AltParty, @unchecked Sendable {
     var pending: PendingUnlock?
     /// The request ids of the unlocks built and abandoned before their post.
     var abandoned: [String] = []
+    var prepared = 0
     let kem: KemPrivateKey
     let ik = Ed25519PrivateKey.generate()
     let app: AppIdentity
@@ -139,7 +140,7 @@ final class TestParty: AltParty, @unchecked Sendable {
     func prepareUnlock(userGuid: String, pin: String, enclave: VerifiedEnclave, manifest: ReleaseManifest, attester: Attester, options: UnlockOptions) async throws -> BuiltUnlock { // swiftlint:disable:this function_parameter_count
         let (vid, s) = lock.withLock { (vaultID, state) }
         let b = try AltRequests.buildUnlock(userGuid: userGuid, vaultID: try #require(vid), pin: pin, enclave: enclave, manifest: manifest, attester: attester, ik: ik, token: "v4.public.tok", state: s, options: options, now: Date())
-        lock.withLock { pending = b.pending }
+        lock.withLock { pending = b.pending; prepared += 1 }
         return b
     }
 

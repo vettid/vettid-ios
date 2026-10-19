@@ -99,6 +99,12 @@ import VettIDRelay
         await d.abandonPreparedUnlock(built)
         #expect(d.mem.withLock { d.st.issuedExpMs } == 1_000 && d.mem.withLock { d.pendingUnlock } == nil)
         #expect(try saved() == 1_000)
+        // A token issued after the build (a refresh while the request waited) is kept.
+        let refreshed = try await d.prepareUnlock(userGuid: "guid-1", pin: "246802", enclave: enclave, manifest: m, attester: Attest(), options: UnlockOptions())
+        d.mem.withLock { d.st.issuedExpMs += 5_000 }
+        let newer = d.mem.withLock { d.st.issuedExpMs }
+        await d.abandonPreparedUnlock(refreshed)
+        #expect(d.mem.withLock { d.st.issuedExpMs } == newer && d.mem.withLock { d.pendingUnlock } == nil)
         // Only the unlock last built: an older one changes nothing.
         let next = try await d.prepareUnlock(userGuid: "guid-1", pin: "246802", enclave: enclave, manifest: m, attester: Attest(), options: UnlockOptions())
         await d.abandonPreparedUnlock(built)
