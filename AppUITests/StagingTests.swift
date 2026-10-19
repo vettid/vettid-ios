@@ -17,6 +17,9 @@ final class StagingTests: XCTestCase {
     private static let network: TimeInterval = 90
     /// Enrollment: the vault's enclave is made and attested, then the credential.
     private static let enrollment: TimeInterval = 600
+    /// A release update: the lock, the unlock with the approval, and the unlock on the new release, which may have to
+    /// start first (VAULT-MESSAGING §11.10.5: `503 release_starting`, minutes).
+    private static let releaseUpdate: TimeInterval = 900
 
     /// Identifiers of the notices that say why something failed: their text is what a failure reports.
     private static let failureIds = [
@@ -122,6 +125,50 @@ final class StagingTests: XCTestCase {
         }
 
         unlock(app, pin: pin, password: password)
+        lock(app)
+    }
+
+    /// RELEASE-UPDATES §2: from the open app, Settings → Vault → "Update available", What's new and the release offered,
+    /// "Approve and update" with the PIN; the lock, the unlock that carries the approval, the move, and the vault open on
+    /// the new release. Then the vault is locked (STAGING-TESTING §5).
+    @MainActor
+    func testStagingApproveUpdate() throws {
+        let pin = try Self.pin()
+        let password = try Self.input("VETTID_STAGING_PASSWORD")
+
+        let app = launch()
+        switch waitForAny(app, ["unlock", "app_shell", "owner_check", "welcome_recover"], timeout: 60) {
+        case "app_shell": break
+        case "owner_check": ownerCheck(app, pin: pin, password: password)
+        case "unlock": unlock(app, pin: pin, password: password)
+        case let other: return fail(app, "No vault on this phone to update: \(other ?? "no known screen") is shown.")
+        }
+
+        // Settings, from the drawer; the row is there only while the vault has an update to approve.
+        expect(app, "app_shell", timeout: Self.network)
+        // (An app left open on Settings has no menu button there: Settings has a back arrow.)
+        if app.buttons["top_bar_menu"].waitForExistence(timeout: 10) {
+            tap(app.buttons["top_bar_menu"])
+            tap(app.buttons["drawer_settings"])
+        }
+        let row = app.buttons["release_update_row"]
+        if !row.waitForExistence(timeout: Self.network) {
+            return fail(app, "Settings offers no release update (no newer active release in the manifest this phone uses).")
+        }
+        row.tap()
+        expect(app, "release_offer", timeout: Self.network)
+        enterPin(app, pin)
+        tapPrimary(app)
+
+        // The update's own screens: progress, then the outcome.
+        let outcomes = ["release_update_done", "release_update_refused", "release_update_failed", "release_update_bad_pin",
+                        "release_update_new_failed"]
+        let outcome = waitForAny(app, outcomes, timeout: Self.releaseUpdate)
+        guard outcome == "release_update_done" else {
+            return fail(app, "The update did not finish: \(outcome ?? "still running after \(Int(Self.releaseUpdate)) s").")
+        }
+        tapPrimary(app)
+        expect(app, "app_shell", timeout: Self.network)
         lock(app)
     }
 
