@@ -92,6 +92,24 @@ enum PinStrings {
         )
     }
 
+    /// VAULT-MESSAGING 0.45.0 §11.14.9 step 3 (shared with the Android app): the check ended without a decision.
+    static var pinEnded: String {
+        String(
+            localized: "settings_pin_ended",
+            defaultValue: """
+                VettID couldn't confirm whether your PIN was changed, because something else changed in your vault at the \
+                same time. To find out without using an attempt, lock your vault and unlock it again: VettID will ask for \
+                each PIN in turn.
+                """,
+            bundle: .module
+        )
+    }
+
+    /// VAULT-MESSAGING 0.45.0 §11.14.9 (shared with the Android app).
+    static var pinLockUnlock: String {
+        String(localized: "settings_pin_lock_unlock", defaultValue: "Lock and unlock now", bundle: .module)
+    }
+
     static var pinNotChanged: String {
         String(localized: "settings_pin_not_changed", defaultValue: "Your PIN was not changed. You can try again.", bundle: .module)
     }

@@ -65,7 +65,7 @@ import VettIDVault
     @Test func theResendGetsTheCachedAnswer() async throws {
         defer { phone.close() }
         try await setUp()
-        service.loseAnswers(["pin.change", "credential.version"])
+        service.loseAnswers(["pin.change", "credential.version"], from: "pin.change")
         let f = await pinChangeUndecided()
         #expect(f?.kind == .changeUnresolved && f?.code == VaultManager.codeChangeUnresolved)
         #expect(m.changeCheck == ChangeCheck(.pin, .unreachable))
@@ -138,8 +138,9 @@ import VettIDVault
         let after = Set(service.requestsSeen.dropFirst(before))
         #expect(after.isSubset(of: ["credential.version", "pin.change"]), "only the checks: \(after)")
         #expect(service.ownerChecks.isEmpty && service.nameSets.isEmpty && service.passwordChanges.isEmpty)
-        // The vault out of reach: "can't be reached".
+        // The vault out of reach: once a check could not reach it, "can't be reached".
         service.loseAnswers(["credential.version"])
+        await m.checkUnresolvedChange()
         #expect(try await m.ownerChecks.check(pin: pin, password: password, holdOff: nil)
             == .failed(.changeUnresolved, code: VaultManager.codeChangeUnresolved))
     }
@@ -161,7 +162,7 @@ import VettIDVault
     @Test func anOwnerCheckWaitingForTheLockIsRefused() async throws {
         defer { phone.close() }
         try await setUp()
-        service.loseAnswers(["pin.change", "credential.version"])
+        service.loseAnswers(["pin.change", "credential.version"], from: "pin.change")
         let change = Task { try await m.changePin(pin: pin, newPin: newPin, password: password) }
         #expect(await eventually { m.sendingChange && service.pinChanges.count == 1 })
         // Past ``VaultManager/decideFirst()`` already: straight to the credential operation.
@@ -182,7 +183,7 @@ import VettIDVault
     @Test func theCredentialLockRefusesWhileUnresolved() async throws {
         defer { phone.close() }
         try await setUp()
-        service.loseAnswers(["pin.change", "credential.version"])
+        service.loseAnswers(["pin.change", "credential.version"], from: "pin.change")
         _ = await pinChangeUndecided()
         let api = try #require(m.session?.api)
         await #expect(throws: VaultFailure.self) { _ = try await api.ownerCheck(pin: pin, password: password) }
@@ -193,7 +194,7 @@ import VettIDVault
     @Test func aPasswordChangeWhileAPinChangeIsOnItsWayIsRefused() async throws {
         defer { phone.close() }
         try await setUp()
-        service.loseAnswers(["pin.change", "credential.version"])
+        service.loseAnswers(["pin.change", "credential.version"], from: "pin.change")
         let first = Task { try await m.changePin(pin: pin, newPin: newPin, password: password) }
         #expect(await eventually { m.sendingChange })
         #expect(await vaultFailure { try await m.changePassword(password, newPassword: newPassword, pin: pin) }?.kind == .busy)
@@ -201,12 +202,12 @@ import VettIDVault
         #expect(service.passwordChanges.isEmpty)
     }
 
-    /// `stale_credential` to a PIN change (an earlier credential operation applied without its answer) is not resent with
+    /// `stale_credential` to a PIN change (the blob moved between the version's answer and the change) is not resent with
     /// the typed secrets: the latest blob is fetched, nothing changed, no attempt counted; the next try goes through.
     @Test func aStaleCredentialIsNotRetriedWithTheTypedSecrets() async throws {
         defer { phone.close() }
         try await setUp()
-        service.moveCredentialWithoutTheApp()
+        service.moveCredential(on: "pin.change")
         let f = await vaultFailure { try await m.changePin(pin: pin, newPin: newPin, password: password) }
         #expect(f?.code == VaultManager.codeChangeNotApplied)
         #expect(service.pinChanges.count == 1 && service.pinFailureCount == 0 && service.currentPin == pin)
@@ -222,7 +223,7 @@ import VettIDVault
     @Test func aLockedVaultAsksForThePreviousPinThenTheNewOne() async throws {
         defer { phone.close() }
         try await setUp()
-        service.loseAnswers(["pin.change", "credential.version"])
+        service.loseAnswers(["pin.change", "credential.version"], from: "pin.change")
         _ = await pinChangeUndecided()
         try await m.lock()
         service.loseAnswers([])
@@ -256,7 +257,7 @@ import VettIDVault
     @Test func aRestartWhileUndecided() async throws {
         defer { phone.close() }
         try await setUp()
-        service.loseAnswers(["pin.change", "credential.version"])
+        service.loseAnswers(["pin.change", "credential.version"], from: "pin.change")
         _ = await pinChangeUndecided()
         let sent = count("pin.change")
         try phone.restart()
@@ -271,13 +272,13 @@ import VettIDVault
         #expect(count("pin.change") == sent && service.pinChanges.count == 1)
     }
 
-    /// The vault locked by itself before the change: the request waits in its mailbox. `ok` to the previous PIN before
-    /// `exp` decides nothing and keeps the candidate a candidate; the waiting copy then applies, and the check after the
-    /// unlock gets its cached answer: applied, and the new PIN opens the vault.
+    /// The vault locked by itself just before the change reached it: the request waits in its mailbox. `ok` to the
+    /// previous PIN before `exp` decides nothing and keeps the candidate a candidate; the waiting copy then applies, and
+    /// the check after the unlock gets its cached answer: applied, and the new PIN opens the vault.
     @Test func okToThePreviousPinBeforeExpThenTheWaitingCopyApplies() async throws {
         defer { phone.close() }
         try await setUp()
-        service.lockByItself(reason: "test")
+        service.lockByItself(on: "pin.change")
         #expect(await pinChangeUndecided()?.kind == .changeUnresolved)
         #expect(m.unlockPinStep == .previous && service.pinChanges.isEmpty)
         #expect(try await m.unlock(pin: pin) == .success)
@@ -308,7 +309,7 @@ import VettIDVault
     @Test func aRefusedResendIsShownAsItIs() async throws {
         defer { phone.close() }
         try await setUp()
-        service.loseAnswers(["pin.change", "credential.version"])
+        service.loseAnswers(["pin.change", "credential.version"], from: "pin.change")
         #expect(await vaultFailure { try await m.changePin(pin: "999999", newPin: newPin, password: password) }?.kind == .changeUnresolved)
         service.loseAnswers([])
         await m.checkUnresolvedChange()
@@ -321,7 +322,7 @@ import VettIDVault
     @Test func anotherVersionEndsTheCheck() async throws {
         defer { phone.close() }
         try await setUp()
-        service.loseAnswers(["pin.change", "credential.version"])
+        service.loseAnswers(["pin.change", "credential.version"], from: "pin.change")
         _ = await pinChangeUndecided()
         service.moveCredentialWithoutTheApp()
         try phone.restart()
@@ -363,7 +364,7 @@ import VettIDVault
     @Test func aWipeWhileUnresolved() async throws {
         defer { phone.close() }
         try await setUp()
-        service.loseAnswers(["pin.change", "credential.version"])
+        service.loseAnswers(["pin.change", "credential.version"], from: "pin.change")
         _ = await pinChangeUndecided()
         let check = Task { await m.checkUnresolvedChange() }
         await Task.yield()
@@ -408,7 +409,7 @@ import VettIDVault
     @Test func aLostPasswordChangeIsDecidedByTheResend() async throws {
         defer { phone.close() }
         try await setUp()
-        service.loseAnswers(["credential.password.change", "credential.version"])
+        service.loseAnswers(["credential.password.change", "credential.version"], from: "credential.password.change")
         #expect(await vaultFailure { try await m.changePassword(password, newPassword: newPassword, pin: pin) }?.kind == .changeUnresolved)
         #expect(m.changeCheck == ChangeCheck(.password, .unreachable) && m.unlockPinStep == .pin)
         service.loseAnswers([])
@@ -438,7 +439,7 @@ import VettIDVault
     @Test func aStalePasswordChangeIsNotRetried() async throws {
         defer { phone.close() }
         try await setUp()
-        service.moveCredentialWithoutTheApp()
+        service.moveCredential(on: "credential.password.change")
         let f = await vaultFailure { try await m.changePassword(password, newPassword: newPassword, pin: pin) }
         #expect(f?.code == VaultManager.codeChangeNotApplied)
         #expect(service.passwordChanges.count == 1 && service.passwordFailureCount == 0)
@@ -453,5 +454,24 @@ import VettIDVault
         let recs = PhoneRecords(unresolved: marker)
         #expect(try PhoneRecords.parse(recs.marshal()) == recs)
         #expect(try PhoneRecords.parse(PhoneRecords().marshal()).unresolved == nil)
+        // An uncertain PIN whose candidate is gone is settled: not stored.
+        var settled = PhoneRecords()
+        settled.uncertainPinOperation = "pin.change-1"
+        #expect(settled.uncertainPin == nil && String(bytes: settled.marshal(), encoding: .utf8)?.contains("uncertain_pin") == false)
+    }
+
+    /// The marker store refuses a second change while one is unresolved (VAULT-MESSAGING 0.45.0 §11.14.9 step 1).
+    @Test func theMarkerStoreRefusesASecondChange() throws {
+        defer { phone.close() }
+        let exp = Date(timeIntervalSince1970: 1_800_000_000)
+        let first = UnresolvedChange(type: .password, id: "01J001", version: 1, exp: exp)
+        let second = UnresolvedChange(type: .password, id: "01J002", version: 1, exp: exp)
+        try m.phoneSecrets.setUnresolved(first)
+        #expect(throws: VaultFailure.self) { try m.phoneSecrets.setUnresolved(second) }
+        try m.phoneSecrets.setUnresolved(first)
+        #expect(try m.phoneSecrets.unresolvedChange() == first)
+        try m.phoneSecrets.clearUnresolved(id: first.id)
+        try m.phoneSecrets.setUnresolved(second)
+        #expect(try m.phoneSecrets.unresolvedChange() == second)
     }
 }

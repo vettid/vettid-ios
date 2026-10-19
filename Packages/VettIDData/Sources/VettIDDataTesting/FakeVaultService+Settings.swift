@@ -169,14 +169,15 @@ extension FakeVaultService {
         return r.build()
     }
 
-    /// `credential.unlock`: the blob and the password; the window open for the setting's length.
+    /// `credential.unlock`: the blob and the password; the window open for the setting's length and the CEK rotated.
     private func credentialUnlock(_ m: Inner, _ body: JsonObject) throws {
         guard let p = try opened(m, body) else { return }
         guard try body.optString("credential") == Self.blob(credentialVersion) else { return try reply(m.type, "{}", re: m.id, error: "stale_credential") }
         guard (try? p.string("password")) == vaultPassword else { return try reply(m.type, "{}", re: m.id, error: "bad_password") }
         let until = vaultNow.addingTimeInterval(TimeInterval(unlockTtl))
         windowUntil = until
-        try reply(m.type, #"{"expires_at":"\#(Timestamps.formatMillis(until))"}"#, re: m.id)
+        // As vettid-vault's `credential.unlock` (`respond`): the CEK rotates, the new blob and UTKs beside the expiry.
+        try reply(m.type, try rotated() + #","expires_at":"\#(Timestamps.formatMillis(until))"}"#, re: m.id)
     }
 
     /// `credential.password.change` (release R: the PIN verified, §11.14.9): the new password kept, the CEK rotated.

@@ -169,6 +169,12 @@ public final class FakeVaultService: @unchecked Sendable {
     var seenRequests: Set<String> = []
     var lostAnswerTypes: Set<String> = []
     var lostRequestTypes: Set<String> = []
+    /// ``loseAnswers(_:from:)``: the answers of ``lostAnswerTypes`` are lost only once a request of this type arrived.
+    var lostAnswersFrom: String?
+    var lostAnswersStarted = true
+    /// ``moveCredential(on:)`` and ``lockByItself(on:)``: what happens when the next request of the type arrives.
+    var moveCredentialOn: String?
+    var lockOn: String?
     var stampsOnVaultClockValue = false
     var requestsSeenValue: [String] = []
     /// Requests that reached the vault's mailbox while it was locked, handled after the next unlock (subject to `exp`).

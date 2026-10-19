@@ -87,13 +87,19 @@ extension VaultManager {
         try await guarded {
             // A renew on its way: refused at once, before anything is asked of the vault (its blob may still move).
             if phoneSecrets.anyInFlight { throw VaultFailure(.busy, code: "change_in_flight") }
-            try await decideFirst()
+            try await decideFirst(carriesPin: true)
             let api = try openApi(try await openSession())
-            let (change, marker) = try await newChange(.password, api)
-            try await changing(marker) {
-                try phoneSecrets.setUnresolved(marker)
-                try await api.credentialChangePassword(password: password, newPassword: newPassword, pin: pin, change: change)
-                try? phoneSecrets.clearUnresolved(id: marker.id)
+            try await refreshedOnce {
+                let box = MarkerBox()
+                try await changing(box) {
+                    // Stored once the request is fixed, after the checks (VAULT-MESSAGING 0.46.0 §11.14.9 step 1).
+                    try await api.credentialChangePassword(password: password, newPassword: newPassword, pin: pin) { @MainActor change in
+                        let marker = UnresolvedChange(type: .password, id: change.id, version: change.version, exp: change.exp)
+                        try self.phoneSecrets.setUnresolved(marker)
+                        box.marker = marker
+                    }
+                    if let m = box.marker { try? phoneSecrets.clearUnresolved(id: m.id) }
+                }
             }
         }
     }
@@ -123,18 +129,30 @@ extension VaultManager {
             guard phoneSecrets.inUse else { throw VaultFailure(.notSupported, code: Self.codeNoPhoneSecret) }
             // A renew on its way: refused at once, before anything is asked of the vault.
             if phoneSecrets.anyInFlight { throw VaultFailure(.busy, code: "change_in_flight") }
-            try await decideFirst()
+            try await decideFirst(carriesPin: true)
             let api = try openApi(try await openSession())
-            let (change, unmarked) = try await newChange(.pin, api)
-            // No await from here to the send's start: a second change is refused by ``changing(_:_:)``.
-            let operation = try pinOperation()
-            let marker = unmarked.with(operation: operation)
-            try await changing(marker) {
-                let advanced = try await phoneSecrets.change(operation: operation, unresolved: marker, send: { next in
-                    try await api.pinChange(pin: pin, newPin: newPin, password: password, newUnlockSecret: next, change: change)
-                }, confirmed: { _ in false })
-                confirmApplied(marker, epochAdvanced: advanced)
-                refreshPinStep()
+            // A renew whose answer was lost is decided first (VAULT-MESSAGING 0.46.0 §11.14.9 step 1).
+            try await settleRenews(api)
+            // A refusal with nothing sent because the blob had moved is built again once, reusing the same record.
+            try await refreshedOnce {
+                // No await from here to the send's start: a second change is refused by ``changing(_:_:)``.
+                let operation = try pinOperation()
+                let box = MarkerBox()
+                try await changing(box) {
+                    defer { phoneSecrets.endChange(operation: operation) }
+                    // The candidate and the marker, in one write, once the request is fixed after the checks
+                    // (VAULT-MESSAGING 0.46.0 §11.14.9 step 1): a restart never decides a marker stored before them.
+                    let advanced = try await api.pinChange(pin: pin, newPin: newPin, password: password) { @MainActor change in
+                        let marker = UnresolvedChange(
+                            type: .pin, id: change.id, version: change.version, exp: change.exp, operation: operation
+                        )
+                        let next = try self.phoneSecrets.beginChange(operation: operation, unresolved: marker)
+                        box.marker = marker
+                        return next
+                    }
+                    if let m = box.marker { confirmApplied(m, epochAdvanced: advanced) }
+                    refreshPinStep()
+                }
             }
         }
     }

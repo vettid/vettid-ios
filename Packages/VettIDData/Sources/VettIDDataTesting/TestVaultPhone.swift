@@ -77,6 +77,14 @@ public final class TestVaultPhone {
     private let uptime = TestPhoneClock()
     /// The pauses between the checks of a change whose answer was lost: each waits until the test releases it.
     public let changePauses = TestPauses()
+    /// A change's wait for the credential operations before it (§11.14.9 step 1): ends when the test releases it while
+    /// ``holdsChangeWaits``, else after a second.
+    public let changeWaits = TestPauses()
+    /// Whether a change's wait lasts until the test releases it (``changeWaits``).
+    public var holdsChangeWaits: Bool {
+        get { changeWaits.holding }
+        set { changeWaits.holding = newValue }
+    }
     private let requestTimeout: TimeInterval
     /// What this phone's wipe erases: its directory and its software keys.
     public let wipeTargets: TestWipeTargets
@@ -99,9 +107,10 @@ public final class TestVaultPhone {
         let startOver = AttestStartOver()
         self.attester = attester
         attestStartOver = startOver
+        let waits = Waits(requestTimeout: requestTimeout, pauses: changePauses, changeWaits: changeWaits)
         manager = VaultManager(config: try Self.configured(
             service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock,
-            wipes ? wipeTargets : nil, attester, startOver, (requestTimeout, changePauses), uptime
+            wipes ? wipeTargets : nil, attester, startOver, waits, uptime
         ))
     }
 
@@ -110,8 +119,17 @@ public final class TestVaultPhone {
         manager.stopCollecting()
         manager = VaultManager(config: try Self.configured(
             service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock,
-            wipes ? wipeTargets : nil, attester, attestStartOver, (requestTimeout, changePauses), uptime
+            wipes ? wipeTargets : nil, attester, attestStartOver, waits, uptime
         ))
+    }
+
+    private var waits: Waits { Waits(requestTimeout: requestTimeout, pauses: changePauses, changeWaits: changeWaits) }
+
+    /// A test phone's waits: how long a request waits for its answer, and the pauses the test releases.
+    private struct Waits {
+        let requestTimeout: TimeInterval
+        let pauses: TestPauses
+        let changeWaits: TestPauses
     }
 
     // swiftlint:disable:next function_parameter_count
@@ -120,7 +138,7 @@ public final class TestVaultPhone {
         _ wrapped: InMemoryWrappedKeyStore, _ phoneKeys: SoftwarePhoneSecretSource, _ fileKeys: InMemoryFileKeyHolder,
         _ protectedData: ProtectedDataFlag, _ directory: URL, _ gate: PrepareSwitch, _ clock: TestPhoneClock,
         _ wipeTargets: (any WipeTargets)?, _ attester: TestAttester, _ startOver: AttestStartOver,
-        _ waits: (requestTimeout: TimeInterval, pauses: TestPauses), _ uptime: TestPhoneClock
+        _ waits: Waits, _ uptime: TestPhoneClock
     ) throws -> VaultManagerConfig {
         var c = try config(service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock, wipeTargets)
         c.attester = attester
@@ -128,6 +146,9 @@ public final class TestVaultPhone {
         c.requestTimeout = waits.requestTimeout
         let pauses = waits.pauses
         c.changeCheckSleep = { try await pauses.sleep($0) }
+        let changeWaits = waits.changeWaits
+        changeWaits.holding = false
+        c.changeWaitSleep = { try await changeWaits.sleep($0) }
         c.uptime = { DeviceConfig.monotonicNow() + uptime.ahead }
         return c
     }
@@ -234,10 +255,23 @@ public final class TestPauses: @unchecked Sendable {
     private var asked: [TimeInterval] = []
     private var waiting: [UUID: CheckedContinuation<Void, Never>] = [:]
 
+    private var hold = true
+
     /// The lengths asked for, in order.
     public var lengths: [TimeInterval] { lock.withLock { asked } }
 
+    /// False: a pause lasts a second instead of waiting for ``release()`` (its length is recorded all the same).
+    var holding: Bool {
+        get { lock.withLock { hold } }
+        set { lock.withLock { hold = newValue } }
+    }
+
     func sleep(_ s: TimeInterval) async throws {
+        if !holding {
+            lock.withLock { asked.append(s) }
+            try await Task.sleep(nanoseconds: 1_000_000_000)
+            return
+        }
         let id = UUID()
         await withTaskCancellationHandler {
             await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in

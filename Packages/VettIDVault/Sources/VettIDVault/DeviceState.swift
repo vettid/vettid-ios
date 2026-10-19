@@ -25,6 +25,10 @@ final class DeviceState: Codable, @unchecked Sendable {
     var outbox: [OutboxEntry] = []
     /// The vault has shown this app a signer on its own `device.list` entry (VAULT-MESSAGING 0.27.0 §11.7.1).
     var signerSeen = false
+    /// (VAULT-MESSAGING 0.46.0 §11.14.9 step 1) This device's credential requests that may still reach the vault: inner
+    /// id to `exp` (epoch ms), until answered or the vault's clock is past `exp` by more than a minute. Optional: a state
+    /// written before it existed has none.
+    var unsettled: [String: Int64]?
 
     init(role: String, name: String, relayURL: String) {
         self.role = role

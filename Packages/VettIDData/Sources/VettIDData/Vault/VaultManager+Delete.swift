@@ -53,7 +53,8 @@ extension VaultManager {
     /// One deletion: true when VettID's data on this phone was erased after it, false when its answer was lost and it is undecided.
     private func deleteOnce(pin: String, password: String) async throws -> Bool {
         let answered: Bool = try await guarded {
-            try await decideFirst()
+            // It carries the PIN: refused while the PIN is uncertain too (§11.14.9 step 3).
+            try await decideFirst(carriesPin: true)
             let s = try await openSession()
             let api = try openApi(s)
             let exp = try await api.requestExp()

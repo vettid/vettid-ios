@@ -46,11 +46,23 @@ import VettIDTesting
         }
     }
 
-    func config(timeout: TimeInterval, uptime: Uptime = Uptime(), store: DeviceStateStore = InMemoryDeviceStateStore()) -> DeviceConfig {
+    /// The phone's clock, which a test moves ahead (seconds).
+    final class PhoneClock: @unchecked Sendable {
+        private let lock = NSLock()
+        private var offset: TimeInterval = 0
+
+        var now: Date { lock.withLock { Date().addingTimeInterval(offset) } }
+        func advance(_ s: TimeInterval) { lock.withLock { offset += s } }
+    }
+
+    func config(
+        timeout: TimeInterval, uptime: Uptime = Uptime(), store: DeviceStateStore = InMemoryDeviceStateStore(),
+        clock: PhoneClock = PhoneClock()
+    ) -> DeviceConfig {
         let relay = ops.base.relay
         return DeviceConfig(
             name: "phone", relayURL: relay.baseURL, transport: HTTPTransport(session: relay.server.session, sleep: { _ in }),
-            store: store, enrolledAttestation: .skipForTests, requestTimeout: timeout, uptime: { uptime.now }
+            store: store, enrolledAttestation: .skipForTests, now: { clock.now }, requestTimeout: timeout, uptime: { uptime.now }
         )
     }
 
@@ -62,8 +74,11 @@ import VettIDTesting
         let keys: [String: KemPrivateKey]
     }
 
-    func holder(timeout: TimeInterval = 5, uptime: Uptime = Uptime(), store: DeviceStateStore = InMemoryDeviceStateStore()) async throws -> Holder {
-        let (d, v) = try await ops.base.pairedDevice(cfg: config(timeout: timeout, uptime: uptime, store: store))
+    func holder(
+        timeout: TimeInterval = 5, uptime: Uptime = Uptime(), store: DeviceStateStore = InMemoryDeviceStateStore(),
+        clock: PhoneClock = PhoneClock()
+    ) async throws -> Holder {
+        let (d, v) = try await ops.base.pairedDevice(cfg: config(timeout: timeout, uptime: uptime, store: store, clock: clock))
         let api = VaultApi(device: d) { true }
         let fetch = Task { try await api.credentialFetch() }
         try await ops.answer(v, d, "credential.get", #"{"credential":"AQID","version":1}"#)
@@ -83,39 +98,34 @@ import VettIDTesting
         try await d.handle(v.msg(try #require(v.keyring.current()).seal(inner)))
     }
 
-    /// The change goes with the stored id and `exp`, and the blob of the stored version; a version that moved meanwhile is
-    /// refused before anything is sent.
+    /// The change goes with the id and `exp` it was fixed as, after the version check, and the blob of the confirmed
+    /// version; its marker is handed over before the send.
     @Test func theChangeCarriesTheStoredIdAndExp() async throws {
         let h = try await holder()
         let (d, v, api) = (h.d, h.v, h.api)
-        let change = try await api.newChange()
+        let marked = Marked()
+        let task = Task { try await api.pinChange(pin: "975310", newPin: "864201", password: "pw", newUnlockSecret: [UInt8](repeating: 1, count: 32), marked: marked) }
+        try await ops.answer(v, d, "credential.version", #"{"exists":true,"version":1}"#)
+        let req = try await open(v)
+        let change = try #require(marked.change)
         #expect(change.version == 1)
         #expect(abs(change.exp.timeIntervalSince(d.vaultNow()) - ChangeRequest.validFor) < 1)
-        let task = Task { try await api.pinChange(pin: "975310", newPin: "864201", password: "pw", newUnlockSecret: [UInt8](repeating: 1, count: 32), change: change) }
-        let req = try await open(v)
         #expect(req.type == VaultApi.typePinChange && req.id == change.id)
         #expect(abs(try #require(req.exp).timeIntervalSince(change.exp)) < 0.001)
         try await deliver(v, d, Inner(id: Ulid.new(), type: req.type, ts: Date(), re: req.id, status: Inner.statusOK, body: Array(#"{"credential":"BAUG","version":2,"epoch_advanced":true}"#.utf8)))
         try await ops.answer(v, d, "credential.ack")
         #expect(try await task.value)
-        let stale = ChangeRequest(id: d.newRequestID(), exp: Date().addingTimeInterval(600), version: 1)
-        await #expect(throws: VaultStateError.self) {
-            try await api.credentialChangePassword(password: "a", newPassword: "b", pin: "975310", change: stale)
-        }
-        #expect(await ops.base.relay.noDeposit(within: 0.2))
     }
 
     /// `vault.delete` without an answer once its request may have gone out: ``RequestUnanswered`` (the vault may be gone),
-    /// never the request's own failure. A renew without an answer stays a plain failure (its record decides, IOS-PLAN §6.3).
+    /// never the request's own failure; it stays unsettled (VAULT-MESSAGING 0.46.0 §11.14.9 step 1).
     @Test func aDeleteWithoutAnAnswerIsUnanswered() async throws {
         let h = try await holder(timeout: 0.2)
         let (v, api) = (h.v, h.api)
         let delete = Task { try await api.deleteVault(pin: "975310", password: "pw", exp: Date().addingTimeInterval(600)) }
         for _ in 0...VaultDevice.appRetries { #expect(try await open(v).type == VaultApi.typeVaultDelete) }
         await #expect(throws: RequestUnanswered.self) { try await delete.value }
-        let renew = Task { try await api.secretRenew(pin: "975310", password: "pw", newUnlockSecret: [UInt8](repeating: 7, count: 32), exp: Date().addingTimeInterval(600)) }
-        for _ in 0...VaultDevice.appRetries { #expect(try await open(v).type == VaultApi.typeSecretRenew) }
-        await #expect(throws: VaultStateError.self) { try await renew.value }
+        #expect(!(await h.d.credentialSettled()), "the deletion may still reach the vault")
     }
 
     /// No answer to the automatic resends: ``ChangeUnanswered`` with the request. The resend is the same request (same
@@ -123,10 +133,12 @@ import VettIDTesting
     @Test func aResendIsTheSameRequestAndGetsTheCachedAnswer() async throws {
         let holder = try await holder(timeout: 0.3)
         let (d, v, api, keys) = (holder.d, holder.v, holder.api, holder.keys)
-        let change = try await api.newChange()
-        let task = Task { try await api.credentialChangePassword(password: "old pw", newPassword: "new pw", pin: "975310", change: change) }
+        let marked = Marked()
+        let task = Task { try await api.credentialChangePassword(password: "old pw", newPassword: "new pw", pin: "975310", marked: marked) }
+        try await ops.answer(v, d, "credential.version", #"{"exists":true,"version":1}"#)
         var sent: [Inner] = []
         for _ in 0...VaultDevice.appRetries { sent.append(try await open(v)) }
+        let change = try #require(marked.change)
         #expect(Set(sent.map(\.id)) == [change.id] && Set(sent.map(\.body)).count == 1)
         var held: HeldRequest?
         do {
@@ -151,22 +163,32 @@ import VettIDTesting
         #expect(d.credentialVersion == 2)
     }
 
-    /// The device state cannot be saved after the request was deposited: the change may still apply, so it is
-    /// ``ChangeUnanswered`` (decided), never a failure that would drop its marker.
+    /// The device state cannot be saved once the request may have gone out (here the second send's): the change may
+    /// still apply, so it is ``ChangeUnanswered`` (decided), never a failure that would drop its marker. The request is
+    /// deposited straight to the relay, never kept in the outbox on the phone's storage (§11.14.9 step 1).
     @Test func aSaveThatFailsAfterTheDepositIsNoAnswer() async throws {
         let store = FailingStore()
-        let h = try await holder(store: store)
-        let change = try await h.api.newChange()
-        // The UTK taken and the outbox entry are saved; the save after the deposit fails.
-        store.arm(after: 2)
-        let task = Task { try await h.api.credentialChangePassword(password: "a", newPassword: "b", pin: "975310", change: change) }
-        #expect(try await open(h.v).id == change.id, "deposited")
+        let h = try await holder(timeout: 0.3, store: store)
+        let marked = Marked()
+        let task = Task { try await h.api.credentialChangePassword(password: "a", newPassword: "b", pin: "975310", marked: marked) }
+        let question = try await open(h.v)
+        #expect(question.type == "credential.version")
+        // The answer to `credential.version`, the UTK taken, the request recorded as unsettled and the first send are
+        // saved; the saves of the next sends fail.
+        store.arm(after: 4)
+        try await deliver(h.v, h.d, Inner(id: Ulid.new(), type: question.type, ts: Date(), re: question.id, status: Inner.statusOK, body: Array(#"{"exists":true,"version":1}"#.utf8)))
+        let deposited = try await open(h.v)
+        let change = try #require(marked.change)
+        #expect(deposited.id == change.id, "deposited")
         do {
             try await task.value
             Issue.record("no error")
         } catch let u as ChangeUnanswered {
             #expect(u.held.id == change.id)
         }
+        let stored = try JSONSerialization.jsonObject(with: Data(store.load() ?? [])) as? [String: Any]
+        let outbox = (stored?["outbox"] as? [[String: Any]]) ?? []
+        #expect(!outbox.contains { $0["id"] as? String == change.id }, "never in the stored outbox")
     }
 
     /// The vault's clock runs on the monotonic clock that counts the phone's sleep.
@@ -183,8 +205,8 @@ import VettIDTesting
     @Test func aResendWithoutAnswerIsOneDeposit() async throws {
         let holder = try await holder(timeout: 0.2)
         let (v, api) = (holder.v, holder.api)
-        let change = try await api.newChange()
-        let task = Task { try await api.pinChange(pin: "975310", newPin: "864201", password: "pw", newUnlockSecret: [UInt8](repeating: 1, count: 32), change: change) }
+        let task = Task { try await api.pinChange(pin: "975310", newPin: "864201", password: "pw", newUnlockSecret: [UInt8](repeating: 1, count: 32), marked: Marked()) }
+        try await ops.answer(v, holder.d, "credential.version", #"{"exists":true,"version":1}"#)
         for _ in 0...VaultDevice.appRetries { _ = try await open(v) }
         let h = try #require(await unanswered(task))
         await #expect(throws: ChangeUnanswered.self) { _ = try await api.resendChange(h) }
@@ -209,11 +231,12 @@ import VettIDTesting
             let (d, v, api) = (h.d, h.v, h.api)
             let task = Task {
                 if type == VaultApi.typePinChange {
-                    _ = try await api.pinChange(pin: "975310", newPin: "864201", password: "pw", newUnlockSecret: [UInt8](repeating: 1, count: 32), change: try await api.newChange())
+                    _ = try await api.pinChange(pin: "975310", newPin: "864201", password: "pw", newUnlockSecret: [UInt8](repeating: 1, count: 32), marked: Marked())
                 } else {
-                    try await api.credentialChangePassword(password: "a", newPassword: "b", pin: "975310", change: try await api.newChange())
+                    try await api.credentialChangePassword(password: "a", newPassword: "b", pin: "975310", marked: Marked())
                 }
             }
+            try await ops.answer(v, d, "credential.version", #"{"exists":true,"version":1}"#)
             try await ops.answer(v, d, type, code: "stale_credential", errorBody: "{}")
             try await ops.answer(v, d, "credential.get", #"{"credential":"BAUG","version":2}"#)
             try await ops.answer(v, d, "credential.ack")

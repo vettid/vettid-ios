@@ -164,7 +164,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         ownerChecks = OwnerCheckManager(
             ops: {
                 guard let m = ref.manager else { throw VaultFailure(.other, code: "session_dropped") }
-                return VaultOwnerCheckOps(api: try m.openApi(try await m.openSession())) { try await ref.manager?.decideFirst() }
+                return VaultOwnerCheckOps(api: try m.openApi(try await m.openSession()), gate: Self.pinGate(ref))
             },
             load: { try checkFile.load() },
             // Nothing is written while a wipe runs or after one that did not finish.
@@ -199,13 +199,18 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         refusedByVault = true
     }
 
+    /// The gate of an operation that carries the PIN (VAULT-MESSAGING §11.14.9 steps 2 and 3).
+    private static func pinGate(_ ref: ManagerRef) -> @Sendable () async throws -> Void {
+        { try await ref.manager?.decideFirst(carriesPin: true) }
+    }
+
     /// The name change over this manager's session: the request kept with the account record it was sent for, the checks
     /// left read again after a wrong PIN or password.
     private static func profiles(_ ref: ManagerRef, checks: OwnerCheckManager, record rec: AccountRecord) -> ProfileManager {
         ProfileManager(
             ops: {
                 guard let m = ref.manager else { throw VaultFailure(.other, code: "session_dropped") }
-                return VaultProfileOps(api: try m.openApi(try await m.openSession())) { try await ref.manager?.decideFirst() }
+                return VaultProfileOps(api: try m.openApi(try await m.openSession()), gate: Self.pinGate(ref))
             },
             onRequest: { r, since in ref.manager?.keepNameRequest(r, since: since) },
             checksLeft: {
@@ -300,7 +305,9 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         let generation = sessionGeneration
         // §11.14.9 "A lost answer": checked again under the credential lock, where a change that began after an
         // operation's own check is seen.
-        let gate: @Sendable () async throws -> Void = { [weak self] in try await self?.credentialGate() }
+        let gate: @Sendable (Bool) async throws -> Void = { [weak self] carriesPin in
+            try await self?.credentialGate(carriesPin: carriesPin)
+        }
         let task = Task { try await Self.makeSession(c, member, source, gate: gate) }
         opening = task
         defer { opening = nil }
@@ -323,7 +330,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
 
     private nonisolated static func makeSession(
         _ c: VaultManagerConfig, _ member: MemberApiClient, _ canary: CanaryManifestStore,
-        gate: @escaping @Sendable () async throws -> Void
+        gate: @escaping @Sendable (Bool) async throws -> Void
     ) async throws -> VaultSession {
         // A wipe cancels an opening: nothing more is made or written from here.
         try Task.checkCancellation()
@@ -346,7 +353,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         let device = if let restored { restored } else { try await VaultDevice.create(cfg, secrets: secrets) }
         try Task.checkCancellation()
         // IOS-PLAN ID8: every vault this app holds is of release R, whose passwords are normalized to NFC (§11.14.7).
-        let api = VaultApi(device: device, normalizePasswords: { true }, credentialGate: gate)
+        let api = VaultApi(device: device, normalizePasswords: { true }, credentialGate: gate, changeWaitSleep: c.changeWaitSleep)
         let alt = AltChannelFlow(api: member, trust: c.trust, now: c.now, canary: canary, verifyEnclave: c.enclaveCheck)
         return VaultSession(device: device, api: api, alt: alt)
     }

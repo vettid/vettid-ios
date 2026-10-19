@@ -82,6 +82,8 @@ extension VaultDevice {
             throw e
         }
         noteVaultTime(inner.ts)
+        // An answer (also a cached one sent again, also one that comes after its wait ended) settles its request.
+        if let re = inner.re { settled(re, at: inner.ts) }
         let firstTime: Bool = mem.withLock {
             guard st.seenInner[inner.id] == nil else { return false }
             st.seenInner[inner.id] = Self.ms(t)
