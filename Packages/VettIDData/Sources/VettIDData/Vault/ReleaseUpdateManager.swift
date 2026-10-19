@@ -116,7 +116,7 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
         else { return }
         launch { [self] in
             set { $0.step = .abandoning; $0.failure = nil; $0.failureCode = nil }
-            let r = await withStart { s in await self.ops.unlock(pin: pin, approve: nil, abandon: true, onStarting: s) }
+            let r = await withStart { s in await self.ops.unlock(pin: pin, approve: nil, abandon: true, afterMove: false, onStarting: s) }
             switch r {
             case .abandoned, .opened:
                 set { $0.step = .abandoned; $0.vaultOpen = true; $0.canAbandon = false }
@@ -174,7 +174,7 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
     private func approve(_ pin: String, afterFailure: Bool) async {
         guard let to = progress?.to else { return }
         set { $0.step = .approving; $0.failure = nil; $0.failureCode = nil; $0.waitSeconds = 0; $0.refusal = nil }
-        let r = await withStart { s in await self.ops.unlock(pin: pin, approve: to, abandon: false, onStarting: s) }
+        let r = await withStart { s in await self.ops.unlock(pin: pin, approve: to, abandon: false, afterMove: false, onStarting: s) }
         switch r {
         case .moved:
             await reopen(pin)
@@ -202,13 +202,13 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
     /// After `moved`: the unlock that reaches the new release, with the same PIN, and no approval.
     private func reopen(_ pin: String) async {
         set { $0.step = .reopening; $0.failure = nil; $0.failureCode = nil; $0.waitSeconds = 0 }
-        var r = await withStart { s in await self.ops.unlock(pin: pin, approve: nil, abandon: false, onStarting: s) }
+        var r = await withStart { s in await self.ops.unlock(pin: pin, approve: nil, abandon: false, afterMove: true, onStarting: s) }
         // Routed to the old release still (the API learns the move from its lifecycle event): it completes the recorded
         // move again (§11.10.4 "Failures") and reports `moved`; once more reaches the new release.
         var again = 0
         while r == .moved, again < Self.maxMovedAgain {
             again += 1
-            r = await withStart { s in await self.ops.unlock(pin: pin, approve: nil, abandon: false, onStarting: s) }
+            r = await withStart { s in await self.ops.unlock(pin: pin, approve: nil, abandon: false, afterMove: true, onStarting: s) }
         }
         switch r {
         case .opened, .refused: done()

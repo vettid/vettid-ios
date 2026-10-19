@@ -44,6 +44,7 @@ enum VaultFailures {
     private static func refused(_ r: AltRefused) -> VaultFailure {
         switch r {
         case .rollbackRelease: VaultFailure(.rollback, code: "rollback_release", cause: r)
+        case .notYetRouted: VaultFailure(.vaultUnavailable, code: VaultManager.codeReleaseNotRouted, cause: r)
         case .manifestOlder: VaultFailure(.manifest, code: "manifest_older", cause: r)
         case .notPaired: VaultFailure(.other, code: "not_paired", cause: r)
         }

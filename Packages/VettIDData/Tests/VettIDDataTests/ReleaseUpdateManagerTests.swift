@@ -55,9 +55,9 @@ import Testing
         }
 
         func unlock(
-            pin: String, approve: ReleaseView?, abandon: Bool, onStarting: @escaping @MainActor () -> Void
+            pin: String, approve: ReleaseView?, abandon: Bool, afterMove: Bool, onStarting: @escaping @MainActor () -> Void
         ) async -> UpdateStepResult {
-            log.append("unlock")
+            log.append(afterMove ? "unlock-after-move" : "unlock")
             unlocks.append(Call(pin: pin, approve: approve?.number, abandon: abandon))
             if startingCallbacks > 0 {
                 startingCallbacks -= 1
@@ -92,7 +92,7 @@ import Testing
         let m = manager(ops)
         #expect(m.start(pin: "246802", offer: offer))
         await m.settle()
-        #expect(ops.log == ["lock", "unlock", "unlock"])
+        #expect(ops.log == ["lock", "unlock", "unlock-after-move"])
         #expect(ops.unlocks == [Call(pin: "246802", approve: 5, abandon: false), Call(pin: "246802", approve: nil, abandon: false)])
         let p = try #require(m.progress)
         #expect(p.step == .done && p.vaultOpen)

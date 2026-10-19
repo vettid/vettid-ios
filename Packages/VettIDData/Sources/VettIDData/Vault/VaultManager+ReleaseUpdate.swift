@@ -27,9 +27,11 @@ final class VaultReleaseUpdateOps: ReleaseUpdateOps {
 
     func lock() async throws { try await manager.lockForUpdate() }
 
-    func unlock(pin: String, approve: ReleaseView?, abandon: Bool, onStarting: @escaping @MainActor () -> Void) async -> UpdateStepResult {
+    func unlock(
+        pin: String, approve: ReleaseView?, abandon: Bool, afterMove: Bool, onStarting: @escaping @MainActor () -> Void
+    ) async -> UpdateStepResult {
         guard let m = ref.manager else { return .failed(.other, code: "session_dropped") }
-        return await m.updateUnlock(pin: pin, approve: approve, abandon: abandon, onStarting: onStarting)
+        return await m.updateUnlock(pin: pin, approve: approve, abandon: abandon, afterMove: afterMove, onStarting: onStarting)
     }
 
     func canAbandon() -> Bool { ref.manager?.session?.device.altState.previousRelease.isEmpty == false }
@@ -58,6 +60,8 @@ extension VaultManager {
     /// undecided while the vault answers, is ``FailureKind/changeChecking``; undecided while it cannot be reached (or a
     /// records file that cannot be read), ``FailureKind/changeUnresolved``. Nil when nothing is undecided. Reads
     /// ``changeCheck`` and ``unlockPinStep``, so that the screens follow it.
+    public var releaseUpdateHeld: Bool { releaseUpdateHold() != nil }
+
     func releaseUpdateHold() -> FailureKind? {
         let status = changeCheck?.status
         _ = unlockPinStep
@@ -109,7 +113,7 @@ extension VaultManager {
 
     /// One unlock of the update: approving [approve] or abandoning the unconfirmed move, never following a move.
     func updateUnlock(
-        pin: String, approve: ReleaseView?, abandon: Bool, onStarting: @escaping @MainActor () -> Void
+        pin: String, approve: ReleaseView?, abandon: Bool, afterMove: Bool = false, onStarting: @escaping @MainActor () -> Void
     ) async -> UpdateStepResult {
         // (§11.14.9) Nothing is sent while a PIN or password change is undecided: the PIN may be the wrong one of two.
         if let hold = releaseUpdateHold() {
@@ -125,7 +129,7 @@ extension VaultManager {
         let options = UnlockOptions(approve: approve.map { Approval(toPcr0: $0.pcr0, toRelease: $0.number) }, abandon: abandon)
         let starting: @Sendable (Int) -> Void = { _ in Task { @MainActor in onStarting() } }
         // The update never moves the unlock's PIN steps (§11.14.9 step 5): a change undecided is refused above.
-        let route = UnlockRoute(followMove: false, release: release, onStarting: starting, pinSteps: false)
+        let route = UnlockRoute(followMove: false, release: release, onStarting: starting, pinSteps: false, afterMove: afterMove)
         var o = await unlockOutcome(pin: pin, options: options, route: route)
         if abandon, case .failed(_, let code, _) = o.attempt, code == MemberApiError.vaultBusy {
             // §11.10.5: an instance of the new release holds the vault; lock it first, then return.

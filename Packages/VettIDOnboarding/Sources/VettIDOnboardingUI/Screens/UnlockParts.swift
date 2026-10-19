@@ -47,11 +47,14 @@ struct PreflightNotices: View {
                 message: OnboardingStrings.unlockOfferBody(Int(p.routed.number), Int(offer.number), offer.fingerprint)
             )
             .accessibilityIdentifier("release_offer")
-            Toggle(isOn: Binding(get: { state.approveOffer }, set: { actions.setApproveOffer($0) })) {
-                Text(OnboardingStrings.unlockOfferApprove).vettIDFont(.bodyMedium)
+            // (§11.14.9) Not while a PIN or password change is undecided.
+            if !state.updateHeld {
+                Toggle(isOn: Binding(get: { state.approveOffer }, set: { actions.setApproveOffer($0) })) {
+                    Text(OnboardingStrings.unlockOfferApprove).vettIDFont(.bodyMedium)
+                }
+                .frame(minHeight: Spacing.touchTarget)
+                .accessibilityIdentifier("approve_offer")
             }
-            .frame(minHeight: Spacing.touchTarget)
-            .accessibilityIdentifier("approve_offer")
         }
     }
 }

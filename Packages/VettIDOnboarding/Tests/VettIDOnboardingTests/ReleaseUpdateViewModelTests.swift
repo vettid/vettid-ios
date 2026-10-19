@@ -155,6 +155,33 @@ import VettIDDataTesting
         #expect(updates.progress == nil)
     }
 
+    /// (§11.14.9; chosen; not in the spec) While a PIN or password change is undecided the unlock screen does not offer
+    /// the approval and none goes with the unlock, even one turned on before.
+    @Test func noApprovalWithTheUnlockWhileAChangeIsUndecided() async {
+        let locked = FakeVaultRepository(.locked)
+        locked.preflightInfo = PreflightInfo(routed: rel(4), lastNumber: 4, softwareUpdated: false, rollback: false, offer: rel(5))
+        let vm = UnlockViewModel(vault: locked, account: locked)
+        await vm.settle()
+        vm.setApproveOffer(true)
+        locked.releaseUpdateHeld = true
+        await vm.settle()
+        #expect(vm.state.updateHeld)
+        vm.setPin("40281795")
+        vm.submit()
+        await vm.settle()
+        #expect(locked.lastApproved == nil)
+        // Without the hold the approval goes.
+        locked.releaseUpdateHeld = false
+        try? await locked.lock()
+        let again = UnlockViewModel(vault: locked, account: locked)
+        await again.settle()
+        again.setApproveOffer(true)
+        again.setPin("40281795")
+        again.submit()
+        await again.settle()
+        #expect(locked.lastApproved == rel(5))
+    }
+
     @Test func whatsNewIsLookedUpForTheUnlockOfferOnly() async {
         let notes = FakeReleaseNotes(.unavailable)
         let locked = FakeVaultRepository(.locked)

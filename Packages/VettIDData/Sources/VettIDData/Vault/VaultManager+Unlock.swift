@@ -28,6 +28,8 @@ struct UnlockRoute: Sendable {
     var onStarting: (@Sendable (Int) -> Void)?
     /// The unlock's PIN steps of an unresolved PIN change apply (§11.14.9 step 5); the release update never moves them.
     var pinSteps = true
+    /// The unlock right after `update: moved`: routed to exactly the release moved from, it waits (``unlockRouted``).
+    var afterMove = false
 }
 
 /// The sealed result of one unlock, the session it went through, and whether the vault moved.
@@ -184,7 +186,7 @@ extension VaultManager {
         let moved = out.ok && out.result.update?.result == Self.updateMoved
         if moved && route.followMove {
             // §11.10.6: after a move the vault is locked under the new release; unlock again, which reaches it.
-            let next = UnlockRoute(onStarting: route.onStarting)
+            let next = UnlockRoute(onStarting: route.onStarting, afterMove: true)
             out = try await unlockWithSecret(s, pin: pin, options: UnlockOptions(), path: .current, route: next)
         }
         // A sealed result: the enclave knows this phone; earlier relay refusals no longer count.
@@ -263,14 +265,15 @@ extension VaultManager {
     /// The code of an unlock after a move that the member API kept routing to the release the vault left.
     public nonisolated static let codeReleaseNotRouted = "release_not_routed"
 
-    /// One unlock request with [secret]. Right after a move (an unlock without an approval or an abandonment, with the
-    /// release moved from recorded), the member API may still route to the release the vault left, which this phone
-    /// refuses as a rollback (§11.10.6): that is waited out, a few times; still so, it is a neutral failure, never the
-    /// rollback's text (chosen; not in the spec).
+    /// One unlock request with [secret]. Right after a move (``UnlockRoute/afterMove``) the member API may still route to
+    /// exactly the release the vault left, which is not sent to (``AltRefused/notYetRouted``): that is waited out, a few
+    /// times; still so, it is a neutral failure, never the rollback's text (chosen; not in the spec). Any other older
+    /// release, and every other unlock, keeps the rollback refusal (§11.10.6).
     private func unlockRouted(
         _ s: VaultSession, pin: String, options: UnlockOptions, route: UnlockRoute, secret: [UInt8]
     ) async throws -> UnlockOutcome {
-        let afterMove = options.approve == nil && !options.abandon && !s.device.altState.previousRelease.isEmpty
+        var options = options
+        options.afterMove = route.afterMove
         let guid = record.value.userGuid
         let attester = config.attester
         let sleep = config.releaseUpdateSleep
@@ -285,7 +288,7 @@ extension VaultManager {
                         return secret
                     }
                 )
-            } catch AltRefused.rollbackRelease where afterMove {
+            } catch AltRefused.notYetRouted {
                 guard waited < Self.routingRetries else { throw VaultFailure(.vaultUnavailable, code: Self.codeReleaseNotRouted) }
                 waited += 1
                 try await sleep(Self.routingPause)

@@ -50,6 +50,7 @@ public final class UnlockViewModel: UnlockActions {
         followers.add(follow(self, read: { $0.vault.finishMoveFailure }, apply: { $0.state.moveFailure = $1 }))
         // §11.14.9 "A lost answer" step 5: the previous PIN, then the new one.
         followers.add(follow(self, read: { $0.vault.unlockPinStep }, apply: { $0.state.pinStep = $1 }))
+        followers.add(follow(self, read: { $0.vault.releaseUpdateHeld }, apply: { $0.state.updateHeld = $1 }))
         if let ownerCheck {
             followers.add(follow(
                 ownerCheck,
@@ -250,7 +251,8 @@ public final class UnlockViewModel: UnlockActions {
 
     /// The request [kind] asks for; every failure is an ``UnlockAttempt``.
     private func send(_ kind: Kind, _ s: UnlockState) async -> UnlockAttempt {
-        let offer = s.approveOffer ? s.preflight?.offer : nil
+        // (§11.14.9; chosen; not in the spec) No approval while a PIN or password change is undecided.
+        let offer = s.approveOffer && !vault.releaseUpdateHeld ? s.preflight?.offer : nil
         do {
             switch kind {
             case .earlierSecret:

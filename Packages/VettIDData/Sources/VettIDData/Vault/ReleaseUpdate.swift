@@ -84,8 +84,11 @@ public protocol ReleaseUpdateOps: AnyObject {
     func lock() async throws
 
     /// One unlock with [pin]: approving [approve] (§11.10.3) when non-nil, or abandoning the unconfirmed move ([abandon],
-    /// §11.10.4); never following a move by itself. [onStarting] hears `503 release_starting`.
-    func unlock(pin: String, approve: ReleaseView?, abandon: Bool, onStarting: @escaping @MainActor () -> Void) async -> UpdateStepResult
+    /// §11.10.4); never following a move by itself. [afterMove]: the unlock right after `moved`, which waits while the
+    /// member API still routes to the release moved from. [onStarting] hears `503 release_starting`.
+    func unlock(
+        pin: String, approve: ReleaseView?, abandon: Bool, afterMove: Bool, onStarting: @escaping @MainActor () -> Void
+    ) async -> UpdateStepResult
 
     /// An unconfirmed move can be abandoned: this phone knows the release it moved from.
     func canAbandon() -> Bool

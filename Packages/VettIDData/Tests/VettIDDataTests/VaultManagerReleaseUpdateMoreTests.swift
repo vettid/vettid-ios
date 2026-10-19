@@ -89,6 +89,36 @@ import VettIDDataTesting
         #expect(p.failure != .rollback)
     }
 
+    /// Only the unlock right after a move waits: a later ordinary unlock routed to the release moved from is a rollback
+    /// (§11.10.6), said as one, and no PIN is sent.
+    @Test func aLaterUnlockRoutedToThePreviousReleaseIsARollback() async throws {
+        defer { phone.close() }
+        try await setUp()
+        _ = m.releaseUpdate.start(pin: pin, offer: try offer)
+        await m.releaseUpdate.settle()
+        #expect(m.releaseUpdate.progress?.step == .done)
+        m.releaseUpdate.finish()
+        try await m.lock()
+        service.routedRelease = 3
+        let unlocksBefore = service.unlocks.count
+        guard case .failed(let kind, let code, _) = try await m.unlock(pin: pin) else {
+            Issue.record("not refused")
+            return
+        }
+        #expect(kind == .rollback && code == "rollback_release")
+        #expect(service.unlocks.count == unlocksBefore, "no PIN sent to the older release")
+    }
+
+    /// The vault manager says when no approval may go with an unlock: a change is undecided.
+    @Test func theVaultSaysWhenAnApprovalIsHeld() async throws {
+        defer { phone.close() }
+        try await setUp()
+        #expect(!m.releaseUpdateHeld)
+        service.loseRequests(["pin.change"])
+        _ = await vaultFailure { try await m.changePin(pin: pin, newPin: "518293", password: password) }
+        #expect(m.releaseUpdateHeld)
+    }
+
     /// The unlock screen's approval waits out the same lag.
     @Test func theUnlockScreensApprovalWaitsOutALag() async throws {
         defer { phone.close() }

@@ -46,6 +46,8 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     public var updateAcknowledged = false
     /// The member approves the offered release with this unlock (§11.10.3).
     public var approveOffer = false
+    /// (§11.14.9) A PIN or password change is undecided: the approval is not offered, and none goes with the unlock.
+    public var updateHeld = false
     /// What's new in the offered release; nil while it loads (or without an offer). Never gates the unlock.
     public var notes: ReleaseNotes?
     public var pin = ""
