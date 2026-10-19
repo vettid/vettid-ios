@@ -1,0 +1,13 @@
+diff --git a/Packages/VettIDVault/Sources/VettIDVault/VaultApi.swift b/Packages/VettIDVault/Sources/VettIDVault/VaultApi.swift
+index f4c06dc..b887db8 100644
+--- a/Packages/VettIDVault/Sources/VettIDVault/VaultApi.swift
++++ b/Packages/VettIDVault/Sources/VettIDVault/VaultApi.swift
+@@ -43,7 +43,7 @@ public struct VaultApi: Sendable {
+     }
+ 
+     /// A sleep of [seconds] (cancellable).
+-    public static func sleep(_ seconds: TimeInterval) async throws { try await Task.sleep(nanoseconds: UInt64(max(seconds, 0) * 1e9)) }
++    public static let sleep: @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64(max($0, 0) * 1e9)) }
+ 
+     var credential: CredentialOps {
+         CredentialOps(device: device, normalizePasswords: normalizePasswords, gate: credentialGate, changeWaitSleep: changeWaitSleep)

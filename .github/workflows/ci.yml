@@ -75,14 +75,31 @@ jobs:
           PY
             done
           }
-          echo "::group::ChangeVersionTests"
-          swift test --package-path Packages/VettIDVault --no-parallel --filter ChangeVersionTests 2>&1 | tail -150
+          echo "::group::repro variants"
+          swift build -q --package-path ci-repro
+          for v in methodRef literal staticLet doCatch wrapped; do
+            for m in handed timeout; do
+              ci-repro/.build/debug/repro $v $m 2>&1 | tail -3
+              echo "variant $v $m: exit ${PIPESTATUS[0]}"
+            done
+          done
           echo "::endgroup::"
-          crashes
-          echo "::group::the single test"
-          swift test --package-path Packages/VettIDVault --no-parallel --filter anOperationThatWaitedWhileASecretWentOutIsRefused 2>&1 | tail -150
+          one() {
+            for i in 1 2 3; do
+              swift test --package-path Packages/VettIDVault --no-parallel --filter anOperationThatWaitedWhileASecretWentOutIsRefused 2>&1 | tail -6
+              echo "$1 run $i: exit ${PIPESTATUS[0]}"
+            done
+          }
+          echo "::group::unchanged"
+          one unchanged
           echo "::endgroup::"
-          crashes
+          for f in fixA fixB; do
+            echo "::group::$f"
+            git apply "ci-repro/$f.patch" && one "$f"
+            git checkout -q -- Packages/VettIDVault
+            echo "::endgroup::"
+          done
+          crashes 2>&1 | grep -E "^===|asi|swift_task_dealloc|AsyncLock|exception" | head -40
           exit 1
       - name: pure packages (swift test on macOS)
         run: |
