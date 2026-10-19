@@ -98,19 +98,38 @@ import VettIDDataTesting
         #expect(m.session?.device.pendingUnlock == nil)
     }
 
-    /// "Finish the move" with a PIN taken before a PIN change: the vault is locked, no unlock is sent, and the PIN asked
-    /// for again opens it.
+    /// "Finish the move" with a PIN taken before a PIN change: the vault is not locked, no unlock is sent, and the PIN
+    /// asked for again opens it.
     @Test func finishTheMoveWithAPinTakenBeforeAPinChangeSendsNothing() async throws {
         defer { phone.close() }
         try await setUp()
         let old = m.phoneSecrets.pinGeneration
         try await m.changePin(pin: pin, newPin: newPin, password: password)
         let unlocks = service.unlocks.count
+        let locks = (service.memberLocks, service.relayLocks)
         let r = try await m.finishMove(pin: pin, taken: old)
         #expect(r == .failed(.credentialUnsettled, code: VaultManager.codePinTakenBefore))
         #expect(service.unlocks.count == unlocks && service.pinFailureCount == 0)
+        #expect(service.memberLocks == locks.0 && service.relayLocks == locks.1 && service.isOpen && m.phase == .unlocked)
         #expect(try await m.finishMove(pin: newPin) == .success)
         #expect(service.unlocks.count == unlocks + 1 && m.phase == .unlocked)
+    }
+
+    /// The update's keypad read before a PIN change: "Update" fails at once, with the vault neither locked nor sent an
+    /// unlock, and the PIN is asked for again.
+    @Test func anUpdateWithAStaleReadingNeverLocksTheVault() async throws {
+        defer { phone.close() }
+        try await setUp()
+        let old = m.phoneSecrets.pinGeneration
+        try await m.changePin(pin: pin, newPin: newPin, password: password)
+        let unlocks = service.unlocks.count
+        let locks = (service.memberLocks, service.relayLocks)
+        #expect(m.releaseUpdate.start(pin: pin, offer: try #require(m.releaseUpdate.offer), generation: old))
+        await m.releaseUpdate.settle()
+        let p = try #require(m.releaseUpdate.progress)
+        #expect(p.step == .failed && p.failureCode == VaultManager.codePinTakenBefore && p.vaultOpen)
+        #expect(service.unlocks.count == unlocks && service.memberLocks == locks.0 && service.relayLocks == locks.1)
+        #expect(service.isOpen && m.phase == .unlocked)
     }
 
     /// The normal path: "Finish the move" locks and unlocks with the PIN.

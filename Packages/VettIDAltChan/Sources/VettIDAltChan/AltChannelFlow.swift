@@ -45,6 +45,14 @@ public protocol AltParty: Sendable {
         userGuid: String, pin: String, enclave: VerifiedEnclave, manifest: ReleaseManifest, attester: Attester, options: UnlockOptions
     ) async throws -> BuiltUnlock
     func openUnlockResult(_ raw: [UInt8]) async throws -> UnlockResult
+    /// [built] was not posted (VAULT-MESSAGING §11.14.9 step 2: its PIN may no longer be the one the vault expects): what
+    /// ``prepareUnlock(userGuid:pin:enclave:manifest:attester:options:)`` recorded for it goes, as if it had never been
+    /// built (the pending unlock, the standing token recorded as issued). Nothing of it reached the vault.
+    func abandonPreparedUnlock(_ built: BuiltUnlock) async
+}
+
+public extension AltParty {
+    func abandonPreparedUnlock(_ built: BuiltUnlock) async {}
 }
 
 /// The opened vault.enroll.result, the vault id the API assigned and where it ran.
@@ -255,7 +263,8 @@ public struct AltChannelFlow: Sendable {
 
     /// Unlocks the vault (§11.4); [release] (a PCR0) only to abandon an unconfirmed move. [onStarting] hears each
     /// `503 release_starting` while the routed release starts (§11.10.5). [beforePost] runs right before each request is
-    /// posted, after it is built; a throw sends nothing more.
+    /// posted, after it is built; a throw sends nothing more, and the request built is abandoned
+    /// (``AltParty/abandonPreparedUnlock(_:)``).
     public func unlock(
         party: AltParty, userGuid: String, pin: String, attester: Attester, options: UnlockOptions = UnlockOptions(),
         release: String? = nil, onStarting: (@Sendable (Int) -> Void)? = nil,
@@ -284,7 +293,13 @@ public struct AltChannelFlow: Sendable {
                     userGuid: userGuid, pin: pin, enclave: e, manifest: m, attester: attester, options: opts
                 )
             }
-            try await beforePost?()
+            do {
+                try await beforePost?()
+            } catch {
+                // Held back between the build and the post: nothing of what the build recorded stays behind.
+                await party.abandonPreparedUnlock(built)
+                throw error
+            }
             let (err, slot) = try await postAndPoll(
                 { try await api.unlock(vaultID: vaultID, instanceID: info.instanceID, built.request) }, built.request.requestID
             )

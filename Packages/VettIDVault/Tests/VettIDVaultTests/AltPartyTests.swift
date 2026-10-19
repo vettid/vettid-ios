@@ -77,6 +77,33 @@ import VettIDRelay
         await #expect(throws: VaultStateError.self) { _ = try await d.openUnlockResult(wrongRaw) }
         #expect(d.altState.stateSeq == 5)
     }
+
+    /// (VAULT-MESSAGING §11.14.9 step 2) An unlock built and then held back before its post leaves the device as before
+    /// the build: no pending unlock, the standing token's recorded expiry restored, in memory and in the store.
+    @Test func anUnlockAbandonedBeforeItsPostLeavesNothingBehind() async throws {
+        let store = InMemoryDeviceStateStore()
+        let cfg = DeviceConfig(name: "phone", relayURL: relay.baseURL, transport: HTTPTransport(session: relay.server.session, sleep: { _ in }), store: store, enrolledAttestation: .skipForTests, requestTimeout: 5)
+        let d = try await VaultDevice.create(cfg, secrets: try DeviceSecrets.generate())
+        let v = try FakeVault(relayURL: relay.baseURL)
+        try await d.handle(try v.enrolled(d))
+        try await d.awaitEnrolled(timeout: 1)
+        let m = try manifest()
+        let desc = try Descriptor.parse(Descriptor.marshal(instanceID: "inst-a", etk: try KemPrivateKey.generate().publicKey, release: Self.pcr0, notAfter: Date().addingTimeInterval(3600)))
+        let r = try #require(m.byNumber(3))
+        let enclave = VerifiedEnclave(descriptor: desc, measurements: r.measurements, release: r)
+        d.mem.withLock { d.st.issuedExpMs = 1_000 }
+        func saved() throws -> Int64 { try JSONDecoder().decode(DeviceState.self, from: Data(try #require(store.load()))).issuedExpMs }
+        let built = try await d.prepareUnlock(userGuid: "guid-1", pin: "246802", enclave: enclave, manifest: m, attester: Attest(), options: UnlockOptions())
+        #expect(d.mem.withLock { d.st.issuedExpMs } > 1_000 && d.mem.withLock { d.pendingUnlock } == built.pending)
+        #expect(try saved() > 1_000)
+        await d.abandonPreparedUnlock(built)
+        #expect(d.mem.withLock { d.st.issuedExpMs } == 1_000 && d.mem.withLock { d.pendingUnlock } == nil)
+        #expect(try saved() == 1_000)
+        // Only the unlock last built: an older one changes nothing.
+        let next = try await d.prepareUnlock(userGuid: "guid-1", pin: "246802", enclave: enclave, manifest: m, attester: Attest(), options: UnlockOptions())
+        await d.abandonPreparedUnlock(built)
+        #expect(d.mem.withLock { d.pendingUnlock } == next.pending && d.mem.withLock { d.st.issuedExpMs } > 1_000)
+    }
 }
 
 // swiftlint:enable line_length

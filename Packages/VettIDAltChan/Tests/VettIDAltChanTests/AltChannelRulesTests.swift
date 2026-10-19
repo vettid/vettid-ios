@@ -60,6 +60,22 @@ struct ChainAttester: Attester {
         #expect(mine == [UInt8](repeating: 0x42, count: 32))
     }
 
+    /// (VAULT-MESSAGING §11.14.9 step 2) A request held back between its build and its post is not posted, and the
+    /// party abandons what the build recorded for it.
+    @Test func anUnlockHeldBackBeforeItsPostIsAbandoned() async throws {
+        struct Held: Error {}
+        let (api, p, f) = try setUp()
+        p.vaultID = "0123456789abcdef0123456789abcdef"
+        await #expect(throws: Held.self) {
+            _ = try await f.unlock(party: p, userGuid: "guid-1", pin: "246802", attester: SoftAttester(), beforePost: { throw Held() })
+        }
+        #expect(api.requests.filter { $0.path == "/api/vault/unlock" }.isEmpty)
+        #expect(p.abandoned.count == 1 && p.pending == nil)
+        // A request that goes is not abandoned.
+        #expect(try await f.unlock(party: p, userGuid: "guid-1", pin: "246802", attester: SoftAttester(), beforePost: {}).ok)
+        #expect(p.abandoned.count == 1)
+    }
+
     /// A canary manifest is used only while nothing is published (404) or it is newer; a server error is not "nothing
     /// published".
     @Test func onlyA404FallsBackToTheCanary() async throws {

@@ -111,6 +111,8 @@ final class TestParty: AltParty, @unchecked Sendable {
     var state = AltState()
     var vaultID: String?
     var pending: PendingUnlock?
+    /// The request ids of the unlocks built and abandoned before their post.
+    var abandoned: [String] = []
     let kem: KemPrivateKey
     let ik = Ed25519PrivateKey.generate()
     let app: AppIdentity
@@ -147,6 +149,13 @@ final class TestParty: AltParty, @unchecked Sendable {
         let next = try AltRequests.applyUnlock(lock.withLock { state }, p, r)
         lock.withLock { state = next }
         return r
+    }
+
+    func abandonPreparedUnlock(_ built: BuiltUnlock) async {
+        lock.withLock {
+            abandoned.append(built.pending.requestID)
+            if pending?.requestID == built.pending.requestID { pending = nil }
+        }
     }
 }
 

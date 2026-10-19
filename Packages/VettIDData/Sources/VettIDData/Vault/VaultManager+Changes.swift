@@ -137,6 +137,9 @@ extension VaultManager {
     /// "Finish the move" with a PIN taken at ``PhoneSecrets/pinGeneration`` [taken].
     func finishMove(pin: String, taken: Int) async throws -> UnlockAttempt {
         if let hold = moveHold() { throw hold }
+        // A PIN taken before a change neither locks the vault nor is sent; checked again after the lock (a change decided
+        // meanwhile) and right before the unlock goes out.
+        if let moved = pinTakenBefore(taken) { return .failed(moved.kind, code: moved.code) }
         try await lock()
         if let moved = pinTakenBefore(taken) { return .failed(moved.kind, code: moved.code) }
         var route = UnlockRoute()

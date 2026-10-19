@@ -54,6 +54,7 @@ extension VaultDevice: AltParty {
                 guard st.vault != nil || recovering else { throw VaultStateError(message: "not paired with a vault") }
                 return (vid, recovering, st.signerSeen, alt())
             }
+            let issuedBefore = mem.withLock { st.issuedExpMs }
             // A recovering app does not know the vault's relay key yet: an open token for its mailbox (§11.11.5).
             let tok = recovering ? try own.mintOpenToken(audience: cfg.relayURL, ttl: Self.openTokenTTL) : try mintForVault()
             // §11.7.1: the device key's chain goes with every unlock until the vault has shown this app its signer (an
@@ -64,9 +65,26 @@ extension VaultDevice: AltParty {
                 userGuid: userGuid, vaultID: vid, pin: pin, enclave: enclave, manifest: manifest, attester: attester,
                 ik: secrets.identity, token: tok, state: state, options: opts, now: now()
             )
-            mem.withLock { pendingUnlock = b.pending }
+            mem.withLock {
+                pendingUnlock = b.pending
+                preparedUnlock = (b.pending.requestID, issuedBefore)
+            }
             try save()
             return b
+        }
+    }
+
+    public func abandonPreparedUnlock(_ built: BuiltUnlock) async {
+        await lock.withLock {
+            let restored = mem.withLock { () -> Bool in
+                guard let p = preparedUnlock, p.requestID == built.pending.requestID else { return false }
+                preparedUnlock = nil
+                if pendingUnlock?.requestID == p.requestID { pendingUnlock = nil }
+                st.issuedExpMs = p.issuedExpMs
+                return true
+            }
+            // Kept as the build kept it; a failed write leaves the expiry recorded later, which only renews it sooner.
+            if restored { try? save() }
         }
     }
 
@@ -74,7 +92,10 @@ extension VaultDevice: AltParty {
         try await lock.withLock {
             // Taken before anything else, as vettid-android does: a result that does not apply still ends this unlock.
             guard let p = mem.withLock({ () -> PendingUnlock? in
-                defer { pendingUnlock = nil }
+                defer {
+                    pendingUnlock = nil
+                    preparedUnlock = nil
+                }
                 return pendingUnlock
             }) else { throw VaultStateError(message: "no pending unlock") }
             let inner = try AltResults.openInner(raw, kem: secrets.kem, type: AltResults.typeUnlockResult, requestID: p.requestID)
