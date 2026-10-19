@@ -44,7 +44,7 @@ extension FakeVaultService {
 
     func answerRelay(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer {
         if r.path == "/v1/register" {
-            return .json(201, #"{"mailbox_id":"x","limits":{"max_payload_bytes":262144,"message_ttl_seconds":1,"visibility_timeout_seconds":60,"max_token_lifetime_seconds":1,"open_token_max_lifetime_seconds":1,"max_claim_bytes":1,"claim_ttl_seconds":1}}"#)
+            return .json(201, #"{"mailbox_id":"x","limits":{"max_payload_bytes":262144,"message_ttl_seconds":1,"visibility_timeout_seconds":60,"max_token_lifetime_seconds":1,"open_token_max_lifetime_seconds":86400,"max_claim_bytes":65536,"claim_ttl_seconds":86400}}"#)
         }
         if r.path == "/v1/mailbox", r.method == "GET" { return collect() }
         if r.path.hasPrefix("/v1/mailbox/"), r.method == "DELETE" { return .empty(204) }
