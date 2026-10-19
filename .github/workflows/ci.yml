@@ -41,24 +41,6 @@ jobs:
           git diff --exit-code -- VettID.xcodeproj App/Info.plist
       - name: SwiftLint
         run: swiftlint lint --strict
-      - name: TEMPORARY the new AsyncLock test against the old sleep
-        run: |
-          set +e
-          python3 - <<'PY'
-          p = "Packages/VettIDVault/Sources/VettIDVault/VaultApi.swift"
-          s = open(p).read()
-          a = s.index("    public static let sleep:")
-          b = s.index("    }\n", a) + 6
-          s = s[:a] + "    public static func sleep(_ seconds: TimeInterval) async throws { try await Task.sleep(nanoseconds: UInt64(max(seconds, 0) * 1e9)) }\n" + s[b:]
-          open(p, "w").write(s)
-          PY
-          git diff
-          for i in 1 2 3; do
-            swift test --package-path Packages/VettIDVault --no-parallel --filter aWaiterWithTheAppSleepHandedTheLock 2>&1 | tail -4
-            echo "old sleep run $i: exit ${PIPESTATUS[0]}"
-          done
-          git checkout -q -- Packages/VettIDVault
-          git status --short
       - name: pure packages (swift test on macOS)
         run: |
           for p in VettIDCrypto VettIDAttestation VettIDRelay VettIDAltChan VettIDVault VettIDKeys VettIDTesting; do
