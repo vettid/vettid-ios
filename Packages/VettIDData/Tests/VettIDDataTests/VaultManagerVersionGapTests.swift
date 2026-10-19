@@ -9,9 +9,9 @@ import VettIDVault
 /// changes): an earlier credential operation applied without its answer leaves the vault one version ahead of the phone.
 /// A change is sent only once every earlier credential request of the phone is settled (answered, or past its `exp` by
 /// more than a minute on the vault's clock; VAULT-MESSAGING 0.46.0 §11.14.9 step 1), waiting for at most 30 s. It then
-/// asks `credential.version` under the credential lock (VAULT-MESSAGING: pending spec PR for vettid/vettid.org#347): a
-/// version that moved refuses it with nothing sent, the latest blob is fetched, and the change built again on it is
-/// decided by "version + 1" correctly.
+/// asks `credential.version` under the credential lock (VAULT-MESSAGING 0.47.0 §11.14.9 step 1, "Sent with the vault's
+/// current blob"; IOS-PLAN 0.1.6 §6.3): when the version moved, the latest blob is fetched and the change goes with it,
+/// so that "version + 1" decides it correctly.
 @MainActor
 @Suite(.serialized) struct VaultManagerVersionGapTests {
     let service: FakeVaultService
@@ -77,8 +77,9 @@ import VettIDVault
         #expect(try m.phoneSecrets.unresolvedChange() == nil && phoneVersion == service.vaultCredentialVersion)
     }
 
-    /// An owner check applied without its answer, then a PIN change: refused before anything is sent (the version moved),
-    /// the latest blob fetched, then sent with it; its own answer lost, "version + 1" decides it applied, and it did.
+    /// An owner check applied without its answer, then a PIN change: the version moved, so the latest blob is fetched
+    /// before anything is sent, and the change goes with it; its own answer lost, "version + 1" decides it applied, and
+    /// it did.
     @Test func anOwnerCheckWithoutItsAnswerThenAPinChange() async throws {
         defer { phone.close() }
         try await setUp()
@@ -90,9 +91,10 @@ import VettIDVault
         let order = since(mark).filter { $0.hasPrefix("credential.") || $0 == VaultApi.typePinChange }
         let firstChange = try #require(order.firstIndex(of: VaultApi.typePinChange))
         let before = Array(order[..<firstChange])
-        #expect(before.first == "credential.version" && before.contains("credential.get"), "\(order)")
-        // The settling's probe of the vault's time, the check that found the version moved, and the check of the retry.
-        #expect(before.last == "credential.version" && before.filter { $0 == "credential.version" }.count >= 2, "\(order)")
+        // The settling's probe of the vault's time and the check that found the version moved, then the fetch; the change
+        // goes with the fetched blob, without asking again.
+        let get = try #require(before.lastIndex(of: "credential.get"), "\(order)")
+        #expect(before.first == "credential.version" && !before[get...].contains("credential.version"), "\(order)")
         #expect(service.pinChanges.count == 1 && m.changeCheck == ChangeCheck(.pin, .applied))
         try expectPinChanged()
         try await m.lock()
@@ -155,6 +157,22 @@ import VettIDVault
         #expect(service.pinChanges.isEmpty && service.currentPin == pin)
     }
 
+    /// No answer to `credential.version` before a password change or a renew: the plain no-answer text, never a "change
+    /// pending" one, since nothing was sent (VAULT-MESSAGING 0.47.0 §11.14.9 step 1; the owner's decision of 2026-10-19);
+    /// no marker or renew request kept.
+    @Test func noAnswerToTheVersionIsThePlainNoAnswerText() async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.lockByItself(reason: "test")
+        let change = await vaultFailure { try await m.changePassword(password, newPassword: newPassword, pin: pin) }
+        #expect(change?.kind == .noResponse, "\(String(describing: change))")
+        let renew = await vaultFailure { try await m.renewPhoneSecret(pin: pin, password: password) }
+        #expect(renew?.kind == .noResponse, "\(String(describing: renew))")
+        #expect(service.passwordChanges.isEmpty && service.renews.isEmpty)
+        #expect(try m.phoneSecrets.unresolvedChange() == nil && m.changeCheck == nil)
+        #expect(try m.phoneSecrets.records().candidates.allSatisfy { $0.sent == nil })
+    }
+
     /// A change waits at most 30 s for a credential operation in flight (here an owner check whose answer does not come),
     /// then is refused with nothing sent; the refusal says an earlier request is unfinished.
     @Test func aChangeWaitsAtMostThirtySeconds() async throws {
@@ -181,8 +199,7 @@ import VettIDVault
 
     /// The app killed between the marker and the send (a new manager on the same files), after an earlier operation
     /// moved the version: the marker was stored only after the version was confirmed, on that version, so the restart's
-    /// check never reads the earlier operation as this change (vettid/vettid.org#347; the pre-check before the marker:
-    /// chosen; not in the spec).
+    /// check never reads the earlier operation as this change (VAULT-MESSAGING 0.47.0 §11.14.9 step 1).
     @Test func aRestartBetweenTheMarkerAndTheSendNeverDecidesApplied() async throws {
         defer { phone.close() }
         try await setUp()

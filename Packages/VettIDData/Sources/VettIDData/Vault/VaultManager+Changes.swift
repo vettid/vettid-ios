@@ -17,10 +17,13 @@ import VettIDVault
 //   (``decideFirst(carriesPin:)``, 0.45.0 "The gate"). A check that ends without a decision after a PIN change leaves the
 //   PIN uncertain: every operation that carries it is refused until the unlock's two prompts settle it (0.45.0 step 3).
 // - Before the send, nothing else is in flight (0.46.0 step 1): every earlier credential request settled (30 s at most),
-//   a renew whose answer was lost decided (``settleRenews(_:)``), and `credential.version` confirming the blob, under the
-//   credential lock; only then is the request fixed and the marker (and candidate) stored, so a restart never decides a
-//   marker stored before those checks (``refreshedOnce(_:)``; VAULT-MESSAGING: pending spec PR for vettid/vettid.org#347;
-//   the pre-check before the marker: chosen, not in the spec).
+//   a renew whose answer was lost decided (``settleRenews(_:)``), and `credential.version` confirming the blob, or the
+//   vault's blob fetched and the request sent with it, under the credential lock (VAULT-MESSAGING 0.47.0 §11.14.9 step
+//   1, "Sent with the vault's current blob"; IOS-PLAN 0.1.6 §6.3); only then is the request fixed and the marker (and
+//   candidate) stored, so a restart never decides a marker stored before those checks.
+// - An operation that waited for the credential lock while a change went out is refused there (0.47.0 step 2): the gate
+//   (``credentialGate(carriesPin:)``) sees a change on its way or unresolved, and the count of changes and renews sent
+//   (``VaultDevice/secretsSent``) one already answered and decided.
 extension VaultManager {
     /// How long after `exp`, by the vault's clock, the same version means that the change never applied.
     nonisolated static let decidedAfterExp: TimeInterval = 60
@@ -86,18 +89,6 @@ extension VaultManager {
 
     /// The code of an operation refused while the change is undecided and the vault answers (still checking).
     public nonisolated static let codeChangeChecking = "change_checking"
-
-    /// Runs [send] (a change or a renew built and sent), and once more when it was refused with nothing sent or stored
-    /// because the vault's blob had moved past this phone's (§11.14.9 step 1: an earlier credential operation applied
-    /// without its answer; the latest blob was fetched by then, so the request built again goes with it). A second
-    /// refusal is reported (``FailureKind/credentialUnsettled``). One retry (chosen; not in the spec).
-    func refreshedOnce(_ send: () async throws -> Void) async throws {
-        do {
-            try await send()
-        } catch let e as CredentialUnsettled where e.reason == .versionMoved {
-            try await send()
-        }
-    }
 
     // MARK: - Deciding
 

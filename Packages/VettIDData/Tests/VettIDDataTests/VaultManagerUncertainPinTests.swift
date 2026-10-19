@@ -20,7 +20,7 @@ import VettIDVault
     init() throws {
         service = try FakeVaultService()
         service.stampsOnVaultClock = true
-        phone = try TestVaultPhone(service: service, requestTimeout: 0.4)
+        phone = try TestVaultPhone(service: service, requestTimeout: 1)
     }
 
     var m: VaultManager { phone.manager }
@@ -49,6 +49,7 @@ import VettIDVault
         await m.checkUnresolvedChange(evenLocked: true)
         #expect(m.changeCheck == ChangeCheck(.pin, .ended))
         #expect(try m.phoneSecrets.unresolvedChange() == nil && m.phoneSecrets.uncertainPin() != nil)
+        #expect(m.session?.device.credentialVersion == service.vaultCredentialVersion, "the latest blob kept")
     }
 
     func expectRefused(_ f: VaultFailure?, _ what: String) {

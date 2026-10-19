@@ -55,7 +55,9 @@ struct CredentialOps: Sendable {
     /// passwords among them normalized to NFC for a vault of release R. Returns the response body once its blob and UTKs
     /// are kept.
     func sealedOp(_ type: String, _ fields: [(String, String)]) async throws -> [UInt8] {
-        try await device.credentialLock.withLock {
+        let since = device.secretsSent
+        return try await device.credentialLock.withLock {
+            try noSecretSent(since, type)
             let utk = try await takeUTK()
             return try await sealed(type, utk: utk, fields: fields.map { .string($0.0, $0.1) }, CredOpOptions(withBlob: false))
         }
@@ -65,11 +67,14 @@ struct CredentialOps: Sendable {
     /// them (and [options]' outer members); on `stale_credential` the latest blob is fetched once and the operation sent
     /// again with a fresh UTK.
     func credOp(_ type: String, _ fields: [SealedField], _ options: CredOpOptions = CredOpOptions()) async throws -> [UInt8] {
-        try await device.credentialLock.withLock {
+        let since = device.secretsSent
+        return try await device.credentialLock.withLock {
             // Nothing is taken from the pool for an operation that cannot be sent.
             if device.credentialBlob == nil { throw VaultStateError(message: "no credential on this device") }
-            // Under the lock: a change that started after the caller's own check is seen here.
+            // Under the lock: a change that started after the caller's own check is seen here, and one that went out
+            // (and was even decided) while this waited for the lock.
             try await gate(Self.carriesPin(fields))
+            try noSecretSent(since, type)
             do {
                 return try await sealed(type, utk: try await takeUTK(), fields: fields, options)
             } catch let e as VaultOpError where e.code == Self.codeStaleCredential {
@@ -78,6 +83,7 @@ struct CredentialOps: Sendable {
                 try await fetch()
                 // Never resent with the typed secrets while a change may have moved them (§11.14.9 step 4).
                 try await gate(Self.carriesPin(fields))
+                try noSecretSent(since, type)
                 return try await sealed(type, utk: try await takeUTK(), fields: fields, options)
             }
         }
@@ -94,6 +100,15 @@ struct CredentialOps: Sendable {
             // Refused all the same.
         }
         return CredentialUnsettled(type: type, reason: .inFlight)
+    }
+
+    /// (VAULT-MESSAGING 0.47.0 §11.14.9 step 2) Refused with nothing sent when a change or a renew went out since
+    /// [since] (``VaultDevice/secretsSent`` read when the operation began, before it waited for the lock): it would carry
+    /// the PIN or password typed before that change, or the secret before that renew, and a wrong one counts as a failed
+    /// owner check. The gate alone does not see a change answered and decided before this got the lock. The refusal is
+    /// the "earlier request" text. Callers hold the credential lock. Mirrors vettid-android `secretGeneration`.
+    private func noSecretSent(_ since: Int, _ type: String) throws {
+        guard device.secretsSent == since else { throw CredentialUnsettled(type: type, reason: .inFlight) }
     }
 
     /// Whether [fields] carry the PIN (refused while the PIN is uncertain, §11.14.9 step 3).
@@ -114,8 +129,10 @@ struct CredentialOps: Sendable {
         // than a minute (VAULT-MESSAGING 0.46.0 §11.14.9 step 1).
         let exp: Date
         if let given = options.exp { exp = given } else { exp = try await requestExp() }
-        // Under the credential lock, right before the request goes out (each send, a retry's too).
-        if let onSending = options.onSending { try await onSending() }
+        // Under the credential lock, as the request goes out and again once it ended (each send, a retry's too): an
+        // operation that read the count before the send or while it was out sees it moved when it gets the lock.
+        if options.replacesSecret { device.secretSent() }
+        defer { if options.replacesSecret { device.secretSent() } }
         try await device.trackCredential(id, exp: exp)
         let r: VaultMessage
         do {
@@ -180,18 +197,20 @@ struct CredentialOps: Sendable {
 
     // MARK: - The changes of PIN and password, and the renew (§11.14.9 "A lost answer")
 
-    /// `pin.change` or `credential.password.change`. Step 1 (VAULT-MESSAGING 0.46.0 §11.14.9, "Nothing else in flight",
-    /// "Settled on answers only"; ``settledAndChecked``): every earlier credential request of this device settled and
-    /// the blob's version confirmed by the vault, under the credential lock; only then is the request fixed (a new inner
-    /// id, an `exp` 10 minutes after the vault's clock as last seen, the confirmed version) and handed to [onMarker],
-    /// which stores the unresolved change (and a PIN change's candidate) and returns the payload members that go with it
-    /// (a PIN change's next secret). Nothing is stored for a change refused before that (the pre-check before the marker:
-    /// chosen; not in the spec). A `stale_credential` is **not** retried with the same secrets: the latest blob is
+    /// `pin.change` or `credential.password.change`. Step 1 (VAULT-MESSAGING 0.47.0 §11.14.9, "Nothing else in flight",
+    /// "Settled on answers only", "Sent with the vault's current blob"; ``settledAndChecked``): every earlier credential
+    /// request of this device settled and the blob's version confirmed by the vault (or the vault's blob fetched), under
+    /// the credential lock; only then is the request fixed (a new inner id, an `exp` 10 minutes after the vault's clock as
+    /// last seen, the confirmed version) and handed to [onMarker], which stores the unresolved change (and a PIN change's
+    /// candidate) and returns the payload members that go with it (a PIN change's next secret). Nothing is stored for a
+    /// change refused before that. A `stale_credential` is **not** retried with the same secrets: the latest blob is
     /// fetched and the refusal thrown. No answer (none to the automatic resends of §8.6, every deposit straight to the
     /// relay) is ``ChangeUnanswered`` with the request to send again.
-    func change(_ type: String, _ fields: [SealedField], onMarker: OnMarker) async throws -> [UInt8] {
-        try await settledAndChecked(type, gate: false) { change, utk in
+    func change(_ type: String, _ fields: [SealedField], since: Int? = nil, onMarker: OnMarker) async throws -> [UInt8] {
+        try await settledAndChecked(type, gate: false, since: since) { change, utk in
             let more = try await marked(change, utk, onMarker)
+            try sameVersion(change, type)
+            device.secretSent()
             let held = HeldRequest(
                 type: type, id: change.id, exp: change.exp,
                 body: try build(type, utk: utk, fields: fields + more, id: change.id, CredOpOptions())
@@ -201,17 +220,20 @@ struct CredentialOps: Sendable {
         }
     }
 
-    /// `vault.secret.renew` after the same steps as a change, the credential gate included (VAULT-MESSAGING: pending spec
-    /// PR for vettid/vettid.org#347; renews settle too: chosen, not in the spec), [onMarker] storing the renew's record
-    /// and request. [onAnswered] runs on its own `ok` answer, before its blob is kept. Any refusal of its own request,
-    /// `stale_credential` included, means it did not apply: `stale_credential` is not retried, the latest blob is fetched
-    /// and the refusal thrown (VAULT-MESSAGING: pending spec PR for vettid/vettid.org#347). A failure once it may have
-    /// gone out is ``RequestUnanswered``.
+    /// `vault.secret.renew` after the same steps as a change, the credential gate included (VAULT-MESSAGING 0.47.0
+    /// §11.14.9 step 1: every earlier request settled and the vault's current blob; IOS-PLAN 0.1.6 §6.3), [onMarker]
+    /// storing the renew's record and request. [onAnswered] runs on its own `ok` answer, before its blob is kept. Any
+    /// refusal of its own request, `stale_credential` included, means it did not apply: `stale_credential` is not
+    /// retried, the latest blob is fetched and the refusal thrown (VAULT-MESSAGING 0.47.0 §11.14.9 step 1, "A renew is
+    /// settled before a PIN change"). A failure once it may have gone out is ``RequestUnanswered``.
     func renew(
-        _ type: String, _ fields: [SealedField], onMarker: OnMarker, onAnswered: @escaping @Sendable () async -> Void
+        _ type: String, _ fields: [SealedField], since: Int? = nil, onMarker: OnMarker,
+        onAnswered: @escaping @Sendable () async -> Void
     ) async throws -> [UInt8] {
-        try await settledAndChecked(type, gate: true) { change, utk in
+        try await settledAndChecked(type, gate: true, since: since) { change, utk in
             let more = try await marked(change, utk, onMarker)
+            try sameVersion(change, type)
+            device.secretSent()
             do {
                 let options = CredOpOptions(unanswered: true, exp: change.exp)
                 return try await sealed(type, utk: utk, fields: fields + more, options, id: change.id, onOK: onAnswered)
@@ -225,6 +247,13 @@ struct CredentialOps: Sendable {
     /// What the caller stores once the request is fixed, returning the payload members that go with it.
     typealias OnMarker = @Sendable (ChangeRequest) async throws -> [SealedField]
 
+    /// The blob this device holds is still the one [change] was fixed on, right before the request is built: a blob kept
+    /// outside the credential lock (a fetch or a UTK top-up of a decision) never goes with a request fixed on another
+    /// version. Else refused with nothing sent (the marker stored stays for the decision).
+    private func sameVersion(_ change: ChangeRequest, _ type: String) throws {
+        guard device.credentialVersion == change.version else { throw CredentialUnsettled(type: type, reason: .inFlight) }
+    }
+
     /// [onMarker] for [change]; [utk] goes back to the pool when it fails (nothing was sent).
     private func marked(_ change: ChangeRequest, _ utk: UtkRecord, _ onMarker: OnMarker) async throws -> [SealedField] {
         do {
@@ -235,14 +264,18 @@ struct CredentialOps: Sendable {
         }
     }
 
-    /// Step 1 before a change or a renew: every earlier credential request of this device settled (the outbox flushed,
-    /// waited for at most ``inFlightWait``), then under the credential lock (at most as long): the credential gate for a
-    /// renew ([gate]), the settling checked again, `credential.version` confirming the blob this device holds
-    /// (``checkVersion``), a UTK taken, and [body] with the request fixed on the confirmed version. Else refused with
-    /// nothing sent or stored.
+    /// Step 1 before a change or a renew (VAULT-MESSAGING 0.47.0 §11.14.9 "Sent with the vault's current blob"): every
+    /// earlier credential request of this device settled (the outbox flushed, waited for at most ``inFlightWait``), then
+    /// under the credential lock (at most as long): the credential gate for a renew ([gate]), no change or renew gone out
+    /// since this began, the settling checked again, `credential.version` confirming the blob this device holds or the
+    /// vault's fetched (``checkVersion``), a UTK taken, and [body] with the request fixed on the confirmed version. Else
+    /// refused with nothing sent or stored.
+    /// [since]: ``VaultDevice/secretsSent`` as the caller read it before its own checks (a renew's decision before a PIN
+    /// change may wait on the network); nil: read now.
     private func settledAndChecked(
-        _ type: String, gate checksGate: Bool, _ body: (ChangeRequest, UtkRecord) async throws -> [UInt8]
+        _ type: String, gate checksGate: Bool, since given: Int?, _ body: (ChangeRequest, UtkRecord) async throws -> [UInt8]
     ) async throws -> [UInt8] {
+        let since = given ?? device.secretsSent
         guard await device.awaitCredentialSettled(within: Self.inFlightWait, sleep: changeWaitSleep) else {
             throw CredentialUnsettled(type: type, reason: .inFlight)
         }
@@ -251,11 +284,12 @@ struct CredentialOps: Sendable {
                 throw VaultStateError(message: "no credential on this device")
             }
             if checksGate { try await gate(true) }
+            try noSecretSent(since, type)
             // One that started meanwhile, before this took the lock.
             guard await device.credentialSettled() else { throw CredentialUnsettled(type: type, reason: .inFlight) }
-            try await checkVersion(version, before: type)
+            let confirmed = try await checkVersion(version, before: type)
             let utk = try await takeUTK()
-            let change = ChangeRequest(id: device.newRequestID(), exp: try await requestExp(), version: version)
+            let change = ChangeRequest(id: device.newRequestID(), exp: try await requestExp(), version: confirmed)
             return try await body(change, utk)
         }
         guard let sent else { throw CredentialUnsettled(type: type, reason: .inFlight) }
@@ -272,14 +306,20 @@ struct CredentialOps: Sendable {
         return device.vaultNow().addingTimeInterval(ChangeRequest.validFor)
     }
 
-    /// `credential.version` before a change or a renew (a request as any other, §8.6's resends of the same id included):
-    /// [version], or the latest blob fetched and ``CredentialUnsettled/Reason/versionMoved`` thrown (a fetch that fails:
-    /// ``CredentialUnsettled/Reason/inFlight``, the "earlier request" refusal). Callers hold the credential lock.
-    /// (VAULT-MESSAGING: pending spec PR for vettid/vettid.org#347.)
-    private func checkVersion(_ version: Int64, before type: String) async throws {
-        let info = try VaultJSON.decode(CredentialInfo.self, try await device.op("credential.version"))
-        guard info.exists, let v = info.version else { throw VaultStateError(message: "no credential in the vault") }
-        guard v != version else { return }
+    /// `credential.version` before a change or a renew (VAULT-MESSAGING 0.47.0 §11.14.9 step 1, "Sent with the vault's
+    /// current blob"; a request as any other, §8.6's resends of the same id included), returning the version the request
+    /// goes with: [version] when the vault's is the same; otherwise an earlier operation applied without its answer, and
+    /// the latest blob is fetched and kept, and the request goes with it when the fetched version is the vault's. An
+    /// answer that is an error, has no version or says no credential counts as different (as vettid-android does): the
+    /// fetch runs, and the request cannot go since the vault's version is not known. A fetch that fails or gives another
+    /// version is ``CredentialUnsettled/Reason/inFlight`` (the "earlier request" refusal), never the answer's own code; no
+    /// answer to the question is its own failure; nothing is sent either way. Callers hold the credential lock.
+    private func checkVersion(_ version: Int64, before type: String) async throws -> Int64 {
+        let answer = try await device.request("credential.version")
+        let info: CredentialInfo? = answer.inner.status == Inner.statusOK
+            ? try? VaultJSON.decode(CredentialInfo.self, answer.body) : nil
+        let vaults = info.flatMap { $0.exists ? $0.version : nil }
+        if let v = vaults, v == version { return v }
         do {
             try await fetch()
         } catch is CancellationError {
@@ -287,7 +327,10 @@ struct CredentialOps: Sendable {
         } catch {
             throw CredentialUnsettled(type: type, reason: .inFlight)
         }
-        throw CredentialUnsettled(type: type, reason: .versionMoved)
+        guard let v = vaults, device.credentialBlob != nil, device.credentialVersion == v else {
+            throw CredentialUnsettled(type: type, reason: .inFlight)
+        }
+        return v
     }
 
     /// [held] sent again, as the same request (§11.14.9 step 3): one deposit, one wait.
@@ -341,35 +384,34 @@ public struct ChangeUnanswered: Error, Sendable, CustomStringConvertible {
     public var description: String { "\(held.type): no answer" }
 }
 
-/// A change of PIN or password refused with nothing sent, because an earlier credential operation is not settled
-/// (VAULT-MESSAGING §11.14.9 "A lost answer" step 1): one still held the credential lock after the wait
-/// ([reason] ``Reason/inFlight``), or the vault's blob had moved past this phone's (``Reason/versionMoved``; the latest
-/// blob was fetched, so a change built again now goes with it).
+/// A credential operation refused with nothing sent, because an earlier one is not settled (VAULT-MESSAGING 0.47.0
+/// §11.14.9 "A lost answer" steps 1 and 2): one still held the credential lock after the wait, the vault's blob could not
+/// be made this phone's, or a change or a renew went out while this waited ([reason] ``Reason/inFlight``, the "earlier
+/// request" text).
 public struct CredentialUnsettled: Error, Sendable, CustomStringConvertible {
     public enum Reason: Sendable {
         case inFlight
-        case versionMoved
     }
 
     public let type: String
     public let reason: Reason
 
-    public var description: String { "\(type): \(reason == .inFlight ? "an earlier operation in flight" : "the version moved")" }
+    public var description: String { "\(type): an earlier operation in flight" }
 }
 
 /// What a credential operation carries besides its sealed members: the blob ([withBlob]; not for `credential.create`),
 /// members of the outer body beside it ([outer]: `vault.delete`'s `confirm`, §12.5), whether a failure once the
 /// request may have gone out is ``RequestUnanswered`` ([unanswered]) rather than the failure itself, and the request's
 /// `exp` (§5.3; a retry after `stale_credential` keeps it). [retriesStale] false: a `stale_credential` is not sent again
-/// with the same secrets (the latest blob is fetched and ``CredentialUnsettled`` thrown). [onSending] runs under the
-/// credential lock right before each send of the request (an operation that replaces a secret records it there).
+/// with the same secrets (the latest blob is fetched and ``CredentialUnsettled`` thrown). [replacesSecret]: the
+/// operation replaces a secret (`credential.reset`), so it counts as a secret sent (``VaultDevice/secretsSent``).
 struct CredOpOptions: Sendable {
     var withBlob = true
     var outer: [(String, String)] = []
     var unanswered = false
     var exp: Date?
     var retriesStale = true
-    var onSending: (@Sendable () async throws -> Void)?
+    var replacesSecret = false
 }
 
 /// A credential operation whose answer did not arrive once its request may have gone out (no answer to the automatic

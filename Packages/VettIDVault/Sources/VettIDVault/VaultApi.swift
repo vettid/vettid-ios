@@ -42,8 +42,12 @@ public struct VaultApi: Sendable {
         self.changeWaitSleep = changeWaitSleep
     }
 
-    /// A sleep of [seconds] (cancellable).
-    public static func sleep(_ seconds: TimeInterval) async throws { try await Task.sleep(nanoseconds: UInt64(max(seconds, 0) * 1e9)) }
+    /// A sleep of [seconds] (cancellable). A closure, not a static method: with Swift 6.2 (Xcode 26), a reference to the
+    /// method as a function value, cancelled while it sleeps in ``AsyncLock``'s give-up timer, aborted the process
+    /// ("freed pointer was not the last allocation" in `swift_task_dealloc`).
+    public static let sleep: @Sendable (TimeInterval) async throws -> Void = { seconds in
+        try await Task.sleep(nanoseconds: UInt64(max(seconds, 0) * 1e9))
+    }
 
     var credential: CredentialOps {
         CredentialOps(device: device, normalizePasswords: normalizePasswords, gate: credentialGate, changeWaitSleep: changeWaitSleep)

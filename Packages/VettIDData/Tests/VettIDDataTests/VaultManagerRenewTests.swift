@@ -20,7 +20,7 @@ import VettIDVault
     init() throws {
         service = try FakeVaultService()
         service.stampsOnVaultClock = true
-        phone = try TestVaultPhone(service: service, requestTimeout: 0.4)
+        phone = try TestVaultPhone(service: service, requestTimeout: 1)
     }
 
     var m: VaultManager { phone.manager }
@@ -71,8 +71,8 @@ import VettIDVault
     }
 
     /// The answer lost, then the member tries again: the retry sends the same secret (IOS-PLAN §6.3 item 2). The version
-    /// asked first shows the blob the lost renew left: it is fetched before anything is sent (VAULT-MESSAGING: pending
-    /// spec PR for vettid/vettid.org#347), and the record becomes current.
+    /// asked first shows the blob the lost renew left: it is fetched before anything is sent (VAULT-MESSAGING 0.47.0
+    /// §11.14.9 step 1), and the record becomes current.
     @Test func aLostAnswerThenARetrySendsTheSameSecret() async throws {
         defer { phone.close() }
         try await setUp()
@@ -257,7 +257,7 @@ import VettIDVault
     @Test func aRenewInFlightRefusesAPinChangeAndAPasswordChange() async throws {
         // Long waits for the answers, so that the renew is still on its way while the changes are tried: it waits,
         // unanswered, in the mailbox of a vault that locked just before it arrived.
-        let slow = try TestVaultPhone(service: service, requestTimeout: 2)
+        let slow = try TestVaultPhone(service: service, requestTimeout: 1)
         defer { slow.close() }
         let m = slow.manager
         _ = try await m.redeemSetupCode(.secret(service.secret))
@@ -313,6 +313,24 @@ import VettIDVault
         #expect(try m.phoneSecrets.records().replaced.contains { $0.operation == first.operation })
         try await m.lock()
         #expect(try await m.unlock(pin: pin) == .success)
+    }
+
+    /// The renew's own `stale_credential` (the blob moved between the version's answer and the renew): not applied and
+    /// not retried, the latest blob fetched, no attempt counted, shown with the "earlier request" text (VAULT-MESSAGING
+    /// 0.47.0 §11.14.9 step 1); the next renew goes through with the same record.
+    @Test func theRenewsOwnStaleCredentialIsNotApplied() async throws {
+        defer { phone.close() }
+        try await setUp()
+        let before = try m.phoneSecrets.currentSecret()
+        service.moveCredential(on: VaultApi.typeSecretRenew)
+        let f = await renew()
+        #expect(f?.kind == .credentialUnsettled && f?.code == VaultFailures.codeCredentialUnsettled, "\(String(describing: f))")
+        #expect(service.pinFailureCount == 0 && service.renews.count <= 1)
+        #expect(try m.phoneSecrets.currentSecret() == before)
+        #expect(try m.phoneSecrets.records().candidates.allSatisfy { $0.sent == nil }, "nothing left to decide")
+        #expect(m.session?.device.credentialVersion == service.vaultCredentialVersion)
+        #expect(await renew() == nil)
+        #expect(try m.phoneSecrets.currentSecret() == service.currentSecret)
     }
 
     /// Four renews that never arrived, each after a restart (a new operation): the fifth is refused before anything is made

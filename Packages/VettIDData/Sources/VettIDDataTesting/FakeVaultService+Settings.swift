@@ -173,7 +173,15 @@ extension FakeVaultService {
     private func credentialUnlock(_ m: Inner, _ body: JsonObject) throws {
         guard let p = try opened(m, body) else { return }
         guard try checkBlob(m, try body.optString("credential")) else { return }
-        guard (try? p.string("password")) == vaultPassword else { return try reply(m.type, "{}", re: m.id, error: "bad_password") }
+        // As vettid-vault's `openChecked`: the password backoff first, and a wrong password counted in it.
+        if let b = passwordNotBefore, vaultNow < b {
+            return try reply(m.type, #"{"retry_after":\#(max(Int(b.timeIntervalSince(vaultNow).rounded(.up)), 1))}"#, re: m.id, error: "backoff")
+        }
+        guard (try? p.string("password")) == vaultPassword else {
+            passwordFailures += 1
+            return try reply(m.type, "{}", re: m.id, error: "bad_password")
+        }
+        passwordFailures = 0
         let until = vaultNow.addingTimeInterval(TimeInterval(unlockTtl))
         windowUntil = until
         // As vettid-vault's `credential.unlock` (`respond`): the CEK rotates, the new blob and UTKs beside the expiry.

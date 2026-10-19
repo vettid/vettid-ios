@@ -90,13 +90,13 @@ extension VaultApi {
     /// means an earlier credential operation applied without its answer reaching the phone (a lost reset leaves a blob
     /// of another credential, which the vault takes for a clone, not as stale), and the reset is a change of password:
     /// as for the changes of §11.14.9 step 4, the member decides again rather than the app resending the secrets.
-    /// [onSending] runs under the credential lock right before each send. Mirrors vettid-android
+    /// The reset replaces the password, so it counts as a secret sent (``VaultDevice/secretsSent``): a credential
+    /// operation that waited for the lock behind it, from before the reset went out or while it was out, is refused with
+    /// nothing sent (§11.14.9 step 2). Mirrors vettid-android
     /// `VaultApi.credentialResetHolder`.
-    public func credentialReset(
-        pin: String, password: String, newPassword: String, onSending: (@Sendable () async throws -> Void)? = nil
-    ) async throws {
+    public func credentialReset(pin: String, password: String, newPassword: String) async throws {
         let fields: [SealedField] = [.string("pin", pin), .string("password", password), .string("new_password", newPassword)]
-        _ = try await credential.credOp(Self.typeReset, fields, CredOpOptions(retriesStale: false, onSending: onSending))
+        _ = try await credential.credOp(Self.typeReset, fields, CredOpOptions(retriesStale: false, replacesSecret: true))
     }
 
     public static let typeReset = "credential.reset"
@@ -115,16 +115,17 @@ extension VaultApi {
     /// `credential.password.change` (§10.6): the current password and the new one, sealed with the blob. (Release R,
     /// §11.14.9) With [pin], which the vault verifies; the change closes the recovery generation and arms the next. Once
     /// the request is fixed (``CredentialOps/change(_:_:onMarker:)``), [onMarker] stores its unresolved change; no answer
-    /// is ``ChangeUnanswered``, and `stale_credential` is not retried ("A lost answer").
+    /// is ``ChangeUnanswered``, and `stale_credential` is not retried ("A lost answer"). [since]: ``VaultDevice/secretsSent``
+    /// as the caller read it before its own checks (nil: read here).
     public func credentialChangePassword(
-        password: String, newPassword: String, pin: String? = nil,
+        password: String, newPassword: String, pin: String? = nil, since: Int? = nil,
         onMarker: @escaping @Sendable (ChangeRequest) async throws -> Void
     ) async throws {
         var fields: [SealedField] = []
         if let pin { fields.append(.string("pin", pin)) }
         fields.append(.string("password", password))
         fields.append(.string("new_password", newPassword))
-        _ = try await credential.change(Self.typePasswordChange, fields) { change in
+        _ = try await credential.change(Self.typePasswordChange, fields, since: since) { change in
             try await onMarker(change)
             return []
         }

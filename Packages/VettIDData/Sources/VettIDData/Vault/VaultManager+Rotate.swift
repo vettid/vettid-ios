@@ -63,7 +63,7 @@ extension VaultManager {
     /// `credential.reset` (§3.5.5) by the holder: the PIN, the current password and the new one. Every critical item is
     /// destroyed. The PIN and the password are checked as an owner check is, a wrong one counting as a failed check
     /// (§3.6.1), after which the owner check's state is read again; a success starts the owner-check clock afresh. A
-    /// `stale_credential` is not sent again with the same secrets (``VaultApi/credentialReset(pin:password:newPassword:onSending:)``).
+    /// `stale_credential` is not sent again with the same secrets (``VaultApi/credentialReset(pin:password:newPassword:)``).
     /// As before a PIN change, a renew on its way refuses it at once, and a renew whose answer was lost is decided first
     /// (VAULT-MESSAGING 0.46.0 §11.14.9 step 1): the reset replaces the DEK under the phone's current secret.
     public func newCredential(pin: String, password: String, newPassword: String) async throws {
@@ -73,9 +73,7 @@ extension VaultManager {
             let api = try openApi(try await openSession())
             try await settleRenews(api)
             do {
-                // The reset replaces the password: what records a secret sent goes in `onSending` (under the lock, right
-                // before each send).
-                try await api.credentialReset(pin: pin, password: password, newPassword: newPassword, onSending: nil)
+                try await api.credentialReset(pin: pin, password: password, newPassword: newPassword)
             } catch let e as VaultOpError where e.code == OwnerCheckManager.codeBadPin || e.code == OwnerCheckManager.codeBadPassword {
                 ownerChecks.onOpened()
                 throw e

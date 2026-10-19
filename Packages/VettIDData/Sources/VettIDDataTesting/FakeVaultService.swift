@@ -75,6 +75,7 @@ public final class FakeVaultService: @unchecked Sendable {
     var enrollAnswers: [EnrollAnswer] = []
     var capabilitiesValue: [String]? = [Capabilities.recoveryOffered, Capabilities.recoveryR]
     var timeScaleValue: UInt64?
+    var recoveryCounterValue = "ok"
     var timeScalesValue = TimeScalePolicy.production
     var weakPasswordReason: String?
     var statusState = "unlocked"
@@ -240,6 +241,12 @@ public final class FakeVaultService: @unchecked Sendable {
     public var timeScale: UInt64? {
         get { locked { timeScaleValue } }
         set { locked { timeScaleValue = newValue } }
+    }
+
+    /// `vault.status`'s `recovery.counter` (§11.14.11): `ok` unless a test makes it `unavailable`.
+    public var recoveryCounter: String {
+        get { locked { recoveryCounterValue } }
+        set { locked { recoveryCounterValue = newValue } }
     }
 
     /// The time scales the phone's build accepts (``trust``): production's unless a test says.

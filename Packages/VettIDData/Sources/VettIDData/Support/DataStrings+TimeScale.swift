@@ -18,6 +18,35 @@ extension DataStrings {
     static func timeScaleSetting(_ real: String, _ scaled: String) -> String {
         String(localized: "data_time_scale_setting", defaultValue: "\(real) (staging: \(scaled))", bundle: .module)
     }
+    /// ANDROID-PLAN "Owner check and status" (release R), verbatim (vettid-android `settings_recovery_unknown_day`): the
+    /// text in real time.
+    static var recoveryUnknownDay: String {
+        String(
+            localized: "data_recovery_unknown_day",
+            defaultValue: """
+                For a day your vault has not been able to check its recovery attempts or record that you were here. If this \
+                goes on for three days, your vault is no longer protected against a recovery started by someone else, and \
+                until it ends you cannot change your PIN or password. This is a fault of the VettID service or an attack on \
+                it. Contact VettID.
+                """,
+            bundle: .module
+        )
+    }
+    /// The same on a scaled vault, both durations computed (STAGING-TIME-SCALE 0.1.1 S8, S7; ANDROID-PLAN 0.1.49 §4
+    /// "Staging time scale"): [day] the clock's period, [quiet] the recovery quiet period. The key is chosen; not in the
+    /// spec.
+    static func recoveryUnknownDayScaled(_ day: String, _ quiet: String) -> String {
+        String(
+            localized: "data_recovery_unknown_day_scaled",
+            defaultValue: """
+                For \(day) your vault has not been able to check its recovery attempts or record that you were here. If \
+                this goes on for \(quiet), your vault is no longer protected against a recovery started by someone else, \
+                and until it ends you cannot change your PIN or password. This is a fault of the VettID service or an attack \
+                on it. Contact VettID.
+                """,
+            bundle: .module
+        )
+    }
     static func durationDays(_ n: Int) -> String {
         String(localized: "data_duration_days", defaultValue: "\(n) days", bundle: .module)
     }

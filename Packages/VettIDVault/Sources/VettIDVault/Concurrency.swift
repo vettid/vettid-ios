@@ -18,6 +18,9 @@ final class AsyncLock: @unchecked Sendable {
     private var locked = false
     private var waiters: [Waiter] = []
 
+    /// How many wait for the lock now (the tests' view of who is queued).
+    var waiting: Int { lock.withLock { waiters.count } }
+
     func acquire() async {
         await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
             let run: Bool = lock.withLock {
