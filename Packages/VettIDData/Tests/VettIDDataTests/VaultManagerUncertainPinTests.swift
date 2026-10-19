@@ -79,9 +79,8 @@ import VettIDVault
         #expect(m.changeHold()?.kind == .pinUncertain)
         #expect(service.ownerChecks.isEmpty && service.nameSets.isEmpty && service.renews.isEmpty && service.deletes.isEmpty)
         #expect(service.resets.isEmpty)
-        // The password alone is not uncertain: the unlock window opens, and the rotation goes.
+        // The password alone is not uncertain: the unlock window opens.
         try await m.openUnlockWindow(password: password)
-        try await m.rotate(password: password)
     }
 
     /// An applied change whose check ended: the unlock asks for the previous PIN, then (after `device_secret`, nothing

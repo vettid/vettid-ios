@@ -65,8 +65,8 @@ public final class FakeVaultService: @unchecked Sendable {
     /// build pins.
     let manifestSigner = FakeVaultService.testManifestSigner
     let etk: KemPrivateKey
-    let ik = Ed25519PrivateKey.generate()
-    let kem: KemPrivateKey
+    var ik = Ed25519PrivateKey.generate()
+    var kem: KemPrivateKey
     let relayKey = Ed25519PrivateKey.generate()
     let keyring = Keyring()
 
@@ -139,7 +139,7 @@ public final class FakeVaultService: @unchecked Sendable {
 
     // The owner check (FakeVaultService+OwnerCheck.swift), under ``cond``, on the vault's clock.
     var vaultPassword: String?
-    var credentialVersion: Int64 = 1
+    var credentialVersion: Int64 = 1 { didSet { credentialAcked = false } }
     var checkLastAt: Date?
     var checkDeadline: Date?
     var checkInterval: TimeInterval = 86_400
@@ -198,6 +198,13 @@ public final class FakeVaultService: @unchecked Sendable {
     var rotationsValue: [String] = []
     var resetsValue: [ResetSeen] = []
     var alarmConfirmsValue: [Bool] = []
+    /// Which credential the blob is of (a reset makes a new one) and whether the holder confirmed the current version.
+    var credentialGeneration = 0
+    var credentialAcked = true
+    /// The device's identity key (from its hs.init) and the vault-initiated rekey on its way after an identity rotation.
+    var deviceIk: [UInt8]?
+    var rekeying: Initiator?
+    var identityRotationsValue = 0
 
     public init() throws {
         etk = try KemPrivateKey.generate()

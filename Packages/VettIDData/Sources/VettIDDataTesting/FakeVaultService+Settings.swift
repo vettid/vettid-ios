@@ -141,7 +141,7 @@ extension FakeVaultService {
     /// The rotated CEK's answer members (`credential`, `version`, `utks`), without the closing brace.
     func rotated() throws -> String {
         credentialVersion += 1
-        return #"{"credential":"\#(Self.blob(credentialVersion))","version":\#(credentialVersion),"utks":\#(try issueUTKs(2))"#
+        return #"{"credential":"\#(currentBlob)","version":\#(credentialVersion),"utks":\#(try issueUTKs(2))"#
     }
 
     /// `account.name.set` in vettid-vault's order (§10.8): the UTK, `too_soon`, the names (`bad_request`, nothing
@@ -172,7 +172,7 @@ extension FakeVaultService {
     /// `credential.unlock`: the blob and the password; the window open for the setting's length and the CEK rotated.
     private func credentialUnlock(_ m: Inner, _ body: JsonObject) throws {
         guard let p = try opened(m, body) else { return }
-        guard try body.optString("credential") == Self.blob(credentialVersion) else { return try reply(m.type, "{}", re: m.id, error: "stale_credential") }
+        guard try checkBlob(m, try body.optString("credential")) else { return }
         guard (try? p.string("password")) == vaultPassword else { return try reply(m.type, "{}", re: m.id, error: "bad_password") }
         let until = vaultNow.addingTimeInterval(TimeInterval(unlockTtl))
         windowUntil = until

@@ -119,23 +119,24 @@ public final class NewCredentialViewModel {
                 try await repo.newCredential(pin: s.pin, password: s.current, newPassword: s.password)
                 self?.state = NewCredentialState(done: true)
             } catch {
-                self?.refused(error as? VaultFailure ?? VaultFailure(.other))
+                self?.refused(error)
             }
         }
     }
 
     /// The PIN and the current password are not kept after an answer. `weak_password` (§11.14.7): its reason under the
     /// new password, in the same words as the app's.
-    private func refused(_ failure: VaultFailure) {
+    private func refused(_ error: any Error) {
         state.busy = false
         state.pin = ""
         state.current = ""
-        if failure.kind == .weakPassword {
-            state.rule = PasswordRule.fromVault(failure.weakPasswordReason)
+        let kind = failureKind(error)
+        if kind == .weakPassword {
+            state.rule = PasswordRule.fromVault((error as? VaultFailure)?.weakPasswordReason)
             state.refused = true
             state.error = nil
         } else {
-            state.error = failure.kind
+            state.error = kind
         }
     }
 

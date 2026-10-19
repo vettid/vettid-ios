@@ -84,16 +84,16 @@ struct CredentialOps: Sendable {
     }
 
     /// A `stale_credential` that is not retried: the latest blob fetched (a fetch that fails is left to the next
-    /// operation), and the refusal to throw, with nothing more sent.
+    /// operation), and the refusal to throw (the "earlier request" text), with nothing more sent.
     private func staleRefused(_ type: String) async throws -> CredentialUnsettled {
         do {
             try await fetch()
         } catch is CancellationError {
             throw CancellationError()
         } catch {
-            return CredentialUnsettled(type: type, reason: .inFlight)
+            // Refused all the same.
         }
-        return CredentialUnsettled(type: type, reason: .versionMoved)
+        return CredentialUnsettled(type: type, reason: .inFlight)
     }
 
     /// Whether [fields] carry the PIN (refused while the PIN is uncertain, §11.14.9 step 3).
@@ -114,6 +114,8 @@ struct CredentialOps: Sendable {
         // than a minute (VAULT-MESSAGING 0.46.0 §11.14.9 step 1).
         let exp: Date
         if let given = options.exp { exp = given } else { exp = try await requestExp() }
+        // Under the credential lock, right before the request goes out (each send, a retry's too).
+        if let onSending = options.onSending { try await onSending() }
         try await device.trackCredential(id, exp: exp)
         let r: VaultMessage
         do {
@@ -359,13 +361,15 @@ public struct CredentialUnsettled: Error, Sendable, CustomStringConvertible {
 /// members of the outer body beside it ([outer]: `vault.delete`'s `confirm`, §12.5), whether a failure once the
 /// request may have gone out is ``RequestUnanswered`` ([unanswered]) rather than the failure itself, and the request's
 /// `exp` (§5.3; a retry after `stale_credential` keeps it). [retriesStale] false: a `stale_credential` is not sent again
-/// with the same secrets (the latest blob is fetched and ``CredentialUnsettled`` thrown).
+/// with the same secrets (the latest blob is fetched and ``CredentialUnsettled`` thrown). [onSending] runs under the
+/// credential lock right before each send of the request (an operation that replaces a secret records it there).
 struct CredOpOptions: Sendable {
     var withBlob = true
     var outer: [(String, String)] = []
     var unanswered = false
     var exp: Date?
     var retriesStale = true
+    var onSending: (@Sendable () async throws -> Void)?
 }
 
 /// A credential operation whose answer did not arrive once its request may have gone out (no answer to the automatic

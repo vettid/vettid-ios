@@ -34,7 +34,8 @@ enum CredentialSheet: String, Identifiable {
 
 /// Settings → Security → Credential (ANDROID-PLAN §4; VAULT-MESSAGING §3.5): the Protean Credential's status, the unlock
 /// window (§3.5.3) and its length, the password, the rotation (§3.5.5), the sealed backup (§3.5.6, turned off only after a
-/// warning and an acknowledgement), a new credential, and the clone alarm's card with its "Review" (§3.5.9). Pushed over
+/// warning and an acknowledgement), a new credential (held back: ``CredentialRows/newCredentialRowShown``), and the
+/// clone alarm's card with its "Review" (§3.5.9). Pushed over
 /// Settings with a back arrow and a large title, where vettid-android keeps the top bar of a drawer screen (chosen; not in
 /// the spec). Mirrors vettid-android `CredentialContent`.
 public struct CredentialContent: View {
@@ -162,6 +163,11 @@ public struct CredentialContent: View {
 
 /// The status, the unlock window and the protection groups.
 struct CredentialRows: View {
+    /// New credential (`credential.reset`) is held back until VAULT-MESSAGING says what a lost answer to it means: §11.14.9
+    /// leaves `credential.reset` out of "A lost answer", and after one the phone's blob would be the replaced credential's.
+    /// Its screen and its operation are built and tested.
+    static let newCredentialRowShown = false
+
     @Environment(\.vettIDColors) private var colors
     let state: CredentialState
     let status: CredentialStatus
@@ -201,12 +207,14 @@ struct CredentialRows: View {
                 supporting: st.backup ? CredentialStrings.backupSupportingOn : CredentialStrings.backupSupportingOff
             )
             .accessibilityIdentifier("backup_switch")
-            SettingsDivider()
-            SettingsRow(
-                CredentialStrings.newTitle, icon: .restartAlt, iconTint: colors.error, supporting: CredentialStrings.newSupporting,
-                action: actions.newCredential
-            )
-            .accessibilityIdentifier("new_credential_row")
+            if Self.newCredentialRowShown {
+                SettingsDivider()
+                SettingsRow(
+                    CredentialStrings.newTitle, icon: .restartAlt, iconTint: colors.error, supporting: CredentialStrings.newSupporting,
+                    action: actions.newCredential
+                )
+                .accessibilityIdentifier("new_credential_row")
+            }
         }
     }
 

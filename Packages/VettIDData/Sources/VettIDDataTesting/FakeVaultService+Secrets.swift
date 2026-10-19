@@ -105,9 +105,7 @@ extension FakeVaultService {
             return try reply(m.type, "{}", re: m.id, error: "bad_pin")
         }
         pinFailures = 0
-        guard try body.optString("credential") == Self.blob(credentialVersion) else {
-            return try reply(m.type, "{}", re: m.id, error: "stale_credential")
-        }
+        guard try checkBlob(m, try body.optString("credential")) else { return }
         guard seen.password == vaultPassword else {
             passwordFailures += 1
             return try reply(m.type, "{}", re: m.id, error: "bad_password")

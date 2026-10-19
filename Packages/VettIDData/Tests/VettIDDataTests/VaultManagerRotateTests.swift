@@ -19,7 +19,9 @@ import VettIDVault
     init() throws {
         service = try FakeVaultService()
         service.stampsOnVaultClock = true
-        phone = try TestVaultPhone(service: service, requestTimeout: 0.4)
+        // A rotation is followed by the vault's identity rotation and its rekey (§3.4, §6.5), whose key work runs on the
+        // phone's receiving side while the next answers wait behind it: a wait long enough for a loaded test run.
+        phone = try TestVaultPhone(service: service, requestTimeout: 2)
     }
 
     var m: VaultManager { phone.manager }
@@ -47,6 +49,69 @@ import VettIDVault
         #expect(m.unlockWindow == nil)
         let st = try await m.status()
         #expect(st.keyFingerprint == String(service.credentialKey.prefix(VaultManager.keyFingerprintChars)))
+    }
+
+    /// The vault rotates its `ik` and `kem` with the rotation (§3.4): the phone follows `identity.rotate` and answers the
+    /// rekey (§6.5), and the session goes on in the new epoch: further requests, a credential operation included.
+    @Test func aRotationThenFurtherRequests() async throws {
+        defer { phone.close() }
+        try await setUp()
+        try await m.rotate(password: password)
+        #expect(service.identityRotations == 1)
+        _ = try await m.status()
+        #expect(await eventually { !service.rekeyPending }, "the phone answered the rekey")
+        try await m.openUnlockWindow(password: password)
+        try await m.rotate(password: password)
+        #expect(service.identityRotations == 2 && service.rotations.count == 2)
+        #expect(try await m.status().version == service.vaultCredentialVersion)
+    }
+
+    /// The answer lost after the vault rotated: no answer is reported, and the member's next try meets
+    /// `stale_credential` (the holder's own retry), fetches the latest blob and rotates again; the session goes on.
+    @Test func aLostAnswerThenATryAgain() async throws {
+        defer { phone.close() }
+        try await setUp()
+        let before = service.vaultCredentialVersion
+        service.loseAnswers([VaultApi.typeRotate])
+        #expect(await vaultFailure { try await m.rotate(password: password) }?.kind == .noResponse)
+        #expect(service.vaultCredentialVersion == before + 1 && service.alarmState == nil)
+        service.loseAnswers([])
+        try await m.rotate(password: password)
+        #expect(service.rotations.count == 3, "the lost one, the stale one and its retry")
+        #expect(service.vaultCredentialVersion == before + 2 && service.alarmState == nil)
+        #expect(m.session?.device.credentialVersion == service.vaultCredentialVersion)
+        try await m.openUnlockWindow(password: password)
+    }
+
+    /// The forced rotation with a blob older than the vault's (a phone restored from a backup, §3.5.9): presenting it
+    /// raises the alarm; after "that was me" the rotation first fetches the latest blob, then resolves the alarm.
+    @Test func theForcedRotationFetchesTheLatestBlob() async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.moveCredentialWithoutTheApp()
+        service.moveCredentialWithoutTheApp()
+        #expect(await vaultFailure { try await m.openUnlockWindow(password: password) }?.kind == .credentialFrozen)
+        #expect(await eventually { m.alarm?.frozen == true })
+        try await m.confirmAlarm(mine: true)
+        try await m.rotate(password: password)
+        #expect(m.alarm == nil && service.alarmState == nil)
+        #expect(m.session?.device.credentialVersion == service.vaultCredentialVersion)
+        try await m.openUnlockWindow(password: password)
+    }
+
+    /// The same when the phone did not hear of the alarm: the rotation is answered `rotation_required`, the latest blob is
+    /// fetched, and the rotation sent once more.
+    @Test func aRotationRefusedForAnOldBlobIsSentOnceMore() async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.moveCredentialWithoutTheApp()
+        service.moveCredentialWithoutTheApp()
+        service.raiseCloneAlarm(presenter: "holder", told: false)
+        service.requireRotation()
+        #expect(m.alarm == nil)
+        try await m.rotate(password: password)
+        #expect(service.rotations.count == 2 && service.alarmState == nil && m.alarm == nil)
+        try await m.openUnlockWindow(password: password)
     }
 
     /// A wrong password is refused as it is, and is not a failed owner check (§3.6.1: the password backoff only).

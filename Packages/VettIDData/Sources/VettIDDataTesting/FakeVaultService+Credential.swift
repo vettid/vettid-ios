@@ -52,17 +52,112 @@ extension FakeVaultService {
 
     /// A clone was presented (§3.5.9): an alarm opens in state `frozen`, the unlock window ends, and the holder gets
     /// `credential.alarm` when the vault is open. Returns the alarm's id.
+    /// [told] false: the alert and the sync event are lost on their way (the phone learns of the alarm only by asking).
     @discardableResult
-    public func raiseCloneAlarm(presenter: String = "other") -> String {
-        locked {
-            let a = FakeAlarm(id: Ulid.new(), state: "frozen", at: vaultNow)
-            alarmValue = a
-            windowUntil = nil
-            if vaultOpen {
-                try? reply("credential.alarm", #"{"alarm_id":"\#(a.id)","kind":"clone","state":"frozen","at":"\#(Timestamps.formatMillis(a.at))","presenter":"\#(presenter)","version":\#(credentialVersion)}"#)
-            }
-            return a.id
+    public func raiseCloneAlarm(presenter: String = "other", told: Bool = true) -> String {
+        locked { openAlarm(presenter: presenter, version: credentialVersion, told: told).id }
+    }
+
+    /// The open alarm moves to `rotation_required` as another of the owner's apps answered it, without telling this one.
+    public func requireRotation() { locked { alarmValue?.state = "rotation_required" } }
+
+    /// How many times the vault rotated its `ik` and `kem` (§3.4).
+    public var identityRotations: Int { locked { identityRotationsValue } }
+
+    /// Whether the vault-initiated rekey after the last identity rotation is still waiting for the device's hs.resp.
+    public var rekeyPending: Bool { locked { rekeying != nil } }
+
+    /// The blob the vault holds now.
+    var currentBlob: String { Self.blob(credentialVersion, generation: credentialGeneration) }
+
+    /// Opens an alarm in state `frozen`: the window ends, and the holder gets `credential.alarm` and the sync event when
+    /// the vault is open. Callers hold ``cond``.
+    @discardableResult
+    func openAlarm(presenter: String, version: Int64, told: Bool = true) -> FakeAlarm {
+        let a = FakeAlarm(id: Ulid.new(), state: "frozen", at: vaultNow)
+        alarmValue = a
+        windowUntil = nil
+        if vaultOpen, told {
+            try? reply("credential.alarm", #"{"alarm_id":"\#(a.id)","kind":"clone","state":"frozen","at":"\#(Timestamps.formatMillis(a.at))","presenter":"\#(presenter)","version":\#(version)}"#)
+            try? reply("sync.event", #"{"kind":"credential.alarm","alarm_id":"\#(a.id)","state":"frozen"}"#)
         }
+        return a
+    }
+
+    /// vettid-vault's `checkBlob` for the holder (this phone): the current blob passes (and confirms its version); the
+    /// previous version while the current one is not confirmed is the holder's own retry (`stale_credential`); anything
+    /// else is a clone (`clone`): the freeze code while an alarm is open, otherwise a new alarm and `credential_frozen`.
+    /// False when refused (the refusal is answered). Callers hold ``cond``.
+    func checkBlob(_ m: Inner, _ blob: String?) throws -> Bool {
+        if blob == currentBlob {
+            credentialAcked = true
+            return true
+        }
+        let presented = blob.flatMap(Self.blobVersion)
+        if let p = presented, p.generation == credentialGeneration, p.version + 1 == credentialVersion, !credentialAcked {
+            try reply(m.type, "{}", re: m.id, error: "stale_credential")
+            return false
+        }
+        if let a = alarmValue {
+            try reply(m.type, "{}", re: m.id, error: a.state == "rotation_required" ? "rotation_required" : "credential_frozen")
+            return false
+        }
+        try reply(m.type, "{}", re: m.id, error: "credential_frozen")
+        openAlarm(presenter: "holder", version: presented?.version ?? 0)
+        return false
+    }
+
+    /// The version and generation of a blob of ``blob(_:generation:)``; nil for any other.
+    static func blobVersion(_ blob: String) -> (version: Int64, generation: Int)? {
+        if blob == "AQID" { return (1, 0) }
+        guard let raw = try? Base64s.decodeStd(blob), let text = String(bytes: raw, encoding: .utf8) else { return nil }
+        let parts = text.split(separator: "-")
+        if parts.count == 2, parts[0] == "blob", let v = Int64(parts[1]) { return (v, 0) }
+        if parts.count == 3, parts[0] == "blob", parts[1].hasPrefix("g"), let g = Int(parts[1].dropFirst()), let v = Int64(parts[2]) {
+            return (v, g)
+        }
+        return nil
+    }
+
+    /// `credential.ack{version}`: the current version confirmed (`stale_credential` for any other). Callers hold ``cond``.
+    func credentialAck(_ m: Inner, _ body: JsonObject) throws {
+        guard let v = try? body.uint("version", min: 1, max: StrictJson.maxSafeInteger), Int64(v) == credentialVersion else {
+            return try reply(m.type, "{}", re: m.id, error: "stale_credential")
+        }
+        credentialAcked = true
+        try reply(m.type, "{}", re: m.id)
+    }
+
+    /// vettid-vault's `rotateIdentity` (§3.4): a new `ik` and `kem`, `identity.rotate{rotation}` to the device, then a
+    /// vault-initiated rekey (§6.5) whose hs.resp ``rekeyResponse(_:)`` completes. Callers hold ``cond``.
+    func rotateIdentity() throws {
+        let newIk = Ed25519PrivateKey.generate()
+        let newKem = try KemPrivateKey.generate()
+        let rotation = try Rotation.create(old: ik, new: newIk, newKem: newKem.publicKey)
+        ik = newIk
+        kem = newKem
+        identityRotationsValue += 1
+        try reply("identity.rotate", #"{"rotation":\#(rotation.marshal())}"#)
+        guard let device, let deviceIk, let current = keyring.current() else { return }
+        let relay = RelayAddr(url: vaultRelay.baseURL, mailbox: vaultMailbox, pk: relayKey.publicKey)
+        let ini = try Initiator.create(InitiatorConfig(
+            purpose: .rekey, ctx: "", identity: ik, staticKem: kem.publicKey, relay: relay, responderIk: deviceIk, responderEk: nil,
+            responderRelayKey: device.relay.pk, current: current, policy: .vaultToDevice
+        ))
+        rekeying?.abort()
+        rekeying = ini
+        queue(ini.envelope)
+    }
+
+    /// The device's hs.resp to the rekey: the new epoch active and hs.fin sent. False when [raw] is not one (a sealed-mode
+    /// deposit only answers a handshake). Callers hold ``cond``.
+    func rekeyResponse(_ raw: [UInt8]) throws -> Bool {
+        guard let ini = rekeying, let device, (try? Envelope.parse(raw))?.mode == .sealed else { return false }
+        rekeying = nil
+        let res = try ini.handleResp(raw, collectSender: device.relay.pk, now: Date())
+        keyring.activate(res.epoch, now: Date())
+        queue(res.fin)
+        return true
     }
 
     // MARK: - The requests
@@ -105,13 +200,13 @@ extension FakeVaultService {
         try reply(m.type, #"{"state":"\#(a.state)"}"#, re: m.id)
     }
 
-    /// The blob (`stale_credential`), then the password under its backoff (`bad_password`, not a failed check); a new key,
-    /// the CEK rotated, the window ended and an open alarm resolved.
+    /// The blob (``checkBlob(_:_:)``), then the password under its backoff (`bad_password`, not a failed check); a new
+    /// key, the CEK rotated, the window ended, an open alarm resolved, and the vault's identity rotated.
     private func rotate(_ m: Inner, _ body: JsonObject) throws {
         guard let p = try opened(m, body) else { return }
         let password = (try? p.string("password")) ?? ""
         rotationsValue.append(password)
-        guard try body.optString("credential") == Self.blob(credentialVersion) else { return try reply(m.type, "{}", re: m.id, error: "stale_credential") }
+        guard try checkBlob(m, try body.optString("credential")) else { return }
         if let b = passwordNotBefore, vaultNow < b {
             return try reply(m.type, #"{"retry_after":\#(max(Int(b.timeIntervalSince(vaultNow).rounded(.up)), 1))}"#, re: m.id, error: "backoff")
         }
@@ -127,6 +222,7 @@ extension FakeVaultService {
             alarmValue = nil
             try reply("sync.event", #"{"kind":"credential.alarm","alarm_id":"\#(a.id)","state":"resolved"}"#)
         }
+        try rotateIdentity()
     }
 
     /// Checked as an owner check (a wrong PIN or password is a failed check), then the new password's rules; version 1 of
@@ -141,6 +237,8 @@ extension FakeVaultService {
             return try reply(m.type, #"{"reason":"\#(reason)"}"#, re: m.id, error: "weak_password")
         }
         vaultPassword = seen.newPassword
+        // A new credential: no blob of the old one is accepted again.
+        credentialGeneration += 1
         credentialVersion = 0
         credentialKeyValue = "\(Self.credentialKeyID)-new-\(resetsValue.count)"
         windowUntil = nil
