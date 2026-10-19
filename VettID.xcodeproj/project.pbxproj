@@ -20,6 +20,7 @@
 		48C14D9734DD1B7FCF3CF6B0 /* AppLockWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB1D13186B27047D3E39486C /* AppLockWindowTests.swift */; };
 		56E730CA2E4280BD26BA2CBF /* VettIDRelay in Frameworks */ = {isa = PBXBuildFile; productRef = 2373D4A3A26B7B0852A64CED /* VettIDRelay */; };
 		6C78BEF34322DEFA23FAF443 /* SecureInputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27784FA957AF2CC5794ED472 /* SecureInputTests.swift */; };
+		6FFEE77FE1828A19B428CCAB /* StagingTests+Helpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AD7F60FD2F81A1D30A5A802 /* StagingTests+Helpers.swift */; };
 		732235F0D7CDBADC340E6D41 /* AppWipeTargets.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDBF1FF3D70DF0D8E826048E /* AppWipeTargets.swift */; };
 		73BB80548EC5E12691B5059B /* SecureHardware.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BC7B2415F948B243F5CAD54 /* SecureHardware.swift */; };
 		79EF40CF165A7802AA53B55D /* AppComposition.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9AE8109566BB532DFAC5A50 /* AppComposition.swift */; };
@@ -73,6 +74,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		0AD7F60FD2F81A1D30A5A802 /* StagingTests+Helpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StagingTests+Helpers.swift"; sourceTree = "<group>"; };
 		0FA837F1B3F48BDD0B340707 /* GalleryScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GalleryScreen.swift; sourceTree = "<group>"; };
 		18D27D877D6472CB1E622763 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		27784FA957AF2CC5794ED472 /* SecureInputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureInputTests.swift; sourceTree = "<group>"; };
@@ -177,6 +179,7 @@
 			children = (
 				CEAFD630960C3CA7D7885DEB /* GalleryScreenshots.swift */,
 				A34C0ED8CB57521C8F3EF6D6 /* StagingTests.swift */,
+				0AD7F60FD2F81A1D30A5A802 /* StagingTests+Helpers.swift */,
 				73029356B90552AC0C29EE9F /* StagingUITests.xctestplan */,
 			);
 			path = AppUITests;
@@ -458,6 +461,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				91EB5DA7D60B53E6CE50FCE0 /* GalleryScreenshots.swift in Sources */,
+				6FFEE77FE1828A19B428CCAB /* StagingTests+Helpers.swift in Sources */,
 				16CC7F1AD834271FC0C79440 /* StagingTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

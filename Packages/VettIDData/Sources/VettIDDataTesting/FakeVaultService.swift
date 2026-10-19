@@ -190,6 +190,8 @@ public final class FakeVaultService: @unchecked Sendable {
     /// The vault deleted itself (§12.5): it answers nothing more and its mailbox refuses every deposit.
     var vaultDeletedValue = false
     var statusLagsDeletionValue = false
+    var slotQueuedAfterDeletionValue = 0
+    var statusGateValue: FakeHTTPServer.Gate?
 
     public init() throws {
         etk = try KemPrivateKey.generate()
@@ -329,8 +331,12 @@ public final class FakeVaultService: @unchecked Sendable {
             case ("POST", "/api/vault/unlock"): return unlock(r)
             case ("POST", "/api/vault/lock"): return memberLock(r)
             case ("GET", "/api/vault/status"):
-                if noVault || vaultDeletedValue && !statusLagsDeletionValue { return .json(200, #"{"vault":null}"#) }
-                return .json(200, #"{"vault":{"vault_id":"\#(vaultID)","state":"\#(statusState)","release":{"number":\#(releases.routed),"status":"active"}}}"#)
+                let a: FakeHTTPServer.Answer = if noVault || vaultDeletedValue && !statusLagsDeletionValue {
+                    .json(200, #"{"vault":null}"#)
+                } else {
+                    .json(200, #"{"vault":{"vault_id":"\#(vaultID)","state":"\#(statusState)","release":{"number":\#(releases.routed),"status":"active"}}}"#)
+                }
+                return statusGateValue.map { .held($0, a) } ?? a
             default:
                 if r.method == "GET", r.path.hasPrefix("/api/vault/requests/") { return slot(String(r.path.dropFirst("/api/vault/requests/".count))) }
                 return .json(404, #"{"error":"not_found"}"#)
@@ -364,6 +370,10 @@ public final class FakeVaultService: @unchecked Sendable {
         if lostSlots.contains(requestID) { return .failure(.timedOut) }
         if let plain = plainSlots[requestID] { return .json(200, plain) }
         guard let env = slots[requestID] else { return .json(200, #"{"status":"queued"}"#) }
+        if vaultDeletedValue, slotQueuedAfterDeletionValue > 0 {
+            slotQueuedAfterDeletionValue -= 1
+            return .json(200, #"{"status":"queued"}"#)
+        }
         return .json(200, JsonBuilder().string("status", "done").base64("envelope", env).build())
     }
 

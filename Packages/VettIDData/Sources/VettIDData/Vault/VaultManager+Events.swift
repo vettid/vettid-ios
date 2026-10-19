@@ -113,6 +113,7 @@ extension VaultManager {
         // re-read like any change of the vault.
         case HolderPolicy.deviceUnlinked:
             if holder?.onVaultEvent(HolderPolicy.of(m)) != true {
+                rereads += 1
                 Task { [weak self] in try? await self?.refresh() }
             }
         default:
