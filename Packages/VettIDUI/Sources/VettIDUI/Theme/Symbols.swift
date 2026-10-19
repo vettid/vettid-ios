@@ -47,6 +47,7 @@ public enum VettIDSymbol: String, CaseIterable, Sendable {
     case update = "arrow.triangle.2.circlepath" // Update
     case systemUpdate = "arrow.down.circle" // SystemUpdate (a vault release update)
     case restore = "arrow.counterclockwise" // Restore
+    case restartAlt = "arrow.counterclockwise.circle" // RestartAlt (a new credential)
     case devices = "laptopcomputer.and.iphone" // Devices
     case person = "person" // Person
     case email = "envelope" // Email

@@ -66,12 +66,12 @@ extension FakeVaultService {
 
     // MARK: - The requests
 
-    /// `vault.secret.renew` and `vault.delete`; `unsupported_type` for any other. Callers hold ``cond``.
+    /// `vault.secret.renew` and `vault.delete`; then ``credentialRequest(_:_:)``. Callers hold ``cond``.
     func secretsRequest(_ m: Inner, _ body: JsonObject) throws {
         switch m.type {
         case Self.typeSecretRenew: try secretRenew(m, body)
         case Self.typeVaultDelete: try vaultDelete(m, body)
-        default: try reply(m.type, "{}", re: m.id, error: "unsupported_type")
+        default: try credentialRequest(m, body)
         }
     }
 

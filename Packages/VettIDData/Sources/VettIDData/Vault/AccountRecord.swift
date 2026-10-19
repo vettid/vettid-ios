@@ -48,6 +48,9 @@ struct LocalAccount: Codable, Equatable, Sendable {
     var snapshot: AccountSnapshot?
     /// The latest name change (`account.get`'s `name_request`, §10.8), or the one this phone just asked for.
     var nameRequest: NameRequest?
+    /// (Release R, ANDROID-PLAN "Transfer") The offer to rotate the vault's keys after a PIN or password change, until a
+    /// rotation or the member puts it away; kept so that a restart does not lose it.
+    var rotateOffer = false
 
     enum CodingKeys: String, CodingKey {
         case userGuid = "user_guid"
@@ -66,6 +69,7 @@ struct LocalAccount: Codable, Equatable, Sendable {
         case lockFileInUse = "lock_file_in_use"
         case snapshot
         case nameRequest = "name_request"
+        case rotateOffer = "rotate_offer"
     }
 
     init() {}
@@ -93,6 +97,7 @@ struct LocalAccount: Codable, Equatable, Sendable {
         lastContactMs = try c.decodeIfPresent(Int64.self, forKey: .lastContactMs)
         lastOpenedMs = try c.decodeIfPresent(Int64.self, forKey: .lastOpenedMs)
         lockFileInUse = try c.decodeIfPresent(Bool.self, forKey: .lockFileInUse) ?? false
+        rotateOffer = try c.decodeIfPresent(Bool.self, forKey: .rotateOffer) ?? false
         // Display only: a snapshot or request this build cannot read is no snapshot, never an unreadable record.
         snapshot = try? c.decodeIfPresent(AccountSnapshot.self, forKey: .snapshot)
         nameRequest = try? c.decodeIfPresent(NameRequest.self, forKey: .nameRequest)

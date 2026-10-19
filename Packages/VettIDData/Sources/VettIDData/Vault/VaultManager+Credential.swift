@@ -79,12 +79,13 @@ extension VaultManager {
         throw VaultFailure(.notSupported, code: ReleasePath.codeReleaseTooOld)
     }
 
-    /// (Release R, §11.14.9) With the PIN, which the vault verifies; the change closes the recovery generation. The rotation
-    /// offered after it (ANDROID-PLAN "Transfer") comes with the rotation. A lost answer is decided, not repeated
+    /// (Release R, §11.14.9) With the PIN, which the vault verifies; the change closes the recovery generation. Once it
+    /// applied the app offers to rotate the vault's keys (ANDROID-PLAN "Transfer"). A lost answer is decided, not repeated
     /// (§11.14.9 "A lost answer", ``changing(_:_:)``): the marker is stored before the send.
     public func changePassword(_ password: String, newPassword: String, pin: String?) async throws {
         guard let pin else { throw VaultFailure(.notSupported, code: ReleasePath.codeReleaseTooOld) }
         try await guarded {
+            let since = record.generation
             // A renew on its way: refused at once, before anything is asked of the vault (its blob may still move).
             if phoneSecrets.anyInFlight { throw VaultFailure(.busy, code: "change_in_flight") }
             try await decideFirst(carriesPin: true)
@@ -101,6 +102,7 @@ extension VaultManager {
                     if let m = box.marker { try? phoneSecrets.clearUnresolved(id: m.id) }
                 }
             }
+            setRotateOffer(true, since: since)
         }
     }
 
@@ -119,13 +121,14 @@ extension VaultManager {
     /// next epoch's record is written before the request is built (IOS-PLAN §6.3 item 1), with the unresolved change in
     /// the same write (§11.14.9 "A lost answer"); it becomes current with the answer's `epoch_advanced`, or when the
     /// change is decided as applied. A retry after a refusal reuses it (item 2); a new record is made only for a new change
-    /// after one was confirmed. The rotation offered after it (ANDROID-PLAN "Transfer") comes with the rotation.
+    /// after one was confirmed. Once it applied the app offers to rotate the vault's keys (ANDROID-PLAN "Transfer").
     ///
     /// No answer is not a failure: the change is decided (``changing(_:_:)``), and refused as
     /// ``FailureKind/changeUnresolved`` while undecided. While this change is on its way a second one is refused
     /// (``FailureKind/busy``). A record that cannot be made current after `epoch_advanced` is a success all the same.
     public func changePin(pin: String, newPin: String, password: String) async throws {
         try await guarded {
+            let since = record.generation
             guard phoneSecrets.inUse else { throw VaultFailure(.notSupported, code: Self.codeNoPhoneSecret) }
             // A renew on its way: refused at once, before anything is asked of the vault.
             if phoneSecrets.anyInFlight { throw VaultFailure(.busy, code: "change_in_flight") }
@@ -154,6 +157,7 @@ extension VaultManager {
                     refreshPinStep()
                 }
             }
+            setRotateOffer(true, since: since)
         }
     }
 

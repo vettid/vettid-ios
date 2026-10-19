@@ -7,7 +7,7 @@ import VettIDSettingsUI
 /// Debug only: the name change, the PIN change, the Credential screen, the password change, New phone secret and Delete
 /// vault in each of their states (``ShellCatalog``).
 extension ShellCatalog {
-    static var flowEntries: [Entry] { nameEntries + pinEntries + credentialEntries + secretEntries }
+    static var flowEntries: [Entry] { nameEntries + pinEntries + credentialEntries + rotateEntries + secretEntries }
 
     /// The screen of a flow's entry, with actions that do nothing.
     @MainActor @ViewBuilder
@@ -20,6 +20,17 @@ extension ShellCatalog {
         case .newPhoneSecret(let state): NewPhoneSecretContent(state: state)
         case .deleteVault(let state): DeleteVaultContent(state: state)
         case .settingsAskScreenshots(let state): SettingsContent(state: state, now: now, askScreenshots: true)
+        default: rotateScreen(screen)
+        }
+    }
+
+    /// The rotation, the clone alarm and a new credential.
+    @MainActor @ViewBuilder
+    private static func rotateScreen(_ screen: Screen) -> some View {
+        switch screen {
+        case .rotate(let state): RotateContent(state: state)
+        case .alarm(let state): AlarmContent(state: state)
+        case .newCredential(let state): NewCredentialContent(state: state)
         default: EmptyView()
         }
     }
@@ -131,6 +142,32 @@ extension ShellCatalog {
             Entry(id: "password", title: "Change password", screen: .changePassword(ChangePasswordState(askPin: true))),
             Entry(id: "password_weak", title: "Change password: a common password", screen: .changePassword(weak)),
             Entry(id: "password_done", title: "Change password: done", screen: .changePassword(done)),
+        ]
+    }
+
+    private static var rotateEntries: [Entry] {
+        let alarm = CredentialAlarm(
+            alarmID: "01J0000000000000000000000A", state: CredentialAlarm.stateFrozen, at: "2026-10-04T12:00:00Z", presenter: "other"
+        )
+        var rotate = AlarmState(alarm: alarm, step: .rotate)
+        rotate.notMine = true
+        var resolved = rotate
+        resolved.step = .resolved
+        var weak = NewCredentialState()
+        weak.password = "password1234"
+        weak.rule = .common
+        weak.refused = true
+        return [
+            Entry(id: "rotate", title: "Rotate", screen: .rotate(RotateState())),
+            Entry(id: "rotate_refused", title: "Rotate: wrong password", screen: .rotate(RotateState(error: .badPassword))),
+            Entry(id: "rotate_done", title: "Rotate: done", screen: .rotate(RotateState(done: true))),
+            Entry(id: "alarm", title: "Alarm: was that you?", screen: .alarm(AlarmState(alarm: alarm))),
+            Entry(id: "alarm_confirm", title: "Alarm: confirm not me", screen: .alarm(AlarmState(alarm: alarm, step: .confirmNotMine))),
+            Entry(id: "alarm_rotate", title: "Alarm: rotate after not me", screen: .alarm(rotate)),
+            Entry(id: "alarm_resolved", title: "Alarm: resolved", screen: .alarm(resolved)),
+            Entry(id: "new_credential", title: "New credential", screen: .newCredential(NewCredentialState())),
+            Entry(id: "new_credential_weak", title: "New credential: a common password", screen: .newCredential(weak)),
+            Entry(id: "new_credential_done", title: "New credential: done", screen: .newCredential(NewCredentialState(done: true))),
         ]
     }
 

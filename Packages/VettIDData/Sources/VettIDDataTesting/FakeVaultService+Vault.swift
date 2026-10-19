@@ -133,6 +133,8 @@ extension FakeVaultService {
         // §3.6.3: the owner check's clock before each batch, then its gate on the app.
         try ownerCheckTick()
         if !holdAllows(m.type) { return try reply(m.type, "{}", re: m.id, error: "owner_check_required") }
+        // §3.5.9: a clone alarm holds the credential operations, before the UTK is spent.
+        if let freeze = alarmRefusal(m.type) { return try reply(m.type, "{}", re: m.id, error: freeze) }
         switch m.type {
         case "credential.utk.get": try reply(m.type, #"{"utks":\#(try issueUTKs(3))}"#, re: m.id)
         case "credential.create": try create(m, body)

@@ -21,10 +21,8 @@ struct VaultSession: Sendable {
 /// The slices so far (IOS-PLAN §8): what onboarding needs (I1.6: the phase at start, the setup code, enrollment with the
 /// phone's unlock secret of epoch 1, §11.14.1 "On an iPhone", the first handshake, the credential and Finish setup),
 /// the unlock and the member's lock (I1.7a: §11.4 with the phone secret, VAULT-LOCK as vettid-android implements it, the
-/// vault events they follow), and Settings (I1.8: the account snapshot, the name change, the credential screen, the PIN
-/// change). Every other operation keeps its protocol default or refuses with
-/// ``FailureKind/notSupported`` until the row that brings it (`VaultManager+Later.swift`). Mirrors vettid-android
-/// `VaultManager`.
+/// vault events they follow), and Settings (I1.8: the account, the name, the credential screen, the PIN). Every other
+/// operation keeps its protocol default until the row that brings it. Mirrors vettid-android `VaultManager`.
 @MainActor
 @Observable
 public final class VaultManager: AccountRepository, VaultRepository, CredentialRepository {
@@ -52,6 +50,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     public internal(set) var renewSecretSuggested = false
     /// (STAGING-TIME-SCALE §5.2) The vault's time scale as this phone last learnt it (``LocalAccount/timeScale``).
     public internal(set) var timeScale: UInt64 = 1
+    public internal(set) var rotateOffered = false // (release R) ``LocalAccount/rotateOffer``
 
     // CredentialRepository.
     public internal(set) var alarm: CredentialAlarm?
@@ -152,6 +151,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             let s = policy.accepts(a.timeScale) ? a.timeScale : 1
             scale.set(s)
             if ref.manager?.timeScale != s { ref.manager?.timeScale = s }
+            if ref.manager?.rotateOffered != a.rotateOffer { ref.manager?.rotateOffered = a.rotateOffer }
         }
         let ids = memberVault
         member = MemberApiClient(

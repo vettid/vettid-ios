@@ -192,6 +192,12 @@ public final class FakeVaultService: @unchecked Sendable {
     var statusLagsDeletionValue = false
     var slotQueuedAfterDeletionValue = 0
     var statusGateValue: FakeHTTPServer.Gate?
+    // The rotation, a new credential and the clone alarm (FakeVaultService+Credential.swift), under ``cond``.
+    var alarmValue: FakeAlarm?
+    var credentialKeyValue = FakeVaultService.credentialKeyID
+    var rotationsValue: [String] = []
+    var resetsValue: [ResetSeen] = []
+    var alarmConfirmsValue: [Bool] = []
 
     public init() throws {
         etk = try KemPrivateKey.generate()

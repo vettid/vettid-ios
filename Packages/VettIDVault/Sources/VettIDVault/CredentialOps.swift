@@ -73,12 +73,27 @@ struct CredentialOps: Sendable {
             do {
                 return try await sealed(type, utk: try await takeUTK(), fields: fields, options)
             } catch let e as VaultOpError where e.code == Self.codeStaleCredential {
+                // Not sent again with the same secrets: the latest blob is kept and the request refused.
+                guard options.retriesStale else { throw try await staleRefused(type) }
                 try await fetch()
                 // Never resent with the typed secrets while a change may have moved them (§11.14.9 step 4).
                 try await gate(Self.carriesPin(fields))
                 return try await sealed(type, utk: try await takeUTK(), fields: fields, options)
             }
         }
+    }
+
+    /// A `stale_credential` that is not retried: the latest blob fetched (a fetch that fails is left to the next
+    /// operation), and the refusal to throw, with nothing more sent.
+    private func staleRefused(_ type: String) async throws -> CredentialUnsettled {
+        do {
+            try await fetch()
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            return CredentialUnsettled(type: type, reason: .inFlight)
+        }
+        return CredentialUnsettled(type: type, reason: .versionMoved)
     }
 
     /// Whether [fields] carry the PIN (refused while the PIN is uncertain, §11.14.9 step 3).
@@ -343,12 +358,14 @@ public struct CredentialUnsettled: Error, Sendable, CustomStringConvertible {
 /// What a credential operation carries besides its sealed members: the blob ([withBlob]; not for `credential.create`),
 /// members of the outer body beside it ([outer]: `vault.delete`'s `confirm`, §12.5), whether a failure once the
 /// request may have gone out is ``RequestUnanswered`` ([unanswered]) rather than the failure itself, and the request's
-/// `exp` (§5.3; a retry after `stale_credential` keeps it).
+/// `exp` (§5.3; a retry after `stale_credential` keeps it). [retriesStale] false: a `stale_credential` is not sent again
+/// with the same secrets (the latest blob is fetched and ``CredentialUnsettled`` thrown).
 struct CredOpOptions: Sendable {
     var withBlob = true
     var outer: [(String, String)] = []
     var unanswered = false
     var exp: Date?
+    var retriesStale = true
 }
 
 /// A credential operation whose answer did not arrive once its request may have gone out (no answer to the automatic

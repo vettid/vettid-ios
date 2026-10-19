@@ -73,6 +73,41 @@ extension VaultApi {
     /// `credential.lock`: closes the unlock window.
     public func credentialLock() async throws { _ = try await device.op("credential.lock") }
 
+    /// `credential.rotate` (§3.5.5, §10.6): a new credential key, every critical item re-keyed, and the vault's `ik` and
+    /// `kem` rotated, with the password (a credential operation; in state `rotation_required` the only one, §3.5.9). It
+    /// tests the password alone, so a wrong one counts only in the password backoff (§3.6.1). Mirrors vettid-android
+    /// `VaultApi.credentialRotate`.
+    public func credentialRotate(password: String) async throws {
+        _ = try await credential.credOp(Self.typeRotate, [.string("password", password)])
+    }
+
+    public static let typeRotate = "credential.rotate"
+
+    /// `credential.reset` (§3.5.5, §10.6) by the holder: a new credential under [newPassword]; the old one and every
+    /// critical item are destroyed. The PIN and the password are verified as in an owner check, and a `bad_pin` or
+    /// `bad_password` counts as a failed check (§3.6.1). A `stale_credential` is not retried with the typed secrets: the
+    /// latest blob is fetched and the request refused as ``CredentialUnsettled`` (chosen; not in the spec, which leaves
+    /// `credential.reset` out of §11.14.9 "A lost answer": after a lost answer the reset may have replaced the password,
+    /// and the generic retry would send the old one with the new blob). Mirrors vettid-android
+    /// `VaultApi.credentialResetHolder`.
+    public func credentialReset(pin: String, password: String, newPassword: String) async throws {
+        let fields: [SealedField] = [.string("pin", pin), .string("password", password), .string("new_password", newPassword)]
+        _ = try await credential.credOp(Self.typeReset, fields, CredOpOptions(retriesStale: false))
+    }
+
+    public static let typeReset = "credential.reset"
+
+    /// `credential.alarm.confirm{alarm_id, mine}` (§3.5.9, §10.6): the holder's answer to a clone alarm, [mine] true for
+    /// "that was me". Either answer moves the alarm to `rotation_required`; returns the state the vault answered (nil when
+    /// it did not say). `not_found` when no such alarm is open. Not a credential operation. Mirrors vettid-android
+    /// `VaultApi.credentialAlarmConfirm`.
+    public func credentialAlarmConfirm(alarmID: String, mine: Bool) async throws -> String? {
+        let body = JsonBuilder().string("alarm_id", alarmID).bool("mine", mine).bytes()
+        return VaultJSON.string(VaultJSON.object(try await device.op(Self.typeAlarmConfirm, body: body)), "state")
+    }
+
+    public static let typeAlarmConfirm = "credential.alarm.confirm"
+
     /// `credential.password.change` (§10.6): the current password and the new one, sealed with the blob. (Release R,
     /// §11.14.9) With [pin], which the vault verifies; the change closes the recovery generation and arms the next. Once
     /// the request is fixed (``CredentialOps/change(_:_:onMarker:)``), [onMarker] stores its unresolved change; no answer

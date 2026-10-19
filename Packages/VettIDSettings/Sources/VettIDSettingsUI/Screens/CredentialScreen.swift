@@ -5,8 +5,7 @@ import VettIDData
 import VettIDSettings
 import VettIDUI
 
-/// What the Credential screen can ask for. Mirrors vettid-android `CredentialActions`; the rotation, the clone alarm's
-/// review and a new credential come with their screens (IOS-PLAN §8 I1.8).
+/// What the Credential screen can ask for. Mirrors vettid-android `CredentialActions`.
 public struct CredentialActions {
     public var back: @MainActor () -> Void = {}
     public var retry: @MainActor () -> Void = {}
@@ -18,6 +17,10 @@ public struct CredentialActions {
     public var setBackup: @MainActor (Bool) -> Void = { _ in }
     public var dismissNotice: @MainActor () -> Void = {}
     public var changePassword: @MainActor () -> Void = {}
+    public var rotate: @MainActor () -> Void = {}
+    public var reviewAlarm: @MainActor () -> Void = {}
+    /// A new credential (`credential.reset`): the old one and every critical item are destroyed.
+    public var newCredential: @MainActor () -> Void = {}
 
     public init() {}
 }
@@ -30,10 +33,10 @@ enum CredentialSheet: String, Identifiable {
 }
 
 /// Settings → Security → Credential (ANDROID-PLAN §4; VAULT-MESSAGING §3.5): the Protean Credential's status, the unlock
-/// window (§3.5.3) and its length, the password and the sealed backup (§3.5.6, turned off only after a warning and an
-/// acknowledgement). Pushed over Settings with a back arrow and a large title, where vettid-android keeps the top bar of
-/// a drawer screen (chosen; not in the spec). The rows of the rotation and of a new credential, and the alarm's
-/// "Review", come with their screens. Mirrors vettid-android `CredentialContent`.
+/// window (§3.5.3) and its length, the password, the rotation (§3.5.5), the sealed backup (§3.5.6, turned off only after a
+/// warning and an acknowledgement), a new credential, and the clone alarm's card with its "Review" (§3.5.9). Pushed over
+/// Settings with a back arrow and a large title, where vettid-android keeps the top bar of a drawer screen (chosen; not in
+/// the spec). Mirrors vettid-android `CredentialContent`.
 public struct CredentialContent: View {
     @Environment(\.vettIDColors) private var colors
     let state: CredentialState
@@ -108,11 +111,12 @@ public struct CredentialContent: View {
     @ViewBuilder private func notices(_ st: CredentialStatus) -> some View {
         VStack(spacing: Spacing.s) {
             if let a = state.alarm {
-                // The answer to the alarm (its "Review") comes with the alarm's screens.
                 NoticeCard(
                     .urgent, title: CredentialStrings.alarmCardTitle,
                     message: a.rotationRequired ? CredentialStrings.alarmCardRotate : CredentialStrings.alarmCardFrozen
-                )
+                ) {
+                    NoticeAction(label: CredentialStrings.alarmReview, identifier: "credential_alarm_review", action: actions.reviewAlarm)
+                }
                 .accessibilityIdentifier("credential_alarm")
             }
             if state.error != nil || state.notice != nil {
@@ -158,6 +162,7 @@ public struct CredentialContent: View {
 
 /// The status, the unlock window and the protection groups.
 struct CredentialRows: View {
+    @Environment(\.vettIDColors) private var colors
     let state: CredentialState
     let status: CredentialStatus
     let actions: CredentialActions
@@ -186,6 +191,9 @@ struct CredentialRows: View {
             SettingsRow(CredentialStrings.changePassword, icon: .password, action: actions.changePassword)
                 .accessibilityIdentifier("change_password")
             SettingsDivider()
+            SettingsRow(CredentialStrings.rotate, icon: .sync, supporting: CredentialStrings.rotateSupporting, action: actions.rotate)
+                .accessibilityIdentifier("rotate_row")
+            SettingsDivider()
             SettingsSwitchRow(
                 CredentialStrings.backup,
                 isOn: Binding(get: { st.backup }, set: { on in if on { actions.setBackup(true) } else { sheet = .backupOff } }),
@@ -193,6 +201,12 @@ struct CredentialRows: View {
                 supporting: st.backup ? CredentialStrings.backupSupportingOn : CredentialStrings.backupSupportingOff
             )
             .accessibilityIdentifier("backup_switch")
+            SettingsDivider()
+            SettingsRow(
+                CredentialStrings.newTitle, icon: .restartAlt, iconTint: colors.error, supporting: CredentialStrings.newSupporting,
+                action: actions.newCredential
+            )
+            .accessibilityIdentifier("new_credential_row")
         }
     }
 

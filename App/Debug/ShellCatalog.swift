@@ -37,6 +37,9 @@ enum ShellCatalog {
         case changePassword(ChangePasswordState)
         case newPhoneSecret(NewPhoneSecretState)
         case deleteVault(DeleteVaultState)
+        case rotate(RotateState)
+        case alarm(AlarmState)
+        case newCredential(NewCredentialState)
         /// Settings with Allow screenshots' confirmation shown.
         case settingsAskScreenshots(SettingsState)
     }
@@ -174,7 +177,8 @@ enum ShellCatalog {
             AttestationContent(state: state, canary: canary, onLoadCanary: {})
         case .canaryDialog(let prompt):
             ComingLaterScreen(destination: .messages, chrome: chrome).canaryManifestDialog(prompt, onConfirm: {}, onDismiss: {})
-        case .changeName, .changePin, .credential, .changePassword, .newPhoneSecret, .deleteVault, .settingsAskScreenshots:
+        case .changeName, .changePin, .credential, .changePassword, .newPhoneSecret, .deleteVault, .settingsAskScreenshots, .rotate,
+             .alarm, .newCredential:
             flowScreen(entry.screen)
         }
     }

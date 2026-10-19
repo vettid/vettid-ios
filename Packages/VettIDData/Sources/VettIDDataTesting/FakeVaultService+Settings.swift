@@ -108,7 +108,7 @@ extension FakeVaultService {
         switch m.type {
         case "account.get": try accountGet(m)
         case "account.name.set": try nameSet(m, body)
-        case "credential.version": try reply(m.type, #"{"exists":\#(hasCredential),"version":\#(credentialVersion),"key":"\#(Self.credentialKeyID)","updated_at":"2026-10-04T12:00:00Z"}"#, re: m.id)
+        case "credential.version": try reply(m.type, #"{"exists":\#(hasCredential),"version":\#(credentialVersion),"key":"\#(credentialKeyValue)","updated_at":"2026-10-04T12:00:00Z"\#(alarmMember)}"#, re: m.id)
         case "credential.unlock": try credentialUnlock(m, body)
         case "credential.lock":
             windowUntil = nil

@@ -47,6 +47,28 @@ enum ShellStrings {
         String(localized: "settings_security_new_secret", defaultValue: "New phone secret", bundle: .module)
     }
 
+    /// The clone alarm's banner (VAULT-MESSAGING §3.5.9), vettid-android `feature/credential`'s text.
+    static var alarmBanner: String {
+        String(localized: "credential_alarm_banner", defaultValue: "Your credential was presented by another device", bundle: .module)
+    }
+
+    static var alarmReview: String {
+        String(localized: "credential_alarm_review", defaultValue: "Review", bundle: .module)
+    }
+
+    /// (Release R, ANDROID-PLAN "Transfer") The offer to rotate after a PIN or password change.
+    static var rotateOffer: String {
+        String(
+            localized: "rotate_offer",
+            defaultValue: "You can now rotate your vault's keys: every older copy of your credential stops working.",
+            bundle: .module
+        )
+    }
+
+    static var rotateOfferAction: String {
+        String(localized: "rotate_offer_action", defaultValue: "Rotate now", bundle: .module)
+    }
+
     static func drawerVersion(_ a0: String, _ a1: Int) -> String {
         String(localized: "drawer_version", defaultValue: "VettID \(a0) (\(a1))", bundle: .module)
     }

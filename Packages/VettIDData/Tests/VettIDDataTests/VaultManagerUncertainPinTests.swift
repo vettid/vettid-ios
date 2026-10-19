@@ -70,6 +70,7 @@ import VettIDVault
         expectRefused(await vaultFailure { try await m.changePassword(password, newPassword: newPassword, pin: newPin) }, "password")
         expectRefused(await vaultFailure { try await m.renewPhoneSecret(pin: newPin, password: password) }, "renew")
         expectRefused(await vaultFailure { try await m.deleteVault(pin: newPin, password: password) }, "delete")
+        expectRefused(await vaultFailure { try await m.newCredential(pin: newPin, password: password, newPassword: newPassword) }, "reset")
         // "Finish the move" is held too (VAULT-MESSAGING 0.46.0 §11.14.9 step 2): nothing locked or sent.
         let phase = m.phase
         expectRefused(await vaultFailure { _ = try await m.finishMove(pin: newPin) }, "finish the move")
@@ -77,8 +78,10 @@ import VettIDVault
         #expect(service.requestsSeen.count == mark, "nothing sent: \(service.requestsSeen.dropFirst(mark))")
         #expect(m.changeHold()?.kind == .pinUncertain)
         #expect(service.ownerChecks.isEmpty && service.nameSets.isEmpty && service.renews.isEmpty && service.deletes.isEmpty)
-        // The password alone is not uncertain: the unlock window opens.
+        #expect(service.resets.isEmpty)
+        // The password alone is not uncertain: the unlock window opens, and the rotation goes.
         try await m.openUnlockWindow(password: password)
+        try await m.rotate(password: password)
     }
 
     /// An applied change whose check ended: the unlock asks for the previous PIN, then (after `device_secret`, nothing
