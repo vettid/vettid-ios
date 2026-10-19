@@ -16,6 +16,10 @@ public struct SettingsHost {
     public var onChangePin: @MainActor () -> Void = {}
     /// Settings → Security → Credential.
     public var onCredential: @MainActor () -> Void = {}
+    /// Settings → Security → New phone secret (release R).
+    public var onNewPhoneSecret: @MainActor () -> Void = {}
+    /// Settings → Account → Delete vault.
+    public var onDeleteVault: @MainActor () -> Void = {}
     /// Opens the owner check (VAULT-MESSAGING §3.6.5): [holdOff] true turns the hold off with it (VAULT-MESSAGING §3.6.7).
     public var onOwnerCheck: @MainActor (_ holdOff: Bool) -> Void = { _ in }
 
@@ -31,6 +35,8 @@ public struct SettingsRoute: View {
     private let appLock: any AppLockSettings
     private let promptReason: String
     private let host: SettingsHost
+    /// The app's "Allow screenshots" (IOS-PLAN §4), from the environment; absent in a preview or a test.
+    @Environment(ScreenshotAllowance.self) private var screenshots: ScreenshotAllowance?
     @State private var model: SettingsViewModel?
     @State private var ownerCheck: OwnerCheckSettingsViewModel?
 
@@ -63,7 +69,8 @@ public struct SettingsRoute: View {
                 SettingsContent(
                     state: SettingsState(
                         account: account.account, appLockOn: appLock.state.isOn, appLockMethod: appLock.method,
-                        appLockTimeout: appLock.timeout
+                        appLockTimeout: appLock.timeout, screenshotsAllowed: screenshots?.allowed ?? false,
+                        screenshotsStayOn: screenshots?.staysOn ?? false, phoneSecret: vault.usesPhoneSecret
                     ),
                     ownerCheck: OwnerCheckSettingsState(view: ownerChecks.ownerCheck)
                 )
@@ -71,7 +78,9 @@ public struct SettingsRoute: View {
         }
         .onAppear {
             if model == nil {
-                model = SettingsViewModel(account: account, vault: vault, appLock: appLock, promptReason: promptReason)
+                model = SettingsViewModel(
+                    account: account, vault: vault, appLock: appLock, promptReason: promptReason, screenshots: screenshots
+                )
                 ownerCheck = OwnerCheckSettingsViewModel(repo: ownerChecks)
             }
         }
@@ -85,6 +94,9 @@ public struct SettingsRoute: View {
         a.attestation = host.onAttestation
         a.changePin = host.onChangePin
         a.credential = host.onCredential
+        a.newPhoneSecret = host.onNewPhoneSecret
+        a.deleteVault = host.onDeleteVault
+        a.setScreenshotsAllowed = { m.setScreenshotsAllowed($0) }
         a.accountSite = host.onOpenAccountSite
         a.lockVault = { m.lockVault() }
         a.setAppLock = { m.setAppLock($0) }
@@ -327,6 +339,75 @@ public struct ChangePasswordRoute: View {
         }
         a.onForgetSecrets = { m?.forgetSecrets() }
         a.onBack = onBack
+        return a
+    }
+}
+#endif
+
+#if os(iOS)
+/// Settings → Security → New phone secret with its view model. Mirrors vettid-android's `NewPhoneSecretRoute`
+/// destination.
+public struct NewPhoneSecretRoute: View {
+    private let vault: any VaultRepository
+    private let onBack: @MainActor () -> Void
+    @State private var model: NewPhoneSecretViewModel?
+
+    public init(vault: any VaultRepository, onBack: @escaping @MainActor () -> Void) {
+        self.vault = vault
+        self.onBack = onBack
+    }
+
+    public var body: some View {
+        NewPhoneSecretContent(state: model?.state ?? NewPhoneSecretState(), actions: actions)
+            .onAppear { if model == nil { model = NewPhoneSecretViewModel(vault: vault) } }
+    }
+
+    private var actions: NewPhoneSecretActions {
+        var a = NewPhoneSecretActions()
+        let m = model
+        a.onPassword = { m?.setPassword($0) }
+        a.onSubmit = { pin in
+            m?.setPin(pin)
+            m?.submit()
+        }
+        a.onForgetSecrets = { m?.forgetSecrets() }
+        a.onBack = onBack
+        return a
+    }
+}
+
+/// Settings → Account → Delete vault with its view model. After the deletion the root shows the welcome screen (the
+/// phase). Mirrors vettid-android's `DeleteVaultRoute` destination.
+public struct DeleteVaultRoute: View {
+    private let vault: any VaultRepository
+    private let onBack: @MainActor () -> Void
+    @State private var model: DeleteVaultViewModel?
+
+    public init(vault: any VaultRepository, onBack: @escaping @MainActor () -> Void) {
+        self.vault = vault
+        self.onBack = onBack
+    }
+
+    public var body: some View {
+        DeleteVaultContent(state: model?.state ?? DeleteVaultState(), actions: actions)
+            .onAppear { if model == nil { model = DeleteVaultViewModel(vault: vault) } }
+    }
+
+    private var actions: DeleteVaultActions {
+        var a = DeleteVaultActions()
+        let m = model
+        a.setPhrase = { m?.setPhrase($0) }
+        a.setPassword = { m?.setPassword($0) }
+        a.setAcknowledged = { m?.setAcknowledged($0) }
+        a.submit = { pin in
+            if let pin { m?.setPin(pin) }
+            m?.submit()
+        }
+        a.cancelConfirm = { m?.cancelConfirm() }
+        a.confirm = { m?.confirm() }
+        a.checkAgain = { m?.checkAgain() }
+        a.forgetSecrets = { m?.forgetSecrets() }
+        a.back = onBack
         return a
     }
 }

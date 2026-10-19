@@ -55,25 +55,26 @@ struct CredentialOps: Sendable {
     func sealedOp(_ type: String, _ fields: [(String, String)]) async throws -> [UInt8] {
         try await device.credentialLock.withLock {
             let utk = try await takeUTK()
-            return try await sealed(type, utk: utk, fields: fields.map { .string($0.0, $0.1) }, withBlob: false)
+            return try await sealed(type, utk: utk, fields: fields.map { .string($0.0, $0.1) }, CredOpOptions(withBlob: false))
         }
     }
 
     /// A credential operation with the blob (§3.5.3): [fields] sealed to a fresh UTK, the blob this device holds beside
-    /// them; on `stale_credential` the latest blob is fetched once and the operation sent again with a fresh UTK.
-    func credOp(_ type: String, _ fields: [SealedField]) async throws -> [UInt8] {
+    /// them (and [options]' outer members); on `stale_credential` the latest blob is fetched once and the operation sent
+    /// again with a fresh UTK.
+    func credOp(_ type: String, _ fields: [SealedField], _ options: CredOpOptions = CredOpOptions()) async throws -> [UInt8] {
         try await device.credentialLock.withLock {
             // Nothing is taken from the pool for an operation that cannot be sent.
             if device.credentialBlob == nil { throw VaultStateError(message: "no credential on this device") }
             // Under the lock: a change that started after the caller's own check is seen here.
             try await gate()
             do {
-                return try await sealed(type, utk: try await takeUTK(), fields: fields, withBlob: true)
+                return try await sealed(type, utk: try await takeUTK(), fields: fields, options)
             } catch let e as VaultOpError where e.code == Self.codeStaleCredential {
                 try await fetch()
                 // Never resent with the typed secrets while a change may have moved them (§11.14.9 step 4).
                 try await gate()
-                return try await sealed(type, utk: try await takeUTK(), fields: fields, withBlob: true)
+                return try await sealed(type, utk: try await takeUTK(), fields: fields, options)
             }
         }
     }
@@ -81,15 +82,26 @@ struct CredentialOps: Sendable {
     /// Fetches the latest blob the vault holds (the holder only).
     func fetch() async throws { try await keep(try await device.op("credential.get")) }
 
-    private func sealed(_ type: String, utk: UtkRecord, fields: [SealedField], withBlob: Bool) async throws -> [UInt8] {
+    private func sealed(_ type: String, utk: UtkRecord, fields: [SealedField], _ options: CredOpOptions) async throws -> [UInt8] {
         let id = device.newRequestID()
-        let body = try build(type, utk: utk, fields: fields, withBlob: withBlob, id: id)
-        return try await answered(type, utk: utk, try await device.request(type, body: body, innerID: id))
+        let body = try build(type, utk: utk, fields: fields, id: id, options)
+        let r: VaultMessage
+        do {
+            r = try await device.request(type, body: body, innerID: id, exp: options.exp)
+        } catch {
+            // From the deposit on, the request may have reached the vault (a deposit that failed may still go out from
+            // the outbox).
+            guard options.unanswered, !(error is CancellationError) else { throw error }
+            throw RequestUnanswered(type: type)
+        }
+        return try await answered(type, utk: utk, r)
     }
 
-    /// The outer body of a sealed operation: [fields] sealed to [utk] for the inner id [id], and the blob when [withBlob].
-    private func build(_ type: String, utk: UtkRecord, fields: [SealedField], withBlob: Bool, id: String) throws -> [UInt8] {
+    /// The outer body of a sealed operation: [fields] sealed to [utk] for the inner id [id], the blob when [options] say
+    /// so, and their outer members.
+    private func build(_ type: String, utk: UtkRecord, fields: [SealedField], id: String, _ options: CredOpOptions) throws -> [UInt8] {
         guard let vaultID = device.vaultID else { throw VaultStateError(message: "no vault id") }
+        let withBlob = options.withBlob
         let blob = withBlob ? device.credentialBlob : nil
         if withBlob, blob == nil { throw VaultStateError(message: "no credential on this device") }
         let nfc = normalizePasswords()
@@ -112,6 +124,7 @@ struct CredentialOps: Sendable {
         }
         let outer = JsonBuilder().string("utk_id", utk.id).base64("sealed", sealedPayload)
         if let blob { outer.string("credential", blob) }
+        for (k, v) in options.outer { outer.string(k, v) }
         return outer.bytes()
     }
 
@@ -145,7 +158,7 @@ struct CredentialOps: Sendable {
             let utk = try await takeUTK()
             let held = HeldRequest(
                 type: type, id: change.id, exp: change.exp,
-                body: try build(type, utk: utk, fields: fields, withBlob: true, id: change.id)
+                body: try build(type, utk: utk, fields: fields, id: change.id, CredOpOptions())
             )
             return try await sendChange(held, utk: utk, first: true)
         }
@@ -201,6 +214,25 @@ public struct ChangeUnanswered: Error, Sendable, CustomStringConvertible {
     public let held: HeldRequest
 
     public var description: String { "\(held.type): no answer" }
+}
+
+/// What a credential operation carries besides its sealed members: the blob ([withBlob]; not for `credential.create`),
+/// members of the outer body beside it ([outer]: `vault.delete`'s `confirm`, §12.5), whether a failure once the
+/// request may have gone out is ``RequestUnanswered`` ([unanswered]) rather than the failure itself, and the request's
+/// `exp` (§5.3; a retry after `stale_credential` keeps it).
+struct CredOpOptions: Sendable {
+    var withBlob = true
+    var outer: [(String, String)] = []
+    var unanswered = false
+    var exp: Date?
+}
+
+/// A credential operation whose answer did not arrive once its request may have gone out (no answer to the automatic
+/// resends of §8.6, or a deposit that failed and may still go out from the outbox): the vault may have acted on it.
+public struct RequestUnanswered: Error, Sendable, CustomStringConvertible {
+    public let type: String
+
+    public var description: String { "\(type): no answer" }
 }
 
 /// One member of a sealed payload (§3.5.4): a string (a password is normalized for a vault of release R) or a bool.

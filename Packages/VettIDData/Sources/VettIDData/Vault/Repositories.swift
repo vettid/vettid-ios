@@ -251,8 +251,11 @@ public protocol VaultRepository: AnyObject, Observable, Sendable {
     func lock() async throws
 
     /// (iPhone, IOS-PLAN §6.3 item 5) The earlier-secret step opened the vault: the app asks at once for a new phone
-    /// secret (`vault.secret.renew`). Default: false.
+    /// secret (`vault.secret.renew`), until one is made or ``dismissRenewSuggestion()``. Default: false.
     var renewSecretSuggested: Bool { get }
+
+    /// The member chose not to make a new phone secret now (the prompt goes).
+    func dismissRenewSuggestion()
 
     /// (iPhone, IOS-PLAN §6.3 item 5) Whether the earlier-secret step can be offered on the "this phone no longer holds
     /// the keys" screen: a replaced phone-secret record exists. Default: false.
@@ -267,8 +270,14 @@ public protocol VaultRepository: AnyObject, Observable, Sendable {
     /// `pin.change` (§10.6).
     func changePin(pin: String, newPin: String) async throws
 
-    /// `vault.delete` (§12.5): irreversible.
+    /// `vault.delete` (§12.5): irreversible. After the vault's answer VettID's data on this phone is erased and ``phase`` is
+    /// ``AppPhase/signedOut``. No answer, and the member API not yet showing the vault gone: ``FailureKind/noResponse``
+    /// with code `delete_unconfirmed` (``checkVaultDeleted()`` asks again).
     func deleteVault(pin: String, password: String) async throws
+
+    /// After a deletion whose answer was lost: what the member API now says (``DeletionCheck``; gone: VettID's data on
+    /// this phone is erased). Nothing is sent to the vault. Default: ``DeletionCheck/undecided``.
+    func checkVaultDeleted() async throws -> DeletionCheck
 
     /// A recovery in progress, from `GET /api/vault/status` (it is cancelled on the account portal, or by an unlock).
     func recovery() async throws -> RecoveryView?
@@ -282,6 +291,8 @@ public extension VaultRepository {
     func dismissLockNotice() {}
     var earlierSecretOffered: Bool { false }
     var renewSecretSuggested: Bool { false }
+    func dismissRenewSuggestion() {}
+    func checkVaultDeleted() async throws -> DeletionCheck { .undecided }
     func unlockWithEarlierSecret(pin: String) async throws -> UnlockAttempt { throw VaultFailure(.notSupported) }
     var pendingDeletion: DeletionView? { nil }
     func cancelDeletion() async throws -> Bool { false }
@@ -506,4 +517,15 @@ public enum MoveCodes {
     /// ``MoveRepository/transferIn(code:)``'s ``FailureKind/noResponse`` code when no `hs.resp` came within
     /// ``hsRespWait``.
     public static let hsUnanswered = "hs_unanswered"
+}
+
+/// What a check after a deletion whose answer was lost found (chosen; not in the spec).
+public enum DeletionCheck: Equatable, Sendable {
+    /// The member API says explicitly that the account has no vault: it deleted itself, and VettID's data on this phone was erased.
+    case deleted
+    /// The vault is still listed more than a minute after the deletion's `exp`, by the vault's clock: no copy of it can
+    /// apply any more. Nothing was deleted; the member may try again.
+    case notDeleted
+    /// Not known yet (still listed before then, or the member API not reached).
+    case undecided
 }

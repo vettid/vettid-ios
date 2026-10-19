@@ -26,12 +26,13 @@ import VettIDUI
             .appendingPathComponent("Sources/VettIDShellUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 63)
+        #expect(keys.count == 65)
         let missing = "\u{0}missing"
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)
             #expect(!text.isEmpty && text != key && text != missing, "\(key)")
-            #expect(["nav_", "drawer_", "account_", "owner_check_", "ownercheck_", "ios_"].contains { key.hasPrefix($0) }, "\(key)")
+            let prefixes = ["nav_", "drawer_", "account_", "owner_check_", "ownercheck_", "settings_", "ios_"]
+            #expect(prefixes.contains { key.hasPrefix($0) }, "\(key)")
         }
     }
 
@@ -43,6 +44,7 @@ import VettIDUI
         #expect(ShellStrings.ownerCheckNoticeMore("A daily check failed: wrong PIN.", 2) == "A daily check failed: wrong PIN. And 2 more.")
         #expect(ShellStrings.accountSubscriptionTrialUntil("Annual", "Dec 1") == "Annual: trial until Dec 1")
         #expect(ShellStrings.accountEmailNote == "Only you see this address.")
+        #expect(ShellStrings.renewPromptAction == "New phone secret")
         #expect(ShellStrings.accountChangeNameBody == "Only here, in the app, with your PIN and password")
     }
 

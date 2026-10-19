@@ -826,6 +826,28 @@
         }
       }
     },
+    "ios_settings_app_screenshots_confirm_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Screenshots will show whatever is on screen, including messages and vault items. Anyone you show or send them to sees the same. Screen recording and sharing stay hidden, and the app switcher still shows only the VettID cover.\n\nThis turns itself off when the vault locks, and after 1 hour. The screen for typing a recovery code stays protected."
+          }
+        }
+      }
+    },
+    "ios_settings_app_screenshots_off": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Off. Screens that hold your secrets are left out of screenshots."
+          }
+        }
+      }
+    },
     "ios_settings_attestation_body": {
       "extractionState": "manual",
       "localizations": {
@@ -899,6 +921,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "Only if VettID asked you to test a new vault release: choose the file VettID sent you, or open it with VettID from Files or AirDrop."
+          }
+        }
+      }
+    },
+    "ios_settings_delete_check_again": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check again"
+          }
+        }
+      }
+    },
+    "ios_settings_delete_not_deleted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault was not deleted. You can try again."
+          }
+        }
+      }
+    },
+    "ios_settings_delete_unconfirmed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault didn't answer, so VettID doesn't know yet whether it was deleted. Check again in a moment. If it was deleted, VettID's data is then erased from this phone."
           }
         }
       }
@@ -1064,6 +1119,61 @@
           "stringUnit": {
             "state": "translated",
             "value": "Account site"
+          }
+        }
+      }
+    },
+    "settings_app_screenshots": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow screenshots"
+          }
+        }
+      }
+    },
+    "settings_app_screenshots_confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow screenshots"
+          }
+        }
+      }
+    },
+    "settings_app_screenshots_confirm_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow screenshots?"
+          }
+        }
+      }
+    },
+    "settings_app_screenshots_on": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On. Turns itself off when the vault locks, and after 1 hour."
+          }
+        }
+      }
+    },
+    "settings_app_screenshots_on_development": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On. A development build: it stays on until you turn it off."
           }
         }
       }
@@ -1317,6 +1427,149 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cancel"
+          }
+        }
+      }
+    },
+    "settings_delete_ack": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I understand that my vault and everything in it will be erased and cannot be restored"
+          }
+        }
+      }
+    },
+    "settings_delete_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This erases your vault for good: your messages, connections, items, critical items and Protean Credential. Your connections are told the connection ended. It cannot be undone, and VettID cannot restore it."
+          }
+        }
+      }
+    },
+    "settings_delete_confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete forever"
+          }
+        }
+      }
+    },
+    "settings_delete_confirm_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is the last step. Your vault is erased immediately."
+          }
+        }
+      }
+    },
+    "settings_delete_confirm_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete your vault now?"
+          }
+        }
+      }
+    },
+    "settings_delete_password": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credential password"
+          }
+        }
+      }
+    },
+    "settings_delete_phrase_label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type: delete my vault"
+          }
+        }
+      }
+    },
+    "settings_delete_phrase_wrong": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type the phrase exactly: delete my vault"
+          }
+        }
+      }
+    },
+    "settings_delete_pin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault PIN"
+          }
+        }
+      }
+    },
+    "settings_delete_submit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete my vault"
+          }
+        }
+      }
+    },
+    "settings_delete_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete your vault"
+          }
+        }
+      }
+    },
+    "settings_delete_vault": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete vault"
+          }
+        }
+      }
+    },
+    "settings_delete_vault_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erase your vault and everything in it"
           }
         }
       }
@@ -1714,6 +1967,50 @@
           "stringUnit": {
             "state": "translated",
             "value": "Too many wrong tries. Try again in %@."
+          }
+        }
+      }
+    },
+    "settings_new_secret_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault gives this phone a new secret. Your PIN stays the same, and the old secret opens nothing your vault stores from now on. Enter your PIN and your password."
+          }
+        }
+      }
+    },
+    "settings_new_secret_done": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your phone now uses a new secret for this vault."
+          }
+        }
+      }
+    },
+    "settings_new_secret_not_enough": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If something ran as VettID on this phone, a new secret alone is not enough: move your vault to another phone, or recover it."
+          }
+        }
+      }
+    },
+    "settings_new_secret_submit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Make a new secret"
           }
         }
       }
@@ -2203,6 +2500,17 @@
         }
       }
     },
+    "settings_section_app": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App"
+          }
+        }
+      }
+    },
     "settings_section_security": {
       "extractionState": "manual",
       "localizations": {
@@ -2287,6 +2595,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lock after"
+          }
+        }
+      }
+    },
+    "settings_security_new_secret": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New phone secret"
+          }
+        }
+      }
+    },
+    "settings_security_new_secret_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If you fear that something ran as VettID on this phone"
           }
         }
       }

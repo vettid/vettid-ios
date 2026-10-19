@@ -118,7 +118,7 @@ extension FakeVaultService {
         case "item.list":
             let items = (0..<criticalItemsValue).map { #"{"item_id":"item-\#($0)","sensitivity":"critical"}"# }
             try reply(m.type, #"{"items":[\#(items.joined(separator: ","))],"next":null}"#, re: m.id)
-        default: try reply(m.type, "{}", re: m.id, error: "unsupported_type")
+        default: try secretsRequest(m, body)
         }
     }
 
@@ -129,7 +129,7 @@ extension FakeVaultService {
     }
 
     /// The sealed payload of a holder operation, its UTK spent (`utk_invalid` answered, and nil, when it is not one).
-    private func opened(_ m: Inner, _ body: JsonObject) throws -> JsonObject? {
+    func opened(_ m: Inner, _ body: JsonObject) throws -> JsonObject? {
         let utk = try body.string("utk_id")
         guard let ltk = utks.removeValue(forKey: utk) else {
             try reply(m.type, "{}", re: m.id, error: "utk_invalid")
@@ -139,7 +139,7 @@ extension FakeVaultService {
     }
 
     /// The rotated CEK's answer members (`credential`, `version`, `utks`), without the closing brace.
-    private func rotated() throws -> String {
+    func rotated() throws -> String {
         credentialVersion += 1
         return #"{"credential":"\#(Self.blob(credentialVersion))","version":\#(credentialVersion),"utks":\#(try issueUTKs(2))"#
     }

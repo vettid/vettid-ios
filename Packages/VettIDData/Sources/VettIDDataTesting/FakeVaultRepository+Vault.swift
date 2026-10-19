@@ -73,6 +73,12 @@ extension FakeVaultRepository: VaultRepository {
     public func renewPhoneSecret(pin: String, password: String) async throws {
         try call("renewPhoneSecret")
         lastRenew = (pin, password)
+        renewSecretSuggested = false
+    }
+
+    public func dismissRenewSuggestion() {
+        calls.append("dismissRenewSuggestion")
+        renewSecretSuggested = false
     }
 
     public func finishSetup() async throws {
@@ -146,6 +152,12 @@ extension FakeVaultRepository: VaultRepository {
         lastPin = pin
         lastPassword = password
         phase = .signedOut // a new vault needs a new setup code
+    }
+
+    public func checkVaultDeleted() async throws -> DeletionCheck {
+        try call("checkVaultDeleted")
+        if deletionCheck == .deleted { phase = .signedOut }
+        return deletionCheck
     }
 
     public func recovery() async throws -> RecoveryView? {

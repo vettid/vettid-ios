@@ -134,6 +134,8 @@ public struct VaultManagerConfig: Sendable {
     /// The pause before a change whose answer was lost is checked again (VAULT-MESSAGING §11.14.9 "A lost answer": 30 s,
     /// doubling up to 5 minutes), in seconds.
     public var changeCheckSleep: @Sendable (TimeInterval) async throws -> Void
+    /// The monotonic clock the vault's clock is counted on between its answers (seconds; tests move it).
+    public var uptime: @Sendable () -> TimeInterval = DeviceConfig.monotonicNow
 
     public init(
         apiOrigin: String,

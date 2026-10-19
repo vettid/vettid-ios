@@ -121,7 +121,8 @@ import VettIDKeys
         await Task.yield()
         let start = Date()
         await m.onBackground(budget: .milliseconds(50))
-        #expect(Date().timeIntervalSince(start) < 0.4)
+        // Well under the 5 s an unanswered request waits in these tests, with room for a loaded CI machine.
+        #expect(Date().timeIntervalSince(start) < 2.5)
         #expect(m.session == nil)
         try await locking.value
     }

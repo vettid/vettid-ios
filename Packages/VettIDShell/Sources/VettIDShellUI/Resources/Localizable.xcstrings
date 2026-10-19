@@ -419,6 +419,17 @@
         }
       }
     },
+    "ios_shell_new_secret_prompt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault opened with this phone's earlier secret. Make a new phone secret now."
+          }
+        }
+      }
+    },
     "nav_approvals": {
       "extractionState": "manual",
       "localizations": {
@@ -690,6 +701,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your vault could not record that you were here."
+          }
+        }
+      }
+    },
+    "settings_security_new_secret": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New phone secret"
           }
         }
       }
