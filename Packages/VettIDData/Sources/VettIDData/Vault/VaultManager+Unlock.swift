@@ -163,7 +163,7 @@ extension VaultManager {
             return UnlockStepOutcome(.failed(.other, code: nil))
         }
         let r = opened.outcome.result
-        learnTimeScale(opened.outcome.timeScale, since: rec)
+        learnTimeScale(opened.outcome.timeScale, since: marks.record)
         if let next = afterPinStep(step, ok: r.ok, code: r.code, at: r.at) { return UnlockStepOutcome(next) }
         guard r.ok else {
             if await holder?.onSealedUnlockResult(HolderPolicy.of(r)) == true { return UnlockStepOutcome(.failed(.other, code: r.code)) }
