@@ -75,6 +75,10 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored let lockNotices = LockNotices()
     /// Bumped by every lock the member asks for: an unlock or a refresh that began before it publishes no open phase.
     @ObservationIgnored var lockGeneration = 0
+    /// Bumped by every vault event that has the phase read again (`device.unlinked` that is not a replacement): an unlock
+    /// that one reached while it was on its way reads the phase again rather than publish its own, so that the event's
+    /// read is never lost to the unlock's phase (chosen; not in the spec).
+    @ObservationIgnored var rereads = 0
     /// The pending lock found at the start was taken up (once, after the first-run cleanup and the record).
     @ObservationIgnored private var lockResumed = false
     @ObservationIgnored private(set) var holder: HolderWatch?
@@ -478,7 +482,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             let last = [record.value.lastContactMs, record.value.lastOpenedMs].compactMap { $0 }.max()
             p = .unreachable(kind, longUnreachable: StuckScreens.longUnreachable(kind, lastContactMs: last, nowMs: nowMs))
         }
-        // A reset, a lock, or a newer phase set by an operation meanwhile, wins.
+        // A reset, a lock, or a newer phase set by an operation meanwhile, wins. (An unlock that a `device.unlinked`
+        // reached on its way reads the phase again rather than set its own: ``rereads``.)
         if gen == record.generation, changes == phaseChanges, locks == lockGeneration { phase = p }
     }
 
