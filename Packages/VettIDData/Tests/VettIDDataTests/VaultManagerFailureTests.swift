@@ -202,6 +202,18 @@ import VettIDKeysTesting
     func awaitPinned() async throws {
         for _ in 0..<200 where m.session?.device.vaultID == nil { try await Task.sleep(nanoseconds: 10_000_000) }
         #expect(m.session?.device.vaultID == service.vaultID)
+        // The device pins the vault in memory while it handles `vault.enrolled` and writes its state only once the message
+        // is handled (`VaultDevice.handle`): a restart in between would read a device without the vault.
+        for _ in 0..<200 where try !storedPinned() { try await Task.sleep(nanoseconds: 10_000_000) }
+        #expect(try storedPinned())
+    }
+
+    /// Whether the device state on disk names the vault.
+    func storedPinned() throws -> Bool {
+        guard let b = try m.config.file(VaultFiles.device).load(),
+              let o = try JSONSerialization.jsonObject(with: Data(b)) as? [String: Any]
+        else { return false }
+        return o["vaultID"] as? String == service.vaultID
     }
 
     /// The enrollment's answer lost on the way back while the vault was made (it deposits `vault.enrolled` and answers
