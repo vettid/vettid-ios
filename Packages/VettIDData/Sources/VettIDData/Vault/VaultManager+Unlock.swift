@@ -308,7 +308,9 @@ extension VaultManager {
                 return try await s.alt.unlock(
                     party: s.device, userGuid: guid, pin: pin, attester: attester, options: options, release: route.release,
                     onStarting: route.onStarting,
-                    unlockSecretFor: { caps in
+                    unlockSecretFor: { [self] caps in
+                        // Before each request is built as well: one held back leaves no standing token recorded as issued.
+                        if let moved = pinTakenBefore(taken) { throw moved }
                         try ReleasePath.requireR(caps)
                         return secret
                     },

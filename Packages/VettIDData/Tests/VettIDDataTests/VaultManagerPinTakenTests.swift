@@ -3,7 +3,7 @@ import Testing
 import VettIDAltChan
 @testable import VettIDData
 import VettIDDataTesting
-import VettIDVault
+@testable import VettIDVault
 
 /// A PIN typed on a flow's own screen (the release update, "Finish the move") goes through the member API's unlock, not
 /// the credential lock, so the count of secrets sent does not protect it (VAULT-MESSAGING §11.14.9 step 2). Taken
@@ -94,6 +94,8 @@ import VettIDVault
         let o = await m.unlockOutcome(pin: pin, options: UnlockOptions(), route: route)
         #expect(o.attempt == .failed(.credentialUnsettled, code: VaultManager.codePinTakenBefore))
         #expect(service.unlocks.count == unlocks && service.pinFailureCount == 0)
+        // Refused before the request was built: no pending unlock kept, no standing token recorded as issued.
+        #expect(m.session?.device.pendingUnlock == nil)
     }
 
     /// "Finish the move" with a PIN taken before a PIN change: the vault is locked, no unlock is sent, and the PIN asked
