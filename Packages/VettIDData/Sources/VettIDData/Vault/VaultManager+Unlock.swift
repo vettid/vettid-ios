@@ -216,17 +216,22 @@ extension VaultManager {
             if lockedSince { phase = .locked }
             return
         }
-        if !s.device.recovering { await beforeOpen() }
-        guard locks == lockGeneration, rec == record.generation, !lockGuard.lockedWhatever(unlocked: true) else { return }
         // A vault event that has the phase read again (a `device.unlinked{vault_deleted}` of a deletion that waited in the
         // locked vault's mailbox) came while this unlock was on its way: its read may have ended before this, or may end
-        // after it, and either way this unlock's phase is older. The phase is read again instead (chosen; not in the spec).
-        if rereads != marks.rereads {
-            try? await refresh()
-            return
-        }
+        // after it, and either way this unlock's phase is older. The phase is read again instead, and nothing more (no
+        // owner check) is sent to a vault that may be deleting itself (chosen; not in the spec). What this does not cover:
+        // the vault sends `device.unlinked{vault_deleted}` before it erases itself (VAULT-MESSAGING §12.5 "Order", steps 2
+        // and 4), and until step 5 the member API still lists the vault as unlocked, so a read in that window still gives
+        // the open app.
+        if rereads != marks.rereads { return await rereadPhase() }
+        if !s.device.recovering { await beforeOpen() }
+        guard locks == lockGeneration, rec == record.generation, !lockGuard.lockedWhatever(unlocked: true) else { return }
+        // The same for one that came during the steps before the open app.
+        if rereads != marks.rereads { return await rereadPhase() }
         phase = afterUnlocked(s)
     }
+
+    private func rereadPhase() async { try? await refresh() }
 
     /// What an unlock reads before it starts, to know at its end what happened meanwhile: the member's locks, the record's
     /// resets and the vault events that have the phase read again.

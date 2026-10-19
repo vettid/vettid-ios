@@ -22,7 +22,8 @@ public final class FakeHTTPServer: @unchecked Sendable {
         }
     }
 
-    /// Holds the answers given with it until ``open()``.
+    /// Holds the answers given with it until ``open()``. A test that holds an answer must open its gate (also on a
+    /// failure path): until then the request waits, and a thread of the global queue with it.
     public final class Gate: @unchecked Sendable {
         private let cond = NSCondition()
         private var isOpen = false

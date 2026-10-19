@@ -41,7 +41,8 @@ extension FakeVaultService {
     }
 
     /// Once the vault deleted itself, the next [n] polls of a result slot that is done answer `queued` (the vault's answer
-    /// reaches the phone late, after what the vault sent to its mailbox); 0 lets the results through.
+    /// reaches the phone late, after what the vault sent to its mailbox); 0 lets the results through. It holds back every
+    /// done slot, whatever its request, not only the unlock's.
     public var slotQueuedAfterDeletion: Int {
         get { locked { slotQueuedAfterDeletionValue } }
         set { locked { slotQueuedAfterDeletionValue = newValue } }

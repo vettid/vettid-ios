@@ -176,12 +176,15 @@ import VettIDTesting
         let task = Task { try await h.api.credentialChangePassword(password: "a", newPassword: "b", pin: "975310", marked: marked) }
         let question = try await open(h.v)
         #expect(question.type == "credential.version")
-        // Every save fails from the moment the relay takes the change's deposit (the next deposit: the question's is
-        // taken already), however many saves came before it (the settling and the question's own deposit save on their
-        // own timing): the saves of the next sends fail, and so these sends never go out.
-        ops.base.relay.onDeposit = { store.arm() }
+        // Every save fails from the moment the relay takes the change's deposit, however many saves came before it (the
+        // settling and the question's own deposit save on their own timing): the saves of the next sends fail, and so
+        // these sends never go out. Armed only by a deposit after the change's marker was handed over (just before its
+        // send), so that a resent question never arms it.
+        ops.base.relay.onDeposit = { if marked.change != nil { store.arm() } }
         try await deliver(h.v, h.d, Inner(id: Ulid.new(), type: question.type, ts: Date(), re: question.id, status: Inner.statusOK, body: Array(#"{"exists":true,"version":1}"#.utf8)))
-        let deposited = try await open(h.v)
+        // A resend of the question (its answer late on a slow runner) may come before the change.
+        var deposited = try await open(h.v)
+        while deposited.type == question.type { deposited = try await open(h.v) }
         let change = try #require(marked.change)
         #expect(deposited.id == change.id, "deposited")
         do {
