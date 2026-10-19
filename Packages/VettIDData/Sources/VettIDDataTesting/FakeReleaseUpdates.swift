@@ -19,6 +19,10 @@ public final class FakeReleaseUpdates: ReleaseUpdateRepository {
     public private(set) var refreshed = 0
     /// What ``start(pin:offer:)`` answers when the check is not due.
     public var startResult = true
+    /// Which PIN the vault expects (``ReleaseUpdateRepository/pinGeneration``), moved by the test.
+    public var pinGeneration = 0
+    /// The generation handed over with each PIN (nil: none read when the keypad opened).
+    public private(set) var generations: [Int?] = []
 
     public init(offer: ReleaseUpdateOffer? = nil) {
         self.offer = offer
@@ -38,14 +42,30 @@ public final class FakeReleaseUpdates: ReleaseUpdateRepository {
         dismissal = ReleaseDismissal(release: o.target.number, kind: o.kind, at: at)
     }
 
-    public func start(pin: String, offer: ReleaseUpdateOffer) -> Bool {
+    /// As the update does: a PIN whose keypad opened before ``pinGeneration`` moved is sent nothing (`refused:`), and the
+    /// step fails so that the PIN is asked for again.
+    public func start(pin: String, offer: ReleaseUpdateOffer, generation: Int?) -> Bool {
+        generations.append(generation)
+        if let generation, generation != pinGeneration {
+            calls.append("refused:\(pin)")
+            var p = UpdateProgress(step: .failed, from: offer.current, to: offer.target, failure: .credentialUnsettled)
+            p.failureCode = VaultManager.codePinTakenBefore
+            progress = p
+            return true
+        }
         calls.append("start:\(pin):\(offer.target.number)")
         return startResult && !checkDue && changeHold == nil
     }
 
-    public func retry(pin: String) { calls.append("retry:\(pin)") }
+    public func retry(pin: String, generation: Int?) {
+        generations.append(generation)
+        calls.append(generation.map { $0 != pinGeneration } == true ? "refused:\(pin)" : "retry:\(pin)")
+    }
 
-    public func abandon(pin: String) { calls.append("abandon:\(pin)") }
+    public func abandon(pin: String, generation: Int?) {
+        generations.append(generation)
+        calls.append(generation.map { $0 != pinGeneration } == true ? "refused:\(pin)" : "abandon:\(pin)")
+    }
 
     public func finish() {
         calls.append("finish")

@@ -151,7 +151,7 @@ import VettIDVault
         #expect(m.releaseUpdateHeld && m.releaseUpdate.changeHold == .pinUncertain)
         #expect(FailureKind.pinUncertain.message.hasPrefix("VettID couldn't confirm whether your PIN was changed"))
         let unlocks = service.unlocks.count
-        let r = await m.updateUnlock(pin: pin, approve: nil, abandon: false) {}
+        let r = await m.updateUnlock(pin: TakenPin(pin: pin, generation: m.phoneSecrets.pinGeneration), approve: nil, abandon: false) {}
         guard case .failed(let kind, let code, _) = r else {
             Issue.record("not refused: \(r)")
             return

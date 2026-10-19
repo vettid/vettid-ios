@@ -35,6 +35,9 @@ import Testing
         var abandonable = true
         var release: UInt64 = 4
         var hold: FailureKind?
+        /// Which PIN the vault expects (``ReleaseUpdateOps/pinGeneration()``); [onLock] may move it while the update locks.
+        var generation = 0
+        var onLock: () -> Void = {}
         /// Unlocks that report `release_starting` through the API client's callback before answering.
         var startingCallbacks = 0
         /// Runs right after such a report, while the unlock still waits.
@@ -52,14 +55,19 @@ import Testing
 
         func lock() async throws {
             log.append("lock")
+            onLock()
             if let lockFails { throw lockFails }
         }
 
         func unlock(
-            pin: String, approve: ReleaseView?, abandon: Bool, afterMove: Bool, onStarting: @escaping @MainActor () -> Void
+            pin: TakenPin, approve: ReleaseView?, abandon: Bool, afterMove: Bool, onStarting: @escaping @MainActor () -> Void
         ) async -> UpdateStepResult {
+            // As the vault manager does: nothing is sent with a PIN taken before which PIN the vault expects moved.
+            if pin.generation != generation {
+                return .failed(.credentialUnsettled, code: VaultManager.codePinTakenBefore)
+            }
             log.append(afterMove ? "unlock-after-move" : "unlock")
-            unlocks.append(Call(pin: pin, approve: approve?.number, abandon: abandon))
+            unlocks.append(Call(pin: pin.pin, approve: approve?.number, abandon: abandon))
             if startingCallbacks > 0 {
                 startingCallbacks -= 1
                 onStarting()
@@ -73,6 +81,8 @@ import Testing
         func releaseNumber() -> UInt64 { release }
 
         func changeHold() -> FailureKind? { hold }
+
+        func pinGeneration() -> Int { generation }
 
         func timeScale() -> UInt64 { scale }
     }
@@ -102,6 +112,25 @@ import Testing
         #expect(m.offer == nil)
         m.finish()
         #expect(m.progress == nil)
+    }
+
+    /// (VAULT-MESSAGING §11.14.9 step 2) The PIN is taken when the screen hands it over: a change that moves which PIN
+    /// the vault expects while the update locks stops its unlock with nothing sent, and "Try again" takes the PIN again.
+    @Test func aPinTakenBeforeAChangeIsAskedForAgain() async throws {
+        let ops = Ops()
+        ops.onLock = { ops.generation += 1 }
+        ops.results = [.moved, .opened]
+        let m = manager(ops)
+        #expect(m.start(pin: "246802", offer: offer))
+        await m.settle()
+        let p = try #require(m.progress)
+        #expect(p.step == .failed && p.failure == .credentialUnsettled && p.failureCode == VaultManager.codePinTakenBefore)
+        #expect(!p.vaultOpen && ops.unlocks.isEmpty)
+        ops.onLock = {}
+        m.retry(pin: "135791")
+        await m.settle()
+        #expect(ops.unlocks == [Call(pin: "135791", approve: 5, abandon: false), Call(pin: "135791", approve: nil, abandon: false)])
+        #expect(m.progress?.step == .done)
     }
 
     @Test func theApprovalIsSentOnlyOnceAndOnlyForTheOfferedRelease() async {

@@ -69,10 +69,14 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
         dismissal = nil
     }
 
-    public func start(pin: String, offer o: ReleaseUpdateOffer) -> Bool {
+    public var pinGeneration: Int { ops.pinGeneration() }
+
+    public func start(pin: String, offer o: ReleaseUpdateOffer, generation: Int?) -> Bool {
         // Neither the owner check (§3.6.5) nor an undecided PIN or password change (§11.14.9) comes first.
         if running || ops.ownerCheckDue() || ops.changeHold() != nil || pin.isEmpty { return false }
         progress = UpdateProgress(step: .locking, from: o.current, to: o.target)
+        // The PIN as the keypad took it: a change that moves which PIN the vault expects before an unlock goes out stops it.
+        let pin = taken(pin, generation)
         launch { [self] in
             do {
                 try await ops.lock()
@@ -86,8 +90,9 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
         return true
     }
 
-    public func retry(pin: String) {
+    public func retry(pin: String, generation: Int?) {
         guard let p = progress, !running, !pin.isEmpty, !refusedWhileChangeHeld() else { return }
+        let pin = taken(pin, generation)
         switch p.step {
         case .badPin:
             launch { [self] in await approve(pin, afterFailure: false) }
@@ -111,10 +116,11 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
         }
     }
 
-    public func abandon(pin: String) {
+    public func abandon(pin: String, generation: Int?) {
         guard let p = progress, !running, !pin.isEmpty, p.step == .newReleaseFailed, p.canAbandon, ops.canAbandon(),
               !refusedWhileChangeHeld()
         else { return }
+        let pin = taken(pin, generation)
         launch { [self] in
             set { $0.step = .abandoning; $0.failure = nil; $0.failureCode = nil }
             let r = await withStart { s in await self.ops.unlock(pin: pin, approve: nil, abandon: true, afterMove: false, onStarting: s) }
@@ -142,6 +148,12 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
     // MARK: - Steps
 
     private var running: Bool { progress?.step.running == true }
+
+    /// [pin] with the generation of which PIN the vault expects when the keypad opened ([generation]), else read as the
+    /// screen hands it over.
+    private func taken(_ pin: String, _ generation: Int?) -> TakenPin {
+        TakenPin(pin: pin, generation: generation ?? ops.pinGeneration())
+    }
 
     /// (§11.14.9) A change is undecided: nothing is sent, and the step says "still checking".
     private func refusedWhileChangeHeld() -> Bool {
@@ -172,7 +184,7 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
 
     /// The unlock with the approval of ``UpdateProgress/to``; nothing else sends one. [afterFailure]: "Try again" after a
     /// failure that may have reached the vault (its answer lost).
-    private func approve(_ pin: String, afterFailure: Bool) async {
+    private func approve(_ pin: TakenPin, afterFailure: Bool) async {
         guard let to = progress?.to else { return }
         set { $0.step = .approving; $0.failure = nil; $0.failureCode = nil; $0.waitSeconds = 0; $0.refusal = nil }
         let r = await withStart { s in await self.ops.unlock(pin: pin, approve: to, abandon: false, afterMove: false, onStarting: s) }
@@ -201,7 +213,7 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
     }
 
     /// After `moved`: the unlock that reaches the new release, with the same PIN, and no approval.
-    private func reopen(_ pin: String) async {
+    private func reopen(_ pin: TakenPin) async {
         set { $0.step = .reopening; $0.failure = nil; $0.failureCode = nil; $0.waitSeconds = 0 }
         var r = await withStart { s in await self.ops.unlock(pin: pin, approve: nil, abandon: false, afterMove: true, onStarting: s) }
         // Routed to the old release still (the API learns the move from its lifecycle event): it completes the recorded
