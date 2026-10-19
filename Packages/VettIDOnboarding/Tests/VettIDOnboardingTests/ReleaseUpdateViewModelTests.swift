@@ -219,6 +219,41 @@ import VettIDDataTesting
         #expect(updates.calls == ["refused:246802", "refused:246802"])
     }
 
+    /// A change after the keypad opened but before the first digit: the reading is taken again as typing starts, and the
+    /// approval goes; a change after the first digit is refused.
+    @Test func theReadingIsRenewedAtTheFirstDigit() async {
+        let updates = FakeReleaseUpdates(offer: offer)
+        updates.pinGeneration = 3
+        let vm = ReleaseUpdateViewModel(updates: updates, ownerCheck: vault, notes: FakeReleaseNotes())
+        await vm.settle()
+        updates.pinGeneration = 4
+        vm.pinTypingStarted()
+        #expect(vm.approve(pin: "246802"))
+        #expect(updates.calls == ["start:246802:5"] && updates.generations == [4])
+        let late = FakeReleaseUpdates(offer: offer)
+        let typed = ReleaseUpdateViewModel(updates: late, ownerCheck: vault, notes: FakeReleaseNotes())
+        await typed.settle()
+        typed.pinTypingStarted()
+        late.pinGeneration = 1
+        #expect(typed.approve(pin: "246802"))
+        #expect(late.calls == ["refused:246802"])
+    }
+
+    /// The update's own keypad as well: "Try again" goes with the reading taken at its first digit.
+    @Test func theUpdatesKeypadIsRenewedAtTheFirstDigit() async {
+        let updates = FakeReleaseUpdates(offer: offer)
+        let vm = ReleaseUpdateFlowViewModel(updates: updates)
+        updates.progress = UpdateProgress(step: .failed, from: rel(4), to: rel(5), failure: .network)
+        await vm.settle()
+        updates.pinGeneration = 1
+        vm.pinTypingStarted()
+        #expect(vm.retry(pin: "246802"))
+        vm.pinTypingStarted()
+        updates.pinGeneration = 2
+        #expect(vm.retry(pin: "246802"))
+        #expect(updates.calls == ["retry:246802", "refused:246802"] && updates.generations == [1, 1])
+    }
+
     /// A reading is used once: after a PIN taken before a change is refused without the keypad ever closing (the step
     /// fails at once), the PIN typed again on the same screen goes with a fresh reading.
     @Test func aReadingIsUsedOnce() async {

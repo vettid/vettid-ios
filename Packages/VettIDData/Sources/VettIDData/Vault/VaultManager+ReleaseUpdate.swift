@@ -149,7 +149,9 @@ extension VaultManager {
         route.pinTaken = pin.generation
         var o = await unlockOutcome(pin: pin.pin, options: options, route: route)
         if abandon, case .failed(_, let code, _) = o.attempt, code == MemberApiError.vaultBusy {
-            // §11.10.5: an instance of the new release holds the vault; lock it first, then return.
+            // §11.10.5: an instance of the new release holds the vault; lock it first, then return. Not with a PIN taken
+            // before a change: nothing is locked or sent then.
+            if let moved = pinTakenBefore(pin.generation) { return .failed(moved.kind, code: moved.code) }
             try? await lock()
             o = await unlockOutcome(pin: pin.pin, options: options, route: route)
         }

@@ -24,6 +24,7 @@ public struct ReleaseUpdateFlowRoute: View {
         var a = ReleaseUpdateFlowActions()
         let m = model
         a.retry = { pin in m?.retry(pin: pin) ?? false }
+        a.typingStarts = { m?.pinTypingStarted() }
         a.askAbandon = { m?.askAbandon() }
         a.dismissAbandon = { m?.dismissAbandon() }
         a.confirmAbandon = { pin in m?.confirmAbandon(pin: pin) ?? false }
@@ -35,6 +36,8 @@ public struct ReleaseUpdateFlowRoute: View {
 /// What the update's screens can ask for. The PIN is the keypad's, handed over once.
 public struct ReleaseUpdateFlowActions {
     public var retry: @MainActor (_ pin: String) -> Bool = { _ in false }
+    /// The first digit was typed into the empty keypad (``ReleaseUpdateFlowViewModel/pinTypingStarted()``).
+    public var typingStarts: @MainActor () -> Void = {}
     public var askAbandon: @MainActor () -> Void = {}
     public var dismissAbandon: @MainActor () -> Void = {}
     public var confirmAbandon: @MainActor (_ pin: String) -> Bool = { _ in false }
@@ -71,6 +74,10 @@ public struct ReleaseUpdateFlowContent: View {
             if !actions.confirmAbandon(pin.take()) { pin.clear() }
         }
         .onDisappear { pin.clear() }
+        .onChange(of: pin.count) { before, now in
+            // VAULT-MESSAGING §11.14.9 step 2: which PIN the vault expects is read as the PIN starts being typed.
+            if before == 0, now > 0 { actions.typingStarts() }
+        }
         .onChange(of: state.pinAllowed) { _, allowed in
             // Digits typed before a step ran or a backoff began are not kept for after it (a fresh reading then).
             if !allowed { pin.clear() }

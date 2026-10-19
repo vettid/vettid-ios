@@ -133,6 +133,28 @@ import Testing
         #expect(m.progress?.step == .done)
     }
 
+    /// (VAULT-MESSAGING §11.14.9 step 2) A keypad reading from before a change neither locks the vault nor sends
+    /// anything: the step fails at once with the vault open, as is; "Try again" with the same stale reading does not lock
+    /// either, and the PIN typed again goes.
+    @Test func aStaleReadingNeverLocksTheVault() async throws {
+        let ops = Ops()
+        ops.generation = 1
+        ops.results = [.moved, .opened]
+        let m = manager(ops)
+        #expect(m.start(pin: "246802", offer: offer, generation: 0))
+        await m.settle()
+        var p = try #require(m.progress)
+        #expect(p.step == .failed && p.failure == .credentialUnsettled && p.failureCode == VaultManager.codePinTakenBefore)
+        #expect(p.vaultOpen && ops.log.isEmpty)
+        m.retry(pin: "246802", generation: 0)
+        await m.settle()
+        p = try #require(m.progress)
+        #expect(p.step == .failed && p.failureCode == VaultManager.codePinTakenBefore && p.vaultOpen && ops.log.isEmpty)
+        m.retry(pin: "135791", generation: 1)
+        await m.settle()
+        #expect(ops.log == ["lock", "unlock", "unlock-after-move"] && m.progress?.step == .done)
+    }
+
     @Test func theApprovalIsSentOnlyOnceAndOnlyForTheOfferedRelease() async {
         let ops = Ops()
         // Routed to the old release again: it reports the move once more.

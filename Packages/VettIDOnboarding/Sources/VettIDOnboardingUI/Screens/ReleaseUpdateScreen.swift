@@ -30,7 +30,8 @@ public struct ReleaseUpdateRoute: View {
         ReleaseUpdateContent(
             state: model?.state ?? ReleaseUpdateState(loading: updates.offer == nil, offer: updates.offer),
             onApprove: { pin in model?.approve(pin: pin) ?? false },
-            onBack: onBack
+            onBack: onBack,
+            onTypingStarts: { model?.pinTypingStarted() }
         )
         .onAppear { if model == nil { model = ReleaseUpdateViewModel(updates: updates, ownerCheck: ownerCheck, notes: notes) } }
     }
@@ -48,12 +49,18 @@ public struct ReleaseUpdateContent: View {
     let state: ReleaseUpdateState
     let onApprove: @MainActor (String) -> Bool
     let onBack: @MainActor () -> Void
+    /// The first digit was typed into the empty keypad (``ReleaseUpdateViewModel/pinTypingStarted()``).
+    let onTypingStarts: @MainActor () -> Void
     @State private var pin = PinBuffer()
 
-    public init(state: ReleaseUpdateState, onApprove: @escaping @MainActor (String) -> Bool, onBack: @escaping @MainActor () -> Void) {
+    public init(
+        state: ReleaseUpdateState, onApprove: @escaping @MainActor (String) -> Bool, onBack: @escaping @MainActor () -> Void,
+        onTypingStarts: @escaping @MainActor () -> Void = {}
+    ) {
         self.state = state
         self.onApprove = onApprove
         self.onBack = onBack
+        self.onTypingStarts = onTypingStarts
     }
 
     private func approve() {
@@ -103,6 +110,10 @@ public struct ReleaseUpdateContent: View {
         }
         .accessibilityIdentifier("release_update")
         .onDisappear { pin.clear() }
+        .onChange(of: pin.count) { before, now in
+            // VAULT-MESSAGING §11.14.9 step 2: which PIN the vault expects is read as the PIN starts being typed.
+            if before == 0, now > 0 { onTypingStarts() }
+        }
         .onChange(of: state.pinAllowed) { _, allowed in
             // Digits typed before a hold or the owner check are not kept for after it (a fresh reading then).
             if !allowed { pin.clear() }

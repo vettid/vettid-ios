@@ -139,6 +139,15 @@ public final class VaultDevice: @unchecked Sendable {
     var awaiting: [Awaiting] = []
     /// The unlock built and not yet answered (§11.4): what its result is opened and applied with.
     var pendingUnlock: PendingUnlock?
+    /// The unlock last built (its request id), the standing token's recorded expiry before it and the one its build
+    /// minted (``abandonPreparedUnlock(_:)``). Read and written under ``mem``.
+    var preparedUnlock: PreparedUnlock?
+
+    struct PreparedUnlock {
+        let requestID: String
+        let before: Int64
+        let minted: Int64
+    }
     var pending: [String: OneShot<Inner>] = [:]
     var inbox: [VaultMessage] = []
     var inboxWaiters: [OneShot<Bool>] = []

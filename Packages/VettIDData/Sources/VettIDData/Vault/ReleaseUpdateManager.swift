@@ -77,6 +77,8 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
         progress = UpdateProgress(step: .locking, from: o.current, to: o.target)
         // The PIN as the keypad took it: a change that moves which PIN the vault expects before an unlock goes out stops it.
         let pin = taken(pin, generation)
+        // Checked before the lock too: a PIN taken before a change neither locks the vault nor is sent.
+        if refusedAsTakenBefore(pin) { return true }
         launch { [self] in
             do {
                 try await ops.lock()
@@ -99,6 +101,7 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
         case .failed:
             launch { [self] in
                 if p.vaultOpen {
+                    if refusedAsTakenBefore(pin) { return }
                     set { $0.step = .locking; $0.failure = nil; $0.failureCode = nil }
                     do {
                         try await ops.lock()
@@ -153,6 +156,20 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
     /// screen hands it over.
     private func taken(_ pin: String, _ generation: Int?) -> TakenPin {
         TakenPin(pin: pin, generation: generation ?? ops.pinGeneration())
+    }
+
+    /// (§11.14.9 step 2; chosen; not in the spec) [pin] was taken before something moved which PIN the vault expects: the
+    /// step fails at once, before any lock, with nothing sent (``VaultManager/codePinTakenBefore``); the vault is as it
+    /// was (open), and the PIN is asked for again.
+    private func refusedAsTakenBefore(_ pin: TakenPin) -> Bool {
+        guard pin.generation != ops.pinGeneration() else { return false }
+        set {
+            $0.step = .failed
+            $0.failure = .credentialUnsettled
+            $0.failureCode = VaultManager.codePinTakenBefore
+            $0.vaultOpen = true
+        }
+        return true
     }
 
     /// (§11.14.9) A change is undecided: nothing is sent, and the step says "still checking".
