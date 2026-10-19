@@ -44,6 +44,7 @@ func releaseDate(_ d: Date) -> String { d.formatted(date: .abbreviated, time: .o
 /// `ReleaseUpdateContent`.
 public struct ReleaseUpdateContent: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.vettIDTimeScale) private var timeScale
     let state: ReleaseUpdateState
     let onApprove: @MainActor (String) -> Bool
     let onBack: @MainActor () -> Void
@@ -85,7 +86,7 @@ public struct ReleaseUpdateContent: View {
                     }
                     // VAULT-MESSAGING §11.14.9: no update while a PIN or password change is being decided.
                     if let why = state.changeHold {
-                        NoticeCard(.warning, title: OnboardingStrings.releaseUpdateTitle, message: why.message)
+                        NoticeCard(.warning, title: OnboardingStrings.releaseUpdateTitle, message: why.message(timeScale: timeScale))
                             .accessibilityIdentifier("release_update_change_unresolved")
                     }
                     PinEntry(label: OnboardingStrings.unlockPinLabel, buffer: pin, identifier: "release_update_pin")

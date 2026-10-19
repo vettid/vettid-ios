@@ -1,4 +1,5 @@
 import Foundation
+import VettIDCrypto
 
 // The models of the repositories (Repositories.swift): what the screens see of the account, the vault, the credential
 // and a move. Display models only; the wire models are VettIDVault's and VettIDAltChan's. Mirrors vettid-android
@@ -429,7 +430,9 @@ public struct RecoveryStatusView: Equatable, Sendable {
     /// 0.1.1 S8, S7). In real time the approved text verbatim; on a scaled vault, or for a clock started on one, the clock's
     /// period as it started and the recovery quiet period at the vault's time scale (the owner's decision of 2026-10-19).
     public var unknownDayText: String {
-        if timeScale == 1, unknownForSeconds == TimeScales.recoveryUnknownDay { return DataStrings.recoveryUnknownDay }
+        guard timeScale > TimeScale.real || unknownForSeconds != TimeScales.recoveryUnknownDay else {
+            return DataStrings.recoveryUnknownDay
+        }
         return DataStrings.recoveryUnknownDayScaled(
             DurationText.of(unknownForSeconds), TimeScales.text(TimeScales.recoveryQuiet, by: timeScale)
         )

@@ -31,6 +31,7 @@ public struct DeleteVaultActions {
 /// the welcome screen follows. A lost answer is said, with a check that sends nothing to the vault (chosen; not in the
 /// spec). Mirrors vettid-android `DeleteVaultContent`.
 public struct DeleteVaultContent: View {
+    @Environment(\.vettIDTimeScale) private var timeScale
     @Environment(\.vettIDColors) private var colors
     @Environment(\.scenePhase) private var scenePhase
     let state: DeleteVaultState
@@ -71,7 +72,8 @@ public struct DeleteVaultContent: View {
                         .accessibilityIdentifier("delete_not_deleted")
                 }
                 if let error = state.error {
-                    NoticeCard(.urgent, title: SecurityStrings.deleteTitle, message: error.message).accessibilityIdentifier("error")
+                    NoticeCard(.urgent, title: SecurityStrings.deleteTitle, message: error.message(timeScale: timeScale))
+                        .accessibilityIdentifier("error")
                 }
             }
             .disabled(state.busy)

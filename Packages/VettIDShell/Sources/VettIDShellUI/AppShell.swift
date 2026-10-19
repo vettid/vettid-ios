@@ -81,7 +81,7 @@ public struct AppShell: View {
     /// A lost answer's decision reached while its screen was closed (VAULT-MESSAGING §11.14.9): once, until "OK".
     @ViewBuilder private var changeCheckNotice: some View {
         // A change screen waiting for it shows the decision itself.
-        if let check = vault.changeCheck, let text = ChangeCheckNotice.text(check), !vault.changeCheckAwaited {
+        if let check = vault.changeCheck, let text = ChangeCheckNotice.text(check, timeScale: vault.timeScale), !vault.changeCheckAwaited {
             if ChangeCheckNotice.offersLockAndUnlock(check) {
                 // The PIN is uncertain: the unlock's two prompts settle it at no cost (§11.14.9 step 3).
                 UrgentBanner(

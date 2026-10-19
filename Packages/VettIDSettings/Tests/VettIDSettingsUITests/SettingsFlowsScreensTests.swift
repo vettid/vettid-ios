@@ -46,6 +46,11 @@ import VettIDUI
         #expect(!ChangeCheckNotice.offersLockAndUnlock(ChangeCheck(.password, .ended)))
         #expect(ChangeCheckNotice.lockAndUnlock == "Lock and unlock now")
         #expect(ChangeCheckNotice.text(ChangeCheck(.pin, .refused(.badPin, code: "bad_pin"))) == FailureKind.badPin.message)
+        // A refusal names a scaled wait at the vault's scale (STAGING-TIME-SCALE §5.2): the approved words in real time.
+        let gone = ChangeCheck(.pin, .refused(.deviceSecret, code: "device_secret"))
+        #expect(ChangeCheckNotice.text(gone)?.contains("It takes one to three days,") == true)
+        #expect(ChangeCheckNotice.text(gone, timeScale: 24) == FailureKind.deviceSecret.message(timeScale: 24))
+        #expect(ChangeCheckNotice.text(gone, timeScale: 24)?.contains("It takes 1 hour to 3 hours,") == true)
         #expect(ChangeCheckNotice.urgent(ChangeCheck(.pin, .ended)) && !ChangeCheckNotice.urgent(ChangeCheck(.pin, .applied)))
         #expect(PinStrings.vaultPin == "Change vault PIN" && PinStrings.securityCredential == "Credential")
         #expect(CredentialStrings.windowOpenUntil("3:00 PM") == "Open until 3:00 PM")

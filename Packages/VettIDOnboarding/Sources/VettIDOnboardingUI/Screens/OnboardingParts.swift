@@ -11,10 +11,12 @@ struct ErrorNotice: View {
     let state: OnboardingState
     var override: FailureKind?
     var overrideText: String?
+    @Environment(\.vettIDTimeScale) private var timeScale
 
     var body: some View {
         if let kind = state.error {
-            let text = override != nil && kind == override ? overrideText ?? kind.message : Self.message(kind, state.errorRetryAt)
+            let text = override != nil && kind == override
+                ? overrideText ?? kind.message(timeScale: timeScale) : Self.message(kind, state.errorRetryAt, timeScale: timeScale)
             NoticeCard(.urgent, title: OnboardingStrings.progressFailed, message: text)
                 .padding(.top, Spacing.l)
                 .accessibilityIdentifier("error")
@@ -23,10 +25,10 @@ struct ErrorNotice: View {
 }
 
 extension ErrorNotice {
-    /// The failure's text; a refused start-over (iPhone only) says from when it is possible.
-    static func message(_ kind: FailureKind, _ retryAt: Date?) -> String {
+    /// The failure's text at the vault's [timeScale]; a refused start-over (iPhone only) says from when it is possible.
+    static func message(_ kind: FailureKind, _ retryAt: Date?, timeScale: UInt64 = 1) -> String {
         if kind == .enrollmentStarted, let retryAt { return FailureKind.enrollmentStartedText(after: retryAt) }
-        return kind.message
+        return kind.message(timeScale: timeScale)
     }
 }
 

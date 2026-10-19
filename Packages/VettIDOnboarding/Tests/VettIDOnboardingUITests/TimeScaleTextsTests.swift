@@ -66,6 +66,21 @@ import VettIDOnboarding
         #expect(OnboardingStrings.rootLongUnreachable(wait(24)) == "VettID has not reached your vault for 7 hours or more.")
     }
 
+    /// A failure that names a scaled wait (`device_secret`, from any signed request) says it at the vault's scale on every
+    /// screen that shows a failure, as vettid-android's `failureText()`: the onboarding's notice and a failed update.
+    @Test func aFailureOnAnyScreenSaysTheScaledRecovery() {
+        let real = "It takes one to three days,"
+        let staging = "It takes 1 hour to 3 hours,"
+        #expect(ErrorNotice.message(.deviceSecret, nil).contains(real))
+        #expect(ErrorNotice.message(.deviceSecret, nil, timeScale: 24).contains(staging))
+        let rel = { (n: UInt64) in
+            ReleaseView(number: n, pcr0: String(repeating: "ab", count: 48), status: "active", endsAt: nil, notes: "")
+        }
+        let p = UpdateProgress(step: .newReleaseFailed, from: rel(4), to: rel(5), failure: .deviceSecret, canAbandon: true)
+        #expect(updateFailureText(p).contains(real))
+        #expect(updateFailureText(p, timeScale: 24).contains(staging))
+    }
+
     /// Texts kept in real time on purpose: the "recover elsewhere" screen has no vault, so no scale; "within a day" of a
     /// failed move is the data bucket's version retention (STAGING-TIME-SCALE N4), which is never scaled.
     @Test func theTextsThatStayInRealTime() {

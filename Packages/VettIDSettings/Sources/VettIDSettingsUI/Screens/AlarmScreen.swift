@@ -23,6 +23,7 @@ public struct AlarmActions {
 /// password, and the alert resolved. On "not me" the advice to change the password and the PIN. Mirrors vettid-android
 /// `AlarmContent`.
 public struct AlarmContent: View {
+    @Environment(\.vettIDTimeScale) private var timeScale
     @Environment(\.scenePhase) private var scenePhase
     let state: AlarmState
     let actions: AlarmActions
@@ -63,7 +64,8 @@ public struct AlarmContent: View {
             VStack(alignment: .leading, spacing: Spacing.l) {
                 NoticeCard(.info, title: CredentialStrings.alarmMine, message: CredentialStrings.alarmMineBody)
                 if let error = state.error {
-                    NoticeCard(.urgent, title: CredentialStrings.title, message: error.message).accessibilityIdentifier("error")
+                    NoticeCard(.urgent, title: CredentialStrings.title, message: error.message(timeScale: timeScale))
+                        .accessibilityIdentifier("error")
                 }
             }
         }
@@ -96,7 +98,8 @@ public struct AlarmContent: View {
                 )
                 .accessibilityIdentifier("alarm_password")
                 if let error = state.error {
-                    NoticeCard(.urgent, title: CredentialStrings.title, message: error.message).accessibilityIdentifier("error")
+                    NoticeCard(.urgent, title: CredentialStrings.title, message: error.message(timeScale: timeScale))
+                        .accessibilityIdentifier("error")
                 }
             }
             .disabled(state.busy)

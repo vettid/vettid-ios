@@ -27,6 +27,7 @@ public struct NewCredentialActions {
 /// destroyed, the PIN on the in-app keypad (IOS-PLAN §6.5), the current password, the new one under the rules of release R
 /// and again, the acknowledgement, then a final confirmation. Mirrors vettid-android `NewCredentialContent`.
 public struct NewCredentialContent: View {
+    @Environment(\.vettIDTimeScale) private var timeScale
     @Environment(\.vettIDColors) private var colors
     @Environment(\.scenePhase) private var scenePhase
     let state: NewCredentialState
@@ -81,7 +82,8 @@ public struct NewCredentialContent: View {
                 .accessibilityIdentifier("new_credential_confirm")
                 acknowledgement
                 if let error = state.error {
-                    NoticeCard(.urgent, title: CredentialStrings.newTitle, message: error.message).accessibilityIdentifier("error")
+                    NoticeCard(.urgent, title: CredentialStrings.newTitle, message: error.message(timeScale: timeScale))
+                        .accessibilityIdentifier("error")
                 }
             }
             .disabled(state.busy)

@@ -6,15 +6,15 @@ import VettIDData
 /// (``VaultRepository/acknowledgeChangeCheck()``); a change screen that was waiting shows and acknowledges it itself, and
 /// one opened later does not show it again (chosen; not in the spec).
 public enum ChangeCheckNotice {
-    /// The text of a decided change, nil while undecided.
-    public static func text(_ c: ChangeCheck) -> String? {
+    /// The text of a decided change, nil while undecided; a refusal's text at the vault's [timeScale].
+    public static func text(_ c: ChangeCheck, timeScale: UInt64 = 1) -> String? {
         switch (c.type, c.status) {
         case (_, .checking), (_, .unreachable): nil
         case (.pin, .applied): ChangeNoticeTexts.pinApplied
         case (.password, .applied): ChangeNoticeTexts.passwordApplied
         case (.pin, .notApplied): ChangeNoticeTexts.pinNotChanged
         case (.password, .notApplied): ChangeNoticeTexts.passwordNotChanged
-        case (_, .refused(let kind, _)): kind.message
+        case (_, .refused(let kind, _)): kind.message(timeScale: timeScale)
         case (.pin, .ended): ChangeNoticeTexts.pinEnded
         case (.password, .ended): ChangeNoticeTexts.passwordEnded
         }

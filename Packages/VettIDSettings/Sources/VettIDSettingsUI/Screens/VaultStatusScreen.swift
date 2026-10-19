@@ -174,12 +174,13 @@ public struct VaultStatusContent: View {
 
 /// A screen's value that could not be loaded: the failure, and "Try again" when it can be.
 struct LoadFailure: View {
+    @Environment(\.vettIDTimeScale) private var timeScale
     let error: FailureKind
     var retry: (@MainActor () -> Void)?
 
     var body: some View {
         VStack(spacing: Spacing.l) {
-            NoticeCard(.warning, title: SettingsStrings.title, message: error.message)
+            NoticeCard(.warning, title: SettingsStrings.title, message: error.message(timeScale: timeScale))
             if let retry { SecondaryButton(SettingsStrings.retry, action: retry) }
         }
         .padding(Spacing.gutter)

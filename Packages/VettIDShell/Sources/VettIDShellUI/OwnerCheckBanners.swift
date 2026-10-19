@@ -65,7 +65,8 @@ public struct OwnerCheckBanners: View {
     }
 
     /// The early warning: the deadline's time; without one, "within the hour", or on a scaled vault [scaledAhead]
-    /// (``OwnerCheckGate/scaledWarningText``).
+    /// (``OwnerCheckGate/scaledWarningText``). The branch without a deadline cannot be reached today, since
+    /// ``OwnerCheckView/warning(_:)`` needs a deadline; it is kept as vettid-android keeps it.
     static func warningText(_ deadline: Date?, scaledAhead: String? = nil) -> String {
         if let deadline { return ShellStrings.ownerCheckWarning(ShellTimes.time(deadline)) }
         return scaledAhead.map(ShellStrings.ownerCheckWarningSoonScaled) ?? ShellStrings.ownerCheckWarningSoon

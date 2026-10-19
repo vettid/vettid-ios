@@ -1,4 +1,5 @@
 import Foundation
+import VettIDCrypto
 
 // The member-facing texts of failures and of named limits (the package's strings `data_failure_*` and `data_limit_*`).
 // Mirrors vettid-android `core/data` `vault/FailureText.kt`.
@@ -83,7 +84,7 @@ public extension FailureKind {
     /// recovery's time from its code delay (24 h) to its quiet period (72 h), each at [timeScale] (the owner's decision of
     /// 2026-10-19).
     private static func deviceSecretText(timeScale: UInt64) -> String {
-        guard timeScale > 1 else { return DataStrings.failureDeviceSecret }
+        guard timeScale > TimeScale.real else { return DataStrings.failureDeviceSecret }
         return DataStrings.failureDeviceSecretScaled(
             TimeScales.text(TimeScales.recoveryDelay, by: timeScale), TimeScales.text(TimeScales.recoveryQuiet, by: timeScale)
         )

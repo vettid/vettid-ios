@@ -55,7 +55,7 @@ struct OwnerCheckSettingsRows: View {
                 ) {
                     Button(SettingsStrings.done, action: actions.dismissError)
                 } message: {
-                    Text(state.error?.message ?? "")
+                    Text(state.error?.message(timeScale: state.timeScale) ?? "")
                 }
         }
     }
