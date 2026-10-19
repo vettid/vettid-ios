@@ -278,10 +278,10 @@ struct CredentialOps: Sendable {
         try await device.credentialLock.withLock { try await sendChange(held, utk: nil, first: false) }
     }
 
-    /// Once the request may have been deposited, only the vault's own refusal (``VaultOpError``) or a cancellation
-    /// leaves here as itself: every other failure (no answer, the relay, the device state or a key that could not be
-    /// saved after the deposit, a blob that could not be kept after the answer) is ``ChangeUnanswered``, so that the
-    /// change is decided rather than taken as not sent.
+    /// Once the request may have been deposited, only the vault's own refusal (``VaultOpError``) leaves here as itself:
+    /// every other failure (no answer, a cancellation, the relay, the device state or a key that could not be saved after
+    /// the deposit, a blob that could not be kept after the answer) is ``ChangeUnanswered`` with the request, so that the
+    /// change is decided (and can be sent again) rather than taken as not sent.
     private func sendChange(_ held: HeldRequest, utk: UtkRecord?, first: Bool) async throws -> [UInt8] {
         do {
             let r = first
@@ -292,9 +292,8 @@ struct CredentialOps: Sendable {
             // An earlier credential operation applied without its answer: never resent with the typed secrets.
             if e.code == Self.codeStaleCredential { try? await fetch() }
             throw e
-        } catch is CancellationError {
-            throw CancellationError()
         } catch {
+            // A cancellation too: a copy may have gone out, and the request is kept to be sent again.
             throw ChangeUnanswered(held: held)
         }
     }

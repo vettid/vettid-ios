@@ -191,6 +191,27 @@ import VettIDTesting
         #expect(!outbox.contains { $0["id"] as? String == change.id }, "never in the stored outbox")
     }
 
+    /// A cancellation once the request was deposited is no answer: ``ChangeUnanswered`` with the request, which can be
+    /// sent again as the same request.
+    @Test func aCancellationAfterTheDepositKeepsTheRequest() async throws {
+        let h = try await holder()
+        let marked = Marked()
+        let task = Task { try await h.api.credentialChangePassword(password: "a", newPassword: "b", pin: "975310", marked: marked) }
+        try await ops.answer(h.v, h.d, "credential.version", #"{"exists":true,"version":1}"#)
+        let deposited = try await open(h.v)
+        task.cancel()
+        do {
+            try await task.value
+            Issue.record("no error")
+        } catch let u as ChangeUnanswered {
+            #expect(u.held.id == deposited.id && u.held.id == marked.change?.id)
+            let again = Task { try await h.api.resendChange(u.held) }
+            #expect(try await open(h.v).id == u.held.id, "sent again as the same request")
+            again.cancel()
+            _ = await again.result
+        }
+    }
+
     /// The vault's clock runs on the monotonic clock that counts the phone's sleep.
     @Test func theDefaultClockCountsSleep() {
         let cfg = DeviceConfig(
