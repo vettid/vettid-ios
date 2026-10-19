@@ -224,25 +224,7 @@ final class StagingTests: XCTestCase {
         field.typeText(password)
         tapPrimary(app)
 
-        // The answer: the screen closes (or first says that the vault could not record the presence), or it stays with
-        // the wrong entry, the checks left or the failure.
-        var screen: [String: String] = [:]
-        let answered = waitUntil(timeout: Self.network) {
-            screen = shown(app)
-            return screen["owner_check"] == nil || screen["owner_check_passed_unrecorded"] != nil || failureText(in: screen) != nil
-        }
-        if screen["owner_check_passed_unrecorded"] != nil {
-            tapPrimary(app)
-            if !waitUntil(timeout: 30, { shown(app)["owner_check_passed_unrecorded"] == nil }) {
-                return fail(app, "The check's presence notice did not close.")
-            }
-        } else if !answered || screen["owner_check"] != nil {
-            let left = screen["owner_check_left"].map { " \($0)" } ?? ""
-            return fail(app, "The check did not pass: its screen is still open.\(left)")
-        }
-        // Back on Settings, under no check screen, with no failure.
-        if !row.waitForExistence(timeout: 30) { return fail(app, "Settings did not come back after the check.") }
-        if let why = failureText(in: shown(app)) { return fail(app, "The check failed: \(why)") }
+        guard checkPassed(app, row: row) else { return }
         failOnSavePassword(app)
         lock(app)
     }
@@ -251,10 +233,11 @@ final class StagingTests: XCTestCase {
     /// the current password and a new one the test makes up (the current password followed by
     /// ``wrongPinSuffix``); the vault refuses it (`bad_pin`, VAULT-MESSAGING §11.14.9) and the form shows "That PIN is not
     /// correct.". The form is then left without a retry, so the member's password is never changed, and the vault is
-    /// locked. The right PIN is never sent in this test.
+    /// locked. The right PIN is never sent with the change (the unlock uses it).
     ///
-    /// A wrong PIN counts as a failed daily check on the vault (§3.6.5): each run spends one of the checks left before
-    /// the vault locks. Skipped (after the lock) when the change asks for no PIN (a vault without a phone secret).
+    /// A wrong PIN in a password change is not a failed daily check: it spends one step of the PIN backoff (VAULT-MESSAGING
+    /// §11.8), which the next PIN check that succeeds resets (an unlock, the owner check, "Check now"). Skipped (after the
+    /// lock) when the change asks for no PIN (a vault without a phone secret).
     @MainActor
     func testStagingWrongPinInPasswordChange() throws {
         let pin = try Self.pin()
@@ -315,6 +298,45 @@ final class StagingTests: XCTestCase {
         return true
     }
 
+    /// The voluntary check's answer: true when its screen closed (after the presence notice, if any) on two snapshots in
+    /// a row, the Settings [row] can be tapped again, and no failure showed meanwhile, a late one included; false after
+    /// the failure. (A snapshot that fails reads as empty: it never counts as closed.)
+    @MainActor
+    private func checkPassed(_ app: XCUIApplication, row: XCUIElement) -> Bool {
+        var screen: [String: String] = [:]
+        var closedOnce = false
+        let answered = waitUntil(timeout: Self.network) {
+            screen = shown(app)
+            if screen.isEmpty { return false }
+            if screen["owner_check_passed_unrecorded"] != nil || failureText(in: screen) != nil { return true }
+            let closed = screen["owner_check"] == nil
+            defer { closedOnce = closed }
+            return closed && closedOnce
+        }
+        if screen["owner_check_passed_unrecorded"] != nil {
+            tapPrimary(app)
+            if !waitUntil(timeout: 30, { let s = shown(app); return !s.isEmpty && s["owner_check_passed_unrecorded"] == nil }) {
+                fail(app, "The check's presence notice did not close.")
+                return false
+            }
+        } else if !answered || screen["owner_check"] != nil {
+            let left = screen["owner_check_left"].map { " \($0)" } ?? ""
+            fail(app, "The check did not pass: its screen is still open.\(left)")
+            return false
+        }
+        // Back on Settings, under no check screen; a refusal that comes late still fails.
+        if !waitUntil(timeout: 30, { row.exists && row.isHittable }) {
+            fail(app, "Settings did not come back after the check.")
+            return false
+        }
+        _ = waitUntil(timeout: 3) { failureText(in: shown(app)) != nil }
+        if let why = failureText(in: shown(app)) {
+            fail(app, "The check failed: \(why)")
+            return false
+        }
+        return true
+    }
+
     /// Settings → Credential → Change password; its current-password field, or nil after the failure.
     @MainActor
     private func openPasswordChange(_ app: XCUIApplication) -> XCUIElement? {
@@ -352,7 +374,7 @@ final class StagingTests: XCTestCase {
         let why: String
         if screen["change_password_done"] != nil {
             why = "The vault changed the password with a wrong PIN: it is now the input password followed by "
-                + "\"\(Self.wrongPinSuffix)\"."
+                + "\"\(Self.wrongPinSuffix)\". Update VETTID_STAGING_PASSWORD in the inputs file to match."
         } else if let check = screen["change_check"] {
             why = "The change got no plain answer: \(check)"
         } else if let refusal = screen["error"] {
@@ -467,7 +489,7 @@ final class StagingTests: XCTestCase {
         expect(app, "app_shell", timeout: Self.network)
         // From Settings or a screen pushed over it: back arrows up to the screen with the account button.
         let account = app.buttons["top_bar_account"]
-        for _ in 0..<4 where !account.waitForExistence(timeout: 2) {
+        for _ in 0..<4 where !(account.waitForExistence(timeout: 2) && account.isHittable) {
             let back = app.buttons["top_bar_back"].firstMatch
             guard back.exists, back.isHittable else { break }
             back.tap()

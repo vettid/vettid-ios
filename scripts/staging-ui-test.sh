@@ -28,9 +28,10 @@
 #                                        voluntary check passes
 #   testStagingWrongPinInPasswordChange  Settings -> Credential -> Change password with a wrong PIN (the input PIN with
 #                                        its last digit changed): the vault's refusal is shown and the form is left
-#                                        without a retry, so the password is never changed. It spends one failed check
-#                                        attempt: a wrong PIN counts as a failed daily check on the vault, so run it
-#                                        sparingly and follow it with testStagingCheckNow or testStagingUnlockLock.
+#                                        without a retry, so the password is never changed. The wrong PIN is not a
+#                                        failed daily check: it spends one step of the vault's PIN backoff
+#                                        (VAULT-MESSAGING §11.8), which the next PIN check that succeeds resets; so
+#                                        follow it with testStagingUnlockLock or testStagingCheckNow.
 #
 # A test without its inputs is skipped. The inputs reach only the test step, as TEST_RUNNER_<NAME> (xcodebuild passes
 # them to the runner as <NAME>), never a command line or the build; xcodebuild's output is shown with them (and the
@@ -64,8 +65,7 @@ while [[ $# -gt 0 ]]; do
 done
 [[ -n "${DEVICE}" ]] || { echo "--device is required" >&2; usage; }
 case "${TEST}" in
-  testStagingEnroll|testStagingUnlockLock|testStagingApproveUpdate|testStagingApproveUpdateAtUnlock|testStagingCheckNow) ;;
-  testStagingWrongPinInPasswordChange) ;;
+  testStagingEnroll|testStagingUnlockLock|testStagingApproveUpdate|testStagingApproveUpdateAtUnlock|testStagingCheckNow|testStagingWrongPinInPasswordChange) ;;
   *) echo "--test must be testStagingEnroll, testStagingUnlockLock, testStagingApproveUpdate," \
        "testStagingApproveUpdateAtUnlock, testStagingCheckNow or testStagingWrongPinInPasswordChange" >&2
      usage ;;
