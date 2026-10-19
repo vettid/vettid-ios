@@ -12,6 +12,8 @@ public struct SettingsHost {
     public var onAccount: @MainActor () -> Void = {}
     public var onOpenAccountSite: @MainActor () -> Void = {}
     public var onVaultStatus: @MainActor () -> Void = {}
+    /// Settings → Vault → "Update available": the update screen.
+    public var onReleaseUpdate: @MainActor () -> Void = {}
     public var onAttestation: @MainActor () -> Void = {}
     public var onChangePin: @MainActor () -> Void = {}
     /// Settings → Security → Credential.
@@ -33,6 +35,7 @@ public struct SettingsRoute: View {
     private let vault: any VaultRepository
     private let ownerChecks: any OwnerCheckRepository
     private let appLock: any AppLockSettings
+    private let updates: (any ReleaseUpdateRepository)?
     private let promptReason: String
     private let host: SettingsHost
     /// The app's "Allow screenshots" (IOS-PLAN §4), from the environment; absent in a preview or a test.
@@ -40,12 +43,14 @@ public struct SettingsRoute: View {
     @State private var model: SettingsViewModel?
     @State private var ownerCheck: OwnerCheckSettingsViewModel?
 
-    /// [promptReason]: what the Face ID, Touch ID or passcode prompt says when the app lock is turned on.
+    /// [promptReason]: what the Face ID, Touch ID or passcode prompt says when the app lock is turned on. [updates]: the
+    /// release update ("Update available").
     public init(
         account: any AccountRepository,
         vault: any VaultRepository,
         ownerChecks: any OwnerCheckRepository,
         appLock: any AppLockSettings,
+        updates: (any ReleaseUpdateRepository)? = nil,
         promptReason: String,
         host: SettingsHost
     ) {
@@ -53,6 +58,7 @@ public struct SettingsRoute: View {
         self.vault = vault
         self.ownerChecks = ownerChecks
         self.appLock = appLock
+        self.updates = updates
         self.promptReason = promptReason
         self.host = host
     }
@@ -70,7 +76,7 @@ public struct SettingsRoute: View {
                     state: SettingsState(
                         account: account.account, appLockOn: appLock.state.isOn, appLockMethod: appLock.method,
                         appLockTimeout: appLock.timeout, screenshotsAllowed: screenshots?.allowed ?? false,
-                        screenshotsStayOn: screenshots?.staysOn ?? false, phoneSecret: vault.usesPhoneSecret
+                        screenshotsStayOn: screenshots?.staysOn ?? false, phoneSecret: vault.usesPhoneSecret, update: updates?.offer
                     ),
                     ownerCheck: OwnerCheckSettingsState(view: ownerChecks.ownerCheck)
                 )
@@ -79,7 +85,8 @@ public struct SettingsRoute: View {
         .onAppear {
             if model == nil {
                 model = SettingsViewModel(
-                    account: account, vault: vault, appLock: appLock, promptReason: promptReason, screenshots: screenshots
+                    account: account, vault: vault, appLock: appLock, promptReason: promptReason, screenshots: screenshots,
+                    updates: updates
                 )
                 ownerCheck = OwnerCheckSettingsViewModel(repo: ownerChecks)
             }
@@ -91,6 +98,7 @@ public struct SettingsRoute: View {
         a.back = host.onBack
         a.account = host.onAccount
         a.vaultStatus = host.onVaultStatus
+        a.releaseUpdate = host.onReleaseUpdate
         a.attestation = host.onAttestation
         a.changePin = host.onChangePin
         a.credential = host.onCredential

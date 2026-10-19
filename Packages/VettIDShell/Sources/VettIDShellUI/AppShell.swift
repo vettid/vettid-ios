@@ -12,8 +12,8 @@ import VettIDUI
 /// vettid-android's order; the owner check's banners above every screen; a navigation stack per destination for the
 /// screens pushed over it, with the system back gesture; the avatar sheet; and the owner check the member asks for
 /// ("Check now", turning the hold off) over everything. The check past the deadline is the root's (``OwnerCheckGate``),
-/// before the shell. The banners of later rows (the clone alarm, a pending deletion, a release update, the notifications
-/// note, the rotation offer) go above the owner check's, in vettid-android's order. Mirrors vettid-android `AppShell`.
+/// before the shell. The banners of later rows (the clone alarm, a pending deletion, a release update's banner, the
+/// notifications note, the rotation offer) go above the owner check's, in vettid-android's order. Mirrors vettid-android `AppShell`.
 public struct AppShell: View {
     private let account: any AccountRepository
     private let vault: any VaultRepository
@@ -29,11 +29,14 @@ public struct AppShell: View {
     private let promptReason: String
     private let canary: (any CanaryManifestRepository)?
     private let canaryInbox: CanaryManifestInbox?
+    private let releaseUpdates: (any ReleaseUpdateRepository)?
+    private let releaseNotes: (any ReleaseNotesRepository)?
     private let onOpenPortal: @MainActor () -> Void
 
     /// [model]: where the member is, owned above the owner check's gate. [gate]: the owner check at [now] (the root re-reads
     /// it as time passes). [promptReason]: what the Face ID, Touch ID or passcode prompt says when the app lock is turned on.
     /// [canary] and [canaryInbox]: the canary manifest on Settings → Attestation (VAULT-RELEASES §10.1 step 9).
+    /// [releaseUpdates] and [releaseNotes]: Settings → Vault → "Update available" and its screen (RELEASE-UPDATES §2).
     public init(
         account: any AccountRepository,
         vault: any VaultRepository,
@@ -49,6 +52,8 @@ public struct AppShell: View {
         promptReason: String,
         canary: (any CanaryManifestRepository)? = nil,
         canaryInbox: CanaryManifestInbox? = nil,
+        releaseUpdates: (any ReleaseUpdateRepository)? = nil,
+        releaseNotes: (any ReleaseNotesRepository)? = nil,
         onOpenPortal: @escaping @MainActor () -> Void
     ) {
         self.account = account
@@ -65,6 +70,8 @@ public struct AppShell: View {
         self.promptReason = promptReason
         self.canary = canary
         self.canaryInbox = canaryInbox
+        self.releaseUpdates = releaseUpdates
+        self.releaseNotes = releaseNotes
         self.onOpenPortal = onOpenPortal
     }
 
@@ -161,8 +168,8 @@ public struct AppShell: View {
         switch model.destination {
         case .settings:
             SettingsRoute(
-                account: account, vault: vault, ownerChecks: ownerChecks, appLock: appLock, promptReason: promptReason,
-                host: settingsHost
+                account: account, vault: vault, ownerChecks: ownerChecks, appLock: appLock, updates: releaseUpdates,
+                promptReason: promptReason, host: settingsHost
             )
         default:
             ComingLaterScreen(destination: model.destination, chrome: chrome)
@@ -190,6 +197,10 @@ public struct AppShell: View {
             NewPhoneSecretRoute(vault: vault) { model.pop() }
         case .deleteVault:
             DeleteVaultRoute(vault: vault) { model.pop() }
+        case .releaseUpdate:
+            if let releaseUpdates, let releaseNotes {
+                ReleaseUpdateRoute(updates: releaseUpdates, ownerCheck: ownerChecks, notes: releaseNotes) { model.pop() }
+            }
         }
     }
 
@@ -201,6 +212,7 @@ public struct AppShell: View {
         h.onAccount = { model.showAccount = true }
         h.onOpenAccountSite = onOpenPortal
         h.onVaultStatus = { model.push(.vaultStatus) }
+        h.onReleaseUpdate = { model.push(.releaseUpdate) }
         h.onAttestation = { model.push(.attestation) }
         h.onChangePin = { model.push(.changePin(fromAttempts: false)) }
         h.onCredential = { model.push(.credential) }

@@ -126,6 +126,8 @@ public final class FakeVaultService: @unchecked Sendable {
     var vaultClockAhead: TimeInterval = 0
     var unlockAnswers: [UnlockAnswer] = []
     var unlocksValue: [UnlockSeen] = []
+    /// The releases the fake runs and the release updates it was sent (``FakeVaultService+Release.swift``).
+    var releases = FakeReleases()
     var relayLockAnswerValue: RelayLockAnswer = .lock
     var memberLockAnswerValue: MemberLockAnswer = .lock
     var heldSlots: [String: [UInt8]] = [:]
@@ -280,10 +282,13 @@ public final class FakeVaultService: @unchecked Sendable {
         return VerifiedEnclave(descriptor: d, measurements: r.measurements, release: r)
     }
 
-    /// The served manifest of [serial], listing this service's release 3 `active`, signed by [signer] (the TEST key).
-    public func servedManifest(serial: UInt64 = 7, signer: P256.Signing.PrivateKey? = nil) throws -> [UInt8] {
-        let entry = JsonBuilder().uint("release", 3).string("pcr0", Self.pcr0).string("pcr1", Self.pcr1).string("pcr2", Self.pcr2).string("seal_key", "arn:aws:kms:us-east-1:000000000000:key/test").string("status", "active").string("published_at", "2026-09-01T00:00:00Z").string("notes", "https://vettid.org/releases/3").build()
-        let m = JsonBuilder().uint("v", 1).uint("serial", serial).string("issued_at", "2026-10-02T12:00:00Z").raw("releases", JsonBuilder.array([entry])).bytes()
+    /// The served manifest of [serial], listing this service's release 3 `active` (and release 4 `active` when
+    /// [release4]), signed by [signer] (the TEST key).
+    public func servedManifest(serial: UInt64 = 7, signer: P256.Signing.PrivateKey? = nil, release4: Bool = false) throws -> [UInt8] {
+        let entries = (release4 ? [3, 4] : [3]).map { (n: UInt64) in
+            JsonBuilder().uint("release", n).string("pcr0", Self.pcr0(n)).string("pcr1", Self.pcr1).string("pcr2", Self.pcr2).string("seal_key", "arn:aws:kms:us-east-1:000000000000:key/test\(n == 3 ? "" : String(n))").string("status", "active").string("published_at", "2026-09-01T00:00:00Z").string("notes", "https://vettid.org/security/releases/\(n)/").build()
+        }
+        let m = JsonBuilder().uint("v", 1).uint("serial", serial).string("issued_at", "2026-10-02T12:00:00Z").raw("releases", JsonBuilder.array(entries)).bytes()
         let key = signer ?? manifestSigner
         let sig = try key.signature(for: Array(ReleaseManifest.label.utf8) + [0] + m).rawRepresentation
         let keyID = try ManifestKey(spki: Array(key.publicKey.derRepresentation)).keyID
@@ -305,7 +310,7 @@ public final class FakeVaultService: @unchecked Sendable {
             case ("POST", "/api/vault/lock"): return memberLock(r)
             case ("GET", "/api/vault/status"):
                 if noVault || vaultDeletedValue && !statusLagsDeletionValue { return .json(200, #"{"vault":null}"#) }
-                return .json(200, #"{"vault":{"vault_id":"\#(vaultID)","state":"\#(statusState)","release":{"number":3,"status":"active"}}}"#)
+                return .json(200, #"{"vault":{"vault_id":"\#(vaultID)","state":"\#(statusState)","release":{"number":\#(releases.routed),"status":"active"}}}"#)
             default:
                 if r.method == "GET", r.path.hasPrefix("/api/vault/requests/") { return slot(String(r.path.dropFirst("/api/vault/requests/".count))) }
                 return .json(404, #"{"error":"not_found"}"#)
@@ -329,8 +334,9 @@ public final class FakeVaultService: @unchecked Sendable {
 
     private func enclave() -> FakeHTTPServer.Answer {
         if enclaveOfflineValue { return .failure(.notConnectedToInternet) }
-        let d = Descriptor.marshal(instanceID: instanceID, etk: etk.publicKey, release: Self.pcr0, notAfter: Date().addingTimeInterval(3600), capabilities: capabilitiesValue)
-        return .json(200, JsonBuilder().string("instance_id", instanceID).string("release", Self.pcr0).base64("descriptor", d).base64("attestation", [1, 2, 3]).build())
+        let release = Self.pcr0(releases.routed)
+        let d = Descriptor.marshal(instanceID: instanceID, etk: etk.publicKey, release: release, notAfter: Date().addingTimeInterval(3600), capabilities: capabilitiesValue)
+        return .json(200, JsonBuilder().string("instance_id", instanceID).string("release", release).base64("descriptor", d).base64("attestation", [1, 2, 3]).build())
     }
 
     private func slot(_ requestID: String) -> FakeHTTPServer.Answer {

@@ -50,7 +50,7 @@ extension FakeVaultService {
         if manifestOfflineValue { return .failure(.notConnectedToInternet) }
         if manifestBrokenValue { return .bytes(200, Array("not a manifest".utf8)) }
         guard let serial = publishedSerialValue else { return .json(404, #"{"error":"not_found"}"#) }
-        return (try? servedManifest(serial: serial)).map { .bytes(200, $0) } ?? .empty(500)
+        return (try? servedManifest(serial: serial, release4: releases.listed4)).map { .bytes(200, $0) } ?? .empty(500)
     }
 }
 #endif

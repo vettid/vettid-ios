@@ -2514,6 +2514,655 @@
           }
         }
       }
+    },
+    "release_notes_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What's new in release %lld"
+          }
+        }
+      }
+    },
+    "release_notes_loading": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading the release notes…"
+          }
+        }
+      }
+    },
+    "release_notes_unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Release notes unavailable"
+          }
+        }
+      }
+    },
+    "release_notes_security_none": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No security fix"
+          }
+        }
+      }
+    },
+    "release_notes_security_recommended": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Security fix: update recommended"
+          }
+        }
+      }
+    },
+    "release_notes_security_urgent": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Security fix: update urgently"
+          }
+        }
+      }
+    },
+    "release_notes_earlier": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Also in earlier releases"
+          }
+        }
+      }
+    },
+    "release_notes_earlier_item": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Release %lld: %@"
+          }
+        }
+      }
+    },
+    "release_notes_from": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From %@"
+          }
+        }
+      }
+    },
+    "release_notes_information": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Release notes are information. What keeps your vault safe is the signed release list and the fingerprint below."
+          }
+        }
+      }
+    },
+    "release_notes_full": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Full release notes"
+          }
+        }
+      }
+    },
+    "release_update_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update your vault"
+          }
+        }
+      }
+    },
+    "release_update_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approve release %lld for your vault with your vault PIN."
+          }
+        }
+      }
+    },
+    "release_update_approve": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approve and update"
+          }
+        }
+      }
+    },
+    "release_update_how": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID locks your vault, opens it again with your approval, and then opens it on the new release. This takes a moment; a release that has to start first can take a few minutes. Your vault stays locked meanwhile."
+          }
+        }
+      }
+    },
+    "release_update_ended_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "It has ended and is open only so that you can move your vault. Update now to keep it."
+          }
+        }
+      }
+    },
+    "release_update_check_first_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Daily check first"
+          }
+        }
+      }
+    },
+    "release_update_check_first_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault is waiting for its daily PIN and password check. Do the check first, then update."
+          }
+        }
+      }
+    },
+    "release_update_none_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault is up to date"
+          }
+        }
+      }
+    },
+    "release_update_none_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault runs the newest release."
+          }
+        }
+      }
+    },
+    "release_update_running_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Updating your vault to release %lld…"
+          }
+        }
+      }
+    },
+    "release_update_returning_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Returning to release %lld…"
+          }
+        }
+      }
+    },
+    "release_update_step_lock": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lock your vault"
+          }
+        }
+      }
+    },
+    "release_update_step_approve": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move from release %lld to release %lld"
+          }
+        }
+      }
+    },
+    "release_update_step_open": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open your vault on release %lld"
+          }
+        }
+      }
+    },
+    "release_update_step_return": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opening your vault on release %lld"
+          }
+        }
+      }
+    },
+    "release_update_starting": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Release %lld is starting. This can take a few minutes."
+          }
+        }
+      }
+    },
+    "release_update_keep_open": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep VettID open until this is done."
+          }
+        }
+      }
+    },
+    "release_update_done_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault is updated"
+          }
+        }
+      }
+    },
+    "release_update_done_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault now runs release %lld (fingerprint %@) and is open."
+          }
+        }
+      }
+    },
+    "release_update_continue": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue"
+          }
+        }
+      }
+    },
+    "release_update_refused_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The update was refused"
+          }
+        }
+      }
+    },
+    "release_update_refused_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault stayed on release %lld and is open."
+          }
+        }
+      }
+    },
+    "release_update_refused_why": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Why"
+          }
+        }
+      }
+    },
+    "release_update_refused_target": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Release %lld is not an active release in the release list your vault trusts."
+          }
+        }
+      }
+    },
+    "release_update_refused_downgrade": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Release %lld is not newer than your vault's release."
+          }
+        }
+      }
+    },
+    "release_update_refused_approval": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault could not verify this phone's approval."
+          }
+        }
+      }
+    },
+    "release_update_refused_seal_key": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault did not accept the sealing key of release %lld."
+          }
+        }
+      }
+    },
+    "release_update_refused_pending": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Another update is already under way for your vault."
+          }
+        }
+      }
+    },
+    "release_update_refused_write": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault could not record the update. Try again later."
+          }
+        }
+      }
+    },
+    "release_update_refused_other": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault did not move (%@)."
+          }
+        }
+      }
+    },
+    "release_update_failed_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The update did not go through"
+          }
+        }
+      }
+    },
+    "release_update_failed_body_open": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing changed: your vault stays on release %lld and is open."
+          }
+        }
+      }
+    },
+    "release_update_failed_body_lock_pending": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing changed: your vault stays on release %lld. It could not be reached to lock it, so it may still be open. This phone is locked, and VettID keeps trying to lock the vault."
+          }
+        }
+      }
+    },
+    "release_update_failed_body_locked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing changed: your vault stays on release %lld. It is locked; enter your PIN to try again."
+          }
+        }
+      }
+    },
+    "release_update_retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try again"
+          }
+        }
+      }
+    },
+    "release_update_not_now": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not now"
+          }
+        }
+      }
+    },
+    "release_update_unlock_only": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock without updating"
+          }
+        }
+      }
+    },
+    "release_update_backoff": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too many wrong PINs. Wait, then try again."
+          }
+        }
+      }
+    },
+    "release_update_start_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The new release did not start. Try again later."
+          }
+        }
+      }
+    },
+    "release_update_new_failed_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Release %lld did not open your vault"
+          }
+        }
+      }
+    },
+    "release_update_new_failed_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault was moved to release %lld but did not open there. Try again, or return to release %lld: that is possible until release %lld has opened your vault once."
+          }
+        }
+      }
+    },
+    "release_update_new_failed_body_no_return": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault was moved to release %lld but did not open there. Try again with your PIN."
+          }
+        }
+      }
+    },
+    "release_update_new_failed_why": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What happened"
+          }
+        }
+      }
+    },
+    "release_update_return": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Return to release %lld"
+          }
+        }
+      }
+    },
+    "release_update_return_confirm_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Return to release %lld?"
+          }
+        }
+      }
+    },
+    "release_update_return_confirm_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault goes back to release %lld and opens there. You can approve release %lld again later."
+          }
+        }
+      }
+    },
+    "release_update_abandoned_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back on release %lld"
+          }
+        }
+      }
+    },
+    "release_update_abandoned_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault runs release %lld again and is open. You can update to release %lld later."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

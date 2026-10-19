@@ -14,6 +14,17 @@ enum SettingsStrings {
         String(localized: "settings_section_vault", defaultValue: "Vault", bundle: .module)
     }
 
+    static var vaultUpdate: String {
+        String(localized: "settings_vault_update", defaultValue: "Update available", bundle: .module)
+    }
+
+    static func vaultUpdateBody(_ release: Int, _ current: Int) -> String {
+        String(
+            localized: "settings_vault_update_body", defaultValue: "Release \(release) (your vault runs release \(current))",
+            bundle: .module
+        )
+    }
+
     static var vaultStatus: String {
         String(localized: "settings_vault_status", defaultValue: "Vault status", bundle: .module)
     }

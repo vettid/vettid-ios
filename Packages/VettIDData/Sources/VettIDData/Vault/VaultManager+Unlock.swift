@@ -17,6 +17,38 @@ enum UnlockSecretPath {
     case earlier
 }
 
+/// How one unlock goes: which of the phone's secrets, whether a move is followed at once, and where it is routed.
+struct UnlockRoute: Sendable {
+    var path: UnlockSecretPath = .current
+    /// After `update: moved`, unlock again at once (§11.10.6): the unlock screen. The release update reports the move.
+    var followMove = true
+    /// A release (PCR0) to route to: only to abandon an unconfirmed move (§11.10.5).
+    var release: String?
+    /// Hears each `503 release_starting` while the routed release starts (§11.10.5).
+    var onStarting: (@Sendable (Int) -> Void)?
+}
+
+/// The sealed result of one unlock, the session it went through, and whether the vault moved.
+struct UnlockOpened: Sendable {
+    let outcome: UnlockOutcome
+    let session: VaultSession
+    let moved: Bool
+}
+
+/// One unlock's outcome; [moved]: the vault moved and locked itself (only without following the move); [abandoned]: it
+/// returned to the previous release (§11.10.4).
+struct UnlockStepOutcome: Sendable {
+    let attempt: UnlockAttempt
+    var moved = false
+    var abandoned = false
+
+    init(_ attempt: UnlockAttempt, moved: Bool = false, abandoned: Bool = false) {
+        self.attempt = attempt
+        self.moved = moved
+        self.abandoned = abandoned
+    }
+}
+
 // The unlock (VAULT-MESSAGING §11.4) over the alternate channel with the phone's unlock secret (§11.14.1), the release
 // check before the PIN (§11.10.6) and what the result says (§11.8 backoff, §11.10.4 release moves, §11.11.4 recovery,
 // §13.2 rollback). Mirrors vettid-android `VaultManager.preflight`, `unlockOnce`, `unlockStep` and `unlockWithSecret`.
@@ -91,52 +123,73 @@ extension VaultManager {
     func unlockStep(
         pin: String, options: UnlockOptions, path: UnlockSecretPath = .current, beforeOpen: @MainActor () async -> Void = {}
     ) async -> UnlockAttempt {
+        await unlockOutcome(pin: pin, options: options, route: UnlockRoute(path: path), beforeOpen: beforeOpen).attempt
+    }
+
+    /// One unlock (§11.4) along [route]: with ``UnlockRoute/followMove`` (the unlock screen) an `update: moved` is followed
+    /// at once by the unlock that reaches the new release (§11.10.6); without it (the release update) the move is reported
+    /// and the vault stays locked. ``UnlockRoute/release`` routes to a given release (only to abandon an unconfirmed move,
+    /// §11.10.5).
+    func unlockOutcome(
+        pin: String, options: UnlockOptions, route: UnlockRoute, beforeOpen: @MainActor () async -> Void = {}
+    ) async -> UnlockStepOutcome {
         do {
             try prepared()
         } catch {
             let f = VaultFailures.map(error) as? VaultFailure
-            return .failed(f?.kind ?? .other, code: f?.code)
+            return UnlockStepOutcome(.failed(f?.kind ?? .other, code: f?.code))
         }
         // §6.7.1 (0.17.0): a phone a transfer set up from an older vault release has no user_guid (§11.4 needs it).
-        guard !record.value.userGuid.isEmpty else { return .failed(.notSupported, code: UnlockAttempt.codeNoUserGuid) }
+        guard !record.value.userGuid.isEmpty else { return UnlockStepOutcome(.failed(.notSupported, code: UnlockAttempt.codeNoUserGuid)) }
         // §11.14.9 step 5: while a PIN change is unresolved, the previous PIN with the current record, then the new one.
         refreshPinStep()
-        let step = path == .current ? unlockPinStep : .pin
+        let step = route.path == .current ? unlockPinStep : .pin
         // Read before the unlock: a lock asked for while it is on its way bumps it, and this unlock then opens nothing.
         let locks = lockGeneration
         let rec = record.generation
-        let opened: (outcome: UnlockOutcome, session: VaultSession)
+        let opened: UnlockOpened
         do {
             opened = try await lockGuard.keeper.unlocking(opened: { $0.outcome.ok }) {
-                try await guarded {
-                    let s = try await openSession()
-                    var out = try await unlockWithSecret(s, pin: pin, options: options, path: path, tries: tries(step))
-                    if out.ok, out.result.update?.result == Self.updateMoved {
-                        // §11.10.6: after a move the vault is locked under the new release; unlock again, which reaches it.
-                        out = try await unlockWithSecret(s, pin: pin, options: UnlockOptions(), path: .current)
-                    }
-                    // A sealed result: the enclave knows this phone; earlier relay refusals no longer count.
-                    s.device.clearVaultRefusals()
-                    refusals?.clear()
-                    refusedByVault = false
-                    return (out, s)
-                }
+                try await guarded { try await unlockFollowing(pin: pin, options: options, route: route, tries: tries(step)) }
             }
         } catch let f as VaultFailure {
             _ = holder?.onFailure(f) // never proof (a 503, paused or not, included)
-            return .failed(f.kind, code: f.code, retryAfterSeconds: f.retryAfterSeconds)
+            return UnlockStepOutcome(.failed(f.kind, code: f.code, retryAfterSeconds: f.retryAfterSeconds))
         } catch {
-            return .failed(.other, code: nil)
+            return UnlockStepOutcome(.failed(.other, code: nil))
         }
         let r = opened.outcome.result
-        if let next = afterPinStep(step, ok: r.ok, code: r.code, at: r.at) { return next }
+        if let next = afterPinStep(step, ok: r.ok, code: r.code, at: r.at) { return UnlockStepOutcome(next) }
         guard r.ok else {
-            if await holder?.onSealedUnlockResult(HolderPolicy.of(r)) == true { return .failed(.other, code: r.code) }
-            return Self.refusal(r)
+            if await holder?.onSealedUnlockResult(HolderPolicy.of(r)) == true { return UnlockStepOutcome(.failed(.other, code: r.code)) }
+            return UnlockStepOutcome(Self.refusal(r))
         }
+        // The vault moved and locked itself (§11.10.4 step 8); the caller unlocks again.
+        if opened.moved && !route.followMove { return UnlockStepOutcome(.success, moved: true) }
         await didOpen(r, opened.session, locks: locks, record: rec, beforeOpen: beforeOpen)
-        if let u = r.update, u.result == Self.updateRefused { return .updateRefused(code: u.code ?? Self.updateRefused) }
-        return .success
+        let abandoned = r.update?.result == Self.updateAbandoned
+        if let u = r.update, u.result == Self.updateRefused { return UnlockStepOutcome(.updateRefused(code: u.code ?? Self.updateRefused)) }
+        return UnlockStepOutcome(.success, abandoned: abandoned)
+    }
+
+    /// The unlock with this phone's secret and, after `update: moved` with [route]'s ``UnlockRoute/followMove``, the
+    /// unlock that reaches the new release; the outcome, the session and whether the vault moved.
+    private func unlockFollowing(
+        pin: String, options: UnlockOptions, route: UnlockRoute, tries: UnlockTries
+    ) async throws -> UnlockOpened {
+        let s = try await openSession()
+        var out = try await unlockWithSecret(s, pin: pin, options: options, path: route.path, tries: tries, route: route)
+        let moved = out.ok && out.result.update?.result == Self.updateMoved
+        if moved && route.followMove {
+            // §11.10.6: after a move the vault is locked under the new release; unlock again, which reaches it.
+            let next = UnlockRoute(onStarting: route.onStarting)
+            out = try await unlockWithSecret(s, pin: pin, options: UnlockOptions(), path: .current, route: next)
+        }
+        // A sealed result: the enclave knows this phone; earlier relay refusals no longer count.
+        s.device.clearVaultRefusals()
+        refusals?.clear()
+        refusedByVault = false
+        return UnlockOpened(outcome: out, session: s, moved: moved)
     }
 
     /// The vault opened: the stale lock notices, the outbox, and the phase, unless a lock overtook this unlock.
@@ -180,13 +233,15 @@ extension VaultManager {
     /// pending epoch-1 records after `device_secret` (``PhoneSecrets/unlock(isolation:attempt:)``), or the replaced
     /// records on the member's tap. IOS-PLAN ID8: an instance without `recovery_r` is refused before anything is built.
     private func unlockWithSecret(
-        _ s: VaultSession, pin: String, options: UnlockOptions, path: UnlockSecretPath, tries: UnlockTries = .all
+        _ s: VaultSession, pin: String, options: UnlockOptions, path: UnlockSecretPath, tries: UnlockTries = .all,
+        route: UnlockRoute = UnlockRoute()
     ) async throws -> UnlockOutcome {
         let guid = record.value.userGuid
         let attester = config.attester
         let attempt: ([UInt8]) async throws -> UnlockOutcome = { secret in
             try await s.alt.unlock(
-                party: s.device, userGuid: guid, pin: pin, attester: attester, options: options,
+                party: s.device, userGuid: guid, pin: pin, attester: attester, options: options, release: route.release,
+                onStarting: route.onStarting,
                 unlockSecretFor: { caps in
                     try ReleasePath.requireR(caps)
                     return secret
