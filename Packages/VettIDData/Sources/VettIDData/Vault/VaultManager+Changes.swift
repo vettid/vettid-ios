@@ -324,7 +324,13 @@ extension VaultManager {
     private func decide(_ marker: UnresolvedChange, _ v: StampedCredentialInfo, _ api: VaultApi, _ gen: Int) async {
         guard v.info.exists, let version = v.info.version, v.info.alarm?.alarmID == nil else { return ended(marker, v.info) }
         if version == marker.version + 1 { return await applied(marker, api, answer: nil, gen) }
-        guard version == marker.version else { return ended(marker, v.info) }
+        guard version == marker.version else {
+            // Another version: this phone's blob is behind the vault's by more than its own retry, so its next credential
+            // operation would be taken for a clone (§3.5.9). The latest blob is kept first (chosen; not in the spec).
+            try? await api.credentialFetch()
+            guard stillUnresolved(marker, gen) else { return }
+            return ended(marker, v.info)
+        }
         if v.ts > marker.exp.addingTimeInterval(Self.decidedAfterExp) { return notApplied(marker) }
         undecided(marker, reachable: true)
     }

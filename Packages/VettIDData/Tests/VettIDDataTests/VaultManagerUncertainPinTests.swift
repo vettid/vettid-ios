@@ -49,6 +49,7 @@ import VettIDVault
         await m.checkUnresolvedChange(evenLocked: true)
         #expect(m.changeCheck == ChangeCheck(.pin, .ended))
         #expect(try m.phoneSecrets.unresolvedChange() == nil && m.phoneSecrets.uncertainPin() != nil)
+        #expect(m.session?.device.credentialVersion == service.vaultCredentialVersion, "the latest blob kept")
     }
 
     func expectRefused(_ f: VaultFailure?, _ what: String) {
@@ -70,6 +71,7 @@ import VettIDVault
         expectRefused(await vaultFailure { try await m.changePassword(password, newPassword: newPassword, pin: newPin) }, "password")
         expectRefused(await vaultFailure { try await m.renewPhoneSecret(pin: newPin, password: password) }, "renew")
         expectRefused(await vaultFailure { try await m.deleteVault(pin: newPin, password: password) }, "delete")
+        expectRefused(await vaultFailure { try await m.newCredential(pin: newPin, password: password, newPassword: newPassword) }, "reset")
         // "Finish the move" is held too (VAULT-MESSAGING 0.46.0 §11.14.9 step 2): nothing locked or sent.
         let phase = m.phase
         expectRefused(await vaultFailure { _ = try await m.finishMove(pin: newPin) }, "finish the move")
@@ -77,6 +79,7 @@ import VettIDVault
         #expect(service.requestsSeen.count == mark, "nothing sent: \(service.requestsSeen.dropFirst(mark))")
         #expect(m.changeHold()?.kind == .pinUncertain)
         #expect(service.ownerChecks.isEmpty && service.nameSets.isEmpty && service.renews.isEmpty && service.deletes.isEmpty)
+        #expect(service.resets.isEmpty)
         // The password alone is not uncertain: the unlock window opens.
         try await m.openUnlockWindow(password: password)
     }

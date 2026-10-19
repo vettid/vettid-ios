@@ -107,9 +107,10 @@ extension FakeVaultService {
         try reply("vault.held", #"{"deadline":"\#(checkDeadline.map(Timestamps.formatMillis) ?? "")","waiting":{"messages":\#(w[0]),"requests":\#(w[1]),"calls":\#(w[2]),"other":\#(w[3])}}"#)
     }
 
-    /// The credential blob of [version] (opaque to the app).
-    static func blob(_ version: Int64) -> String {
-        version == 1 ? "AQID" : Base64s.encodeStd(Array("blob-\(version)".utf8))
+    /// The credential blob of [version] of the credential of [generation] (a reset makes a new one; opaque to the app).
+    static func blob(_ version: Int64, generation: Int = 0) -> String {
+        if generation > 0 { return Base64s.encodeStd(Array("blob-g\(generation)-\(version)".utf8)) }
+        return version == 1 ? "AQID" : Base64s.encodeStd(Array("blob-\(version)".utf8))
     }
 
     // MARK: - vault.status and the settings
@@ -180,7 +181,7 @@ extension FakeVaultService {
         }
         checkGate = ""
         waitingCounts = [0, 0, 0, 0]
-        var answer = #"{"credential":"\#(Self.blob(credentialVersion))","version":\#(credentialVersion),"utks":\#(try issueUTKs(2)),"deadline":"\#(checkDeadline.map(Timestamps.formatMillis) ?? "")","interval_seconds":\#(Int(checkInterval)),"hold":\#(!holdOffValue)"#
+        var answer = #"{"credential":"\#(currentBlob)","version":\#(credentialVersion),"utks":\#(try issueUTKs(2)),"deadline":"\#(checkDeadline.map(Timestamps.formatMillis) ?? "")","interval_seconds":\#(Int(checkInterval)),"hold":\#(!holdOffValue)"#
         if holdOffValue, let u = holdOffUntilValue { answer += #","hold_off_until":"\#(Timestamps.formatMillis(u))""# }
         answer += #","recovery":{"state":"armed","present_recorded":\#(presentRecordedValue)}}"#
         try reply(m.type, answer, re: m.id)
@@ -191,11 +192,8 @@ extension FakeVaultService {
     /// failed check. False when refused (the refusal is answered). Callers hold ``cond``.
     func checkSecrets(_ m: Inner, pin: String, password: String, blob: String?) throws -> Bool {
         let now = vaultNow
-        // Step 3: the blob.
-        guard blob == Self.blob(credentialVersion) else {
-            try reply(m.type, "{}", re: m.id, error: "stale_credential")
-            return false
-        }
+        // Step 3: the blob (the holder's own retry, or a clone).
+        guard try checkBlob(m, blob) else { return false }
         // Steps 4–5: the PIN.
         if let b = backoffUntil, now < b {
             try backoff(m, b.timeIntervalSince(now))

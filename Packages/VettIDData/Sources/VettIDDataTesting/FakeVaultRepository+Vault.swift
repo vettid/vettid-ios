@@ -145,6 +145,7 @@ extension FakeVaultRepository: VaultRepository {
         try call("changePin")
         lastPinChange = (pin, password)
         lastPin = newPin
+        rotateOffered = true // as the real one (ANDROID-PLAN "Transfer")
     }
 
     public func deleteVault(pin: String, password: String) async throws {

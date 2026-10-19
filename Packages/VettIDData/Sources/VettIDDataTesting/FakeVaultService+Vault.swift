@@ -91,9 +91,12 @@ extension FakeVaultService {
             try reply("device.paired", #"{"device_id":"dev-1","role":"app","vault_id":"\#(vaultID)","release":"\#(Self.pcr0)","release_number":3}"#)
             return
         }
+        // §6.5: the device's hs.resp to a vault-initiated rekey (after an identity rotation).
+        if try rekeyResponse(raw) { return }
         if keyring.current() == nil {
             let kem = kem
             let p = try PendingInit.open(raw, lookup: { k in k == kem.publicKey.kid ? kem : nil }, now: Date())
+            deviceIk = p.body.from.ik
             let (resp, env) = try p.respond(ResponderConfig(identity: ik, token: try token(device.relay), policy: .vaultToDevice, collectSender: device.relay.pk))
             responder = resp
             queue(env)
@@ -133,13 +136,15 @@ extension FakeVaultService {
         // §3.6.3: the owner check's clock before each batch, then its gate on the app.
         try ownerCheckTick()
         if !holdAllows(m.type) { return try reply(m.type, "{}", re: m.id, error: "owner_check_required") }
+        // §3.5.9: a clone alarm holds the credential operations, before the UTK is spent.
+        if let freeze = alarmRefusal(m.type) { return try reply(m.type, "{}", re: m.id, error: freeze) }
         switch m.type {
         case "credential.utk.get": try reply(m.type, #"{"utks":\#(try issueUTKs(3))}"#, re: m.id)
         case "credential.create": try create(m, body)
-        case "credential.get": try reply(m.type, #"{"credential":"\#(Self.blob(credentialVersion))","version":\#(credentialVersion),"updated_at":"2026-10-18T00:00:00Z"}"#, re: m.id)
+        case "credential.get": try reply(m.type, #"{"credential":"\#(currentBlob)","version":\#(credentialVersion),"updated_at":"2026-10-18T00:00:00Z"}"#, re: m.id)
         case "vault.status": try status(m)
         case Self.typeOwnerCheck: try ownerCheck(m, body)
-        case "credential.ack": try reply(m.type, "{}", re: m.id)
+        case "credential.ack": try credentialAck(m, body)
         case "settings.get": try reply(m.type, #"{"version":\#(settingsVersion),"settings":{"credential.backup":\#(backup),"credential.unlock_ttl_seconds":\#(unlockTtl),"owner_check.interval_seconds":\#(Int(checkInterval)),"owner_check.hold":\#(!holdOffValue)}}"#, re: m.id)
         case "settings.set": try settingsSet(m, body)
         case "vault.lock": try relayLock(m)
@@ -201,7 +206,7 @@ extension FakeVaultService {
         credentialVersion = 1
         // §3.6.1: the first credential.create starts the owner check's clock.
         startCheckClock()
-        try reply(m.type, #"{"credential":"\#(Self.blob(credentialVersion))","version":1,"key":"k","utks":\#(try issueUTKs(2))}"#, re: m.id)
+        try reply(m.type, #"{"credential":"\#(currentBlob)","version":1,"key":"k","utks":\#(try issueUTKs(2))}"#, re: m.id)
     }
 
     /// [n] fresh UTKs (§3.5.4), their private keys kept. Callers hold ``cond``.

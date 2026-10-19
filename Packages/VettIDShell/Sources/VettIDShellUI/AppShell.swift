@@ -12,8 +12,8 @@ import VettIDUI
 /// vettid-android's order; the owner check's banners above every screen; a navigation stack per destination for the
 /// screens pushed over it, with the system back gesture; the avatar sheet; and the owner check the member asks for
 /// ("Check now", turning the hold off) over everything. The check past the deadline is the root's (``OwnerCheckGate``),
-/// before the shell. The banners of later rows (the clone alarm, a pending deletion, a release update's banner, the
-/// notifications note, the rotation offer) go above the owner check's, in vettid-android's order. Mirrors vettid-android `AppShell`.
+/// before the shell. The clone alarm's banner goes first, the rotation offer last, in vettid-android's order; those of later
+/// rows (a pending deletion, the notifications note) go between them. Mirrors vettid-android `AppShell`.
 public struct AppShell: View {
     private let account: any AccountRepository
     private let vault: any VaultRepository
@@ -114,6 +114,27 @@ public struct AppShell: View {
         }
     }
 
+    /// The clone alarm (VAULT-MESSAGING §3.5.9): an urgent banner above every screen until it is resolved; hidden on the
+    /// alarm's own screen.
+    @ViewBuilder private var alarmBanner: some View {
+        if credential.alarm != nil, model.path.last != .alarm {
+            UrgentBanner(ShellStrings.alarmBanner, actionLabel: ShellStrings.alarmReview) { model.push(.alarm) }
+                .accessibilityIdentifier("alarm_banner")
+        }
+    }
+
+    /// (Release R, ANDROID-PLAN "Transfer") The offer to rotate the vault's keys after a PIN or password change: it stays
+    /// until a rotation succeeds or the member puts it away, and is hidden on the rotation screen.
+    @ViewBuilder private var rotateOffer: some View {
+        if vault.rotateOffered, model.path.last != .rotate {
+            InfoBanner(
+                ShellStrings.rotateOffer, actionLabel: ShellStrings.rotateOfferAction,
+                onAction: { model.push(.rotate) }, onDismiss: { vault.dismissRotateOffer() }
+            )
+            .accessibilityIdentifier("rotate_offer")
+        }
+    }
+
     public var body: some View {
         ZStack {
             DrawerContainer(isOpen: $model.drawerOpen) {
@@ -126,6 +147,7 @@ public struct AppShell: View {
                 }
             } content: {
                 VStack(spacing: 0) {
+                    alarmBanner
                     OwnerCheckBanners(
                         gate: gate, now: now, onCheckNow: { model.ownerCheck(holdOff: false) },
                         onHoldOn: { Task { await model.turnHoldOn() } }, onDismissNotices: { Task { await model.dismissNotices() } }
@@ -135,6 +157,7 @@ public struct AppShell: View {
                     }
                     changeCheckNotice
                     renewPrompt
+                    rotateOffer
                     NavigationStack(path: $model.path) {
                         root
                             .toolbar(.hidden, for: .navigationBar)
@@ -212,13 +235,8 @@ public struct AppShell: View {
             ChangeNameRoute(accounts: account, profiles: profiles) { model.pop() }
         case .changePin(let fromAttempts):
             ChangePinRoute(vault: vault, fromAttempts: fromAttempts) { model.pop() }
-        case .credential:
-            CredentialRoute(
-                repo: credential, onBack: { model.pop() }, onChangePassword: { model.push(.changePassword) },
-                onOwnerCheck: { model.ownerCheck(holdOff: false) }
-            )
-        case .changePassword:
-            ChangePasswordRoute(repo: credential, vault: vault) { model.pop() }
+        case .credential, .changePassword, .rotate, .alarm, .newCredential:
+            credentialDetail(route)
         case .newPhoneSecret:
             NewPhoneSecretRoute(vault: vault) { model.pop() }
         case .deleteVault:
@@ -228,6 +246,34 @@ public struct AppShell: View {
                 ReleaseUpdateRoute(updates: releaseUpdates, ownerCheck: ownerChecks, notes: releaseNotes) { model.pop() }
             }
         }
+    }
+
+    /// The Credential screen and the screens pushed from it (vettid-android's `credentialDestination`).
+    @ViewBuilder private func credentialDetail(_ route: ShellRoute) -> some View {
+        switch route {
+        case .changePassword:
+            ChangePasswordRoute(repo: credential, vault: vault) { model.pop() }
+        case .rotate:
+            RotateRoute(repo: credential) { model.pop() }
+        case .alarm:
+            AlarmRoute(repo: credential) { model.pop() }
+        case .newCredential:
+            NewCredentialRoute(repo: credential) { model.pop() }
+        default:
+            CredentialRoute(
+                repo: credential, onBack: { model.pop() }, onChangePassword: { model.push(.changePassword) },
+                onOwnerCheck: { model.ownerCheck(holdOff: false) }, more: credentialLinks
+            )
+        }
+    }
+
+    private var credentialLinks: CredentialRouteLinks {
+        let model = model
+        var l = CredentialRouteLinks()
+        l.onRotate = { model.push(.rotate) }
+        l.onReviewAlarm = { model.push(.alarm) }
+        l.onNewCredential = { model.push(.newCredential) }
+        return l
     }
 
     private var settingsHost: SettingsHost {

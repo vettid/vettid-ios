@@ -137,6 +137,8 @@ public final class FakeVaultRepository: CustomStringConvertible {
         criticalItems: 0
     )
     public var lastNewPassword: String?
+    /// The answer of the last ``confirmAlarm(mine:)``.
+    public var lastAlarmMine: Bool?
     /// The last release R `pin.change`: the current PIN and the password (``lastPin`` is the new PIN).
     public var lastPinChange: (pin: String, password: String)?
 
@@ -344,12 +346,15 @@ extension FakeVaultRepository: CredentialRepository {
     public func changePassword(_ password: String, newPassword: String, pin: String?) async throws {
         lastPasswordChangePin = phoneSecret ? pin : nil
         try await changePassword(password, newPassword: newPassword)
+        if phoneSecret { rotateOffered = true } // as the real one (ANDROID-PLAN "Transfer")
     }
 
     public func rotate(password: String) async throws {
         try call("rotate")
         lastPassword = password
         alarm = nil
+        rotateOffered = false
+        unlockWindow = nil
     }
 
     public func newCredential(pin: String, password: String, newPassword: String) async throws {
@@ -372,6 +377,8 @@ extension FakeVaultRepository: CredentialRepository {
 
     public func confirmAlarm(mine: Bool) async throws {
         try call("confirmAlarm")
+        lastAlarmMine = mine
+        guard alarm != nil else { throw VaultFailure(.notFound) }
         alarm?.state = CredentialAlarm.stateRotationRequired
     }
 }

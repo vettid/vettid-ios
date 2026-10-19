@@ -78,6 +78,8 @@ struct CredentialOps: Sendable {
             do {
                 return try await sealed(type, utk: try await takeUTK(), fields: fields, options)
             } catch let e as VaultOpError where e.code == Self.codeStaleCredential {
+                // Not sent again with the same secrets: the latest blob is kept and the request refused.
+                guard options.retriesStale else { throw try await staleRefused(type) }
                 try await fetch()
                 // Never resent with the typed secrets while a change may have moved them (§11.14.9 step 4).
                 try await gate(Self.carriesPin(fields))
@@ -85,6 +87,19 @@ struct CredentialOps: Sendable {
                 return try await sealed(type, utk: try await takeUTK(), fields: fields, options)
             }
         }
+    }
+
+    /// A `stale_credential` that is not retried: the latest blob fetched (a fetch that fails is left to the next
+    /// operation), and the refusal to throw (the "earlier request" text), with nothing more sent.
+    private func staleRefused(_ type: String) async throws -> CredentialUnsettled {
+        do {
+            try await fetch()
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            // Refused all the same.
+        }
+        return CredentialUnsettled(type: type, reason: .inFlight)
     }
 
     /// (VAULT-MESSAGING 0.47.0 §11.14.9 step 2) Refused with nothing sent when a change or a renew went out since
@@ -114,6 +129,10 @@ struct CredentialOps: Sendable {
         // than a minute (VAULT-MESSAGING 0.46.0 §11.14.9 step 1).
         let exp: Date
         if let given = options.exp { exp = given } else { exp = try await requestExp() }
+        // Under the credential lock, as the request goes out and again once it ended (each send, a retry's too): an
+        // operation that read the count before the send or while it was out sees it moved when it gets the lock.
+        if options.replacesSecret { device.secretSent() }
+        defer { if options.replacesSecret { device.secretSent() } }
         try await device.trackCredential(id, exp: exp)
         let r: VaultMessage
         do {
@@ -383,12 +402,16 @@ public struct CredentialUnsettled: Error, Sendable, CustomStringConvertible {
 /// What a credential operation carries besides its sealed members: the blob ([withBlob]; not for `credential.create`),
 /// members of the outer body beside it ([outer]: `vault.delete`'s `confirm`, §12.5), whether a failure once the
 /// request may have gone out is ``RequestUnanswered`` ([unanswered]) rather than the failure itself, and the request's
-/// `exp` (§5.3; a retry after `stale_credential` keeps it).
+/// `exp` (§5.3; a retry after `stale_credential` keeps it). [retriesStale] false: a `stale_credential` is not sent again
+/// with the same secrets (the latest blob is fetched and ``CredentialUnsettled`` thrown). [replacesSecret]: the
+/// operation replaces a secret (`credential.reset`), so it counts as a secret sent (``VaultDevice/secretsSent``).
 struct CredOpOptions: Sendable {
     var withBlob = true
     var outer: [(String, String)] = []
     var unanswered = false
     var exp: Date?
+    var retriesStale = true
+    var replacesSecret = false
 }
 
 /// A credential operation whose answer did not arrive once its request may have gone out (no answer to the automatic

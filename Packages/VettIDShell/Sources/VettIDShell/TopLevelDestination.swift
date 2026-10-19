@@ -50,6 +50,12 @@ public enum ShellRoute: Hashable, Sendable {
     case changePin(fromAttempts: Bool)
     case credential
     case changePassword
+    /// Credential → Rotate the credential key (VAULT-MESSAGING §3.5.5), also from the offer after a change.
+    case rotate
+    /// The clone alarm (VAULT-MESSAGING §3.5.9), from the Credential screen or the shell's banner.
+    case alarm
+    /// Credential → New credential (VAULT-MESSAGING §3.5.5, `credential.reset`).
+    case newCredential
     /// Settings → Security → New phone secret (release R, VAULT-MESSAGING §11.14.9).
     case newPhoneSecret
     /// Settings → Account → Delete vault (VAULT-MESSAGING §12.5).

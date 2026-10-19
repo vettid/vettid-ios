@@ -282,23 +282,31 @@ public struct CredentialRoute: View {
     private let onBack: @MainActor () -> Void
     private let onChangePassword: @MainActor () -> Void
     private let onOwnerCheck: @MainActor () -> Void
+    private let more: CredentialRouteLinks
     @State private var model: CredentialViewModel?
 
+    /// [more]: the rotation, the clone alarm and a new credential.
     public init(
         repo: any CredentialRepository,
         onBack: @escaping @MainActor () -> Void,
         onChangePassword: @escaping @MainActor () -> Void,
-        onOwnerCheck: @escaping @MainActor () -> Void
+        onOwnerCheck: @escaping @MainActor () -> Void,
+        more: CredentialRouteLinks = CredentialRouteLinks()
     ) {
         self.repo = repo
         self.onBack = onBack
         self.onChangePassword = onChangePassword
         self.onOwnerCheck = onOwnerCheck
+        self.more = more
     }
 
     public var body: some View {
         CredentialContent(state: model?.state ?? CredentialState(), actions: actions)
-            .onAppear { if model == nil { model = CredentialViewModel(repo: repo) } }
+            .onAppear {
+                // Read again on the way back from a screen pushed over it (the rotation and a new credential change the
+                // version and the key; chosen, not in the spec).
+                if let model { model.refresh() } else { model = CredentialViewModel(repo: repo) }
+            }
             .onChange(of: model?.state.notice) { _, notice in if notice == .backupOn { onOwnerCheck() } }
     }
 
@@ -315,6 +323,9 @@ public struct CredentialRoute: View {
         a.setBackup = { m?.setBackup($0) }
         a.dismissNotice = { m?.dismissNotice() }
         a.changePassword = onChangePassword
+        a.rotate = more.onRotate
+        a.reviewAlarm = more.onReviewAlarm
+        a.newCredential = more.onNewCredential
         return a
     }
 }
