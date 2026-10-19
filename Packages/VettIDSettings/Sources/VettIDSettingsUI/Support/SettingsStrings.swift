@@ -41,6 +41,22 @@ enum SettingsStrings {
         )
     }
 
+    static var appTheme: String {
+        String(localized: "settings_app_theme", defaultValue: "Theme", bundle: .module)
+    }
+
+    static var themeSystem: String {
+        String(localized: "settings_theme_system", defaultValue: "System default", bundle: .module)
+    }
+
+    static var themeLight: String {
+        String(localized: "settings_theme_light", defaultValue: "Light", bundle: .module)
+    }
+
+    static var themeDark: String {
+        String(localized: "settings_theme_dark", defaultValue: "Dark", bundle: .module)
+    }
+
     static var sectionSecurity: String {
         String(localized: "settings_section_security", defaultValue: "Security", bundle: .module)
     }

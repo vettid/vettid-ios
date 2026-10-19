@@ -22,6 +22,7 @@ enum ShellCatalog {
     enum Screen: Sendable {
         case drawer
         case comingLater(TopLevelDestination)
+        case help
         case banners(OwnerCheckGate)
         case accountSheet(AccountInfo?)
         case settings(SettingsState, OwnerCheckSettingsState)
@@ -102,6 +103,7 @@ enum ShellCatalog {
         return [
             Entry(id: "drawer", title: "Drawer open", screen: .drawer),
             Entry(id: "messages", title: "Messages: coming later", screen: .comingLater(.messages)),
+            Entry(id: "help", title: "Help", screen: .help),
             Entry(id: "banners", title: "Banners: warning, hold off, presence", screen: .banners(OwnerCheckGate(
                 gated: false, warning: true, holdOff: true, deadline: now.addingTimeInterval(1_800),
                 holdOffUntil: now.addingTimeInterval(86_400 * 3), presenceUnrecorded: true
@@ -134,8 +136,8 @@ enum ShellCatalog {
             Entry(id: "settings", title: "Settings", screen: .settings(SettingsState(account: member), .init(view: ownerCheck))),
             Entry(id: "settings_lock_on", title: "Settings: app lock on, hold off", screen: .settings(lockOn, holdOff)),
             Entry(id: "settings_failures", title: "Settings: failures", screen: .settings(failure, OwnerCheckSettingsState())),
-            Entry(id: "settings_release_r", title: "Settings: phone secret", screen: .settings(
-                SettingsState(account: member, phoneSecret: true), OwnerCheckSettingsState()
+            Entry(id: "settings_release_r", title: "Settings: phone secret, dark theme", screen: .settings(
+                SettingsState(account: member, phoneSecret: true, theme: .dark), OwnerCheckSettingsState()
             )),
             Entry(id: "status", title: "Vault status", screen: .vaultStatus(loaded, InstalledFromBuild.current)),
             Entry(id: "status_apple", title: "Vault status: from Apple", screen: .vaultStatus(loaded, .apple)),
@@ -178,7 +180,7 @@ enum ShellCatalog {
         case .canaryDialog(let prompt):
             ComingLaterScreen(destination: .messages, chrome: chrome).canaryManifestDialog(prompt, onConfirm: {}, onDismiss: {})
         case .changeName, .changePin, .credential, .changePassword, .newPhoneSecret, .deleteVault, .settingsAskScreenshots, .rotate,
-             .alarm, .newCredential:
+             .alarm, .newCredential, .help:
             flowScreen(entry.screen)
         }
     }

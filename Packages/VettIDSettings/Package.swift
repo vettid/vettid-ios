@@ -2,7 +2,7 @@
 import PackageDescription
 
 // Settings (vettid-android `feature/settings` and `feature/credential`): the Settings screen, Vault status, Attestation,
-// the name change, the PIN change and the Credential screen (IOS-PLAN §8 I1.8).
+// the name change, the PIN change, the Credential screen and Help (IOS-PLAN §8 I1.8).
 let package = Package(
     name: "VettIDSettings",
     defaultLocalization: "en",

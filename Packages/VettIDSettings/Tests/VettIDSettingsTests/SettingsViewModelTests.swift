@@ -167,6 +167,25 @@ import VettIDKeys
         #expect(m.state.screenshotsAllowed && m.state.screenshotsStayOn)
     }
 
+    // MARK: - Theme (ANDROID-PLAN §4 "Screens", Settings → App)
+
+    /// The row shows the stored choice; a choice is applied and stored at once, and nothing is asked of the vault.
+    @Test func theThemeIsReadAppliedAndStoredOnThisPhone() throws {
+        let name = "settings-theme-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let setting = ThemeSetting(defaults: defaults)
+        let m = SettingsViewModel(account: repo, vault: repo, appLock: lock, promptReason: "Unlock VettID", theme: setting)
+        #expect(m.state.theme == .system)
+        m.setTheme(.dark)
+        #expect(m.state.theme == .dark && setting.theme == .dark)
+        #expect(ThemeSetting(defaults: defaults).theme == .dark)
+        #expect(repo.calls.isEmpty, "nothing asked of the vault: \(repo.calls)")
+        // Without the app's setting (a preview), the system default, and a choice changes nothing.
+        model().setTheme(.light)
+        #expect(model().state.theme == .system)
+    }
+
     /// New phone secret is offered only on a phone that holds a phone secret (release R).
     @Test func newPhoneSecretFollowsThePhoneSecret() {
         #expect(!model().state.phoneSecret)

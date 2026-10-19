@@ -35,8 +35,8 @@ public enum TopLevelDestination: String, CaseIterable, Sendable {
     public static let start = TopLevelDestination.messages
 
     /// Whether this destination's screen is in the iPhone app yet (IOS-PLAN §8): Messages, Connections, Approvals,
-    /// Vault and History come with I2 and I3, Help with I1.8c; until then a placeholder says so.
-    public var available: Bool { self == .settings }
+    /// Vault and History come with I2 and I3; until then a placeholder says so.
+    public var available: Bool { self == .settings || self == .help }
 }
 
 /// The screens pushed over a top-level screen so far (vettid-android's routes of `feature/settings` and

@@ -47,6 +47,7 @@
 		C6FDE6FB207680D30A950256 /* NoSecureHardware.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DAFB636C365A57D892BA212 /* NoSecureHardware.swift */; };
 		CFBE64FEEE60DFB5A0D4D48D /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 412ACBC39A6E3761D83FDE48 /* AppEnvironment.swift */; };
 		DBACC8BECCC6A93B92DD9D69 /* ShellCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99011BCFDF16002458067C88 /* ShellCatalogTests.swift */; };
+		E439EBDBA3C877F67536A6AB /* ThemeChoiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC218FA20D284028E26100BA /* ThemeChoiceTests.swift */; };
 		E47F8A336CA8647AB9653FFA /* GalleryScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FA837F1B3F48BDD0B340707 /* GalleryScreen.swift */; };
 		EEF954DC3356D2023F69D301 /* VettIDData in Frameworks */ = {isa = PBXBuildFile; productRef = D206CA22B8283CD5891C9982 /* VettIDData */; };
 		F1ADABC2B7218CFC0367D5AF /* VettIDSettings in Frameworks */ = {isa = PBXBuildFile; productRef = 68FCA0E7F927360E3D19644D /* VettIDSettings */; };
@@ -113,6 +114,7 @@
 		ABC062C8E50CF3A935F64F87 /* OnboardingCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingCatalogTests.swift; sourceTree = "<group>"; };
 		B0D14B2DBE5EF0620ED73CEC /* SecureEnclaveDeviceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureEnclaveDeviceTests.swift; sourceTree = "<group>"; };
 		B5C81B56C71C53452A052D2A /* VettIDApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VettIDApp.swift; sourceTree = "<group>"; };
+		BC218FA20D284028E26100BA /* ThemeChoiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeChoiceTests.swift; sourceTree = "<group>"; };
 		C237293096175603123FFEBC /* VettIDCrypto */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDCrypto; path = Packages/VettIDCrypto; sourceTree = SOURCE_ROOT; };
 		CA46D6F62E13C2404BDC26A2 /* UnlockCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnlockCatalog.swift; sourceTree = "<group>"; };
 		CA9F0084CA34E6D53027BDA1 /* VettIDTesting */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDTesting; path = Packages/VettIDTesting; sourceTree = SOURCE_ROOT; };
@@ -199,6 +201,7 @@
 				B0D14B2DBE5EF0620ED73CEC /* SecureEnclaveDeviceTests.swift */,
 				27784FA957AF2CC5794ED472 /* SecureInputTests.swift */,
 				99011BCFDF16002458067C88 /* ShellCatalogTests.swift */,
+				BC218FA20D284028E26100BA /* ThemeChoiceTests.swift */,
 				55434C49B97C4353C6D68569 /* UnlockCatalogTests.swift */,
 			);
 			path = AppTests;
@@ -452,6 +455,7 @@
 				B80076DE16F2BEDB9AC3AE54 /* SecureEnclaveDeviceTests.swift in Sources */,
 				6C78BEF34322DEFA23FAF443 /* SecureInputTests.swift in Sources */,
 				DBACC8BECCC6A93B92DD9D69 /* ShellCatalogTests.swift in Sources */,
+				E439EBDBA3C877F67536A6AB /* ThemeChoiceTests.swift in Sources */,
 				F5D383F807ACDF1EA2CC51FA /* UnlockCatalogTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

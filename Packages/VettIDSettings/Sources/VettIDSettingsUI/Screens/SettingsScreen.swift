@@ -23,6 +23,8 @@ public struct SettingsActions {
     public var setAppLock: @MainActor (Bool) -> Void = { _ in }
     public var setAppLockMethod: @MainActor (AppLockMethod) -> Void = { _ in }
     public var setTimeout: @MainActor (AppLockTimeout) -> Void = { _ in }
+    /// Settings → App → Theme.
+    public var setTheme: @MainActor (ThemePreference) -> Void = { _ in }
     public var acknowledgeInvalidated: @MainActor () -> Void = {}
     public var dismissAppLockUnavailable: @MainActor () -> Void = {}
     public var accountSite: @MainActor () -> Void = {}
@@ -34,11 +36,11 @@ public struct SettingsActions {
 /// Settings (ANDROID-PLAN §4 "Screens", Settings): the account card, then Vault, Security, App and Account, in
 /// vettid-android's order; grouped cards (Proton); the vault's lock and Allow screenshots confirm first. A row is shown
 /// only once its feature works; "Update available" while the vault has a release update to approve (RELEASE-UPDATES §2);
-/// the rest come with the rows of IOS-PLAN §8 that bring them: Theme (I1.8c), Notifications (phase P, IOS-PLAN §6.7), Move to a new phone and Recovery (I3,
-/// VAULT-MESSAGING §6.7.1, §11.11), the Privacy section (shared profile, sharing rules: I2 and I3, VAULT-MESSAGING
-/// §10.8), and Allow screenshots with its App section (IOS-PLAN §4), which waits for the first screen that holds the
-/// secure layer (`SecureContainer`: received photos, I2; the typed recovery code and the recovery open, I3): until then it
-/// would turn off nothing (``screenshotsRowShown``). Mirrors vettid-android `SettingsContent`.
+/// the rest come with the rows of IOS-PLAN §8 that bring them: Notifications (phase P, IOS-PLAN §6.7), Move to a new
+/// phone and Recovery (I3, VAULT-MESSAGING §6.7.1, §11.11), the Privacy section (shared profile, sharing rules: I2 and I3,
+/// VAULT-MESSAGING §10.8), and Allow screenshots (IOS-PLAN §4), which waits for the first screen that holds the secure
+/// layer (`SecureContainer`: received photos, I2; the typed recovery code and the recovery open, I3): until then it would
+/// turn off nothing (``screenshotsRowShown``). Mirrors vettid-android `SettingsContent`.
 public struct SettingsContent: View {
     @Environment(\.vettIDTimeScale) private var timeScale
     /// Allow screenshots is shown once a screen holds the secure layer it turns off (no `SecureContainer` is in use yet).
@@ -52,7 +54,7 @@ public struct SettingsContent: View {
     let now: Date
     @State private var confirmLock = false
     @State private var confirmScreenshots: Bool
-    @State private var picker: SecurityPicker?
+    @State private var picker: SettingsPicker?
 
     /// [askScreenshots]: Allow screenshots' confirmation shows from the start (the debug screen catalog).
     public init(
@@ -101,10 +103,7 @@ public struct SettingsContent: View {
                         OwnerCheckSettingsRows(state: ownerCheck, actions: ownerCheckActions, now: now)
                         AppLockRows(state: state, actions: actions, picker: $picker)
                     }
-                    if Self.screenshotsRowShown {
-                        SettingsSectionHeader(SecurityStrings.sectionApp)
-                        SettingsGroup { AllowScreenshotsRow(state: state, actions: actions, confirm: $confirmScreenshots) }
-                    }
+                    appSection
                     SettingsSectionHeader(SettingsStrings.sectionAccount)
                     SettingsGroup {
                         SettingsRow(SettingsStrings.accountSite, icon: .openInNew, showChevron: false, action: actions.accountSite)
@@ -130,7 +129,30 @@ public struct SettingsContent: View {
             dismissLabel: SettingsStrings.cancel, onConfirm: { actions.setScreenshotsAllowed(true) }
         )
         .choiceSheet(item: $picker) { p in
-            SecurityPickerSheet(picker: p, state: state, actions: actions) { picker = nil }
+            SettingsPickerSheet(picker: p, state: state, actions: actions) { picker = nil }
+        }
+    }
+
+    /// App: Theme (a choice of three, as vettid-android's `ChoiceDialog`), then Allow screenshots once it is shown.
+    private var appSection: some View {
+        VStack(spacing: 0) {
+            SettingsSectionHeader(SecurityStrings.sectionApp)
+            SettingsGroup {
+                SettingsRow(SettingsStrings.appTheme, icon: .darkMode, supporting: Self.themeLabel(state.theme)) { picker = .theme }
+                    .accessibilityIdentifier("theme")
+                if Self.screenshotsRowShown {
+                    SettingsDivider()
+                    AllowScreenshotsRow(state: state, actions: actions, confirm: $confirmScreenshots)
+                }
+            }
+        }
+    }
+
+    static func themeLabel(_ t: ThemePreference) -> String {
+        switch t {
+        case .system: SettingsStrings.themeSystem
+        case .light: SettingsStrings.themeLight
+        case .dark: SettingsStrings.themeDark
         }
     }
 
@@ -253,9 +275,9 @@ struct AllowScreenshotsRow: View {
     }
 }
 
-/// Which of the Security group's choices is open.
-enum SecurityPicker: String, Identifiable {
-    case method, timeout
+/// Which of the screen's choices is open: the app lock's method or timeout, or the theme.
+enum SettingsPicker: String, Identifiable {
+    case method, timeout, theme
 
     var id: String { rawValue }
 }
@@ -264,7 +286,7 @@ enum SecurityPicker: String, Identifiable {
 struct AppLockRows: View {
     let state: SettingsState
     let actions: SettingsActions
-    @Binding var picker: SecurityPicker?
+    @Binding var picker: SettingsPicker?
 
     var body: some View {
         let passcode = state.appLockMethod == .passcode
@@ -308,11 +330,11 @@ struct AppLockRows: View {
     }
 }
 
-/// The method (with what each asks for, and the note that the app lock never replaces the PIN or the password) or the
-/// timeout. Mirrors vettid-android `AppLockMethodDialog` and its timeout `ChoiceDialog`; an iPhone without a passcode
-/// cannot use either method, so there is no "Open security settings" (chosen; not in the spec).
-struct SecurityPickerSheet: View {
-    let picker: SecurityPicker
+/// The method (with what each asks for, and the note that the app lock never replaces the PIN or the password), the
+/// timeout or the theme. Mirrors vettid-android `AppLockMethodDialog` and its timeout and theme `ChoiceDialog`s; an iPhone
+/// without a passcode cannot use either method, so there is no "Open security settings" (chosen; not in the spec).
+struct SettingsPickerSheet: View {
+    let picker: SettingsPicker
     let state: SettingsState
     let actions: SettingsActions
     let close: @MainActor () -> Void
@@ -347,6 +369,17 @@ struct SecurityPickerSheet: View {
                 onPick: { t in
                     close()
                     actions.setTimeout(t)
+                },
+                onDismiss: close
+            )
+        case .theme:
+            ChoiceSheet(
+                title: SettingsStrings.appTheme,
+                options: ThemePreference.allCases.map { ChoiceOption(value: $0, label: SettingsContent.themeLabel($0)) },
+                selected: state.theme,
+                onPick: { t in
+                    close()
+                    actions.setTheme(t)
                 },
                 onDismiss: close
             )
