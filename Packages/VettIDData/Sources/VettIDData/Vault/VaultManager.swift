@@ -21,8 +21,9 @@ struct VaultSession: Sendable {
 /// The slices so far (IOS-PLAN §8): what onboarding needs (I1.6: the phase at start, the setup code, enrollment with the
 /// phone's unlock secret of epoch 1, §11.14.1 "On an iPhone", the first handshake, the credential and Finish setup),
 /// the unlock and the member's lock (I1.7a: §11.4 with the phone secret, VAULT-LOCK as vettid-android implements it, the
-/// vault events they follow), and Settings (I1.8: the account, the name, the credential screen, the PIN). Every other
-/// operation keeps its protocol default until the row that brings it. Mirrors vettid-android `VaultManager`.
+/// vault events they follow), Settings (I1.8: the account, the name, the credential screen, the PIN) and the connections
+/// (I2.1: ``connections``, fed this manager's events). Every other operation keeps its protocol default until the row
+/// that brings it. Mirrors vettid-android `VaultManager`.
 @MainActor
 @Observable
 public final class VaultManager: AccountRepository, VaultRepository, CredentialRepository {
@@ -32,6 +33,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             phaseChanges += 1
             // The account is read again whenever the vault opens (an unlock, the end of onboarding, a start while open).
             if phase == .unlocked, oldValue != .unlocked { onOpened() }
+            if phase != .unlocked, oldValue == .unlocked { connections.forgetOpenVault() } // not kept once it is locked
         }
     }
     public internal(set) var account: AccountInfo?
@@ -89,6 +91,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// The account's names (VAULT-MESSAGING §10.8): the name change, which counts as an owner check for its PIN and
     /// password (§3.6.4).
     @ObservationIgnored public let profiles: ProfileManager
+    /// Connections, invitations and connection requests (VAULT-MESSAGING §6.4, §10.4), kept in their encrypted file.
+    @ObservationIgnored public let connections: ConnectionsManager
     /// The canary manifest installed out of band (VAULT-RELEASES §10.1 step 9, VAULT-MESSAGING §11.10.1): used by the
     /// alternate channel instead of the published manifest only while it is newer.
     @ObservationIgnored public let canary: CanaryManifestManager
@@ -182,6 +186,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         locking = LockSequence(sleep: timing.sleep)
         ownerChecks = Self.ownerCheckManager(config, ref, rec, scale)
         profiles = Self.profiles(ref, checks: ownerChecks, record: rec)
+        connections = Self.connectionsManager(config, ref, rec)
         wiper = config.wipeTargets.map { LocalWipe(targets: $0, hooks: [{ await ref.manager?.runWipeHooks() }]) }
         ref.manager = self
         lockPorts.manager = self
@@ -233,25 +238,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     }
 
     /// The gate of an operation that carries the PIN (VAULT-MESSAGING §11.14.9 steps 2 and 3).
-    private static func pinGate(_ ref: ManagerRef) -> @Sendable () async throws -> Void {
+    static func pinGate(_ ref: ManagerRef) -> @Sendable () async throws -> Void {
         { try await ref.manager?.decideFirst(carriesPin: true) }
-    }
-
-    /// The name change over this manager's session: the request kept with the account record it was sent for, the checks
-    /// left read again after a wrong PIN or password.
-    private static func profiles(_ ref: ManagerRef, checks: OwnerCheckManager, record rec: AccountRecord) -> ProfileManager {
-        ProfileManager(
-            ops: {
-                guard let m = ref.manager else { throw VaultFailure(.other, code: "session_dropped") }
-                return VaultProfileOps(api: try m.openApi(try await m.openSession()), gate: Self.pinGate(ref))
-            },
-            onRequest: { r, since in ref.manager?.keepNameRequest(r, since: since) },
-            checksLeft: {
-                try? await checks.refreshOwnerCheck()
-                return checks.ownerCheck?.checksLeft
-            },
-            mark: { rec.generation }
-        )
     }
 
     // MARK: - Failures
@@ -292,6 +280,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         try record.load()
         ownerChecks.loadIfNeeded()
         canary.loadIfNeeded()
+        connections.loadIfNeeded()
         memberVault.set(recorded: record.value.vaultID)
         if account == nil { account = record.value.info }
         if !lockResumed {

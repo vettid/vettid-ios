@@ -98,6 +98,7 @@ extension VaultManager {
         // The lock before this phone's last unlock (the one an unlock of a running vault makes), relayed late.
         if lockNotices.stale(m) { return }
         ownerChecks.onEvent(m)
+        connections.onEvent(m)
         switch m.type {
         // §3.6.3: entering the hold ends the credential's unlock window.
         case Self.typeHeld:
