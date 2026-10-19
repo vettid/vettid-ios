@@ -143,4 +143,19 @@ import Testing
         #expect(await l.acquire(within: 0, sleep: { _ in }) == true)
         l.release()
     }
+
+    /// A timed waiter with the app's own sleep (``VaultApi/sleep``) handed the lock: its give-up timer is cancelled while
+    /// it sleeps, and the process goes on (it aborted in `swift_task_dealloc` with Swift 6.2 while the sleep was a method).
+    @Test func aWaiterWithTheAppSleepHandedTheLock() async {
+        let l = AsyncLock()
+        await l.acquire()
+        let waiter = Task { await l.acquire(within: 60, sleep: VaultApi.sleep) }
+        #expect(await until { l.waiting == 1 })
+        l.release()
+        #expect(await waiter.value == true)
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        l.release()
+        #expect(await l.acquire(within: 0, sleep: { _ in }) == true)
+        l.release()
+    }
 }

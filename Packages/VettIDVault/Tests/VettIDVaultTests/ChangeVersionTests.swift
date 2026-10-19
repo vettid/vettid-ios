@@ -327,7 +327,6 @@ import VettIDCrypto
         // A short wait for answers: an operation sent by mistake fails fast, after the deposit checked below.
         let h = try await lost.holder(timeout: 0.3)
         let (d, api) = (h.d, h.api)
-        // Two plain cases (an array of async closures crashed the Xcode 26.6 test runner).
         await d.credentialLock.acquire()
         let check = Task { _ = try await api.ownerCheck(pin: "975310", password: "pw") }
         try await expectRefusedAfterASecret(d, check)
