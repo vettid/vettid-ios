@@ -87,6 +87,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// The canary manifest installed out of band (VAULT-RELEASES §10.1 step 9, VAULT-MESSAGING §11.10.1): used by the
     /// alternate channel instead of the published manifest only while it is newer.
     @ObservationIgnored public let canary: CanaryManifestManager
+    /// The proactive release update (RELEASE-UPDATES §2): the offer and the one-step update.
+    @ObservationIgnored public let releaseUpdate: ReleaseUpdateManager
     /// The `pin.change` the member started and whose answer has not confirmed it: a retry reuses its next-epoch record
     /// (IOS-PLAN §6.3 item 2). In memory only.
     @ObservationIgnored var pinChangeOperation: String?
@@ -143,6 +145,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         phoneSecrets = PhoneSecrets(keys: config.keys.phone, store: config.file(VaultFiles.phoneSecrets), now: config.now)
         let ref = ManagerRef()
         canary = Self.canaryManifests(config, member, ref)
+        releaseUpdate = ReleaseUpdateManager(ops: VaultReleaseUpdateOps(ref: ref))
         let timing = config.lockTiming
         let rec = record
         let lockFile = LockRecordFile(
@@ -413,6 +416,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         renewOperation = nil
         renewSecretSuggested = false
         forgetChangeCheck()
+        releaseUpdate.clear()
         unlockWindow = nil
         try record.update(since: record.generation) {
             $0.setupComplete = false

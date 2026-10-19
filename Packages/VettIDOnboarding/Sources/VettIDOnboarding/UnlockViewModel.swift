@@ -8,8 +8,8 @@ import VettIDData
 /// (§13.2). An unlock the vault did not recognise (an unreadable result), or a phone that no longer holds the vault's keys
 /// (`device_secret`), offers "Erase VettID from this phone", only after a confirmation; a phone sent here by repeated
 /// relay refusals is told so, and the refusals alone offer nothing. A vault past its owner-check deadline, or locked after
-/// ten failed checks, asks for the password with the PIN (§3.6.5). Mirrors vettid-android `UnlockViewModel` (What's new
-/// comes with I1.8).
+/// ten failed checks, asks for the password with the PIN (§3.6.5). What's new above the offer is information only: it
+/// never holds the unlock up. Mirrors vettid-android `UnlockViewModel`.
 @MainActor
 @Observable
 public final class UnlockViewModel: UnlockActions {
@@ -17,6 +17,8 @@ public final class UnlockViewModel: UnlockActions {
 
     @ObservationIgnored let vault: any VaultRepository
     @ObservationIgnored let account: any AccountRepository
+    @ObservationIgnored private let releaseNotes: (any ReleaseNotesRepository)?
+    @ObservationIgnored private var notesTask: Task<Void, Never>?
     /// One second of a countdown (a virtual clock in the tests).
     @ObservationIgnored private let tick: @Sendable () async throws -> Void
     @ObservationIgnored private let followers = TaskBag()
@@ -30,12 +32,14 @@ public final class UnlockViewModel: UnlockActions {
         vault: any VaultRepository,
         account: any AccountRepository,
         ownerCheck: (any OwnerCheckRepository)? = nil,
+        releaseNotes: (any ReleaseNotesRepository)? = nil,
         now: @escaping @Sendable () -> Date = { Date() },
         tick: @escaping @Sendable () async throws -> Void = { try await Task.sleep(for: .seconds(1)) },
         recheck: @escaping @Sendable () async throws -> Void = { try await Task.sleep(for: .seconds(15)) }
     ) {
         self.vault = vault
         self.account = account
+        self.releaseNotes = releaseNotes
         self.tick = tick
         let hint = account.account?.emailHint
         state = UnlockState(email: hint?.isEmpty == false ? hint : nil, phoneSecret: vault.usesPhoneSecret)
@@ -46,6 +50,7 @@ public final class UnlockViewModel: UnlockActions {
         followers.add(follow(self, read: { $0.vault.finishMoveFailure }, apply: { $0.state.moveFailure = $1 }))
         // §11.14.9 "A lost answer" step 5: the previous PIN, then the new one.
         followers.add(follow(self, read: { $0.vault.unlockPinStep }, apply: { $0.state.pinStep = $1 }))
+        followers.add(follow(self, read: { $0.vault.releaseUpdateHeld }, apply: { $0.state.updateHeld = $1 }))
         if let ownerCheck {
             followers.add(follow(
                 ownerCheck,
@@ -70,6 +75,7 @@ public final class UnlockViewModel: UnlockActions {
     deinit {
         followers.cancelAll()
         countdowns.cancelAll()
+        notesTask?.cancel()
     }
 
     /// The owner check's state, from its repository (the vault past its deadline, or locked after ten checks).
@@ -97,6 +103,7 @@ public final class UnlockViewModel: UnlockActions {
                 await task.value
                 work[id] = nil
             }
+            await notesTask?.value
         }
     }
 
@@ -117,6 +124,8 @@ public final class UnlockViewModel: UnlockActions {
                 let p = try await vault.preflight()
                 state.loading = false
                 state.preflight = p
+                state.notes = nil
+                loadNotes(p)
             } catch let e as VaultFailure {
                 state.loading = false
                 state.preflightError = e.kind
@@ -124,6 +133,17 @@ public final class UnlockViewModel: UnlockActions {
             } catch {
                 state.loading = false
             }
+        }
+    }
+
+    /// What's new for the offer: information only, it never holds the unlock up.
+    private func loadNotes(_ p: PreflightInfo) {
+        guard let offer = p.offer, !p.rollback, let repo = releaseNotes else { return }
+        notesTask?.cancel()
+        notesTask = Task { [weak self] in
+            let n = await repo.whatsNew(target: offer, between: p.between)
+            guard !Task.isCancelled, let self, self.state.preflight?.offer == offer else { return }
+            self.state.notes = n
         }
     }
 
@@ -231,7 +251,8 @@ public final class UnlockViewModel: UnlockActions {
 
     /// The request [kind] asks for; every failure is an ``UnlockAttempt``.
     private func send(_ kind: Kind, _ s: UnlockState) async -> UnlockAttempt {
-        let offer = s.approveOffer ? s.preflight?.offer : nil
+        // (§11.14.9; chosen; not in the spec) No approval while a PIN or password change is undecided.
+        let offer = s.approveOffer && !vault.releaseUpdateHeld ? s.preflight?.offer : nil
         do {
             switch kind {
             case .earlierSecret:

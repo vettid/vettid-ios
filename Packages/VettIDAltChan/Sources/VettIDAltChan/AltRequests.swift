@@ -6,6 +6,9 @@ import VettIDCrypto
 public enum AltRefused: Error, Equatable, Sendable {
     /// Never send a PIN to an older release than the last one unlocked into.
     case rollbackRelease
+    /// The unlock right after a move (``UnlockOptions/afterMove``) is routed to exactly the release the vault left: the
+    /// member API has not learnt the move yet. Nothing is sent; the caller may wait and try again.
+    case notYetRouted
     /// The manifest is older than one already seen.
     case manifestOlder
     /// The device is not paired with a vault.
@@ -71,6 +74,9 @@ public struct UnlockOptions: Sendable, CustomStringConvertible {
     public var cancelRecovery = false
     public var sendChain = false
     public var unlockSecret: [UInt8]?
+    /// The unlock right after `update: moved` (§11.10.6): routed to exactly the release moved from, it is
+    /// ``AltRefused/notYetRouted`` rather than a rollback.
+    public var afterMove = false
 
     public init(
         approve: Approval? = nil, abandon: Bool = false, cancelRecovery: Bool = false, sendChain: Bool = false, unlockSecret: [UInt8]? = nil
@@ -153,6 +159,9 @@ public enum AltRequests {
         let rel = enclave.release
         let changed = !state.release.isEmpty && state.release != rel.pcr0
         if state.releaseNumber != 0, rel.number < state.releaseNumber {
+            if options.afterMove, !options.abandon, !state.previousRelease.isEmpty, rel.pcr0 == state.previousRelease {
+                throw AltRefused.notYetRouted
+            }
             guard options.abandon, rel.pcr0 == state.previousRelease else { throw AltRefused.rollbackRelease }
         }
         let t = ms(now)

@@ -24,6 +24,10 @@ final class AppComposition {
     let appLock: AppLock
     /// The Secure Enclave keys and App Attest, or the refusing placeholder without them.
     let hardware: HardwareKeys
+    /// What's new from the release log of the build's channel (RELEASE-UPDATES §5): only the pinned manifest's host.
+    let releaseNotes: any ReleaseNotesRepository
+    /// A request to open the update screen (fed by the "Vault updates" notification with phase P, IOS-PLAN §6.7).
+    let releaseInbox = ReleaseUpdateInbox()
 
     init(environment: AppEnvironment) {
         self.environment = environment
@@ -69,6 +73,7 @@ final class AppComposition {
         )
         config.attestStartOver = startOver
         vault = VaultManager(config: config)
+        releaseNotes = ReleaseNotesClient(manifestURL: environment.manifestURL)
         appLock = AppLock(
             store: FileAppLockStore(
                 directory: directory, keys: KeychainFileKeyHolder(protectedData: protectedData), protectedData: protectedData

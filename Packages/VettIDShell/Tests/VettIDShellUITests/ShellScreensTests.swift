@@ -26,12 +26,12 @@ import VettIDUI
             .appendingPathComponent("Sources/VettIDShellUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 65)
+        #expect(keys.count == 70)
         let missing = "\u{0}missing"
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)
             #expect(!text.isEmpty && text != key && text != missing, "\(key)")
-            let prefixes = ["nav_", "drawer_", "account_", "owner_check_", "ownercheck_", "settings_", "ios_"]
+            let prefixes = ["nav_", "drawer_", "account_", "owner_check_", "ownercheck_", "settings_", "ios_", "release_banner_"]
             #expect(prefixes.contains { key.hasPrefix($0) }, "\(key)")
         }
     }
@@ -60,6 +60,26 @@ import VettIDUI
         let at = OwnerCheckNotice(itemID: "2", kind: "owner_check.locked", ref: nil, at: now, urgent: true)
         #expect(OwnerCheckBanners.noticeText(at, count: 3, now: now)
             == "Your vault locked after ten wrong daily checks. (\(ShellTimes.time(now))) And 2 more.")
+    }
+
+    /// The release banner (RELEASE-UPDATES §2): vettid-android's texts, "available" or the end-date warning.
+    @Test func theReleaseBanner() {
+        func rel(_ n: UInt64, _ status: String = "active", _ endsAt: Date? = nil) -> ReleaseView {
+            ReleaseView(number: n, pcr0: String(repeating: "ab", count: 48), status: status, endsAt: endsAt, notes: "")
+        }
+        #expect(ShellStrings.releaseBannerAvailable(18) == "A new vault release is available (release 18).")
+        #expect(ShellStrings.releaseBannerUpdate == "Update now")
+        let ending = ReleaseUpdateOffer(current: rel(17, "retired"), target: rel(18))
+        #expect(ReleaseUpdateBanner.text(ending) == "Your vault's release is ending. Update now to keep your vault.")
+        let ended = ReleaseUpdateOffer(current: rel(17, "removed"), target: rel(18))
+        #expect(ReleaseUpdateBanner.text(ended) == "Your vault's release has ended. Update now to keep your vault.")
+        let dated = ReleaseUpdateOffer(current: rel(17, "deprecated", now), target: rel(18))
+        #expect(ReleaseUpdateBanner.text(dated).hasPrefix("Your vault's release ends on "))
+        for o in [ReleaseUpdateOffer(current: rel(17, "active"), target: rel(18)), ending, ended, dated] {
+            #expect(height(ReleaseUpdateBanner.banner(o, onUpdate: {}, onDismiss: {})) > 0)
+        }
+        let updates = FakeReleaseUpdates(offer: ending)
+        #expect(height(ReleaseUpdateBanner(updates: updates) {}) > 0)
     }
 
     @Test func theAccountDetails() {

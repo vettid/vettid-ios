@@ -65,7 +65,7 @@ struct RootView: View {
     private var appRoot: some View {
         AppRoot(
             environment: environment, vault: composition.vault, inbox: composition.inbox, canaryInbox: composition.canaryInbox,
-            appLock: composition.appLock
+            appLock: composition.appLock, releaseNotes: composition.releaseNotes, releaseInbox: composition.releaseInbox
         )
     }
 }
@@ -78,6 +78,9 @@ struct AppRoot: View {
     let inbox: SetupLinkInbox
     let canaryInbox: CanaryManifestInbox
     let appLock: AppLock
+    /// What's new from the channel's release log (RELEASE-UPDATES §5).
+    let releaseNotes: any ReleaseNotesRepository
+    let releaseInbox: ReleaseUpdateInbox
     /// Where the member is in the open app, kept while the check past the deadline takes the shell's place.
     @State private var shell: ShellModel
     @Environment(\.openURL) private var openURL
@@ -85,12 +88,17 @@ struct AppRoot: View {
     /// "Allow screenshots" (IOS-PLAN §4): it ends when the vault is no longer open, and after its hour.
     @Environment(ScreenshotAllowance.self) private var screenshots
 
-    init(environment: AppEnvironment, vault: VaultManager, inbox: SetupLinkInbox, canaryInbox: CanaryManifestInbox, appLock: AppLock) {
+    init(
+        environment: AppEnvironment, vault: VaultManager, inbox: SetupLinkInbox, canaryInbox: CanaryManifestInbox, appLock: AppLock,
+        releaseNotes: any ReleaseNotesRepository, releaseInbox: ReleaseUpdateInbox
+    ) {
         self.environment = environment
         self.vault = vault
         self.inbox = inbox
         self.canaryInbox = canaryInbox
         self.appLock = appLock
+        self.releaseNotes = releaseNotes
+        self.releaseInbox = releaseInbox
         _shell = State(initialValue: ShellModel(account: vault, vault: vault, ownerChecks: vault.ownerChecks))
     }
 
@@ -178,6 +186,16 @@ struct AppRoot: View {
     }
 
     @ViewBuilder private var content: some View {
+        // A release update under way, or its outcome, is shown over every phase until it is left (ANDROID-PLAN "Vault
+        // update").
+        if vault.releaseUpdate.progress != nil {
+            ReleaseUpdateFlowRoute(updates: vault.releaseUpdate)
+        } else {
+            phaseContent
+        }
+    }
+
+    @ViewBuilder private var phaseContent: some View {
         switch vault.phase {
         case .signedOut, .setup:
             OnboardingFlow(account: vault, vault: vault, inbox: inbox, routes: .pending) { openPortal() }
@@ -186,7 +204,7 @@ struct AppRoot: View {
         case .unreachable:
             UnreachableFlow(account: vault) { openPortal() }
         case .locked:
-            UnlockFlow(vault: vault, account: vault, ownerCheck: vault.ownerChecks) { openPortal() }
+            UnlockFlow(vault: vault, account: vault, ownerCheck: vault.ownerChecks, releaseNotes: releaseNotes) { openPortal() }
         case .unlocked:
             // The check past the deadline closes whatever the shell had open (the drawer, the sheet, an asked check), so
             // that nothing of it comes back for a moment afterwards.
@@ -195,7 +213,8 @@ struct AppRoot: View {
                     account: vault, vault: vault, ownerChecks: vault.ownerChecks, credential: vault, profiles: vault.profiles,
                     appLock: appLock, model: shell, gate: gate, now: now,
                     version: .of(Bundle.main.infoDictionary ?? [:]), installedFrom: InstalledFromBuild.current,
-                    promptReason: AppLockTexts.reason, canary: vault.canary, canaryInbox: canaryInbox
+                    promptReason: AppLockTexts.reason, canary: vault.canary, canaryInbox: canaryInbox,
+                    releaseUpdates: vault.releaseUpdate, releaseNotes: releaseNotes, releaseInbox: releaseInbox
                 ) { openPortal() }
             }
         }

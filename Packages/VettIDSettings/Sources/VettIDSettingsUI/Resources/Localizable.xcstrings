@@ -3038,6 +3038,28 @@
           }
         }
       }
+    },
+    "settings_vault_update": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update available"
+          }
+        }
+      }
+    },
+    "settings_vault_update_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Release %lld (your vault runs release %lld)"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

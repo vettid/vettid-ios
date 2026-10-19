@@ -108,6 +108,16 @@ struct ChainAttester: Attester {
         moved.previousRelease = FakeEnclave.pcr0
         moved.previousReleaseNumber = 3
         #expect(try body(UnlockOptions(abandon: true), moved).obj("release_update").string("to") == FakeEnclave.pcr0)
+        // Right after the move, routed to exactly the release moved from: not yet routed (waited out), nothing sent.
+        var afterMove = UnlockOptions()
+        afterMove.afterMove = true
+        #expect(throws: AltRefused.notYetRouted) { _ = try body(afterMove, moved) }
+        // Any other unlock routed there, or right after a move to an older release that is not the one moved from: a
+        // rollback.
+        #expect(throws: AltRefused.rollbackRelease) { _ = try body(UnlockOptions(), moved) }
+        var elsewhere = moved
+        elsewhere.previousRelease = String(repeating: "b2", count: 48)
+        #expect(throws: AltRefused.rollbackRelease) { _ = try body(afterMove, elsewhere) }
         let abandoned = try AltRequests.applyUnlock(moved, PendingUnlock(requestID: "r", release: FakeEnclave.pcr0, number: 3, serial: 7, toNumber: 3), {
             var r = UnlockResult(ok: true)
             r.release = FakeEnclave.pcr0

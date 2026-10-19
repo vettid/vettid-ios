@@ -261,6 +261,10 @@ public protocol VaultRepository: AnyObject, Observable, Sendable {
     /// the keys" screen: a replaced phone-secret record exists. Default: false.
     var earlierSecretOffered: Bool { get }
 
+    /// (VAULT-MESSAGING §11.14.9) A PIN or password change is undecided or on its way: no release approval goes with an
+    /// unlock (chosen; not in the spec, where vettid-android has the same gap). Default: false.
+    var releaseUpdateHeld: Bool { get }
+
     /// (iPhone, IOS-PLAN §6.3 item 5) The earlier-secret step, only on the member's tap: an unlock with [pin] and each
     /// replaced record of the phone secret, newest first, each once. Default: ``FailureKind/notSupported``.
     func unlockWithEarlierSecret(pin: String) async throws -> UnlockAttempt
@@ -290,6 +294,7 @@ public extension VaultRepository {
     func retryLock() {}
     func dismissLockNotice() {}
     var earlierSecretOffered: Bool { false }
+    var releaseUpdateHeld: Bool { false }
     var renewSecretSuggested: Bool { false }
     func dismissRenewSuggestion() {}
     func checkVaultDeleted() async throws -> DeletionCheck { .undecided }

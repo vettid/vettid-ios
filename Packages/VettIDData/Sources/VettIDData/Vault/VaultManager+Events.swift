@@ -48,6 +48,7 @@ extension VaultManager {
         // A vault past its owner-check deadline, or near it, is read again: the check screen shows what is waiting.
         let t = config.now()
         if phase == .unlocked, let v = ownerChecks.ownerCheck, v.gated(t) || v.warning(t) { ownerChecks.onOpened() }
+        if phase == .unlocked { Task { [weak self] in await self?.releaseUpdate.refreshOffer() } }
         Task { [weak self] in
             guard let self, let s = try? await storedSession() else { return }
             // A session opened in the background (a lock's retry) has not collected yet.

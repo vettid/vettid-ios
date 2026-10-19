@@ -140,7 +140,8 @@ extension VaultManager {
         return try await unlock(pin: pin, approve: nil, cancelRecovery: false)
     }
 
-    /// The hold of a flow that unlocks with a PIN typed on its own screen: a change on its way, or ``changeHold()``.
+    /// The one hold of a flow that unlocks with a PIN typed on its own screen (the release update, the unlock screen's
+    /// approval, "Finish the move"): a change on its way, or ``changeHold()``.
     func moveHold() -> VaultFailure? {
         sendingChange ? VaultFailure(.changeChecking, code: Self.codeChangeChecking) : changeHold()
     }
@@ -156,7 +157,8 @@ extension VaultManager {
             }
             return try strictUncertainPin() == nil ? nil : VaultFailure(.pinUncertain, code: Self.codePinUncertain)
         } catch {
-            return error as? VaultFailure ?? VaultFailure(.localState)
+            // A records file that cannot be read holds it too: the hold never lifts on what it cannot see.
+            return VaultFailure(.changeUnresolved, code: Self.codeChangeUnresolved)
         }
     }
 

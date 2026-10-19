@@ -138,4 +138,22 @@ import VettIDVault
         #expect(!service.requestsSeen.dropFirst(mark).contains(VaultApi.typeOwnerCheck))
         #expect(FailureKind.changeChecking.message != FailureKind.changeCheckingPassword.message)
     }
+
+    /// An uncertain PIN holds the release update and the unlock screen's approval (one hold with the change's,
+    /// VAULT-MESSAGING §11.14.9 step 2), said with the uncertain-PIN text; the update's unlock sends nothing.
+    @Test func anUncertainPinHoldsTheReleaseUpdate() async throws {
+        defer { phone.close() }
+        try await setUp()
+        try await endedPinChange(applied: true, moves: 1)
+        #expect(m.releaseUpdateHeld && m.releaseUpdate.changeHold == .pinUncertain)
+        #expect(FailureKind.pinUncertain.message.hasPrefix("VettID couldn't confirm whether your PIN was changed"))
+        let unlocks = service.unlocks.count
+        let r = await m.updateUnlock(pin: pin, approve: nil, abandon: false) {}
+        guard case .failed(let kind, let code, _) = r else {
+            Issue.record("not refused: \(r)")
+            return
+        }
+        #expect(kind == .pinUncertain && code == VaultManager.codeChangeHeld)
+        #expect(service.unlocks.count == unlocks)
+    }
 }

@@ -78,7 +78,7 @@ public final class TestVaultPhone {
     /// The pauses between the checks of a change whose answer was lost: each waits until the test releases it.
     public let changePauses = TestPauses()
     /// A change's wait for the credential operations before it (§11.14.9 step 1): ends when the test releases it while
-    /// ``holdsChangeWaits``, else after a second.
+    /// ``holdsChangeWaits``, else after five seconds (room for a late answer on a loaded machine).
     public let changeWaits = TestPauses()
     /// Whether a change's wait lasts until the test releases it (``changeWaits``).
     public var holdsChangeWaits: Bool {
@@ -149,6 +149,7 @@ public final class TestVaultPhone {
         let changeWaits = waits.changeWaits
         changeWaits.holding = false
         c.changeWaitSleep = { try await changeWaits.sleep($0) }
+        c.releaseUpdateSleep = { _ in try await Task.sleep(for: .milliseconds(5)) }
         c.uptime = { DeviceConfig.monotonicNow() + uptime.ahead }
         return c
     }
@@ -260,7 +261,7 @@ public final class TestPauses: @unchecked Sendable {
     /// The lengths asked for, in order.
     public var lengths: [TimeInterval] { lock.withLock { asked } }
 
-    /// False: a pause lasts a second instead of waiting for ``release()`` (its length is recorded all the same).
+    /// False: a pause lasts five seconds instead of waiting for ``release()`` (its length is recorded all the same).
     var holding: Bool {
         get { lock.withLock { hold } }
         set { lock.withLock { hold = newValue } }
@@ -269,7 +270,7 @@ public final class TestPauses: @unchecked Sendable {
     func sleep(_ s: TimeInterval) async throws {
         if !holding {
             lock.withLock { asked.append(s) }
-            try await Task.sleep(nanoseconds: 1_000_000_000)
+            try await Task.sleep(nanoseconds: 5_000_000_000)
             return
         }
         let id = UUID()

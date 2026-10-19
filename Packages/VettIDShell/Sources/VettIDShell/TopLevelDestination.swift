@@ -54,6 +54,8 @@ public enum ShellRoute: Hashable, Sendable {
     case newPhoneSecret
     /// Settings → Account → Delete vault (VAULT-MESSAGING §12.5).
     case deleteVault
+    /// Settings → Vault → "Update available" (RELEASE-UPDATES §2).
+    case releaseUpdate
 }
 
 /// This build's version as the drawer's footer shows it ("VettID 2.0.0 (1)", vettid-android `drawer_version`).
