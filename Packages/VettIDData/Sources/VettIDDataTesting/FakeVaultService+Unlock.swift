@@ -156,6 +156,7 @@ extension FakeVaultService {
             vaultManifestSerial = max(vaultManifestSerial, sent)
         }
         unlocksValue.append(UnlockSeen(pin: pin, unlockSecret: secret, cancelRecovery: cancel))
+        let update = recordUpdate(body, requestID: rid)
         // procHost.Open: a running vault is locked first, as for an owner request, whatever the unlock is answered.
         if vaultOpen {
             try? reply("vault.locking", #"{"reason":"unlock"}"#)
@@ -167,16 +168,16 @@ extension FakeVaultService {
         case .sealed(let code):
             slots[rid] = try? Self.sealResult(kem, "vault.unlock.result", rid, #"{"ok":false,"code":"\#(code)","header_seq":\#(headerSeq)}"#)
         case .held:
-            heldSlots[rid] = try? Self.sealResult(kem, "vault.unlock.result", rid, unlockResult(pin: pin, secret: secret))
+            heldSlots[rid] = try? Self.sealResult(kem, "vault.unlock.result", rid, unlockResult(pin: pin, secret: secret, update: update))
         case .vault, .answerLost, .offline, .unavailable:
-            slots[rid] = try? Self.sealResult(kem, "vault.unlock.result", rid, unlockResult(pin: pin, secret: secret), ts: stampNow)
+            slots[rid] = try? Self.sealResult(kem, "vault.unlock.result", rid, unlockResult(pin: pin, secret: secret, update: update), ts: stampNow)
             if case .answerLost = answer { lostSlots.insert(rid) }
         }
         return .json(202, "{}")
     }
 
     /// The vault's own rules, in the order of `UnlockAlt`. Callers hold ``cond``.
-    private func unlockResult(pin: String, secret: [UInt8]?) -> String {
+    private func unlockResult(pin: String, secret: [UInt8]?, update: UpdateSeen?) -> String {
         let now = Date().addingTimeInterval(vaultClockAhead)
         guard let secret, secret.count == 32 else { return refused("bad_request") }
         if let until = backoffUntil, now < until { return refused("backoff", retryAfter: until.timeIntervalSince(now)) }
@@ -191,11 +192,16 @@ extension FakeVaultService {
         }
         pinFailures = 0
         backoffUntil = nil
+        let token = device.flatMap { try? self.token($0.relay) } ?? ""
+        let serving = releases.serving
+        let (member, staysLocked) = releaseRules(update)
+        let ok = #"{"ok":true,"state_seq":\#(stateSeq),"header_seq":\#(headerSeq),"token":"\#(token)","release":"\#(Self.pcr0(serving))","release_number":\#(serving),"release_status":"active","manifest_serial":\#(vaultManifestSerial)\#(member)}"#
+        // A move (§11.10.4 step 8) locks without opening.
+        if staysLocked { return ok }
         vaultOpen = true
         statusState = Self.unlocked
         handleWhileLockedRequests()
-        let token = device.flatMap { try? self.token($0.relay) } ?? ""
-        return #"{"ok":true,"state_seq":\#(stateSeq),"header_seq":\#(headerSeq),"token":"\#(token)","release":"\#(Self.pcr0)","release_number":3,"release_status":"active","manifest_serial":\#(vaultManifestSerial)}"#
+        return ok
     }
 
     private func refused(_ code: String, retryAfter: TimeInterval = 0) -> String {
@@ -206,6 +212,7 @@ extension FakeVaultService {
     /// Callers hold ``cond``.
     func memberLock(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer {
         memberLocksValue += 1
+        releases.busy = false
         let answer = memberLockAnswerValue
         guard let rid = try? StrictJson.parseObject(r.body).string("request_id") else { return .json(400, #"{"error":"bad_request"}"#) }
         switch answer {
@@ -226,6 +233,7 @@ extension FakeVaultService {
     /// ``cond``.
     func relayLock(_ m: Inner) throws {
         relayLocksValue += 1
+        releases.busy = false
         guard relayLockAnswerValue == .lock else { return }
         try reply(m.type, "{}", re: m.id)
         try reply("vault.locking", #"{"reason":"owner"}"#)

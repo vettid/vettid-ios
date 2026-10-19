@@ -21,7 +21,7 @@ import VettIDUI
             .appendingPathComponent("Sources/VettIDSettingsUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 264)
+        #expect(keys.count == 266)
         let missing = "\u{0}missing"
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)
@@ -33,6 +33,8 @@ import VettIDUI
 
     @Test func theTextsAreAndroids() {
         #expect(SettingsStrings.vaultLockBody == "Locks your vault now. You need your PIN to open it again.")
+        #expect(SettingsStrings.vaultUpdate == "Update available")
+        #expect(SettingsStrings.vaultUpdateBody(5, 4) == "Release 5 (your vault runs release 4)")
         #expect(SettingsStrings.ownerCheckEvery(1) == "Every hour")
         #expect(SettingsStrings.ownerCheckEvery(4) == "Every 4 hours")
         #expect(SettingsStrings.ownerCheckNext("Oct 18") == "next by Oct 18")
@@ -138,6 +140,7 @@ import VettIDUI
             SettingsState(),
             SettingsState(appLockOn: true, appLockInvalidated: true, appLockMethod: .passcode, error: .network, appLockUnavailable: true),
             SettingsState(appLockSuggestPasscode: true),
+            SettingsState(update: ReleaseUpdateOffer(current: Self.release(4, "retired"), target: Self.release(5))),
         ]
         for s in states {
             #expect(height(SettingsContent(state: s, ownerCheck: OwnerCheckSettingsState(view: check), now: now)) > 0)
@@ -167,6 +170,10 @@ import VettIDUI
             #expect(height(AttestationContent(state: s)) > 0)
             #expect(height(AttestationContent(state: s, canary: canary, onLoadCanary: {})) > 0)
         }
+    }
+
+    static func release(_ n: UInt64, _ status: String = "active") -> ReleaseView {
+        ReleaseView(number: n, pcr0: String(repeating: "a\(n)", count: 48), status: status, endsAt: nil, notes: "https://x/\(n)")
     }
 
     private func height(_ view: some View) -> CGFloat {

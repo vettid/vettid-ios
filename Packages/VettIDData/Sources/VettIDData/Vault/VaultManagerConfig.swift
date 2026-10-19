@@ -131,6 +131,9 @@ public struct VaultManagerConfig: Sendable {
     /// (iPhone) Told whether no vault made or being made here can hold an App Attest key of this phone, from the account
     /// record (``AttestStartOver``); nil where nothing listens.
     public var attestStartOver: AttestStartOver?
+    /// The release update's waits: for the member API to see the vault locked, and for the API to route an unlock to the
+    /// release a vault just moved to (a virtual clock in the tests).
+    public var releaseUpdateSleep: LockSleep = realLockSleep
     /// The pause before a change whose answer was lost is checked again (VAULT-MESSAGING §11.14.9 "A lost answer": 30 s,
     /// doubling up to 5 minutes), in seconds.
     public var changeCheckSleep: @Sendable (TimeInterval) async throws -> Void

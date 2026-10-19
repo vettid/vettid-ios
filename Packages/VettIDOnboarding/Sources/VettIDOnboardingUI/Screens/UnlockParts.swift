@@ -7,8 +7,8 @@ import VettIDUI
 // The unlock screen's notices with a way forward. Mirrors the private composables of vettid-android `UnlockScreen.kt`.
 
 /// The release check's notices before the PIN (§11.10.6): an older release (the PIN is not sent), a newer one to
-/// acknowledge, a deprecated or retired release, and the newest active release to approve with this unlock. (What's new
-/// above the offer comes with I1.8.)
+/// acknowledge, a deprecated or retired release, and the newest active release to approve with this unlock, What's new
+/// first (ANDROID-PLAN "What's new"), then the fingerprint and the approval.
 struct PreflightNotices: View {
     let preflight: PreflightInfo
     let state: UnlockState
@@ -41,16 +41,20 @@ struct PreflightNotices: View {
             )
         }
         if let offer = p.offer, !p.rollback {
+            WhatsNew(release: offer.number, notes: state.notes, notesURL: offer.notes)
             NoticeCard(
                 .info, title: OnboardingStrings.unlockOfferTitle(Int(offer.number)),
                 message: OnboardingStrings.unlockOfferBody(Int(p.routed.number), Int(offer.number), offer.fingerprint)
             )
             .accessibilityIdentifier("release_offer")
-            Toggle(isOn: Binding(get: { state.approveOffer }, set: { actions.setApproveOffer($0) })) {
-                Text(OnboardingStrings.unlockOfferApprove).vettIDFont(.bodyMedium)
+            // (§11.14.9) Not while a PIN or password change is undecided.
+            if !state.updateHeld {
+                Toggle(isOn: Binding(get: { state.approveOffer }, set: { actions.setApproveOffer($0) })) {
+                    Text(OnboardingStrings.unlockOfferApprove).vettIDFont(.bodyMedium)
+                }
+                .frame(minHeight: Spacing.touchTarget)
+                .accessibilityIdentifier("approve_offer")
             }
-            .frame(minHeight: Spacing.touchTarget)
-            .accessibilityIdentifier("approve_offer")
         }
     }
 }

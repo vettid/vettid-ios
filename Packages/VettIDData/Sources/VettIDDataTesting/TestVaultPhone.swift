@@ -128,6 +128,7 @@ public final class TestVaultPhone {
         c.requestTimeout = waits.requestTimeout
         let pauses = waits.pauses
         c.changeCheckSleep = { try await pauses.sleep($0) }
+        c.releaseUpdateSleep = { _ in try await Task.sleep(for: .milliseconds(5)) }
         c.uptime = { DeviceConfig.monotonicNow() + uptime.ahead }
         return c
     }

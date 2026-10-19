@@ -29,8 +29,7 @@ public extension UnlockMessage {
 
 /// The unlock screen's state. The PIN is here only from the member's "Unlock" until the answer (kept through a recovery
 /// pending, so that "Cancel the recovery and unlock" can send it again); the password only until the unlock and its check.
-/// Never printed: the description names no secret. Mirrors vettid-android `UnlockUiState` (the release notes of What's
-/// new come with I1.8).
+/// Never printed: the description names no secret. Mirrors vettid-android `UnlockUiState`.
 public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     public static let minPinLength = 4
     public static let maxPin = 32
@@ -47,6 +46,10 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     public var updateAcknowledged = false
     /// The member approves the offered release with this unlock (§11.10.3).
     public var approveOffer = false
+    /// (§11.14.9) A PIN or password change is undecided: the approval is not offered, and none goes with the unlock.
+    public var updateHeld = false
+    /// What's new in the offered release; nil while it loads (or without an offer). Never gates the unlock.
+    public var notes: ReleaseNotes?
     public var pin = ""
     public var busy = false
     public var message: UnlockMessage?

@@ -25,6 +25,8 @@ public struct SettingsState: Equatable, Sendable {
     public var screenshotsStayOn = false
     /// (Release R) This phone holds a phone secret: New phone secret is offered.
     public var phoneSecret = false
+    /// A release update the vault can take (RELEASE-UPDATES §2): Settings → Vault → "Update available".
+    public var update: ReleaseUpdateOffer?
 
     public init(
         account: AccountInfo? = nil,
@@ -38,7 +40,8 @@ public struct SettingsState: Equatable, Sendable {
         appLockSuggestPasscode: Bool = false,
         screenshotsAllowed: Bool = false,
         screenshotsStayOn: Bool = false,
-        phoneSecret: Bool = false
+        phoneSecret: Bool = false,
+        update: ReleaseUpdateOffer? = nil
     ) {
         self.account = account
         self.appLockOn = appLockOn
@@ -52,6 +55,7 @@ public struct SettingsState: Equatable, Sendable {
         self.screenshotsAllowed = screenshotsAllowed
         self.screenshotsStayOn = screenshotsStayOn
         self.phoneSecret = phoneSecret
+        self.update = update
     }
 }
 
@@ -72,19 +76,21 @@ public final class SettingsViewModel {
     @ObservationIgnored private let promptReason: String
     @ObservationIgnored private let deviceAuthentication: @MainActor () -> DeviceAuthentication
     @ObservationIgnored private let screenshots: ScreenshotAllowance?
+    @ObservationIgnored private let updates: (any ReleaseUpdateRepository)?
     @ObservationIgnored private let work = Work()
     /// Turning the app lock on: its prompt is the app lock's, never cancelled with the screen.
     @ObservationIgnored private let prompts = Work()
 
     /// [promptReason]: what the Face ID, Touch ID or passcode prompt says when the lock is turned on. [deviceAuthentication]:
     /// what the iPhone can ask for, read when the lock is turned on. [screenshots]: the app's "Allow screenshots" (nil: the
-    /// row shows off and changes nothing).
+    /// row shows off and changes nothing). [updates]: the release update ("Update available" while one is offered).
     public init(
         account: any AccountRepository,
         vault: any VaultRepository,
         appLock: any AppLockSettings,
         promptReason: String,
         screenshots: ScreenshotAllowance? = nil,
+        updates: (any ReleaseUpdateRepository)? = nil,
         deviceAuthentication: @escaping @MainActor () -> DeviceAuthentication = { DeviceAuthentication.current() }
     ) {
         self.account = account
@@ -92,6 +98,7 @@ public final class SettingsViewModel {
         self.appLock = appLock
         self.promptReason = promptReason
         self.screenshots = screenshots
+        self.updates = updates
         self.deviceAuthentication = deviceAuthentication
     }
 
@@ -104,7 +111,7 @@ public final class SettingsViewModel {
             appLockMethod: appLock.method, appLockTimeout: appLock.timeout, busy: busy, error: error,
             appLockUnavailable: appLockUnavailable, appLockSuggestPasscode: appLockSuggestPasscode,
             screenshotsAllowed: screenshots?.allowed ?? false, screenshotsStayOn: screenshots?.staysOn ?? false,
-            phoneSecret: vault.usesPhoneSecret
+            phoneSecret: vault.usesPhoneSecret, update: updates?.offer
         )
     }
 

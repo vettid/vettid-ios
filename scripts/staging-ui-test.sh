@@ -8,7 +8,8 @@
 #   scripts/staging-ui-test.sh --device <id> --test <test> [--inputs <file>] [--fresh] [--skip-build] [--keep-result]
 #
 #   --device <id>     the iPhone (`xcrun devicectl list devices`)
-#   --test <test>     testStagingEnroll or testStagingUnlockLock
+#   --test <test>     testStagingEnroll, testStagingUnlockLock, testStagingApproveUpdate or
+#                     testStagingApproveUpdateAtUnlock
 #   --inputs <file>   a private file outside the repository (chmod 600) with lines NAME=value for
 #                     VETTID_STAGING_EMAIL, VETTID_STAGING_CODE, VETTID_STAGING_PIN, VETTID_STAGING_PASSWORD (quotes
 #                     around a value and CRLF line ends are stripped); only the file is read then. Without it they are
@@ -50,8 +51,9 @@ while [[ $# -gt 0 ]]; do
 done
 [[ -n "${DEVICE}" ]] || { echo "--device is required" >&2; usage; }
 case "${TEST}" in
-  testStagingEnroll|testStagingUnlockLock) ;;
-  *) echo "--test must be testStagingEnroll or testStagingUnlockLock" >&2; usage ;;
+  testStagingEnroll|testStagingUnlockLock|testStagingApproveUpdate|testStagingApproveUpdateAtUnlock) ;;
+  *) echo "--test must be testStagingEnroll, testStagingUnlockLock, testStagingApproveUpdate or testStagingApproveUpdateAtUnlock" >&2
+     usage ;;
 esac
 
 # The inputs are kept in IN_<NAME>, unexported, and the variables of the same names leave the environment: nothing the

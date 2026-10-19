@@ -98,6 +98,7 @@ private struct DrawerRow: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? [.isSelected] : [])
+        .accessibilityIdentifier("drawer_\(item.key)")
     }
 }
 

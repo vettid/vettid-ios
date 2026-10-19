@@ -27,6 +27,17 @@ import VettIDKeys
         #expect(!s.busy && s.error == nil)
     }
 
+    /// "Update available" while the vault has a release update to approve (RELEASE-UPDATES §2), and not otherwise.
+    @Test func theUpdateRowFollowsTheOffer() {
+        let offer = ReleaseUpdateOffer(current: FakeVaultRepository.release(4), target: FakeVaultRepository.release(5))
+        let updates = FakeReleaseUpdates(offer: offer)
+        let m = SettingsViewModel(account: repo, vault: repo, appLock: lock, promptReason: "Unlock VettID", updates: updates)
+        #expect(m.state.update == offer)
+        updates.offer = nil
+        #expect(m.state.update == nil)
+        #expect(model().state.update == nil)
+    }
+
     /// vettid-android `themeIsPersistedAndLockWorks`: the lock goes to the vault; this phone is locked.
     @Test func lockVaultLocks() async {
         let m = model()

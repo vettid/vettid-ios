@@ -298,3 +298,33 @@ enum ShellStrings {
         )
     }
 }
+
+// The release banner's texts: vettid-android's `release_banner_*`, word for word.
+extension ShellStrings {
+    static func releaseBannerAvailable(_ release: Int) -> String {
+        String(
+            localized: "release_banner_available", defaultValue: "A new vault release is available (release \(release)).", bundle: .module
+        )
+    }
+    static func releaseBannerEnding(_ date: String) -> String {
+        String(
+            localized: "release_banner_ending", defaultValue: "Your vault's release ends on \(date). Update now to keep your vault.",
+            bundle: .module
+        )
+    }
+    static var releaseBannerEndingSoon: String {
+        String(
+            localized: "release_banner_ending_soon", defaultValue: "Your vault's release is ending. Update now to keep your vault.",
+            bundle: .module
+        )
+    }
+    static var releaseBannerEnded: String {
+        String(
+            localized: "release_banner_ended", defaultValue: "Your vault's release has ended. Update now to keep your vault.",
+            bundle: .module
+        )
+    }
+    static var releaseBannerUpdate: String {
+        String(localized: "release_banner_update", defaultValue: "Update now", bundle: .module)
+    }
+}

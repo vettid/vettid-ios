@@ -11,6 +11,8 @@ public struct SettingsActions {
     public var back: @MainActor () -> Void = {}
     public var account: @MainActor () -> Void = {}
     public var vaultStatus: @MainActor () -> Void = {}
+    /// Settings → Vault → "Update available": the update screen.
+    public var releaseUpdate: @MainActor () -> Void = {}
     public var lockVault: @MainActor () -> Void = {}
     public var attestation: @MainActor () -> Void = {}
     public var changePin: @MainActor () -> Void = {}
@@ -31,8 +33,8 @@ public struct SettingsActions {
 
 /// Settings (ANDROID-PLAN §4 "Screens", Settings): the account card, then Vault, Security, App and Account, in
 /// vettid-android's order; grouped cards (Proton); the vault's lock and Allow screenshots confirm first. A row is shown
-/// only once its feature works; the rest come with the rows of IOS-PLAN §8 that bring them: Update available (I1.8c,
-/// RELEASE-UPDATES §2), Theme (I1.8c), Notifications (phase P, IOS-PLAN §6.7), Move to a new phone and Recovery (I3,
+/// only once its feature works; "Update available" while the vault has a release update to approve (RELEASE-UPDATES §2);
+/// the rest come with the rows of IOS-PLAN §8 that bring them: Theme (I1.8c), Notifications (phase P, IOS-PLAN §6.7), Move to a new phone and Recovery (I3,
 /// VAULT-MESSAGING §6.7.1, §11.11), the Privacy section (shared profile, sharing rules: I2 and I3, VAULT-MESSAGING
 /// §10.8), and Allow screenshots with its App section (IOS-PLAN §4), which waits for the first screen that holds the
 /// secure layer (`SecureContainer`: received photos, I2; the typed recovery code and the recovery open, I3): until then it
@@ -168,6 +170,16 @@ public struct SettingsContent: View {
         VStack(spacing: 0) {
             SettingsSectionHeader(SettingsStrings.sectionVault)
             SettingsGroup {
+                // The proactive release update (owner decision 2026-10-09): while the vault has one to approve.
+                if let o = state.update {
+                    SettingsRow(
+                        SettingsStrings.vaultUpdate, icon: .systemUpdate, iconTint: o.kind == .available ? colors.primary : colors.error,
+                        supporting: SettingsStrings.vaultUpdateBody(Int(o.target.number), Int(o.current.number)),
+                        action: actions.releaseUpdate
+                    )
+                    .accessibilityIdentifier("release_update_row")
+                    SettingsDivider()
+                }
                 SettingsRow(SettingsStrings.vaultStatus, icon: .storage, action: actions.vaultStatus)
                     .accessibilityIdentifier("vault_status")
                 SettingsDivider()

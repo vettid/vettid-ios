@@ -715,6 +715,61 @@
           }
         }
       }
+    },
+    "release_banner_available": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A new vault release is available (release %lld)."
+          }
+        }
+      }
+    },
+    "release_banner_ending": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault's release ends on %@. Update now to keep your vault."
+          }
+        }
+      }
+    },
+    "release_banner_ending_soon": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault's release is ending. Update now to keep your vault."
+          }
+        }
+      }
+    },
+    "release_banner_ended": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault's release has ended. Update now to keep your vault."
+          }
+        }
+      }
+    },
+    "release_banner_update": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update now"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
