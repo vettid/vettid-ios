@@ -247,7 +247,10 @@ public final class PhoneSecrets: @unchecked Sendable {
     /// and the records deleted. A flow that unlocks with a PIN typed on its own screen (the release update, "Finish the
     /// move") reads it when it takes the PIN and sends nothing when it moved since (``VaultManager/pinTakenBefore(_:)``):
     /// the PIN may be the one from before that change (chosen; not in the spec, which holds these flows only while a
-    /// change is undecided). In memory only; a restart takes the PIN again.
+    /// change is undecided). In memory only; a restart takes the PIN again. Not moved by what does not change the PIN:
+    /// the earlier-secret step's restore, the epoch-1 records of an enrollment, a transfer or a recovery and their
+    /// confirmation (``confirmCreate(id:)``, ``confirmPending(keyVault:)``, ``dropPending(id:)``), an unlock's own
+    /// confirmation of a candidate (unless it settles the uncertain PIN), and pruning.
     public var pinGeneration: Int { generationLock.withLock { generation } }
 
     /// Something that may change which PIN the vault expects happened (``pinGeneration``).

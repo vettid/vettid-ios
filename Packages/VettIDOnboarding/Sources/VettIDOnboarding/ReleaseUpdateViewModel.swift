@@ -103,7 +103,7 @@ public final class ReleaseUpdateViewModel {
     public func approve(pin: String) -> Bool {
         let digits = String(pin.filter { $0.isASCII && $0.isNumber }.prefix(UnlockState.maxPin))
         guard let offer = state.offer, state.submitAllowed(pinTyped: digits.count) else { return false }
-        if updates.start(pin: digits, offer: offer, generation: keypad.generation) { return true }
+        if updates.start(pin: digits, offer: offer, generation: keypad.take(state.pinAllowed, updates)) { return true }
         state.checkDue = updates.ownerCheckDue()
         state.changeHold = updates.changeHold
         return false
@@ -183,7 +183,7 @@ public final class ReleaseUpdateFlowViewModel {
     @discardableResult
     public func retry(pin: String) -> Bool {
         guard state.retryAllowed(pinTyped: pin.count) else { return false }
-        updates.retry(pin: pin, generation: keypad.generation)
+        updates.retry(pin: pin, generation: keypad.take(state.pinAllowed, updates))
         return true
     }
 
@@ -198,7 +198,7 @@ public final class ReleaseUpdateFlowViewModel {
     public func confirmAbandon(pin: String) -> Bool {
         state.abandonConfirm = false
         guard state.retryAllowed(pinTyped: pin.count), state.progress?.step == .newReleaseFailed else { return false }
-        updates.abandon(pin: pin, generation: keypad.generation)
+        updates.abandon(pin: pin, generation: keypad.take(state.pinAllowed, updates))
         return true
     }
 
@@ -234,10 +234,20 @@ public final class ReleaseUpdateFlowViewModel {
 /// (VAULT-MESSAGING §11.14.9 step 2; chosen; not in the spec) Which PIN the vault expects
 /// (``ReleaseUpdateRepository/pinGeneration``), read when the keypad becomes usable: a change sent or decided while the
 /// member types moves it, and the update then sends nothing with that PIN and asks for it again. Dropped while the keypad
-/// is not usable; read again each time it becomes so.
+/// is not usable; read again each time it becomes so. Used once: handing a PIN over empties the keypad, and the next PIN
+/// is typed from then on, so the reading is taken again at once (a step refused without the keypad ever closing, as a
+/// PIN taken before a change is, then gets a fresh one).
 @MainActor
 final class KeypadReading {
     private(set) var generation: Int?
+
+    /// The reading for the PIN handed over now, and a fresh one for the next PIN if the keypad stays usable ([allowed]).
+    func take(_ allowed: Bool, _ updates: any ReleaseUpdateRepository) -> Int? {
+        let taken = generation
+        generation = nil
+        follow(allowed, updates)
+        return taken
+    }
 
     /// The keypad is usable ([allowed]) or not.
     func follow(_ allowed: Bool, _ updates: any ReleaseUpdateRepository) {

@@ -71,6 +71,10 @@ public struct ReleaseUpdateFlowContent: View {
             if !actions.confirmAbandon(pin.take()) { pin.clear() }
         }
         .onDisappear { pin.clear() }
+        .onChange(of: state.pinAllowed) { _, allowed in
+            // Digits typed before a step ran or a backoff began are not kept for after it (a fresh reading then).
+            if !allowed { pin.clear() }
+        }
         .onChange(of: scenePhase) { _, now in
             // IOS-PLAN §6.3: typed secrets are dropped when the app leaves the foreground, and when the iPhone locks.
             if now == .background { pin.clear() }

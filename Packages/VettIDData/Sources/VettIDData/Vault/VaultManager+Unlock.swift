@@ -31,7 +31,7 @@ struct UnlockRoute: Sendable {
     /// The unlock right after `update: moved`: routed to exactly the release moved from, it waits (``unlockRouted``).
     var afterMove = false
     /// (VAULT-MESSAGING §11.14.9 step 2) A PIN typed on a flow's own screen (the release update, "Finish the move"):
-    /// ``PhoneSecrets/pinGeneration`` when it was taken. Each request is refused with nothing sent once it moved
+    /// ``PhoneSecrets/pinGeneration`` when it was taken. Each request is held back, right before it is posted, once it moved
     /// (``VaultManager/pinTakenBefore(_:)``). Nil: the unlock screen's prompts, whose PIN step is read as the unlock starts.
     var pinTaken: Int?
 }
@@ -308,11 +308,15 @@ extension VaultManager {
                 return try await s.alt.unlock(
                     party: s.device, userGuid: guid, pin: pin, attester: attester, options: options, release: route.release,
                     onStarting: route.onStarting,
-                    unlockSecretFor: { [self] caps in
+                    unlockSecretFor: { caps in
                         try ReleasePath.requireR(caps)
-                        // Right before the request is built and sent: nothing goes with a PIN taken before a change.
-                        if let moved = pinTakenBefore(taken) { throw moved }
                         return secret
+                    },
+                    beforePost: { [self] in
+                        // Right before each request is posted: none goes with a PIN taken before a change. An earlier try
+                        // of this same unlock may have reached the vault already (an expired slot; a sealed `attestation`
+                        // or `manifest` refusal, decided before the PIN check); this stops only the requests still to go.
+                        if let moved = pinTakenBefore(taken) { throw moved }
                     }
                 )
             } catch AltRefused.notYetRouted {

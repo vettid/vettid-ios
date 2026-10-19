@@ -211,10 +211,26 @@ import VettIDDataTesting
         await vm.settle()
         updates.pinGeneration = 3
         #expect(vm.retry(pin: "246802"))
+        // Read again as the keypad empties; another change while the PIN is typed for the return.
+        updates.pinGeneration = 4
         vm.askAbandon()
         #expect(vm.confirmAbandon(pin: "246802"))
-        #expect(updates.generations == [2, 2])
+        #expect(updates.generations == [2, 3])
         #expect(updates.calls == ["refused:246802", "refused:246802"])
+    }
+
+    /// A reading is used once: after a PIN taken before a change is refused without the keypad ever closing (the step
+    /// fails at once), the PIN typed again on the same screen goes with a fresh reading.
+    @Test func aReadingIsUsedOnce() async {
+        let updates = FakeReleaseUpdates(offer: offer)
+        let vm = ReleaseUpdateFlowViewModel(updates: updates)
+        updates.progress = UpdateProgress(step: .failed, from: rel(4), to: rel(5), failure: .network)
+        await vm.settle()
+        updates.pinGeneration = 1
+        #expect(vm.retry(pin: "246802"))
+        #expect(vm.retry(pin: "246802"))
+        #expect(updates.calls == ["refused:246802", "retry:246802"])
+        #expect(updates.generations == [0, 1])
     }
 
     /// (§11.14.9; chosen; not in the spec) While a PIN or password change is undecided the unlock screen does not offer

@@ -125,8 +125,8 @@ extension VaultManager {
     }
 
     /// One unlock of the update: approving [approve] or abandoning the unconfirmed move, never following a move. Nothing
-    /// is sent once which PIN the vault expects moved since [pin] was taken: checked here and again right before the
-    /// request goes out (``UnlockRoute/pinTaken``).
+    /// is sent once which PIN the vault expects moved since [pin] was taken: checked here and again right before each
+    /// request is posted (``UnlockRoute/pinTaken``).
     func updateUnlock(
         pin: TakenPin, approve: ReleaseView?, abandon: Bool, afterMove: Bool = false, onStarting: @escaping @MainActor () -> Void
     ) async -> UpdateStepResult {

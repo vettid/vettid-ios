@@ -81,8 +81,8 @@ import VettIDVault
         try await expectAskedAgain(old)
     }
 
-    /// The check right before the request is built, whatever came before it: nothing goes out.
-    @Test func theUnlockRequestIsNotBuiltWithAPinTakenBefore() async throws {
+    /// The check right before the request is posted, whatever came before it: nothing goes out.
+    @Test func theUnlockRequestIsNotPostedWithAPinTakenBefore() async throws {
         defer { phone.close() }
         try await setUp()
         let old = m.phoneSecrets.pinGeneration
@@ -118,6 +118,78 @@ import VettIDVault
         let unlocks = service.unlocks.count
         #expect(try await m.finishMove(pin: pin) == .success)
         #expect(service.unlocks.count == unlocks + 1 && service.pinFailureCount == 0 && m.phase == .unlocked)
+    }
+
+    // MARK: - A change decided after the PIN was taken (a password change: the unlock's PIN step never moves)
+
+    /// A password change whose answer was lost ([lose]: its request or its answer), and the generation read while it is
+    /// undecided (its marker stored).
+    func passwordChangeUndecided(losingTheRequest lose: Bool) async -> Int {
+        let type = "credential.password.change"
+        if lose {
+            service.loseRequests([type])
+        } else {
+            service.loseAnswers([type, "credential.version"], from: type)
+        }
+        _ = await vaultFailure { try await m.changePassword(password, newPassword: "a brand new passphrase", pin: pin) }
+        #expect((try? m.phoneSecrets.unresolvedChange())??.type == .password)
+        service.loseRequests([])
+        service.loseAnswers([])
+        return m.phoneSecrets.pinGeneration
+    }
+
+    /// Decided applied after the PIN was taken: the update's unlock sends nothing.
+    @Test func aChangeDecidedAppliedMovesIt() async throws {
+        defer { phone.close() }
+        try await setUp()
+        let taken = await passwordChangeUndecided(losingTheRequest: false)
+        await m.checkUnresolvedChange()
+        #expect(m.changeCheck == ChangeCheck(.password, .applied))
+        try await m.lockForUpdate()
+        let unlocks = service.unlocks.count
+        let r = await m.updateUnlock(pin: TakenPin(pin: pin, generation: taken), approve: try target, abandon: false) {}
+        #expect(r == .failed(.credentialUnsettled, code: VaultManager.codePinTakenBefore))
+        #expect(service.unlocks.count == unlocks)
+    }
+
+    /// Decided not applied (the same version past `exp`).
+    @Test func aChangeDecidedNotAppliedMovesIt() async throws {
+        defer { phone.close() }
+        try await setUp()
+        let taken = await passwordChangeUndecided(losingTheRequest: true)
+        let past = ChangeRequest.validFor + 2 * VaultManager.decidedAfterExp
+        service.advanceVaultClock(past)
+        phone.clockAhead = past
+        await m.checkUnresolvedChange()
+        #expect(m.changeCheck == ChangeCheck(.password, .notApplied))
+        #expect(m.phoneSecrets.pinGeneration != taken)
+    }
+
+    /// Ended without a decision (another version, after a restart: the generation is read on the new start).
+    @Test func aCheckThatEndsMovesIt() async throws {
+        defer { phone.close() }
+        try await setUp()
+        _ = await passwordChangeUndecided(losingTheRequest: false)
+        service.moveCredentialWithoutTheApp()
+        try phone.restart()
+        let taken = m.phoneSecrets.pinGeneration
+        await m.checkUnresolvedChange(evenLocked: true)
+        #expect(m.changeCheck == ChangeCheck(.password, .ended))
+        #expect(m.phoneSecrets.pinGeneration != taken)
+    }
+
+    /// The unlock's PIN step moving alone (the previous PIN answered `device_secret`: the new one is asked for) moves it.
+    @Test func theUnlocksPinStepMovesIt() async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.loseAnswers([VaultApi.typePinChange, "credential.version"], from: VaultApi.typePinChange)
+        _ = await vaultFailure { try await m.changePin(pin: pin, newPin: newPin, password: password) }
+        try await m.lock()
+        service.loseAnswers([])
+        #expect(m.unlockPinStep == .previous)
+        let taken = m.phoneSecrets.pinGeneration
+        #expect(try await m.unlock(pin: pin) == .newPinNeeded)
+        #expect(m.unlockPinStep == .new && m.phoneSecrets.pinGeneration != taken)
     }
 
     /// What moves the generation: a password change and a new phone secret going out, as well as a PIN change.
