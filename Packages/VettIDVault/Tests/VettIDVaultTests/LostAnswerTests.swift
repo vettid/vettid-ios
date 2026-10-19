@@ -24,22 +24,25 @@ import VettIDTesting
         func advance(_ s: TimeInterval) { lock.withLock { value += s } }
     }
 
-    /// A device state store whose saves fail once armed, from its [after]th save on (a full disk, or protected data gone
-    /// once the phone locks).
+    /// A device state store whose saves fail once armed (a full disk, or protected data gone once the phone locks).
     final class FailingStore: DeviceStateStore, @unchecked Sendable {
         private let lock = NSLock()
         private var b: [UInt8]?
-        private var left: Int?
+        private var armed = false
+        private var failed = 0
 
-        func arm(after n: Int) { lock.withLock { left = n } }
+        /// Every save from now on fails.
+        func arm() { lock.withLock { armed = true } }
+        /// How many saves failed.
+        var failures: Int { lock.withLock { failed } }
         func load() -> [UInt8]? { lock.withLock { b } }
         func clear() { lock.withLock { b = nil } }
 
         func save(_ state: [UInt8]) throws {
             try lock.withLock {
-                if let n = left {
-                    if n <= 0 { throw CocoaError(.fileWriteOutOfSpace) }
-                    left = n - 1
+                if armed {
+                    failed += 1
+                    throw CocoaError(.fileWriteOutOfSpace)
                 }
                 b = state
             }
@@ -173,9 +176,10 @@ import VettIDTesting
         let task = Task { try await h.api.credentialChangePassword(password: "a", newPassword: "b", pin: "975310", marked: marked) }
         let question = try await open(h.v)
         #expect(question.type == "credential.version")
-        // The answer to `credential.version`, the UTK taken, the request recorded as unsettled and the first send are
-        // saved; the saves of the next sends fail.
-        store.arm(after: 4)
+        // Every save fails from the moment the relay takes the change's deposit (the next deposit: the question's is
+        // taken already), however many saves came before it (the settling and the question's own deposit save on their
+        // own timing): the saves of the next sends fail, and so these sends never go out.
+        ops.base.relay.onDeposit = { store.arm() }
         try await deliver(h.v, h.d, Inner(id: Ulid.new(), type: question.type, ts: Date(), re: question.id, status: Inner.statusOK, body: Array(#"{"exists":true,"version":1}"#.utf8)))
         let deposited = try await open(h.v)
         let change = try #require(marked.change)
@@ -186,6 +190,8 @@ import VettIDTesting
         } catch let u as ChangeUnanswered {
             #expect(u.held.id == change.id)
         }
+        #expect(store.failures > 0, "the saves after the deposit failed")
+        #expect(await ops.base.relay.noDeposit(within: 0.3), "no send after the failed saves")
         let stored = try JSONSerialization.jsonObject(with: Data(store.load() ?? [])) as? [String: Any]
         let outbox = (stored?["outbox"] as? [[String: Any]]) ?? []
         #expect(!outbox.contains { $0["id"] as? String == change.id }, "never in the stored outbox")
