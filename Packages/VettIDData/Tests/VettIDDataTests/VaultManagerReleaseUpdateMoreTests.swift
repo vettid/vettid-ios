@@ -151,7 +151,7 @@ import VettIDDataTesting
 
     private func expectHeld() throws {
         let hold = m.releaseUpdate.changeHold
-        #expect(hold == .changeChecking || hold == .changeUnresolved)
+        #expect(hold == .changeChecking || hold == .changeCheckingPassword || hold == .changeUnresolved)
         let locks = service.memberLocks + service.relayLocks
         let unlocks = service.unlocks.count
         #expect(!m.releaseUpdate.start(pin: pin, offer: try offer))

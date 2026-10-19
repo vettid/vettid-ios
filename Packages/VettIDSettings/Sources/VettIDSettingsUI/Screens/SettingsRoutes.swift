@@ -268,6 +268,8 @@ public struct ChangePinRoute: View {
         a.onStepBack = { m?.back() }
         a.onForgetSecrets = { m?.forgetSecrets() }
         a.onClose = onClose
+        a.onLockAndUnlock = { m?.lockAndUnlock() }
+        a.offersLockAndUnlock = m?.offersLockAndUnlock ?? false
         return a
     }
 }

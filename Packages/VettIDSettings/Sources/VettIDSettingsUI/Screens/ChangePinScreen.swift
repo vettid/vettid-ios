@@ -21,6 +21,10 @@ public struct ChangePinActions {
     public var onForgetSecrets: @MainActor () -> Void = {}
     /// Leaves the screen.
     public var onClose: @MainActor () -> Void = {}
+    /// "Lock and unlock now" (VAULT-MESSAGING §11.14.9): shown when ``offersLockAndUnlock``.
+    public var onLockAndUnlock: @MainActor () -> Void = {}
+    /// Whether the PIN is uncertain or a new phone secret undecided, which a lock and unlock settles.
+    public var offersLockAndUnlock = false
 
     public init() {}
 }
@@ -100,6 +104,10 @@ public struct ChangePinContent: View {
                 if let error = state.error {
                     NoticeCard(.urgent, title: PinStrings.pinTitle, message: error.message).accessibilityIdentifier("error")
                 }
+                if actions.offersLockAndUnlock {
+                    SecondaryButton(PinStrings.pinLockUnlock, action: actions.onLockAndUnlock)
+                        .accessibilityIdentifier("change_pin_lock_unlock")
+                }
             }
         }
         .accessibilityIdentifier("change_pin")
@@ -120,6 +128,7 @@ public struct ChangePinContent: View {
         case .checking: PinStrings.pinChecking
         case .unreachable: PinStrings.pinUnreachable
         case .notApplied: PinStrings.pinNotChanged
+        case .ended: PinStrings.pinEnded
         default: nil
         }
     }

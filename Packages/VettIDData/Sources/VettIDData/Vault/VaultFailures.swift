@@ -13,6 +13,10 @@ enum VaultFailures {
     /// root screen says ``FailureKind/localState``).
     static let codeKeystore = "keystore"
 
+    /// The code of a change refused with nothing sent while an earlier credential operation is not settled
+    /// (VAULT-MESSAGING §11.14.9 step 1).
+    static let codeCredentialUnsettled = "credential_unsettled"
+
     // swiftlint:disable cyclomatic_complexity
     /// [e] as a ``VaultFailure``; a cancellation stays one.
     static func map(_ e: any Error) -> any Error {
@@ -28,6 +32,8 @@ enum VaultFailures {
         case let r as AltResultFailure: VaultFailure(.other, code: "unreadable_result", cause: r)
         case let c as AltChannelFailure: VaultFailure(.noResponse, cause: c)
         case let s as VaultStateError: VaultFailure(noResponse(s) ? .noResponse : .other, cause: s)
+        case let u as CredentialUnsettled: VaultFailure(.credentialUnsettled, code: codeCredentialUnsettled, cause: u)
+        case let u as RequestUnanswered: VaultFailure(.noResponse, cause: u)
         case let p as PairingRejected: VaultFailure(.rejected, code: "rejected", cause: p)
         case let r as RelayError: VaultFailure(.network, cause: r)
         case let u as URLError: VaultFailure(.network, cause: u)

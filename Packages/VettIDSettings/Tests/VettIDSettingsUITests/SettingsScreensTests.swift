@@ -21,12 +21,13 @@ import VettIDUI
             .appendingPathComponent("Sources/VettIDSettingsUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 266)
+        #expect(keys.count == 276)
         let missing = "\u{0}missing"
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)
             #expect(!text.isEmpty && text != key && text != missing, "\(key)")
-            let prefixes = ["settings_", "credential_", "canary_", "ios_settings_", "ios_credential_", "ios_app_lock_"]
+            // `root_change_`: the one-time notice of a change's decision, under the Android app module's keys.
+            let prefixes = ["settings_", "credential_", "canary_", "root_change_", "ios_settings_", "ios_credential_", "ios_app_lock_"]
             #expect(prefixes.contains { key.hasPrefix($0) }, "\(key)")
         }
     }

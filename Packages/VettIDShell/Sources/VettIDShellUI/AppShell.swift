@@ -82,7 +82,17 @@ public struct AppShell: View {
     @ViewBuilder private var changeCheckNotice: some View {
         // A change screen waiting for it shows the decision itself.
         if let check = vault.changeCheck, let text = ChangeCheckNotice.text(check), !vault.changeCheckAwaited {
-            if ChangeCheckNotice.urgent(check) {
+            if ChangeCheckNotice.offersLockAndUnlock(check) {
+                // The PIN is uncertain: the unlock's two prompts settle it at no cost (§11.14.9 step 3).
+                UrgentBanner(
+                    text, actionLabel: ChangeCheckNotice.lockAndUnlock, onDismiss: { vault.acknowledgeChangeCheck() },
+                    action: {
+                        vault.acknowledgeChangeCheck()
+                        Task { try? await vault.lock() }
+                    }
+                )
+                .accessibilityIdentifier("change_check_notice")
+            } else if ChangeCheckNotice.urgent(check) {
                 UrgentBanner(text, actionLabel: ShellStrings.ownerCheckNoticeOk, action: { vault.acknowledgeChangeCheck() })
                     .accessibilityIdentifier("change_check_notice")
             } else {

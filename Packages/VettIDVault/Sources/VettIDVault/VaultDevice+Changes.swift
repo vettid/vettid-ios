@@ -44,10 +44,27 @@ extension VaultDevice {
     /// Whether a message from the vault arrived in this process: until one does, ``vaultNow()`` is the phone's clock.
     public var knowsVaultTime: Bool { mem.withLock { vaultClock != nil } }
 
-    /// Sends [held] again (the same inner id, `exp` and body, in a new envelope) and waits once for its answer: the
-    /// vault answers it from its response cache if it handled it, or handles it once if it never arrived (§8.2). No
-    /// answer is ``VaultStateError``.
+    /// Sends [held] again (the same inner id, `exp` and body, in a new envelope, never through the outbox) and waits once
+    /// for its answer: the vault answers it from its response cache if it handled it, or handles it once if it never
+    /// arrived (§8.2). No answer is ``VaultStateError``.
     public func resend(_ held: HeldRequest, timeout: TimeInterval? = nil) async throws -> VaultMessage {
-        try await request(held.type, body: held.body, timeout: timeout, innerID: held.id, exp: held.exp, retries: 0)
+        try await requestKept(held, sends: 1, timeout: timeout)
+    }
+
+    /// [held] deposited at most [sends] times while its `exp` has not passed by ``vaultNow()``, each straight to the
+    /// relay and never through the outbox, so that the request is never written to the phone's storage (§11.14.9 step 1:
+    /// kept in memory only); a deposit that fails is a send without an answer. Its answer, or ``VaultStateError``.
+    func requestKept(_ held: HeldRequest, sends: Int, timeout: TimeInterval? = nil) async throws -> VaultMessage {
+        let d = OneShot<Inner>()
+        mem.withLock { pending[held.id] = d }
+        defer { mem.withLock { _ = pending.removeValue(forKey: held.id) } }
+        for _ in 0..<sends where vaultNow() < held.exp {
+            _ = try? await lock.withLock { try await sendOnceLocked(id: held.id, type: held.type, body: held.body, exp: held.exp) }
+            if let inner = await d.wait(timeout: timeout ?? cfg.requestTimeout) { return VaultMessage(inner: inner) }
+            try Task.checkCancellation()
+            // No answer: the collection may have ended (the answer would then wait in the mailbox unread).
+            ensureCollecting()
+        }
+        throw VaultStateError(message: "\(held.type): no response")
     }
 }

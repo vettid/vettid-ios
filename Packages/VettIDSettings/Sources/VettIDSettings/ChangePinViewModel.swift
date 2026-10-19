@@ -99,8 +99,9 @@ public final class ChangePinViewModel {
             state.check = nil
             failed(kind, kept: state)
         case .ended:
-            state.check = nil
-            state.error = .other
+            // 0.45.0 step 3: no retry that sends the PIN again; the entries go, and the PIN is uncertain.
+            state = ChangePinState(withPassword: state.withPassword, fromAttempts: state.fromAttempts)
+            state.check = .ended
         }
         vault.waitForChangeCheck(nil)
         vault.acknowledgeChangeCheck()
@@ -170,6 +171,18 @@ public final class ChangePinViewModel {
             state.password = ""
             state.mismatch = false
         }
+    }
+
+    /// Whether the screen offers "Lock and unlock now" (VAULT-MESSAGING 0.45.0 §11.14.9 step 3, 0.46.0 step 1): the PIN is
+    /// uncertain, or a new phone secret could not be decided; the unlock's two prompts settle either at no cost.
+    public var offersLockAndUnlock: Bool {
+        state.check == .ended || state.error == .pinUncertain || state.error == .renewUnconfirmed
+    }
+
+    /// "Lock and unlock now": the vault is locked, and the unlock screen that follows asks for each PIN in turn.
+    public func lockAndUnlock() {
+        let vault = vault
+        work.launch { try? await vault.lock() }
     }
 
     /// Leaving the screen, or the app leaving the foreground: nothing typed stays. A change on its way stays busy (its
@@ -242,6 +255,11 @@ public final class ChangePinViewModel {
             } else if failed.code == VaultManager.codeChangeNotApplied {
                 state = Self.kept(s, current: false)
                 state.check = .notApplied
+                vault.acknowledgeChangeCheck()
+            } else if let check = vault.changeCheck, check.type == .pin, check.status == .ended {
+                // §11.14.9 step 3: ended without a decision; nothing is kept for a retry.
+                state = ChangePinState(withPassword: s.withPassword, fromAttempts: s.fromAttempts)
+                state.check = .ended
                 vault.acknowledgeChangeCheck()
             } else {
                 self.failed(failed.kind, kept: s)
