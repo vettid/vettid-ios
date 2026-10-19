@@ -61,12 +61,25 @@ extension StagingTests {
         dismissKeyboard(app)
         for digit in pin {
             let key = app.buttons["pin_\(digit)"]
-            XCTAssertTrue(waitUntil(timeout: 10, { key.exists && key.isHittable }), "no keypad")
+            XCTAssertTrue(waitUntil(timeout: 10, { key.exists }), "no keypad")
+            scrollToHittable(app, key)
+            XCTAssertTrue(waitUntil(timeout: 10, { key.isHittable }), "the keypad cannot be reached")
             key.tap()
         }
         let dots = app.descendants(matching: .any)["pin_dots"]
         if dots.exists, let entered = dots.value as? String, entered != String(pin.count) {
             return fail(app, "The keypad holds \(entered) digits, not \(pin.count); nothing was sent.")
+        }
+    }
+
+    /// Scrolls the screen up until [element] can be tapped (a long notice, such as the unlock screen's What's new, can
+    /// push the keypad below the screen). Drags from the top of the screen, which is the screen's own scrolling content,
+    /// not a card that scrolls on its own.
+    @MainActor
+    func scrollToHittable(_ app: XCUIApplication, _ element: XCUIElement) {
+        for _ in 0..<8 where !element.isHittable {
+            let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
+            from.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05)))
         }
     }
 
