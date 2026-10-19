@@ -41,6 +41,49 @@ jobs:
           git diff --exit-code -- VettID.xcodeproj App/Info.plist
       - name: SwiftLint
         run: swiftlint lint --strict
+      - name: TEMPORARY diagnose the VettIDVault test crash
+        run: |
+          set +e
+          crashes() {
+            sleep 15
+            find "$HOME/Library/Logs/DiagnosticReports" /Library/Logs/DiagnosticReports \
+              \( -name '*.ips' -o -name '*.crash' \) -mmin -10 2>/dev/null | while read -r f; do
+              echo "=== $f"
+              ls -l "$f"
+              python3 - "$f" <<'PY'
+          import json, sys
+          p = sys.argv[1]
+          raw = open(p, errors="replace").read()
+          parts = raw.split("\n", 1)
+          try:
+              body = json.loads(parts[1])
+          except Exception:
+              print(raw[:20000]); sys.exit()
+          print("procName:", body.get("procName"))
+          print("exception:", json.dumps(body.get("exception")))
+          print("termination:", json.dumps(body.get("termination")))
+          print("asi:", json.dumps(body.get("asi"), indent=1))
+          imgs = body.get("usedImages", [])
+          ft = body.get("faultingThread", 0)
+          for i, t in enumerate(body.get("threads", [])):
+              if i != ft and not t.get("triggered"):
+                  continue
+              print("--- thread", i, t.get("name", ""), t.get("queue", ""))
+              for fr in t.get("frames", [])[:80]:
+                  img = imgs[fr["imageIndex"]].get("name", "?") if fr.get("imageIndex", -1) < len(imgs) else "?"
+                  print("  ", img, fr.get("symbol", "?"), "+", fr.get("symbolLocation", ""), fr.get("sourceFile", ""), fr.get("sourceLine", ""))
+          PY
+            done
+          }
+          echo "::group::ChangeVersionTests"
+          swift test --package-path Packages/VettIDVault --no-parallel --filter ChangeVersionTests 2>&1 | tail -150
+          echo "::endgroup::"
+          crashes
+          echo "::group::the single test"
+          swift test --package-path Packages/VettIDVault --no-parallel --filter anOperationThatWaitedWhileASecretWentOutIsRefused 2>&1 | tail -150
+          echo "::endgroup::"
+          crashes
+          exit 1
       - name: pure packages (swift test on macOS)
         run: |
           for p in VettIDCrypto VettIDAttestation VettIDRelay VettIDAltChan VettIDVault VettIDKeys VettIDTesting; do
