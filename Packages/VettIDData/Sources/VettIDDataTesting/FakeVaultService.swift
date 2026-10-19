@@ -173,6 +173,12 @@ public final class FakeVaultService: @unchecked Sendable {
     /// Requests that reached the vault's mailbox while it was locked, handled after the next unlock (subject to `exp`).
     var lockedRequests: [Inner] = []
     var lastExpValue: [String: Date] = [:]
+    // New phone secret and Delete vault (FakeVaultService+Secrets.swift), under ``cond``.
+    var renewsValue: [RenewSeen] = []
+    var deletesValue: [DeleteSeen] = []
+    /// The vault deleted itself (§12.5): it answers nothing more and its mailbox refuses every deposit.
+    var vaultDeletedValue = false
+    var statusLagsDeletionValue = false
 
     public init() throws {
         etk = try KemPrivateKey.generate()
@@ -297,7 +303,7 @@ public final class FakeVaultService: @unchecked Sendable {
             case ("POST", "/api/vault/unlock"): return unlock(r)
             case ("POST", "/api/vault/lock"): return memberLock(r)
             case ("GET", "/api/vault/status"):
-                if noVault { return .json(200, #"{"vault":null}"#) }
+                if noVault || vaultDeletedValue && !statusLagsDeletionValue { return .json(200, #"{"vault":null}"#) }
                 return .json(200, #"{"vault":{"vault_id":"\#(vaultID)","state":"\#(statusState)","release":{"number":3,"status":"active"}}}"#)
             default:
                 if r.method == "GET", r.path.hasPrefix("/api/vault/requests/") { return slot(String(r.path.dropFirst("/api/vault/requests/".count))) }

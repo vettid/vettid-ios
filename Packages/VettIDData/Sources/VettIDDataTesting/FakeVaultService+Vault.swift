@@ -67,6 +67,8 @@ extension FakeVaultService {
 
     func answerVaultRelay(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer {
         guard r.method == "POST", r.path == "/v1/mailbox/\(vaultMailbox)" else { return .json(404, #"{"code":"not_found","message":""}"#) }
+        // §12.5 step 2: a deleted vault's mailbox is gone, and every deposit is refused.
+        if locked({ vaultDeletedValue }) { return .json(404, #"{"code":"mailbox_unknown","message":""}"#) }
         guard let payload = try? StrictJson.parseObject(r.body).base64("payload") else { return .json(400, #"{"code":"bad_request","message":""}"#) }
         locked {
             do {

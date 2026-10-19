@@ -79,8 +79,13 @@ extension VaultManager {
     /// The code of an operation refused while the change is undecided and the vault answers (still checking).
     public nonisolated static let codeChangeChecking = "change_checking"
 
-    /// The marker of a change of [type] to send now, with its request (§11.14.9 step 1).
+    /// The marker of a change of [type] to send now, with its request (§11.14.9 step 1). While a renew's record is
+    /// unconfirmed (its answer lost), the vault may hold a newer blob than this phone: the latest is fetched first, so that
+    /// "version + 1" of step 3 means this change and not the renew (chosen; not in the spec).
     func newChange(_ type: ChangeType, _ api: VaultApi, operation: String? = nil) async throws -> (ChangeRequest, UnresolvedChange) {
+        if try phoneSecrets.records().candidates.contains(where: { $0.operation.hasPrefix(VaultApi.typeSecretRenew) }) {
+            try await api.credentialFetch()
+        }
         let change = try await api.newChange()
         return (change, UnresolvedChange(type: type, id: change.id, version: change.version, exp: change.exp, operation: operation))
     }
@@ -361,11 +366,13 @@ extension VaultManager {
         if unlockPinStep != step { unlockPinStep = step }
     }
 
-    /// What the unlock's tries are for [step]: at the new-PIN step, only the unresolved change's own candidate.
+    /// What the unlock's tries are for [step]: at the previous-PIN step, the current record and then the other candidates
+    /// (an unanswered renew's: VAULT-MESSAGING 0.45.0 §11.14.9 step 5); at the new-PIN step, only the unresolved change's
+    /// own candidate.
     func tries(_ step: UnlockPinStep) -> UnlockTries {
         switch step {
         case .pin: .all
-        case .previous: .current
+        case .previous: .previous(excluding: unresolved()?.operation)
         case .new: unresolved()?.operation.map { UnlockTries.candidate(operation: $0) } ?? .all
         }
     }

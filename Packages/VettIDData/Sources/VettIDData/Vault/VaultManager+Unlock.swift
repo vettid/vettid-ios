@@ -6,6 +6,7 @@ import VettIDVault
 /// The opened unlock result as the phone secret's tries judge it (``PhoneSecrets/unlock(isolation:attempt:)``).
 extension UnlockOutcome: SecretCheckedAnswer {
     public var code: String? { result.code }
+    public var at: Date? { result.at }
 }
 
 /// Which of the phone's secrets an unlock carries.

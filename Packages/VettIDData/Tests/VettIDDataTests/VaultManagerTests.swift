@@ -148,6 +148,6 @@ func vaultFailure(_ body: @MainActor () async throws -> Void) async -> VaultFail
     @Test func laterOperationsAreNotSupportedYet() async throws {
         defer { phone.close() }
         #expect(await vaultFailure { try await m.rotate(password: "pw") }?.kind == .notSupported)
-        #expect(await vaultFailure { try await m.deleteVault(pin: "402817", password: "pw") }?.kind == .notSupported)
+        #expect(await vaultFailure { try await m.confirmAlarm(mine: true) }?.kind == .notSupported)
     }
 }

@@ -82,6 +82,8 @@ struct AppRoot: View {
     @State private var shell: ShellModel
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
+    /// "Allow screenshots" (IOS-PLAN §4): it ends when the vault is no longer open, and after its hour.
+    @Environment(ScreenshotAllowance.self) private var screenshots
 
     init(environment: AppEnvironment, vault: VaultManager, inbox: SetupLinkInbox, canaryInbox: CanaryManifestInbox, appLock: AppLock) {
         self.environment = environment
@@ -101,6 +103,8 @@ struct AppRoot: View {
             .onChange(of: scenePhase) { _, now in
                 switch now {
                 case .active:
+                    // An allowance whose hour ended while the iPhone slept ends now.
+                    screenshots.check()
                     vault.onForeground()
                     retryRefresh()
                 case .background:
@@ -115,7 +119,12 @@ struct AppRoot: View {
                 retryRefresh()
             }
             // A lock (or anything that leaves the open app) starts the next open afresh, as vettid-android's new shell does.
-            .onChange(of: vault.phase) { _, now in if now != .unlocked { shell.reset() } }
+            .onChange(of: vault.phase) { _, now in
+                guard now != .unlocked else { return }
+                shell.reset()
+                // The vault is no longer open (locked, signed out, unreachable): the allowance ends.
+                screenshots.vaultClosed()
+            }
             .onOpenURL { url in
                 if SetupCodes.isSetupLink(url.absoluteString) {
                     inbox.offer(url.absoluteString)

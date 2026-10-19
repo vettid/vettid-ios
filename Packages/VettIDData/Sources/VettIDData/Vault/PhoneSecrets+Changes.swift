@@ -28,12 +28,13 @@ extension PhoneSecrets {
     /// nothing is in flight.
     /// Internal: the only public entry is ``change(isolation:operation:unresolved:send:confirmed:)``, which always frees
     /// the slot. [unresolved] is stored in the same atomic write as the candidate (VAULT-MESSAGING §11.14.9 "A lost
-    /// answer" step 1).
-    func beginChange(operation: String, unresolved: UnresolvedChange? = nil) throws -> [UInt8] {
+    /// answer" step 1); so is [exp], the `exp` of the request about to carry it (a renew's; a retry's later `exp` replaces
+    /// an earlier one).
+    func beginChange(operation: String, unresolved: UnresolvedChange? = nil, exp: Date? = nil) throws -> [UInt8] {
         let reserved = ChangesInFlight.reserve(store.url, operation)
         guard reserved != .refused else { throw VaultFailure(.busy, code: "change_in_flight") }
         do {
-            return try prepareChange(operation: operation, unresolved: unresolved)
+            return try prepareChange(operation: operation, unresolved: unresolved, exp: exp)
         } catch {
             // A retry that fails leaves its earlier send in flight; a new operation that fails frees the slot.
             if reserved == .reserved { ChangesInFlight.end(store.url, operation) }
@@ -41,29 +42,19 @@ extension PhoneSecrets {
         }
     }
 
-    private func prepareChange(operation: String, unresolved: UnresolvedChange?) throws -> [UInt8] {
+    private func prepareChange(operation: String, unresolved: UnresolvedChange?, exp: Date?) throws -> [UInt8] {
         try store.exclusive {
             var recs = try readRecords()
             guard let cur = recs.current else { throw Self.lost }
-            if let again = recs.candidates.first(where: { $0.operation == operation }) {
-                var s = try secret(of: again.entry)
-                if let unresolved {
-                    recs.unresolved = unresolved
-                    do {
-                        try write(recs)
-                    } catch {
-                        Bytes.wipe(&s)
-                        throw error
-                    }
-                }
-                return s
+            if let i = recs.candidates.firstIndex(where: { $0.operation == operation }) {
+                return try reuse(&recs, candidate: i, unresolved: unresolved, exp: exp)
             }
             guard recs.candidates.count < Self.maxCandidates else {
                 throw VaultFailure(.unconfirmedChanges, code: "unconfirmed_changes")
             }
             var made = try newEpoch(try phoneKey(cur), keyVault: cur.record.keyVault, epoch: cur.record.epoch + 1, creating: false)
             let entry = PhoneRecords.Entry(keyID: cur.keyID, record: made.record)
-            recs.candidates.append(PhoneRecords.Candidate(operation: operation, entry: entry))
+            recs.candidates.append(PhoneRecords.Candidate(operation: operation, entry: entry, exp: exp))
             if let unresolved { recs.unresolved = unresolved }
             do {
                 try write(recs)
@@ -74,6 +65,26 @@ extension PhoneSecrets {
             return made.secret
         }
     }
+
+    /// A retry: candidate [i]'s secret, with [unresolved] and a later [exp] written first. Callers hold the store.
+    private func reuse(_ recs: inout PhoneRecords, candidate i: Int, unresolved: UnresolvedChange?, exp: Date?) throws -> [UInt8] {
+        var s = try secret(of: recs.candidates[i].entry)
+        let c = recs.candidates[i]
+        let later = exp.map { e in c.exp.map { $0 < e } ?? true } ?? false
+        guard unresolved != nil || later else { return s }
+        if let unresolved { recs.unresolved = unresolved }
+        if later { recs.candidates[i] = PhoneRecords.Candidate(operation: c.operation, entry: c.entry, exp: exp) }
+        do {
+            try write(recs)
+        } catch {
+            Bytes.wipe(&s)
+            throw error
+        }
+        return s
+    }
+
+    /// Whether any change is on its way now (in this process).
+    public var anyInFlight: Bool { !ChangesInFlight.current(store.url).isEmpty }
 
     /// Whether the change [operation] is on its way now (in this process).
     public func inFlight(operation: String) -> Bool { ChangesInFlight.current(store.url).contains(operation) }
@@ -140,15 +151,16 @@ extension PhoneSecrets {
     /// when [confirmed] says the answer is the operation's own, the candidate becomes current. Any other answer, an error,
     /// no answer or a cancellation leaves it a candidate (VAULT-MESSAGING §11.14.1 rule 5). The in-flight slot is held
     /// only while [send] runs and is freed however it ends (throw or cancellation included). A retry passes the same
-    /// [operation]. [unresolved] is stored with the candidate, in the same write.
+    /// [operation]. [unresolved] and [exp] (the request's `exp`, a renew's) are stored with the candidate, in the same write.
     public func change<Answer>(
         isolation: isolated (any Actor)? = #isolation,
         operation: String,
         unresolved: UnresolvedChange? = nil,
+        exp: Date? = nil,
         send: ([UInt8]) async throws -> Answer,
         confirmed: (Answer) -> Bool
     ) async throws -> Answer {
-        var next = try beginChange(operation: operation, unresolved: unresolved)
+        var next = try beginChange(operation: operation, unresolved: unresolved, exp: exp)
         defer {
             Bytes.wipe(&next)
             endChange(operation: operation)
@@ -168,9 +180,10 @@ extension PhoneSecrets {
     /// holds none of them); a candidate written or sent meanwhile stays. Returns the answer that decided.
     ///
     /// [tries] (VAULT-MESSAGING §11.14.9 "A lost answer" step 5, while a PIN change is unresolved): ``UnlockTries/current``
-    /// sends only the current record (with the previous PIN), whose `device_secret` is then the answer;
-    /// ``UnlockTries/candidate(operation:)`` sends only that change's candidate (with the new PIN), or tries as
-    /// ``UnlockTries/all`` when it is no longer a candidate.
+    /// sends only the current record, whose `device_secret` is then the answer; ``UnlockTries/previous(excluding:)`` (the
+    /// previous PIN) sends the current record, then on `device_secret` the other candidates (an unanswered renew's),
+    /// newest first, never the change's own; ``UnlockTries/candidate(operation:)`` sends only that change's candidate
+    /// (with the new PIN), or tries as ``UnlockTries/all`` when it is no longer a candidate.
     public func unlock<Answer: SecretCheckedAnswer>(
         isolation: isolated (any Actor)? = #isolation,
         tries only: UnlockTries = .all,
@@ -190,10 +203,15 @@ extension PhoneSecrets {
         }
         let first = try await send(cur, attempt)
         if first.ok {
-            try settle(openedWith: cur, candidatesThen: snapshot.candidates)
+            try settle(openedWith: cur, candidatesThen: snapshot.candidates, at: first.at)
             return first
         }
         guard first.code == UnlockEpoch.deviceSecret, only != .current else { return first }
+        if case .previous(let change) = only {
+            // 0.45.0: a candidate that goes with the previous PIN is tried with it before the new PIN is asked for.
+            let others = snapshot.candidates.filter { $0.operation != change }.reversed().map(\.entry)
+            return try await tryInTurn(others, attempt).decided ?? first
+        }
         return try await tryInTurn(tries, attempt).decided ?? first
     }
 
@@ -255,7 +273,7 @@ extension PhoneSecrets {
             }
             last = answer
             if UnlockEpoch.confirmsNext(ok: answer.ok, code: answer.code) {
-                try confirmByUnlock(entry)
+                try confirmByUnlock(entry, at: answer.at)
                 return (answer, answer)
             }
             if answer.code != UnlockEpoch.deviceSecret { return (answer, answer) }
@@ -274,12 +292,17 @@ extension PhoneSecrets {
         return try await attempt(s)
     }
 
-    /// A candidate or the pending record that an unlock proved becomes current.
-    private func confirmByUnlock(_ entry: PhoneRecords.Entry) throws {
+    /// A candidate or the pending record that an unlock proved becomes current. The candidate of a change in flight, of
+    /// the unresolved change, or of a renew whose `exp` has not passed by more than a minute when the vault answered at
+    /// [at], stays a candidate: its request may still reach the vault after this unlock (§11.14.9 step 5: a renew's
+    /// candidate confirmed with the previous PIN leaves the PIN change undecided).
+    private func confirmByUnlock(_ entry: PhoneRecords.Entry, at: Date?) throws {
         try store.exclusive {
             var recs = try readRecords()
             if let i = recs.candidates.firstIndex(where: { $0.entry == entry }) {
-                promote(&recs, candidate: i)
+                var keep = ChangesInFlight.current(store.url).union([recs.unresolved?.operation].compactMap { $0 })
+                keep.formUnion(recs.candidates.filter { Self.mayStillApply($0, at: at) }.map(\.operation))
+                promote(&recs, candidate: i, keeping: keep)
             } else if let i = recs.pendings.firstIndex(of: entry) {
                 promotePending(&recs, at: i)
             } else {
@@ -289,16 +312,20 @@ extension PhoneSecrets {
         }
     }
 
-    /// `ok` with the current record: the candidates of [then] (those that existed when its secret was taken) that are
-    /// not in flight become replaced records, marked as put there by an unlock; a candidate written or sent after that
-    /// may be one the vault stores after this unlock, and stays.
-    private func settle(openedWith record: PhoneRecords.Entry, candidatesThen then: [PhoneRecords.Candidate]) throws {
+    /// `ok` with the current record (answered at [at]): the candidates of [then] (those that existed when its secret was
+    /// taken) that are not in flight become replaced records, marked as put there by an unlock; a candidate written or
+    /// sent after that may be one the vault stores after this unlock, and stays. So does a renew's whose request may still
+    /// wait in the vault's mailbox (``mayStillApply(_:at:)``).
+    private func settle(openedWith record: PhoneRecords.Entry, candidatesThen then: [PhoneRecords.Candidate], at: Date?) throws {
         try store.exclusive {
             var recs = try readRecords()
             guard recs.current == record else { return }
             // The unresolved change's candidate is in flight too: its request may still reach the vault after this unlock.
             let inFlight = ChangesInFlight.current(store.url).union([recs.unresolved?.operation].compactMap { $0 })
-            let settles = { (c: PhoneRecords.Candidate) in then.contains(c) && !inFlight.contains(c.operation) }
+            let settles = { (c: PhoneRecords.Candidate) in
+                then.contains { $0.operation == c.operation && $0.entry == c.entry } && !inFlight.contains(c.operation)
+                    && !Self.mayStillApply(c, at: at)
+            }
             let settled = recs.candidates.filter(settles)
             guard !settled.isEmpty else { return }
             let ms = nowMs()
@@ -308,14 +335,28 @@ extension PhoneSecrets {
         }
     }
 
-    /// Candidate [i] becomes current; the current record and every other candidate become replaced records.
-    func promote(_ recs: inout PhoneRecords, candidate i: Int) {
+    /// How long after a renew's `exp`, by the vault's clock, no copy of it can apply any more (as for a change, §11.14.9
+    /// step 3: the vault's clock does not step back by more than this).
+    static let expMargin: TimeInterval = 60
+
+    /// Whether a copy of the renew that made [c] may still apply after an answer the vault gave at [at]: its `exp`, plus
+    /// a minute, has not passed then (an answer of unknown time counts as early). A candidate without `exp` never does.
+    static func mayStillApply(_ c: PhoneRecords.Candidate, at: Date?) -> Bool {
+        guard let exp = c.exp else { return false }
+        guard let at else { return true }
+        return at <= exp.addingTimeInterval(expMargin)
+    }
+
+    /// Candidate [i] becomes current; the current record and every other candidate, except those of the operations
+    /// [keep], become replaced records.
+    func promote(_ recs: inout PhoneRecords, candidate i: Int, keeping keep: Set<String> = []) {
         let ms = nowMs()
         recs.confirmed()
         let chosen = recs.candidates.remove(at: i)
         if let cur = recs.current { recs.replaced.append(PhoneRecords.Replaced(entry: cur, operation: nil, since: ms)) }
-        recs.replaced += recs.candidates.map { PhoneRecords.Replaced(entry: $0.entry, operation: $0.operation, since: ms) }
-        recs.candidates = []
+        let replaced = recs.candidates.filter { !keep.contains($0.operation) }
+        recs.replaced += replaced.map { PhoneRecords.Replaced(entry: $0.entry, operation: $0.operation, since: ms) }
+        recs.candidates = recs.candidates.filter { keep.contains($0.operation) }
         recs.current = chosen.entry
     }
 
@@ -339,6 +380,9 @@ public enum UnlockTries: Equatable, Sendable {
     case all
     /// The current record only.
     case current
+    /// (§11.14.9 step 5, the previous PIN) The current record, then on `device_secret` the candidates other than that of
+    /// the change [excluding], newest first.
+    case previous(excluding: String?)
     /// The candidate of this change only (``all`` when it is no longer a candidate).
     case candidate(operation: String)
 }

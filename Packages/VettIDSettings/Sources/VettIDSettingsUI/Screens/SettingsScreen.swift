@@ -15,6 +15,9 @@ public struct SettingsActions {
     public var attestation: @MainActor () -> Void = {}
     public var changePin: @MainActor () -> Void = {}
     public var credential: @MainActor () -> Void = {}
+    public var newPhoneSecret: @MainActor () -> Void = {}
+    public var setScreenshotsAllowed: @MainActor (Bool) -> Void = { _ in }
+    public var deleteVault: @MainActor () -> Void = {}
     public var setAppLock: @MainActor (Bool) -> Void = { _ in }
     public var setAppLockMethod: @MainActor (AppLockMethod) -> Void = { _ in }
     public var setTimeout: @MainActor (AppLockTimeout) -> Void = { _ in }
@@ -26,14 +29,18 @@ public struct SettingsActions {
     public init() {}
 }
 
-/// Settings (ANDROID-PLAN §4 "Screens", Settings): the account card, then Vault, Security and Account, in vettid-android's
-/// order; grouped cards (Proton); the vault's lock confirms first. A row is shown only once its feature works; the rest
-/// come with the rows of IOS-PLAN §8 that bring them: Update available (I1.8c, RELEASE-UPDATES §2), New phone secret
-/// (I1.8, VAULT-MESSAGING §11.14.9), Allow screenshots (I1.8, IOS-PLAN §4) and Delete vault (I1.8, VAULT-MESSAGING §12.5),
-/// Theme (I1.8c), Notifications (phase P, IOS-PLAN §6.7), Move to a new phone and Recovery (I3, VAULT-MESSAGING §6.7.1,
-/// §11.11), and the Privacy section (shared profile, sharing rules: I2 and I3, VAULT-MESSAGING §10.8). Mirrors
-/// vettid-android `SettingsContent`.
+/// Settings (ANDROID-PLAN §4 "Screens", Settings): the account card, then Vault, Security, App and Account, in
+/// vettid-android's order; grouped cards (Proton); the vault's lock and Allow screenshots confirm first. A row is shown
+/// only once its feature works; the rest come with the rows of IOS-PLAN §8 that bring them: Update available (I1.8c,
+/// RELEASE-UPDATES §2), Theme (I1.8c), Notifications (phase P, IOS-PLAN §6.7), Move to a new phone and Recovery (I3,
+/// VAULT-MESSAGING §6.7.1, §11.11), the Privacy section (shared profile, sharing rules: I2 and I3, VAULT-MESSAGING
+/// §10.8), and Allow screenshots with its App section (IOS-PLAN §4), which waits for the first screen that holds the
+/// secure layer (`SecureContainer`: received photos, I2; the typed recovery code and the recovery open, I3): until then it
+/// would turn off nothing (``screenshotsRowShown``). Mirrors vettid-android `SettingsContent`.
 public struct SettingsContent: View {
+    /// Allow screenshots is shown once a screen holds the secure layer it turns off (no `SecureContainer` is in use yet).
+    static let screenshotsRowShown = false
+
     @Environment(\.vettIDColors) private var colors
     let state: SettingsState
     let ownerCheck: OwnerCheckSettingsState
@@ -41,20 +48,24 @@ public struct SettingsContent: View {
     let ownerCheckActions: OwnerCheckSettingsActions
     let now: Date
     @State private var confirmLock = false
+    @State private var confirmScreenshots: Bool
     @State private var picker: SecurityPicker?
 
+    /// [askScreenshots]: Allow screenshots' confirmation shows from the start (the debug screen catalog).
     public init(
         state: SettingsState,
         ownerCheck: OwnerCheckSettingsState = OwnerCheckSettingsState(),
         actions: SettingsActions = SettingsActions(),
         ownerCheckActions: OwnerCheckSettingsActions = OwnerCheckSettingsActions(),
-        now: Date = Date()
+        now: Date = Date(),
+        askScreenshots: Bool = false
     ) {
         self.state = state
         self.ownerCheck = ownerCheck
         self.actions = actions
         self.ownerCheckActions = ownerCheckActions
         self.now = now
+        _confirmScreenshots = State(initialValue: askScreenshots)
     }
 
     public var body: some View {
@@ -74,15 +85,33 @@ public struct SettingsContent: View {
                         )
                         .accessibilityIdentifier("credential_row")
                         SettingsDivider()
+                        if state.phoneSecret {
+                            SettingsRow(
+                                SecurityStrings.newSecret, icon: .key, supporting: SecurityStrings.newSecretRowBody,
+                                action: actions.newPhoneSecret
+                            )
+                            .accessibilityIdentifier("new_phone_secret_row")
+                            SettingsDivider()
+                        }
                         SettingsRow(SettingsStrings.securityAttestation, icon: .verifiedUser, action: actions.attestation)
                             .accessibilityIdentifier("attestation")
                         OwnerCheckSettingsRows(state: ownerCheck, actions: ownerCheckActions, now: now)
                         AppLockRows(state: state, actions: actions, picker: $picker)
                     }
+                    if Self.screenshotsRowShown {
+                        SettingsSectionHeader(SecurityStrings.sectionApp)
+                        SettingsGroup { AllowScreenshotsRow(state: state, actions: actions, confirm: $confirmScreenshots) }
+                    }
                     SettingsSectionHeader(SettingsStrings.sectionAccount)
                     SettingsGroup {
                         SettingsRow(SettingsStrings.accountSite, icon: .openInNew, showChevron: false, action: actions.accountSite)
                             .accessibilityIdentifier("account_site")
+                        SettingsDivider()
+                        SettingsRow(
+                            SecurityStrings.deleteVault, icon: .delete, iconTint: colors.error, supporting: SecurityStrings.deleteVaultBody,
+                            action: actions.deleteVault
+                        )
+                        .accessibilityIdentifier("delete_vault")
                     }
                     Spacer().frame(height: Spacing.xxl)
                 }
@@ -91,6 +120,11 @@ public struct SettingsContent: View {
         .confirmDialog(
             isPresented: $confirmLock, title: SettingsStrings.vaultLock, message: SettingsStrings.vaultLockBody,
             confirmLabel: SettingsStrings.vaultLock, dismissLabel: SettingsStrings.cancel, onConfirm: actions.lockVault
+        )
+        .confirmDialog(
+            isPresented: $confirmScreenshots, title: SecurityStrings.screenshotsConfirmTitle,
+            message: SecurityStrings.screenshotsConfirmBody, confirmLabel: SecurityStrings.screenshotsConfirm,
+            dismissLabel: SettingsStrings.cancel, onConfirm: { actions.setScreenshotsAllowed(true) }
         )
         .choiceSheet(item: $picker) { p in
             SecurityPickerSheet(picker: p, state: state, actions: actions) { picker = nil }
@@ -175,6 +209,34 @@ struct AccountCard: View {
         case (false, "member"): return SettingsStrings.accountMember
         default: return SettingsStrings.accountRegistered
         }
+    }
+}
+
+/// "Allow screenshots" (IOS-PLAN §4; owner decision 2026-10-11): turns off only the secure layer of the screens that hold
+/// it, the app switcher's cover and capture hiding staying on. Turning it on asks first, in a dialog that says plainly
+/// what it does; turning it off does not ask. Mirrors vettid-android `AllowScreenshotsRow`.
+struct AllowScreenshotsRow: View {
+    let state: SettingsState
+    let actions: SettingsActions
+    @Binding var confirm: Bool
+
+    var body: some View {
+        SettingsSwitchRow(SecurityStrings.screenshots, isOn: isOn, icon: .screenshot, supporting: Self.supporting(state))
+            .accessibilityIdentifier("allow_screenshots")
+    }
+
+    /// On asks first; off does not.
+    private var isOn: Binding<Bool> {
+        let actions = actions
+        let confirm = $confirm
+        return Binding(get: { state.screenshotsAllowed }, set: { on in
+            if on { confirm.wrappedValue = true } else { actions.setScreenshotsAllowed(false) }
+        })
+    }
+
+    static func supporting(_ s: SettingsState) -> String {
+        if !s.screenshotsAllowed { return SecurityStrings.screenshotsOff }
+        return s.screenshotsStayOn ? SecurityStrings.screenshotsOnDevelopment : SecurityStrings.screenshotsOn
     }
 }
 

@@ -129,4 +129,37 @@ import VettIDKeys
         none.setAppLock(true)
         #expect(none.state.appLockUnavailable && !none.state.appLockSuggestPasscode)
     }
+
+    // MARK: - Allow screenshots (IOS-PLAN §4)
+
+    /// vettid-android `allowScreenshotsIsOffUntilTurnedOnAndNeverStoredOrSentToTheVault`: off at start, on from the switch,
+    /// off again when the vault closes or the member turns it off; nothing is asked of the vault.
+    @Test func allowScreenshotsIsOffUntilTurnedOnAndNeverSentToTheVault() {
+        let allowance = ScreenshotAllowance(onByDefault: false, now: { 0 })
+        let m = SettingsViewModel(account: repo, vault: repo, appLock: lock, promptReason: "Unlock VettID", screenshots: allowance)
+        #expect(!m.state.screenshotsAllowed && !m.state.screenshotsStayOn)
+        m.setScreenshotsAllowed(true)
+        #expect(m.state.screenshotsAllowed && allowance.allowed)
+        #expect(repo.calls.isEmpty, "nothing asked of the vault: \(repo.calls)")
+        allowance.vaultClosed()
+        #expect(!m.state.screenshotsAllowed)
+        m.setScreenshotsAllowed(true)
+        m.setScreenshotsAllowed(false)
+        #expect(!allowance.allowed)
+    }
+
+    /// vettid-android `aDevelopmentBuildShowsTheSwitchOn`.
+    @Test func aDevelopmentBuildShowsTheSwitchOn() {
+        let m = SettingsViewModel(
+            account: repo, vault: repo, appLock: lock, promptReason: "Unlock VettID", screenshots: ScreenshotAllowance(onByDefault: true)
+        )
+        #expect(m.state.screenshotsAllowed && m.state.screenshotsStayOn)
+    }
+
+    /// New phone secret is offered only on a phone that holds a phone secret (release R).
+    @Test func newPhoneSecretFollowsThePhoneSecret() {
+        #expect(!model().state.phoneSecret)
+        repo.phoneSecret = true
+        #expect(model().state.phoneSecret)
+    }
 }

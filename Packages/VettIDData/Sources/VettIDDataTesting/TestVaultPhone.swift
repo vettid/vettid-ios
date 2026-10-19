@@ -67,18 +67,29 @@ public final class TestVaultPhone {
         get { clock.ahead }
         set { clock.ahead = newValue }
     }
+    /// Moves this phone's monotonic clock ahead (seconds), and with it its idea of the vault's clock between answers.
+    public var uptimeAhead: TimeInterval {
+        get { uptime.ahead }
+        set { uptime.ahead = newValue }
+    }
     private let gate = PrepareSwitch()
     private let clock = TestPhoneClock()
+    private let uptime = TestPhoneClock()
     /// The pauses between the checks of a change whose answer was lost: each waits until the test releases it.
     public let changePauses = TestPauses()
     private let requestTimeout: TimeInterval
     /// What this phone's wipe erases: its directory and its software keys.
     public let wipeTargets: TestWipeTargets
 
-    /// [requestTimeout]: how long a request waits for its answer before it is sent again (§8.6).
-    public init(service: FakeVaultService, requestTimeout: TimeInterval = 5) throws {
+    /// Whether this build can wipe (false: a manager without ``LocalWipe``).
+    private let wipes: Bool
+
+    /// [requestTimeout]: how long a request waits for its answer before it is sent again (§8.6). [wipes]: false for a
+    /// build that cannot wipe.
+    public init(service: FakeVaultService, requestTimeout: TimeInterval = 5, wipes: Bool = true) throws {
         self.service = service
         self.requestTimeout = requestTimeout
+        self.wipes = wipes
         directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("vettid-manager-tests/\(UUID().uuidString)/VettID")
         wipeTargets = TestWipeTargets(
@@ -89,8 +100,8 @@ public final class TestVaultPhone {
         self.attester = attester
         attestStartOver = startOver
         manager = VaultManager(config: try Self.configured(
-            service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock, wipeTargets,
-            attester, startOver, (requestTimeout, changePauses)
+            service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock,
+            wipes ? wipeTargets : nil, attester, startOver, (requestTimeout, changePauses), uptime
         ))
     }
 
@@ -98,8 +109,8 @@ public final class TestVaultPhone {
     public func restart() throws {
         manager.stopCollecting()
         manager = VaultManager(config: try Self.configured(
-            service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock, wipeTargets,
-            attester, attestStartOver, (requestTimeout, changePauses)
+            service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock,
+            wipes ? wipeTargets : nil, attester, attestStartOver, (requestTimeout, changePauses), uptime
         ))
     }
 
@@ -108,8 +119,8 @@ public final class TestVaultPhone {
         _ service: FakeVaultService, _ appKeys: SoftwareAppKeyStore, _ seedWrap: SoftwareSeedWrapKeySource,
         _ wrapped: InMemoryWrappedKeyStore, _ phoneKeys: SoftwarePhoneSecretSource, _ fileKeys: InMemoryFileKeyHolder,
         _ protectedData: ProtectedDataFlag, _ directory: URL, _ gate: PrepareSwitch, _ clock: TestPhoneClock,
-        _ wipeTargets: TestWipeTargets, _ attester: TestAttester, _ startOver: AttestStartOver,
-        _ waits: (requestTimeout: TimeInterval, pauses: TestPauses)
+        _ wipeTargets: (any WipeTargets)?, _ attester: TestAttester, _ startOver: AttestStartOver,
+        _ waits: (requestTimeout: TimeInterval, pauses: TestPauses), _ uptime: TestPhoneClock
     ) throws -> VaultManagerConfig {
         var c = try config(service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock, wipeTargets)
         c.attester = attester
@@ -117,6 +128,7 @@ public final class TestVaultPhone {
         c.requestTimeout = waits.requestTimeout
         let pauses = waits.pauses
         c.changeCheckSleep = { try await pauses.sleep($0) }
+        c.uptime = { DeviceConfig.monotonicNow() + uptime.ahead }
         return c
     }
 
@@ -128,7 +140,7 @@ public final class TestVaultPhone {
         _ service: FakeVaultService, _ appKeys: SoftwareAppKeyStore, _ seedWrap: SoftwareSeedWrapKeySource,
         _ wrapped: InMemoryWrappedKeyStore, _ phoneKeys: SoftwarePhoneSecretSource, _ fileKeys: InMemoryFileKeyHolder,
         _ protectedData: ProtectedDataFlag, _ directory: URL, _ gate: PrepareSwitch, _ clock: TestPhoneClock,
-        _ wipeTargets: TestWipeTargets
+        _ wipeTargets: (any WipeTargets)?
     ) throws -> VaultManagerConfig {
         VaultManagerConfig(
             apiOrigin: service.api.baseURL,

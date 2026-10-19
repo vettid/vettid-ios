@@ -34,6 +34,19 @@ enum ShellStrings {
         String(localized: "nav_history", defaultValue: "History", bundle: .module)
     }
 
+    /// (iPhone, IOS-PLAN §6.3 item 5) After the earlier-secret step opened the vault.
+    static var renewPrompt: String {
+        String(
+            localized: "ios_shell_new_secret_prompt",
+            defaultValue: "Your vault opened with this phone's earlier secret. Make a new phone secret now.",
+            bundle: .module
+        )
+    }
+
+    static var renewPromptAction: String {
+        String(localized: "settings_security_new_secret", defaultValue: "New phone secret", bundle: .module)
+    }
+
     static func drawerVersion(_ a0: String, _ a1: Int) -> String {
         String(localized: "drawer_version", defaultValue: "VettID \(a0) (\(a1))", bundle: .module)
     }

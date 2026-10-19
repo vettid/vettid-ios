@@ -85,6 +85,8 @@ extension VaultManager {
     public func changePassword(_ password: String, newPassword: String, pin: String?) async throws {
         guard let pin else { throw VaultFailure(.notSupported, code: ReleasePath.codeReleaseTooOld) }
         try await guarded {
+            // A renew on its way: refused at once, before anything is asked of the vault (its blob may still move).
+            if phoneSecrets.anyInFlight { throw VaultFailure(.busy, code: "change_in_flight") }
             try await decideFirst()
             let api = try openApi(try await openSession())
             let (change, marker) = try await newChange(.password, api)
@@ -119,6 +121,8 @@ extension VaultManager {
     public func changePin(pin: String, newPin: String, password: String) async throws {
         try await guarded {
             guard phoneSecrets.inUse else { throw VaultFailure(.notSupported, code: Self.codeNoPhoneSecret) }
+            // A renew on its way: refused at once, before anything is asked of the vault.
+            if phoneSecrets.anyInFlight { throw VaultFailure(.busy, code: "change_in_flight") }
             try await decideFirst()
             let api = try openApi(try await openSession())
             let (change, unmarked) = try await newChange(.pin, api)

@@ -80,6 +80,8 @@ extension VaultManager {
         alarm = nil
         unlockWindow = nil
         pinChangeOperation = nil
+        renewOperation = nil
+        deleteUnanswered = nil
         forgetChangeCheck()
         account = nil
         await wiper.resetMemory()

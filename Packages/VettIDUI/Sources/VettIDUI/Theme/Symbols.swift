@@ -58,6 +58,7 @@ public enum VettIDSymbol: String, CaseIterable, Sendable {
     case sync = "arrow.2.circlepath" // Sync
     case lockClock = "lock.badge.clock" // LockClock
     case backup = "icloud.and.arrow.up" // Backup
+    case screenshot = "camera.viewfinder" // Screenshot
 
     // States
     case info = "info.circle" // Info

@@ -20,6 +20,29 @@ extension VaultApi {
         return Self.epochAdvanced(body)
     }
 
+    /// `vault.secret.renew`: a new phone secret with the PIN unchanged (§11.14.9): the PIN, the password and the phone's
+    /// next epoch's secret sealed to one UTK, with the blob, valid until [exp] (``requestExp()``; chosen, not in the spec:
+    /// after it a copy waiting in a locked vault's mailbox never applies). The answer carries the rotated blob and new
+    /// UTKs, which are kept; the generation does not change. The caller makes the next epoch's record current on that
+    /// answer only. A generic credential operation (§3.5.3): a lost answer is left to the phone's records (IOS-PLAN
+    /// §6.3): a retry of the same operation sends the same secret, and an unlock tries the record.
+    public func secretRenew(pin: String, password: String, newUnlockSecret: [UInt8], exp: Date) async throws {
+        let fields: [SealedField] = [
+            .string("pin", pin), .string("password", password),
+            .string("new_unlock_secret", Base64s.encodeStd(newUnlockSecret)),
+        ]
+        _ = try await credential.credOp(Self.typeSecretRenew, fields, CredOpOptions(exp: exp))
+    }
+
+    /// The `exp` of a request to send now: 10 minutes after the vault's clock as last seen (§11.14.9 "A lost answer" step
+    /// 1). In a process that has not heard from the vault yet, `credential.version` is asked first, so that it is counted
+    /// on the vault's clock rather than the phone's (chosen; not in the spec); without an answer nothing is sent.
+    public func requestExp() async throws -> Date {
+        if !device.knowsVaultTime { _ = try await credentialVersionStamped() }
+        return device.vaultNow().addingTimeInterval(ChangeRequest.validFor)
+    }
+
+    public static let typeSecretRenew = "vault.secret.renew"
     public static let typePinChange = "pin.change"
     public static let typePasswordChange = "credential.password.change"
 
@@ -32,11 +55,9 @@ extension VaultApi {
     /// may be wrong (chosen; not in the spec, which allows the phone's clock then). It fails, and nothing is sent, when
     /// the vault does not answer.
     public func newChange() async throws -> ChangeRequest {
-        if !device.knowsVaultTime { _ = try await credentialVersionStamped() }
+        let exp = try await requestExp()
         guard let version = device.credentialVersion else { throw VaultStateError(message: "no credential on this device") }
-        return ChangeRequest(
-            id: device.newRequestID(), exp: device.vaultNow().addingTimeInterval(ChangeRequest.validFor), version: version
-        )
+        return ChangeRequest(id: device.newRequestID(), exp: exp, version: version)
     }
 
     /// A change of PIN or password sent again as the same request (§11.14.9 step 3). Returns the answer's body, its blob

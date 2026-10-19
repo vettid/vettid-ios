@@ -55,6 +55,21 @@ extension VaultApi {
         return VaultJSON.string(VaultJSON.object(body), "expires_at") ?? ""
     }
 
+    /// `vault.delete` (VAULT-MESSAGING §12.5) by the holder: the phrase `delete my vault` beside the blob, the PIN and the
+    /// credential password sealed to one UTK, valid until [exp] (``requestExp()``; chosen, not in the spec: after it a
+    /// copy waiting in a locked vault's mailbox never applies). The vault answers `{}` and then erases itself; nothing of
+    /// the device is forgotten here (the caller erases VettID's data on the phone). A failure once the request may have
+    /// gone out is ``RequestUnanswered``: the vault may be gone. Mirrors vettid-android `VaultApi.deleteVault` for a phone
+    /// that holds the credential.
+    public func deleteVault(pin: String, password: String, exp: Date) async throws {
+        let options = CredOpOptions(outer: [("confirm", Self.deleteConfirmation)], unanswered: true, exp: exp)
+        _ = try await credential.credOp(Self.typeVaultDelete, [.string("pin", pin), .string("password", password)], options)
+    }
+
+    public static let typeVaultDelete = "vault.delete"
+    /// The phrase `vault.delete` carries (§12.5).
+    public static let deleteConfirmation = "delete my vault"
+
     /// `credential.lock`: closes the unlock window.
     public func credentialLock() async throws { _ = try await device.op("credential.lock") }
 

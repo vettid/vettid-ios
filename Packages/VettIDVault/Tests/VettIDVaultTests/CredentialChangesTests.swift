@@ -127,6 +127,45 @@ import VettIDCrypto
         try await close.value
     }
 
+    /// Release R `vault.secret.renew` (§11.14.9): the PIN, the password and the next epoch's secret sealed with the blob;
+    /// the rotated blob is kept and acknowledged.
+    @Test func aRenewCarriesTheNextSecret() async throws {
+        let h = try await holder()
+        let (d, v, api, utks, keys) = (h.d, h.v, h.api, h.utks, h.keys)
+        let secret = [UInt8](repeating: 0x3C, count: 32)
+        let renew = Task { try await api.secretRenew(pin: "975310", password: "pw", newUnlockSecret: secret, exp: Date().addingTimeInterval(600)) }
+        try await ops.answer(v, d, "credential.utk.get", utks)
+        let req = try await ops.answer(v, d, VaultApi.typeSecretRenew, #"{"credential":"BAUG","version":2}"#)
+        #expect(req.exp != nil, "a renew carries its exp")
+        #expect(try StrictJson.parseObject(req.body).string("credential") == "AQID")
+        let p = try ops.payload(req, v.vaultID, keys)
+        #expect(p.members.map(\.name) == ["pin", "password", "new_unlock_secret"])
+        #expect(try p.string("pin") == "975310" && p.string("password") == "pw" && p.base64("new_unlock_secret") == secret)
+        try await ops.answer(v, d, "credential.ack")
+        try await renew.value
+        #expect(d.credentialVersion == 2)
+    }
+
+    /// `vault.delete` (§12.5): the phrase beside the blob, the PIN and the password sealed to one UTK; the vault's `{}`
+    /// ends it; a refusal is the vault's own.
+    @Test func aDeleteCarriesThePhraseBesideTheBlob() async throws {
+        let h = try await holder()
+        let (d, v, api, utks, keys) = (h.d, h.v, h.api, h.utks, h.keys)
+        let refused = Task { try await api.deleteVault(pin: "111111", password: "pw", exp: Date().addingTimeInterval(600)) }
+        try await ops.answer(v, d, "credential.utk.get", utks)
+        try await ops.answer(v, d, VaultApi.typeVaultDelete, code: "bad_pin", errorBody: "{}")
+        await #expect(throws: VaultOpError.self) { try await refused.value }
+        let delete = Task { try await api.deleteVault(pin: "975310", password: "pw", exp: Date().addingTimeInterval(600)) }
+        let req = try await ops.answer(v, d, VaultApi.typeVaultDelete, "{}")
+        #expect(req.exp != nil, "a deletion carries its exp")
+        let outer = try StrictJson.parseObject(req.body)
+        #expect(try outer.string("confirm") == "delete my vault" && outer.string("credential") == "AQID")
+        let p = try ops.payload(req, v.vaultID, keys)
+        #expect(p.members.map(\.name) == ["pin", "password"])
+        #expect(try p.string("pin") == "975310" && p.string("password") == "pw")
+        try await delete.value
+    }
+
     /// `credential.version` with its alarm; the critical items counted one page at a time, `next` absent or `null` at the end.
     @Test func theVersionAndTheCriticalCount() async throws {
         let (d, v) = try await ops.base.pairedDevice()

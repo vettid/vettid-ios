@@ -4,10 +4,10 @@ import VettIDData
 import VettIDSettings
 import VettIDSettingsUI
 
-/// Debug only: the name change, the PIN change, the Credential screen and the password change in each of their states
-/// (``ShellCatalog``).
+/// Debug only: the name change, the PIN change, the Credential screen, the password change, New phone secret and Delete
+/// vault in each of their states (``ShellCatalog``).
 extension ShellCatalog {
-    static var flowEntries: [Entry] { nameEntries + pinEntries + credentialEntries }
+    static var flowEntries: [Entry] { nameEntries + pinEntries + credentialEntries + secretEntries }
 
     /// The screen of a flow's entry, with actions that do nothing.
     @MainActor @ViewBuilder
@@ -17,6 +17,9 @@ extension ShellCatalog {
         case .changePin(let state): ChangePinContent(state: state)
         case .credential(let state): CredentialContent(state: state, now: now)
         case .changePassword(let state): ChangePasswordContent(state: state)
+        case .newPhoneSecret(let state): NewPhoneSecretContent(state: state)
+        case .deleteVault(let state): DeleteVaultContent(state: state)
+        case .settingsAskScreenshots(let state): SettingsContent(state: state, now: now, askScreenshots: true)
         default: EmptyView()
         }
     }
@@ -128,6 +131,31 @@ extension ShellCatalog {
             Entry(id: "password", title: "Change password", screen: .changePassword(ChangePasswordState(askPin: true))),
             Entry(id: "password_weak", title: "Change password: a common password", screen: .changePassword(weak)),
             Entry(id: "password_done", title: "Change password: done", screen: .changePassword(done)),
+        ]
+    }
+
+    private static var secretEntries: [Entry] {
+        var refused = NewPhoneSecretState(error: .badPassword)
+        refused.password = ""
+        var filled = DeleteVaultState()
+        filled.phrase = "delete my vault"
+        filled.password = "pw"
+        filled.acknowledged = true
+        var wrong = DeleteVaultState()
+        wrong.phrase = "Delete my vault"
+        wrong.phraseWrong = true
+        var unconfirmed = DeleteVaultState()
+        unconfirmed.unconfirmed = true
+        var notDeleted = DeleteVaultState()
+        notDeleted.notDeleted = true
+        return [
+            Entry(id: "new_secret", title: "New phone secret", screen: .newPhoneSecret(NewPhoneSecretState())),
+            Entry(id: "new_secret_refused", title: "New phone secret: wrong password", screen: .newPhoneSecret(refused)),
+            Entry(id: "new_secret_done", title: "New phone secret: done", screen: .newPhoneSecret(NewPhoneSecretState(done: true))),
+            Entry(id: "delete", title: "Delete vault", screen: .deleteVault(filled)),
+            Entry(id: "delete_phrase_wrong", title: "Delete vault: the phrase wrong", screen: .deleteVault(wrong)),
+            Entry(id: "delete_unconfirmed", title: "Delete vault: no answer", screen: .deleteVault(unconfirmed)),
+            Entry(id: "delete_not_deleted", title: "Delete vault: not deleted", screen: .deleteVault(notDeleted)),
         ]
     }
 }

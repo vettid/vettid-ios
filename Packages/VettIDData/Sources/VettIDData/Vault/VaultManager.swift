@@ -47,8 +47,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     public internal(set) var recoveryOffered = true
     /// The relay kept refusing this phone's messages to the vault while it was open (``RefusalWatch``).
     public internal(set) var refusedByVault = false
-    /// (iPhone, IOS-PLAN §6.3 item 5) The earlier-secret step opened the vault: a new phone secret is to be asked for at
-    /// once (the prompt and the History entry come with New phone secret).
+    /// (iPhone, IOS-PLAN §6.3 item 5) The earlier-secret step opened the vault: a new phone secret is asked for at once
+    /// (the shell's prompt), until one is made or the member dismisses the prompt. The History entry comes with History.
     public internal(set) var renewSecretSuggested = false
 
     // CredentialRepository.
@@ -90,6 +90,13 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// The `pin.change` the member started and whose answer has not confirmed it: a retry reuses its next-epoch record
     /// (IOS-PLAN §6.3 item 2). In memory only.
     @ObservationIgnored var pinChangeOperation: String?
+    /// The `vault.secret.renew` the member started and whose answer has not confirmed it: a retry reuses its next-epoch
+    /// record (IOS-PLAN §6.3 item 2). In memory only.
+    @ObservationIgnored var renewOperation: String?
+    /// A `vault.delete` of this process that got no answer: the member API's explicit "no vault" then means that the
+    /// vault deleted itself, and a vault still listed after its deadline means it never will (``checkVaultDeleted()``). In
+    /// memory only.
+    @ObservationIgnored var deleteUnanswered: UnansweredDelete?
     /// TEST ONLY: replaces making the record of a confirmed `pin.change` current (a write that fails).
     @ObservationIgnored var confirmPinChangeOverride: (@MainActor (String) throws -> Void)?
     /// (VAULT-MESSAGING §11.14.9 "A lost answer") Where the decision of a change whose answer was lost stands.
@@ -332,7 +339,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         let cfg = DeviceConfig(
             name: c.deviceName, relayURL: c.relayURL, transport: c.transport,
             store: FileDeviceStateStore(file: c.file(VaultFiles.device)), enrolledAttestation: c.enrolledAttestation, now: c.now,
-            collectMode: c.collectMode, pollWait: c.pollWait, requestTimeout: c.requestTimeout
+            collectMode: c.collectMode, pollWait: c.pollWait, requestTimeout: c.requestTimeout, uptime: c.uptime
         )
         let restored = try VaultDevice.load(cfg, secrets: secrets)
         try Task.checkCancellation()
@@ -396,6 +403,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         try phoneSecrets.delete()
         usesPhoneSecret = false
         pinChangeOperation = nil
+        renewOperation = nil
+        renewSecretSuggested = false
         forgetChangeCheck()
         unlockWindow = nil
         try record.update(since: record.generation) {

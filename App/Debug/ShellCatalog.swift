@@ -35,6 +35,10 @@ enum ShellCatalog {
         case changePin(ChangePinState)
         case credential(CredentialState)
         case changePassword(ChangePasswordState)
+        case newPhoneSecret(NewPhoneSecretState)
+        case deleteVault(DeleteVaultState)
+        /// Settings with Allow screenshots' confirmation shown.
+        case settingsAskScreenshots(SettingsState)
     }
 
     static let now = Date(timeIntervalSince1970: 1_791_384_000)
@@ -127,6 +131,9 @@ enum ShellCatalog {
             Entry(id: "settings", title: "Settings", screen: .settings(SettingsState(account: member), .init(view: ownerCheck))),
             Entry(id: "settings_lock_on", title: "Settings: app lock on, hold off", screen: .settings(lockOn, holdOff)),
             Entry(id: "settings_failures", title: "Settings: failures", screen: .settings(failure, OwnerCheckSettingsState())),
+            Entry(id: "settings_release_r", title: "Settings: phone secret", screen: .settings(
+                SettingsState(account: member, phoneSecret: true), OwnerCheckSettingsState()
+            )),
             Entry(id: "status", title: "Vault status", screen: .vaultStatus(loaded, InstalledFromBuild.current)),
             Entry(id: "status_apple", title: "Vault status: from Apple", screen: .vaultStatus(loaded, .apple)),
             Entry(id: "status_loading", title: "Vault status: loading", screen: .vaultStatus(LoadState(), .apple)),
@@ -167,7 +174,7 @@ enum ShellCatalog {
             AttestationContent(state: state, canary: canary, onLoadCanary: {})
         case .canaryDialog(let prompt):
             ComingLaterScreen(destination: .messages, chrome: chrome).canaryManifestDialog(prompt, onConfirm: {}, onDismiss: {})
-        case .changeName, .changePin, .credential, .changePassword:
+        case .changeName, .changePin, .credential, .changePassword, .newPhoneSecret, .deleteVault, .settingsAskScreenshots:
             flowScreen(entry.screen)
         }
     }

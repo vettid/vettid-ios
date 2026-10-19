@@ -50,6 +50,10 @@ public enum ShellRoute: Hashable, Sendable {
     case changePin(fromAttempts: Bool)
     case credential
     case changePassword
+    /// Settings → Security → New phone secret (release R, VAULT-MESSAGING §11.14.9).
+    case newPhoneSecret
+    /// Settings → Account → Delete vault (VAULT-MESSAGING §12.5).
+    case deleteVault
 }
 
 /// This build's version as the drawer's footer shows it ("VettID 2.0.0 (1)", vettid-android `drawer_version`).

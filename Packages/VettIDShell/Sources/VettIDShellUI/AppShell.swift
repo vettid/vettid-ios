@@ -82,6 +82,18 @@ public struct AppShell: View {
         }
     }
 
+    /// (IOS-PLAN §6.3 item 5) The earlier-secret step opened the vault: a new phone secret at once, until one is made or
+    /// the member dismisses the prompt. Hidden while New phone secret is open.
+    @ViewBuilder private var renewPrompt: some View {
+        if vault.renewSecretSuggested, model.path.last != .newPhoneSecret {
+            InfoBanner(
+                ShellStrings.renewPrompt, actionLabel: ShellStrings.renewPromptAction,
+                onAction: { model.push(.newPhoneSecret) }, onDismiss: { vault.dismissRenewSuggestion() }
+            )
+            .accessibilityIdentifier("renew_prompt")
+        }
+    }
+
     public var body: some View {
         ZStack {
             DrawerContainer(isOpen: $model.drawerOpen) {
@@ -99,6 +111,7 @@ public struct AppShell: View {
                         onHoldOn: { Task { await model.turnHoldOn() } }, onDismissNotices: { Task { await model.dismissNotices() } }
                     )
                     changeCheckNotice
+                    renewPrompt
                     NavigationStack(path: $model.path) {
                         root
                             .toolbar(.hidden, for: .navigationBar)
@@ -170,6 +183,10 @@ public struct AppShell: View {
             )
         case .changePassword:
             ChangePasswordRoute(repo: credential, vault: vault) { model.pop() }
+        case .newPhoneSecret:
+            NewPhoneSecretRoute(vault: vault) { model.pop() }
+        case .deleteVault:
+            DeleteVaultRoute(vault: vault) { model.pop() }
         }
     }
 
@@ -184,6 +201,8 @@ public struct AppShell: View {
         h.onAttestation = { model.push(.attestation) }
         h.onChangePin = { model.push(.changePin(fromAttempts: false)) }
         h.onCredential = { model.push(.credential) }
+        h.onNewPhoneSecret = { model.push(.newPhoneSecret) }
+        h.onDeleteVault = { model.push(.deleteVault) }
         h.onOwnerCheck = { holdOff in model.ownerCheck(holdOff: holdOff) }
         return h
     }

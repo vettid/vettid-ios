@@ -16,10 +16,10 @@ import VettIDCrypto
 /// - **unresolved** (at most one): a `pin.change` or `credential.password.change` sent and not yet decided
 ///   (VAULT-MESSAGING §11.14.9 "A lost answer"), written in the same atomic write as the PIN change's candidate.
 ///
-/// Stored form (chosen; not in the spec): `{"v":1,"current":E,"pendings":[E],"candidates":[{"operation",E…}],
+/// Stored form (chosen; not in the spec): `{"v":1,"current":E,"pendings":[E],"candidates":[{"operation","exp"?,E…}],
 /// "replaced":[{"since","operation"?,"by_unlock"?,E…}],"unresolved"?:U}` where `E` is `"key_id","record"`, `U` is
-/// ``UnresolvedChange``'s form, compact JSON, records in ``PhoneSecretRecord``'s form, `since` in Unix ms. A file without
-/// `unresolved` (written before it existed) has none.
+/// ``UnresolvedChange``'s form, compact JSON, records in ``PhoneSecretRecord``'s form, `since` and `exp` in Unix ms. A file
+/// without `unresolved` (written before it existed) has none, and a candidate without `exp` has none.
 public struct PhoneRecords: Equatable, Sendable {
     public static let format: UInt64 = 1
 
@@ -46,6 +46,16 @@ public struct PhoneRecords: Equatable, Sendable {
         /// The operation that made it (the request id of its `pin.change` or `vault.secret.renew`).
         public let operation: String
         public let entry: Entry
+        /// (A renew's, chosen; not in the spec) The `exp` of the latest request that carried it, by the vault's clock: until
+        /// a minute after it a copy waiting in the vault's mailbox may still apply, so an unlock's `ok` with another record
+        /// does not make it a replaced record. Nil: none (a PIN change's, whose unresolved change keeps it).
+        public var exp: Date?
+
+        public init(operation: String, entry: Entry, exp: Date? = nil) {
+            self.operation = operation
+            self.entry = entry
+            self.exp = exp.map { Date(timeIntervalSince1970: ($0.timeIntervalSince1970 * 1000).rounded(.down) / 1000) }
+        }
     }
 
     public struct Replaced: Equatable, Sendable {
@@ -94,7 +104,11 @@ public struct PhoneRecords: Equatable, Sendable {
     }
 
     public func marshal() -> [UInt8] {
-        let candidates = candidates.map { $0.entry.json(JsonBuilder().string("operation", $0.operation)).build() }
+        let candidates = candidates.map { c in
+            let b = JsonBuilder().string("operation", c.operation)
+            if let exp = c.exp { b.uint("exp", UInt64(max(0, (exp.timeIntervalSince1970 * 1000).rounded(.down)))) }
+            return c.entry.json(b).build()
+        }
         let replaced = replaced.map { r in
             let b = JsonBuilder().uint("since", UInt64(max(0, r.since)))
             if let op = r.operation { b.string("operation", op) }
@@ -121,7 +135,8 @@ public struct PhoneRecords: Equatable, Sendable {
         _ = try o.uint("v", min: format, max: format)
         let candidates = try o.array("candidates").map { v in
             let c = try v.asObject()
-            return Candidate(operation: try c.string("operation"), entry: try Entry.parse(c))
+            let exp = try c.optUint("exp", min: 0, max: StrictJson.maxSafeInteger).map { Date(timeIntervalSince1970: Double($0) / 1000) }
+            return Candidate(operation: try c.string("operation"), entry: try Entry.parse(c), exp: exp)
         }
         let replaced = try o.array("replaced").map { v in
             let r = try v.asObject()
@@ -197,6 +212,12 @@ public protocol SecretCheckedAnswer {
     var ok: Bool { get }
     /// The refusal's code (nil when ``ok``).
     var code: String? { get }
+    /// When the vault answered, by its clock (the result's `ts`); nil when not known.
+    var at: Date? { get }
+}
+
+public extension SecretCheckedAnswer {
+    var at: Date? { nil }
 }
 
 /// A plain answer (tests, and callers that keep nothing else).

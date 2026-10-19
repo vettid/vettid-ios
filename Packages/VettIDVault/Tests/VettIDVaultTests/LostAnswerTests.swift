@@ -105,6 +105,19 @@ import VettIDTesting
         #expect(await ops.base.relay.noDeposit(within: 0.2))
     }
 
+    /// `vault.delete` without an answer once its request may have gone out: ``RequestUnanswered`` (the vault may be gone),
+    /// never the request's own failure. A renew without an answer stays a plain failure (its record decides, IOS-PLAN §6.3).
+    @Test func aDeleteWithoutAnAnswerIsUnanswered() async throws {
+        let h = try await holder(timeout: 0.2)
+        let (v, api) = (h.v, h.api)
+        let delete = Task { try await api.deleteVault(pin: "975310", password: "pw", exp: Date().addingTimeInterval(600)) }
+        for _ in 0...VaultDevice.appRetries { #expect(try await open(v).type == VaultApi.typeVaultDelete) }
+        await #expect(throws: RequestUnanswered.self) { try await delete.value }
+        let renew = Task { try await api.secretRenew(pin: "975310", password: "pw", newUnlockSecret: [UInt8](repeating: 7, count: 32), exp: Date().addingTimeInterval(600)) }
+        for _ in 0...VaultDevice.appRetries { #expect(try await open(v).type == VaultApi.typeSecretRenew) }
+        await #expect(throws: VaultStateError.self) { try await renew.value }
+    }
+
     /// No answer to the automatic resends: ``ChangeUnanswered`` with the request. The resend is the same request (same
     /// id, `exp` and body); the vault's cached answer, which the device saw already after its wait ended, completes it.
     @Test func aResendIsTheSameRequestAndGetsTheCachedAnswer() async throws {
