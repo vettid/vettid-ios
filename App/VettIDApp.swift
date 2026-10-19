@@ -14,26 +14,52 @@ import VettIDUI
 @main
 struct VettIDApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var themeMode: ThemeMode = Self.initialThemeMode
+    /// Settings → App → Theme: stored on this phone, applied everywhere at once.
+    @State private var theme = ThemeSetting(launchOverride: Self.launchTheme)
     /// "Allow screenshots" (ID10): on from the start only in the development builds, whose screens are screenshotted.
     @State private var screenshots = ScreenshotAllowance(onByDefault: AppEnvironment.current.kind.screenshotsByDefault)
 
-    private static var initialThemeMode: ThemeMode {
+    /// Debug builds: `-vettid.theme dark|light` at launch (screenshots), shown but not stored.
+    private static var launchTheme: ThemePreference? {
         #if DEBUG
-        // Debug builds: `-vettid.theme dark|light` at launch (screenshots).
-        if let mode = UserDefaults.standard.string(forKey: "vettid.theme").flatMap(ThemeMode.init(rawValue:)) {
-            return mode
-        }
+        UserDefaults.standard.string(forKey: "vettid.theme").flatMap(ThemePreference.init(rawValue:))
+        #else
+        nil
         #endif
-        return .system
     }
 
     var body: some Scene {
         WindowGroup {
-            RootView(environment: .current, composition: .shared, themeMode: $themeMode)
-                .vettIDTheme(themeMode)
+            RootView(environment: .current, composition: .shared, themeMode: themeMode)
+                .vettIDTheme(theme.theme.mode)
                 .environment(screenshots)
+                .environment(theme)
                 .privacyShield()
+        }
+    }
+
+    /// The debug gallery's theme chips change what is shown, never the member's stored choice.
+    private var themeMode: Binding<ThemeMode> {
+        let theme = theme
+        return Binding(get: { theme.theme.mode }, set: { theme.show(ThemePreference($0)) })
+    }
+}
+
+/// vettid-android `MainActivity`'s `toMode` and `toPreference`: the stored choice and the theme it applies.
+extension ThemePreference {
+    var mode: ThemeMode {
+        switch self {
+        case .system: .system
+        case .light: .light
+        case .dark: .dark
+        }
+    }
+
+    init(_ mode: ThemeMode) {
+        switch mode {
+        case .system: self = .system
+        case .light: self = .light
+        case .dark: self = .dark
         }
     }
 }

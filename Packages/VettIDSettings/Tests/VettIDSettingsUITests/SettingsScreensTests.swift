@@ -21,13 +21,16 @@ import VettIDUI
             .appendingPathComponent("Sources/VettIDSettingsUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 311)
+        #expect(keys.count == 325)
         let missing = "\u{0}missing"
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)
             #expect(!text.isEmpty && text != key && text != missing, "\(key)")
             // `root_change_`: the one-time notice of a change's decision, under the Android app module's keys.
-            let prefixes = ["settings_", "credential_", "canary_", "root_change_", "ios_settings_", "ios_credential_", "ios_app_lock_"]
+            let prefixes = [
+                "settings_", "credential_", "canary_", "root_change_", "help_", "ios_settings_", "ios_credential_", "ios_app_lock_",
+                "ios_help_",
+            ]
             #expect(prefixes.contains { key.hasPrefix($0) }, "\(key)")
         }
     }
@@ -45,6 +48,37 @@ import VettIDUI
         #expect(SettingsStrings.attestationReleaseValue(3, "a3a3 a3a3") == "Release 3 · a3a3 a3a3")
         #expect(VaultStatusContent.recoveryLine(.armed(used: 0)) == "Recovery: on. Attempts used: 0 of 10.")
         #expect(VaultStatusContent.recoveryLine(.unknown) == "Recovery: cannot be checked right now.")
+    }
+
+    /// Settings → App → Theme: vettid-android's texts, its three choices in its order.
+    @Test func theThemeRowIsAndroids() {
+        #expect(SettingsStrings.appTheme == "Theme")
+        #expect(ThemePreference.allCases.map(SettingsContent.themeLabel) == ["System default", "Light", "Dark"])
+        for t in ThemePreference.allCases {
+            #expect(height(SettingsContent(state: SettingsState(theme: t), now: now)) > 0)
+        }
+    }
+
+    /// Help: vettid-android's sections, rows and pages, word for word; the iPhone's own texts of IOS-PLAN ID18 and ID11.
+    @Test func helpIsAndroids() {
+        #expect(HelpStrings.title == "Help")
+        #expect(HelpStrings.sectionLearn == "Learn")
+        #expect(HelpStrings.sectionSupport == "Support")
+        #expect(HelpScreen.learn.map(\.label) == ["About VettID", "How VettID protects you"])
+        #expect(HelpScreen.learn.map(\.url) == ["https://vettid.org/about", "https://vettid.org/security"])
+        #expect(HelpScreen.support.map(\.label) == ["Contact us"])
+        #expect(HelpScreen.support.map(\.url) == ["https://vettid.org/contact"])
+        for link in HelpScreen.learn + HelpScreen.support {
+            #expect(URL(string: link.url)?.scheme == "https", "\(link.url)")
+        }
+        #expect(HelpStrings.privacy == "Privacy" && HelpStrings.keyboards == "Keyboards")
+        #expect(HelpStrings.privacyBody == """
+            When you set up, move or recover a vault, your iPhone asks Apple to vouch for the VettID app. Apple learns that \
+            VettID was set up on an iPhone, nothing about your vault.
+            """)
+        #expect(HelpStrings.keyboardsBody
+            == "VettID uses only Apple's keyboard, so that other keyboards never see your PIN, password or codes.")
+        #expect(height(HelpScreen {}) > 0)
     }
 
     /// The canary manifest's texts are vettid-android's, word for word (VAULT-RELEASES §10.1 step 9).

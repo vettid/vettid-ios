@@ -24,13 +24,14 @@ extension ShellCatalog {
         }
     }
 
-    /// The rotation, the clone alarm and a new credential.
+    /// The rotation, the clone alarm, a new credential and Help.
     @MainActor @ViewBuilder
     private static func rotateScreen(_ screen: Screen) -> some View {
         switch screen {
         case .rotate(let state): RotateContent(state: state)
         case .alarm(let state): AlarmContent(state: state)
         case .newCredential(let state): NewCredentialContent(state: state)
+        case .help: HelpScreen {}
         default: EmptyView()
         }
     }

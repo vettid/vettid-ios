@@ -61,6 +61,10 @@ public enum VettIDSymbol: String, CaseIterable, Sendable {
     case lockClock = "lock.badge.clock" // LockClock
     case backup = "icloud.and.arrow.up" // Backup
     case screenshot = "camera.viewfinder" // Screenshot
+    case darkMode = "moon" // DarkMode (the theme)
+    case security = "lock.shield" // Security
+    case privacyTip = "hand.raised" // PrivacyTip
+    case keyboard = "keyboard" // Keyboard
 
     // States
     case info = "info.circle" // Info
