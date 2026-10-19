@@ -47,7 +47,7 @@ public extension FailureKind {
         case .noVault: DataStrings.failureNoVault
         case .localState: DataStrings.failureLocalState
         case .eraseFailed: DataStrings.failureEraseFailed
-        case .deviceSecret: Self.deviceSecretText(timeScale: 1)
+        case .deviceSecret: DataStrings.failureDeviceSecret
         case .transferIncomplete: DataStrings.failureTransferIncomplete
         case .busy: DataStrings.failureBusy
         case .retry: DataStrings.failureRetry
@@ -79,9 +79,12 @@ public extension FailureKind {
         self == .deviceSecret ? Self.deviceSecretText(timeScale: timeScale) : message
     }
 
-    /// ``deviceSecret``'s text: a recovery takes from its code delay (24 h) to its quiet period (72 h), at [timeScale].
+    /// ``deviceSecret``'s text. In real time the approved text verbatim ("one to three days"); on a scaled vault a
+    /// recovery's time from its code delay (24 h) to its quiet period (72 h), each at [timeScale] (the owner's decision of
+    /// 2026-10-19).
     private static func deviceSecretText(timeScale: UInt64) -> String {
-        DataStrings.failureDeviceSecret(
+        guard timeScale > 1 else { return DataStrings.failureDeviceSecret }
+        return DataStrings.failureDeviceSecretScaled(
             TimeScales.text(TimeScales.recoveryDelay, by: timeScale), TimeScales.text(TimeScales.recoveryQuiet, by: timeScale)
         )
     }

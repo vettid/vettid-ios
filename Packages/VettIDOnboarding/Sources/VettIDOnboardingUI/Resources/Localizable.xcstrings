@@ -2252,6 +2252,17 @@
         "en": {
           "stringUnit": {
             "state": "translated",
+            "value": "If this stays for three days, your vault is no longer protected against a recovery started by someone else. Try again later. If it does not go away, contact VettID."
+          }
+        }
+      }
+    },
+    "ownercheck_presence_body_scaled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
             "value": "If this stays for %@, your vault is no longer protected against a recovery started by someone else. Try again later. If it does not go away, contact VettID."
           }
         }

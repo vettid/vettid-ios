@@ -150,10 +150,22 @@ extension OnboardingStrings {
     static var ownerCheckPresenceTitle: String {
         String(localized: "ownercheck_presence_title", defaultValue: "Your vault could not record that you were here.", bundle: .module)
     }
-    /// [quiet]: the recovery quiet period at the vault's time scale (STAGING-TIME-SCALE S7).
-    static func ownerCheckPresenceBody(_ quiet: String) -> String {
+    /// ANDROID-PLAN §4 "Recovery and unlock from release R", "Owner check and status", verbatim: the text in real time.
+    static var ownerCheckPresenceBody: String {
         String(
             localized: "ownercheck_presence_body",
+            defaultValue: """
+                If this stays for three days, your vault is no longer protected against a recovery started by someone \
+                else. Try again later. If it does not go away, contact VettID.
+                """,
+            bundle: .module
+        )
+    }
+    /// The same on a scaled vault: [quiet], the recovery quiet period at the vault's time scale (STAGING-TIME-SCALE S7;
+    /// the owner's decision of 2026-10-19). The key is chosen; not in the spec.
+    static func ownerCheckPresenceBodyScaled(_ quiet: String) -> String {
+        String(
+            localized: "ownercheck_presence_body_scaled",
             defaultValue: """
                 If this stays for \(quiet), your vault is no longer protected against a recovery started by someone \
                 else. Try again later. If it does not go away, contact VettID.

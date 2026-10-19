@@ -100,8 +100,9 @@ public struct OwnerCheckScreenState: Equatable, Sendable, CustomStringConvertibl
         TimeScales.text(TimeInterval(view?.intervalSeconds ?? OwnerCheckView.maxIntervalSeconds), by: timeScale)
     }
 
-    /// The presence notice's quiet period (§11.14.5) at the vault's time scale.
-    public var quietText: String { TimeScales.text(TimeScales.recoveryQuiet, by: timeScale) }
+    /// The presence notice's quiet period (§11.14.5) at the vault's time scale on a scaled vault ("3 hours" on staging);
+    /// nil in real time, where the notice says the approved "three days" (the owner's decision of 2026-10-19).
+    public var scaledQuietText: String? { TimeScales.scaledText(TimeScales.recoveryQuiet, by: timeScale) }
 
     /// "Staging: 1 day = 1 hour" on a staging vault; nil otherwise.
     public var stagingNote: String? { TimeScales.stagingNote(timeScale) }
@@ -386,8 +387,13 @@ public struct OwnerCheckGate: Equatable, Sendable {
         return g
     }
 
-    /// The presence notice's quiet period (§11.14.5) at the vault's time scale ("3 days"; on staging "3 hours").
-    public var quietText: String { TimeScales.text(TimeScales.recoveryQuiet, by: timeScale) }
+    /// The presence notice's quiet period (§11.14.5) at the vault's time scale on a scaled vault ("3 hours" on staging);
+    /// nil in real time, where the notice says the approved "three days" (the owner's decision of 2026-10-19).
+    public var scaledQuietText: String? { TimeScales.scaledText(TimeScales.recoveryQuiet, by: timeScale) }
+
+    /// How long before the deadline the early warning starts (§3.6.5, S2) on a scaled vault ("150 seconds" on staging);
+    /// nil in real time, where the warning says the approved "within the hour".
+    public var scaledWarningText: String? { TimeScales.scaledText(TimeScales.ownerCheckWarning, by: timeScale) }
 
     /// "Staging: 1 day = 1 hour" on a staging vault; nil otherwise.
     public var stagingNote: String? { TimeScales.stagingNote(timeScale) }

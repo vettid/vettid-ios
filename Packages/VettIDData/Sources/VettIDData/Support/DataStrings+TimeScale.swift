@@ -47,6 +47,24 @@ extension DataStrings {
             bundle: .module
         )
     }
+    /// ``failureDeviceSecret`` on a scaled vault: [from] and [to], a recovery's shortest and longest time (its code delay,
+    /// S5, and its quiet period, S7) at the vault's time scale (the owner's decision of 2026-10-19). The key is chosen;
+    /// not in the spec.
+    static func failureDeviceSecretScaled(_ from: String, _ to: String) -> String {
+        String(
+            localized: "data_failure_device_secret_scaled",
+            defaultValue: """
+                This phone no longer holds the keys of your vault. That happens when the app's data was cleared or the phone \
+                was set up again from a backup. Nothing was disclosed. Whether you can get back into the vault depends on one \
+                of its settings. If its credential backup was on (the usual case), you can recover it: start a recovery on the \
+                account site. It takes \(from) to \(to), and you need your PIN and your password. If you had turned \
+                credential backup off, this vault cannot be brought back; you can delete it on the account site and start a \
+                new one. If you still have a phone on which VettID works, use 'Move to a new phone' there instead. The account \
+                site tells you which of these applies.
+                """,
+            bundle: .module
+        )
+    }
     static func durationDays(_ n: Int) -> String {
         String(localized: "data_duration_days", defaultValue: "\(n) days", bundle: .module)
     }

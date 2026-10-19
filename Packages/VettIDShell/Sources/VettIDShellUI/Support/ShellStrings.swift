@@ -237,6 +237,12 @@ enum ShellStrings {
         String(localized: "owner_check_warning_soon", defaultValue: "Your daily check is due within the hour.", bundle: .module)
     }
 
+    /// ``ownerCheckWarningSoon`` on a scaled vault: [ahead], the early warning's hour at the vault's time scale
+    /// (STAGING-TIME-SCALE S2; the owner's decision of 2026-10-19). The key is chosen; not in the spec.
+    static func ownerCheckWarningSoonScaled(_ ahead: String) -> String {
+        String(localized: "owner_check_warning_soon_scaled", defaultValue: "Your daily check is due within \(ahead).", bundle: .module)
+    }
+
     static var ownerCheckNow: String {
         String(localized: "owner_check_now", defaultValue: "Check now", bundle: .module)
     }
@@ -301,10 +307,22 @@ enum ShellStrings {
         String(localized: "ownercheck_presence_title", defaultValue: "Your vault could not record that you were here.", bundle: .module)
     }
 
-    /// [quiet]: the recovery quiet period at the vault's time scale (STAGING-TIME-SCALE S7).
-    static func ownercheckPresenceBody(_ quiet: String) -> String {
+    /// ANDROID-PLAN §4 "Recovery and unlock from release R", "Owner check and status", verbatim: the text in real time.
+    static var ownercheckPresenceBody: String {
         String(
             localized: "ownercheck_presence_body",
+            defaultValue: """
+                If this stays for three days, your vault is no longer protected against a recovery started by someone \
+                else. Try again later. If it does not go away, contact VettID.
+                """,
+            bundle: .module
+        )
+    }
+    /// The same on a scaled vault: [quiet], the recovery quiet period at the vault's time scale (STAGING-TIME-SCALE S7;
+    /// the owner's decision of 2026-10-19). The key is chosen; not in the spec.
+    static func ownercheckPresenceBodyScaled(_ quiet: String) -> String {
+        String(
+            localized: "ownercheck_presence_body_scaled",
             defaultValue: """
                 If this stays for \(quiet), your vault is no longer protected against a recovery started by someone \
                 else. Try again later. If it does not go away, contact VettID.
