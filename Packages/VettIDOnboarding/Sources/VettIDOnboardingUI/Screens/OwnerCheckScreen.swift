@@ -81,10 +81,8 @@ public struct OwnerCheckScreen: View {
         self.now = now
     }
 
-    private var interval: String {
-        let h = max(Int((state.view?.intervalSeconds ?? OwnerCheckView.maxIntervalSeconds) / 3_600), 1)
-        return OnboardingStrings.ownerCheckHours(h)
-    }
+    /// The interval at the vault's time scale (STAGING-TIME-SCALE §5.2): "24 hours", on staging "1 hour".
+    private var interval: String { state.intervalText }
 
     private var title: String {
         switch state.mode {
@@ -123,7 +121,7 @@ public struct OwnerCheckScreen: View {
     public var body: some View {
         if state.passedUnrecorded {
             FormScaffold(title: title, primaryLabel: OnboardingStrings.continueLabel, onPrimary: { actions.acknowledgePresence() }) {
-                PresenceNotice()
+                PresenceNotice(quiet: state.quietText)
             }
             .accessibilityIdentifier("owner_check_passed_unrecorded")
         } else {
@@ -149,7 +147,8 @@ public struct OwnerCheckScreen: View {
             }
         ) {
             VStack(alignment: .leading, spacing: Spacing.m) {
-                if state.presenceUnrecorded { PresenceNotice() }
+                SmallNote(state.stagingNote)
+                if state.presenceUnrecorded { PresenceNotice(quiet: state.quietText) }
                 if let card = WaitingCardModel.of(state.mode, state.view, now: now) { WaitingCard(model: card) }
                 if state.mode == .holdOff {
                     NoticeCard(
@@ -228,8 +227,11 @@ struct OwnerCheckMessageView: View {
 
 /// ANDROID-PLAN "Owner check and status" (release R): the vault could not record that the member was here.
 struct PresenceNotice: View {
+    /// The recovery quiet period at the vault's time scale ("3 days"; on staging "3 hours").
+    let quiet: String
+
     var body: some View {
-        NoticeCard(.warning, title: OnboardingStrings.ownerCheckPresenceTitle, message: OnboardingStrings.ownerCheckPresenceBody)
+        NoticeCard(.warning, title: OnboardingStrings.ownerCheckPresenceTitle, message: OnboardingStrings.ownerCheckPresenceBody(quiet))
             .accessibilityAddTraits(.updatesFrequently)
             .accessibilityIdentifier("owner_check_presence")
     }

@@ -38,6 +38,8 @@ final class VaultReleaseUpdateOps: ReleaseUpdateOps {
 
     func releaseNumber() -> UInt64 { ref.manager?.session?.device.altState.releaseNumber ?? 0 }
 
+    func timeScale() -> UInt64 { ref.manager?.timeScale ?? 1 }
+
     func changeHold() -> FailureKind? { ref.manager?.releaseUpdateHold() }
 }
 

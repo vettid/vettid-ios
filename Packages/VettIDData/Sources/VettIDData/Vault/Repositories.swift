@@ -184,6 +184,10 @@ public protocol VaultRepository: AnyObject, Observable, Sendable {
     /// from release R only when its capabilities list `recovery_offered`. Default: true.
     var recoveryOffered: Bool { get }
 
+    /// (STAGING-TIME-SCALE §5.2) The vault's time scale as this phone last learnt it: 1 in production and before the
+    /// scale, 24 on staging from release 18. The screens show the app's and the vault's waits divided by it. Default: 1.
+    var timeScale: UInt64 { get }
+
     /// (Release R, §11.14.10) When this phone approved a transfer it still keeps the keys for (until the new phone's
     /// first unlock, at most 7 days); nil otherwise. The shell shows "Finish the move on your new phone".
     var transferKeptSince: Date? { get }
@@ -335,6 +339,7 @@ public extension VaultRepository {
     func dismissRotateOffer() {}
     var movedAway: Bool { false }
     func acknowledgeMovedAway() {}
+    var timeScale: UInt64 { 1 }
 
     func unlockCancellingRecovery(pin: String, password: String, approve: ReleaseView?) async throws -> UnlockAttempt {
         try await unlock(pin: pin, approve: approve, cancelRecovery: true)

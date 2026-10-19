@@ -101,10 +101,14 @@ public protocol ReleaseUpdateOps: AnyObject {
     /// starts nor retries nor abandons: its lock and unlock would send a PIN that may be the wrong one of two. Nil when
     /// it is not held.
     func changeHold() -> FailureKind?
+
+    /// (STAGING-TIME-SCALE S16) The vault's time scale, which divides how long a dismissed banner stays hidden.
+    func timeScale() -> UInt64
 }
 
 public extension ReleaseUpdateOps {
     func changeHold() -> FailureKind? { nil }
+    func timeScale() -> UInt64 { 1 }
 }
 
 /// The member dismissed the notice of [release] ([kind]) at [at]. Mirrors vettid-android `ReleaseDismissal`.
@@ -112,19 +116,24 @@ public struct ReleaseDismissal: Equatable, Sendable {
     public var release: UInt64
     public var kind: UpdateNoticeKind
     public var at: Date
+    /// How long it stays hidden: ``ReleaseNotices/dismissFor`` divided by the vault's time scale at the dismissal
+    /// (STAGING-TIME-SCALE S16).
+    public var hiddenFor: TimeInterval
 
-    public init(release: UInt64, kind: UpdateNoticeKind, at: Date) {
+    public init(release: UInt64, kind: UpdateNoticeKind, at: Date, hiddenFor: TimeInterval = ReleaseNotices.dismissFor) {
         self.release = release
         self.kind = kind
         self.at = at
+        self.hiddenFor = hiddenFor
     }
 }
 
 /// When the shell shows the release banner. Mirrors vettid-android `ReleaseNotices` (the local notification comes with
 /// phase P, IOS-PLAN §6.7).
 public enum ReleaseNotices {
-    /// A dismissed banner comes back after 24 h, whatever the kind (owner decision 2026-10-09).
-    public static let dismissFor: TimeInterval = 24 * 3600
+    /// A dismissed banner comes back after 24 h, whatever the kind (owner decision 2026-10-09); divided by the vault's
+    /// time scale when dismissed (STAGING-TIME-SCALE S16).
+    public static let dismissFor: TimeInterval = TimeScales.updateBannerDismiss
 
     /// Whether the banner shows for [offer] at [now]: always without a dismissal of this release and kind (a notice that
     /// turns from "available" into an end-date warning shows again), and again ``dismissFor`` after one. A dismissal "in
@@ -132,7 +141,7 @@ public enum ReleaseNotices {
     public static func bannerVisible(_ offer: ReleaseUpdateOffer?, _ dismissal: ReleaseDismissal?, now: Date) -> Bool {
         guard let offer else { return false }
         guard let d = dismissal, d.release == offer.target.number, d.kind == offer.kind else { return true }
-        return now < d.at || now >= d.at.addingTimeInterval(dismissFor)
+        return now < d.at || now >= d.at.addingTimeInterval(d.hiddenFor)
     }
 }
 

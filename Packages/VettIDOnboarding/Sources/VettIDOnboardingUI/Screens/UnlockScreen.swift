@@ -108,7 +108,11 @@ public struct UnlockScreen: View {
                     pinEntry
                     UnlockMessageNotice(state: state)
                 }
-                if state.signerRefused { SignerRefusedNotice(help: state.signerHelp, actions: actions) }
+                if state.signerRefused {
+                    SignerRefusedNotice(
+                        help: state.signerHelp, recovery: state.recoveryText, stagingNote: state.stagingNote, actions: actions
+                    )
+                }
                 wayForward
             }
         }
@@ -116,7 +120,8 @@ public struct UnlockScreen: View {
             isPresented: Binding(get: { state.eraseConfirm && state.eraseOffered }, set: { if !$0 { actions.dismissErase() } }),
             title: OnboardingStrings.unlockEraseConfirmTitle,
             // A phone without its vault's keys: the root screen's text, which says what a recovery then needs.
-            message: state.keysGone && !state.notRecognised ? OnboardingStrings.erasePhoneBody : OnboardingStrings.unlockEraseConfirmBody,
+            message: state.keysGone && !state.notRecognised
+                ? OnboardingStrings.erasePhoneBody(state.recoveryText) : OnboardingStrings.unlockEraseConfirmBody,
             confirmLabel: OnboardingStrings.unlockEraseConfirm,
             destructive: true,
             onConfirm: { actions.confirmErase() }
@@ -215,9 +220,10 @@ struct UnlockNotices: View {
             // Release R (§11.14.10): the old phone after a transfer's approval.
             NoticeCard(
                 .info, title: OnboardingStrings.moveDidntFinish,
-                message: OnboardingStrings.keptTransfer + "\n\n" + OnboardingStrings.moveDidntFinishBody
+                message: OnboardingStrings.keptTransfer(state.keptTransferText) + "\n\n" + OnboardingStrings.moveDidntFinishBody
             )
             .accessibilityIdentifier("kept_transfer")
+            SmallNote(state.stagingNote)
         }
         if let error = state.preflightError {
             let title = switch error {

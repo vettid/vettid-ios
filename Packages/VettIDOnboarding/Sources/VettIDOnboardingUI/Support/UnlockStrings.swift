@@ -238,7 +238,8 @@ extension OnboardingStrings {
     static var unlockSignerRefusedHelpTitle: String {
         String(localized: "unlock_signer_refused_help_title", defaultValue: "Recovering or moving your vault", bundle: .module)
     }
-    static var unlockSignerRefusedHelpBody: String {
+    /// [recovery]: the recovery's delay at the vault's time scale (STAGING-TIME-SCALE S5).
+    static func unlockSignerRefusedHelpBody(_ recovery: String) -> String {
         String(
             localized: "unlock_signer_refused_help_body",
             defaultValue: """
@@ -246,8 +247,8 @@ extension OnboardingStrings {
 
                 If that does not help, recover your vault. Start a recovery on the account site, install a current \
                 version of VettID (on this phone after removing this one, or on another phone) and choose "I lost my \
-                phone: recover my vault" on its first screen, then scan or type the recovery code. A recovery takes 24 \
-                hours and needs your PIN and your credential password.
+                phone: recover my vault" on its first screen, then scan or type the recovery code. A recovery takes \
+                \(recovery) and needs your PIN and your credential password.
 
                 Moving your vault to a new phone directly is not possible while this phone cannot open it.
                 """,
@@ -345,12 +346,13 @@ extension OnboardingStrings {
     static var moveDidntFinish: String {
         String(localized: "onboarding_move_didnt_finish", defaultValue: "The move didn't finish", bundle: .module)
     }
-    static var keptTransfer: String {
+    /// [keep]: the old phone's keep period at the vault's time scale (STAGING-TIME-SCALE S10).
+    static func keptTransfer(_ keep: String) -> String {
         String(
             localized: "onboarding_kept_transfer",
             defaultValue: """
                 Finish the move on your new phone. This phone keeps your vault's keys until your new phone has finished \
-                the move, for at most 7 days. Before you give this phone away, remove VettID from it or reset it.
+                the move, for at most \(keep). Before you give this phone away, remove VettID from it or reset it.
                 """,
             bundle: .module
         )
@@ -377,14 +379,15 @@ extension OnboardingStrings {
     static var finishMoveTitle: String {
         String(localized: "onboarding_finish_move_title", defaultValue: "Finish the move", bundle: .module)
     }
-    static var erasePhoneBody: String {
+    /// [recovery]: the recovery's delay at the vault's time scale (STAGING-TIME-SCALE S5).
+    static func erasePhoneBody(_ recovery: String) -> String {
         String(
             localized: "core_ui_erase_phone_body",
             defaultValue: """
                 Everything VettID keeps on this phone is erased, including its keys for your vault, and VettID goes back \
                 to the start. Your vault itself is not changed.
 
-                To get back into it you then need a recovery from the account site (it takes 24 hours and needs your PIN \
+                To get back into it you then need a recovery from the account site (it takes \(recovery) and needs your PIN \
                 and credential password, and the credential backup must be on), or a move from another phone that still \
                 holds your vault.
                 """,
@@ -425,8 +428,9 @@ extension OnboardingStrings {
             bundle: .module
         )
     }
-    static var rootLongUnreachable: String {
-        String(localized: "root_long_unreachable", defaultValue: "VettID has not reached your vault for 7 days or more.", bundle: .module)
+    /// [wait]: 7 days at the vault's time scale (STAGING-TIME-SCALE S12).
+    static func rootLongUnreachable(_ wait: String) -> String {
+        String(localized: "root_long_unreachable", defaultValue: "VettID has not reached your vault for \(wait) or more.", bundle: .module)
     }
     static var rootStartOver: String {
         String(localized: "root_start_over", defaultValue: "Start over on this phone", bundle: .module)

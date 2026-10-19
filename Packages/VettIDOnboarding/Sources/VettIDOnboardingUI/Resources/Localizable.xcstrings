@@ -7,7 +7,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Everything VettID keeps on this phone is erased, including its keys for your vault, and VettID goes back to the start. Your vault itself is not changed.\n\nTo get back into it you then need a recovery from the account site (it takes 24 hours and needs your PIN and credential password, and the credential backup must be on), or a move from another phone that still holds your vault."
+            "value": "Everything VettID keeps on this phone is erased, including its keys for your vault, and VettID goes back to the start. Your vault itself is not changed.\n\nTo get back into it you then need a recovery from the account site (it takes %@ and needs your PIN and credential password, and the credential backup must be on), or a move from another phone that still holds your vault."
           }
         }
       }
@@ -403,7 +403,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Finish the move on your new phone. This phone keeps your vault's keys until your new phone has finished the move, for at most 7 days. Before you give this phone away, remove VettID from it or reset it."
+            "value": "Finish the move on your new phone. This phone keeps your vault's keys until your new phone has finished the move, for at most %@. Before you give this phone away, remove VettID from it or reset it."
           }
         }
       }
@@ -1096,7 +1096,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "VettID has not reached your vault for 7 days or more."
+            "value": "VettID has not reached your vault for %@ or more."
           }
         }
       }
@@ -1701,7 +1701,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "First update VettID from where you installed it and try again: your PIN was not counted as wrong.\n\nIf that does not help, recover your vault. Start a recovery on the account site, install a current version of VettID (on this phone after removing this one, or on another phone) and choose \"I lost my phone: recover my vault\" on its first screen, then scan or type the recovery code. A recovery takes 24 hours and needs your PIN and your credential password.\n\nMoving your vault to a new phone directly is not possible while this phone cannot open it."
+            "value": "First update VettID from where you installed it and try again: your PIN was not counted as wrong.\n\nIf that does not help, recover your vault. Start a recovery on the account site, install a current version of VettID (on this phone after removing this one, or on another phone) and choose \"I lost my phone: recover my vault\" on its first screen, then scan or type the recovery code. A recovery takes %@ and needs your PIN and your credential password.\n\nMoving your vault to a new phone directly is not possible while this phone cannot open it."
           }
         }
       }
@@ -2213,29 +2213,6 @@
         }
       }
     },
-    "ownercheck_hours": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld hour"
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld hours"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "ownercheck_lock": {
       "extractionState": "manual",
       "localizations": {
@@ -2275,7 +2252,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "If this stays for three days, your vault is no longer protected against a recovery started by someone else. Try again later. If it does not go away, contact VettID."
+            "value": "If this stays for %@, your vault is no longer protected against a recovery started by someone else. Try again later. If it does not go away, contact VettID."
           }
         }
       }

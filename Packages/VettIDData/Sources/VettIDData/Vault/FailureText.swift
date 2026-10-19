@@ -64,6 +64,7 @@ public extension FailureKind {
         case .responseTooLarge: DataStrings.failureResponseTooLarge
         case .changeUnresolved: DataStrings.failureChangeUnresolved
         case .changeChecking: DataStrings.failureChangeChecking
+        case .timeScale: DataStrings.failureTimeScale
         case .other: DataStrings.failureOther
         }
     }
@@ -128,6 +129,7 @@ public extension FailureKind {
         case .responseTooLarge: "data_failure_response_too_large"
         case .changeUnresolved: "data_failure_change_unresolved"
         case .changeChecking: "data_failure_ios_change_checking"
+        case .timeScale: "data_failure_time_scale"
         case .other: "data_failure_other"
         }
     }

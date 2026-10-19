@@ -50,6 +50,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// (iPhone, IOS-PLAN §6.3 item 5) The earlier-secret step opened the vault: a new phone secret is asked for at once
     /// (the shell's prompt), until one is made or the member dismisses the prompt. The History entry comes with History.
     public internal(set) var renewSecretSuggested = false
+    /// (STAGING-TIME-SCALE §5.2) The vault's time scale as this phone last learnt it (``LocalAccount/timeScale``).
+    public internal(set) var timeScale: UInt64 = 1
 
     // CredentialRepository.
     public internal(set) var alarm: CredentialAlarm?
@@ -61,6 +63,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored let member: MemberApiClient
     @ObservationIgnored let phoneSecrets: PhoneSecrets
     @ObservationIgnored let memberVault = MemberVaultID()
+    @ObservationIgnored let timeScaleCell = TimeScaleCell()
     @ObservationIgnored var session: VaultSession?
     @ObservationIgnored private var opening: Task<VaultSession, any Error>?
     /// Bumped whenever the session is dropped: a session opened before is not kept.
@@ -136,14 +139,22 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         self.config = config
         apiOrigin = config.apiOrigin
         record = AccountRecord(store: config.file(VaultFiles.account))
-        if let gate = config.attestStartOver { record.onChange = { gate.set($0.noVaultHoldsAttestKey) } }
+        let ref = ManagerRef()
+        let gate = config.attestStartOver
+        let scale = timeScaleCell
+        record.onChange = { a in
+            gate?.set(a.noVaultHoldsAttestKey)
+            scale.set(a.timeScale)
+            if ref.manager?.timeScale != a.timeScale { ref.manager?.timeScale = a.timeScale }
+        }
         let ids = memberVault
         member = MemberApiClient(
             apiBase: config.apiOrigin, manifestURL: config.manifestURL, transport: config.transport,
             auth: .appKey(StoredAppKeySigner(store: config.keys.appKeys), vaultID: { ids.current })
         )
-        phoneSecrets = PhoneSecrets(keys: config.keys.phone, store: config.file(VaultFiles.phoneSecrets), now: config.now)
-        let ref = ManagerRef()
+        phoneSecrets = PhoneSecrets(
+            keys: config.keys.phone, store: config.file(VaultFiles.phoneSecrets), now: config.now, timeScale: { scale.value }
+        )
         canary = Self.canaryManifests(config, member, ref)
         releaseUpdate = ReleaseUpdateManager(ops: VaultReleaseUpdateOps(ref: ref))
         let timing = config.lockTiming
@@ -163,11 +174,27 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             )
         }
         locking = LockSequence(sleep: timing.sleep)
+        ownerChecks = Self.ownerCheckManager(config, ref, rec, scale)
+        profiles = Self.profiles(ref, checks: ownerChecks, record: rec)
+        wiper = config.wipeTargets.map { LocalWipe(targets: $0, hooks: [{ await ref.manager?.runWipeHooks() }]) }
+        ref.manager = self
+        lockPorts.manager = self
+        holder = HolderWatch { [weak self] in await self?.wipeReplacedPhone() }
+        refusals = RefusalWatch { [weak self] in self?.refusedOnRelay() }
+    }
+
+    /// The daily owner check over the open session, kept in its encrypted file; [scale] the vault's time scale.
+    private static func ownerCheckManager(
+        _ config: VaultManagerConfig, _ ref: ManagerRef, _ rec: AccountRecord, _ scale: TimeScaleCell
+    ) -> OwnerCheckManager {
         let checkFile = config.file(VaultFiles.ownerCheck)
-        ownerChecks = OwnerCheckManager(
+        return OwnerCheckManager(
             ops: {
                 guard let m = ref.manager else { throw VaultFailure(.other, code: "session_dropped") }
-                return VaultOwnerCheckOps(api: try m.openApi(try await m.openSession())) { try await ref.manager?.decideFirst() }
+                return VaultOwnerCheckOps(
+                    api: try m.openApi(try await m.openSession()), gate: { try await ref.manager?.decideFirst() },
+                    onStatus: { st in await ref.manager?.learnTimeScale(status: st) }
+                )
             },
             load: { try checkFile.load() },
             // Nothing is written while a wipe runs or after one that did not finish.
@@ -177,14 +204,9 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             },
             now: config.now,
             mark: { rec.generation },
-            sleep: timing.sleep
+            sleep: config.lockTiming.sleep,
+            timeScale: { scale.value }
         )
-        profiles = Self.profiles(ref, checks: ownerChecks, record: rec)
-        wiper = config.wipeTargets.map { LocalWipe(targets: $0, hooks: [{ await ref.manager?.runWipeHooks() }]) }
-        ref.manager = self
-        lockPorts.manager = self
-        holder = HolderWatch { [weak self] in await self?.wipeReplacedPhone() }
-        refusals = RefusalWatch { [weak self] in self?.refusedOnRelay() }
     }
 
     /// The canary manifest in its encrypted file, checked against the serial this phone used and the published manifest.
@@ -414,6 +436,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         try record.update(since: record.generation) {
             $0.setupComplete = false
             $0.capabilities = []
+            $0.timeScale = 1
         }
         // The vault is no longer this phone's: nothing to lock from here. Only once the forget succeeded: a forget that
         // failed leaves the phone holding the vault, and its pending lock with it.
@@ -469,7 +492,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             let kind = f.code == VaultFailures.codeKeystore ? FailureKind.localState : f.kind
             // Nothing has reached the vault service for a long time: erase-or-recover beside "Try again".
             let last = [record.value.lastContactMs, record.value.lastOpenedMs].compactMap { $0 }.max()
-            p = .unreachable(kind, longUnreachable: StuckScreens.longUnreachable(kind, lastContactMs: last, nowMs: nowMs))
+            let long = StuckScreens.longUnreachable(kind, lastContactMs: last, nowMs: nowMs, timeScale: record.value.timeScale)
+            p = .unreachable(kind, longUnreachable: long)
         }
         // A reset, a lock, or a newer phase set by an operation meanwhile, wins.
         if gen == record.generation, changes == phaseChanges, locks == lockGeneration { phase = p }

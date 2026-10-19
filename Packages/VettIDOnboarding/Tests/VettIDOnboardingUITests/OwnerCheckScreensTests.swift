@@ -66,9 +66,10 @@ import VettIDUI
     }
 
     @Test func theTextsAreAndroids() {
-        #expect(OnboardingStrings.ownerCheckBodyGated(OnboardingStrings.ownerCheckHours(24)) == "Your vault asks for your PIN and "
+        #expect(OnboardingStrings.ownerCheckBodyGated(OwnerCheckScreenState().intervalText) == "Your vault asks for your PIN and "
             + "your credential password together at least once every 24 hours. Until you check, the app shows nothing from your vault.")
-        #expect(OnboardingStrings.ownerCheckHours(1) == "1 hour")
+        let hourly = OwnerCheckScreenState(view: OwnerCheckView(state: .ok, deadline: nil, intervalSeconds: 3_600))
+        #expect(hourly.intervalText == "1 hour")
         #expect(OnboardingStrings.ownerCheckChecksLeft(1) == "1 wrong check left before your vault locks.")
         #expect(OnboardingStrings.ownerCheckChecksLeft(8) == "8 wrong checks left before your vault locks.")
         #expect(OnboardingStrings.ownerCheckWaitingRequests(1) == "1 connection request")

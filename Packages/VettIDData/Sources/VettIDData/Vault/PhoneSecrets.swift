@@ -36,8 +36,9 @@ public final class PhoneSecrets: @unchecked Sendable {
     public static let maxCandidates = 4
     /// Unconfirmed epoch-1 records kept at most (chosen; not in the spec: the bound of the candidates, rule 3).
     public static let maxPendings = 4
-    /// How long a replaced record is kept after the confirmation (VAULT-MESSAGING §11.14.1 rule 6).
-    public static let keepMs: Int64 = 7 * 24 * 60 * 60 * 1000
+    /// How long a replaced record is kept after the confirmation (VAULT-MESSAGING §11.14.1 rule 6), in real time; divided
+    /// by the vault's time scale when the 7 days start (STAGING-TIME-SCALE S9).
+    public static let keepMs: Int64 = TimeScales.replacedRecordsKeepMs
     /// The records file's purpose in the encrypted file store.
     public static let purpose = "phone-secrets"
 
@@ -45,6 +46,8 @@ public final class PhoneSecrets: @unchecked Sendable {
     let store: EncryptedFileStore
     let now: @Sendable () -> Date
     let ephemeral: @Sendable () -> P256.KeyAgreement.PrivateKey
+    /// The vault's time scale now (STAGING-TIME-SCALE §5.2).
+    let timeScale: @Sendable () -> UInt64
 
     /// [store] is the records file (purpose ``purpose``, in the app's backup-excluded data directory). [ephemeral] makes
     /// each epoch's fresh `E_e` (random; the vectors pass fixed keys).
@@ -52,7 +55,8 @@ public final class PhoneSecrets: @unchecked Sendable {
         keys: any PhoneSecretSource,
         store: EncryptedFileStore,
         now: @escaping @Sendable () -> Date = { Date() },
-        ephemeral: @escaping @Sendable () -> P256.KeyAgreement.PrivateKey = { P256.KeyAgreement.PrivateKey() }
+        ephemeral: @escaping @Sendable () -> P256.KeyAgreement.PrivateKey = { P256.KeyAgreement.PrivateKey() },
+        timeScale: @escaping @Sendable () -> UInt64 = { 1 }
     ) {
         let claimed = PhoneSecretsRegistry.claim(source: keys.sourceID, records: store.url)
         precondition(claimed, "one PhoneSecrets records file per phone key source")
@@ -60,6 +64,7 @@ public final class PhoneSecrets: @unchecked Sendable {
         self.store = store
         self.now = now
         self.ephemeral = ephemeral
+        self.timeScale = timeScale
     }
 
     // MARK: - Epoch 1
@@ -242,7 +247,7 @@ public final class PhoneSecrets: @unchecked Sendable {
     public func prune() throws {
         try store.exclusive {
             let recs = try readRecords()
-            if Self.pruned(recs, nowMs: nowMs()) != recs { try write(recs) }
+            if Self.pruned(recs, nowMs: nowMs(), keepMs: keepNowMs()) != recs { try write(recs) }
         }
     }
 
@@ -254,15 +259,21 @@ public final class PhoneSecrets: @unchecked Sendable {
         }
     }
 
-    static func pruned(_ recs: PhoneRecords, nowMs: Int64) -> PhoneRecords {
+    /// The records less the replaced ones whose keep period is over. A replaced record without its keep period yet (just
+    /// made) gets [keepMs], the 7 days at the vault's time scale now, and keeps it.
+    static func pruned(_ recs: PhoneRecords, nowMs: Int64, keepMs: Int64 = PhoneSecrets.keepMs) -> PhoneRecords {
         var out = recs
         out.replaced = recs.replaced.compactMap { r in
             var r = r
             if nowMs < r.since { r.since = nowMs }
-            return nowMs - r.since >= keepMs ? nil : r
+            if r.keepMs == nil { r.keepMs = keepMs }
+            return nowMs - r.since >= (r.keepMs ?? keepMs) ? nil : r
         }
         return out
     }
+
+    /// The 7 days of a replaced record that starts now, at the vault's time scale.
+    func keepNowMs() -> Int64 { TimeScale.scaledMs(Self.keepMs, by: timeScale()) }
 
     // MARK: - Internals (callers hold the file's lock)
 
@@ -306,7 +317,7 @@ public final class PhoneSecrets: @unchecked Sendable {
     /// Writes [recs] (after pruning), durably, by atomic replace; then deletes the keys of pruned records that no kept
     /// record names.
     func write(_ recs: PhoneRecords) throws {
-        let kept = Self.pruned(recs, nowMs: nowMs())
+        let kept = Self.pruned(recs, nowMs: nowMs(), keepMs: keepNowMs())
         do {
             try store.save(kept.marshal())
         } catch {

@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import VettIDCrypto
 
 /// The vault's owner-check state (VAULT-MESSAGING §3.6, `vault.status` `owner_check.state`). Mirrors vettid-android
 /// `OwnerCheckState`.
@@ -39,8 +40,8 @@ public struct OwnerCheckView: Equatable, Sendable {
     public static let maxIntervalSeconds: Int64 = 86_400
     /// The longest a hold may stay off (§3.6.7).
     public static let maxHoldOff: TimeInterval = 30 * 86_400
-    /// §3.6.5: the reference app warns from 1 h ahead.
-    public static let warningAhead: TimeInterval = 3_600
+    /// §3.6.5: the reference app warns from 1 h ahead (divided by ``timeScale``, STAGING-TIME-SCALE S2).
+    public static let warningAhead: TimeInterval = TimeScales.ownerCheckWarning
 
     public var state: OwnerCheckState
     public var deadline: Date?
@@ -53,6 +54,9 @@ public struct OwnerCheckView: Equatable, Sendable {
     public var holdOffUntil: Date?
     /// The latest `vault.held` counts, while gated; nil: the vault has not said (never zero for unknown).
     public var waiting: WaitingCounts?
+    /// (STAGING-TIME-SCALE §5.2) The vault's time scale when this deadline was learnt: the early warning starts
+    /// ``warningAhead`` divided by it before the deadline, and keeps that time if the scale changes later.
+    public var timeScale: UInt64
 
     public init(
         state: OwnerCheckState,
@@ -61,7 +65,8 @@ public struct OwnerCheckView: Equatable, Sendable {
         failures: Int = 0,
         hold: Bool = true,
         holdOffUntil: Date? = nil,
-        waiting: WaitingCounts? = nil
+        waiting: WaitingCounts? = nil,
+        timeScale: UInt64 = TimeScale.real
     ) {
         self.state = state
         self.deadline = deadline
@@ -70,16 +75,21 @@ public struct OwnerCheckView: Equatable, Sendable {
         self.hold = hold
         self.holdOffUntil = holdOffUntil
         self.waiting = waiting
+        self.timeScale = timeScale
     }
 
     /// Past the deadline: the app may send only the check (§3.6.3), whether or not the hold is on.
     public func gated(_ now: Date) -> Bool { state != .ok || deadline.map { now >= $0 } == true }
 
-    /// From ``warningAhead`` before the deadline until it (§3.6.5).
+    /// From ``warningAhead`` (at ``timeScale``) before the deadline until it (§3.6.5).
     public func warning(_ now: Date) -> Bool {
         guard let deadline, !gated(now) else { return false }
-        return now >= deadline.addingTimeInterval(-Self.warningAhead)
+        return now >= deadline.addingTimeInterval(-TimeScale.scaled(Self.warningAhead, by: timeScale))
     }
+
+    /// The check interval at ``timeScale``: what the member waits between checks (the setting stays in real units,
+    /// STAGING-TIME-SCALE §3 rule 3).
+    public var scaledIntervalSeconds: TimeInterval { TimeScale.scaled(TimeInterval(intervalSeconds), by: timeScale) }
 
     /// Whether the hold is off now (an end date in the past means it came back on).
     public func holdOff(_ now: Date) -> Bool { !hold && (holdOffUntil.map { now < $0 } ?? true) }
@@ -170,6 +180,9 @@ public protocol OwnerCheckRepository: AnyObject, Observable, Sendable {
 
     func consumeCheckAfterCancel()
 
+    /// (STAGING-TIME-SCALE §5.2) The vault's time scale, for the screens' scaled times and the staging note. Default: 1.
+    var timeScale: UInt64 { get }
+
     /// Marks the notices read.
     func dismissNotices() async throws
 }
@@ -178,6 +191,7 @@ public extension OwnerCheckRepository {
     var notices: [OwnerCheckNotice] { [] }
     var presenceUnrecorded: Bool { false }
     var checkAfterCancel: Bool { false }
+    var timeScale: UInt64 { 1 }
     func consumeCheckAfterCancel() {}
     func dismissNotices() async throws {}
 

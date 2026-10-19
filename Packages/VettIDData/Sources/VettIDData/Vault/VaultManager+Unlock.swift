@@ -70,6 +70,7 @@ extension VaultManager {
             let s = try await openSession()
             let p = try await s.alt.preflight(s.device.altState)
             try ReleasePath.requireR(p.capabilities)
+            learnTimeScale(p.timeScale, since: record.generation)
             return PreflightInfo(
                 routed: Self.view(p.routed), lastNumber: p.lastNumber, softwareUpdated: p.softwareUpdated, rollback: p.rollback,
                 offer: p.offer.map(Self.view), between: p.between.map(Self.view)
@@ -163,6 +164,7 @@ extension VaultManager {
             return UnlockStepOutcome(.failed(.other, code: nil))
         }
         let r = opened.outcome.result
+        learnTimeScale(opened.outcome.timeScale, since: rec)
         if let next = afterPinStep(step, ok: r.ok, code: r.code, at: r.at) { return UnlockStepOutcome(next) }
         guard r.ok else {
             if await holder?.onSealedUnlockResult(HolderPolicy.of(r)) == true { return UnlockStepOutcome(.failed(.other, code: r.code)) }

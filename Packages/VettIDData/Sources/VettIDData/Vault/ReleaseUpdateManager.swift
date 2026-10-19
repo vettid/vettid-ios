@@ -55,7 +55,8 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
 
     public func dismissBanner(at: Date) {
         guard let o = offer else { return }
-        dismissal = ReleaseDismissal(release: o.target.number, kind: o.kind, at: at)
+        let hidden = TimeScales.scaled(ReleaseNotices.dismissFor, by: ops.timeScale())
+        dismissal = ReleaseDismissal(release: o.target.number, kind: o.kind, at: at, hiddenFor: hidden)
     }
 
     /// A wipe or a forget of this phone's vault: no offer, no update, no dismissal is kept.

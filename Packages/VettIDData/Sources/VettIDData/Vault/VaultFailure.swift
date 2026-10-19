@@ -115,6 +115,9 @@ public enum FailureKind: Equatable, Sendable, CaseIterable {
     /// (§11.14.9 "A lost answer") The same, while the vault answers but has not shown yet whether the change applied:
     /// refused for now, without saying the vault cannot be reached.
     case changeChecking
+    /// (VAULT-MESSAGING 0.43.0 §11.10.9) The vault's instance (or a transfer bundle) carries a time scale this build does
+    /// not accept (a production build and any value other than 1): treated as malformed, nothing was sent.
+    case timeScale
     case other
 }
 

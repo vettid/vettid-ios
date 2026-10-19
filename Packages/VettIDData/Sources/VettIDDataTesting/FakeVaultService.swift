@@ -74,6 +74,8 @@ public final class FakeVaultService: @unchecked Sendable {
     var redeemAnswerValue: RedeemAnswer = .ok
     var enrollAnswers: [EnrollAnswer] = []
     var capabilitiesValue: [String]? = [Capabilities.recoveryOffered, Capabilities.recoveryR]
+    var timeScaleValue: UInt64?
+    var timeScalesValue = TimeScalePolicy.production
     var weakPasswordReason: String?
     var statusState = "unlocked"
     var noVault = false
@@ -213,6 +215,18 @@ public final class FakeVaultService: @unchecked Sendable {
         set { locked { capabilitiesValue = newValue } }
     }
 
+    /// The instance's time scale (§11.10.9), in its descriptor and `vault.status`; nil: a release before it.
+    public var timeScale: UInt64? {
+        get { locked { timeScaleValue } }
+        set { locked { timeScaleValue = newValue } }
+    }
+
+    /// The time scales the phone's build accepts (``trust``): production's unless a test says.
+    public var timeScales: TimeScalePolicy {
+        get { locked { timeScalesValue } }
+        set { locked { timeScalesValue = newValue } }
+    }
+
     /// The next `credential.create` is refused `weak_password` with this reason (§11.14.7).
     public func refusePassword(_ reason: String) { locked { weakPasswordReason = reason } }
 
@@ -272,7 +286,7 @@ public final class FakeVaultService: @unchecked Sendable {
     /// The manifest key the served manifest is signed with: the manager's pin.
     public var manifestKey: ManifestKey { get throws { try ManifestKey(spki: Array(manifestSigner.publicKey.derRepresentation)) } }
 
-    public var trust: AltTrust { get throws { AltTrust(nitroRoots: [], manifestKeys: [try manifestKey]) } }
+    public var trust: AltTrust { get throws { AltTrust(nitroRoots: [], manifestKeys: [try manifestKey], timeScales: timeScales) } }
 
     /// The enclave check of the tests (§11.2 without Nitro): the descriptor as served, the manifest's entry for its
     /// release.
@@ -336,7 +350,7 @@ public final class FakeVaultService: @unchecked Sendable {
         if enclaveOfflineValue { return .failure(.notConnectedToInternet) }
         guard let n = route(asked: Self.askedRelease(r)) else { return .json(409, #"{"error":"vault_busy","retry_after":1}"#) }
         let release = Self.pcr0(n)
-        let d = Descriptor.marshal(instanceID: instanceID, etk: etk.publicKey, release: release, notAfter: Date().addingTimeInterval(3600), capabilities: capabilitiesValue)
+        let d = Descriptor.marshal(instanceID: instanceID, etk: etk.publicKey, release: release, notAfter: Date().addingTimeInterval(3600), capabilities: capabilitiesValue, timeScale: timeScaleValue)
         return .json(200, JsonBuilder().string("instance_id", instanceID).string("release", release).base64("descriptor", d).base64("attestation", [1, 2, 3]).build())
     }
 

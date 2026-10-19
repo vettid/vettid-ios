@@ -126,7 +126,8 @@ extension FakeVaultService {
             oc += #","waiting":{"messages":\#(w[0]),"requests":\#(w[1]),"calls":\#(w[2]),"other":\#(w[3])}"#
         }
         oc += "}"
-        try reply(m.type, #"{"vault_id":"\#(vaultID)","state_seq":\#(stateSeq),"header_seq":\#(headerSeq),"provisional":\#(!confirmedValue),"devices":1,"connections":0,"owner_check":\#(oc),"recovery":{"state":"armed","attempts":{"used":0,"of":10},"counter":"ok"}}"#, re: m.id)
+        let scale = timeScaleValue.map { ",\"time_scale\":\($0)" } ?? ""
+        try reply(m.type, #"{"vault_id":"\#(vaultID)","state_seq":\#(stateSeq),"header_seq":\#(headerSeq),"provisional":\#(!confirmedValue),"devices":1,"connections":0,"owner_check":\#(oc),"recovery":{"state":"armed","attempts":{"used":0,"of":10},"counter":"ok"}\#(scale)}"#, re: m.id)
     }
 
     /// `settingsOwnerCheck`: a shorter interval moves the deadline earlier at once; the hold turned on. Callers hold

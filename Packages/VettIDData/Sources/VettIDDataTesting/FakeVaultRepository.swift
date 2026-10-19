@@ -81,6 +81,8 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var movedInFlag = false
     /// (§11.10.9) Whether the vault's release offers recovery.
     public var recoveryOfferedValue = true
+    /// (STAGING-TIME-SCALE §5.2) The vault's time scale (``VaultRepository/timeScale``, ``OwnerCheckRepository/timeScale``).
+    public var timeScale: UInt64 = 1
     /// The PIN the last `credential.create` and `credential.password.change` carried (release R).
     public var lastCredentialPin: String?
     public var lastPasswordChangePin: String?

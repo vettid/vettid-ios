@@ -110,6 +110,13 @@ public struct InviteBundle: Sendable {
     /// (0.34.0, release R) A transfer bundle's (`app`) release capabilities (§6.4, §11.10.9), bound by the QR's `h`;
     /// nil when absent (a release before R). No other kind carries it.
     public let capabilities: [String]?
+    /// (0.43.0) A transfer bundle's (`app`) time scale (§6.4, §11.10.9, ``TimeScale``), bound by the QR's `h`; nil when
+    /// absent (a release before the scale: 1). No other kind carries it. The new phone stores it per vault and refuses,
+    /// in a production build, any value other than 1 (I3 reads it with the transfer; ``timeScaleOrReal``).
+    public let timeScale: UInt64?
+
+    /// The bundle's time scale, 1 when absent.
+    public var timeScaleOrReal: UInt64 { timeScale ?? TimeScale.real }
 
     public static let version: UInt64 = 1
     public static let maxHintName = 128
@@ -122,7 +129,8 @@ public struct InviteBundle: Sendable {
         token: String,
         exp: Date,
         hintName: String? = nil,
-        capabilities: [String]? = nil
+        capabilities: [String]? = nil,
+        timeScale: UInt64? = nil
     ) {
         self.kind = kind
         self.inviteID = inviteID
@@ -132,11 +140,15 @@ public struct InviteBundle: Sendable {
         self.exp = exp
         self.hintName = hintName
         self.capabilities = capabilities
+        self.timeScale = timeScale
     }
 
     private func validate() throws {
         if remote, kind != .connection { throw CryptoError.format("bundle remote") }
         if capabilities != nil, kind != .app { throw CryptoError.format("bundle capabilities") }
+        if let timeScale, kind != .app || !(TimeScale.real...TimeScale.maxDevelopment).contains(timeScale) {
+            throw CryptoError.format("bundle time_scale")
+        }
         let wholeSeconds = exp.timeIntervalSince1970.rounded(.down) == exp.timeIntervalSince1970
         guard Ulid.isValid(inviteID), Relay.isValidToken(token), wholeSeconds else {
             throw CryptoError.format("bundle")
@@ -158,6 +170,7 @@ public struct InviteBundle: Sendable {
             .string("token", token)
             .string("exp", Timestamps.formatSeconds(exp))
         if let capabilities { Capabilities.write(b, capabilities) }
+        if let timeScale { TimeScale.write(b, timeScale) }
         if let hintName, !hintName.isEmpty { b.raw("hint", JsonBuilder().string("name", hintName).build()) }
         return b.bytes()
     }
@@ -176,7 +189,8 @@ public struct InviteBundle: Sendable {
             token: try o.string("token"),
             exp: try Timestamps.parseSeconds(try o.string("exp")),
             hintName: try o.optObj("hint")?.optString("name"),
-            capabilities: o.has(Capabilities.member) ? try Capabilities.parse(o) : nil
+            capabilities: o.has(Capabilities.member) ? try Capabilities.parse(o) : nil,
+            timeScale: o.has(TimeScale.member) ? try TimeScale.parse(o) : nil
         )
         try b.validate()
         return b

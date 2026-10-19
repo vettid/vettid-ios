@@ -202,7 +202,7 @@ struct AppRoot: View {
         case .starting:
             StartingScreen()
         case .unreachable:
-            UnreachableFlow(account: vault) { openPortal() }
+            UnreachableFlow(account: vault, timeScale: vault.timeScale) { openPortal() }
         case .locked:
             UnlockFlow(vault: vault, account: vault, ownerCheck: vault.ownerChecks, releaseNotes: releaseNotes) { openPortal() }
         case .unlocked:

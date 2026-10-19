@@ -20,6 +20,10 @@ struct LocalAccount: Codable, Equatable, Sendable {
     var setupComplete = false
     /// (§11.10.9) The capabilities of the vault's instance this phone last verified (`recovery_offered`).
     var capabilities: [String] = []
+    /// (VAULT-MESSAGING 0.43.0 §11.10.9; STAGING-TIME-SCALE §5.2) The time scale of the vault's instance as this phone last
+    /// learnt it (its verified descriptor, `vault.status`): 1 until then, and from a release before the scale. The app's own
+    /// waits divide by it when each starts (``TimeScales``).
+    var timeScale: UInt64 = 1
     /// The member's backup choice (§3.5.6), kept before `credential.create` so that a restart before the vault was
     /// confirmed still sends it; nil before the member chose.
     var backupChoice: Bool?
@@ -52,6 +56,7 @@ struct LocalAccount: Codable, Equatable, Sendable {
         case transferIn = "transfer_in"
         case setupComplete = "setup_complete"
         case capabilities
+        case timeScale = "time_scale"
         case backupChoice = "backup_choice"
         case enrollConfirmed = "enroll_confirmed"
         case enrolledHere = "enrolled_here"
@@ -79,6 +84,8 @@ struct LocalAccount: Codable, Equatable, Sendable {
         transferIn = try c.decodeIfPresent(Bool.self, forKey: .transferIn) ?? false
         setupComplete = try c.decodeIfPresent(Bool.self, forKey: .setupComplete) ?? false
         capabilities = try c.decodeIfPresent([String].self, forKey: .capabilities) ?? []
+        // A scale of 0 is never stored; read as real time.
+        timeScale = max(try c.decodeIfPresent(UInt64.self, forKey: .timeScale) ?? 1, 1)
         backupChoice = try c.decodeIfPresent(Bool.self, forKey: .backupChoice)
         enrollConfirmed = try c.decodeIfPresent(Bool.self, forKey: .enrollConfirmed) ?? false
         enrolledHere = try c.decodeIfPresent(Bool.self, forKey: .enrolledHere) ?? false

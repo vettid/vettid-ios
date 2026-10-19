@@ -102,6 +102,7 @@ extension VaultManager {
         try record.update(since: rec) {
             if out.ok, !out.vaultID.isEmpty { $0.vaultID = out.vaultID }
             $0.capabilities = capabilities
+            $0.timeScale = out.timeScale
         }
         memberVault.set(recorded: record.value.vaultID)
         recoveryOffered = ReleasePath.recoveryOffered(capabilities)

@@ -86,11 +86,25 @@ public struct OwnerCheckScreenState: Equatable, Sendable, CustomStringConvertibl
     public var presenceUnrecorded = false
     /// The check passed with the presence not recorded: the screen stays with the notice until the member goes on.
     public var passedUnrecorded = false
+    /// (STAGING-TIME-SCALE §5.2) The vault's time scale: the screen shows the scaled waits, and on staging its note.
+    public var timeScale: UInt64 = 1
 
-    public init(mode: OwnerCheckMode = .gated, view: OwnerCheckView? = nil) {
+    public init(mode: OwnerCheckMode = .gated, view: OwnerCheckView? = nil, timeScale: UInt64 = 1) {
         self.mode = mode
         self.view = view
+        self.timeScale = timeScale
     }
+
+    /// What the member waits between checks: the interval (real units) at the vault's time scale.
+    public var intervalText: String {
+        TimeScales.text(TimeInterval(view?.intervalSeconds ?? OwnerCheckView.maxIntervalSeconds), by: timeScale)
+    }
+
+    /// The presence notice's quiet period (§11.14.5) at the vault's time scale.
+    public var quietText: String { TimeScales.text(TimeScales.recoveryQuiet, by: timeScale) }
+
+    /// "Staging: 1 day = 1 hour" on a staging vault; nil otherwise.
+    public var stagingNote: String? { TimeScales.stagingNote(timeScale) }
 
     /// Whether the check may be sent now (the PIN's length is the keypad's, checked by the screen).
     public var entriesAllowed: Bool { !busy && !locking && waitSeconds == 0 }
@@ -172,7 +186,7 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
         self.vault = vault
         self.now = now
         self.tick = tick
-        state = OwnerCheckScreenState(view: repo.ownerCheck)
+        state = OwnerCheckScreenState(view: repo.ownerCheck, timeScale: repo.timeScale)
         followers.add(follow(self, read: { $0.repo.ownerCheck }, apply: { $0.state.view = $1 }))
         followers.add(follow(self, read: { $0.repo.presenceUnrecorded }, apply: { $0.state.presenceUnrecorded = $1 }))
     }
@@ -207,7 +221,7 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
         ticker?.cancel()
         let after = repo.unlockCheckOutcome
         repo.consumeUnlockCheckOutcome()
-        state = OwnerCheckScreenState(mode: mode, view: repo.ownerCheck)
+        state = OwnerCheckScreenState(mode: mode, view: repo.ownerCheck, timeScale: repo.timeScale)
         state.message = after.flatMap(Self.message)
         state.presenceUnrecorded = repo.presenceUnrecorded
         if case .backoff(let wait)? = after { startBackoff(wait) }
@@ -336,6 +350,8 @@ public struct OwnerCheckGate: Equatable, Sendable {
     public var notices: [OwnerCheckNotice]
     /// (Release R, §11.14.5) The vault could not record that the member was here: the presence notice.
     public var presenceUnrecorded: Bool
+    /// (STAGING-TIME-SCALE §5.2) The vault's time scale, as the owner check last learnt it with its deadline.
+    public var timeScale: UInt64 = 1
 
     public init(
         gated: Bool,
@@ -361,11 +377,16 @@ public struct OwnerCheckGate: Equatable, Sendable {
         notices: [OwnerCheckNotice] = [],
         presenceUnrecorded: Bool = false
     ) -> OwnerCheckGate {
-        OwnerCheckGate(
+        var g = OwnerCheckGate(
             gated: v?.gated(now) == true, warning: v?.warning(now) == true, holdOff: v?.holdOff(now) == true,
             deadline: v?.deadline, holdOffUntil: v?.holdOffUntil, notices: notices, presenceUnrecorded: presenceUnrecorded
         )
+        g.timeScale = v?.timeScale ?? 1
+        return g
     }
+
+    /// The presence notice's quiet period (§11.14.5) at the vault's time scale ("3 days"; on staging "3 hours").
+    public var quietText: String { TimeScales.text(TimeScales.recoveryQuiet, by: timeScale) }
 
     /// The early warning shows: within the hour before the deadline, not past it.
     public var warningShown: Bool { warning && !gated }

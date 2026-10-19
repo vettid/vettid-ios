@@ -10,13 +10,27 @@ public struct OwnerCheckSettingsState: Equatable, Sendable {
     public var error: FailureKind?
     /// The interval was shortened: a check is offered with the change (VAULT-MESSAGING §3.6.2).
     public var offerCheck = false
+    /// (STAGING-TIME-SCALE §5.2) The vault's time scale: the interval is shown in real units with its scaled value.
+    public var timeScale: UInt64
 
-    public init(view: OwnerCheckView? = nil, busy: Bool = false, error: FailureKind? = nil, offerCheck: Bool = false) {
+    public init(
+        view: OwnerCheckView? = nil, busy: Bool = false, error: FailureKind? = nil, offerCheck: Bool = false, timeScale: UInt64 = 1
+    ) {
         self.view = view
         self.busy = busy
         self.error = error
         self.offerCheck = offerCheck
+        self.timeScale = timeScale
     }
+
+    /// [text] for an interval of [hours] with its scaled value on a staging vault ("Every 24 hours (staging: 1 hour)",
+    /// STAGING-TIME-SCALE §3 rule 3).
+    public func interval(_ text: String, hours: Int) -> String {
+        TimeScales.withStaging(text, TimeInterval(hours) * 3_600, by: timeScale)
+    }
+
+    /// "Staging: 1 day = 1 hour" on a staging vault; nil otherwise.
+    public var stagingNote: String? { TimeScales.stagingNote(timeScale) }
 
     /// The interval in whole hours, at least 1.
     public var intervalHours: Int { max(Int((view?.intervalSeconds ?? OwnerCheckView.maxIntervalSeconds) / 3_600), 1) }
@@ -47,7 +61,7 @@ public final class OwnerCheckSettingsViewModel {
     deinit { work.cancelAll() }
 
     public var state: OwnerCheckSettingsState {
-        OwnerCheckSettingsState(view: repo.ownerCheck, busy: busy, error: error, offerCheck: offerCheck)
+        OwnerCheckSettingsState(view: repo.ownerCheck, busy: busy, error: error, offerCheck: offerCheck, timeScale: repo.timeScale)
     }
 
     /// A shorter interval applies at once and may put the vault on hold: a check is offered with it.

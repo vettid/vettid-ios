@@ -24,6 +24,7 @@ enum VaultFailures {
         case let o as VaultOpError:
             VaultFailure(opFailure(o.code), code: o.code, retryAfterSeconds: retryAfter(o), cause: o, limit: limit(o))
         case let r as AltRefused: refused(r)
+        case let t as TimeScaleRefused: VaultFailure(.timeScale, code: "time_scale", cause: t)
         case let a as AttestationError: VaultFailure(enclaveFailure(a), code: "enclave", cause: a)
         case let r as AltResultFailure: VaultFailure(.other, code: "unreadable_result", cause: r)
         case let c as AltChannelFailure: VaultFailure(.noResponse, cause: c)
