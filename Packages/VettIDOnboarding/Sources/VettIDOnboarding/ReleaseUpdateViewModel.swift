@@ -97,6 +97,10 @@ public final class ReleaseUpdateViewModel {
         }
     }
 
+    /// The keypad's first digit was typed (it was empty before): the reading is taken afresh, since the PIN is typed from
+    /// here on; a change between the keypad's opening and the first digit is not counted against it.
+    public func pinTypingStarted() { keypad.renew(state.pinAllowed, updates) }
+
     /// "Approve and update": the member's explicit approval of the release shown, with the vault PIN from the keypad.
     /// False when it did not start (nothing offered, the check first, or too short a PIN).
     @discardableResult
@@ -187,6 +191,9 @@ public final class ReleaseUpdateFlowViewModel {
         return true
     }
 
+    /// The keypad's first digit was typed (``ReleaseUpdateViewModel/pinTypingStarted()``).
+    public func pinTypingStarted() { keypad.renew(state.pinAllowed, updates) }
+
     public func askAbandon() {
         if state.progress?.canAbandon == true { state.abandonConfirm = true }
     }
@@ -236,7 +243,8 @@ public final class ReleaseUpdateFlowViewModel {
 /// member types moves it, and the update then sends nothing with that PIN and asks for it again. Dropped while the keypad
 /// is not usable; read again each time it becomes so. Used once: handing a PIN over empties the keypad, and the next PIN
 /// is typed from then on, so the reading is taken again at once (a step refused without the keypad ever closing, as a
-/// PIN taken before a change is, then gets a fresh one).
+/// PIN taken before a change is, then gets a fresh one). Taken again when the first digit is typed into an empty keypad
+/// (``renew(_:_:)``): only a change while the PIN is being typed is counted against it.
 @MainActor
 final class KeypadReading {
     private(set) var generation: Int?
@@ -247,6 +255,11 @@ final class KeypadReading {
         generation = nil
         follow(allowed, updates)
         return taken
+    }
+
+    /// The first digit was typed into an empty keypad: the reading is taken afresh when the keypad is usable ([allowed]).
+    func renew(_ allowed: Bool, _ updates: any ReleaseUpdateRepository) {
+        generation = allowed ? updates.pinGeneration : nil
     }
 
     /// The keypad is usable ([allowed]) or not.
