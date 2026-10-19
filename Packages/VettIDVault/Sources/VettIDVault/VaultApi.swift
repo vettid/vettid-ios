@@ -22,21 +22,31 @@ public struct VaultApi: Sendable {
     let normalizePasswords: @Sendable () -> Bool
 
     /// Checked under the credential lock before every credential operation with the blob, and again before its
-    /// `stale_credential` retry: it throws to refuse the operation (VAULT-MESSAGING §11.14.9 "A lost answer": nothing
-    /// credential-bearing while a change of PIN or password is on its way or unresolved).
-    let credentialGate: @Sendable () async throws -> Void
+    /// `stale_credential` retry, with whether its payload carries the PIN: it throws to refuse the operation
+    /// (VAULT-MESSAGING §11.14.9 "A lost answer": nothing credential-bearing while a change of PIN or password is on its
+    /// way or unresolved, nothing with the PIN while the PIN is uncertain).
+    let credentialGate: @Sendable (_ carriesPin: Bool) async throws -> Void
+
+    /// How a change of PIN or password waits for the credential operations before it (VAULT-MESSAGING §11.14.9 step 1:
+    /// at most 30 s, then refused): a sleep of the given length; a test passes its own.
+    let changeWaitSleep: @Sendable (TimeInterval) async throws -> Void
 
     public init(
         device: VaultDevice, normalizePasswords: @escaping @Sendable () -> Bool = { false },
-        credentialGate: @escaping @Sendable () async throws -> Void = {}
+        credentialGate: @escaping @Sendable (_ carriesPin: Bool) async throws -> Void = { _ in },
+        changeWaitSleep: @escaping @Sendable (TimeInterval) async throws -> Void = VaultApi.sleep
     ) {
         self.device = device
         self.normalizePasswords = normalizePasswords
         self.credentialGate = credentialGate
+        self.changeWaitSleep = changeWaitSleep
     }
 
+    /// A sleep of [seconds] (cancellable).
+    public static func sleep(_ seconds: TimeInterval) async throws { try await Task.sleep(nanoseconds: UInt64(max(seconds, 0) * 1e9)) }
+
     var credential: CredentialOps {
-        CredentialOps(device: device, normalizePasswords: normalizePasswords, gate: credentialGate)
+        CredentialOps(device: device, normalizePasswords: normalizePasswords, gate: credentialGate, changeWaitSleep: changeWaitSleep)
     }
 
     private func op(_ type: String, _ body: JsonBuilder? = nil) async throws -> [UInt8] {

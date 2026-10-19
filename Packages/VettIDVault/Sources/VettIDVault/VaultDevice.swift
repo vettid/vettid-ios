@@ -154,6 +154,9 @@ public final class VaultDevice: @unchecked Sendable {
     var forgotten = false
     /// The newest `ts` of a message from the vault and the monotonic time it arrived (in memory only).
     var vaultClock: (ts: Date, at: TimeInterval)?
+    /// The newest `ts` the vault stamped on an **answer** (in memory only): only answers settle a request (VAULT-MESSAGING
+    /// 0.46.0 §11.14.9 step 1).
+    var answerTs: Date?
 
     init(cfg: DeviceConfig, secrets: DeviceSecrets, st: DeviceState) throws {
         self.cfg = cfg

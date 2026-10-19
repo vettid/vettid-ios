@@ -137,6 +137,36 @@ import VettIDDataTesting
         #expect(m.state.done && repo.lastPin == "59173048" && repo.calls.filter { $0 == "changePin" }.count == 2)
     }
 
+    /// The check ended without a decision (VAULT-MESSAGING 0.45.0 §11.14.9 step 3), later or at once: said so, and
+    /// nothing is kept for a retry that would send the PIN again.
+    @Test func anEndedCheckKeepsNothingForARetry() async {
+        repo.fail["changePin"] = FakeVaultRepository.failure(.changeUnresolved, code: VaultManager.codeChangeUnresolved)
+        repo.changeCheck = ChangeCheck(.pin, .checking)
+        let later = ChangePinViewModel(vault: repo)
+        await send(later)
+        repo.changeCheck = ChangeCheck(.pin, .ended)
+        #expect(await until { later.state.check == .ended })
+        #expect(later.state.pin.isEmpty && later.state.current.isEmpty && later.state.error == nil)
+        repo.fail["changePin"] = FakeVaultRepository.failure(.other)
+        repo.changeCheck = ChangeCheck(.pin, .ended)
+        let atOnce = ChangePinViewModel(vault: repo)
+        await send(atOnce)
+        #expect(atOnce.state.check == .ended && atOnce.state.pin.isEmpty && atOnce.state.error == nil)
+        // "Lock and unlock now": the unlock's two prompts settle the PIN.
+        #expect(atOnce.offersLockAndUnlock)
+        atOnce.lockAndUnlock()
+        await atOnce.settle()
+        #expect(repo.calls.contains("lock"))
+    }
+
+    /// A PIN change refused while a new phone secret cannot be decided offers the lock and unlock too.
+    @Test func anUndecidedRenewOffersALockAndUnlock() async {
+        repo.fail["changePin"] = FakeVaultRepository.failure(.renewUnconfirmed, code: VaultManager.codeRenewUnconfirmed)
+        let m = ChangePinViewModel(vault: repo)
+        await send(m)
+        #expect(m.state.error == .renewUnconfirmed && m.offersLockAndUnlock)
+    }
+
     /// The change's own call decided it not applied (or `stale_credential`): said so, the new PIN kept.
     @Test func aChangeDecidedNotAppliedAtOnce() async {
         repo.fail["changePin"] = FakeVaultRepository.failure(.other, code: VaultManager.codeChangeNotApplied)

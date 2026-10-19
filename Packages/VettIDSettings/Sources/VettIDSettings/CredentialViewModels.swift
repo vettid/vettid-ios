@@ -257,8 +257,9 @@ public final class ChangePasswordViewModel {
             state.check = nil
             refused(VaultFailure(kind))
         case .ended:
-            state.check = nil
-            state.error = .other
+            // 0.45.0 step 3: either password may be the current one; no retry that sends them again.
+            state = ChangePasswordState(askPin: state.askPin)
+            state.check = .ended
         }
         vault.waitForChangeCheck(nil)
         vault.acknowledgeChangeCheck()
@@ -352,6 +353,11 @@ public final class ChangePasswordViewModel {
                 state.current = ""
                 state.pin = ""
                 state.check = .notApplied
+                vault.acknowledgeChangeCheck()
+            } else if let check = vault.changeCheck, check.type == .password, check.status == .ended {
+                // §11.14.9 step 3: ended without a decision; nothing is kept for a retry.
+                state = ChangePasswordState(askPin: s.askPin)
+                state.check = .ended
                 vault.acknowledgeChangeCheck()
             } else {
                 refused(failure)

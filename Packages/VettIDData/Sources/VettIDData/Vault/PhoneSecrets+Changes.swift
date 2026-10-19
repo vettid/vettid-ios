@@ -30,11 +30,13 @@ extension PhoneSecrets {
     /// the slot. [unresolved] is stored in the same atomic write as the candidate (VAULT-MESSAGING §11.14.9 "A lost
     /// answer" step 1); so is [exp], the `exp` of the request about to carry it (a renew's; a retry's later `exp` replaces
     /// an earlier one).
-    func beginChange(operation: String, unresolved: UnresolvedChange? = nil, exp: Date? = nil) throws -> [UInt8] {
+    func beginChange(
+        operation: String, unresolved: UnresolvedChange? = nil, exp: Date? = nil, sent: PhoneRecords.SentRequest? = nil
+    ) throws -> [UInt8] {
         let reserved = ChangesInFlight.reserve(store.url, operation)
         guard reserved != .refused else { throw VaultFailure(.busy, code: "change_in_flight") }
         do {
-            return try prepareChange(operation: operation, unresolved: unresolved, exp: exp)
+            return try prepareChange(operation: operation, unresolved: unresolved, exp: exp, sent: sent)
         } catch {
             // A retry that fails leaves its earlier send in flight; a new operation that fails frees the slot.
             if reserved == .reserved { ChangesInFlight.end(store.url, operation) }
@@ -42,19 +44,22 @@ extension PhoneSecrets {
         }
     }
 
-    private func prepareChange(operation: String, unresolved: UnresolvedChange?, exp: Date?) throws -> [UInt8] {
+    private func prepareChange(
+        operation: String, unresolved: UnresolvedChange?, exp: Date?, sent: PhoneRecords.SentRequest?
+    ) throws -> [UInt8] {
         try store.exclusive {
             var recs = try readRecords()
             guard let cur = recs.current else { throw Self.lost }
+            try Self.refuseOther(recs, unresolved)
             if let i = recs.candidates.firstIndex(where: { $0.operation == operation }) {
-                return try reuse(&recs, candidate: i, unresolved: unresolved, exp: exp)
+                return try reuse(&recs, candidate: i, unresolved: unresolved, exp: exp, sent: sent)
             }
             guard recs.candidates.count < Self.maxCandidates else {
                 throw VaultFailure(.unconfirmedChanges, code: "unconfirmed_changes")
             }
             var made = try newEpoch(try phoneKey(cur), keyVault: cur.record.keyVault, epoch: cur.record.epoch + 1, creating: false)
             let entry = PhoneRecords.Entry(keyID: cur.keyID, record: made.record)
-            recs.candidates.append(PhoneRecords.Candidate(operation: operation, entry: entry, exp: exp))
+            recs.candidates.append(PhoneRecords.Candidate(operation: operation, entry: entry, exp: exp, sent: sent))
             if let unresolved { recs.unresolved = unresolved }
             do {
                 try write(recs)
@@ -67,13 +72,17 @@ extension PhoneSecrets {
     }
 
     /// A retry: candidate [i]'s secret, with [unresolved] and a later [exp] written first. Callers hold the store.
-    private func reuse(_ recs: inout PhoneRecords, candidate i: Int, unresolved: UnresolvedChange?, exp: Date?) throws -> [UInt8] {
+    private func reuse(
+        _ recs: inout PhoneRecords, candidate i: Int, unresolved: UnresolvedChange?, exp: Date?, sent: PhoneRecords.SentRequest?
+    ) throws -> [UInt8] {
         var s = try secret(of: recs.candidates[i].entry)
         let c = recs.candidates[i]
         let later = exp.map { e in c.exp.map { $0 < e } ?? true } ?? false
-        guard unresolved != nil || later else { return s }
+        guard unresolved != nil || later || sent != nil else { return s }
         if let unresolved { recs.unresolved = unresolved }
-        if later { recs.candidates[i] = PhoneRecords.Candidate(operation: c.operation, entry: c.entry, exp: exp) }
+        recs.candidates[i] = PhoneRecords.Candidate(
+            operation: c.operation, entry: c.entry, exp: later ? exp : c.exp, sent: sent ?? c.sent
+        )
         do {
             try write(recs)
         } catch {
@@ -129,13 +138,50 @@ extension PhoneSecrets {
     public func unresolvedChange() throws -> UnresolvedChange? { try store.exclusive { try readRecords().unresolved } }
 
     /// Stores [change] as the unresolved change (a password change, which makes no record), before its request is sent.
+    /// Refused while another change is unresolved (VAULT-MESSAGING 0.45.0 §11.14.9 step 1: two changes started together
+    /// never overwrite each other's marker).
     public func setUnresolved(_ change: UnresolvedChange) throws {
         try store.exclusive {
             var recs = try readRecords()
+            try Self.refuseOther(recs, change)
             recs.unresolved = change
             try write(recs)
         }
     }
+
+    /// Throws when [recs] hold an unresolved change other than [change].
+    static func refuseOther(_ recs: PhoneRecords, _ change: UnresolvedChange?) throws {
+        guard let change, let other = recs.unresolved, other.id != change.id else { return }
+        throw VaultFailure(.changeUnresolved, code: "change_unresolved")
+    }
+
+    /// The check of [marker] ended without a decision (§11.14.9 step 3): the marker is cleared and, after a PIN change,
+    /// its PIN is uncertain until an unlock settles it, in one write.
+    public func endUnresolved(_ marker: UnresolvedChange) throws {
+        try store.exclusive {
+            var recs = try readRecords()
+            guard recs.unresolved?.id == marker.id else { return }
+            recs.unresolved = nil
+            if marker.type == .pin, let op = marker.operation { recs.uncertainPinOperation = op }
+            try write(recs)
+        }
+    }
+
+    /// The renew [operation]'s request [id] is decided as not applied, or was never sent (VAULT-MESSAGING 0.46.0 §11.14.9
+    /// step 1): nothing is left to decide for it. Its candidate stays as it is.
+    public func clearSent(operation: String, id: String? = nil) throws {
+        try store.exclusive {
+            var recs = try readRecords()
+            guard let i = recs.candidates.firstIndex(where: { $0.operation == operation }), let sent = recs.candidates[i].sent,
+                  id == nil || sent.id == id
+            else { return }
+            recs.candidates[i].sent = nil
+            try write(recs)
+        }
+    }
+
+    /// The operation of a PIN change whose PIN is uncertain (§11.14.9 step 3), nil when none.
+    public func uncertainPin() throws -> String? { try store.exclusive { try readRecords().uncertainPin } }
 
     /// The change [id] is decided (or was never sent): it is no longer unresolved. Its candidate stays as it is.
     public func clearUnresolved(id: String) throws {
@@ -157,10 +203,11 @@ extension PhoneSecrets {
         operation: String,
         unresolved: UnresolvedChange? = nil,
         exp: Date? = nil,
+        sent: PhoneRecords.SentRequest? = nil,
         send: ([UInt8]) async throws -> Answer,
         confirmed: (Answer) -> Bool
     ) async throws -> Answer {
-        var next = try beginChange(operation: operation, unresolved: unresolved, exp: exp)
+        var next = try beginChange(operation: operation, unresolved: unresolved, exp: exp, sent: sent)
         defer {
             Bytes.wipe(&next)
             endChange(operation: operation)

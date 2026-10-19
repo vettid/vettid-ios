@@ -112,9 +112,20 @@ public enum FailureKind: Equatable, Sendable, CaseIterable {
     /// (VAULT-MESSAGING §11.14.9 "A lost answer") A change of PIN or password got no answer and is not decided yet, and
     /// the vault cannot be reached to decide it: no other change, owner check or credential operation is sent until it is.
     case changeUnresolved
-    /// (§11.14.9 "A lost answer") The same, while the vault answers but has not shown yet whether the change applied:
-    /// refused for now, without saying the vault cannot be reached.
+    /// (§11.14.9 "A lost answer") The same, while the vault answers but has not shown yet whether the PIN change applied:
+    /// refused at once (0.45.0 "The gate"), without saying the vault cannot be reached.
     case changeChecking
+    /// (§11.14.9) The same after a password change.
+    case changeCheckingPassword
+    /// (§11.14.9 step 1, 0.45.0) A change of PIN or password refused with nothing sent: an earlier credential operation
+    /// was still in flight after 30 s, or had moved the vault's blob past this phone's.
+    case credentialUnsettled
+    /// (§11.14.9 step 3, 0.45.0) A PIN change's check ended without a decision: until an unlock with the two PIN prompts
+    /// settles it, every operation that carries the PIN is refused before anything is sent.
+    case pinUncertain
+    /// (§11.14.9 step 1, 0.46.0) A PIN change refused while a new phone secret whose answer was lost cannot be decided by
+    /// the version: a lock and unlock settles it, at no cost (the PIN has not changed).
+    case renewUnconfirmed
     /// (VAULT-MESSAGING 0.43.0 §11.10.9) The vault's instance (or a transfer bundle) carries a time scale this build does
     /// not accept (a production build and any value other than 1): treated as malformed, nothing was sent.
     case timeScale

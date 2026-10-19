@@ -74,17 +74,21 @@ extension VaultApi {
     public func credentialLock() async throws { _ = try await device.op("credential.lock") }
 
     /// `credential.password.change` (§10.6): the current password and the new one, sealed with the blob. (Release R,
-    /// §11.14.9) With [pin], which the vault verifies; the change closes the recovery generation and arms the next. Sent
-    /// as [change] (its inner id and `exp`, stored before this call); no answer is ``ChangeUnanswered``, and
-    /// `stale_credential` is not retried ("A lost answer").
+    /// §11.14.9) With [pin], which the vault verifies; the change closes the recovery generation and arms the next. Once
+    /// the request is fixed (``CredentialOps/change(_:_:onMarker:)``), [onMarker] stores its unresolved change; no answer
+    /// is ``ChangeUnanswered``, and `stale_credential` is not retried ("A lost answer").
     public func credentialChangePassword(
-        password: String, newPassword: String, pin: String? = nil, change: ChangeRequest
+        password: String, newPassword: String, pin: String? = nil,
+        onMarker: @escaping @Sendable (ChangeRequest) async throws -> Void
     ) async throws {
         var fields: [SealedField] = []
         if let pin { fields.append(.string("pin", pin)) }
         fields.append(.string("password", password))
         fields.append(.string("new_password", newPassword))
-        _ = try await credential.change(Self.typePasswordChange, fields, change)
+        _ = try await credential.change(Self.typePasswordChange, fields) { change in
+            try await onMarker(change)
+            return []
+        }
     }
 
     /// One page of `item.list` (§10.7) filtered by [sensitivity], counted (the credential screen's critical items).

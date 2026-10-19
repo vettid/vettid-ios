@@ -320,6 +320,17 @@
         }
       }
     },
+    "credential_change_ended": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID couldn't confirm whether your password was changed, because something else changed in your vault at the same time. Either your previous or your new password may be the current one."
+          }
+        }
+      }
+    },
     "credential_change_password": {
       "extractionState": "manual",
       "localizations": {
@@ -1064,6 +1075,83 @@
           "stringUnit": {
             "state": "translated",
             "value": "The app lock was turned off because Face ID or Touch ID changed on this iPhone. Turn it on again if you like."
+          }
+        }
+      }
+    },
+    "root_change_lock_unlock": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lock and unlock now"
+          }
+        }
+      }
+    },
+    "root_change_password_applied": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your password change went through. Use your new password from now on."
+          }
+        }
+      }
+    },
+    "root_change_password_ended": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID couldn't confirm whether your password was changed, because something else changed in your vault at the same time. Either your previous or your new password may be the current one."
+          }
+        }
+      }
+    },
+    "root_change_password_not_changed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your password change didn't go through. Your previous password is still your password."
+          }
+        }
+      }
+    },
+    "root_change_pin_applied": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your PIN change went through. Use your new PIN from now on."
+          }
+        }
+      }
+    },
+    "root_change_pin_ended": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID couldn't confirm whether your PIN was changed, because something else changed in your vault at the same time. To find out without using an attempt, lock your vault and unlock it again: VettID will ask for each PIN in turn."
+          }
+        }
+      }
+    },
+    "root_change_pin_not_changed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your PIN change didn't go through. Your previous PIN is still your PIN."
           }
         }
       }
@@ -2287,6 +2375,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your PIN was changed. Your vault's recovery now has 10 new attempts for the new PIN and your password."
+          }
+        }
+      }
+    },
+    "settings_pin_ended": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID couldn't confirm whether your PIN was changed, because something else changed in your vault at the same time. To find out without using an attempt, lock your vault and unlock it again: VettID will ask for each PIN in turn."
+          }
+        }
+      }
+    },
+    "settings_pin_lock_unlock": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lock and unlock now"
           }
         }
       }

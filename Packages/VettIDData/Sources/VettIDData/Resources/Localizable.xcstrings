@@ -181,6 +181,28 @@
         }
       }
     },
+    "data_failure_change_undecided": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID is still checking whether your last PIN change went through. This can take up to about 10 minutes. Try again then."
+          }
+        }
+      }
+    },
+    "data_failure_change_undecided_password": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID is still checking whether your last password change went through. This can take up to about 10 minutes. Try again then."
+          }
+        }
+      }
+    },
     "data_failure_change_unresolved": {
       "extractionState": "manual",
       "localizations": {
@@ -243,6 +265,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your credential is locked. Enter your credential password to continue."
+          }
+        }
+      }
+    },
+    "data_failure_credential_unsettled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID is still finishing an earlier request to your vault. Nothing was changed. Try again in a minute."
           }
         }
       }
@@ -353,17 +386,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "This invitation is no longer available: it was used, cancelled or has expired. Ask for a new one."
-          }
-        }
-      }
-    },
-    "data_failure_ios_change_checking": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "VettID is still checking whether your last change went through. Try again in a few minutes."
           }
         }
       }
@@ -524,6 +546,17 @@
         }
       }
     },
+    "data_failure_pin_uncertain": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID couldn't confirm whether your PIN was changed, because something else changed in your vault at the same time. To find out without using an attempt, lock your vault and unlock it again: VettID will ask for each PIN in turn."
+          }
+        }
+      }
+    },
     "data_failure_rate_limited": {
       "extractionState": "manual",
       "localizations": {
@@ -575,6 +608,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your vault runs a release that is not in this app's list of vault releases, so VettID did not ask for your PIN and sent nothing. The app loads the list again each time you try. Try again; if this keeps happening, update VettID."
+          }
+        }
+      }
+    },
+    "data_failure_renew_unconfirmed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID couldn't confirm your last new phone secret. Before you change your PIN, lock your vault and unlock it again: your PIN hasn't changed, so this doesn't use an attempt."
           }
         }
       }

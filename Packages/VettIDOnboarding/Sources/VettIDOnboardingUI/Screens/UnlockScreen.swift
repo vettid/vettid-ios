@@ -232,7 +232,8 @@ struct UnlockNotices: View {
             default: OnboardingStrings.unlockTitle
             }
             // The vault's software did not verify: alarming, unlike a list that could not be loaded.
-            NoticeCard(state.recoverOnly || error == .enclave ? .urgent : .warning, title: title, message: error.message(timeScale: state.timeScale))
+            let level: NoticeKind = state.recoverOnly || error == .enclave ? .urgent : .warning
+            NoticeCard(level, title: title, message: error.message(timeScale: state.timeScale))
                 .accessibilityIdentifier("unlock_preflight_error")
         }
         if state.serviceWaitSeconds > 0 {

@@ -41,6 +41,7 @@ extension VaultDevice {
         defer { mem.withLock { _ = pending.removeValue(forKey: id) } }
         _ = try await lock.withLock { try await sendOnceLocked(id: id, type: type, body: body, exp: exp) }
         guard let inner = await d.wait(timeout: timeout ?? cfg.requestTimeout) else {
+            try Task.checkCancellation()
             throw VaultStateError(message: "\(type): no response")
         }
         return VaultMessage(inner: inner)
@@ -167,6 +168,8 @@ extension VaultDevice {
         _ = try await lock.withLock { try await sendLocked(id: id, type: type, body: body, re: nil, status: nil, exp: exp) }
         for attempt in 0...retries {
             if let inner = await d.wait(timeout: timeout ?? cfg.requestTimeout) { return VaultMessage(inner: inner) }
+            // Cancelled: not sent again (a copy already deposited may still reach the vault).
+            try Task.checkCancellation()
             // No answer: the collection may have ended (the answer would then wait in the mailbox unread).
             ensureCollecting()
             if attempt < retries {
@@ -219,6 +222,7 @@ extension VaultDevice {
             let woke = left > 0 ? await waiter?.wait(timeout: left) : nil
             guard woke != nil else {
                 mem.withLock { inboxWaiters.removeAll { $0 === waiter } }
+                try Task.checkCancellation()
                 throw VaultStateError(message: "no \(types.sorted().joined(separator: "/")) within \(Int(timeout)) s")
             }
         }

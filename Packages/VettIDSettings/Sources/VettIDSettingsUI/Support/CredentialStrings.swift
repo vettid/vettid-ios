@@ -287,6 +287,18 @@ enum CredentialStrings {
         )
     }
 
+    /// VAULT-MESSAGING 0.45.0 §11.14.9 step 3 (shared with the Android app): the check ended without a decision.
+    static var passwordEnded: String {
+        String(
+            localized: "credential_change_ended",
+            defaultValue: """
+                VettID couldn't confirm whether your password was changed, because something else changed in your vault at \
+                the same time. Either your previous or your new password may be the current one.
+                """,
+            bundle: .module
+        )
+    }
+
     static var passwordNotChanged: String {
         String(
             localized: "credential_password_not_changed", defaultValue: "Your password was not changed. You can try again.",

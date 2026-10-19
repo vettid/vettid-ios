@@ -70,18 +70,21 @@ import VettIDVault
         #expect(service.pinFailureCount == 0 && service.renews.count == 1)
     }
 
-    /// The answer lost, then the member tries again: the retry sends the same secret (IOS-PLAN §6.3 item 2); the vault,
-    /// which holds it already, answers after the blob is fetched (`stale_credential`, then the generic retry that spends
-    /// nothing), and the record becomes current.
+    /// The answer lost, then the member tries again: the retry sends the same secret (IOS-PLAN §6.3 item 2). The version
+    /// asked first shows the blob the lost renew left: it is fetched before anything is sent (VAULT-MESSAGING: pending
+    /// spec PR for vettid/vettid.org#347), and the record becomes current.
     @Test func aLostAnswerThenARetrySendsTheSameSecret() async throws {
         defer { phone.close() }
         try await setUp()
         service.loseAnswers([VaultApi.typeSecretRenew])
         #expect(await renew()?.kind == .noResponse)
         service.loseAnswers([])
+        // Until the lost one is settled, the retry is refused with nothing sent (renews settle too).
+        #expect(await renew()?.kind == .credentialUnsettled && service.renews.count == 1)
+        pastExp()
         #expect(await renew() == nil)
         let secrets = Set(service.renews.map(\.newUnlockSecret))
-        #expect(secrets.count == 1 && service.renews.count == 3, "the lost one, the stale blob's refusal, the retry")
+        #expect(secrets.count == 1 && service.renews.count == 2, "the lost one, the retry with the latest blob")
         #expect(try m.phoneSecrets.currentSecret() == service.currentSecret && m.phoneSecrets.records().candidates.isEmpty)
         #expect(service.pinFailureCount == 0 && service.passwordFailureCount == 0)
         try await m.lock()
@@ -123,39 +126,73 @@ import VettIDVault
         #expect(!m.renewSecretSuggested)
     }
 
-    /// A renew's answer lost (the vault holds its secret and a newer blob), then a PIN change whose request does not
-    /// arrive. The change carries the latest blob, fetched first, so that the version decides it and not the renew. With
-    /// the vault locked, the unlock asks for the previous PIN: `device_secret` with the current record, then the renew's
-    /// candidate with the same PIN opens the vault (§11.14.9 step 5, 0.45.0), never the new PIN. The change's candidate
-    /// stays one: the resend after the unlock applies it, the check decides it applied, and the new PIN opens.
-    @Test func aLostRenewIsTriedWithThePreviousPinBeforeTheNewOne() async throws {
+    /// A renew's answer lost: until it is settled a PIN change is refused with nothing sent ("earlier request"); once the
+    /// vault's clock is past its `exp` by more than a minute, `credential.version` one above the version it carried
+    /// decides it applied: its record is made current, and the PIN change goes (VAULT-MESSAGING 0.46.0 §11.14.9 step 1).
+    @Test func aLostRenewIsDecidedBeforeAPinChange() async throws {
         defer { phone.close() }
         try await setUp()
         service.loseAnswers([VaultApi.typeSecretRenew])
         #expect(await renew()?.kind == .noResponse)
         service.loseAnswers([])
-        service.loseRequests(["pin.change"])
-        #expect(await vaultFailure { try await m.changePin(pin: pin, newPin: newPin, password: password) }?.kind == .changeUnresolved)
-        #expect(try m.phoneSecrets.unresolvedChange()?.version == service.vaultCredentialVersion, "the renew's blob fetched first")
-        try await m.lock()
-        service.loseRequests([])
-        #expect(m.unlockPinStep == .previous)
-        #expect(try await m.unlock(pin: pin) == .success)
-        #expect(service.unlocks.allSatisfy { $0.pin == pin } && service.pinFailureCount == 0)
-        #expect(await eventually { m.changeCheck == ChangeCheck(.pin, .applied) })
-        #expect(try service.currentPin == newPin && m.phoneSecrets.currentSecret() == service.currentSecret)
+        let f = await vaultFailure { try await m.changePin(pin: pin, newPin: newPin, password: password) }
+        #expect(f?.kind == .credentialUnsettled && service.pinChanges.isEmpty)
+        #expect(try m.phoneSecrets.unresolvedChange() == nil)
+        pastExp()
+        try await m.changePin(pin: pin, newPin: newPin, password: password)
+        #expect(service.currentPin == newPin && service.pinFailureCount == 0 && service.pinChanges.count == 1)
+        #expect(try m.phoneSecrets.currentSecret() == service.currentSecret && m.phoneSecrets.records().candidates.isEmpty)
         try await m.lock()
         #expect(try await m.unlock(pin: newPin) == .success)
     }
 
-    /// The same with the PIN change applied (its answers lost): the previous PIN gets `device_secret` with the current
-    /// record and with the renew's; only then is the new PIN asked for, which opens with the change's record.
-    @Test func aLostRenewAndAnAppliedPinChangeAskForTheNewPinLast() async throws {
+    /// A renew that never reached the vault: past its `exp`, the same version decides it not applied, and the PIN change
+    /// goes; the renew's record stays a candidate until an unlock replaces it.
+    @Test func aRenewThatNeverArrivedIsDecidedNotApplied() async throws {
+        defer { phone.close() }
+        try await setUp()
+        let before = try m.phoneSecrets.currentSecret()
+        service.loseRequests([VaultApi.typeSecretRenew])
+        #expect(await renew()?.kind == .noResponse)
+        service.loseRequests([])
+        pastExp()
+        try await m.changePin(pin: pin, newPin: newPin, password: password)
+        #expect(service.renews.isEmpty && service.currentPin == newPin)
+        let now = try m.phoneSecrets.currentSecret()
+        #expect(now == service.currentSecret && service.currentSecret != before)
+    }
+
+    /// The version cannot decide the renew (the blob moved for something else as well): the PIN change is refused with
+    /// nothing sent, and a lock and unlock with the same PIN settles it at no cost; the PIN change goes then.
+    @Test func anUndecidableRenewIsSettledByALockAndUnlock() async throws {
         defer { phone.close() }
         try await setUp()
         service.loseAnswers([VaultApi.typeSecretRenew])
         #expect(await renew()?.kind == .noResponse)
-        service.loseAnswers(["pin.change", "credential.version"])
+        service.loseAnswers([])
+        service.moveCredentialWithoutTheApp()
+        pastExp()
+        let f = await vaultFailure { try await m.changePin(pin: pin, newPin: newPin, password: password) }
+        #expect(f?.kind == .renewUnconfirmed && f?.code == VaultManager.codeRenewUnconfirmed && service.pinChanges.isEmpty)
+        try await m.lock()
+        #expect(try await m.unlock(pin: pin) == .success)
+        #expect(try service.pinFailureCount == 0 && m.phoneSecrets.records().candidates.isEmpty)
+        try await m.changePin(pin: pin, newPin: newPin, password: password)
+        #expect(try service.currentPin == newPin && m.phoneSecrets.currentSecret() == service.currentSecret)
+    }
+
+    /// A renew candidate left from before 0.46.0 (no request stored with it) is the fallback of step 5: with a PIN change
+    /// applied and its answers lost, the previous PIN gets `device_secret` with the current record and with the renew's;
+    /// only then is the new PIN asked for, which opens with the change's record.
+    @Test func anOldRenewCandidateIsTriedWithThePreviousPinFirst() async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.loseAnswers([VaultApi.typeSecretRenew])
+        #expect(await renew()?.kind == .noResponse)
+        let renewOp = try #require(try m.phoneSecrets.records().candidates.first?.operation)
+        try m.phoneSecrets.clearSent(operation: renewOp)
+        pastExp()
+        service.loseAnswers(["pin.change", "credential.version"], from: "pin.change")
         #expect(await vaultFailure { try await m.changePin(pin: pin, newPin: newPin, password: password) }?.kind == .changeUnresolved)
         #expect(service.currentPin == newPin)
         try await m.lock()
@@ -170,22 +207,22 @@ import VettIDVault
 
     // MARK: - A renew waiting in a locked vault (chosen; not in the spec)
 
-    /// The vault's clock and the phone's, moved together past a request's `exp` by more than a minute.
+    /// The vault's clock and the phone's, moved together past a request's `exp` by more than a minute (each call once more).
     func pastExp() {
         let t = ChangeRequest.validFor + 2 * VaultManager.decidedAfterExp
         service.advanceVaultClock(t)
-        phone.clockAhead = t
-        phone.uptimeAhead = t
+        phone.clockAhead += t
+        phone.uptimeAhead += t
     }
 
-    /// The vault locked behind the app's back; the renew waits in its mailbox, unanswered. The unlock's `ok` with the
+    /// The vault locked behind the app's back just before the renew reached it; the renew waits in its mailbox, unanswered. The unlock's `ok` with the
     /// current record comes before `exp`: the record stays a candidate, because the waiting copy applies after that
     /// unlock. The next unlock gets `device_secret`, tries the candidate, and opens: never "this phone no longer holds the
     /// keys".
     @Test func aRenewWaitingInALockedVaultIsKeptUntilItsExp() async throws {
         defer { phone.close() }
         try await setUp()
-        service.lockByItself(reason: "test")
+        service.lockByItself(on: VaultApi.typeSecretRenew)
         #expect(await renew()?.kind == .noResponse)
         let candidate = try #require(try m.phoneSecrets.records().candidates.first)
         #expect(candidate.exp != nil && service.renews.isEmpty)
@@ -203,7 +240,7 @@ import VettIDVault
         defer { phone.close() }
         try await setUp()
         let before = try m.phoneSecrets.currentSecret()
-        service.lockByItself(reason: "test")
+        service.lockByItself(on: VaultApi.typeSecretRenew)
         #expect(await renew()?.kind == .noResponse)
         let candidate = try #require(try m.phoneSecrets.records().candidates.first)
         pastExp()
@@ -215,24 +252,28 @@ import VettIDVault
 
     // MARK: - In flight, restarts and the cap
 
-    /// A renew on its way: a PIN change and a password change are each refused at once (busy), nothing asked of the
-    /// vault, so that neither reads a blob the renew is about to move; once it is answered, the password change goes with
-    /// the blob the renew left.
+    /// A renew on its way: a PIN change and a password change are each refused at once (busy), nothing of theirs sent,
+    /// so that neither reads a blob the renew is about to move.
     @Test func aRenewInFlightRefusesAPinChangeAndAPasswordChange() async throws {
-        defer { phone.close() }
-        try await setUp()
-        service.holdMessages = true
-        let renewing = Task { await renew() }
-        #expect(await eventually { service.renews.count == 1 })
+        // Long waits for the answers, so that the renew is still on its way while the changes are tried: it waits,
+        // unanswered, in the mailbox of a vault that locked just before it arrived.
+        let slow = try TestVaultPhone(service: service, requestTimeout: 2)
+        defer { slow.close() }
+        let m = slow.manager
+        _ = try await m.redeemSetupCode(.secret(service.secret))
+        try await m.enroll(pin: pin) { _ in }
+        try await m.createCredential(password: password, backup: true, pin: pin) { _ in }
+        try await m.finishSetup()
+        service.lockByItself(on: VaultApi.typeSecretRenew)
+        let renewing = Task { await vaultFailure { try await m.renewPhoneSecret(pin: pin, password: password) } }
+        #expect(await eventually { m.phoneSecrets.anyInFlight })
         let seen = service.requestsSeen.count
         #expect(await vaultFailure { try await m.changePin(pin: pin, newPin: newPin, password: password) }?.kind == .busy)
         #expect(await vaultFailure { try await m.changePassword(password, newPassword: "a brand new passphrase", pin: pin) }?.kind == .busy)
-        #expect(service.requestsSeen.count == seen, "nothing asked of the vault")
-        service.holdMessages = false
-        #expect(await renewing.value == nil)
-        #expect(await vaultFailure { try await m.changePassword(password, newPassword: "a brand new passphrase", pin: pin) } == nil)
-        #expect(service.pinChanges.isEmpty && service.passwordChanges.count == 1 && service.passwordFailureCount == 0)
-        #expect(m.session?.device.credentialVersion == service.vaultCredentialVersion && m.changeCheck == nil)
+        let asked = service.requestsSeen.dropFirst(seen)
+        #expect(!asked.contains(VaultApi.typePinChange) && !asked.contains(VaultApi.typePasswordChange), "nothing of theirs sent")
+        #expect(await renewing.value?.kind == .noResponse)
+        #expect(service.pinChanges.isEmpty && service.passwordChanges.isEmpty)
     }
 
     /// A crash after the record was written and before the request went: a harmless candidate. It is kept until a minute
@@ -265,6 +306,7 @@ import VettIDVault
         service.loseAnswers([])
         try phone.restart()
         try await m.refresh()
+        pastExp()
         #expect(await renew() == nil)
         #expect(Set(service.renews.map(\.newUnlockSecret)).count == 2)
         #expect(try m.phoneSecrets.currentSecret() == service.currentSecret && m.phoneSecrets.records().candidates.isEmpty)
@@ -283,6 +325,7 @@ import VettIDVault
             #expect(await renew()?.kind == .noResponse)
             try phone.restart()
             try await m.refresh()
+            pastExp()
         }
         let candidates = try m.phoneSecrets.records().candidates
         #expect(candidates.count == 4)

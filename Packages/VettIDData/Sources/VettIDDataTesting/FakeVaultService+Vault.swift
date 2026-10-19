@@ -112,13 +112,14 @@ extension FakeVaultService {
         let inner = error.map { Inner(id: Ulid.new(), type: type, ts: ts, re: re, status: Inner.statusError, error: InnerError($0), body: Array(body.utf8)) }
             ?? Inner(id: Ulid.new(), type: type, ts: ts, re: re, status: re == nil ? nil : Inner.statusOK, body: Array(body.utf8))
         if let re { responses[re] = inner }
-        if re != nil, lostAnswerTypes.contains(type) { return }
+        if re != nil, answerLost(type) { return }
         queue(try epoch.seal(inner))
     }
 
     /// The requests of enrollment (§3.5.7, §10.6, §10.8), and those of Settings (``settingsRequest(_:_:)``). Callers hold
     /// ``cond``.
     private func request(_ m: Inner) throws { // swiftlint:disable:this cyclomatic_complexity
+        beforeHandling(m)
         // A locked vault does not collect: what is sent to it waits in its mailbox until the next unlock (§12.1).
         if !vaultOpen {
             lockedRequests.append(m)

@@ -58,24 +58,21 @@ extension VaultManager {
     /// The code of an update step refused because a PIN or password change is undecided.
     nonisolated static let codeChangeHeld = ReleaseUpdateManager.codeChangeHeld
 
-    /// (VAULT-MESSAGING §11.14.9) Why a release update is held, in the change gate's words: a change on its way, or
-    /// undecided while the vault answers, is ``FailureKind/changeChecking``; undecided while it cannot be reached (or a
-    /// records file that cannot be read), ``FailureKind/changeUnresolved``. Nil when nothing is undecided. Reads
-    /// ``changeCheck`` and ``unlockPinStep``, so that the screens follow it.
+    /// (VAULT-MESSAGING §11.14.9 step 2) Whether a release update, the unlock screen's approval and "Finish the move" are
+    /// held (``releaseUpdateHold()``).
     public var releaseUpdateHeld: Bool { releaseUpdateHold() != nil }
 
+    /// (VAULT-MESSAGING §11.14.9 step 2) Why a release update is held, if it is, in the change gate's words: the one
+    /// hold of every flow that unlocks with a PIN typed outside the unlock screen's two prompts (the release update, the
+    /// unlock screen's approval, "Finish the move"; ``moveHold()``). A change on its way, or undecided while the vault
+    /// answers, is ``FailureKind/changeChecking`` (``FailureKind/changeCheckingPassword`` after a password change);
+    /// undecided while it cannot be reached (or a records file that cannot be read), ``FailureKind/changeUnresolved``;
+    /// an uncertain PIN (step 3), ``FailureKind/pinUncertain``. Nil when nothing holds it. Reads ``changeCheck`` and
+    /// ``unlockPinStep``, so that the screens follow it.
     func releaseUpdateHold() -> FailureKind? {
-        let status = changeCheck?.status
+        _ = changeCheck?.status
         _ = unlockPinStep
-        let marker: UnresolvedChange?
-        do {
-            marker = try strictUnresolved()
-        } catch {
-            return .changeUnresolved
-        }
-        if sendingChange { return .changeChecking }
-        guard marker != nil else { return nil }
-        return status == .unreachable ? .changeUnresolved : .changeChecking
+        return moveHold()?.kind
     }
 
     /// The offer for the vault as this phone knows it: the release it last unlocked into, in the manifest it trusts (the

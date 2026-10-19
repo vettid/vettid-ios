@@ -64,6 +64,10 @@ public extension FailureKind {
         case .responseTooLarge: DataStrings.failureResponseTooLarge
         case .changeUnresolved: DataStrings.failureChangeUnresolved
         case .changeChecking: DataStrings.failureChangeChecking
+        case .changeCheckingPassword: DataStrings.failureChangeCheckingPassword
+        case .credentialUnsettled: DataStrings.failureCredentialUnsettled
+        case .pinUncertain: DataStrings.failurePinUncertain
+        case .renewUnconfirmed: DataStrings.failureRenewUnconfirmed
         case .timeScale: DataStrings.failureTimeScale
         case .other: DataStrings.failureOther
         }
@@ -141,7 +145,11 @@ public extension FailureKind {
         case .enrollmentStarted: "data_failure_ios_enrollment_started"
         case .responseTooLarge: "data_failure_response_too_large"
         case .changeUnresolved: "data_failure_change_unresolved"
-        case .changeChecking: "data_failure_ios_change_checking"
+        case .changeChecking: "data_failure_change_undecided"
+        case .changeCheckingPassword: "data_failure_change_undecided_password"
+        case .credentialUnsettled: "data_failure_credential_unsettled"
+        case .pinUncertain: "data_failure_pin_uncertain"
+        case .renewUnconfirmed: "data_failure_renew_unconfirmed"
         case .timeScale: "data_failure_time_scale"
         case .other: "data_failure_other"
         }

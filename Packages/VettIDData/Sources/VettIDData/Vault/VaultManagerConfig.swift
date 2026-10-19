@@ -139,6 +139,9 @@ public struct VaultManagerConfig: Sendable {
     public var changeCheckSleep: @Sendable (TimeInterval) async throws -> Void
     /// The monotonic clock the vault's clock is counted on between its answers (seconds; tests move it).
     public var uptime: @Sendable () -> TimeInterval = DeviceConfig.monotonicNow
+    /// How a change of PIN or password waits for the credential operations before it (VAULT-MESSAGING §11.14.9 step 1:
+    /// at most 30 s): a sleep of the given length (tests pass their own).
+    public var changeWaitSleep: @Sendable (TimeInterval) async throws -> Void = VaultApi.sleep
 
     public init(
         apiOrigin: String,

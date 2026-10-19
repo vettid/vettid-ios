@@ -37,9 +37,14 @@ import VettIDUI
         }
         // The shell's notice of a decision reached while the screen was closed.
         #expect(ChangeCheckNotice.text(ChangeCheck(.pin, .checking)) == nil)
-        #expect(ChangeCheckNotice.text(ChangeCheck(.pin, .applied)) == PinStrings.pinDone)
-        #expect(ChangeCheckNotice.text(ChangeCheck(.password, .applied)) == CredentialStrings.changeDone)
-        #expect(ChangeCheckNotice.text(ChangeCheck(.password, .notApplied)) == CredentialStrings.passwordNotChanged)
+        #expect(ChangeCheckNotice.text(ChangeCheck(.pin, .applied)) == ChangeNoticeTexts.pinApplied)
+        #expect(ChangeCheckNotice.text(ChangeCheck(.password, .applied)) == ChangeNoticeTexts.passwordApplied)
+        #expect(ChangeCheckNotice.text(ChangeCheck(.password, .notApplied)) == ChangeNoticeTexts.passwordNotChanged)
+        #expect(ChangeCheckNotice.text(ChangeCheck(.pin, .ended)) == ChangeNoticeTexts.pinEnded)
+        #expect(ChangeCheckNotice.text(ChangeCheck(.password, .ended)) == ChangeNoticeTexts.passwordEnded)
+        #expect(ChangeCheckNotice.offersLockAndUnlock(ChangeCheck(.pin, .ended)))
+        #expect(!ChangeCheckNotice.offersLockAndUnlock(ChangeCheck(.password, .ended)))
+        #expect(ChangeCheckNotice.lockAndUnlock == "Lock and unlock now")
         #expect(ChangeCheckNotice.text(ChangeCheck(.pin, .refused(.badPin, code: "bad_pin"))) == FailureKind.badPin.message)
         #expect(ChangeCheckNotice.urgent(ChangeCheck(.pin, .ended)) && !ChangeCheckNotice.urgent(ChangeCheck(.pin, .applied)))
         #expect(PinStrings.vaultPin == "Change vault PIN" && PinStrings.securityCredential == "Credential")
