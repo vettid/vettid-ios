@@ -1794,18 +1794,29 @@
         }
       }
     },
-    "unlock_new_pin": {
+    "unlock_new_pin_title": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your PIN change went through. Enter your new PIN."
+            "value": "Your PIN change went through."
           }
         }
       }
     },
-    "unlock_previous_pin": {
+    "unlock_new_pin_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter your new PIN."
+          }
+        }
+      }
+    },
+    "unlock_previous_pin_title": {
       "extractionState": "manual",
       "localizations": {
         "en": {

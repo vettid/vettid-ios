@@ -143,10 +143,10 @@ public struct UnlockScreen: View {
         switch state.pinStep {
         case .pin: EmptyView()
         case .previous:
-            NoticeCard(.info, title: OnboardingStrings.unlockPreviousPin, message: OnboardingStrings.unlockPreviousPinBody)
+            NoticeCard(.info, title: OnboardingStrings.unlockPreviousPinTitle, message: OnboardingStrings.unlockPreviousPinBody)
                 .accessibilityIdentifier("unlock_previous_pin")
         case .new:
-            NoticeCard(.info, title: OnboardingStrings.unlockTitle, message: OnboardingStrings.unlockNewPin)
+            NoticeCard(.success, title: OnboardingStrings.unlockNewPinTitle, message: OnboardingStrings.unlockNewPinBody)
                 .accessibilityIdentifier("unlock_new_pin")
         }
         PinEntry(
