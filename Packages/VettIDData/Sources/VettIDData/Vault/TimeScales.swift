@@ -5,11 +5,13 @@ import VettIDCrypto
 /// §4 "Staging time scale"), in real time, and the waits of the vault the screens name. Each app-side timer divides its
 /// wait by the vault's time scale (``LocalAccount/timeScale``) when it starts and keeps the absolute time it got, so that
 /// a timer started before the app knew the scale keeps its time. Rate limits, retries and the durations the member
-/// chooses are never scaled (§2.2). S8 (the recovery counter unavailable for a day, shown as urgent) stays real time
-/// here, as in vettid-android: it is not among IOS-PLAN §6.6's app-side waits.
+/// chooses are never scaled (§2.2).
 public enum TimeScales {
     /// S2: the owner check's early warning, from 1 h before the deadline (VAULT-MESSAGING §3.6.5).
     public static let ownerCheckWarning: TimeInterval = 3_600
+    /// S8: the recovery counter unavailable at every read for 24 h is shown as urgent (§11.14.5; STAGING-TIME-SCALE
+    /// 0.1.1; IOS-PLAN 0.1.7 §6.6): ``RecoveryUnknownClock``, which keeps the period with the clock's start.
+    public static let recoveryUnknownDay: TimeInterval = 86_400
     /// S9: replaced phone-secret records are deleted 7 days after the confirmation (§11.14.1 rule 6; IOS-PLAN §6.3).
     public static let replacedRecordsKeepMs: Int64 = 7 * 86_400_000
     /// S10: the old phone keeps its keys for at most 7 days after approving a transfer (§11.14.10). The transfer comes

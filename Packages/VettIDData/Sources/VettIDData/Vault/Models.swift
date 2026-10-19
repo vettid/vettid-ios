@@ -401,15 +401,42 @@ public struct RecoveryStatusView: Equatable, Sendable {
     public var state: String
     public var used: Int?
     public var counterUnavailable: Bool
-    /// (§11.14.5) Unavailable at every read for 24 hours: shown with the urgency of a used attempt.
+    /// (§11.14.5) Unavailable at every read for 24 hours (divided by the vault's time scale when the clock started,
+    /// STAGING-TIME-SCALE 0.1.1 S8): shown with the urgency of a used attempt.
     public var unknownForADay: Bool
+    /// (S8) How long the counter was unavailable before ``unknownForADay``, in seconds, for the text.
+    public var unknownForSeconds: TimeInterval
+    /// The vault's time scale at this read (STAGING-TIME-SCALE §5.2): the quiet period the text names (S7) and the note.
+    public var timeScale: UInt64
 
-    public init(state: String, used: Int?, counterUnavailable: Bool, unknownForADay: Bool = false) {
+    public init(
+        state: String,
+        used: Int?,
+        counterUnavailable: Bool,
+        unknownForADay: Bool = false,
+        unknownForSeconds: TimeInterval = TimeScales.recoveryUnknownDay,
+        timeScale: UInt64 = 1
+    ) {
         self.state = state
         self.used = used
         self.counterUnavailable = counterUnavailable
         self.unknownForADay = unknownForADay
+        self.unknownForSeconds = unknownForSeconds
+        self.timeScale = timeScale
     }
+
+    /// The urgent notice of a counter unavailable for a day (ANDROID-PLAN "Owner check and status"; STAGING-TIME-SCALE
+    /// 0.1.1 S8, S7). In real time the approved text verbatim; on a scaled vault, or for a clock started on one, the clock's
+    /// period as it started and the recovery quiet period at the vault's time scale (the owner's decision of 2026-10-19).
+    public var unknownDayText: String {
+        if timeScale == 1, unknownForSeconds == TimeScales.recoveryUnknownDay { return DataStrings.recoveryUnknownDay }
+        return DataStrings.recoveryUnknownDayScaled(
+            DurationText.of(unknownForSeconds), TimeScales.text(TimeScales.recoveryQuiet, by: timeScale)
+        )
+    }
+
+    /// "Staging: 1 day = 1 hour" beside ``unknownDayText`` on a staging vault; nil in real time.
+    public var stagingNote: String? { TimeScales.stagingNote(timeScale) }
 }
 
 /// MEMBER-API `ReleaseInfo` (advisory; the manifest decides). Mirrors vettid-android `ReleaseInfoView`.

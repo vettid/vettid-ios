@@ -39,6 +39,13 @@ struct LocalAccount: Codable, Equatable, Sendable {
     /// The last time this phone reached the vault service (a status read), written at most hourly
     /// (``StuckScreens/writeContact(_:nowMs:)``), Unix ms.
     var lastContactMs: Int64?
+    /// (§11.14.5, §11.14.11) Since when every `vault.status` read found the recovery counter unavailable (Unix ms, this
+    /// phone's clock), or nil: after 24 hours the status screen says so with the urgency of a used attempt
+    /// (``RecoveryUnknownClock``).
+    var recoveryUnknownSinceMs: Int64?
+    /// (STAGING-TIME-SCALE 0.1.1 S8) How long ``recoveryUnknownSinceMs`` runs before the notice is urgent, set when it
+    /// started: 24 hours divided by the vault's time scale then. Nil: 24 hours (started in real time).
+    var recoveryUnknownForMs: Int64?
     /// The enclave's time of the last successful unlock result (its inner `ts`, Unix ms): a `vault.locking` not later than
     /// it is stale after a restart too (``LockNotices``).
     var lastOpenedMs: Int64?
@@ -62,6 +69,8 @@ struct LocalAccount: Codable, Equatable, Sendable {
         case enrolledHere = "enrolled_here"
         case enrollStartedMs = "enroll_started_ms"
         case lastContactMs = "last_contact_ms"
+        case recoveryUnknownSinceMs = "recovery_unknown_since_ms"
+        case recoveryUnknownForMs = "recovery_unknown_for_ms"
         case lastOpenedMs = "last_opened_ms"
         case lockFileInUse = "lock_file_in_use"
         case snapshot
@@ -91,6 +100,8 @@ struct LocalAccount: Codable, Equatable, Sendable {
         enrolledHere = try c.decodeIfPresent(Bool.self, forKey: .enrolledHere) ?? false
         enrollStartedMs = try c.decodeIfPresent(Int64.self, forKey: .enrollStartedMs)
         lastContactMs = try c.decodeIfPresent(Int64.self, forKey: .lastContactMs)
+        recoveryUnknownSinceMs = try c.decodeIfPresent(Int64.self, forKey: .recoveryUnknownSinceMs)
+        recoveryUnknownForMs = try c.decodeIfPresent(Int64.self, forKey: .recoveryUnknownForMs)
         lastOpenedMs = try c.decodeIfPresent(Int64.self, forKey: .lastOpenedMs)
         lockFileInUse = try c.decodeIfPresent(Bool.self, forKey: .lockFileInUse) ?? false
         // Display only: a snapshot or request this build cannot read is no snapshot, never an unreadable record.

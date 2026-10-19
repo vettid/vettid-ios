@@ -64,33 +64,67 @@ import VettIDCrypto
         Task { try await api.pinChange(pin: "975310", newPin: "864201", password: "pw", newUnlockSecret: [UInt8](repeating: 1, count: 32), marked: marked) }
     }
 
-    /// The vault holds a newer blob than the phone (an owner check applied, its answer lost): the change is refused with
-    /// nothing sent and no marker handed over, the latest blob kept; built again, the change goes with the new version.
-    @Test func aMovedVersionRefusesTheChangeWithNothingSent() async throws {
+    /// The vault holds a newer blob than the phone (an owner check applied, its answer lost): the latest blob is fetched
+    /// and kept, and the change goes with it and its version, the marker handed over only then (VAULT-MESSAGING 0.47.0
+    /// §11.14.9 step 1, "Sent with the vault's current blob").
+    @Test func aMovedVersionSendsTheChangeWithTheFetchedBlob() async throws {
         let h = try await lost.holder()
         let (d, v, api) = (h.d, h.v, h.api)
-        let first = Marked()
-        let task = change(api, first)
+        let marked = Marked()
+        let task = change(api, marked)
         try await ops.answer(v, d, "credential.version", #"{"exists":true,"version":2}"#)
         try await ops.answer(v, d, "credential.get", #"{"credential":"BAUG","version":2}"#)
+        #expect(marked.change == nil, "no marker before the blob is the vault's")
+        try await ops.answer(v, d, "credential.ack")
+        let req = try await ops.answer(v, d, VaultApi.typePinChange, #"{"credential":"BwgJ","version":3,"epoch_advanced":true}"#)
+        let sentBlob = try StrictJson.parseObject(req.body).string("credential")
+        #expect(req.id == marked.change?.id && marked.change?.version == 2 && sentBlob == "BAUG")
+        try await ops.answer(v, d, "credential.ack")
+        #expect(try await task.value)
+        #expect(d.credentialVersion == 3)
+    }
+
+    /// A fetch that gives another version than the vault said: the "earlier request" refusal, nothing sent or stored, the
+    /// fetched blob kept.
+    @Test func aFetchOfAnotherVersionRefusesTheChange() async throws {
+        let h = try await lost.holder()
+        let (d, v, api) = (h.d, h.v, h.api)
+        let marked = Marked()
+        let task = change(api, marked)
+        try await ops.answer(v, d, "credential.version", #"{"exists":true,"version":2}"#)
+        try await ops.answer(v, d, "credential.get", #"{"credential":"BwgJ","version":3}"#)
         try await ops.answer(v, d, "credential.ack")
         do {
             _ = try await task.value
             Issue.record("sent")
         } catch let e as CredentialUnsettled {
-            #expect(e.reason == .versionMoved && e.type == VaultApi.typePinChange)
+            #expect(e.reason == .inFlight && e.type == VaultApi.typePinChange)
         }
-        #expect(first.change == nil, "no marker before the check passed")
-        #expect(d.credentialVersion == 2)
+        #expect(marked.change == nil && d.credentialVersion == 3)
         #expect(await ops.base.relay.noDeposit(within: 0.3), "no pin.change")
-        let second = Marked()
-        let again = change(api, second)
-        try await ops.answer(v, d, "credential.version", #"{"exists":true,"version":2}"#)
-        let req = try await ops.answer(v, d, VaultApi.typePinChange, #"{"credential":"BwgJ","version":3,"epoch_advanced":true}"#)
-        let sentBlob = try StrictJson.parseObject(req.body).string("credential")
-        #expect(req.id == second.change?.id && second.change?.version == 2 && sentBlob == "BAUG")
-        try await ops.answer(v, d, "credential.ack")
-        #expect(try await again.value)
+    }
+
+    /// `credential.version` answered with an error, without a version, or with no credential: counted as different (as
+    /// vettid-android does), so the latest blob is fetched and kept, and since the vault's version is not known the change
+    /// is refused with the "earlier request" refusal, never the answer's own code; nothing sent, no marker.
+    @Test func anAnswerWithoutTheVaultsVersionRefusesTheChange() async throws {
+        for (body, code) in [("{}", "busy" as String?), (#"{"exists":true}"#, nil), (#"{"exists":false}"#, nil)] {
+            let h = try await lost.holder()
+            let (d, v, api) = (h.d, h.v, h.api)
+            let marked = Marked()
+            let task = change(api, marked)
+            try await ops.answer(v, d, "credential.version", body, code: code, errorBody: code.map { _ in "{}" })
+            try await ops.answer(v, d, "credential.get", #"{"credential":"BAUG","version":2}"#)
+            try await ops.answer(v, d, "credential.ack")
+            do {
+                _ = try await task.value
+                Issue.record("sent: \(body) \(String(describing: code))")
+            } catch let e as CredentialUnsettled {
+                #expect(e.reason == .inFlight && e.type == VaultApi.typePinChange)
+            }
+            #expect(marked.change == nil && d.credentialVersion == 2, "the fetched blob kept")
+            #expect(await ops.base.relay.noDeposit(within: 0.3), "no pin.change")
+        }
     }
 
     /// A fetch of the latest blob that fails after the version moved: the "earlier request" refusal, nothing sent.
@@ -179,8 +213,8 @@ import VettIDCrypto
         try await fetch.value
     }
 
-    /// A renew goes through the same checks as a change (VAULT-MESSAGING: pending spec PR for vettid/vettid.org#347): a
-    /// version that moved refuses it with nothing sent or stored and the latest blob kept.
+    /// A renew goes through the same checks as a change (VAULT-MESSAGING 0.47.0 §11.14.9 step 1): a version that moved
+    /// fetches the latest blob, and the renew goes with it, its record handed over only then.
     @Test func aRenewIsCheckedLikeAChange() async throws {
         let h = try await lost.holder()
         let (d, v, api) = (h.d, h.v, h.api)
@@ -189,9 +223,12 @@ import VettIDCrypto
         try await ops.answer(v, d, "credential.version", #"{"exists":true,"version":2}"#)
         try await ops.answer(v, d, "credential.get", #"{"credential":"BAUG","version":2}"#)
         try await ops.answer(v, d, "credential.ack")
-        await #expect(throws: CredentialUnsettled.self) { try await task.value }
-        #expect(d.credentialVersion == 2 && marked.change == nil)
-        #expect(await ops.base.relay.noDeposit(within: 0.3), "no renew")
+        let req = try await ops.answer(v, d, VaultApi.typeSecretRenew, #"{"credential":"BwgJ","version":3}"#)
+        #expect(try StrictJson.parseObject(req.body).string("credential") == "BAUG")
+        #expect(req.id == marked.change?.id && marked.change?.version == 2)
+        try await ops.answer(v, d, "credential.ack")
+        try await task.value
+        #expect(d.credentialVersion == 3)
     }
 
     /// `stale_credential` to a renew means it did not apply: not retried, the latest blob fetched, the refusal thrown.
@@ -250,7 +287,7 @@ import VettIDCrypto
         #expect(await wait.value)
     }
 
-    /// A renew waits for the earlier requests to settle too (renews settle too: chosen; not in the spec), and nothing is
+    /// A renew waits for the earlier requests to settle too (VAULT-MESSAGING 0.47.0 §11.14.9 step 1), and nothing is
     /// stored for it when they do not.
     @Test func aRenewWaitsForTheEarlierRequests() async throws {
         let h = try await lost.holder(timeout: 2)
@@ -281,6 +318,33 @@ import VettIDCrypto
             try await api.secretRenew(pin: "975310", password: "pw", newUnlockSecret: [UInt8](repeating: 7, count: 32), marked: Marked())
         }
         #expect(await ops.base.relay.noDeposit(within: 0.3), "nothing asked")
+    }
+
+    /// VAULT-MESSAGING 0.47.0 §11.14.9 step 2: an operation that began before a change or a renew went out, and waited
+    /// for the credential lock meanwhile, is refused with nothing sent, also when no gate sees that change any more (it
+    /// was answered and decided before the operation got the lock). Here the test holds the lock as the change would.
+    @Test func anOperationThatWaitedWhileASecretWentOutIsRefused() async throws {
+        // A short wait for answers: an operation sent by mistake fails fast, after the deposit checked below.
+        let h = try await lost.holder(timeout: 0.3)
+        let (d, api) = (h.d, h.api)
+        for start in [
+            { try await api.ownerCheck(pin: "975310", password: "pw") },
+            { try await api.secretRenew(pin: "975310", password: "pw", newUnlockSecret: [UInt8](repeating: 7, count: 32), marked: Marked()) },
+        ] as [@Sendable () async throws -> Void] {
+            await d.credentialLock.acquire()
+            let op = Task { try await start() }
+            for _ in 0..<500 where d.credentialLock.waiting == 0 { try await Task.sleep(nanoseconds: 10_000_000) }
+            #expect(d.credentialLock.waiting == 1, "queued")
+            d.secretSent()
+            d.credentialLock.release()
+            #expect(await ops.base.relay.noDeposit(within: 0.3), "nothing sent")
+            do {
+                try await op.value
+                Issue.record("sent")
+            } catch let e as CredentialUnsettled {
+                #expect(e.reason == .inFlight)
+            }
+        }
     }
 
     /// The wait ends at its limit even while its probe of the vault's time is still waiting for an answer.

@@ -11,10 +11,10 @@ import VettIDVault
 // (``settleRenews(_:)``): one above, applied (the candidate made current); the same version stamped more than a minute
 // after `exp`, not applied; anything else cannot be decided, and the PIN change is refused with a lock and unlock to
 // settle it (the PIN has not changed, so that unlock costs nothing). Any refusal of the renew's own request,
-// `stale_credential` included, means it did not apply (VAULT-MESSAGING: pending spec PR for vettid/vettid.org#347). A
+// `stale_credential` included, means it did not apply (VAULT-MESSAGING 0.47.0 §11.14.9 step 1; IOS-PLAN 0.1.6 §6.3). A
 // renew is a credential operation all the same: refused while a change is unresolved or on its way (step 2), and sent
-// after the same checks as a change, its record and request stored only after them
-// (``VaultApi/secretRenew(pin:password:onMarker:onAnswered:)``).
+// after the same checks as a change (every earlier request settled, the vault's current blob; 0.47.0 step 1), its record
+// and request stored only after them (``VaultApi/secretRenew(pin:password:onMarker:onAnswered:)``).
 extension VaultManager {
     /// `vault.secret.renew` (§11.14.9): a new phone secret, the PIN unchanged. The next epoch's record is written before
     /// the request is built (IOS-PLAN §6.3 item 1) and becomes current with the vault's answer; a record that cannot be
@@ -26,28 +26,29 @@ extension VaultManager {
             guard phoneSecrets.inUse else { throw VaultFailure(.notSupported, code: Self.codeNoPhoneSecret) }
             // It carries the PIN: refused while the PIN is uncertain too (§11.14.9 step 3).
             try await decideFirst(carriesPin: true)
-            let api = try openApi(try await openSession())
-            try await refreshedOnce {
-                // No await from here to the send's start: a second renew, or a PIN change, is refused by the records' slot.
-                let operation = try renewOperationID()
-                let state = RenewSend()
-                do {
-                    defer { phoneSecrets.endChange(operation: operation) }
-                    try await api.secretRenew(pin: pin, password: password, onMarker: { @MainActor change in
-                        // The record and its request, once the request is fixed after the checks (0.46.0 step 1).
-                        let sent = PhoneRecords.SentRequest(id: change.id, version: change.version)
-                        let next = try self.phoneSecrets.beginChange(operation: operation, exp: change.exp, sent: sent)
-                        state.sentID = change.id
-                        return next
-                    }, onAnswered: { @MainActor in
-                        // Its own `ok`: the vault holds the new secret, whatever happens to the rest of the answer.
-                        state.answered = true
-                        self.renewOperation = nil
-                        _ = try? self.phoneSecrets.confirmChange(operation: operation)
-                    })
-                } catch {
-                    try renewFailed(error, operation, state)
-                }
+            let s = try await openSession()
+            let api = try openApi(s)
+            // A change or a renew that goes out from here on refuses this one (VAULT-MESSAGING 0.47.0 §11.14.9 step 2).
+            let since = s.device.secretsSent
+            // No await from here to the send's start: a second renew, or a PIN change, is refused by the records' slot.
+            let operation = try renewOperationID()
+            let state = RenewSend()
+            do {
+                defer { phoneSecrets.endChange(operation: operation) }
+                try await api.secretRenew(pin: pin, password: password, since: since, onMarker: { @MainActor change in
+                    // The record and its request, once the request is fixed after the checks (0.47.0 step 1).
+                    let sent = PhoneRecords.SentRequest(id: change.id, version: change.version)
+                    let next = try self.phoneSecrets.beginChange(operation: operation, exp: change.exp, sent: sent)
+                    state.sentID = change.id
+                    return next
+                }, onAnswered: { @MainActor in
+                    // Its own `ok`: the vault holds the new secret, whatever happens to the rest of the answer.
+                    state.answered = true
+                    self.renewOperation = nil
+                    _ = try? self.phoneSecrets.confirmChange(operation: operation)
+                })
+            } catch {
+                try renewFailed(error, operation, state)
             }
             renewSecretSuggested = false
         }
@@ -55,15 +56,21 @@ extension VaultManager {
 
     /// A renew that failed: no answer once it may have gone out keeps its request for ``settleRenews(_:)``; its own
     /// refusal (`stale_credential` included), or a failure before anything was sent, leaves nothing to decide; after its
-    /// own `ok` nothing is undone (VAULT-MESSAGING: pending spec PR for vettid/vettid.org#347).
+    /// own `ok` nothing is undone (VAULT-MESSAGING 0.47.0 §11.14.9 step 1). Its own `stale_credential` (an earlier
+    /// operation applied without its answer; the latest blob was fetched) is the "earlier request" text, not "did not
+    /// answer" (chosen; not in the spec; as vettid-android #147).
     private func renewFailed(_ error: any Error, _ operation: String, _ state: RenewSend) throws -> Never {
         switch error {
         case is RequestUnanswered: throw VaultFailure(.noResponse)
         case is CancellationError: throw CancellationError()
         default: break
         }
-        let ownRefusal = (error as? VaultOpError).map { $0.type == VaultApi.typeSecretRenew } ?? true
+        let own = error as? VaultOpError
+        let ownRefusal = own.map { $0.type == VaultApi.typeSecretRenew } ?? true
         if !state.answered, ownRefusal, let id = state.sentID { try? phoneSecrets.clearSent(operation: operation, id: id) }
+        if let own, own.type == VaultApi.typeSecretRenew, own.code == CredentialOpsCodes.staleCredential {
+            throw VaultFailure(.credentialUnsettled, code: VaultFailures.codeCredentialUnsettled, cause: own)
+        }
         throw error
     }
 

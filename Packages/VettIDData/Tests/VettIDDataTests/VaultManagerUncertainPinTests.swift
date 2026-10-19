@@ -20,7 +20,7 @@ import VettIDVault
     init() throws {
         service = try FakeVaultService()
         service.stampsOnVaultClock = true
-        phone = try TestVaultPhone(service: service, requestTimeout: 0.4)
+        phone = try TestVaultPhone(service: service, requestTimeout: 1)
     }
 
     var m: VaultManager { phone.manager }

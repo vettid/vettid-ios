@@ -8,12 +8,14 @@ extension VaultApi {
     /// with the blob (``CredentialOps/change(_:_:onMarker:)``): once the request is fixed, [onMarker] stores its marker
     /// and candidate and returns the next secret (wiped here once sealed). Returns the answer's `epoch_advanced`: only
     /// `true` lets the phone move to the next epoch (§11.14.1); anything else leaves the next epoch's record a candidate,
-    /// for an unlock to decide. No answer is ``ChangeUnanswered``; `stale_credential` is not retried.
+    /// for an unlock to decide. No answer is ``ChangeUnanswered``; `stale_credential` is not retried. [since]:
+    /// ``VaultDevice/secretsSent`` as the caller read it before its own checks (nil: read here).
     public func pinChange(
-        pin: String, newPin: String, password: String, onMarker: @escaping @Sendable (ChangeRequest) async throws -> [UInt8]
+        pin: String, newPin: String, password: String, since: Int? = nil,
+        onMarker: @escaping @Sendable (ChangeRequest) async throws -> [UInt8]
     ) async throws -> Bool {
         let fields: [SealedField] = [.string("pin", pin), .string("new_pin", newPin), .string("password", password)]
-        let body = try await credential.change(Self.typePinChange, fields, onMarker: Self.withSecret(onMarker))
+        let body = try await credential.change(Self.typePinChange, fields, since: since, onMarker: Self.withSecret(onMarker))
         return Self.epochAdvanced(body)
     }
 
@@ -22,13 +24,16 @@ extension VaultApi {
     /// (``CredentialOps/renew(_:_:onMarker:onAnswered:)``): [onMarker] stores the renew's record and request (its inner
     /// id, `exp` and confirmed blob version, VAULT-MESSAGING 0.46.0 §11.14.9 step 1) and returns the next secret;
     /// [onAnswered] runs on its own `ok`, before the rotated blob and new UTKs are kept. `stale_credential` is not
-    /// retried; a failure once it may have gone out is ``RequestUnanswered``.
+    /// retried; a failure once it may have gone out is ``RequestUnanswered``. [since]: ``VaultDevice/secretsSent`` as the
+    /// caller read it before its own checks (nil: read here).
     public func secretRenew(
-        pin: String, password: String, onMarker: @escaping @Sendable (ChangeRequest) async throws -> [UInt8],
+        pin: String, password: String, since: Int? = nil, onMarker: @escaping @Sendable (ChangeRequest) async throws -> [UInt8],
         onAnswered: @escaping @Sendable () async -> Void
     ) async throws {
         let fields: [SealedField] = [.string("pin", pin), .string("password", password)]
-        _ = try await credential.renew(Self.typeSecretRenew, fields, onMarker: Self.withSecret(onMarker), onAnswered: onAnswered)
+        _ = try await credential.renew(
+            Self.typeSecretRenew, fields, since: since, onMarker: Self.withSecret(onMarker), onAnswered: onAnswered
+        )
     }
 
     /// [onMarker]'s secret as the `new_unlock_secret` member, the bytes wiped.

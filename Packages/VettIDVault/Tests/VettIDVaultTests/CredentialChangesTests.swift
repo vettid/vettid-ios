@@ -139,7 +139,7 @@ import VettIDCrypto
         let secret = [UInt8](repeating: 0x3C, count: 32)
         let marked = Marked()
         let renew = Task { try await api.secretRenew(pin: "975310", password: "pw", newUnlockSecret: secret, marked: marked) }
-        // The same checks as a change (VAULT-MESSAGING: pending spec PR for vettid/vettid.org#347).
+        // The same checks as a change (VAULT-MESSAGING 0.47.0 §11.14.9 step 1).
         try await ops.answer(v, d, "credential.version", #"{"exists":true,"version":1}"#)
         try await ops.answer(v, d, "credential.utk.get", utks)
         let req = try await ops.answer(v, d, VaultApi.typeSecretRenew, #"{"credential":"BAUG","version":2}"#)
