@@ -61,6 +61,72 @@ struct TimeScaleWaitTests {
         #expect(!StuckScreens.longUnreachable(.clock, lastContactMs: last, nowMs: sevenHours, timeScale: 24))
     }
 
+    /// S8 (STAGING-TIME-SCALE 0.1.1; IOS-PLAN 0.1.7 §6.6): the recovery counter unavailable for 24 hours at scale 1, for
+    /// 1 hour at 24, divided when the clock starts and kept with it.
+    @Test func theRecoveryCounterDayIsScaled() {
+        typealias Clock = RecoveryUnknownClock
+        let hour: Int64 = 3_600_000
+        let t: Int64 = 1_800_000_000_000
+        #expect(Clock.periodMs(timeScale: 1) == 24 * hour && Clock.periodMs(timeScale: 24) == hour)
+
+        // Scale 1: urgent after 24 hours, the period stored as none.
+        var real = Clock.advance(Clock.State(), unavailable: true, nowMs: t, timeScale: 1)
+        #expect(real == Clock.State(since: t, periodMs: nil))
+        real = Clock.advance(real, unavailable: true, nowMs: t + 24 * hour - 1, timeScale: 1)
+        #expect(!real.urgent(nowMs: t + 24 * hour - 1) && real.urgent(nowMs: t + 24 * hour))
+        // Read at 24 since: a clock started in real time keeps its 24 hours.
+        real = Clock.advance(real, unavailable: true, nowMs: t + 23 * hour, timeScale: 24)
+        #expect(real.period == 24 * hour && !real.urgent(nowMs: t + 23 * hour))
+
+        // Scale 24: urgent after 1 hour, kept when the scale changes.
+        var scaled = Clock.advance(Clock.State(), unavailable: true, nowMs: t, timeScale: 24)
+        #expect(scaled == Clock.State(since: t, periodMs: hour))
+        #expect(!scaled.urgent(nowMs: t + hour - 1) && scaled.urgent(nowMs: t + hour))
+        scaled = Clock.advance(scaled, unavailable: true, nowMs: t + hour, timeScale: 1)
+        #expect(scaled.period == hour && scaled.urgent(nowMs: t + hour))
+
+        // An available read stops it and forgets the period; a clock set back starts it again with the scale now.
+        #expect(Clock.advance(scaled, unavailable: false, nowMs: t + 2 * hour, timeScale: 24) == Clock.State())
+        #expect(Clock.advance(Clock.State(since: t, periodMs: nil), unavailable: true, nowMs: t - hour, timeScale: 24)
+            == Clock.State(since: t - hour, periodMs: hour))
+        #expect(Clock.unavailable(state: "armed", counter: "unavailable") && Clock.unavailable(state: "unknown", counter: nil))
+        #expect(!Clock.unavailable(state: "armed", counter: "ok") && !Clock.unavailable(state: nil, counter: nil))
+        // A stored period is never longer than 24 hours nor shorter than the largest scale gives; a production build
+        // reads any stored period as 24 hours.
+        #expect(Clock.State(since: t, periodMs: 1).period == 1_000 && Clock.State(since: t, periodMs: 48 * hour).period == 24 * hour)
+        #expect(Clock.State(since: t, periodMs: hour).validated(maxScale: 1) == Clock.State(since: t, periodMs: nil))
+        #expect(Clock.State(since: t, periodMs: 1_000).validated(maxScale: 24) == Clock.State(since: t, periodMs: hour))
+        #expect(Clock.State(since: t, periodMs: hour).validated(maxScale: 24) == Clock.State(since: t, periodMs: hour))
+        #expect(TimeScales.text(TimeScales.recoveryUnknownDay, by: 1) == "24 hours")
+        #expect(TimeScales.text(TimeScales.recoveryUnknownDay, by: 24) == "1 hour")
+    }
+
+    /// S8's text: at scale 1 the approved text verbatim; on a scaled vault both durations computed (the owner's decision
+    /// of 2026-10-19; vettid-android `settings_recovery_unknown_day` with this package's prefix, and the scaled key).
+    @Test func theRecoveryCounterDayText() {
+        let real = RecoveryStatusView(state: "unknown", used: nil, counterUnavailable: true, unknownForADay: true)
+        #expect(real.unknownDayText == """
+            For a day your vault has not been able to check its recovery attempts or record that you were here. If this \
+            goes on for three days, your vault is no longer protected against a recovery started by someone else, and until \
+            it ends you cannot change your PIN or password. This is a fault of the VettID service or an attack on it. \
+            Contact VettID.
+            """)
+        #expect(real.stagingNote == nil)
+        let scaled = RecoveryStatusView(
+            state: "unknown", used: nil, counterUnavailable: true, unknownForADay: true, unknownForSeconds: 3_600, timeScale: 24
+        )
+        #expect(scaled.unknownDayText.hasPrefix("For 1 hour your vault"))
+        #expect(scaled.unknownDayText.contains("If this goes on for 3 hours, your vault"))
+        #expect(scaled.stagingNote == "Staging: 1 day = 1 hour")
+        // A clock started at 24 and read in real time keeps its hour: the computed text.
+        let started = RecoveryStatusView(
+            state: "unknown", used: nil, counterUnavailable: true, unknownForADay: true, unknownForSeconds: 3_600
+        )
+        #expect(started.unknownDayText.hasPrefix("For 1 hour your vault") && started.unknownDayText.contains("goes on for 3 days,"))
+        let format = Bundle.module.localizedString(forKey: "data_recovery_unknown_day_scaled", value: nil, table: nil)
+        #expect(format.hasPrefix("For %1$@ your vault") && format.contains("goes on for %2$@, your vault"))
+    }
+
     /// S10: the old phone's 7 days (I3 starts the timer) at 24.
     @Test func theOldPhonesKeepIsScaled() {
         #expect(TimeScales.scaled(TimeScales.oldPhoneKeep, by: 24) == 7 * 3_600)
@@ -152,6 +218,12 @@ struct TimeScaleWaitTests {
         #expect(read.timeScale == 24)
         let before = try JSONDecoder().decode(LocalAccount.self, from: Data(#"{"user_guid":"g","vault_id":"v"}"#.utf8))
         #expect(before.timeScale == 1)
+        #expect(before.recoveryUnknownSinceMs == nil && before.recoveryUnknownForMs == nil)
+        // S8: the clock's start and its period go with the record.
+        a.recoveryUnknownSinceMs = 1_800_000_000_000
+        a.recoveryUnknownForMs = 3_600_000
+        let clock = try JSONDecoder().decode(LocalAccount.self, from: JSONEncoder().encode(a))
+        #expect(clock.recoveryUnknownSinceMs == 1_800_000_000_000 && clock.recoveryUnknownForMs == 3_600_000)
     }
 }
 
@@ -224,6 +296,52 @@ struct TimeScaleWaitTests {
         try await m.ownerChecks.refreshOwnerCheck()
         _ = try await m.overview()
         #expect(m.record.value.timeScale == 1 && m.timeScale == 1)
+    }
+
+    /// S8 end to end: the status screen's reads move the clock; at 24 the counter unavailable for an hour is urgent and
+    /// the text says so; a running clock keeps its period when the scale changes.
+    @Test func theRecoveryCounterClockAtTwentyFour() async throws {
+        let service = try FakeVaultService()
+        service.timeScales = .staging
+        service.timeScale = 24
+        let phone = try TestVaultPhone(service: service)
+        defer { phone.close() }
+        let m = phone.manager
+        try await setUp(phone, service)
+        service.recoveryCounter = "unavailable"
+        let first = try #require(try await m.overview().recovery)
+        #expect(!first.unknownForADay && first.unknownForSeconds == 3_600 && first.timeScale == 24)
+        #expect(m.record.value.recoveryUnknownSinceMs != nil && m.record.value.recoveryUnknownForMs == 3_600_000)
+        phone.clockAhead = 1_800
+        #expect(try await m.overview().recovery?.unknownForADay == false)
+        // The vault back at real time: the clock started at 24 keeps its hour.
+        service.timeScale = 1
+        phone.clockAhead = 3_601
+        let urgent = try #require(try await m.overview().recovery)
+        #expect(urgent.unknownForADay && urgent.unknownForSeconds == 3_600 && urgent.timeScale == 1)
+        #expect(urgent.unknownDayText.hasPrefix("For 1 hour") && urgent.unknownDayText.contains("goes on for 3 days,"))
+        // An available counter stops the clock.
+        service.recoveryCounter = "ok"
+        #expect(try await m.overview().recovery?.unknownForADay == false)
+        #expect(m.record.value.recoveryUnknownSinceMs == nil && m.record.value.recoveryUnknownForMs == nil)
+    }
+
+    /// S8 at scale 1: 24 hours, and the period is not stored. The owner check's status read moves the clock too.
+    @Test func theRecoveryCounterClockInRealTime() async throws {
+        let service = try FakeVaultService()
+        let phone = try TestVaultPhone(service: service)
+        defer { phone.close() }
+        let m = phone.manager
+        try await setUp(phone, service)
+        service.recoveryCounter = "unavailable"
+        try await m.ownerChecks.refreshOwnerCheck()
+        #expect(m.record.value.recoveryUnknownSinceMs != nil && m.record.value.recoveryUnknownForMs == nil)
+        phone.clockAhead = 23 * 3_600
+        #expect(try await m.overview().recovery?.unknownForADay == false)
+        phone.clockAhead = 24 * 3_600 + 1
+        let urgent = try #require(try await m.overview().recovery)
+        #expect(urgent.unknownForADay && urgent.unknownForSeconds == 86_400)
+        #expect(urgent.unknownDayText.hasPrefix("For a day your vault") && urgent.unknownDayText.contains("goes on for three days,"))
     }
 
     /// `vault.status` says the scale; a deadline learnt before keeps its real-time warning (STAGING-TIME-SCALE §5.5).

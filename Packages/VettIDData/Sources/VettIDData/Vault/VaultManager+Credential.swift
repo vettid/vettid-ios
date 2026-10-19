@@ -88,18 +88,21 @@ extension VaultManager {
             // A renew on its way: refused at once, before anything is asked of the vault (its blob may still move).
             if phoneSecrets.anyInFlight { throw VaultFailure(.busy, code: "change_in_flight") }
             try await decideFirst(carriesPin: true)
-            let api = try openApi(try await openSession())
-            try await refreshedOnce {
-                let box = MarkerBox()
-                try await changing(box) {
-                    // Stored once the request is fixed, after the checks (VAULT-MESSAGING 0.46.0 §11.14.9 step 1).
-                    try await api.credentialChangePassword(password: password, newPassword: newPassword, pin: pin) { @MainActor change in
-                        let marker = UnresolvedChange(type: .password, id: change.id, version: change.version, exp: change.exp)
-                        try self.phoneSecrets.setUnresolved(marker)
-                        box.marker = marker
-                    }
-                    if let m = box.marker { try? phoneSecrets.clearUnresolved(id: m.id) }
+            let s = try await openSession()
+            let api = try openApi(s)
+            // A change or a renew that goes out from here on refuses this one (VAULT-MESSAGING 0.47.0 §11.14.9 step 2).
+            let since = s.device.secretsSent
+            let box = MarkerBox()
+            try await changing(box) {
+                // Stored once the request is fixed, after the checks (VAULT-MESSAGING 0.47.0 §11.14.9 step 1).
+                try await api.credentialChangePassword(
+                    password: password, newPassword: newPassword, pin: pin, since: since
+                ) { @MainActor change in
+                    let marker = UnresolvedChange(type: .password, id: change.id, version: change.version, exp: change.exp)
+                    try self.phoneSecrets.setUnresolved(marker)
+                    box.marker = marker
                 }
+                if let m = box.marker { try? phoneSecrets.clearUnresolved(id: m.id) }
             }
         }
     }
@@ -130,29 +133,30 @@ extension VaultManager {
             // A renew on its way: refused at once, before anything is asked of the vault.
             if phoneSecrets.anyInFlight { throw VaultFailure(.busy, code: "change_in_flight") }
             try await decideFirst(carriesPin: true)
-            let api = try openApi(try await openSession())
+            let s = try await openSession()
+            let api = try openApi(s)
+            // Read before the renews' decision, which may wait on the network: a change or a renew that goes out from here
+            // on refuses this one (VAULT-MESSAGING 0.47.0 §11.14.9 step 2), as vettid-android reads it before its settle.
+            let since = s.device.secretsSent
             // A renew whose answer was lost is decided first (VAULT-MESSAGING 0.46.0 §11.14.9 step 1).
             try await settleRenews(api)
-            // A refusal with nothing sent because the blob had moved is built again once, reusing the same record.
-            try await refreshedOnce {
-                // No await from here to the send's start: a second change is refused by ``changing(_:_:)``.
-                let operation = try pinOperation()
-                let box = MarkerBox()
-                try await changing(box) {
-                    defer { phoneSecrets.endChange(operation: operation) }
-                    // The candidate and the marker, in one write, once the request is fixed after the checks
-                    // (VAULT-MESSAGING 0.46.0 §11.14.9 step 1): a restart never decides a marker stored before them.
-                    let advanced = try await api.pinChange(pin: pin, newPin: newPin, password: password) { @MainActor change in
-                        let marker = UnresolvedChange(
-                            type: .pin, id: change.id, version: change.version, exp: change.exp, operation: operation
-                        )
-                        let next = try self.phoneSecrets.beginChange(operation: operation, unresolved: marker)
-                        box.marker = marker
-                        return next
-                    }
-                    if let m = box.marker { confirmApplied(m, epochAdvanced: advanced) }
-                    refreshPinStep()
+            // No await from here to the send's start: a second change is refused by ``changing(_:_:)``.
+            let operation = try pinOperation()
+            let box = MarkerBox()
+            try await changing(box) {
+                defer { phoneSecrets.endChange(operation: operation) }
+                // The candidate and the marker, in one write, once the request is fixed after the checks
+                // (VAULT-MESSAGING 0.47.0 §11.14.9 step 1): a restart never decides a marker stored before them.
+                let advanced = try await api.pinChange(pin: pin, newPin: newPin, password: password, since: since) { @MainActor change in
+                    let marker = UnresolvedChange(
+                        type: .pin, id: change.id, version: change.version, exp: change.exp, operation: operation
+                    )
+                    let next = try self.phoneSecrets.beginChange(operation: operation, unresolved: marker)
+                    box.marker = marker
+                    return next
                 }
+                if let m = box.marker { confirmApplied(m, epochAdvanced: advanced) }
+                refreshPinStep()
             }
         }
     }

@@ -114,6 +114,32 @@ import VettIDUI
         #expect(VaultStatusContent.recoveryText(v) == "None")
     }
 
+    /// The counter unavailable for a day (§11.14.5; STAGING-TIME-SCALE 0.1.1 S8, S7; vettid-android
+    /// `settings_recovery_unknown_day`): the approved text verbatim at scale 1; at 24 both durations computed, with the
+    /// staging note beside it.
+    @Test func theRecoveryUnknownDayText() {
+        let real = RecoveryStatusView(state: "unknown", used: nil, counterUnavailable: true, unknownForADay: true)
+        #expect(VaultStatusContent.recoveryUnknownDayText(real) == """
+            For a day your vault has not been able to check its recovery attempts or record that you were here. If this \
+            goes on for three days, your vault is no longer protected against a recovery started by someone else, and until \
+            it ends you cannot change your PIN or password. This is a fault of the VettID service or an attack on it. \
+            Contact VettID.
+            """)
+        let staging = RecoveryStatusView(
+            state: "unknown", used: nil, counterUnavailable: true, unknownForADay: true, unknownForSeconds: 3_600, timeScale: 24
+        )
+        let text = VaultStatusContent.recoveryUnknownDayText(staging)
+        #expect(text.hasPrefix("For 1 hour your vault has not been able"))
+        #expect(text.contains("If this goes on for 3 hours, your vault"))
+        #expect(text.hasSuffix("Contact VettID.\n\nStaging: 1 day = 1 hour"))
+        // A clock started in real time keeps its 24 hours on a vault scaled since; the quiet period follows the vault.
+        let started = RecoveryStatusView(state: "unknown", used: nil, counterUnavailable: true, unknownForADay: true, timeScale: 24)
+        #expect(VaultStatusContent.recoveryUnknownDayText(started).hasPrefix("For 24 hours"))
+        var v = overview
+        v.recovery = staging
+        #expect(height(VaultStatusContent(state: LoadState(loading: false, value: v), installedFrom: .apple)) > 0)
+    }
+
     /// vettid-android `AccountCard`: the address and the membership under the names; without a snapshot, the default.
     @Test func theAccountCard() {
         let member = AccountInfo(

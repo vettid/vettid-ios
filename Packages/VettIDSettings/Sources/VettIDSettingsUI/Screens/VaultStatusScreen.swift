@@ -7,8 +7,9 @@ import VettIDUI
 /// Vault status (stateless): a release notice, then the vault's state with "Installed from" under it (IOS-PLAN ID15:
 /// where vettid-android shows its signer line, from the build here, with "Apple App Attest confirms this is the VettID
 /// app"), its ID, the releases, recovery, confirmation, devices and connections, and that the status is advisory.
-/// vettid-android's recovery notices (attempts used, the counter unavailable for a day) come with the recovery screens and
-/// the PIN and password changes they lead to (I1.8b, I3). Mirrors vettid-android `VaultStatusContent`.
+/// Under the release notice, the urgent notice of a recovery counter unavailable for a day (§11.14.5; STAGING-TIME-SCALE
+/// 0.1.1 S8). vettid-android's notice of attempts used comes with the recovery screens and the PIN and password changes
+/// it leads to (I1.8b, I3). Mirrors vettid-android `VaultStatusContent`.
 public struct VaultStatusContent: View {
     @Environment(\.vettIDColors) private var colors
     let state: LoadState<VaultOverview>
@@ -51,6 +52,12 @@ public struct VaultStatusContent: View {
                 .padding(.horizontal, Spacing.gutter)
                 .accessibilityIdentifier("release_notice")
         }
+        if v.recoveryOffered, let r = v.recovery, r.unknownForADay {
+            NoticeCard(.urgent, title: SettingsStrings.statusRecovery, message: Self.recoveryUnknownDayText(r))
+                .padding(.horizontal, Spacing.gutter)
+                .padding(.vertical, Spacing.xs)
+                .accessibilityIdentifier("recovery_unknown_day")
+        }
         SettingsGroup {
             SettingsInfoRow(SettingsStrings.statusState, value: Self.stateText(v.state), icon: .lock)
             SettingsDivider()
@@ -81,6 +88,12 @@ public struct VaultStatusContent: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, Spacing.gutter + Spacing.xs)
             .padding(.vertical, Spacing.l)
+    }
+
+    /// The counter unavailable for a day (STAGING-TIME-SCALE 0.1.1 S8, S7): the clock's period as it started and the quiet
+    /// period at the vault's time scale, with "Staging: 1 day = 1 hour" under it on a staging vault.
+    static func recoveryUnknownDayText(_ r: RecoveryStatusView) -> String {
+        r.stagingNote.map { r.unknownDayText + "\n\n" + $0 } ?? r.unknownDayText
     }
 
     /// IOS-PLAN ID15: Apple for the Release and Staging builds; the development builds' own text otherwise.

@@ -121,6 +121,9 @@ public final class VaultDevice: @unchecked Sendable {
     let lock = AsyncLock()
     /// Serializes the credential operations (§3.5.3): one UTK taken, sealed and answered at a time.
     let credentialLock = AsyncLock()
+    /// The changes and renews this device sent (``CredentialOps``), counted under ``credentialLock`` as each goes out:
+    /// an operation that began before one went out is refused (§11.14.9 step 2). Read and written under ``mem``.
+    private var secretsSentCount = 0
     let mem = NSLock()
     let own: RelayClient
     var relays: [String: RelayClient] = [:]
@@ -200,6 +203,12 @@ public final class VaultDevice: @unchecked Sendable {
     /// Each change of ``vaultRefusals``: a new count after a refusal, 0 when the vault spoke to this device or a sealed
     /// unlock result cleared it (vettid-android's `vaultRefusals` flow).
     public func vaultRefusalCounts() -> AsyncStream<Int> { refusalBroadcast.stream() }
+
+    /// How many changes and renews went out (``CredentialOps``; VAULT-MESSAGING 0.47.0 §11.14.9 step 2).
+    public var secretsSent: Int { mem.withLock { secretsSentCount } }
+
+    /// A change or a renew goes out now. Callers hold ``credentialLock``.
+    func secretSent() { mem.withLock { secretsSentCount += 1 } }
 
     /// True once device.paired arrived: the session with the vault is up.
     public var paired: Bool { mem.withLock { isPaired } }

@@ -1,5 +1,6 @@
 import Foundation
 import VettIDAltChan
+import VettIDCrypto
 import VettIDVault
 
 // Settings → Vault status and Settings → Attestation (IOS-PLAN §8 I1.8).
@@ -7,20 +8,55 @@ extension VaultManager {
     /// Vault status: the member API's advisory status (`GET /api/vault/status`) and, while the vault is open, its own
     /// `vault.status` (VAULT-MESSAGING §10.2). vettid-android also reads its own `device.list` entry for the signer line (VAULT-MESSAGING §11.7.1); an
     /// iPhone has no signer (App Attest reports none), and Settings shows "Installed from" from the build instead
-    /// (IOS-PLAN ID15), so the list is not read. The recovery counter's "unavailable for a day" clock comes with the
-    /// recovery screens (I3); until then ``RecoveryStatusView/unknownForADay`` stays false. Mirrors vettid-android
-    /// `VaultManager.overview`.
+    /// (IOS-PLAN ID15), so the list is not read. Each read that carries `recovery` moves the clock of a recovery counter
+    /// unavailable for a day (``recoveryUnknownClock(unavailable:since:)``). Mirrors vettid-android `VaultManager.overview`.
     public func overview() async throws -> VaultOverview {
         try await guarded {
             let rec = record.generation
             let s = try await openSession()
             let member = try await vaultStatus()
             let own = phase == .unlocked ? try await openStatus(s, since: rec) : nil
-            return Self.overview(
+            var o = Self.overview(
                 member: member, own: own, deviceVault: s.device.vaultID, lastRelease: s.device.altState.releaseNumber,
                 recoveryOffered: ReleasePath.recoveryOffered(record.value.capabilities)
             )
+            if let clock = noteRecoveryStatus(own?.recovery, since: rec) {
+                o.recovery?.unknownForADay = clock.urgent(nowMs: nowMs)
+                o.recovery?.unknownForSeconds = TimeInterval(clock.period / 1_000)
+                o.recovery?.timeScale = timeScale
+            }
+            return o
         }
+    }
+
+    /// Every `vault.status` read that carries `recovery` (the owner check's too, for the record of [rec]) moves the clock
+    /// of ``recoveryUnknownClock(unavailable:since:)``, and gives the clock after it (nil without `recovery`). Mirrors
+    /// vettid-android `noteRecoveryStatus`.
+    @discardableResult
+    func noteRecoveryStatus(_ r: RecoveryStatus?, since rec: Int) -> RecoveryUnknownClock.State? {
+        guard let r else { return nil }
+        return recoveryUnknownClock(unavailable: RecoveryUnknownClock.unavailable(state: r.state, counter: r.counter), since: rec)
+    }
+
+    /// §11.14.5, §11.14.11: the clock of a recovery counter unavailable at every read, urgent after 24 hours. A read that
+    /// finds it available forgets the start; the first that does not records it in the account record of [rec] (kept on
+    /// the phone across restarts), with the 24 hours divided by the vault's time scale then (STAGING-TIME-SCALE 0.1.1 S8;
+    /// IOS-PLAN 0.1.7 §6.6): a running clock keeps its period. A reset since [rec] leaves the clock stopped.
+    func recoveryUnknownClock(unavailable: Bool, since rec: Int) -> RecoveryUnknownClock.State {
+        let now = nowMs
+        let policy = config.trust.timeScales
+        let maxScale = [TimeScale.maxDevelopment, TimeScale.staging].first(where: policy.accepts) ?? TimeScale.real
+        var next = RecoveryUnknownClock.State()
+        _ = try? record.update(since: rec) { a in
+            let was = RecoveryUnknownClock.State(since: a.recoveryUnknownSinceMs, periodMs: a.recoveryUnknownForMs)
+                .validated(maxScale: maxScale)
+            // A stored scale this build does not accept is real time (as ``timeScale``).
+            let scale = policy.accepts(a.timeScale) ? a.timeScale : TimeScale.real
+            next = RecoveryUnknownClock.advance(was, unavailable: unavailable, nowMs: now, timeScale: scale)
+            a.recoveryUnknownSinceMs = next.since
+            a.recoveryUnknownForMs = next.periodMs
+        }
+        return next
     }
 
     /// The vault's own `vault.status`, or nil when it did not answer (the network, no answer in time): the screen then
