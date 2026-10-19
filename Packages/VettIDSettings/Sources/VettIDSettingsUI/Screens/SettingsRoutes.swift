@@ -40,6 +40,8 @@ public struct SettingsRoute: View {
     private let host: SettingsHost
     /// The app's "Allow screenshots" (IOS-PLAN §4), from the environment; absent in a preview or a test.
     @Environment(ScreenshotAllowance.self) private var screenshots: ScreenshotAllowance?
+    /// The app's theme choice (Settings → App → Theme), from the environment; absent in a preview or a test.
+    @Environment(ThemeSetting.self) private var theme: ThemeSetting?
     @State private var model: SettingsViewModel?
     @State private var ownerCheck: OwnerCheckSettingsViewModel?
 
@@ -76,7 +78,8 @@ public struct SettingsRoute: View {
                     state: SettingsState(
                         account: account.account, appLockOn: appLock.state.isOn, appLockMethod: appLock.method,
                         appLockTimeout: appLock.timeout, screenshotsAllowed: screenshots?.allowed ?? false,
-                        screenshotsStayOn: screenshots?.staysOn ?? false, phoneSecret: vault.usesPhoneSecret, update: updates?.offer
+                        screenshotsStayOn: screenshots?.staysOn ?? false, phoneSecret: vault.usesPhoneSecret, update: updates?.offer,
+                        theme: theme?.theme ?? .system
                     ),
                     ownerCheck: OwnerCheckSettingsState(view: ownerChecks.ownerCheck)
                 )
@@ -86,7 +89,7 @@ public struct SettingsRoute: View {
             if model == nil {
                 model = SettingsViewModel(
                     account: account, vault: vault, appLock: appLock, promptReason: promptReason, screenshots: screenshots,
-                    updates: updates
+                    updates: updates, theme: theme
                 )
                 ownerCheck = OwnerCheckSettingsViewModel(repo: ownerChecks)
             }
@@ -110,6 +113,7 @@ public struct SettingsRoute: View {
         a.setAppLock = { m.setAppLock($0) }
         a.setAppLockMethod = { m.setAppLockMethod($0) }
         a.setTimeout = { m.setAppLockTimeout($0) }
+        a.setTheme = { m.setTheme($0) }
         a.acknowledgeInvalidated = { m.acknowledgeInvalidated() }
         a.dismissAppLockUnavailable = { m.dismissAppLockUnavailable() }
         a.dismissError = { m.dismissError() }

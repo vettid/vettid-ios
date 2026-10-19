@@ -14,7 +14,7 @@ import VettIDData
         #expect(TopLevelDestination.allCases.map(\.key) == ["messages", "connections", "approvals", "items", "history", "settings", "help"])
         #expect(TopLevelDestination.fromKey("settings") == .settings && TopLevelDestination.fromKey("nope") == nil)
         #expect(TopLevelDestination.start == .messages)
-        #expect(TopLevelDestination.allCases.filter(\.available) == [.settings])
+        #expect(TopLevelDestination.allCases.filter(\.available) == [.settings, .help])
     }
 
     @Test func theVersion() {

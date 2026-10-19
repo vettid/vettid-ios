@@ -220,6 +220,9 @@ public struct AppShell: View {
                 account: account, vault: vault, ownerChecks: ownerChecks, appLock: appLock, updates: releaseUpdates,
                 promptReason: promptReason, host: settingsHost
             )
+        case .help:
+            // A back arrow, as on Android, where it returns to the start destination.
+            HelpScreen { model.back() }
         default:
             ComingLaterScreen(destination: model.destination, chrome: chrome)
         }
