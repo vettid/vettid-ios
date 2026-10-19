@@ -4,10 +4,12 @@ import Foundation
 /// `URLSession` it makes (``session``), from a queue of scripted answers, and records every request it saw. Each server
 /// has its own host name, so tests that run in parallel never see each other's requests.
 public final class FakeHTTPServer: @unchecked Sendable {
-    /// One scripted answer: an HTTP response, or a transport failure.
-    public enum Answer: Sendable {
+    /// One scripted answer: an HTTP response, or a transport failure; or one of these that reaches the client only once
+    /// its ``Gate`` opens (the server goes on answering other requests meanwhile).
+    public indirect enum Answer: Sendable {
         case response(status: Int, body: [UInt8], headers: [String: String])
         case failure(URLError.Code)
+        case held(Gate, Answer)
 
         public static func json(_ status: Int, _ body: String, headers: [String: String] = [:]) -> Answer {
             .response(status: status, body: Array(body.utf8), headers: ["Content-Type": "application/json"].merging(headers) { $1 })
@@ -17,6 +19,34 @@ public final class FakeHTTPServer: @unchecked Sendable {
 
         public static func bytes(_ status: Int, _ body: [UInt8], headers: [String: String] = [:]) -> Answer {
             .response(status: status, body: body, headers: headers)
+        }
+    }
+
+    /// Holds the answers given with it until ``open()``.
+    public final class Gate: @unchecked Sendable {
+        private let cond = NSCondition()
+        private var isOpen = false
+        private var waitingCount = 0
+
+        public init() {}
+
+        /// The answers held now.
+        public var waiting: Int { cond.withLock { waitingCount } }
+
+        /// Lets every held answer through, and every later one at once.
+        public func open() {
+            cond.withLock {
+                isOpen = true
+                cond.broadcast()
+            }
+        }
+
+        func wait() {
+            cond.withLock {
+                waitingCount += 1
+                while !isOpen { cond.wait() }
+                waitingCount -= 1
+            }
         }
     }
 
@@ -99,7 +129,16 @@ final class FakeURLProtocol: URLProtocol, @unchecked Sendable {
         let r = FakeHTTPServer.Request(
             method: request.httpMethod ?? "GET", url: url, headers: request.allHTTPHeaderFields ?? [:], body: Self.body(of: request)
         )
-        switch server.answer(r) {
+        deliver(server.answer(r), url)
+    }
+
+    private func deliver(_ answer: FakeHTTPServer.Answer, _ url: URL) {
+        switch answer {
+        case .held(let gate, let a):
+            DispatchQueue.global().async {
+                gate.wait()
+                self.deliver(a, url)
+            }
         case .failure(let code):
             client?.urlProtocol(self, didFailWithError: URLError(code))
         case .response(let status, let body, let headers):

@@ -160,6 +160,46 @@ import VettIDVault
         try expectWiped()
     }
 
+    /// The deletion's `device.unlinked{vault_deleted}` read before the unlock's own answer is in (its slot answers late):
+    /// the phase read for it ends before the unlock does, and the unlock's end never puts the open app over "no vault".
+    @Test func anUnlinkReadEndingBeforeTheUnlockWins() async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.lockByItself(reason: "test")
+        #expect(await delete()?.code == VaultManager.codeDeleteUnconfirmed)
+        service.slotQueuedAfterDeletion = .max
+        let unlock = Task { try await m.unlock(pin: pin) }
+        #expect(await eventually { m.phase == noVault }, "read while the unlock waits for its answer")
+        service.slotQueuedAfterDeletion = 0
+        #expect(try await unlock.value == .success)
+        #expect(m.phase == noVault)
+        #expect(try await m.checkVaultDeleted() == .deleted)
+        try expectWiped()
+    }
+
+    /// The same with the read for `device.unlinked` still on its way when the unlock's answer comes in: it ends after the
+    /// unlock, and "no vault" follows all the same.
+    @Test func anUnlinkReadEndingAfterTheUnlockWins() async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.lockByItself(reason: "test")
+        #expect(await delete()?.code == VaultManager.codeDeleteUnconfirmed)
+        service.slotQueuedAfterDeletion = .max
+        service.holdStatusReads()
+        let unlock = Task { try await m.unlock(pin: pin) }
+        #expect(await eventually { service.heldStatusReads == 1 }, "the read for device.unlinked, held")
+        service.slotQueuedAfterDeletion = 0
+        // The unlock's end: the open app set while that read is held, or a read of its own.
+        #expect(await eventually { m.phase == .unlocked || service.heldStatusReads == 2 })
+        service.releaseStatusReads()
+        #expect(try await unlock.value == .success)
+        #expect(await eventually { m.phase == noVault })
+        #expect(try await m.checkVaultDeleted() == .deleted)
+        try expectWiped()
+    }
+
+    var noVault: AppPhase { .unreachable(.noVault, longUnreachable: false) }
+
     /// The same past the deletion's `exp`: the vault is still listed more than a minute after it, so it was not deleted
     /// and never will be; the unlock's waiting copy is dropped unanswered.
     @Test func aDeletionWaitingPastItsExpIsNotDeleted() async throws {

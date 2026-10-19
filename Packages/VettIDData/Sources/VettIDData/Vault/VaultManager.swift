@@ -75,6 +75,9 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored let lockNotices = LockNotices()
     /// Bumped by every lock the member asks for: an unlock or a refresh that began before it publishes no open phase.
     @ObservationIgnored var lockGeneration = 0
+    /// Bumped by every vault event that has the phase read again (`device.unlinked` that is not a replacement): an unlock
+    /// that one reached while it was on its way reads the phase again rather than publish its own.
+    @ObservationIgnored var rereads = 0
     /// The pending lock found at the start was taken up (once, after the first-run cleanup and the record).
     @ObservationIgnored private var lockResumed = false
     @ObservationIgnored private(set) var holder: HolderWatch?
@@ -463,7 +466,11 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
 
     // MARK: - The phase
 
-    public func refresh() async throws {
+    public func refresh() async throws { try await refresh(again: 1) }
+
+    /// ``refresh()``; [again]: how many more times a result dropped only because an operation set an open vault's phase
+    /// meanwhile is read once more (chosen; not in the spec).
+    private func refresh(again: Int) async throws {
         let gen = record.generation
         let changes = phaseChanges
         let locks = lockGeneration
@@ -478,8 +485,23 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             let last = [record.value.lastContactMs, record.value.lastOpenedMs].compactMap { $0 }.max()
             p = .unreachable(kind, longUnreachable: StuckScreens.longUnreachable(kind, lastContactMs: last, nowMs: nowMs))
         }
-        // A reset, a lock, or a newer phase set by an operation meanwhile, wins.
-        if gen == record.generation, changes == phaseChanges, locks == lockGeneration { phase = p }
+        // A reset or a lock meanwhile wins.
+        guard gen == record.generation, locks == lockGeneration else { return }
+        if changes == phaseChanges {
+            phase = p
+            return
+        }
+        // A newer phase set by an operation meanwhile wins, unless it is an open vault's (the end of an unlock or of the
+        // setup), which what this read saw (the vault gone, after a `device.unlinked`) may be newer than: read once more.
+        // A lock, a wipe, a relay refusal or a failure screen set meanwhile is never read over.
+        if again > 0, Self.opensVault(phase) { try await refresh(again: again - 1) }
+    }
+
+    nonisolated static func opensVault(_ p: AppPhase) -> Bool {
+        switch p {
+        case .unlocked, .setup: true
+        default: false
+        }
     }
 
     /// The phone's clock, in Unix ms.

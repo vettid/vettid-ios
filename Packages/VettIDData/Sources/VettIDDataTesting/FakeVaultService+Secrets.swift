@@ -1,6 +1,7 @@
 #if DEBUG
 import Foundation
 import VettIDCrypto
+import VettIDTesting
 
 // TEST ONLY. New phone secret and Delete vault as vettid-vault answers them: `vault.secret.renew` (VAULT-MESSAGING
 // §11.14.9, `features/credential/releaser.go` `changeSecret`: the pair checked as an owner check, the next epoch's
@@ -37,6 +38,29 @@ extension FakeVaultService {
     public var statusLagsDeletion: Bool {
         get { locked { statusLagsDeletionValue } }
         set { locked { statusLagsDeletionValue = newValue } }
+    }
+
+    /// Once the vault deleted itself, the next [n] polls of a result slot that is done answer `queued` (the vault's answer
+    /// reaches the phone late, after what the vault sent to its mailbox); 0 lets the results through.
+    public var slotQueuedAfterDeletion: Int {
+        get { locked { slotQueuedAfterDeletionValue } }
+        set { locked { slotQueuedAfterDeletionValue = newValue } }
+    }
+
+    /// From now on each answer of `GET /api/vault/status` (as it is when asked) reaches the phone only at
+    /// ``releaseStatusReads()``.
+    public func holdStatusReads() { locked { statusGateValue = FakeHTTPServer.Gate() } }
+
+    /// The answers of `GET /api/vault/status` held now.
+    public var heldStatusReads: Int { locked { statusGateValue?.waiting ?? 0 } }
+
+    /// Lets the held answers of `GET /api/vault/status` through, and every later one at once.
+    public func releaseStatusReads() {
+        let gate: FakeHTTPServer.Gate? = locked {
+            defer { statusGateValue = nil }
+            return statusGateValue
+        }
+        gate?.open()
     }
 
     // MARK: - The requests
