@@ -90,6 +90,9 @@ import Testing
         // The number as a string is not the number.
         #expect(ReleaseLog.parse(index(entry(5).replacingOccurrences(of: #""release": 5"#, with: #""release": "5""#)), target: rel(5), between: []) == nil)
         #expect(ReleaseLog.parse(index(entry(5).replacingOccurrences(of: #""release": 5"#, with: #""release": true"#)), target: rel(1), between: []) == nil)
+        // A number with a fraction or an exponent is not an integer, as `longOrNull` reads it.
+        #expect(ReleaseLog.parse(index(entry(5).replacingOccurrences(of: #""release": 5"#, with: #""release": 5.0"#)), target: rel(5), between: []) == nil)
+        #expect(ReleaseLog.parse(index(entry(5).replacingOccurrences(of: #""release": 5"#, with: #""release": 5e0"#)), target: rel(5), between: []) == nil)
     }
 
     @Test func aDocumentThatIsNoLogIsNoEntry() {

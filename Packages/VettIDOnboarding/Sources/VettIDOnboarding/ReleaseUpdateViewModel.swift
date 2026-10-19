@@ -11,16 +11,25 @@ public struct ReleaseUpdateState: Equatable, Sendable {
     public var checkDue = false
     /// What's new in the offered release; nil while it loads. Never gates the approval.
     public var notes: ReleaseNotes?
+    /// (VAULT-MESSAGING §11.14.9) A PIN or password change is undecided: why the update waits, in the change gate's words.
+    public var changeHold: FailureKind?
 
-    public init(loading: Bool = true, offer: ReleaseUpdateOffer? = nil, checkDue: Bool = false, notes: ReleaseNotes? = nil) {
+    public init(
+        loading: Bool = true, offer: ReleaseUpdateOffer? = nil, checkDue: Bool = false, notes: ReleaseNotes? = nil,
+        changeHold: FailureKind? = nil
+    ) {
         self.loading = loading
         self.offer = offer
         self.checkDue = checkDue
         self.notes = notes
+        self.changeHold = changeHold
     }
 
+    /// Whether the PIN may be typed: neither the owner check nor an undecided change comes first.
+    public var pinAllowed: Bool { !checkDue && changeHold == nil }
+
     /// Whether "Approve and update" may be pressed with [pinTyped] digits on the keypad.
-    public func submitAllowed(pinTyped: Int) -> Bool { offer != nil && !checkDue && pinTyped >= UnlockState.minPinLength }
+    public func submitAllowed(pinTyped: Int) -> Bool { offer != nil && pinAllowed && pinTyped >= UnlockState.minPinLength }
 }
 
 /// The update screen (owner decision 2026-10-09): the release offered, its fingerprint and What's new, and "Approve and
@@ -46,8 +55,9 @@ public final class ReleaseUpdateViewModel {
     ) {
         self.updates = updates
         releaseNotes = notes
-        state = ReleaseUpdateState(loading: updates.offer == nil, offer: updates.offer)
+        state = ReleaseUpdateState(loading: updates.offer == nil, offer: updates.offer, changeHold: updates.changeHold)
         followers.add(follow(self, read: { $0.updates.offer }, apply: { $0.offerChanged($1) }))
+        followers.add(follow(self, read: { $0.updates.changeHold }, apply: { $0.state.changeHold = $1 }))
         if let ownerCheck {
             followers.add(follow(
                 ownerCheck, read: { $0.ownerCheck?.gated(now()) == true || $0.lockedByOwnerCheck },
@@ -91,6 +101,7 @@ public final class ReleaseUpdateViewModel {
         guard let offer = state.offer, state.submitAllowed(pinTyped: digits.count) else { return false }
         if updates.start(pin: digits, offer: offer) { return true }
         state.checkDue = updates.ownerCheckDue()
+        state.changeHold = updates.changeHold
         return false
     }
 

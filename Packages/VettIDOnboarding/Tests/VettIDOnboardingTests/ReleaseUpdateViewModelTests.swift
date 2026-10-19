@@ -85,6 +85,20 @@ import VettIDDataTesting
         #expect(updates.calls.isEmpty)
     }
 
+    /// (§11.14.9) A PIN or password change undecided: the PIN waits, with the gate's words, and nothing starts.
+    @Test func anUndecidedChangeHoldsTheApproval() async {
+        let updates = FakeReleaseUpdates(offer: offer)
+        updates.changeHold = .changeChecking
+        let vm = ReleaseUpdateViewModel(updates: updates, ownerCheck: vault, notes: FakeReleaseNotes())
+        await vm.settle()
+        #expect(vm.state.changeHold == .changeChecking && !vm.state.pinAllowed)
+        #expect(!vm.approve(pin: "246802"))
+        #expect(updates.calls.isEmpty)
+        updates.changeHold = nil
+        await vm.settle()
+        #expect(vm.state.pinAllowed)
+    }
+
     @Test func noOfferNothingToApprove() async {
         let updates = FakeReleaseUpdates(offer: nil)
         let vm = ReleaseUpdateViewModel(updates: updates, ownerCheck: vault, notes: FakeReleaseNotes())

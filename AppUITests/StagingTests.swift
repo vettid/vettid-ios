@@ -146,14 +146,11 @@ final class StagingTests: XCTestCase {
 
         // Settings, from the drawer; the row is there only while the vault has an update to approve.
         expect(app, "app_shell", timeout: Self.network)
-        // (An app left open on Settings has no menu button there: Settings has a back arrow.)
-        if app.buttons["top_bar_menu"].waitForExistence(timeout: 10) {
-            tap(app.buttons["top_bar_menu"])
-            tap(app.buttons["drawer_settings"])
-        }
+        openSettings(app)
         let row = app.buttons["release_update_row"]
         if !row.waitForExistence(timeout: Self.network) {
-            return fail(app, "Settings offers no release update (no newer active release in the manifest this phone uses).")
+            // Normal once the phone has moved: no newer active release in the manifest it uses.
+            throw XCTSkip("Settings offers no release update.")
         }
         row.tap()
         expect(app, "release_offer", timeout: Self.network)
@@ -172,7 +169,79 @@ final class StagingTests: XCTestCase {
         lock(app)
     }
 
+    /// The unlock screen's own offer (§11.10.3): "Update available: release N" before the PIN, "Approve the update with
+    /// this unlock", the PIN; the unlock carries the approval, the vault moves and the app opens on the new release. Then
+    /// the vault is locked. Skipped when the unlock offers no update.
+    @MainActor
+    func testStagingApproveUpdateAtUnlock() throws {
+        let pin = try Self.pin()
+        let password = try Self.input("VETTID_STAGING_PASSWORD")
+
+        let app = launch()
+        guard lockedAtStart(app, pin: pin, password: password) else { return }
+        guard shown(app)["release_offer"] != nil else { throw XCTSkip("The unlock screen offers no release update.") }
+        let approve = app.switches["approve_offer"]
+        tap(approve)
+        if !waitUntil(timeout: 10, { (approve.value as? String) == "1" }) { return fail(app, "The approval could not be turned on.") }
+        enterUnlock(app, pin: pin, password: password)
+        // The unlock with the approval, the move, and the unlock that reaches the new release (which may start first).
+        switch waitForAny(app, ["app_shell", "owner_check"], timeout: Self.releaseUpdate) {
+        case "owner_check": ownerCheck(app, pin: pin, password: password)
+        case "app_shell": break
+        default: return fail(app, "The vault did not open on the new release.")
+        }
+        // Moved: Settings no longer offers the update (a refused update would still be offered).
+        openSettings(app)
+        let row = app.buttons["release_update_row"]
+        if !waitUntil(timeout: Self.network, { !row.exists }) { return fail(app, "Settings still offers the update: it did not move.") }
+        lock(app)
+    }
+
     // MARK: - Steps
+
+    /// The unlock screen ready for a PIN, from whatever the app shows at the start (the open app is locked first); false,
+    /// after the failure, when there is no vault.
+    @MainActor
+    private func lockedAtStart(_ app: XCUIApplication, pin: String, password: String) -> Bool {
+        switch waitForAny(app, ["unlock", "app_shell", "owner_check", "welcome_recover"], timeout: 60) {
+        case "app_shell": lock(app)
+        case "owner_check":
+            ownerCheck(app, pin: pin, password: password)
+            lock(app)
+        case "unlock": break
+        case let other:
+            fail(app, "No vault on this phone: \(other ?? "no known screen") is shown.")
+            return false
+        }
+        expect(app, "unlock", timeout: Self.network)
+        let key = app.buttons["pin_1"]
+        if !waitUntil(timeout: Self.network, { key.exists && key.isEnabled }) {
+            fail(app, "The unlock screen never accepted a PIN.")
+            return false
+        }
+        return true
+    }
+
+    /// The password when the owner check is due (VAULT-MESSAGING §3.6.5), the PIN, and "Unlock".
+    @MainActor
+    private func enterUnlock(_ app: XCUIApplication, pin: String, password: String) {
+        let passwordField = app.secureTextFields["unlock_password"]
+        if passwordField.exists {
+            passwordField.tap()
+            passwordField.typeText(password)
+        }
+        enterPin(app, pin)
+        tapPrimary(app)
+    }
+
+    /// Settings, from the drawer. (An app left open on Settings has no menu button there: Settings has a back arrow.)
+    @MainActor
+    private func openSettings(_ app: XCUIApplication) {
+        if app.buttons["top_bar_menu"].waitForExistence(timeout: 10) {
+            tap(app.buttons["top_bar_menu"])
+            tap(app.buttons["drawer_settings"])
+        }
+    }
 
     @MainActor
     private func unlock(_ app: XCUIApplication, pin: String, password: String) {

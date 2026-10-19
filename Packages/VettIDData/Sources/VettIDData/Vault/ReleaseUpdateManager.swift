@@ -18,6 +18,8 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
     public nonisolated static let codeReleaseStarting = "release_starting"
     /// ``UpdateProgress/refusal`` when the vault opened without saying anything of the update.
     public nonisolated static let codeNotMoved = "not_moved"
+    /// ``UpdateProgress/failureCode`` when a step was refused because a PIN or password change is undecided.
+    public nonisolated static let codeChangeHeld = "change_held"
     /// Further waits after the API client's own: a release that cannot start is a failure.
     public nonisolated static let maxStartRetries = 5
     nonisolated static let maxStartWait: Int64 = 60
@@ -26,6 +28,7 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
     public private(set) var offer: ReleaseUpdateOffer?
     public private(set) var offerKnown = false
     public private(set) var progress: UpdateProgress?
+    public private(set) var dismissal: ReleaseDismissal?
 
     @ObservationIgnored private let ops: any ReleaseUpdateOps
     @ObservationIgnored private let sleep: @Sendable (Duration) async throws -> Void
@@ -48,8 +51,26 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
 
     public func ownerCheckDue() -> Bool { ops.ownerCheckDue() }
 
+    public var changeHold: FailureKind? { ops.changeHold() }
+
+    public func dismissBanner(at: Date) {
+        guard let o = offer else { return }
+        dismissal = ReleaseDismissal(release: o.target.number, kind: o.kind, at: at)
+    }
+
+    /// A wipe or a forget of this phone's vault: no offer, no update, no dismissal is kept.
+    public func clear() {
+        job?.cancel()
+        job = nil
+        offer = nil
+        offerKnown = false
+        progress = nil
+        dismissal = nil
+    }
+
     public func start(pin: String, offer o: ReleaseUpdateOffer) -> Bool {
-        if running || ops.ownerCheckDue() || pin.isEmpty { return false }
+        // Neither the owner check (§3.6.5) nor an undecided PIN or password change (§11.14.9) comes first.
+        if running || ops.ownerCheckDue() || ops.changeHold() != nil || pin.isEmpty { return false }
         progress = UpdateProgress(step: .locking, from: o.current, to: o.target)
         launch { [self] in
             do {
@@ -59,16 +80,16 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
                 failedBeforeMove(error, vaultOpen: true)
                 return
             }
-            await approve(pin)
+            await approve(pin, afterFailure: false)
         }
         return true
     }
 
     public func retry(pin: String) {
-        guard let p = progress, !running, !pin.isEmpty else { return }
+        guard let p = progress, !running, !pin.isEmpty, !refusedWhileChangeHeld() else { return }
         switch p.step {
         case .badPin:
-            launch { [self] in await approve(pin) }
+            launch { [self] in await approve(pin, afterFailure: false) }
         case .failed:
             launch { [self] in
                 if p.vaultOpen {
@@ -80,7 +101,7 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
                         return
                     }
                 }
-                await approve(pin)
+                await approve(pin, afterFailure: true)
             }
         case .newReleaseFailed:
             launch { [self] in await reopen(pin) }
@@ -90,7 +111,9 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
     }
 
     public func abandon(pin: String) {
-        guard let p = progress, !running, !pin.isEmpty, p.step == .newReleaseFailed, p.canAbandon, ops.canAbandon() else { return }
+        guard let p = progress, !running, !pin.isEmpty, p.step == .newReleaseFailed, p.canAbandon, ops.canAbandon(),
+              !refusedWhileChangeHeld()
+        else { return }
         launch { [self] in
             set { $0.step = .abandoning; $0.failure = nil; $0.failureCode = nil }
             let r = await withStart { s in await self.ops.unlock(pin: pin, approve: nil, abandon: true, onStarting: s) }
@@ -119,6 +142,13 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
 
     private var running: Bool { progress?.step.running == true }
 
+    /// (§11.14.9) A change is undecided: nothing is sent, and the step says "still checking".
+    private func refusedWhileChangeHeld() -> Bool {
+        guard let why = ops.changeHold() else { return false }
+        set { $0.failure = why; $0.failureCode = Self.codeChangeHeld }
+        return true
+    }
+
     private func launch(_ body: @escaping @MainActor () async -> Void) {
         job = Task { @MainActor in await body() }
     }
@@ -139,8 +169,9 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
         }
     }
 
-    /// The unlock with the approval of ``UpdateProgress/to``; nothing else sends one.
-    private func approve(_ pin: String) async {
+    /// The unlock with the approval of ``UpdateProgress/to``; nothing else sends one. [afterFailure]: "Try again" after a
+    /// failure that may have reached the vault (its answer lost).
+    private func approve(_ pin: String, afterFailure: Bool) async {
         guard let to = progress?.to else { return }
         set { $0.step = .approving; $0.failure = nil; $0.failureCode = nil; $0.waitSeconds = 0; $0.refusal = nil }
         let r = await withStart { s in await self.ops.unlock(pin: pin, approve: to, abandon: false, onStarting: s) }
@@ -153,7 +184,7 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
         case .opened, .abandoned:
             // (iPhone; chosen; not in the spec) An approval sent again after a lost answer reaches the release the first one
             // moved the vault to, which confirms the move and says nothing of the update: done, not "not moved".
-            if ops.releaseNumber() >= to.number {
+            if afterFailure, ops.releaseNumber() >= to.number {
                 done()
             } else {
                 // Opened without an `update` member (a vault that ignored it): nothing moved.

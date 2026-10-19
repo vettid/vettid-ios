@@ -33,6 +33,7 @@ import Testing
         var lockFails: VaultFailure?
         var abandonable = true
         var release: UInt64 = 4
+        var hold: FailureKind?
         /// Unlocks that report `release_starting` through the API client's callback before answering.
         var startingCallbacks = 0
         /// Runs right after such a report, while the unlock still waits.
@@ -69,6 +70,8 @@ import Testing
         func canAbandon() -> Bool { abandonable }
 
         func releaseNumber() -> UInt64 { release }
+
+        func changeHold() -> FailureKind? { hold }
     }
 
     /// The waits while a release starts, recorded; none is waited for.
@@ -315,6 +318,68 @@ import Testing
         #expect(!m.start(pin: "246802", offer: offer))
         await m.settle()
         #expect(ops.log.filter { $0 == "lock" }.count == 1)
+    }
+
+    /// (§11.14.9) A PIN or password change undecided: the update neither starts, nor retries, nor returns; nothing is sent
+    /// and the step says why.
+    @Test func anUndecidedChangeHoldsEveryStep() async {
+        let ops = Ops()
+        ops.hold = .changeChecking
+        let m = manager(ops)
+        #expect(m.changeHold == .changeChecking)
+        #expect(!m.start(pin: "246802", offer: offer))
+        #expect(ops.log.isEmpty && m.progress == nil)
+        ops.hold = nil
+        ops.results = [.badPin(retryAfterSeconds: 0)]
+        _ = m.start(pin: "111111", offer: offer)
+        await m.settle()
+        ops.hold = .changeUnresolved
+        m.retry(pin: "246802")
+        await m.settle()
+        #expect(ops.unlocks.count == 1)
+        #expect(m.progress?.failure == .changeUnresolved && m.progress?.failureCode == ReleaseUpdateManager.codeChangeHeld)
+        ops.hold = nil
+        ops.results = [.moved, .failed(.noResponse, code: nil)]
+        m.retry(pin: "246802")
+        await m.settle()
+        #expect(m.progress?.step == .newReleaseFailed)
+        ops.hold = .changeChecking
+        m.abandon(pin: "246802")
+        await m.settle()
+        #expect(ops.unlocks.count == 3 && m.progress?.step == .newReleaseFailed)
+    }
+
+    /// The lost-answer rule only after a failure: a first approval answered without an `update` member is "not moved",
+    /// whatever release this phone records.
+    @Test func theLostAnswerRuleIsOnlyForARetryAfterAFailure() async {
+        let ops = Ops()
+        ops.release = 5
+        ops.results = [.opened]
+        let m = manager(ops)
+        _ = m.start(pin: "246802", offer: offer)
+        await m.settle()
+        #expect(m.progress?.step == .refused && m.progress?.refusal == ReleaseUpdateManager.codeNotMoved)
+    }
+
+    /// The banner (owner decision 2026-10-09): shown while there is an offer, hidden 24 h after a dismissal of this
+    /// release and kind, shown again for another release or kind, and when the clock was set back.
+    @Test func theBannersDismissal() async {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        #expect(!ReleaseNotices.bannerVisible(nil, nil, now: now))
+        #expect(ReleaseNotices.bannerVisible(offer, nil, now: now))
+        let ops = Ops()
+        ops.offerValue = offer
+        let m = manager(ops)
+        await m.refreshOffer()
+        m.dismissBanner(at: now)
+        let d = m.dismissal
+        #expect(!ReleaseNotices.bannerVisible(offer, d, now: now.addingTimeInterval(3600)))
+        #expect(ReleaseNotices.bannerVisible(offer, d, now: now.addingTimeInterval(ReleaseNotices.dismissFor)))
+        #expect(ReleaseNotices.bannerVisible(offer, d, now: now.addingTimeInterval(-60)))
+        let other = ReleaseUpdateOffer(current: Self.rel(4, "deprecated"), target: Self.rel(6))
+        #expect(ReleaseNotices.bannerVisible(other, d, now: now.addingTimeInterval(60)))
+        let ending = ReleaseUpdateOffer(current: Self.rel(4, "retired"), target: Self.rel(5))
+        #expect(ReleaseNotices.bannerVisible(ending, d, now: now.addingTimeInterval(60)))
     }
 
     @Test func anOpenWithoutUpdateMemberIsNotTakenForAMove() async {

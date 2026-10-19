@@ -92,6 +92,59 @@ public protocol ReleaseUpdateOps: AnyObject {
 
     /// The release number this phone last unlocked into (0 when it has none).
     func releaseNumber() -> UInt64
+
+    /// (VAULT-MESSAGING §11.14.9) Why the update is held, in the change gate's words (``FailureKind/changeChecking``,
+    /// ``FailureKind/changeUnresolved``): a PIN or password change is undecided, or on its way. The update then neither
+    /// starts nor retries nor abandons: its lock and unlock would send a PIN that may be the wrong one of two. Nil when
+    /// it is not held.
+    func changeHold() -> FailureKind?
+}
+
+public extension ReleaseUpdateOps {
+    func changeHold() -> FailureKind? { nil }
+}
+
+/// The member dismissed the notice of [release] ([kind]) at [at]. Mirrors vettid-android `ReleaseDismissal`.
+public struct ReleaseDismissal: Equatable, Sendable {
+    public var release: UInt64
+    public var kind: UpdateNoticeKind
+    public var at: Date
+
+    public init(release: UInt64, kind: UpdateNoticeKind, at: Date) {
+        self.release = release
+        self.kind = kind
+        self.at = at
+    }
+}
+
+/// When the shell shows the release banner. Mirrors vettid-android `ReleaseNotices` (the local notification comes with
+/// phase P, IOS-PLAN §6.7).
+public enum ReleaseNotices {
+    /// A dismissed banner comes back after 24 h, whatever the kind (owner decision 2026-10-09).
+    public static let dismissFor: TimeInterval = 24 * 3600
+
+    /// Whether the banner shows for [offer] at [now]: always without a dismissal of this release and kind (a notice that
+    /// turns from "available" into an end-date warning shows again), and again ``dismissFor`` after one. A dismissal "in
+    /// the future" (the clock was set back) does not hide it either.
+    public static func bannerVisible(_ offer: ReleaseUpdateOffer?, _ dismissal: ReleaseDismissal?, now: Date) -> Bool {
+        guard let offer else { return false }
+        guard let d = dismissal, d.release == offer.target.number, d.kind == offer.kind else { return true }
+        return now < d.at || now >= d.at.addingTimeInterval(dismissFor)
+    }
+}
+
+/// A request to open the update screen once the vault is open (on Android, a tap on the "Vault updates" notification;
+/// on the iPhone its notification comes with phase P, IOS-PLAN §6.7). Mirrors vettid-android `ReleaseUpdateInbox`.
+@MainActor
+@Observable
+public final class ReleaseUpdateInbox {
+    public private(set) var pending = false
+
+    public init() {}
+
+    public func offer() { pending = true }
+
+    public func consume() { pending = false }
 }
 
 /// Where the one-step update stands (owner decision 2026-10-09). Mirrors vettid-android `UpdateStep`.
@@ -165,6 +218,16 @@ public protocol ReleaseUpdateRepository: AnyObject, Observable, Sendable {
 
     /// Non-nil while an update is under way or its outcome is shown; the root shows it over every phase.
     var progress: UpdateProgress? { get }
+
+    /// (§11.14.9) Why the update is held while a PIN or password change is undecided; nil when it is not.
+    var changeHold: FailureKind? { get }
+
+    /// The banner's last dismissal (in memory: after a restart the banner shows again; chosen; not in the spec, where
+    /// vettid-android keeps it in its preferences).
+    var dismissal: ReleaseDismissal? { get }
+
+    /// The member closed the banner at [at]: hidden for ``ReleaseNotices/dismissFor`` at most.
+    func dismissBanner(at: Date)
 
     /// Reads the offer again (the manifest; quiet on failure: the last offer stays).
     func refreshOffer() async

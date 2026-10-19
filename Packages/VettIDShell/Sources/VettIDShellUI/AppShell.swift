@@ -31,6 +31,7 @@ public struct AppShell: View {
     private let canaryInbox: CanaryManifestInbox?
     private let releaseUpdates: (any ReleaseUpdateRepository)?
     private let releaseNotes: (any ReleaseNotesRepository)?
+    private let releaseInbox: ReleaseUpdateInbox?
     private let onOpenPortal: @MainActor () -> Void
 
     /// [model]: where the member is, owned above the owner check's gate. [gate]: the owner check at [now] (the root re-reads
@@ -54,6 +55,7 @@ public struct AppShell: View {
         canaryInbox: CanaryManifestInbox? = nil,
         releaseUpdates: (any ReleaseUpdateRepository)? = nil,
         releaseNotes: (any ReleaseNotesRepository)? = nil,
+        releaseInbox: ReleaseUpdateInbox? = nil,
         onOpenPortal: @escaping @MainActor () -> Void
     ) {
         self.account = account
@@ -72,6 +74,7 @@ public struct AppShell: View {
         self.canaryInbox = canaryInbox
         self.releaseUpdates = releaseUpdates
         self.releaseNotes = releaseNotes
+        self.releaseInbox = releaseInbox
         self.onOpenPortal = onOpenPortal
     }
 
@@ -117,6 +120,9 @@ public struct AppShell: View {
                         gate: gate, now: now, onCheckNow: { model.ownerCheck(holdOff: false) },
                         onHoldOn: { Task { await model.turnHoldOn() } }, onDismissNotices: { Task { await model.dismissNotices() } }
                     )
+                    if let releaseUpdates, model.path.last != .releaseUpdate {
+                        ReleaseUpdateBanner(updates: releaseUpdates) { model.push(.releaseUpdate) }
+                    }
                     changeCheckNotice
                     renewPrompt
                     NavigationStack(path: $model.path) {
@@ -146,6 +152,10 @@ public struct AppShell: View {
             }
         }
         .animation(.easeOut(duration: 0.25), value: model.asked)
+        // A request to open the update screen (on Android a notification tap; on the iPhone with phase P) waits until the
+        // open app is shown.
+        .onAppear { openRequestedUpdate() }
+        .onChange(of: releaseInbox?.pending) { _, _ in openRequestedUpdate() }
         .avatarSheet(isPresented: $model.showAccount) {
             AccountSheet(
                 account: account.account,
@@ -154,6 +164,12 @@ public struct AppShell: View {
                 onOpenPortal: onOpenPortal
             )
         }
+    }
+
+    private func openRequestedUpdate() {
+        guard let inbox = releaseInbox, inbox.pending else { return }
+        inbox.consume()
+        if releaseUpdates != nil, model.path.last != .releaseUpdate { model.push(.releaseUpdate) }
     }
 
     private var chrome: ShellChrome {

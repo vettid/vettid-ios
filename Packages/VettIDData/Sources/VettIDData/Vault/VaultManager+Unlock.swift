@@ -26,6 +26,8 @@ struct UnlockRoute: Sendable {
     var release: String?
     /// Hears each `503 release_starting` while the routed release starts (§11.10.5).
     var onStarting: (@Sendable (Int) -> Void)?
+    /// The unlock's PIN steps of an unresolved PIN change apply (§11.14.9 step 5); the release update never moves them.
+    var pinSteps = true
 }
 
 /// The sealed result of one unlock, the session it went through, and whether the vault moved.
@@ -143,7 +145,7 @@ extension VaultManager {
         guard !record.value.userGuid.isEmpty else { return UnlockStepOutcome(.failed(.notSupported, code: UnlockAttempt.codeNoUserGuid)) }
         // §11.14.9 step 5: while a PIN change is unresolved, the previous PIN with the current record, then the new one.
         refreshPinStep()
-        let step = route.path == .current ? unlockPinStep : .pin
+        let step = route.path == .current && route.pinSteps ? unlockPinStep : .pin
         // Read before the unlock: a lock asked for while it is on its way bumps it, and this unlock then opens nothing.
         let locks = lockGeneration
         let rec = record.generation
@@ -236,17 +238,8 @@ extension VaultManager {
         _ s: VaultSession, pin: String, options: UnlockOptions, path: UnlockSecretPath, tries: UnlockTries = .all,
         route: UnlockRoute = UnlockRoute()
     ) async throws -> UnlockOutcome {
-        let guid = record.value.userGuid
-        let attester = config.attester
-        let attempt: ([UInt8]) async throws -> UnlockOutcome = { secret in
-            try await s.alt.unlock(
-                party: s.device, userGuid: guid, pin: pin, attester: attester, options: options, release: route.release,
-                onStarting: route.onStarting,
-                unlockSecretFor: { caps in
-                    try ReleasePath.requireR(caps)
-                    return secret
-                }
-            )
+        let attempt: ([UInt8]) async throws -> UnlockOutcome = { [self] secret in
+            try await unlockRouted(s, pin: pin, options: options, route: route, secret: secret)
         }
         switch path {
         case .current:
@@ -259,6 +252,43 @@ extension VaultManager {
                 return answer
             case .unchanged(let last?): return last
             case .unchanged(nil): throw VaultFailure(.deviceSecret, code: Self.codeNoEarlierSecret)
+            }
+        }
+    }
+
+    /// How often, and how far apart, an unlock right after a move is tried again while the member API still routes the
+    /// vault to the release it left (chosen; not in the spec: the API learns the move from the vault's lifecycle event).
+    nonisolated static let routingRetries = 3
+    nonisolated static let routingPause: Duration = .seconds(3)
+    /// The code of an unlock after a move that the member API kept routing to the release the vault left.
+    public nonisolated static let codeReleaseNotRouted = "release_not_routed"
+
+    /// One unlock request with [secret]. Right after a move (an unlock without an approval or an abandonment, with the
+    /// release moved from recorded), the member API may still route to the release the vault left, which this phone
+    /// refuses as a rollback (§11.10.6): that is waited out, a few times; still so, it is a neutral failure, never the
+    /// rollback's text (chosen; not in the spec).
+    private func unlockRouted(
+        _ s: VaultSession, pin: String, options: UnlockOptions, route: UnlockRoute, secret: [UInt8]
+    ) async throws -> UnlockOutcome {
+        let afterMove = options.approve == nil && !options.abandon && !s.device.altState.previousRelease.isEmpty
+        let guid = record.value.userGuid
+        let attester = config.attester
+        let sleep = config.releaseUpdateSleep
+        var waited = 0
+        while true {
+            do {
+                return try await s.alt.unlock(
+                    party: s.device, userGuid: guid, pin: pin, attester: attester, options: options, release: route.release,
+                    onStarting: route.onStarting,
+                    unlockSecretFor: { caps in
+                        try ReleasePath.requireR(caps)
+                        return secret
+                    }
+                )
+            } catch AltRefused.rollbackRelease where afterMove {
+                guard waited < Self.routingRetries else { throw VaultFailure(.vaultUnavailable, code: Self.codeReleaseNotRouted) }
+                waited += 1
+                try await sleep(Self.routingPause)
             }
         }
     }

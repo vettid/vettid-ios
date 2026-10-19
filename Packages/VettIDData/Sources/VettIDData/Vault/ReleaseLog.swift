@@ -118,12 +118,13 @@ public enum ReleaseLog {
         integer(o["release"]) == r.number && string(o, "pcr0") == r.pcr0
     }
 
-    /// A JSON number that is a whole number (never a string, never a boolean).
+    /// A JSON integer (never a string, a boolean or a number written with a fraction or an exponent, such as `18.0`), as
+    /// vettid-android's `longOrNull` reads it.
     private static func integer(_ v: Any?) -> UInt64? {
-        guard let n = v as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID() else { return nil }
-        let d = n.doubleValue
-        guard d >= 0, d == d.rounded(), d < 9_007_199_254_740_992 else { return nil }
-        return UInt64(d)
+        guard let n = v as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID(), !CFNumberIsFloatType(n) else { return nil }
+        let i = n.int64Value
+        guard i >= 0, NSNumber(value: i) == n else { return nil }
+        return UInt64(i)
     }
 
     private static func entry(_ o: [String: Any], _ number: UInt64) -> ReleaseLogEntry? {

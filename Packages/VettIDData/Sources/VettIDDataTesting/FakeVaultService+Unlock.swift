@@ -193,17 +193,11 @@ extension FakeVaultService {
         pinFailures = 0
         backoffUntil = nil
         let token = device.flatMap { try? self.token($0.relay) } ?? ""
-        let routed = releases.routed
-        let (member, moved) = updateOutcome(update)
-        let ok = #"{"ok":true,"state_seq":\#(stateSeq),"header_seq":\#(headerSeq),"token":"\#(token)","release":"\#(Self.pcr0(routed))","release_number":\#(routed),"release_status":"active","manifest_serial":\#(vaultManifestSerial)\#(member)}"#
-        // §11.10.4 steps 6–8: the move is recorded and the header sealed to the target; the vault locks without opening,
-        // and the member API routes the next unlock to the target.
-        if moved, let update {
-            releases.routed = update.toRelease
-            releases.pending = update.toRelease
-            return ok
-        }
-        releases.pending = nil
+        let serving = releases.serving
+        let (member, staysLocked) = releaseRules(update)
+        let ok = #"{"ok":true,"state_seq":\#(stateSeq),"header_seq":\#(headerSeq),"token":"\#(token)","release":"\#(Self.pcr0(serving))","release_number":\#(serving),"release_status":"active","manifest_serial":\#(vaultManifestSerial)\#(member)}"#
+        // A move (§11.10.4 step 8) locks without opening.
+        if staysLocked { return ok }
         vaultOpen = true
         statusState = Self.unlocked
         handleWhileLockedRequests()
@@ -218,6 +212,7 @@ extension FakeVaultService {
     /// Callers hold ``cond``.
     func memberLock(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer {
         memberLocksValue += 1
+        releases.busy = false
         let answer = memberLockAnswerValue
         guard let rid = try? StrictJson.parseObject(r.body).string("request_id") else { return .json(400, #"{"error":"bad_request"}"#) }
         switch answer {
@@ -238,6 +233,7 @@ extension FakeVaultService {
     /// ``cond``.
     func relayLock(_ m: Inner) throws {
         relayLocksValue += 1
+        releases.busy = false
         guard relayLockAnswerValue == .lock else { return }
         try reply(m.type, "{}", re: m.id)
         try reply("vault.locking", #"{"reason":"owner"}"#)

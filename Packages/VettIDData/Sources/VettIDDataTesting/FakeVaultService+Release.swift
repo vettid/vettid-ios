@@ -1,14 +1,25 @@
 #if DEBUG
 import Foundation
 import VettIDCrypto
+import VettIDTesting
 
 /// TEST ONLY. The releases the fake vault runs (VAULT-MESSAGING §11.10): release 3, and release 4 when listed; the release
 /// the vault is sealed to and routed to; how a `release_update` is answered; and the updates it was sent.
 struct FakeReleases {
+    /// The release a pending move left.
+    var oldRelease: UInt64? { pending.map { $0 == 4 ? 3 : 4 } }
+
     var listed4 = false
     var routed: UInt64 = 3
-    /// A move recorded and not yet confirmed by the target's first opening.
+    /// A move recorded at the old release and not yet confirmed by the target's first opening (`state.release_move`).
     var pending: UInt64?
+    /// The release of the instance the last enclave route served (the one that answers the next unlock).
+    var serving: UInt64 = 3
+    /// After a move, how many enclave routes still serve the release the vault left (the API learns the move late).
+    var lagRoutes = 0
+    /// The next route asking for a given release answers `409 vault_busy` (an instance of another release holds the
+    /// lease) until the vault is locked through the member API.
+    var busy = false
     var answer: FakeVaultService.ReleaseUpdateAnswer = .move
     var updates: [FakeVaultService.UpdateSeen] = []
 }
@@ -62,6 +73,71 @@ extension FakeVaultService {
 
     public var releaseUpdates: [UpdateSeen] { locked { releases.updates } }
 
+    /// After the next move, this many enclave routes still serve the release the vault left.
+    public var lagRoutesAfterMove: Int {
+        get { locked { releases.lagRoutes } }
+        set { locked { releases.lagRoutes = newValue } }
+    }
+
+    /// The next route that asks for a release answers `409 vault_busy` until a member API lock.
+    public var holdsLeaseElsewhere: Bool {
+        get { locked { releases.busy } }
+        set { locked { releases.busy = newValue } }
+    }
+
+    /// The move recorded and not yet confirmed, if any.
+    public var pendingMove: UInt64? { locked { releases.pending } }
+
+    /// The release a route asks for (`?release=<pcr0>`, §11.10.5), as a number of this fake.
+    static func askedRelease(_ r: FakeHTTPServer.Request) -> UInt64? {
+        guard let q = r.query, let item = URLComponents(string: "?" + q)?.queryItems?.first(where: { $0.name == "release" }),
+              let pcr = item.value
+        else { return nil }
+        return [3, 4].first { pcr0($0) == pcr }
+    }
+
+    /// The release an enclave route serves: the one asked for, or the vault's (the old one while the API lags behind a
+    /// move); nil for `vault_busy`. Callers hold ``cond``.
+    func route(asked: UInt64?) -> UInt64? {
+        if let asked {
+            if releases.busy { return nil }
+            releases.serving = asked
+        } else if releases.lagRoutes > 0, releases.pending == releases.routed, let old = releases.oldRelease {
+            releases.lagRoutes -= 1
+            releases.serving = old
+        } else {
+            releases.serving = releases.routed
+        }
+        return releases.serving
+    }
+
+    /// The vault's release rules after a right PIN (`releaseRules`): the `update` member, whether the vault stays locked
+    /// (a move), and the release that answered. Callers hold ``cond``.
+    func releaseRules(_ u: UpdateSeen?) -> (member: String, locked: Bool) {
+        let serving = releases.serving
+        if let target = releases.pending {
+            if serving == target {
+                // Confirmation at the new release: from here the move is final; any update is ignored.
+                releases.pending = nil
+                return ("", false)
+            }
+            if let u, u.to == Self.pcr0(serving), u.toRelease == serving {
+                // Abandoning the unconfirmed move: back on this release, open.
+                releases.pending = nil
+                releases.routed = serving
+                return (#","update":{"to":"\#(u.to)","result":"abandoned"}"#, false)
+            }
+            // Never resume with a pending move: it is completed again (§11.10.4 "Failures").
+            return (#","update":{"to":"\#(Self.pcr0(target))","result":"moved"}"#, true)
+        }
+        let (member, moved) = updateOutcome(u)
+        if moved, let u {
+            // §11.10.4 steps 6–8: recorded, sealed to the target; the vault locks without opening.
+            releases.pending = u.toRelease
+            releases.routed = u.toRelease
+        }
+        return (member, moved)
+    }
     /// The `release_update` of an unlock request, recorded. Callers hold ``cond``.
     func recordUpdate(_ body: JsonObject, requestID: String) -> UpdateSeen? {
         guard let u = try? body.optObj("release_update"), let to = try? u.string("to"),
@@ -80,9 +156,7 @@ extension FakeVaultService {
     /// The `update` member of an opened vault's result, and whether the vault moved (it then stays locked). Callers hold
     /// ``cond``.
     func updateOutcome(_ u: UpdateSeen?) -> (member: String, moved: Bool) {
-        // Confirmation at the new release: its first opening ignores any update (`releaseRules`).
-        let confirming = releases.pending == releases.routed
-        guard let u, !confirming else { return ("", false) }
+        guard let u else { return ("", false) }
         switch releases.answer {
         case .ignore:
             return ("", false)
@@ -92,7 +166,7 @@ extension FakeVaultService {
             guard releases.listed4, u.to == Self.pcr0(u.toRelease) else {
                 return (#","update":{"to":"\#(u.to)","result":"refused","code":"target"}"#, false)
             }
-            guard u.toRelease > releases.routed else {
+            guard u.toRelease > releases.serving else {
                 return (#","update":{"to":"\#(u.to)","result":"refused","code":"downgrade"}"#, false)
             }
             return (#","update":{"to":"\#(u.to)","result":"moved"}"#, true)

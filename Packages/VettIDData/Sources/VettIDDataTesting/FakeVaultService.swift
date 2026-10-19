@@ -304,7 +304,7 @@ public final class FakeVaultService: @unchecked Sendable {
             guard r.header(AppRequestSigning.header) != nil else { return .json(401, #"{"error":"unauthorized"}"#) }
             switch (r.method, r.path) {
             case ("POST", "/api/vault/enroll/redeem"): return redeem(r)
-            case ("GET", "/api/vault/enclave"): return enclave()
+            case ("GET", "/api/vault/enclave"): return enclave(r)
             case ("POST", "/api/vault/enroll"): return enroll(r)
             case ("POST", "/api/vault/unlock"): return unlock(r)
             case ("POST", "/api/vault/lock"): return memberLock(r)
@@ -332,9 +332,10 @@ public final class FakeVaultService: @unchecked Sendable {
         return .json(200, #"{"vault_id":"\#(redeemVaultID ?? vaultID)","user_guid":"\#(userGuid)","email_hint":"\#(emailHint)"}"#)
     }
 
-    private func enclave() -> FakeHTTPServer.Answer {
+    private func enclave(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer {
         if enclaveOfflineValue { return .failure(.notConnectedToInternet) }
-        let release = Self.pcr0(releases.routed)
+        guard let n = route(asked: Self.askedRelease(r)) else { return .json(409, #"{"error":"vault_busy","retry_after":1}"#) }
+        let release = Self.pcr0(n)
         let d = Descriptor.marshal(instanceID: instanceID, etk: etk.publicKey, release: release, notAfter: Date().addingTimeInterval(3600), capabilities: capabilitiesValue)
         return .json(200, JsonBuilder().string("instance_id", instanceID).string("release", release).base64("descriptor", d).base64("attestation", [1, 2, 3]).build())
     }

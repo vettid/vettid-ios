@@ -14,6 +14,8 @@ public final class FakeReleaseUpdates: ReleaseUpdateRepository {
     public var offerKnown: Bool
     public var progress: UpdateProgress?
     public var checkDue = false
+    public var changeHold: FailureKind?
+    public private(set) var dismissal: ReleaseDismissal?
     public private(set) var refreshed = 0
     /// What ``start(pin:offer:)`` answers when the check is not due.
     public var startResult = true
@@ -30,9 +32,15 @@ public final class FakeReleaseUpdates: ReleaseUpdateRepository {
 
     public func ownerCheckDue() -> Bool { checkDue }
 
+    public func dismissBanner(at: Date) {
+        guard let o = offer else { return }
+        calls.append("dismiss:\(o.target.number)")
+        dismissal = ReleaseDismissal(release: o.target.number, kind: o.kind, at: at)
+    }
+
     public func start(pin: String, offer: ReleaseUpdateOffer) -> Bool {
         calls.append("start:\(pin):\(offer.target.number)")
-        return startResult && !checkDue
+        return startResult && !checkDue && changeHold == nil
     }
 
     public func retry(pin: String) { calls.append("retry:\(pin)") }

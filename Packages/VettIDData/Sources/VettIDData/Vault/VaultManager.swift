@@ -409,6 +409,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         renewOperation = nil
         renewSecretSuggested = false
         forgetChangeCheck()
+        releaseUpdate.clear()
         unlockWindow = nil
         try record.update(since: record.generation) {
             $0.setupComplete = false

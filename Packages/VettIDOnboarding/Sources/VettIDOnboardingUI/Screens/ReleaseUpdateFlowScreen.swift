@@ -203,6 +203,7 @@ func refusalText(_ code: String, _ to: Int) -> String {
 
 /// What a failed step says.
 func updateFailureText(_ p: UpdateProgress) -> String {
+    if p.failureCode == ReleaseUpdateManager.codeChangeHeld { return (p.failure ?? .changeUnresolved).message }
     if p.failure == .badPin { return OnboardingStrings.unlockBadPin }
     if p.failure == .backoff { return OnboardingStrings.releaseUpdateBackoff }
     if p.failureCode == ReleaseUpdateManager.codeReleaseStarting { return OnboardingStrings.releaseUpdateStartFailed }
@@ -260,7 +261,8 @@ private struct UpdateRetryScreen: View {
             onPrimary: retry, onSecondary: onSecondary, header: { UpdateGlyph() }
         ) {
             VStack(alignment: .leading, spacing: Spacing.m) {
-                if p.step == .failed {
+                // (§11.14.9) Also on the PIN step: a change being decided holds the update ("still checking").
+                if p.step == .failed || p.failureCode == ReleaseUpdateManager.codeChangeHeld {
                     NoticeCard(.warning, title: OnboardingStrings.releaseUpdateFailedTitle, message: updateFailureText(p))
                 }
                 UpdatePin(progress: p, state: state, pin: pin)

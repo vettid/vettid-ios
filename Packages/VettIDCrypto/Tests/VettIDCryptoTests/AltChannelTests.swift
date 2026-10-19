@@ -39,6 +39,14 @@ struct AltChannelTests {
         let f = try d.sub("unlock_fields")
         #expect(try Kid.parseHex(try f.str("etk_kid_hex")) == etk.publicKey.kid)
         let rel = try VectorDoc.load("release.json")
+        // The release approval (§11.10.3) byte for byte as vettid-vault's vector, and its SHA-256 (iOS's clientDataHash).
+        let a = try rel.sub("approval")
+        let approvalString = try AltChannel.approvalSigningString(
+            vaultID: try a.str("vault_id"), requestID: try a.str("request_id"), fromPcr0: try a.str("from_pcr0_hex"),
+            toPcr0: try a.str("to_pcr0_hex"), toRelease: try a.num("to_release"), serial: try a.num("manifest_serial")
+        )
+        #expect(approvalString == (try a.str("signing_string")))
+        #expect(Bytes.sha256(Array(approvalString.utf8)) == (try a.hex("signing_string_sha256_hex")))
         #expect(Bytes.sha256(Array(try rel.str("manifest").utf8)) == (try f.hex("manifest_sha256_hex")), "unlock manifest hash")
         let inner = try Inner.parse(Array(try d.str("unlock_inner").utf8), .sealed)
         let body = try StrictJson.parseObject(inner.body)

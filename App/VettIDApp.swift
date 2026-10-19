@@ -65,7 +65,7 @@ struct RootView: View {
     private var appRoot: some View {
         AppRoot(
             environment: environment, vault: composition.vault, inbox: composition.inbox, canaryInbox: composition.canaryInbox,
-            appLock: composition.appLock, releaseNotes: composition.releaseNotes
+            appLock: composition.appLock, releaseNotes: composition.releaseNotes, releaseInbox: composition.releaseInbox
         )
     }
 }
@@ -80,6 +80,7 @@ struct AppRoot: View {
     let appLock: AppLock
     /// What's new from the channel's release log (RELEASE-UPDATES §5).
     let releaseNotes: any ReleaseNotesRepository
+    let releaseInbox: ReleaseUpdateInbox
     /// Where the member is in the open app, kept while the check past the deadline takes the shell's place.
     @State private var shell: ShellModel
     @Environment(\.openURL) private var openURL
@@ -89,7 +90,7 @@ struct AppRoot: View {
 
     init(
         environment: AppEnvironment, vault: VaultManager, inbox: SetupLinkInbox, canaryInbox: CanaryManifestInbox, appLock: AppLock,
-        releaseNotes: any ReleaseNotesRepository
+        releaseNotes: any ReleaseNotesRepository, releaseInbox: ReleaseUpdateInbox
     ) {
         self.environment = environment
         self.vault = vault
@@ -97,6 +98,7 @@ struct AppRoot: View {
         self.canaryInbox = canaryInbox
         self.appLock = appLock
         self.releaseNotes = releaseNotes
+        self.releaseInbox = releaseInbox
         _shell = State(initialValue: ShellModel(account: vault, vault: vault, ownerChecks: vault.ownerChecks))
     }
 
@@ -212,7 +214,7 @@ struct AppRoot: View {
                     appLock: appLock, model: shell, gate: gate, now: now,
                     version: .of(Bundle.main.infoDictionary ?? [:]), installedFrom: InstalledFromBuild.current,
                     promptReason: AppLockTexts.reason, canary: vault.canary, canaryInbox: canaryInbox,
-                    releaseUpdates: vault.releaseUpdate, releaseNotes: releaseNotes
+                    releaseUpdates: vault.releaseUpdate, releaseNotes: releaseNotes, releaseInbox: releaseInbox
                 ) { openPortal() }
             }
         }
