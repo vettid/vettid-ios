@@ -48,6 +48,9 @@ public final class PhoneSecrets: @unchecked Sendable {
     let ephemeral: @Sendable () -> P256.KeyAgreement.PrivateKey
     /// The vault's time scale now (STAGING-TIME-SCALE §5.2).
     let timeScale: @Sendable () -> UInt64
+    /// ``pinGeneration``, read and written under ``generationLock``. In memory only.
+    private var generation = 0
+    private let generationLock = NSLock()
 
     /// [store] is the records file (purpose ``purpose``, in the app's backup-excluded data directory). [ephemeral] makes
     /// each epoch's fresh `E_e` (random; the vectors pass fixed keys).
@@ -236,6 +239,23 @@ public final class PhoneSecrets: @unchecked Sendable {
         }
     }
 
+    // MARK: - Which PIN the vault expects
+
+    /// (VAULT-MESSAGING §11.14.9 step 2) Bumped by everything that may change which PIN the vault expects: a change of
+    /// PIN or password, or a renew, about to go out (its record or marker stored), a change decided (applied, not
+    /// applied, or ended with the PIN uncertain), a renew decided, the uncertain PIN settled, the unlock's PIN step moved,
+    /// and the records deleted. A flow that unlocks with a PIN typed on its own screen (the release update, "Finish the
+    /// move") reads it when it takes the PIN and sends nothing when it moved since (``VaultManager/pinTakenBefore(_:)``):
+    /// the PIN may be the one from before that change (chosen; not in the spec, which holds these flows only while a
+    /// change is undecided). In memory only; a restart takes the PIN again. Not moved by what does not change the PIN:
+    /// the earlier-secret step's restore, the epoch-1 records of an enrollment, a transfer or a recovery and their
+    /// confirmation (``confirmCreate(id:)``, ``confirmPending(keyVault:)``, ``dropPending(id:)``), an unlock's own
+    /// confirmation of a candidate (unless it settles the uncertain PIN), and pruning.
+    public var pinGeneration: Int { generationLock.withLock { generation } }
+
+    /// Something that may change which PIN the vault expects happened (``pinGeneration``).
+    func pinMoved() { generationLock.withLock { generation += 1 } }
+
     /// The records as stored (for the screens and the tests).
     public func records() throws -> PhoneRecords { try store.exclusive { try readRecords() } }
 
@@ -254,6 +274,7 @@ public final class PhoneSecrets: @unchecked Sendable {
     /// Deletes every phone key and record (a wipe, the end of a transfer's keep period).
     public func delete() throws {
         try store.exclusive {
+            defer { pinMoved() }
             try keyStep(creating: false) { try keys.deleteAll() }
             try store.clear()
         }

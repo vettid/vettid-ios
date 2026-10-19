@@ -71,6 +71,19 @@ public enum UpdateStepResult: Equatable, Sendable {
     case failed(FailureKind, code: String?, retryAfterSeconds: Int64 = 0)
 }
 
+/// A PIN the member typed on the update's own screen, with ``ReleaseUpdateOps/pinGeneration()`` as it was when the
+/// screen handed it over: an unlock sends nothing once that moved (VAULT-MESSAGING §11.14.9 step 2; chosen; not in the
+/// spec). Held only while a step runs.
+public struct TakenPin: Sendable {
+    public let pin: String
+    public let generation: Int
+
+    public init(pin: String, generation: Int) {
+        self.pin = pin
+        self.generation = generation
+    }
+}
+
 /// What the update needs from the vault. Mirrors vettid-android `ReleaseUpdateOps`.
 @MainActor
 public protocol ReleaseUpdateOps: AnyObject {
@@ -85,10 +98,15 @@ public protocol ReleaseUpdateOps: AnyObject {
 
     /// One unlock with [pin]: approving [approve] (§11.10.3) when non-nil, or abandoning the unconfirmed move ([abandon],
     /// §11.10.4); never following a move by itself. [afterMove]: the unlock right after `moved`, which waits while the
-    /// member API still routes to the release moved from. [onStarting] hears `503 release_starting`.
+    /// member API still routes to the release moved from. [onStarting] hears `503 release_starting`. Nothing is sent when
+    /// ``pinGeneration()`` moved since [pin] was taken (``VaultManager/codePinTakenBefore``).
     func unlock(
-        pin: String, approve: ReleaseView?, abandon: Bool, afterMove: Bool, onStarting: @escaping @MainActor () -> Void
+        pin: TakenPin, approve: ReleaseView?, abandon: Bool, afterMove: Bool, onStarting: @escaping @MainActor () -> Void
     ) async -> UpdateStepResult
+
+    /// (VAULT-MESSAGING §11.14.9 step 2) Read when the update takes a PIN (``TakenPin``): it moves with everything that
+    /// may change which PIN the vault expects (``PhoneSecrets/pinGeneration``).
+    func pinGeneration() -> Int
 
     /// An unconfirmed move can be abandoned: this phone knows the release it moved from.
     func canAbandon() -> Bool
@@ -108,6 +126,7 @@ public protocol ReleaseUpdateOps: AnyObject {
 
 public extension ReleaseUpdateOps {
     func changeHold() -> FailureKind? { nil }
+    func pinGeneration() -> Int { 0 }
     func timeScale() -> UInt64 { 1 }
 }
 
@@ -247,17 +266,35 @@ public protocol ReleaseUpdateRepository: AnyObject, Observable, Sendable {
     /// Whether the owner check must come first (§3.6.5).
     func ownerCheckDue() -> Bool
 
+    /// (VAULT-MESSAGING §11.14.9 step 2) Which PIN the vault expects, as a generation (``PhoneSecrets/pinGeneration``):
+    /// a screen reads it when its keypad becomes usable and hands it over with the PIN; an unlock sends nothing once it
+    /// moved since (``VaultManager/codePinTakenBefore``).
+    var pinGeneration: Int { get }
+
     /// The member approved [offer] with [pin] ("Approve and update"): locks, unlocks with the approval, and after `moved`
-    /// unlocks again with the same PIN. False when it cannot start (an update runs, or the check is due).
-    func start(pin: String, offer: ReleaseUpdateOffer) -> Bool
+    /// unlocks again with the same PIN. False when it cannot start (an update runs, or the check is due). [generation]:
+    /// ``pinGeneration`` when the keypad opened (nil: read now).
+    func start(pin: String, offer: ReleaseUpdateOffer, generation: Int?) -> Bool
 
     /// ``UpdateStep/badPin`` or ``UpdateStep/failed``: the approved update again; ``UpdateStep/newReleaseFailed``: the
-    /// unlock again.
-    func retry(pin: String)
+    /// unlock again. [generation] as for ``start(pin:offer:generation:)``.
+    func retry(pin: String, generation: Int?)
 
     /// ``UpdateStep/newReleaseFailed`` with ``UpdateProgress/canAbandon``: back to the previous release (§11.10.4).
-    func abandon(pin: String)
+    /// [generation] as for ``start(pin:offer:generation:)``.
+    func abandon(pin: String, generation: Int?)
 
     /// Leaves the outcome (or gives up): the app follows the vault's phase again. Ignored while a step runs.
     func finish()
+}
+
+public extension ReleaseUpdateRepository {
+    var pinGeneration: Int { 0 }
+
+    /// The PIN's generation read as it is handed over (no keypad reading).
+    func start(pin: String, offer: ReleaseUpdateOffer) -> Bool { start(pin: pin, offer: offer, generation: nil) }
+
+    func retry(pin: String) { retry(pin: pin, generation: nil) }
+
+    func abandon(pin: String) { abandon(pin: pin, generation: nil) }
 }

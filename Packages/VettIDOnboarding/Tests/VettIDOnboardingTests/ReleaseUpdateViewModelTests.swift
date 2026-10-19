@@ -155,6 +155,84 @@ import VettIDDataTesting
         #expect(updates.progress == nil)
     }
 
+    /// (VAULT-MESSAGING §11.14.9 step 2; chosen; not in the spec) Which PIN the vault expects is read when the keypad
+    /// becomes usable: at once when it is, else when the hold lifts; not when the PIN is handed over.
+    @Test func thePinsGenerationIsReadWhenTheKeypadOpens() async {
+        let first = FakeReleaseUpdates(offer: offer)
+        first.pinGeneration = 3
+        let open = ReleaseUpdateViewModel(updates: first, ownerCheck: vault, notes: FakeReleaseNotes())
+        await open.settle()
+        first.pinGeneration = 4
+        #expect(open.approve(pin: "246802"))
+        #expect(first.generations == [3])
+        let updates = FakeReleaseUpdates(offer: offer)
+        updates.pinGeneration = 3
+        updates.changeHold = .changeChecking
+        let held = ReleaseUpdateViewModel(updates: updates, ownerCheck: vault, notes: FakeReleaseNotes())
+        await held.settle()
+        #expect(!held.state.pinAllowed)
+        updates.pinGeneration = 4
+        updates.changeHold = nil
+        await held.settle()
+        #expect(held.state.pinAllowed)
+        #expect(held.approve(pin: "135791"))
+        #expect(updates.generations == [4] && updates.calls == ["start:135791:5"])
+    }
+
+    /// A change decided while the member types the PIN on the update screen: nothing is sent with it, and the update's
+    /// screen asks for the PIN again, read anew when its keypad opens.
+    @Test func aChangeWhileThePinIsTypedSendsNothingAndAsksAgain() async throws {
+        let updates = FakeReleaseUpdates(offer: offer)
+        let vm = ReleaseUpdateViewModel(updates: updates, ownerCheck: vault, notes: FakeReleaseNotes())
+        await vm.settle()
+        updates.pinGeneration = 1
+        #expect(vm.approve(pin: "246802"))
+        #expect(updates.calls == ["refused:246802"])
+        let p = try #require(updates.progress)
+        #expect(p.step == .failed && p.failureCode == VaultManager.codePinTakenBefore)
+        let flow = ReleaseUpdateFlowViewModel(updates: updates)
+        await flow.settle()
+        #expect(flow.state.pinAllowed)
+        #expect(flow.retry(pin: "135791"))
+        #expect(updates.calls == ["refused:246802", "retry:135791"])
+        #expect(updates.generations == [0, 1])
+    }
+
+    /// The update's own keypad: read when a step waits for the PIN; a change while the member types it there is refused
+    /// too, for "Try again" and for "Return to release N".
+    @Test func theUpdatesKeypadIsReadWhenAStepWaitsForThePin() async {
+        let updates = FakeReleaseUpdates(offer: offer)
+        let vm = ReleaseUpdateFlowViewModel(updates: updates)
+        updates.progress = UpdateProgress(step: .approving, from: rel(4), to: rel(5))
+        await vm.settle()
+        #expect(!vm.state.pinAllowed)
+        updates.pinGeneration = 2
+        updates.progress = UpdateProgress(step: .newReleaseFailed, from: rel(4), to: rel(5), failure: .noResponse, canAbandon: true)
+        await vm.settle()
+        updates.pinGeneration = 3
+        #expect(vm.retry(pin: "246802"))
+        // Read again as the keypad empties; another change while the PIN is typed for the return.
+        updates.pinGeneration = 4
+        vm.askAbandon()
+        #expect(vm.confirmAbandon(pin: "246802"))
+        #expect(updates.generations == [2, 3])
+        #expect(updates.calls == ["refused:246802", "refused:246802"])
+    }
+
+    /// A reading is used once: after a PIN taken before a change is refused without the keypad ever closing (the step
+    /// fails at once), the PIN typed again on the same screen goes with a fresh reading.
+    @Test func aReadingIsUsedOnce() async {
+        let updates = FakeReleaseUpdates(offer: offer)
+        let vm = ReleaseUpdateFlowViewModel(updates: updates)
+        updates.progress = UpdateProgress(step: .failed, from: rel(4), to: rel(5), failure: .network)
+        await vm.settle()
+        updates.pinGeneration = 1
+        #expect(vm.retry(pin: "246802"))
+        #expect(vm.retry(pin: "246802"))
+        #expect(updates.calls == ["refused:246802", "retry:246802"])
+        #expect(updates.generations == [0, 1])
+    }
+
     /// (§11.14.9; chosen; not in the spec) While a PIN or password change is undecided the unlock screen does not offer
     /// the approval and none goes with the unlock, even one turned on before.
     @Test func noApprovalWithTheUnlockWhileAChangeIsUndecided() async {

@@ -36,7 +36,10 @@ extension PhoneSecrets {
         let reserved = ChangesInFlight.reserve(store.url, operation)
         guard reserved != .refused else { throw VaultFailure(.busy, code: "change_in_flight") }
         do {
-            return try prepareChange(operation: operation, unresolved: unresolved, exp: exp, sent: sent)
+            let next = try prepareChange(operation: operation, unresolved: unresolved, exp: exp, sent: sent)
+            // A change or a renew is about to go out: a PIN taken before it may no longer be the one the vault expects.
+            pinMoved()
+            return next
         } catch {
             // A retry that fails leaves its earlier send in flight; a new operation that fails frees the slot.
             if reserved == .reserved { ChangesInFlight.end(store.url, operation) }
@@ -124,10 +127,14 @@ extension PhoneSecrets {
                 recs.candidates.insert(PhoneRecords.Candidate(operation: operation, entry: back.entry), at: 0)
                 promote(&recs, candidate: 0)
             } else {
-                if cleared { try write(recs) }
+                if cleared {
+                    try write(recs)
+                    pinMoved()
+                }
                 return false
             }
             try write(recs)
+            pinMoved()
             return true
         }
     }
@@ -146,6 +153,7 @@ extension PhoneSecrets {
             try Self.refuseOther(recs, change)
             recs.unresolved = change
             try write(recs)
+            pinMoved()
         }
     }
 
@@ -164,6 +172,7 @@ extension PhoneSecrets {
             recs.unresolved = nil
             if marker.type == .pin, let op = marker.operation { recs.uncertainPinOperation = op }
             try write(recs)
+            pinMoved()
         }
     }
 
@@ -177,6 +186,7 @@ extension PhoneSecrets {
             else { return }
             recs.candidates[i].sent = nil
             try write(recs)
+            pinMoved()
         }
     }
 
@@ -190,6 +200,7 @@ extension PhoneSecrets {
             guard recs.unresolved?.id == id else { return }
             recs.unresolved = nil
             try write(recs)
+            pinMoved()
         }
     }
 
@@ -346,6 +357,7 @@ extension PhoneSecrets {
     private func confirmByUnlock(_ entry: PhoneRecords.Entry, at: Date?) throws {
         try store.exclusive {
             var recs = try readRecords()
+            let uncertain = recs.uncertainPin
             if let i = recs.candidates.firstIndex(where: { $0.entry == entry }) {
                 var keep = ChangesInFlight.current(store.url).union([recs.unresolved?.operation].compactMap { $0 })
                 keep.formUnion(recs.candidates.filter { Self.mayStillApply($0, at: at) }.map(\.operation))
@@ -355,7 +367,7 @@ extension PhoneSecrets {
             } else {
                 return
             }
-            try write(recs)
+            try write(recs, uncertainBefore: uncertain)
         }
     }
 
@@ -367,6 +379,7 @@ extension PhoneSecrets {
         try store.exclusive {
             var recs = try readRecords()
             guard recs.current == record else { return }
+            let uncertain = recs.uncertainPin
             // The unresolved change's candidate is in flight too: its request may still reach the vault after this unlock.
             let inFlight = ChangesInFlight.current(store.url).union([recs.unresolved?.operation].compactMap { $0 })
             let settles = { (c: PhoneRecords.Candidate) in
@@ -378,8 +391,14 @@ extension PhoneSecrets {
             let ms = nowMs()
             recs.replaced += settled.map { PhoneRecords.Replaced(entry: $0.entry, operation: $0.operation, byUnlock: true, since: ms) }
             recs.candidates.removeAll(where: settles)
-            try write(recs)
+            try write(recs, uncertainBefore: uncertain)
         }
+    }
+
+    /// Writes [recs] after an unlock; the uncertain PIN ([uncertainBefore] before it) settled moves ``pinGeneration``.
+    private func write(_ recs: PhoneRecords, uncertainBefore: String?) throws {
+        try write(recs)
+        if recs.uncertainPin != uncertainBefore { pinMoved() }
     }
 
     /// How long after a renew's `exp`, by the vault's clock, no copy of it can apply any more (as for a change, §11.14.9
