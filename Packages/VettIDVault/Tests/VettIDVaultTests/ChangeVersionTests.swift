@@ -295,7 +295,10 @@ import VettIDCrypto
         up.advance(ChangeRequest.validFor + 2 * VaultDevice.settleMargin)
         let started = Date()
         let wait = Task { await d.awaitCredentialSettled(within: 0.5, sleep: VaultApi.sleep) }
-        #expect(try await lost.open(v).type == "credential.version", "the probe")
+        // The settle wait flushes the outbox first, so the cancelled owner check's copy may come before the probe.
+        var type = try await lost.open(v).type
+        for _ in 0..<2 where type != "credential.version" { type = try await lost.open(v).type }
+        #expect(type == "credential.version", "the probe")
         #expect(await wait.value == false)
         #expect(Date().timeIntervalSince(started) < 3, "not the probe's 5 s")
     }
