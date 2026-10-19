@@ -182,8 +182,9 @@ import VettIDKeys
         #expect(ThemeSetting(defaults: defaults).theme == .dark)
         #expect(repo.calls.isEmpty, "nothing asked of the vault: \(repo.calls)")
         // Without the app's setting (a preview), the system default, and a choice changes nothing.
-        model().setTheme(.light)
-        #expect(model().state.theme == .system)
+        let preview = model()
+        preview.setTheme(.light)
+        #expect(preview.state.theme == .system)
     }
 
     /// New phone secret is offered only on a phone that holds a phone secret (release R).

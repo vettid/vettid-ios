@@ -54,4 +54,14 @@ import Testing
         s.set(.system)
         #expect(ThemeSetting(defaults: d).theme == .system)
     }
+
+    /// The debug gallery's chips: shown, the member's stored choice untouched.
+    @Test func aThemeShownIsNotStored() throws {
+        let d = try defaults()
+        let s = ThemeSetting(defaults: d)
+        s.set(.light)
+        s.show(.dark)
+        #expect(s.theme == .dark)
+        #expect(ThemeSetting(defaults: d).theme == .light)
+    }
 }

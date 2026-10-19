@@ -38,10 +38,10 @@ struct VettIDApp: App {
         }
     }
 
-    /// The debug gallery's theme chips change the same choice.
+    /// The debug gallery's theme chips change what is shown, never the member's stored choice.
     private var themeMode: Binding<ThemeMode> {
         let theme = theme
-        return Binding(get: { theme.theme.mode }, set: { theme.set(ThemePreference($0)) })
+        return Binding(get: { theme.theme.mode }, set: { theme.show(ThemePreference($0)) })
     }
 }
 
