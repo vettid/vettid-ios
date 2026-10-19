@@ -28,10 +28,9 @@
 #                                        voluntary check passes
 #   testStagingWrongPinInPasswordChange  Settings -> Credential -> Change password with a wrong PIN (the input PIN with
 #                                        its last digit changed): the vault's refusal is shown and the form is left
-#                                        without a retry, so the password is never changed. The wrong PIN is not a
-#                                        failed daily check: it spends one step of the vault's PIN backoff
-#                                        (VAULT-MESSAGING §11.8), which the next PIN check that succeeds resets; so
-#                                        follow it with testStagingUnlockLock or testStagingCheckNow.
+#                                        without a retry, so the password is never changed. The wrong PIN counts as
+#                                        a failed owner check (VAULT-MESSAGING §3.6.1), which the next passed check
+#                                        resets; so follow it with testStagingCheckNow.
 #
 # A test without its inputs is skipped. The inputs reach only the test step, as TEST_RUNNER_<NAME> (xcodebuild passes
 # them to the runner as <NAME>), never a command line or the build; xcodebuild's output is shown with them (and the

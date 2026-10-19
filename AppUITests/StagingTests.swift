@@ -235,8 +235,8 @@ final class StagingTests: XCTestCase {
     /// correct.". The form is then left without a retry, so the member's password is never changed, and the vault is
     /// locked. The right PIN is never sent with the change (the unlock uses it).
     ///
-    /// A wrong PIN in a password change is not a failed daily check: it spends one step of the PIN backoff (VAULT-MESSAGING
-    /// §11.8), which the next PIN check that succeeds resets (an unlock, the owner check, "Check now"). Skipped (after the
+    /// A wrong PIN in a password change counts as a failed owner check (VAULT-MESSAGING §3.6.1, from 0.46.0; vettid-vault
+    /// releases from staging 18), which the next passed check resets ("Check now" or the due check). Skipped (after the
     /// lock) when the change asks for no PIN (a vault without a phone secret).
     @MainActor
     func testStagingWrongPinInPasswordChange() throws {
