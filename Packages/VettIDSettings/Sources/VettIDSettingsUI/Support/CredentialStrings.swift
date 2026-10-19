@@ -278,7 +278,7 @@ enum CredentialStrings {
 
     static var passwordChecking: String {
         String(
-            localized: "credential_password_checking",
+            localized: "credential_change_checking",
             defaultValue: """
                 Your vault hasn't answered yet, so VettID is checking whether your password was changed. Keep your new \
                 password at hand.
@@ -301,14 +301,14 @@ enum CredentialStrings {
 
     static var passwordNotChanged: String {
         String(
-            localized: "credential_password_not_changed", defaultValue: "Your password was not changed. You can try again.",
+            localized: "credential_change_not_changed", defaultValue: "Your password was not changed. You can try again.",
             bundle: .module
         )
     }
 
     static var passwordUnreachable: String {
         String(
-            localized: "credential_password_unreachable",
+            localized: "credential_change_unreachable",
             defaultValue: """
                 VettID can't reach your vault right now, so it doesn't know yet whether your password was changed. It will \
                 check as soon as it can. Keep both your old and your new password at hand.

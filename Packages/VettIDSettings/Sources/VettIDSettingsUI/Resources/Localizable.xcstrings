@@ -452,7 +452,7 @@
         }
       }
     },
-    "credential_password_checking": {
+    "credential_change_checking": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -518,7 +518,7 @@
         }
       }
     },
-    "credential_password_not_changed": {
+    "credential_change_not_changed": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -540,7 +540,7 @@
         }
       }
     },
-    "credential_password_unreachable": {
+    "credential_change_unreachable": {
       "extractionState": "manual",
       "localizations": {
         "en": {

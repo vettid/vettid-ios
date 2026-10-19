@@ -14,8 +14,8 @@ extension OnboardingStrings {
     }
     /// ANDROID-PLAN 0.1.45 "A lost answer to a PIN or password change" (shared with the Android app): the unlock's first
     /// step while a PIN change is unresolved.
-    static var unlockPreviousPin: String {
-        String(localized: "unlock_previous_pin", defaultValue: "Enter your previous PIN", bundle: .module)
+    static var unlockPreviousPinTitle: String {
+        String(localized: "unlock_previous_pin_title", defaultValue: "Enter your previous PIN", bundle: .module)
     }
     static var unlockPreviousPinBody: String {
         String(
@@ -25,8 +25,11 @@ extension OnboardingStrings {
         )
     }
     /// The same, after the vault answered `device_secret` to the previous PIN.
-    static var unlockNewPin: String {
-        String(localized: "unlock_new_pin", defaultValue: "Your PIN change went through. Enter your new PIN.", bundle: .module)
+    static var unlockNewPinTitle: String {
+        String(localized: "unlock_new_pin_title", defaultValue: "Your PIN change went through.", bundle: .module)
+    }
+    static var unlockNewPinBody: String {
+        String(localized: "unlock_new_pin_body", defaultValue: "Enter your new PIN.", bundle: .module)
     }
     static var unlockSubmit: String {
         String(localized: "unlock_submit", defaultValue: "Unlock", bundle: .module)

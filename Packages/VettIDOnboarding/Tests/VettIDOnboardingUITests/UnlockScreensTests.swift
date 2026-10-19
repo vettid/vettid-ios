@@ -134,10 +134,11 @@ import VettIDUI
         #expect(OnboardingStrings.rootStartOverBody.hasSuffix("could afterwards get back into it only with a recovery."))
         #expect(!OnboardingStrings.unlockRecoverOnlyBody.contains("  "))
         // ANDROID-PLAN 0.1.45 "A lost answer to a PIN or password change".
-        #expect(OnboardingStrings.unlockPreviousPin == "Enter your previous PIN")
+        #expect(OnboardingStrings.unlockPreviousPinTitle == "Enter your previous PIN")
         #expect(OnboardingStrings.unlockPreviousPinBody
             == "Your last PIN change got no answer. If it went through, VettID will ask for your new PIN next.")
-        #expect(OnboardingStrings.unlockNewPin == "Your PIN change went through. Enter your new PIN.")
+        #expect(OnboardingStrings.unlockNewPinTitle == "Your PIN change went through.")
+        #expect(OnboardingStrings.unlockNewPinBody == "Enter your new PIN.")
     }
 
     /// The root's stuck screens: the way out of each failure, confirmed; recover-or-erase where the vault is long out of
