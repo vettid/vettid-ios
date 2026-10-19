@@ -18,6 +18,9 @@ final class FakeRelay: @unchecked Sendable {
     var refuseStatus: Int { get { lock.withLock { status } } set { lock.withLock { status = newValue } } }
     var refuseCollect: String? { get { lock.withLock { collectRefusal } } set { lock.withLock { collectRefusal = newValue } } }
     var serveMailbox: Bool { get { lock.withLock { serve } } set { lock.withLock { serve = newValue } } }
+    /// Runs at each accepted deposit, before the relay answers it (so before the depositing device goes on).
+    var onDeposit: (@Sendable () -> Void)? { get { lock.withLock { depositHook } } set { lock.withLock { depositHook = newValue } } }
+    private var depositHook: (@Sendable () -> Void)?
     private var refuse: String?
     private var status = 403
     private var collectRefusal: String?
@@ -47,6 +50,7 @@ final class FakeRelay: @unchecked Sendable {
                 }
                 let payload = (try? StrictJson.parseObject(r.body).base64("payload")) ?? []
                 deposits.append((String(path.dropFirst("/v1/mailbox/".count)), payload))
+                depositHook?()
                 let ws = depositWaiters
                 depositWaiters.removeAll()
                 for w in ws { w.resume() }

@@ -149,8 +149,7 @@ extension VaultManager {
         refreshPinStep()
         let step = route.path == .current && route.pinSteps ? unlockPinStep : .pin
         // Read before the unlock: a lock asked for while it is on its way bumps it, and this unlock then opens nothing.
-        let locks = lockGeneration
-        let rec = record.generation
+        let marks = OpenMarks(locks: lockGeneration, record: record.generation, rereads: rereads)
         let opened: UnlockOpened
         do {
             opened = try await lockGuard.keeper.unlocking(opened: { $0.outcome.ok }) {
@@ -170,7 +169,7 @@ extension VaultManager {
         }
         // The vault moved and locked itself (§11.10.4 step 8); the caller unlocks again.
         if opened.moved && !route.followMove { return UnlockStepOutcome(.success, moved: true) }
-        await didOpen(r, opened.session, locks: locks, record: rec, beforeOpen: beforeOpen)
+        await didOpen(r, opened.session, marks, beforeOpen: beforeOpen)
         let abandoned = r.update?.result == Self.updateAbandoned
         if let u = r.update, u.result == Self.updateRefused { return UnlockStepOutcome(.updateRefused(code: u.code ?? Self.updateRefused)) }
         return UnlockStepOutcome(.success, abandoned: abandoned)
@@ -197,9 +196,8 @@ extension VaultManager {
     }
 
     /// The vault opened: the stale lock notices, the outbox, and the phase, unless a lock overtook this unlock.
-    private func didOpen(
-        _ r: UnlockResult, _ s: VaultSession, locks: Int, record rec: Int, beforeOpen: @MainActor () async -> Void
-    ) async {
+    private func didOpen(_ r: UnlockResult, _ s: VaultSession, _ marks: OpenMarks, beforeOpen: @MainActor () async -> Void) async {
+        let (locks, rec) = (marks.locks, marks.record)
         // The vault is open as of the result's ts: a vault.locking from before it is stale, also after a restart.
         lockNotices.opened(at: r.at)
         if let at = r.at { try? record.opened(since: rec, atMs: Int64((at.timeIntervalSince1970 * 1000).rounded(.down))) }
@@ -218,9 +216,29 @@ extension VaultManager {
             if lockedSince { phase = .locked }
             return
         }
+        // A vault event that has the phase read again (a `device.unlinked{vault_deleted}` of a deletion that waited in the
+        // locked vault's mailbox) came while this unlock was on its way: its read may have ended before this, or may end
+        // after it, and either way this unlock's phase is older. The phase is read again instead, and nothing more (no
+        // owner check) is sent to a vault that may be deleting itself (chosen; not in the spec). What this does not cover:
+        // the vault sends `device.unlinked{vault_deleted}` before it erases itself (VAULT-MESSAGING §12.5 "Order", steps 2
+        // and 4), and until step 5 the member API still lists the vault as unlocked, so a read in that window still gives
+        // the open app.
+        if rereads != marks.rereads { return await rereadPhase() }
         if !s.device.recovering { await beforeOpen() }
-        let p = afterUnlocked(s)
-        if locks == lockGeneration, rec == record.generation, !lockGuard.lockedWhatever(unlocked: true) { phase = p }
+        guard locks == lockGeneration, rec == record.generation, !lockGuard.lockedWhatever(unlocked: true) else { return }
+        // The same for one that came during the steps before the open app.
+        if rereads != marks.rereads { return await rereadPhase() }
+        phase = afterUnlocked(s)
+    }
+
+    private func rereadPhase() async { try? await refresh() }
+
+    /// What an unlock reads before it starts, to know at its end what happened meanwhile: the member's locks, the record's
+    /// resets and the vault events that have the phase read again.
+    struct OpenMarks {
+        let locks: Int
+        let record: Int
+        let rereads: Int
     }
 
     nonisolated static let typeVaultLock = "vault.lock"
