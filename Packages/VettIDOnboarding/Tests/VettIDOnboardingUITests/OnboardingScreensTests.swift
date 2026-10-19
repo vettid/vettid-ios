@@ -16,10 +16,10 @@ import VettIDUI
     /// iPhone only: a refused start-over says from when it is possible; without a time, the general text.
     @Test func aRefusedStartOverSaysWhen() {
         let at = Date(timeIntervalSince1970: 1_800_000_000)
-        let text = ErrorNotice.message(.enrollmentStarted, at)
+        let text = ErrorNotice.message(.enrollmentStarted, at, timeScale: 1)
         #expect(text == FailureKind.enrollmentStartedText(after: at) && text.contains("start over after"))
-        #expect(ErrorNotice.message(.enrollmentStarted, nil) == FailureKind.enrollmentStarted.message)
-        #expect(ErrorNotice.message(.network, at) == FailureKind.network.message)
+        #expect(ErrorNotice.message(.enrollmentStarted, nil, timeScale: 1) == FailureKind.enrollmentStarted.message)
+        #expect(ErrorNotice.message(.network, at, timeScale: 1) == FailureKind.network.message)
     }
 
     /// Every key of the package's `Localizable.xcstrings` resolves, in the built bundle, to its own non-empty text.

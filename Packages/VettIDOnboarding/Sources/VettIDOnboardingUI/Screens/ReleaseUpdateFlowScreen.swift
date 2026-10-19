@@ -206,7 +206,7 @@ func refusalText(_ code: String, _ to: Int) -> String {
 }
 
 /// What a failed step says, at the vault's [timeScale].
-func updateFailureText(_ p: UpdateProgress, timeScale: UInt64 = 1) -> String {
+func updateFailureText(_ p: UpdateProgress, timeScale: UInt64) -> String {
     if p.failureCode == ReleaseUpdateManager.codeChangeHeld { return (p.failure ?? .changeUnresolved).message(timeScale: timeScale) }
     if p.failure == .badPin { return OnboardingStrings.unlockBadPin }
     if p.failure == .backoff { return OnboardingStrings.releaseUpdateBackoff }

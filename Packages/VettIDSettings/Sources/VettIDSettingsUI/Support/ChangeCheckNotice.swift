@@ -7,7 +7,7 @@ import VettIDData
 /// one opened later does not show it again (chosen; not in the spec).
 public enum ChangeCheckNotice {
     /// The text of a decided change, nil while undecided; a refusal's text at the vault's [timeScale].
-    public static func text(_ c: ChangeCheck, timeScale: UInt64 = 1) -> String? {
+    public static func text(_ c: ChangeCheck, timeScale: UInt64) -> String? {
         switch (c.type, c.status) {
         case (_, .checking), (_, .unreachable): nil
         case (.pin, .applied): ChangeNoticeTexts.pinApplied

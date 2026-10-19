@@ -26,7 +26,7 @@ struct ErrorNotice: View {
 
 extension ErrorNotice {
     /// The failure's text at the vault's [timeScale]; a refused start-over (iPhone only) says from when it is possible.
-    static func message(_ kind: FailureKind, _ retryAt: Date?, timeScale: UInt64 = 1) -> String {
+    static func message(_ kind: FailureKind, _ retryAt: Date?, timeScale: UInt64) -> String {
         if kind == .enrollmentStarted, let retryAt { return FailureKind.enrollmentStartedText(after: retryAt) }
         return kind.message(timeScale: timeScale)
     }

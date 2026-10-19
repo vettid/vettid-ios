@@ -71,13 +71,13 @@ import VettIDOnboarding
     @Test func aFailureOnAnyScreenSaysTheScaledRecovery() {
         let real = "It takes one to three days,"
         let staging = "It takes 1 hour to 3 hours,"
-        #expect(ErrorNotice.message(.deviceSecret, nil).contains(real))
+        #expect(ErrorNotice.message(.deviceSecret, nil, timeScale: 1).contains(real))
         #expect(ErrorNotice.message(.deviceSecret, nil, timeScale: 24).contains(staging))
         let rel = { (n: UInt64) in
             ReleaseView(number: n, pcr0: String(repeating: "ab", count: 48), status: "active", endsAt: nil, notes: "")
         }
         let p = UpdateProgress(step: .newReleaseFailed, from: rel(4), to: rel(5), failure: .deviceSecret, canAbandon: true)
-        #expect(updateFailureText(p).contains(real))
+        #expect(updateFailureText(p, timeScale: 1).contains(real))
         #expect(updateFailureText(p, timeScale: 24).contains(staging))
     }
 

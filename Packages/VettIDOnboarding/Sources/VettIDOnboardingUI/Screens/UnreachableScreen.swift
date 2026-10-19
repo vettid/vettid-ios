@@ -145,7 +145,7 @@ public struct UnreachableFlow: View {
     @State private var model: UnreachableViewModel?
 
     /// [timeScale]: the vault's time scale (STAGING-TIME-SCALE §5.2).
-    public init(account: any AccountRepository, timeScale: UInt64 = 1, onRecover: @escaping @MainActor () -> Void) {
+    public init(account: any AccountRepository, timeScale: UInt64, onRecover: @escaping @MainActor () -> Void) {
         self.account = account
         self.timeScale = timeScale
         self.onRecover = onRecover
