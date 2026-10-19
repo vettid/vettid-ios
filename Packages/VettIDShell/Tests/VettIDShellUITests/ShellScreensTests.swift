@@ -26,7 +26,7 @@ import VettIDUI
             .appendingPathComponent("Sources/VettIDShellUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 74)
+        #expect(keys.count == 76)
         let missing = "\u{0}missing"
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)
@@ -54,12 +54,34 @@ import VettIDUI
         #expect(ShellStrings.rotateOfferAction == "Rotate now")
     }
 
+    /// The texts that name a scaled wait: in real time the approved words verbatim (ANDROID-PLAN §4 "Recovery and unlock
+    /// from release R"; VAULT-MESSAGING §3.6.5), on a scaled vault the computed duration (the owner's decision of
+    /// 2026-10-19).
+    @Test func theScaledWaitsSayTheApprovedWordsInRealTime() {
+        let view = OwnerCheckView(state: .ok, deadline: now.addingTimeInterval(1_800))
+        let real = OwnerCheckGate.of(view, now: now)
+        #expect(OwnerCheckBanners.warningText(nil, scaledAhead: real.scaledWarningText) == "Your daily check is due within the hour.")
+        #expect(OwnerCheckBanners.presenceBody(real.scaledQuietText) == """
+            If this stays for three days, your vault is no longer protected against a recovery started by someone else. \
+            Try again later. If it does not go away, contact VettID.
+            """)
+        let staging = OwnerCheckGate.of(view, now: now, timeScale: 24)
+        #expect(OwnerCheckBanners.warningText(nil, scaledAhead: staging.scaledWarningText)
+            == "Your daily check is due within 150 seconds.")
+        #expect(OwnerCheckBanners.presenceBody(staging.scaledQuietText) == """
+            If this stays for 3 hours, your vault is no longer protected against a recovery started by someone else. \
+            Try again later. If it does not go away, contact VettID.
+            """)
+    }
+
     /// vettid-android `OwnerCheckBanners`: the warning names the deadline's time, the hold-off its end; a notice says when
     /// and how many more.
     @Test func theBannersSayWhatIsDue() {
         let deadline = now.addingTimeInterval(1_800)
         #expect(OwnerCheckBanners.warningText(deadline) == "Your daily check is due at \(ShellTimes.time(deadline)).")
         #expect(OwnerCheckBanners.warningText(nil) == "Your daily check is due within the hour.")
+        #expect(OwnerCheckBanners.warningText(deadline, scaledAhead: "150 seconds")
+            == "Your daily check is due at \(ShellTimes.time(deadline)).")
         #expect(OwnerCheckBanners.holdOffText(nil) == "The hold is off.")
         let failed = OwnerCheckNotice(itemID: "1", kind: "owner_check.failed", ref: "password", at: nil, urgent: true)
         #expect(OwnerCheckBanners.noticeText(failed, count: 1, now: now) == "A daily check failed: wrong credential password.")

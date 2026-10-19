@@ -121,7 +121,7 @@ public struct OwnerCheckScreen: View {
     public var body: some View {
         if state.passedUnrecorded {
             FormScaffold(title: title, primaryLabel: OnboardingStrings.continueLabel, onPrimary: { actions.acknowledgePresence() }) {
-                PresenceNotice(quiet: state.quietText)
+                PresenceNotice(scaledQuiet: state.scaledQuietText)
                 SmallNote(state.stagingNote)
             }
             .accessibilityIdentifier("owner_check_passed_unrecorded")
@@ -149,7 +149,7 @@ public struct OwnerCheckScreen: View {
         ) {
             VStack(alignment: .leading, spacing: Spacing.m) {
                 SmallNote(state.stagingNote)
-                if state.presenceUnrecorded { PresenceNotice(quiet: state.quietText) }
+                if state.presenceUnrecorded { PresenceNotice(scaledQuiet: state.scaledQuietText) }
                 if let card = WaitingCardModel.of(state.mode, state.view, now: now) { WaitingCard(model: card) }
                 if state.mode == .holdOff {
                     NoticeCard(
@@ -221,18 +221,24 @@ struct OwnerCheckMessageView: View {
         } else if state.message == .backoff {
             Text(OnboardingStrings.ownerCheckBackoff).vettIDFont(.bodyMedium)
         } else if case .failed(let kind, _)? = state.message {
-            NoticeCard(.urgent, title: title, message: kind.message).accessibilityIdentifier("owner_check_failed")
+            NoticeCard(.urgent, title: title, message: kind.message(timeScale: state.timeScale))
+                .accessibilityIdentifier("owner_check_failed")
         }
     }
 }
 
 /// ANDROID-PLAN "Owner check and status" (release R): the vault could not record that the member was here.
 struct PresenceNotice: View {
-    /// The recovery quiet period at the vault's time scale ("3 days"; on staging "3 hours").
-    let quiet: String
+    /// The recovery quiet period on a scaled vault ("3 hours" on staging); nil in real time, where the text says the
+    /// approved "three days".
+    let scaledQuiet: String?
+
+    static func body(_ scaledQuiet: String?) -> String {
+        scaledQuiet.map(OnboardingStrings.ownerCheckPresenceBodyScaled) ?? OnboardingStrings.ownerCheckPresenceBody
+    }
 
     var body: some View {
-        NoticeCard(.warning, title: OnboardingStrings.ownerCheckPresenceTitle, message: OnboardingStrings.ownerCheckPresenceBody(quiet))
+        NoticeCard(.warning, title: OnboardingStrings.ownerCheckPresenceTitle, message: Self.body(scaledQuiet))
             .accessibilityAddTraits(.updatesFrequently)
             .accessibilityIdentifier("owner_check_presence")
     }

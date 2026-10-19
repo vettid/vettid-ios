@@ -47,8 +47,8 @@ import VettIDUI
         #expect(refusalText("not_moved", 5) == "Your vault did not move (not_moved).")
         var p = UpdateProgress(step: .failed, from: rel(4), to: rel(5), failure: .vaultUnavailable)
         p.failureCode = ReleaseUpdateManager.codeReleaseStarting
-        #expect(updateFailureText(p) == "The new release did not start. Try again later.")
-        #expect(updateFailureText(UpdateProgress(step: .badPin, from: rel(4), to: rel(5), failure: .backoff))
+        #expect(updateFailureText(p, timeScale: 1) == "The new release did not start. Try again later.")
+        #expect(updateFailureText(UpdateProgress(step: .badPin, from: rel(4), to: rel(5), failure: .backoff), timeScale: 1)
             == "Too many wrong PINs. Wait, then try again.")
     }
 

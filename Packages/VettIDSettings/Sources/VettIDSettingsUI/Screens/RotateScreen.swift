@@ -17,6 +17,7 @@ public struct RotateActions {
 /// Credential → Rotate the credential key (VAULT-MESSAGING §3.5.5), also opened from the offer after a PIN or password
 /// change: the credential password, then "Rotate now". Mirrors vettid-android `RotateContent`.
 public struct RotateContent: View {
+    @Environment(\.vettIDTimeScale) private var timeScale
     @Environment(\.scenePhase) private var scenePhase
     let state: RotateState
     let actions: RotateActions
@@ -50,7 +51,8 @@ public struct RotateContent: View {
                 )
                 .accessibilityIdentifier("rotate_password")
                 if let error = state.error {
-                    NoticeCard(.urgent, title: CredentialStrings.title, message: error.message).accessibilityIdentifier("error")
+                    NoticeCard(.urgent, title: CredentialStrings.title, message: error.message(timeScale: timeScale))
+                        .accessibilityIdentifier("error")
                 }
             }
             .disabled(state.busy)

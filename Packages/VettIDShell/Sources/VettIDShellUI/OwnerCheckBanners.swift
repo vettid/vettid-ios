@@ -43,7 +43,11 @@ public struct OwnerCheckBanners: View {
                 }
             }
             if gate.warningShown {
-                InfoBanner(Self.warningText(gate.deadline), actionLabel: ShellStrings.ownerCheckNow, onAction: onCheckNow)
+                InfoBanner(
+                    Self.warningText(gate.deadline, scaledAhead: gate.scaledWarningText),
+                    actionLabel: ShellStrings.ownerCheckNow,
+                    onAction: onCheckNow
+                )
                     .accessibilityIdentifier("owner_check_warning")
             }
             if gate.holdOff {
@@ -54,14 +58,24 @@ public struct OwnerCheckBanners: View {
             // act on it, so it has no action.
             if gate.presenceUnrecorded {
                 let note = gate.stagingNote.map { " " + $0 } ?? ""
-                InfoBanner(ShellStrings.ownercheckPresenceTitle + " " + ShellStrings.ownercheckPresenceBody(gate.quietText) + note)
+                InfoBanner(ShellStrings.ownercheckPresenceTitle + " " + Self.presenceBody(gate.scaledQuietText) + note)
                     .accessibilityIdentifier("owner_check_presence_banner")
             }
         }
     }
 
-    static func warningText(_ deadline: Date?) -> String {
-        deadline.map { ShellStrings.ownerCheckWarning(ShellTimes.time($0)) } ?? ShellStrings.ownerCheckWarningSoon
+    /// The early warning: the deadline's time; without one, "within the hour", or on a scaled vault [scaledAhead]
+    /// (``OwnerCheckGate/scaledWarningText``). The branch without a deadline cannot be reached today, since
+    /// ``OwnerCheckView/warning(_:)`` needs a deadline; it is kept as vettid-android keeps it.
+    static func warningText(_ deadline: Date?, scaledAhead: String? = nil) -> String {
+        if let deadline { return ShellStrings.ownerCheckWarning(ShellTimes.time(deadline)) }
+        return scaledAhead.map(ShellStrings.ownerCheckWarningSoonScaled) ?? ShellStrings.ownerCheckWarningSoon
+    }
+
+    /// The presence notice: the approved "three days" in real time, or on a scaled vault [scaledQuiet]
+    /// (``OwnerCheckGate/scaledQuietText``).
+    static func presenceBody(_ scaledQuiet: String?) -> String {
+        scaledQuiet.map(ShellStrings.ownercheckPresenceBodyScaled) ?? ShellStrings.ownercheckPresenceBody
     }
 
     static func holdOffText(_ until: Date?) -> String {

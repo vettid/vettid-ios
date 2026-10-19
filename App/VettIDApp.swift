@@ -105,6 +105,8 @@ struct AppRoot: View {
     var body: some View {
         // A canary manifest handed to the app is asked about over whatever is shown (VAULT-RELEASES §10.1 step 9).
         CanaryManifestHost(inbox: canaryInbox, repo: vault.canary) { content }
+            // The vault's time scale for every failure text below (STAGING-TIME-SCALE §5.2).
+            .environment(\.vettIDTimeScale, vault.timeScale)
             .task { try? await vault.refresh() }
             // A start before the first unlock (or while the iPhone was locked) read nothing: read again once the app is
             // active and protected data is available (IOS-PLAN §6.1, §6.3).

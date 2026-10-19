@@ -170,6 +170,7 @@ struct NameField: View {
 
 /// The PIN on the in-app keypad (IOS-PLAN §6.5) and the credential password, on one screen as for the owner check.
 struct ChangeNameConfirmStep: View {
+    @Environment(\.vettIDTimeScale) private var timeScale
     @Environment(\.vettIDColors) private var colors
     @Environment(\.scenePhase) private var scenePhase
     let state: ChangeNameState
@@ -237,7 +238,8 @@ struct ChangeNameConfirmStep: View {
         } else if state.message == .backoff {
             Text(NameStrings.backoff).vettIDFont(.bodyMedium)
         } else if case .failed(let kind)? = state.message {
-            NoticeCard(.urgent, title: NameStrings.title, message: kind.message).accessibilityIdentifier("name_failed")
+            NoticeCard(.urgent, title: NameStrings.title, message: kind.message(timeScale: timeScale))
+                .accessibilityIdentifier("name_failed")
         }
     }
 

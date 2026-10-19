@@ -39,6 +39,7 @@ enum CredentialSheet: String, Identifiable {
 /// Settings with a back arrow and a large title, where vettid-android keeps the top bar of a drawer screen (chosen; not in
 /// the spec). Mirrors vettid-android `CredentialContent`.
 public struct CredentialContent: View {
+    @Environment(\.vettIDTimeScale) private var timeScale
     @Environment(\.vettIDColors) private var colors
     let state: CredentialState
     let actions: CredentialActions
@@ -99,7 +100,7 @@ public struct CredentialContent: View {
         } else if state.status == nil, let error = state.error {
             VStack(spacing: Spacing.l) {
                 LargeTitle(CredentialStrings.title)
-                NoticeCard(.warning, title: CredentialStrings.title, message: error.message)
+                NoticeCard(.warning, title: CredentialStrings.title, message: error.message(timeScale: timeScale))
                 SecondaryButton(CredentialStrings.retry, action: actions.retry)
                 Spacer()
             }
@@ -138,7 +139,7 @@ public struct CredentialContent: View {
     private var noticeKind: NoticeKind { state.error != nil ? .urgent : .success }
 
     private var noticeText: String {
-        if let e = state.error { return e.message }
+        if let e = state.error { return e.message(timeScale: timeScale) }
         switch state.notice {
         case .backupOn?: return CredentialStrings.backupOnDone
         case .backupOff?: return CredentialStrings.backupOffDone
@@ -248,6 +249,7 @@ struct CredentialRows: View {
 
 /// The credential password for the unlock window (vettid-android `PasswordDialog`): a sheet with the secret field.
 struct WindowPasswordSheet: View {
+    @Environment(\.vettIDTimeScale) private var timeScale
     @Environment(\.vettIDColors) private var colors
     @Environment(\.scenePhase) private var scenePhase
     let state: CredentialState
@@ -259,7 +261,7 @@ struct WindowPasswordSheet: View {
             Text(CredentialStrings.windowDialogBody).vettIDFont(.bodyMedium).foregroundStyle(colors.onSurfaceVariant)
             SecretField(
                 CredentialStrings.passwordLabel, text: Binding(get: { state.windowPassword }, set: { actions.setWindowPassword($0) }),
-                error: state.windowError?.message, onSubmit: actions.openWindow
+                error: state.windowError?.message(timeScale: timeScale), onSubmit: actions.openWindow
             )
             .disabled(state.busy)
             .accessibilityIdentifier("dialog_password")

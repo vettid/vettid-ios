@@ -22,6 +22,7 @@ public struct NewPhoneSecretActions {
 /// not enough (ANDROID-PLAN 0.1.43, before the PIN), the PIN on the in-app keypad (IOS-PLAN §6.5) and the credential
 /// password; then the result. Mirrors vettid-android `NewPhoneSecretContent`.
 public struct NewPhoneSecretContent: View {
+    @Environment(\.vettIDTimeScale) private var timeScale
     @Environment(\.scenePhase) private var scenePhase
     let state: NewPhoneSecretState
     let actions: NewPhoneSecretActions
@@ -69,7 +70,8 @@ public struct NewPhoneSecretContent: View {
                 .disabled(state.busy)
                 .accessibilityIdentifier("new_secret_password")
                 if let error = state.error {
-                    NoticeCard(.urgent, title: SecurityStrings.newSecret, message: error.message).accessibilityIdentifier("error")
+                    NoticeCard(.urgent, title: SecurityStrings.newSecret, message: error.message(timeScale: timeScale))
+                        .accessibilityIdentifier("error")
                 }
             }
         }

@@ -205,13 +205,13 @@ func refusalText(_ code: String, _ to: Int) -> String {
     }
 }
 
-/// What a failed step says.
-func updateFailureText(_ p: UpdateProgress) -> String {
-    if p.failureCode == ReleaseUpdateManager.codeChangeHeld { return (p.failure ?? .changeUnresolved).message }
+/// What a failed step says, at the vault's [timeScale].
+func updateFailureText(_ p: UpdateProgress, timeScale: UInt64) -> String {
+    if p.failureCode == ReleaseUpdateManager.codeChangeHeld { return (p.failure ?? .changeUnresolved).message(timeScale: timeScale) }
     if p.failure == .badPin { return OnboardingStrings.unlockBadPin }
     if p.failure == .backoff { return OnboardingStrings.releaseUpdateBackoff }
     if p.failureCode == ReleaseUpdateManager.codeReleaseStarting { return OnboardingStrings.releaseUpdateStartFailed }
-    return (p.failure ?? .other).message
+    return (p.failure ?? .other).message(timeScale: timeScale)
 }
 
 /// The PIN to try again, with the backoff's countdown.
@@ -238,6 +238,7 @@ private struct UpdatePin: View {
 
 /// A wrong PIN, or a failure before anything moved: the approval again with the PIN, or leave.
 private struct UpdateRetryScreen: View {
+    @Environment(\.vettIDTimeScale) private var timeScale
     let progress: UpdateProgress
     let state: ReleaseUpdateFlowState
     let pin: PinBuffer
@@ -267,7 +268,9 @@ private struct UpdateRetryScreen: View {
             VStack(alignment: .leading, spacing: Spacing.m) {
                 // (§11.14.9) Also on the PIN step: a change being decided holds the update ("still checking").
                 if p.step == .failed || p.failureCode == ReleaseUpdateManager.codeChangeHeld {
-                    NoticeCard(.warning, title: OnboardingStrings.releaseUpdateFailedTitle, message: updateFailureText(p))
+                    NoticeCard(
+                        .warning, title: OnboardingStrings.releaseUpdateFailedTitle, message: updateFailureText(p, timeScale: timeScale)
+                    )
                 }
                 UpdatePin(progress: p, state: state, pin: pin)
             }
@@ -278,6 +281,7 @@ private struct UpdateRetryScreen: View {
 
 /// Moved, but the new release did not open the vault: try again, or return while the move is unconfirmed.
 private struct UpdateNewReleaseFailedScreen: View {
+    @Environment(\.vettIDTimeScale) private var timeScale
     let progress: UpdateProgress
     let state: ReleaseUpdateFlowState
     let pin: PinBuffer
@@ -299,7 +303,7 @@ private struct UpdateNewReleaseFailedScreen: View {
             onPrimary: retry, onSecondary: askAbandon, onBack: onBack, header: { UpdateGlyph() }
         ) {
             VStack(alignment: .leading, spacing: Spacing.m) {
-                NoticeCard(.urgent, title: OnboardingStrings.releaseUpdateNewFailedWhy, message: updateFailureText(p))
+                NoticeCard(.urgent, title: OnboardingStrings.releaseUpdateNewFailedWhy, message: updateFailureText(p, timeScale: timeScale))
                 UpdatePin(progress: p, state: state, pin: pin)
             }
         }

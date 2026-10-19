@@ -40,6 +40,7 @@ public struct SettingsActions {
 /// secure layer (`SecureContainer`: received photos, I2; the typed recovery code and the recovery open, I3): until then it
 /// would turn off nothing (``screenshotsRowShown``). Mirrors vettid-android `SettingsContent`.
 public struct SettingsContent: View {
+    @Environment(\.vettIDTimeScale) private var timeScale
     /// Allow screenshots is shown once a screen holds the secure layer it turns off (no `SecureContainer` is in use yet).
     static let screenshotsRowShown = false
 
@@ -135,7 +136,7 @@ public struct SettingsContent: View {
 
     @ViewBuilder private var notices: some View {
         if let error = state.error {
-            NoticeCard(.urgent, title: SettingsStrings.title, message: error.message) {
+            NoticeCard(.urgent, title: SettingsStrings.title, message: error.message(timeScale: timeScale)) {
                 NoticeAction(label: SettingsStrings.done, identifier: "settings_error_done", action: actions.dismissError)
             }
             .padding(.horizontal, Spacing.gutter)

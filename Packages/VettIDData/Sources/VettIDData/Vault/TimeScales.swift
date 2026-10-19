@@ -34,6 +34,13 @@ public enum TimeScales {
         DurationText.of(TimeScale.scaled(seconds, by: scale))
     }
 
+    /// [seconds] at [scale] as the screens say it, for a text whose approved words name the wait in real time ("three
+    /// days", "within the hour"): nil in real time, where the screen shows those words verbatim, and the computed duration
+    /// only on a scaled vault (the owner's decision of 2026-10-19; each such text has a `_scaled` key).
+    public static func scaledText(_ seconds: TimeInterval, by scale: UInt64) -> String? {
+        scale > TimeScale.real ? text(seconds, by: scale) : nil
+    }
+
     /// A setting in its real units with its scaled value beside it on a scaled vault: "24 hours (staging: 1 hour)"
     /// (STAGING-TIME-SCALE §3 rule 3); just "24 hours" in real time.
     public static func setting(_ seconds: TimeInterval, by scale: UInt64) -> String {

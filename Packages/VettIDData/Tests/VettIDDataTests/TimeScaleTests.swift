@@ -171,11 +171,24 @@ struct TimeScaleWaitTests {
         #expect(TimeScales.stagingNote(1) == nil && TimeScales.stagingNote(3_600) == nil)
     }
 
-    /// STAGING-TIME-SCALE §5.2: the "this phone no longer holds the keys" text says a recovery's time at the scale.
+    /// The "this phone no longer holds the keys" text: in real time the approved words verbatim (ANDROID-PLAN §4
+    /// "Recovery and unlock from release R"); on a scaled vault a recovery's time at the scale (the owner's decision of
+    /// 2026-10-19).
     @Test func theDeviceSecretTextSaysTheScaledRecovery() {
-        #expect(FailureKind.deviceSecret.message.contains("It takes 24 hours to 3 days, and you need"))
-        #expect(FailureKind.deviceSecret.message(timeScale: 1) == FailureKind.deviceSecret.message)
-        #expect(FailureKind.deviceSecret.message(timeScale: 24).contains("It takes 1 hour to 3 hours, and you need"))
+        let real = """
+            This phone no longer holds the keys of your vault. That happens when the app's data was cleared or the phone \
+            was set up again from a backup. Nothing was disclosed. Whether you can get back into the vault depends on one \
+            of its settings. If its credential backup was on (the usual case), you can recover it: start a recovery on the \
+            account site. It takes one to three days, and you need your PIN and your password. If you had turned \
+            credential backup off, this vault cannot be brought back; you can delete it on the account site and start a \
+            new one. If you still have a phone on which VettID works, use 'Move to a new phone' there instead. The account \
+            site tells you which of these applies.
+            """
+        #expect(FailureKind.deviceSecret.message == real)
+        #expect(FailureKind.deviceSecret.message(timeScale: 1) == real)
+        let staging = real.replacingOccurrences(of: "one to three days", with: "1 hour to 3 hours")
+        #expect(staging != real && FailureKind.deviceSecret.message(timeScale: 24) == staging)
+        #expect(FailureKind.deviceSecret.message(timeScale: 3_600).contains("It takes 24 seconds to 72 seconds, and you need"))
         #expect(FailureKind.network.message(timeScale: 24) == FailureKind.network.message)
     }
 

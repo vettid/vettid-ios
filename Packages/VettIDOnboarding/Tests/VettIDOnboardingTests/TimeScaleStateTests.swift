@@ -13,9 +13,9 @@ import VettIDDataTesting
     @Test func theOwnerCheckScreenShowsTheScaledInterval() {
         let view = OwnerCheckView(state: .ok, deadline: nil)
         let real = OwnerCheckScreenState(view: view)
-        #expect(real.intervalText == "24 hours" && real.quietText == "3 days" && real.stagingNote == nil)
+        #expect(real.intervalText == "24 hours" && real.scaledQuietText == nil && real.stagingNote == nil)
         let staging = OwnerCheckScreenState(view: view, timeScale: 24)
-        #expect(staging.intervalText == "1 hour" && staging.quietText == "3 hours")
+        #expect(staging.intervalText == "1 hour" && staging.scaledQuietText == "3 hours")
         #expect(staging.stagingNote == "Staging: 1 day = 1 hour")
     }
 
@@ -48,9 +48,12 @@ import VettIDDataTesting
     @Test func theShellsPresenceNoticeIsScaled() {
         let view = OwnerCheckView(state: .ok, deadline: Date().addingTimeInterval(3_600))
         let real = OwnerCheckGate.of(view, now: Date())
-        #expect(real.quietText == "3 days" && real.stagingNote == nil)
+        // Real time: no computed duration, the texts say the approved words.
+        #expect(real.scaledQuietText == nil && real.scaledWarningText == nil && real.stagingNote == nil)
         // The vault's current scale, whatever the deadline's.
         let g = OwnerCheckGate.of(view, now: Date(), timeScale: 24)
-        #expect(g.timeScale == 24 && g.quietText == "3 hours" && g.stagingNote == "Staging: 1 day = 1 hour")
+        #expect(g.timeScale == 24 && g.scaledQuietText == "3 hours" && g.stagingNote == "Staging: 1 day = 1 hour")
+        #expect(g.scaledWarningText == "150 seconds")
+        #expect(OwnerCheckGate.of(view, now: Date(), timeScale: 3_600).scaledWarningText == "1 second")
     }
 }

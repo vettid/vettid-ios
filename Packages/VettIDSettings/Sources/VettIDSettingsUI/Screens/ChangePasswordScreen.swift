@@ -24,6 +24,7 @@ public struct ChangePasswordActions {
 /// password, the new one under the rules of release R as the member types (ANDROID-PLAN "Passwords"), and the new one
 /// again. Mirrors vettid-android `ChangePasswordContent`.
 public struct ChangePasswordContent: View {
+    @Environment(\.vettIDTimeScale) private var timeScale
     @Environment(\.scenePhase) private var scenePhase
     let state: ChangePasswordState
     let actions: ChangePasswordActions
@@ -82,7 +83,8 @@ public struct ChangePasswordContent: View {
                     NoticeCard(.info, title: CredentialStrings.title, message: text).accessibilityIdentifier("change_check")
                 }
                 if let error = state.error {
-                    NoticeCard(.urgent, title: CredentialStrings.title, message: error.message).accessibilityIdentifier("error")
+                    NoticeCard(.urgent, title: CredentialStrings.title, message: error.message(timeScale: timeScale))
+                        .accessibilityIdentifier("error")
                 }
             }
             .disabled(state.busy)
