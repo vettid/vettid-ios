@@ -67,6 +67,16 @@ struct TimeScaleWaitTests {
         #expect(TimeScales.scaled(TimeScales.oldPhoneKeep, by: 1) == 7 * 86_400)
     }
 
+    /// The duration format vettid-android uses word for word (vettid-android #145): seconds under 10 minutes, whole
+    /// minutes rounded up from 10 minutes, whole hours (a day is "24 hours"), days from 2 whole days.
+    @Test(arguments: [
+        (59.0, "59 seconds"), (150, "150 seconds"), (599, "599 seconds"), (600, "10 minutes"), (601, "11 minutes"),
+        (3_600, "1 hour"), (5_400, "90 minutes"), (86_400, "24 hours"), (172_800, "2 days"), (259_200, "3 days"),
+    ])
+    func theDurationTable(_ seconds: TimeInterval, _ text: String) {
+        #expect(DurationText.of(seconds) == text)
+    }
+
     @Test func durationsAreSaidInWholeUnits() {
         #expect(DurationText.of(86_400) == "24 hours")
         #expect(DurationText.of(7 * 86_400) == "7 days")

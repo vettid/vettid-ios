@@ -5,7 +5,8 @@ import VettIDCrypto
 /// §4 "Staging time scale"), in real time, and the waits of the vault the screens name. Each app-side timer divides its
 /// wait by the vault's time scale (``LocalAccount/timeScale``) when it starts and keeps the absolute time it got, so that
 /// a timer started before the app knew the scale keeps its time. Rate limits, retries and the durations the member
-/// chooses are never scaled (§2.2).
+/// chooses are never scaled (§2.2). S8 (the recovery counter unavailable for a day, shown as urgent) stays real time
+/// here, as in vettid-android: it is not among IOS-PLAN §6.6's app-side waits.
 public enum TimeScales {
     /// S2: the owner check's early warning, from 1 h before the deadline (VAULT-MESSAGING §3.6.5).
     public static let ownerCheckWarning: TimeInterval = 3_600
