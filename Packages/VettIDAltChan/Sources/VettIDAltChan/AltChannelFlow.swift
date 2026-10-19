@@ -8,10 +8,13 @@ import VettIDCrypto
 public struct AltTrust: Sendable {
     public let nitroRoots: [[UInt8]]
     public let manifestKeys: [ManifestKey]
+    /// The time scales this build accepts (STAGING-TIME-SCALE §4 item 4): production's (only 1) unless the build says.
+    public let timeScales: TimeScalePolicy
 
-    public init(nitroRoots: [[UInt8]], manifestKeys: [ManifestKey]) {
+    public init(nitroRoots: [[UInt8]], manifestKeys: [ManifestKey], timeScales: TimeScalePolicy = .production) {
         self.nitroRoots = nitroRoots
         self.manifestKeys = manifestKeys
+        self.timeScales = timeScales
     }
 
     public static var production: AltTrust { AltTrust(nitroRoots: [NitroRoot.der], manifestKeys: ManifestKeys.production) }
@@ -50,6 +53,8 @@ public struct EnrollOutcome: Equatable, Sendable {
     public let ok: Bool
     public let code: String?
     public let instanceID: String
+    /// (0.43.0) The time scale of the instance the request was sealed to (§11.10.9).
+    public var timeScale: UInt64 = TimeScale.real
 }
 
 /// The opened vault.unlock.result and where it ran.
@@ -57,6 +62,8 @@ public struct UnlockOutcome: Sendable {
     public let result: UnlockResult
     public let instanceID: String
     public let releaseChanged: Bool
+    /// (0.43.0) The time scale of the instance the request was sealed to (§11.10.9).
+    public var timeScale: UInt64 = TimeScale.real
 
     public var ok: Bool { result.ok }
 }
@@ -98,6 +105,7 @@ public struct AltChannelFlow: Sendable {
     private let now: @Sendable () -> Date
     private let canary: CanaryManifestSource?
     private let verifyEnclave: EnclaveCheck
+    private let timeScales: TimeScalePolicy
 
     public init(
         api: MemberApiClient,
@@ -110,6 +118,7 @@ public struct AltChannelFlow: Sendable {
         manifests = ManifestVerifier(pinned: trust.manifestKeys)
         self.now = now
         self.canary = canary
+        timeScales = trust.timeScales
         let verifier = EnclaveVerifier(nitro: NitroVerifier(roots: trust.nitroRoots))
         self.verifyEnclave = verifyEnclave ?? { d, a, m, e, t in
             try verifier.verifyEnclave(descriptor: d, attestation: a, manifest: m, enroll: e, now: t)
@@ -153,6 +162,8 @@ public struct AltChannelFlow: Sendable {
         let info = try await api.enclaveWait(release: release, onStarting: onStarting)
         let e = try verifyEnclave(info.descriptor, info.attestation, m, enroll, now())
         guard e.descriptor.instanceID == info.instanceID else { throw AltChannelFailure(message: "descriptor names another instance") }
+        // §11.10.9 (0.43.0): a time scale this build does not accept is a malformed descriptor; nothing is sent.
+        try timeScales.check(e.descriptor.timeScale)
         return (info, e)
     }
 
@@ -238,7 +249,7 @@ public struct AltChannelFlow: Sendable {
                 m = try await manifest(seen: party.manifestSerialSeen())
                 continue
             }
-            return EnrollOutcome(vaultID: vid, ok: r.ok, code: r.code, instanceID: info.instanceID)
+            return EnrollOutcome(vaultID: vid, ok: r.ok, code: r.code, instanceID: info.instanceID, timeScale: e.descriptor.timeScale)
         }
     }
 
@@ -295,7 +306,9 @@ public struct AltChannelFlow: Sendable {
                 m = try await manifest(seen: party.manifestSerialSeen())
                 continue
             }
-            return UnlockOutcome(result: r, instanceID: info.instanceID, releaseChanged: built.releaseChanged)
+            return UnlockOutcome(
+                result: r, instanceID: info.instanceID, releaseChanged: built.releaseChanged, timeScale: e.descriptor.timeScale
+            )
         }
     }
 
@@ -306,6 +319,7 @@ public struct AltChannelFlow: Sendable {
         let (_, e) = try await enclave(release: release, manifest: m, enroll: false)
         var p = UnlockPreflight.of(state, routed: e.release, manifest: m)
         p.capabilities = e.descriptor.capabilities
+        p.timeScale = e.descriptor.timeScale
         return p
     }
 
@@ -320,6 +334,8 @@ public struct AltChannelFlow: Sendable {
     /// Registers this app for a recovery (§11.11.3) with the portal's code. [build] seals the request to the verified
     /// enclave; [open] opens vault.recovery.result.
     /// [attester] hears whether the vault bound the key the request attested (IOS-PLAN §6.2), as for an enrollment.
+    /// The instance's time scale (refused above when this build does not accept it) reaches [build] with the verified
+    /// enclave (`descriptor.timeScale`): the recovery on a new phone (I3) stores it with the vault it brings.
     public func recoveryRegister(
         vaultID: String,
         attester: Attester? = nil,
@@ -376,6 +392,8 @@ public struct UnlockPreflight: Equatable, Sendable {
     public let between: [Release]
     /// The routed instance's capabilities (§11.10.9), from its verified descriptor; empty when not known.
     public var capabilities: [String] = []
+    /// (0.43.0) The routed instance's time scale (§11.10.9), from its verified descriptor; 1 when not known.
+    public var timeScale: UInt64 = TimeScale.real
 
     /// Older than the release this device last unlocked into: the app MUST NOT send the PIN.
     public var rollback: Bool { lastNumber != 0 && routed.number < lastNumber }

@@ -202,7 +202,7 @@ struct AppRoot: View {
         case .starting:
             StartingScreen()
         case .unreachable:
-            UnreachableFlow(account: vault) { openPortal() }
+            UnreachableFlow(account: vault, timeScale: vault.timeScale) { openPortal() }
         case .locked:
             UnlockFlow(vault: vault, account: vault, ownerCheck: vault.ownerChecks, releaseNotes: releaseNotes) { openPortal() }
         case .unlocked:
@@ -243,7 +243,8 @@ struct OwnerCheckGateView<Content: View>: View {
         TimelineView(.periodic(from: .now, by: Self.tick)) { context in
             let checks = vault.ownerChecks
             let gate = OwnerCheckGate.of(
-                checks.ownerCheck, now: context.date, notices: checks.notices, presenceUnrecorded: checks.presenceUnrecorded
+                checks.ownerCheck, now: context.date, notices: checks.notices, presenceUnrecorded: checks.presenceUnrecorded,
+                timeScale: vault.timeScale
             )
             if checking || gate.gated || checks.checkAfterCancel {
                 OwnerCheckFlow(mode: .gated, repo: checks, vault: vault) {

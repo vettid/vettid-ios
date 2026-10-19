@@ -32,7 +32,7 @@ struct OwnerCheckSettingsRows: View {
                 .choiceSheet(item: $picker) { _ in
                     ChoiceSheet(
                         title: SettingsStrings.ownerCheck,
-                        options: OwnerCheckSettingsViewModel.intervalHours.map { ChoiceOption(value: $0, label: Self.every($0)) },
+                        options: OwnerCheckSettingsViewModel.intervalHours.map { ChoiceOption(value: $0, label: everyText($0)) },
                         selected: state.intervalHours,
                         onPick: { h in
                             picker = nil
@@ -65,9 +65,12 @@ struct OwnerCheckSettingsRows: View {
         SettingsDivider()
         SettingsRow(
             SettingsStrings.ownerCheck, icon: .schedule,
-            supporting: [Self.every(state.intervalHours), next].compactMap { $0 }.joined(separator: " · ")
+            supporting: [everyText(state.intervalHours), next].compactMap { $0 }.joined(separator: " · ")
         ) { picker = .interval }
         .accessibilityIdentifier("owner_check_interval")
+        if let note = state.stagingNote {
+            SmallNote(note).padding(.horizontal, Spacing.l).padding(.bottom, Spacing.s)
+        }
         SettingsDivider()
         SettingsRow(
             SettingsStrings.ownerCheckNow, icon: .verifiedUser, supporting: SettingsStrings.ownerCheckNowBody, showChevron: false,
@@ -84,8 +87,11 @@ struct OwnerCheckSettingsRows: View {
         .accessibilityIdentifier("owner_check_hold")
     }
 
-    /// "Every hour", "Every 4 hours" (the catalog's plural).
+    /// "Every hour", "Every 4 hours" (the catalog's plural); on a staging vault with its scaled value ("Every 24 hours
+    /// (staging: 1 hour)").
     static func every(_ hours: Int) -> String { SettingsStrings.ownerCheckEvery(hours) }
+
+    private func everyText(_ hours: Int) -> String { state.interval(Self.every(hours), hours: hours) }
 
     static func holdText(_ v: OwnerCheckView, now: Date) -> String {
         if !v.holdOff(now) { return SettingsStrings.ownerCheckHoldOnBody }

@@ -47,6 +47,7 @@ public final class UnlockViewModel: UnlockActions {
         followers.add(follow(self, read: { $0.vault.refusedByVault }, apply: { $0.state.refused = $1 }))
         followers.add(follow(self, read: { $0.vault.lockNotice }, apply: { $0.state.lock = $1 }))
         followers.add(follow(self, read: { $0.vault.transferKeptSince }, apply: { $0.state.keptTransfer = $1 != nil }))
+        followers.add(follow(self, read: { $0.vault.timeScale }, apply: { $0.state.timeScale = $1 }))
         followers.add(follow(self, read: { $0.vault.finishMoveFailure }, apply: { $0.state.moveFailure = $1 }))
         // §11.14.9 "A lost answer" step 5: the previous PIN, then the new one.
         followers.add(follow(self, read: { $0.vault.unlockPinStep }, apply: { $0.state.pinStep = $1 }))

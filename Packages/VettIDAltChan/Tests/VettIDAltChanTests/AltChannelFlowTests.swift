@@ -18,11 +18,11 @@ struct FakeEnclave {
     let descriptor: [UInt8]
     let capabilities: [String]?
 
-    init(_ instanceID: String, capabilities: [String]? = nil) throws {
+    init(_ instanceID: String, capabilities: [String]? = nil, timeScale: UInt64? = nil) throws {
         self.instanceID = instanceID
         etk = try KemPrivateKey.generate()
         self.capabilities = capabilities
-        descriptor = Descriptor.marshal(instanceID: instanceID, etk: etk.publicKey, release: Self.pcr0, notAfter: Date().addingTimeInterval(3600), capabilities: capabilities)
+        descriptor = Descriptor.marshal(instanceID: instanceID, etk: etk.publicKey, release: Self.pcr0, notAfter: Date().addingTimeInterval(3600), capabilities: capabilities, timeScale: timeScale)
     }
 
     func open(_ env: [UInt8]) throws -> Inner {
@@ -268,7 +268,7 @@ final class FakeAltAPI: @unchecked Sendable {
 /// The alternate-channel flows (VAULT-MESSAGING §11.3, §11.4, §11.9) against a fake member API and enclave. Mirrors the
 /// flow-level cases of vettid-android `MemberApiTest`.
 @Suite struct AltChannelFlowTests {
-    func setUp(_ enclaves: [FakeEnclave]? = nil) throws -> (FakeAltAPI, TestParty, AltChannelFlow) { // swiftlint:disable:this large_tuple
+    func setUp(_ enclaves: [FakeEnclave]? = nil, timeScales: TimeScalePolicy = .production) throws -> (FakeAltAPI, TestParty, AltChannelFlow) { // swiftlint:disable:this large_tuple
         let api = FakeAltAPI(try enclaves ?? [FakeEnclave("inst-a")])
         let party = try TestParty()
         api.party = party
@@ -277,7 +277,7 @@ final class FakeAltAPI: @unchecked Sendable {
             apiBase: api.server.baseURL, manifestURL: api.server.baseURL + MemberApiClient.manifestPath,
             transport: HTTPTransport(session: api.server.session, sleep: { _ in }), auth: .bearer("guid-1"), sleep: { _ in }
         )
-        let flow = AltChannelFlow(api: client, trust: AltTrust(nitroRoots: [], manifestKeys: [try api.manifestKey]), verifyEnclave: { d, _, m, _, _ in
+        let flow = AltChannelFlow(api: client, trust: AltTrust(nitroRoots: [], manifestKeys: [try api.manifestKey], timeScales: timeScales), verifyEnclave: { d, _, m, _, _ in
             guard let e = api.lock.withLock({ api.enclaves.first }), d == e.descriptor else { throw AttestationError.userData }
             return try e.verified(m)
         })

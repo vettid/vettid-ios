@@ -30,6 +30,7 @@ import Testing
         var offerValue: ReleaseUpdateOffer?
         var offerFailures = 0
         var due = false
+        var scale: UInt64 = 1
         var lockFails: VaultFailure?
         var abandonable = true
         var release: UInt64 = 4
@@ -72,6 +73,8 @@ import Testing
         func releaseNumber() -> UInt64 { release }
 
         func changeHold() -> FailureKind? { hold }
+
+        func timeScale() -> UInt64 { scale }
     }
 
     /// The waits while a release starts, recorded; none is waited for.
@@ -380,6 +383,27 @@ import Testing
         #expect(ReleaseNotices.bannerVisible(other, d, now: now.addingTimeInterval(60)))
         let ending = ReleaseUpdateOffer(current: Self.rel(4, "retired"), target: Self.rel(5))
         #expect(ReleaseNotices.bannerVisible(ending, d, now: now.addingTimeInterval(60)))
+    }
+
+    /// STAGING-TIME-SCALE S16: on a staging vault (24) a dismissed banner comes back after 1 h, and a dismissal keeps the
+    /// time it got when the scale changes later.
+    @Test func theDismissalIsScaled() async {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let ops = Ops()
+        ops.offerValue = offer
+        ops.scale = 24
+        let m = manager(ops)
+        await m.refreshOffer()
+        m.dismissBanner(at: now)
+        let d = m.dismissal
+        #expect(d?.hiddenFor == 3_600)
+        #expect(!ReleaseNotices.bannerVisible(offer, d, now: now.addingTimeInterval(3_599)))
+        #expect(ReleaseNotices.bannerVisible(offer, d, now: now.addingTimeInterval(3_600)))
+        // The scale drops back to 1: the dismissal keeps its hour.
+        ops.scale = 1
+        #expect(m.dismissal?.hiddenFor == 3_600)
+        #expect(!ReleaseNotices.bannerVisible(offer, m.dismissal, now: now.addingTimeInterval(3_599)))
+        #expect(ReleaseNotices.bannerVisible(offer, m.dismissal, now: now.addingTimeInterval(3_600)))
     }
 
     @Test func anOpenWithoutUpdateMemberIsNotTakenForAMove() async {

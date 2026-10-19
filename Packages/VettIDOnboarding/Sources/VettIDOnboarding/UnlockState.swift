@@ -58,6 +58,8 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     /// Seconds until the paused vault service asked to be tried again (MEMBER-API 1.2.0). Nothing retries by itself.
     public var serviceWaitSeconds: Int64 = 0
     public var recoveryPending = false
+    /// (STAGING-TIME-SCALE §5.2) The vault's time scale: the screen's waits are shown divided by it.
+    public var timeScale: UInt64 = 1
     public var stateRollback = false
     /// `signer_refused` (§11.7.1): a state of its own, not a wrong PIN.
     public var signerRefused = false
@@ -117,6 +119,13 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
 
     /// The PIN field is shown: the vault's software verified, nothing blocking, no recovery pending.
     public var showsPin: Bool { !recoverOnly && !recoveryPending && preflight != nil && preflightError == nil }
+
+    /// A recovery's delay at the vault's time scale ("24 hours"; on staging "1 hour").
+    public var recoveryText: String { TimeScales.text(TimeScales.recoveryDelay, by: timeScale) }
+    /// How long the old phone keeps its keys after a transfer, at the vault's time scale ("7 days"; on staging "7 hours").
+    public var keptTransferText: String { TimeScales.text(TimeScales.oldPhoneKeep, by: timeScale) }
+    /// "Staging: 1 day = 1 hour" on a staging vault; nil otherwise.
+    public var stagingNote: String? { TimeScales.stagingNote(timeScale) }
 
     public var description: String {
         "UnlockState(loading: \(loading), busy: \(busy), message: \(message.map { "\($0)" } ?? "nil"), wait: \(waitSeconds), "

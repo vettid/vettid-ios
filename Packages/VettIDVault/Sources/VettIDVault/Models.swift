@@ -19,6 +19,9 @@ public struct VaultStatusInfo: Decodable, Equatable, Sendable {
     public let unlockId: String?
     /// (0.33.0, release R) Recovery's state and attempts (§11.14.11).
     public let recovery: RecoveryStatus?
+    /// (0.43.0) The release's time scale (§11.10.8; STAGING-TIME-SCALE §5.2), to the app and desktops; nil from a release
+    /// before it (1).
+    public let timeScale: Int64?
 }
 
 /// `vault.status`'s `owner_check` (§3.6, §3.6.7): `state` is `ok`, `due` or `held`.

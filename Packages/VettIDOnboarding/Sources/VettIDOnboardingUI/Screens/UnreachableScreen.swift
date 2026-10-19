@@ -16,6 +16,8 @@ public struct UnreachableScreen: View {
     let longUnreachable: Bool
     let busy: Bool
     let clearFailed: Bool
+    /// (STAGING-TIME-SCALE §5.2) The vault's time scale: the long wait and a recovery's delay are shown divided by it.
+    let timeScale: UInt64
     let onRetry: @MainActor () -> Void
     let onStartOver: @MainActor (WayOut) -> Void
     let onRecover: @MainActor () -> Void
@@ -29,6 +31,7 @@ public struct UnreachableScreen: View {
         busy: Bool,
         confirming: Bool = false,
         clearFailed: Bool = false,
+        timeScale: UInt64 = 1,
         onRetry: @escaping @MainActor () -> Void,
         onStartOver: @escaping @MainActor (WayOut) -> Void,
         onRecover: @escaping @MainActor () -> Void
@@ -37,6 +40,7 @@ public struct UnreachableScreen: View {
         self.longUnreachable = longUnreachable
         self.busy = busy
         self.clearFailed = clearFailed
+        self.timeScale = timeScale
         self.onRetry = onRetry
         self.onStartOver = onStartOver
         self.onRecover = onRecover
@@ -58,7 +62,7 @@ public struct UnreachableScreen: View {
         let eraseOrRecover = way == .eraseOrRecover
         FormScaffold(
             title: Self.title(kind),
-            message: kind?.message,
+            message: kind?.message(timeScale: timeScale),
             primaryLabel: eraseOrRecover ? OnboardingStrings.rootRecover : OnboardingStrings.rootRetry,
             busy: busy,
             secondaryLabel: way.map(Self.label),
@@ -68,7 +72,11 @@ public struct UnreachableScreen: View {
             if eraseOrRecover {
                 VStack(alignment: .leading, spacing: Spacing.m) {
                     if longUnreachable {
-                        Text(OnboardingStrings.rootLongUnreachable).vettIDFont(.bodyLarge).accessibilityIdentifier("long_unreachable")
+                        let wait = TimeScales.text(TimeInterval(TimeScales.longUnreachableMs / 1000), by: timeScale)
+                        Text(OnboardingStrings.rootLongUnreachable(wait))
+                            .vettIDFont(.bodyLarge)
+                            .accessibilityIdentifier("long_unreachable")
+                        SmallNote(TimeScales.stagingNote(timeScale))
                     }
                     Text(OnboardingStrings.rootRecoverLine).vettIDFont(.bodyMedium).foregroundStyle(colors.onSurfaceVariant)
                     TextLink(OnboardingStrings.rootRetry, identifier: "retry_button", action: onRetry).disabled(busy)
@@ -84,7 +92,7 @@ public struct UnreachableScreen: View {
         .confirmDialog(
             isPresented: Binding(get: { confirm && way != nil }, set: { confirm = $0 }),
             title: way.map(Self.confirmTitle) ?? "",
-            message: way.map(Self.confirmBody) ?? "",
+            message: way.map { Self.confirmBody($0, timeScale: timeScale) } ?? "",
             confirmLabel: way.map(Self.confirmLabel) ?? "",
             destructive: true,
             onConfirm: {
@@ -113,23 +121,33 @@ public struct UnreachableScreen: View {
         }
     }
 
-    static func confirmBody(_ way: WayOut) -> String {
+    static func confirmBody(_ way: WayOut, timeScale: UInt64 = 1) -> String {
         switch way {
         case .startOver: OnboardingStrings.rootStartOverBody
         case .clearData: OnboardingStrings.rootClearDataBody
-        case .erase, .eraseOrRecover: OnboardingStrings.erasePhoneBody
+        case .erase, .eraseOrRecover: erasePhoneBody(timeScale: timeScale)
         }
+    }
+
+    /// The erase confirmation's text with a recovery's time at the vault's time scale, and the staging note on a staging
+    /// vault (STAGING-TIME-SCALE §5.2).
+    static func erasePhoneBody(timeScale: UInt64) -> String {
+        let body = OnboardingStrings.erasePhoneBody(TimeScales.text(TimeScales.recoveryDelay, by: timeScale))
+        return TimeScales.stagingNote(timeScale).map { body + "\n\n" + $0 } ?? body
     }
 }
 
 /// The root screen of a phase that could not be read, driven by an ``UnreachableViewModel``.
 public struct UnreachableFlow: View {
     private let account: any AccountRepository
+    private let timeScale: UInt64
     private let onRecover: @MainActor () -> Void
     @State private var model: UnreachableViewModel?
 
-    public init(account: any AccountRepository, onRecover: @escaping @MainActor () -> Void) {
+    /// [timeScale]: the vault's time scale (STAGING-TIME-SCALE §5.2).
+    public init(account: any AccountRepository, timeScale: UInt64 = 1, onRecover: @escaping @MainActor () -> Void) {
         self.account = account
+        self.timeScale = timeScale
         self.onRecover = onRecover
     }
 
@@ -137,7 +155,7 @@ public struct UnreachableFlow: View {
         let (kind, long): (FailureKind?, Bool) = if case .unreachable(let k, let l) = account.phase { (k, l) } else { (nil, false) }
         UnreachableScreen(
             kind: kind, longUnreachable: long, busy: model?.retrying ?? false, clearFailed: model?.clearDataFailed ?? false,
-            onRetry: { model?.retry() }, onStartOver: { model?.startOver($0) }, onRecover: onRecover
+            timeScale: timeScale, onRetry: { model?.retry() }, onStartOver: { model?.startOver($0) }, onRecover: onRecover
         )
         .onAppear {
             if model == nil { model = UnreachableViewModel(account: account) }

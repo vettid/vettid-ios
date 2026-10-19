@@ -62,6 +62,9 @@ struct PreflightNotices: View {
 /// The vault's release does not accept this installation of VettID (`signer_refused`, §11.7.1). Not a wrong PIN.
 struct SignerRefusedNotice: View {
     let help: Bool
+    /// The recovery's delay at the vault's time scale, and the staging note.
+    var recovery: String = TimeScales.text(TimeScales.recoveryDelay, by: 1)
+    var stagingNote: String?
     let actions: any UnlockActions
 
     var body: some View {
@@ -73,8 +76,13 @@ struct SignerRefusedNotice: View {
         }
         .accessibilityIdentifier("unlock_signer_refused")
         if help {
-            NoticeCard(.info, title: OnboardingStrings.unlockSignerRefusedHelpTitle, message: OnboardingStrings.unlockSignerRefusedHelpBody)
-                .accessibilityIdentifier("signer_refused_help_text")
+            NoticeCard(
+                .info,
+                title: OnboardingStrings.unlockSignerRefusedHelpTitle,
+                message: OnboardingStrings.unlockSignerRefusedHelpBody(recovery)
+            )
+            .accessibilityIdentifier("signer_refused_help_text")
+            SmallNote(stagingNote)
         }
     }
 }

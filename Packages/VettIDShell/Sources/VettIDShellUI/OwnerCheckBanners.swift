@@ -53,7 +53,8 @@ public struct OwnerCheckBanners: View {
             // Release R (VAULT-MESSAGING §11.14.5): until a later answer or vault.status says the presence was recorded; the member cannot
             // act on it, so it has no action.
             if gate.presenceUnrecorded {
-                InfoBanner(ShellStrings.ownercheckPresenceTitle + " " + ShellStrings.ownercheckPresenceBody)
+                let note = gate.stagingNote.map { " " + $0 } ?? ""
+                InfoBanner(ShellStrings.ownercheckPresenceTitle + " " + ShellStrings.ownercheckPresenceBody(gate.quietText) + note)
                     .accessibilityIdentifier("owner_check_presence_banner")
             }
         }

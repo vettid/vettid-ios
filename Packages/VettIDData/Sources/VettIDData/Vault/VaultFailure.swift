@@ -126,6 +126,9 @@ public enum FailureKind: Equatable, Sendable, CaseIterable {
     /// (§11.14.9 step 1, 0.46.0) A PIN change refused while a new phone secret whose answer was lost cannot be decided by
     /// the version: a lock and unlock settles it, at no cost (the PIN has not changed).
     case renewUnconfirmed
+    /// (VAULT-MESSAGING 0.43.0 §11.10.9) The vault's instance (or a transfer bundle) carries a time scale this build does
+    /// not accept (a production build and any value other than 1): treated as malformed, nothing was sent.
+    case timeScale
     case other
 }
 

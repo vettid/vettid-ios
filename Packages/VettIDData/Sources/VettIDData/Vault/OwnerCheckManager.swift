@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import VettIDCrypto
 import VettIDKeys
 import VettIDVault
 
@@ -55,6 +56,8 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private let mark: @MainActor () -> Int
     @ObservationIgnored private let sleep: LockSleep
+    /// The vault's time scale now (STAGING-TIME-SCALE §5.2; ``LocalAccount/timeScale``).
+    @ObservationIgnored private let scaleNow: @MainActor () -> UInt64
     /// (Release R) When the check whose presence was not recorded passed, on the vault's clock (its answer's deadline less
     /// its interval), so that only a presence recorded since then ends the notice; nil when the answer did not say.
     @ObservationIgnored private var presenceCheckAt: Date?
@@ -72,7 +75,8 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         onRecoveryStatus: @escaping @MainActor (RecoveryStatus?, Int) -> Void = { _, _ in },
         now: @escaping @Sendable () -> Date = { Date() },
         mark: @escaping @MainActor () -> Int = { 0 },
-        sleep: @escaping LockSleep = realLockSleep
+        sleep: @escaping LockSleep = realLockSleep,
+        timeScale: @escaping @MainActor () -> UInt64 = { 1 }
     ) {
         self.ops = ops
         self.load = load
@@ -82,7 +86,11 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         self.now = now
         self.mark = mark
         self.sleep = sleep
+        scaleNow = timeScale
     }
+
+    /// The vault's time scale as this phone last learnt it (STAGING-TIME-SCALE §5.2), for the screens.
+    public var timeScale: UInt64 { scaleNow() }
 
     /// Reads what was kept on the phone, once. A locked iPhone (protected data not available yet) reads nothing and is
     /// tried again by the next call; a file that does not read is no state.
@@ -318,7 +326,14 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         switch r.recovery?.presentRecorded {
         case false?:
             let deadline = Self.instant(r.deadline)
-            presenceCheckAt = if let deadline, let i = r.intervalSeconds { deadline.addingTimeInterval(-Double(i)) } else { nil }
+            // The interval is in real units; the vault divided it by its time scale for this deadline (§5.1): the scale
+            // recorded with the deadline (as ``set(_:)`` records it).
+            let scale = deadline != nil && deadline == ownerCheck?.deadline ? ownerCheck?.timeScale ?? scaleNow() : scaleNow()
+            presenceCheckAt = if let deadline, let i = r.intervalSeconds {
+                deadline.addingTimeInterval(-TimeScale.scaled(Double(i), by: scale))
+            } else {
+                nil
+            }
             presenceUnrecorded = true
         case true?:
             presenceCheckAt = nil
@@ -363,7 +378,12 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         set(v)
     }
 
-    private func set(_ v: OwnerCheckView) {
+    private func set(_ view: OwnerCheckView) {
+        var v = view
+        // STAGING-TIME-SCALE §5.2: a new deadline's early warning takes the scale known now; the same deadline keeps the
+        // scale it was learnt with.
+        let same = v.deadline != nil && v.deadline == ownerCheck?.deadline
+        v.timeScale = same ? ownerCheck?.timeScale ?? scaleNow() : scaleNow()
         // Newer than what the file held: the file is not read over it.
         loaded = true
         ownerCheck = v
@@ -413,6 +433,8 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         var heldTs: Date?
         var presenceUnrecorded: Bool
         var presenceCheckAt: Date?
+        /// The deadline's time scale; absent in a file written before it (1).
+        var timeScale: UInt64?
 
         init(view v: OwnerCheckView, heldTs: Date?, presenceUnrecorded: Bool, presenceCheckAt: Date?) {
             state = v.state
@@ -425,12 +447,13 @@ public final class OwnerCheckManager: OwnerCheckRepository {
             self.heldTs = heldTs
             self.presenceUnrecorded = presenceUnrecorded
             self.presenceCheckAt = presenceCheckAt
+            timeScale = v.timeScale
         }
 
         var view: OwnerCheckView {
             OwnerCheckView(
                 state: state, deadline: deadline, intervalSeconds: interval, failures: failures, hold: hold,
-                holdOffUntil: holdOffUntil, waiting: waiting
+                holdOffUntil: holdOffUntil, waiting: waiting, timeScale: max(timeScale ?? 1, 1)
             )
         }
     }
@@ -448,9 +471,12 @@ struct VaultOwnerCheckOps: OwnerCheckOps {
     /// Runs before the check is sent: refuses it while a change of PIN or password is unresolved (VAULT-MESSAGING
     /// §11.14.9 "A lost answer").
     var gate: @Sendable () async throws -> Void = {}
+    /// Hears each `vault.status` (its `time_scale`, STAGING-TIME-SCALE §5.2).
+    var onStatus: @Sendable (VaultStatusInfo) async -> Void = { _ in }
 
     func statusAndRecovery() async throws -> (OwnerCheckStatus?, RecoveryStatus?) {
         let s = try await api.status()
+        await onStatus(s)
         return (s.ownerCheck, s.recovery)
     }
 

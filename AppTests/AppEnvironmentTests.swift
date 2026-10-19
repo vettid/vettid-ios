@@ -1,4 +1,5 @@
 import Testing
+import VettIDAltChan
 import VettIDAttestation
 @testable import VettID
 
@@ -56,5 +57,28 @@ struct AppEnvironmentTests {
         ]))
         #expect(env.apiOrigin == "http://127.0.0.1:18081" && env.relayURL == "https://relay.vettid.test")
         #expect(env.manifestKeys.isEmpty)
+    }
+
+    /// STAGING-TIME-SCALE §4 item 4: a Release build accepts only real time; Staging and Debug 1 and 24; DevStack its own.
+    @Test func eachBuildAcceptsItsTimeScales() throws {
+        let release = try #require(AppEnvironment(infoDictionary: Self.production))
+        let releaseTrust = try release.trust()
+        #expect(release.timeScales == .production && releaseTrust.timeScales == .production)
+        #expect(!releaseTrust.timeScales.accepts(24))
+        // The configuration these tests run in, whichever it is.
+        let current = AppEnvironment.current
+        let expected: TimeScalePolicy = switch current.kind {
+        case .production: .production
+        case .staging, .debug: .staging
+        case .devstack: .development
+        }
+        let currentTrust = try current.trust()
+        #expect(current.timeScales == expected && currentTrust.timeScales == expected)
+        var staging = Self.production
+        staging["VettIDEnvironment"] = "staging"
+        #expect(try #require(AppEnvironment(infoDictionary: staging)).timeScales == .staging)
+        var dev = Self.production
+        dev["VettIDEnvironment"] = "devstack"
+        #expect(try #require(AppEnvironment(infoDictionary: dev)).timeScales == .development)
     }
 }

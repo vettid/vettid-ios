@@ -179,14 +179,15 @@ enum DataStrings {
         )
     }
     static var failureNotFound: String { String(localized: "data_failure_not_found", defaultValue: "Nothing was found.", bundle: .module) }
-    static var failureDeviceSecret: String {
+    /// [from] and [to]: a recovery's shortest and longest time at the vault's time scale (STAGING-TIME-SCALE S5, S7).
+    static func failureDeviceSecret(_ from: String, _ to: String) -> String {
         String(
             localized: "data_failure_device_secret",
             defaultValue: """
                 This phone no longer holds the keys of your vault. That happens when the app's data was cleared or the phone \
                 was set up again from a backup. Nothing was disclosed. Whether you can get back into the vault depends on one \
                 of its settings. If its credential backup was on (the usual case), you can recover it: start a recovery on the \
-                account site. It takes one to three days, and you need your PIN and your password. If you had turned \
+                account site. It takes \(from) to \(to), and you need your PIN and your password. If you had turned \
                 credential backup off, this vault cannot be brought back; you can delete it on the account site and start a \
                 new one. If you still have a phone on which VettID works, use 'Move to a new phone' there instead. The account \
                 site tells you which of these applies.

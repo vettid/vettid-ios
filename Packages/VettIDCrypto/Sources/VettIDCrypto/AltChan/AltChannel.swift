@@ -306,6 +306,8 @@ public struct Descriptor: Sendable {
     public let bytes: [UInt8]
     /// (0.34.0, release R) The release's capabilities (§11.10.9); empty for a release before R.
     public let capabilities: [String]
+    /// (0.43.0) The release's time scale (§11.10.9, ``TimeScale``); 1 for a release before it.
+    public let timeScale: UInt64
 
     private static let maxSize = 4096
 
@@ -333,13 +335,15 @@ public struct Descriptor: Sendable {
         return Descriptor(
             instanceID: instanceID, kid: kid, etk: etk, release: release,
             notAfter: try Timestamps.parseSeconds(try o.string("not_after")),
-            bytes: b, capabilities: try Capabilities.parse(o)
+            bytes: b, capabilities: try Capabilities.parse(o), timeScale: try TimeScale.parse(o)
         )
     }
 
-    /// Writes a descriptor in §11.2 member order (tests and tooling); [capabilities] only when given (release R).
+    /// Writes a descriptor in §11.2 member order (tests and tooling); [capabilities] only when given (release R), then
+    /// [timeScale] only when given (0.43.0).
     public static func marshal(
-        instanceID: String, etk: KemPublicKey, release: String, notAfter: Date, capabilities: [String]? = nil
+        instanceID: String, etk: KemPublicKey, release: String, notAfter: Date, capabilities: [String]? = nil,
+        timeScale: UInt64? = nil
     ) -> [UInt8] {
         let b = JsonBuilder()
             .uint("v", 1)
@@ -350,6 +354,7 @@ public struct Descriptor: Sendable {
             .string("release", release)
             .string("not_after", Timestamps.formatSeconds(notAfter))
         if let capabilities { Capabilities.write(b, capabilities) }
+        if let timeScale { TimeScale.write(b, timeScale) }
         return b.bytes()
     }
 }

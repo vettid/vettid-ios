@@ -20,9 +20,11 @@ import VettIDCrypto
 ///
 /// Stored form (chosen; not in the spec): `{"v":1,"current":E,"pendings":[E],"candidates":[{"operation","exp"?,"sent_id"?,
 /// "sent_version"?,E…}],
-/// "replaced":[{"since","operation"?,"by_unlock"?,E…}],"unresolved"?:U,"uncertain_pin"?:O}` where `E` is `"key_id","record"`, `U` is
-/// ``UnresolvedChange``'s form, compact JSON, records in ``PhoneSecretRecord``'s form, `since` and `exp` in Unix ms. A file
-/// without `unresolved` or `uncertain_pin` (written before they existed) has none, and a candidate without `exp` has none.
+/// "replaced":[{"since","keep_ms"?,"operation"?,"by_unlock"?,E…}],"unresolved"?:U,"uncertain_pin"?:O}` where `E` is
+/// `"key_id","record"`, `U` is ``UnresolvedChange``'s form, compact JSON, records in ``PhoneSecretRecord``'s form, `since`
+/// and `exp` in Unix ms. A file without `unresolved` or `uncertain_pin` (written before they existed) has none, and a
+/// candidate without `exp` has none. `keep_ms` is a replaced record's keep period when it is not the real 7 days
+/// (STAGING-TIME-SCALE S9: divided by the vault's time scale when the 7 days start); without it, 7 days.
 public struct PhoneRecords: Equatable, Sendable {
     public static let format: UInt64 = 1
 
@@ -86,12 +88,16 @@ public struct PhoneRecords: Equatable, Sendable {
         public var byUnlock: Bool
         /// When its 7 days started (Unix ms): the confirmation, or a later moment when the clock was found behind it.
         public var since: Int64
+        /// How long it is kept from [since] (ms): ``PhoneSecrets/keepMs`` divided by the vault's time scale when it became
+        /// a replaced record, and kept so afterwards. Nil until the write that stores it gives it the scale of that moment.
+        public var keepMs: Int64?
 
-        public init(entry: Entry, operation: String?, byUnlock: Bool = false, since: Int64) {
+        public init(entry: Entry, operation: String?, byUnlock: Bool = false, since: Int64, keepMs: Int64? = nil) {
             self.entry = entry
             self.operation = operation
             self.byUnlock = byUnlock
             self.since = since
+            self.keepMs = keepMs
         }
     }
 
@@ -141,6 +147,7 @@ public struct PhoneRecords: Equatable, Sendable {
         }
         let replaced = replaced.map { r in
             let b = JsonBuilder().uint("since", UInt64(max(0, r.since)))
+            if let keep = r.keepMs, keep != PhoneSecrets.keepMs { b.uint("keep_ms", UInt64(max(0, keep))) }
             if let op = r.operation { b.string("operation", op) }
             if r.byUnlock { b.bool("by_unlock", true) }
             return r.entry.json(b).build()
@@ -176,8 +183,10 @@ public struct PhoneRecords: Equatable, Sendable {
             let r = try v.asObject()
             let since = try r.uint("since", min: 0, max: StrictJson.maxSafeInteger)
             let byUnlock = r.has("by_unlock") ? try r.bool("by_unlock") : false
+            let keep = try r.optUint("keep_ms", min: 1_000, max: StrictJson.maxSafeInteger).map { Int64($0) } ?? PhoneSecrets.keepMs
             return Replaced(
-                entry: try Entry.parse(r), operation: try r.optString("operation"), byUnlock: byUnlock, since: Int64(since)
+                entry: try Entry.parse(r), operation: try r.optString("operation"), byUnlock: byUnlock, since: Int64(since),
+                keepMs: keep
             )
         }
         let pendings = try o.array("pendings").map { try Entry.parse(try $0.asObject()) }

@@ -127,9 +127,10 @@ import VettIDUI
             == "Your vault is served by release 2, older than release 3 that this phone last used. VettID will not send your PIN to it.")
         #expect(OnboardingStrings.unlockLockUnconfirmedTitle == "Your vault may still be open")
         #expect(OnboardingStrings.unlockStuckBody.contains(#""I lost my phone: recover my vault""#))
-        #expect(OnboardingStrings.unlockSignerRefusedHelpBody.contains("\n\nIf that does not help"))
-        #expect(OnboardingStrings.erasePhoneBody.contains("the credential backup must be on"))
-        #expect(OnboardingStrings.rootLongUnreachable == "VettID has not reached your vault for 7 days or more.")
+        #expect(OnboardingStrings.unlockSignerRefusedHelpBody("24 hours").contains("\n\nIf that does not help"))
+        #expect(OnboardingStrings.unlockSignerRefusedHelpBody("24 hours").contains("A recovery takes 24 hours and needs"))
+        #expect(OnboardingStrings.erasePhoneBody("24 hours").contains("the credential backup must be on"))
+        #expect(OnboardingStrings.rootLongUnreachable("7 days") == "VettID has not reached your vault for 7 days or more.")
         #expect(OnboardingStrings.rootStartOverBody.hasSuffix("could afterwards get back into it only with a recovery."))
         #expect(!OnboardingStrings.unlockRecoverOnlyBody.contains("  "))
         // ANDROID-PLAN 0.1.45 "A lost answer to a PIN or password change".

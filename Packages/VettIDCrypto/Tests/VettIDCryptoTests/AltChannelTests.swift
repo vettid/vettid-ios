@@ -198,9 +198,11 @@ struct AltChannelTests {
         let unsorted = marshal(capabilities: ["recovery_r", "attachments"])
         expectCrypto(.format) { _ = try Descriptor.parse(unsorted) }
         // A staging release with the time scale (VAULT-MESSAGING 0.43.0, STAGING-TIME-SCALE §5.2) writes `time_scale` after
-        // the capabilities: a member this app does not read yet, which it ignores (§5.3).
+        // the capabilities; one before it has none, which is 1.
         let scaled = try #require(String(bytes: rBytes, encoding: .utf8)).dropLast() + #","time_scale":24}"#
-        #expect(try Descriptor.parse(Array(scaled.utf8)).capabilities == ["recovery_offered", "recovery_r"])
+        let s = try Descriptor.parse(Array(scaled.utf8))
+        #expect(s.capabilities == ["recovery_offered", "recovery_r"] && s.timeScale == 24)
+        #expect(r.timeScale == 1 && before.timeScale == 1)
         // A debug (all-zero) PCR, a kid that is not the ETK's, a bad instance id: refused.
         expectCrypto(.format) {
             _ = try Descriptor.parse(marshal(release: String(repeating: "0", count: 96)))

@@ -73,6 +73,18 @@ struct AppEnvironment: Equatable, Sendable {
     /// serves.
     func trust() throws -> AltTrust {
         guard kind != .production else { return .production }
-        return AltTrust(nitroRoots: [NitroRoot.der], manifestKeys: try manifestKeys.map { try ManifestKey(base64: $0) })
+        return AltTrust(
+            nitroRoots: [NitroRoot.der], manifestKeys: try manifestKeys.map { try ManifestKey(base64: $0) }, timeScales: timeScales
+        )
+    }
+
+    /// The time scales this build accepts from a vault (STAGING-TIME-SCALE §4 item 4, §5.2): production only 1 (in
+    /// ``AltTrust/production``); Staging and Debug, which talk to staging, 1 and 24; DevStack the dev stack's 1 to 86,400.
+    var timeScales: TimeScalePolicy {
+        switch kind {
+        case .production: .production
+        case .staging, .debug: .staging
+        case .devstack: .development
+        }
     }
 }

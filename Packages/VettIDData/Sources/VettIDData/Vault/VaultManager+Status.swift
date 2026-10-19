@@ -12,9 +12,10 @@ extension VaultManager {
     /// `VaultManager.overview`.
     public func overview() async throws -> VaultOverview {
         try await guarded {
+            let rec = record.generation
             let s = try await openSession()
             let member = try await vaultStatus()
-            let own = phase == .unlocked ? try await openStatus(s) : nil
+            let own = phase == .unlocked ? try await openStatus(s, since: rec) : nil
             return Self.overview(
                 member: member, own: own, deviceVault: s.device.vaultID, lastRelease: s.device.altState.releaseNumber,
                 recoveryOffered: ReleasePath.recoveryOffered(record.value.capabilities)
@@ -24,9 +25,11 @@ extension VaultManager {
 
     /// The vault's own `vault.status`, or nil when it did not answer (the network, no answer in time): the screen then
     /// shows what the member API said. Any other failure is the screen's (as vettid-android drops only an `IOException`).
-    private func openStatus(_ s: VaultSession) async throws -> VaultStatusInfo? {
+    private func openStatus(_ s: VaultSession, since rec: Int) async throws -> VaultStatusInfo? {
         do {
-            return try await openApi(s).status()
+            let st = try await openApi(s).status()
+            learnTimeScale(status: st, since: rec)
+            return st
         } catch {
             let mapped = VaultFailures.map(error)
             if let f = mapped as? VaultFailure, f.kind == .network || f.kind == .noResponse { return nil }

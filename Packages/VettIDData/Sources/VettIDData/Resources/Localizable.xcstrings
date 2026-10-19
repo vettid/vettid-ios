@@ -1,6 +1,98 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "data_duration_days": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld day"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld days"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "data_duration_hours": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld hour"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld hours"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "data_duration_minutes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld minute"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld minutes"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "data_duration_seconds": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld second"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld seconds"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "data_failure_apple_unreachable": {
       "extractionState": "manual",
       "localizations": {
@@ -194,7 +286,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This phone no longer holds the keys of your vault. That happens when the app's data was cleared or the phone was set up again from a backup. Nothing was disclosed. Whether you can get back into the vault depends on one of its settings. If its credential backup was on (the usual case), you can recover it: start a recovery on the account site. It takes one to three days, and you need your PIN and your password. If you had turned credential backup off, this vault cannot be brought back; you can delete it on the account site and start a new one. If you still have a phone on which VettID works, use 'Move to a new phone' there instead. The account site tells you which of these applies."
+            "value": "This phone no longer holds the keys of your vault. That happens when the app's data was cleared or the phone was set up again from a backup. Nothing was disclosed. Whether you can get back into the vault depends on one of its settings. If its credential backup was on (the usual case), you can recover it: start a recovery on the account site. It takes %1$@ to %2$@, and you need your PIN and your password. If you had turned credential backup off, this vault cannot be brought back; you can delete it on the account site and start a new one. If you still have a phone on which VettID works, use 'Move to a new phone' there instead. The account site tells you which of these applies."
           }
         }
       }
@@ -626,6 +718,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "Accept the current membership terms on the account site first."
+          }
+        }
+      }
+    },
+    "data_failure_time_scale": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This vault's software is not for this app. Contact VettID."
           }
         }
       }
@@ -1286,6 +1389,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Weak"
+          }
+        }
+      }
+    },
+    "data_time_scale_setting": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ (staging: %2$@)"
+          }
+        }
+      }
+    },
+    "data_time_scale_staging": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Staging: 1 day = 1 hour"
           }
         }
       }

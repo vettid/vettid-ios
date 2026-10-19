@@ -20,6 +20,20 @@ import VettIDDataTesting
         #expect(m.state.view == repo.ownerCheck && m.state.intervalHours == 24)
     }
 
+    /// STAGING-TIME-SCALE §3 rule 3: the interval keeps its real units with the scaled value beside it, and the staging
+    /// note, on a staging vault only.
+    @Test func aStagingVaultShowsBothUnitsAndTheNote() async {
+        let real = OwnerCheckSettingsViewModel(repo: repo)
+        #expect(real.state.interval("Every 24 hours", hours: 24) == "Every 24 hours" && real.state.stagingNote == nil)
+        repo.timeScale = 24
+        let m = OwnerCheckSettingsViewModel(repo: repo)
+        await m.settle()
+        #expect(m.state.timeScale == 24)
+        #expect(m.state.interval("Every 24 hours", hours: 24) == "Every 24 hours (staging: 1 hour)")
+        #expect(m.state.interval("Every hour", hours: 1) == "Every hour (staging: 150 seconds)")
+        #expect(m.state.stagingNote == "Staging: 1 day = 1 hour")
+    }
+
     /// A shorter interval offers a check (VAULT-MESSAGING §3.6.2); a longer one does not; the same one sends nothing.
     @Test func shorteningOffersACheck() async {
         let m = OwnerCheckSettingsViewModel(repo: repo)
