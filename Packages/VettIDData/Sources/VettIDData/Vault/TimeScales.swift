@@ -52,13 +52,14 @@ public enum TimeScales {
 }
 
 /// A duration as the screens say it (chosen; not in the spec): whole days from 2 days ("7 days", "3 days"), whole hours
-/// ("24 hours", "1 hour"), minutes rounded up from a minute ("3 minutes" for 150 s), seconds below.
+/// ("24 hours", "1 hour"), minutes rounded up from 10 minutes ("90 minutes"), seconds below ("150 seconds", not a
+/// rounded "3 minutes").
 public enum DurationText {
     public static func of(_ seconds: TimeInterval) -> String {
         let s = Int(max(seconds.rounded(.up), 0))
         if s >= 2 * 86_400, s.isMultiple(of: 86_400) { return DataStrings.durationDays(s / 86_400) }
         if s >= 3_600, s.isMultiple(of: 3_600) { return DataStrings.durationHours(s / 3_600) }
-        if s >= 60 { return DataStrings.durationMinutes((s + 59) / 60) }
+        if s >= 600 { return DataStrings.durationMinutes((s + 59) / 60) }
         return DataStrings.durationSeconds(s)
     }
 }

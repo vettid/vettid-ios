@@ -47,7 +47,7 @@ public extension FailureKind {
         case .noVault: DataStrings.failureNoVault
         case .localState: DataStrings.failureLocalState
         case .eraseFailed: DataStrings.failureEraseFailed
-        case .deviceSecret: DataStrings.failureDeviceSecret
+        case .deviceSecret: Self.deviceSecretText(timeScale: 1)
         case .transferIncomplete: DataStrings.failureTransferIncomplete
         case .busy: DataStrings.failureBusy
         case .retry: DataStrings.failureRetry
@@ -67,6 +67,19 @@ public extension FailureKind {
         case .timeScale: DataStrings.failureTimeScale
         case .other: DataStrings.failureOther
         }
+    }
+
+    /// ``message`` at the vault's time scale (STAGING-TIME-SCALE §5.2): the one text that names a scaled wait (a
+    /// recovery's time, ``deviceSecret``) says it divided by [timeScale]; every other text is ``message``.
+    func message(timeScale: UInt64) -> String {
+        self == .deviceSecret ? Self.deviceSecretText(timeScale: timeScale) : message
+    }
+
+    /// ``deviceSecret``'s text: a recovery takes from its code delay (24 h) to its quiet period (72 h), at [timeScale].
+    private static func deviceSecretText(timeScale: UInt64) -> String {
+        DataStrings.failureDeviceSecret(
+            TimeScales.text(TimeScales.recoveryDelay, by: timeScale), TimeScales.text(TimeScales.recoveryQuiet, by: timeScale)
+        )
     }
 
     /// The key of ``message`` in `Localizable.xcstrings` (the Android string name).

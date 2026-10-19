@@ -5,6 +5,8 @@ import VettIDAltChan
 import VettIDCrypto
 @testable import VettIDData
 import VettIDDataTesting
+import VettIDKeys
+import VettIDKeysTesting
 
 /// The staging time scale (STAGING-TIME-SCALE §3, §5.2; VAULT-MESSAGING 0.43.0 §11.10.9; IOS-PLAN §6.6): each app-side
 /// wait divided by the vault's scale when it starts, the texts and the staging note.
@@ -71,8 +73,11 @@ struct TimeScaleWaitTests {
         #expect(DurationText.of(72 * 3_600) == "3 days")
         #expect(DurationText.of(3_600) == "1 hour")
         #expect(DurationText.of(7 * 3_600) == "7 hours")
-        #expect(DurationText.of(150) == "3 minutes")
-        #expect(DurationText.of(60) == "1 minute")
+        // Under 10 minutes in seconds, never rounded: 1 h at 24 is "150 seconds".
+        #expect(DurationText.of(150) == "150 seconds")
+        #expect(DurationText.of(599) == "599 seconds")
+        #expect(DurationText.of(600) == "10 minutes")
+        #expect(DurationText.of(5_400) == "90 minutes")
         #expect(DurationText.of(24) == "24 seconds")
         #expect(DurationText.of(1) == "1 second")
     }
@@ -88,6 +93,36 @@ struct TimeScaleWaitTests {
         #expect(TimeScales.withStaging("Every 24 hours", 86_400, by: 24) == "Every 24 hours (staging: 1 hour)")
         #expect(TimeScales.stagingNote(24) == "Staging: 1 day = 1 hour")
         #expect(TimeScales.stagingNote(1) == nil && TimeScales.stagingNote(3_600) == nil)
+    }
+
+    /// STAGING-TIME-SCALE §5.2: the "this phone no longer holds the keys" text says a recovery's time at the scale.
+    @Test func theDeviceSecretTextSaysTheScaledRecovery() {
+        #expect(FailureKind.deviceSecret.message.contains("It takes 24 hours to 3 days, and you need"))
+        #expect(FailureKind.deviceSecret.message(timeScale: 1) == FailureKind.deviceSecret.message)
+        #expect(FailureKind.deviceSecret.message(timeScale: 24).contains("It takes 1 hour to 3 hours, and you need"))
+        #expect(FailureKind.network.message(timeScale: 24) == FailureKind.network.message)
+    }
+
+    /// S9 end to end: a phone secret replaced on a staging vault is written with its 7 hours (`keep_ms`) and deleted
+    /// after them.
+    @Test func phoneSecretsWriteTheScaledKeep() throws {
+        let clock = TestClock()
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vettid-data-tests/\(UUID().uuidString)/VettID/phone-secrets")
+        let store = EncryptedFileStore(
+            url: url, purpose: PhoneSecrets.purpose, keys: InMemoryFileKeyHolder(), protectedData: ProtectedDataFlag(available: true)
+        )
+        let secrets = PhoneSecrets(keys: SoftwarePhoneSecretSource(), store: store, now: { clock.date }, timeScale: { 24 })
+        _ = try secrets.createConfirmed(keyVault: "v1")
+        _ = try secrets.createConfirmed(keyVault: "v1")
+        let replaced = try #require(try secrets.records().replaced.first)
+        #expect(replaced.keepMs == Int64(7 * 3_600_000))
+        clock.advance(7 * 3_600_000 - 1)
+        try secrets.prune()
+        #expect(try secrets.records().replaced.count == 1)
+        clock.advance(1)
+        try secrets.prune()
+        #expect(try secrets.records().replaced.isEmpty)
     }
 
     /// §11.10.9: the refusal's text, and the failure it maps from.
@@ -154,6 +189,31 @@ struct TimeScaleWaitTests {
             (e as? VaultFailure)?.kind == .timeScale
         }
         #expect(m.timeScale == 1 && m.record.value.timeScale == 1)
+    }
+
+    /// A Release build reads any stored scale other than 1 as real time, whoever wrote it (I3's bundle included).
+    @Test func aReleaseBuildReadsAStoredScaleAsReal() async throws {
+        let service = try FakeVaultService()
+        let phone = try TestVaultPhone(service: service)
+        defer { phone.close() }
+        let m = phone.manager
+        try await setUp(phone, service)
+        m.learnTimeScale(24, since: m.record.generation)
+        #expect(m.record.value.timeScale == 24)
+        #expect(m.timeScale == 1 && m.timeScaleCell.value == 1 && m.ownerChecks.timeScale == 1)
+    }
+
+    /// A Release build does not store `vault.status`'s `time_scale` 24.
+    @Test func aReleaseBuildIgnoresAScaledStatus() async throws {
+        let service = try FakeVaultService()
+        let phone = try TestVaultPhone(service: service)
+        defer { phone.close() }
+        let m = phone.manager
+        try await setUp(phone, service)
+        service.timeScale = 24
+        try await m.ownerChecks.refreshOwnerCheck()
+        _ = try await m.overview()
+        #expect(m.record.value.timeScale == 1 && m.timeScale == 1)
     }
 
     /// `vault.status` says the scale; a deadline learnt before keeps its real-time warning (STAGING-TIME-SCALE §5.5).

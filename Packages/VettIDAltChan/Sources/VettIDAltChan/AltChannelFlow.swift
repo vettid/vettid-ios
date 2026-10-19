@@ -334,6 +334,8 @@ public struct AltChannelFlow: Sendable {
     /// Registers this app for a recovery (§11.11.3) with the portal's code. [build] seals the request to the verified
     /// enclave; [open] opens vault.recovery.result.
     /// [attester] hears whether the vault bound the key the request attested (IOS-PLAN §6.2), as for an enrollment.
+    /// The instance's time scale (refused above when this build does not accept it) reaches [build] with the verified
+    /// enclave (`descriptor.timeScale`): the recovery on a new phone (I3) stores it with the vault it brings.
     public func recoveryRegister(
         vaultID: String,
         attester: Attester? = nil,

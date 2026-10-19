@@ -30,7 +30,7 @@ import VettIDDataTesting
         await m.settle()
         #expect(m.state.timeScale == 24)
         #expect(m.state.interval("Every 24 hours", hours: 24) == "Every 24 hours (staging: 1 hour)")
-        #expect(m.state.interval("Every hour", hours: 1) == "Every hour (staging: 3 minutes)")
+        #expect(m.state.interval("Every hour", hours: 1) == "Every hour (staging: 150 seconds)")
         #expect(m.state.stagingNote == "Staging: 1 day = 1 hour")
     }
 

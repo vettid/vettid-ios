@@ -16,11 +16,12 @@ extension VaultManager {
         _ = try? record.update(since: rec) { $0.timeScale = scale }
     }
 
-    /// `vault.status`'s `time_scale` (absent: a release before it, 1). A value this build does not accept is not stored
-    /// (chosen; not in the spec: the descriptor's check already refuses such an instance before any unlock).
-    func learnTimeScale(status st: VaultStatusInfo) {
+    /// `vault.status`'s `time_scale` (absent: a release before it, 1), for the record of [rec] (the one the session was
+    /// opened for). A value this build does not accept is not stored (chosen; not in the spec: the descriptor's check
+    /// already refuses such an instance before any unlock).
+    func learnTimeScale(status st: VaultStatusInfo, since rec: Int) {
         let scale = UInt64(clamping: st.timeScale ?? Int64(TimeScale.real))
         guard config.trust.timeScales.accepts(scale) else { return }
-        learnTimeScale(scale, since: record.generation)
+        learnTimeScale(scale, since: rec)
     }
 }

@@ -399,7 +399,10 @@ import Testing
         #expect(d?.hiddenFor == 3_600)
         #expect(!ReleaseNotices.bannerVisible(offer, d, now: now.addingTimeInterval(3_599)))
         #expect(ReleaseNotices.bannerVisible(offer, d, now: now.addingTimeInterval(3_600)))
+        // The scale drops back to 1: the dismissal keeps its hour.
         ops.scale = 1
+        #expect(m.dismissal?.hiddenFor == 3_600)
+        #expect(!ReleaseNotices.bannerVisible(offer, m.dismissal, now: now.addingTimeInterval(3_599)))
         #expect(ReleaseNotices.bannerVisible(offer, m.dismissal, now: now.addingTimeInterval(3_600)))
     }
 

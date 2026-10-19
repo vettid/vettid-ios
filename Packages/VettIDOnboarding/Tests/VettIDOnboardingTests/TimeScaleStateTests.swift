@@ -46,10 +46,11 @@ import VettIDDataTesting
     }
 
     @Test func theShellsPresenceNoticeIsScaled() {
-        var view = OwnerCheckView(state: .ok, deadline: Date().addingTimeInterval(3_600))
-        #expect(OwnerCheckGate.of(view, now: Date()).quietText == "3 days")
-        view.timeScale = 24
-        let g = OwnerCheckGate.of(view, now: Date())
-        #expect(g.timeScale == 24 && g.quietText == "3 hours")
+        let view = OwnerCheckView(state: .ok, deadline: Date().addingTimeInterval(3_600))
+        let real = OwnerCheckGate.of(view, now: Date())
+        #expect(real.quietText == "3 days" && real.stagingNote == nil)
+        // The vault's current scale, whatever the deadline's.
+        let g = OwnerCheckGate.of(view, now: Date(), timeScale: 24)
+        #expect(g.timeScale == 24 && g.quietText == "3 hours" && g.stagingNote == "Staging: 1 day = 1 hour")
     }
 }

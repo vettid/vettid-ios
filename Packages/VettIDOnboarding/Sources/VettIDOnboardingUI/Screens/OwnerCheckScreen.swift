@@ -122,6 +122,7 @@ public struct OwnerCheckScreen: View {
         if state.passedUnrecorded {
             FormScaffold(title: title, primaryLabel: OnboardingStrings.continueLabel, onPrimary: { actions.acknowledgePresence() }) {
                 PresenceNotice(quiet: state.quietText)
+                SmallNote(state.stagingNote)
             }
             .accessibilityIdentifier("owner_check_passed_unrecorded")
         } else {

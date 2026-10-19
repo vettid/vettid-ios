@@ -142,10 +142,13 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         let ref = ManagerRef()
         let gate = config.attestStartOver
         let scale = timeScaleCell
+        let policy = config.trust.timeScales
         record.onChange = { a in
             gate?.set(a.noVaultHoldsAttestKey)
-            scale.set(a.timeScale)
-            if ref.manager?.timeScale != a.timeScale { ref.manager?.timeScale = a.timeScale }
+            // A stored scale this build does not accept is real time: no writer can shorten a wait in a Release build.
+            let s = policy.accepts(a.timeScale) ? a.timeScale : 1
+            scale.set(s)
+            if ref.manager?.timeScale != s { ref.manager?.timeScale = s }
         }
         let ids = memberVault
         member = MemberApiClient(
@@ -191,9 +194,11 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         return OwnerCheckManager(
             ops: {
                 guard let m = ref.manager else { throw VaultFailure(.other, code: "session_dropped") }
+                // The record the session was opened for: a status answered after a reset is not stored.
+                let since = rec.generation
                 return VaultOwnerCheckOps(
                     api: try m.openApi(try await m.openSession()), gate: { try await ref.manager?.decideFirst() },
-                    onStatus: { st in await ref.manager?.learnTimeScale(status: st) }
+                    onStatus: { st in await ref.manager?.learnTimeScale(status: st, since: since) }
                 )
             },
             load: { try checkFile.load() },

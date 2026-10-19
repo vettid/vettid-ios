@@ -350,7 +350,7 @@ public struct OwnerCheckGate: Equatable, Sendable {
     public var notices: [OwnerCheckNotice]
     /// (Release R, §11.14.5) The vault could not record that the member was here: the presence notice.
     public var presenceUnrecorded: Bool
-    /// (STAGING-TIME-SCALE §5.2) The vault's time scale, as the owner check last learnt it with its deadline.
+    /// (STAGING-TIME-SCALE §5.2) The vault's time scale now, for the presence notice's quiet period and the note.
     public var timeScale: UInt64 = 1
 
     public init(
@@ -375,18 +375,22 @@ public struct OwnerCheckGate: Equatable, Sendable {
         _ v: OwnerCheckView?,
         now: Date,
         notices: [OwnerCheckNotice] = [],
-        presenceUnrecorded: Bool = false
+        presenceUnrecorded: Bool = false,
+        timeScale: UInt64 = 1
     ) -> OwnerCheckGate {
         var g = OwnerCheckGate(
             gated: v?.gated(now) == true, warning: v?.warning(now) == true, holdOff: v?.holdOff(now) == true,
             deadline: v?.deadline, holdOffUntil: v?.holdOffUntil, notices: notices, presenceUnrecorded: presenceUnrecorded
         )
-        g.timeScale = v?.timeScale ?? 1
+        g.timeScale = timeScale
         return g
     }
 
     /// The presence notice's quiet period (§11.14.5) at the vault's time scale ("3 days"; on staging "3 hours").
     public var quietText: String { TimeScales.text(TimeScales.recoveryQuiet, by: timeScale) }
+
+    /// "Staging: 1 day = 1 hour" on a staging vault; nil otherwise.
+    public var stagingNote: String? { TimeScales.stagingNote(timeScale) }
 
     /// The early warning shows: within the hour before the deadline, not past it.
     public var warningShown: Bool { warning && !gated }

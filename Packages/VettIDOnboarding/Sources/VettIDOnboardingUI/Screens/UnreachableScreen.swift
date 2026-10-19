@@ -62,7 +62,7 @@ public struct UnreachableScreen: View {
         let eraseOrRecover = way == .eraseOrRecover
         FormScaffold(
             title: Self.title(kind),
-            message: kind?.message,
+            message: kind?.message(timeScale: timeScale),
             primaryLabel: eraseOrRecover ? OnboardingStrings.rootRecover : OnboardingStrings.rootRetry,
             busy: busy,
             secondaryLabel: way.map(Self.label),
@@ -76,6 +76,7 @@ public struct UnreachableScreen: View {
                         Text(OnboardingStrings.rootLongUnreachable(wait))
                             .vettIDFont(.bodyLarge)
                             .accessibilityIdentifier("long_unreachable")
+                        SmallNote(TimeScales.stagingNote(timeScale))
                     }
                     Text(OnboardingStrings.rootRecoverLine).vettIDFont(.bodyMedium).foregroundStyle(colors.onSurfaceVariant)
                     TextLink(OnboardingStrings.rootRetry, identifier: "retry_button", action: onRetry).disabled(busy)
@@ -124,8 +125,15 @@ public struct UnreachableScreen: View {
         switch way {
         case .startOver: OnboardingStrings.rootStartOverBody
         case .clearData: OnboardingStrings.rootClearDataBody
-        case .erase, .eraseOrRecover: OnboardingStrings.erasePhoneBody(TimeScales.text(TimeScales.recoveryDelay, by: timeScale))
+        case .erase, .eraseOrRecover: erasePhoneBody(timeScale: timeScale)
         }
+    }
+
+    /// The erase confirmation's text with a recovery's time at the vault's time scale, and the staging note on a staging
+    /// vault (STAGING-TIME-SCALE §5.2).
+    static func erasePhoneBody(timeScale: UInt64) -> String {
+        let body = OnboardingStrings.erasePhoneBody(TimeScales.text(TimeScales.recoveryDelay, by: timeScale))
+        return TimeScales.stagingNote(timeScale).map { body + "\n\n" + $0 } ?? body
     }
 }
 

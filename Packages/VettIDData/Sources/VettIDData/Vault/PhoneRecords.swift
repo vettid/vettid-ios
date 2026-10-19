@@ -149,7 +149,7 @@ public struct PhoneRecords: Equatable, Sendable {
             let r = try v.asObject()
             let since = try r.uint("since", min: 0, max: StrictJson.maxSafeInteger)
             let byUnlock = r.has("by_unlock") ? try r.bool("by_unlock") : false
-            let keep = try r.optUint("keep_ms", min: 0, max: StrictJson.maxSafeInteger).map { Int64($0) } ?? PhoneSecrets.keepMs
+            let keep = try r.optUint("keep_ms", min: 1_000, max: StrictJson.maxSafeInteger).map { Int64($0) } ?? PhoneSecrets.keepMs
             return Replaced(
                 entry: try Entry.parse(r), operation: try r.optString("operation"), byUnlock: byUnlock, since: Int64(since),
                 keepMs: keep

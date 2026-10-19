@@ -326,9 +326,11 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         switch r.recovery?.presentRecorded {
         case false?:
             let deadline = Self.instant(r.deadline)
-            // The interval is in real units; the vault divided it by its time scale for this deadline (§5.1).
+            // The interval is in real units; the vault divided it by its time scale for this deadline (§5.1): the scale
+            // recorded with the deadline (as ``set(_:)`` records it).
+            let scale = deadline != nil && deadline == ownerCheck?.deadline ? ownerCheck?.timeScale ?? scaleNow() : scaleNow()
             presenceCheckAt = if let deadline, let i = r.intervalSeconds {
-                deadline.addingTimeInterval(-TimeScale.scaled(Double(i), by: scaleNow()))
+                deadline.addingTimeInterval(-TimeScale.scaled(Double(i), by: scale))
             } else {
                 nil
             }

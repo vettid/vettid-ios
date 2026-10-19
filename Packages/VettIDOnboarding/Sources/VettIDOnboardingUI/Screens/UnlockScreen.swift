@@ -121,7 +121,7 @@ public struct UnlockScreen: View {
             title: OnboardingStrings.unlockEraseConfirmTitle,
             // A phone without its vault's keys: the root screen's text, which says what a recovery then needs.
             message: state.keysGone && !state.notRecognised
-                ? OnboardingStrings.erasePhoneBody(state.recoveryText) : OnboardingStrings.unlockEraseConfirmBody,
+                ? UnreachableScreen.erasePhoneBody(timeScale: state.timeScale) : OnboardingStrings.unlockEraseConfirmBody,
             confirmLabel: OnboardingStrings.unlockEraseConfirm,
             destructive: true,
             onConfirm: { actions.confirmErase() }
@@ -232,7 +232,7 @@ struct UnlockNotices: View {
             default: OnboardingStrings.unlockTitle
             }
             // The vault's software did not verify: alarming, unlike a list that could not be loaded.
-            NoticeCard(state.recoverOnly || error == .enclave ? .urgent : .warning, title: title, message: error.message)
+            NoticeCard(state.recoverOnly || error == .enclave ? .urgent : .warning, title: title, message: error.message(timeScale: state.timeScale))
                 .accessibilityIdentifier("unlock_preflight_error")
         }
         if state.serviceWaitSeconds > 0 {
@@ -256,7 +256,7 @@ struct UnlockNotices: View {
                 .accessibilityIdentifier("unlock_owner_check")
         }
         if let f = state.moveFailure {
-            NoticeCard(.warning, title: OnboardingStrings.finishMoveTitle, message: f.message) {
+            NoticeCard(.warning, title: OnboardingStrings.finishMoveTitle, message: f.message(timeScale: state.timeScale)) {
                 TextLink(OnboardingStrings.continueLabel) { actions.dismissMoveFailure() }
             }
             .accessibilityIdentifier("unlock_move_failure")
@@ -346,7 +346,7 @@ struct UnlockMessageNotice: View {
             let text = switch code {
             case UnlockState.codeUnreadable: OnboardingStrings.unlockUnreadable
             case UnlockAttempt.codeNoUserGuid: OnboardingStrings.unlockNoUserGuid
-            default: kind.message
+            default: kind.message(timeScale: state.timeScale)
             }
             // The service paused for maintenance or not there yet: temporary, not alarming.
             let temporary = kind == .servicePaused || kind == .vaultUnavailable

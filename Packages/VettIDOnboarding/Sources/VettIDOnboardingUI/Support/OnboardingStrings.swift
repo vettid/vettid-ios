@@ -209,6 +209,8 @@ extension OnboardingStrings {
     static var elsewhereRecoveryTitle: String {
         String(localized: "onboarding_elsewhere_recovery_title", defaultValue: "Lost it?", bundle: .module)
     }
+    /// "After 24 hours" stays real time: on a phone with no vault yet the vault's time scale is not known (chosen; not in
+    /// the spec).
     static var elsewhereRecoveryBody: String {
         String(
             localized: "onboarding_elsewhere_recovery_body",
