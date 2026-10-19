@@ -168,7 +168,8 @@ import VettIDDataTesting
         _ = await vaultFailure { try await m.changePin(pin: pin, newPin: "518293", password: password) }
         let unlocks = service.unlocks.count
         let step = m.unlockPinStep
-        let r = await m.updateUnlock(pin: pin, approve: try offer.target, abandon: false) {}
+        let taken = TakenPin(pin: pin, generation: m.phoneSecrets.pinGeneration)
+        let r = await m.updateUnlock(pin: taken, approve: try offer.target, abandon: false) {}
         guard case .failed(let kind, let code, _) = r else {
             Issue.record("not refused: \(r)")
             return

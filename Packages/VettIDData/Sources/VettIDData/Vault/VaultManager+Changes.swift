@@ -1,4 +1,5 @@
 import Foundation
+import VettIDAltChan
 import VettIDVault
 
 // A lost answer to `pin.change` or `credential.password.change` (VAULT-MESSAGING §11.14.9 "A lost answer", IOS-PLAN
@@ -125,10 +126,20 @@ extension VaultManager {
     /// (Release R, §11.14.10) "Finish the move": refused while a change is on its way or unresolved, or the PIN
     /// uncertain (VAULT-MESSAGING 0.46.0 §11.14.9 step 2: only the unlock screen's two prompts send a PIN with a
     /// candidate), with the hold's text; else `vault.lock` and the unlock with this phone's keys, as the default does.
+    /// The PIN is taken here: once which PIN the vault expects moved since (``PhoneSecrets/pinGeneration``), the unlock
+    /// sends nothing and fails with ``codePinTakenBefore``, and the PIN is asked for again.
     public func finishMove(pin: String) async throws -> UnlockAttempt {
+        try await finishMove(pin: pin, taken: phoneSecrets.pinGeneration)
+    }
+
+    /// "Finish the move" with a PIN taken at ``PhoneSecrets/pinGeneration`` [taken].
+    func finishMove(pin: String, taken: Int) async throws -> UnlockAttempt {
         if let hold = moveHold() { throw hold }
         try await lock()
-        return try await unlock(pin: pin, approve: nil, cancelRecovery: false)
+        if let moved = pinTakenBefore(taken) { return .failed(moved.kind, code: moved.code) }
+        var route = UnlockRoute()
+        route.pinTaken = taken
+        return await unlockOutcome(pin: pin, options: UnlockOptions(), route: route).attempt
     }
 
     /// The one hold of a flow that unlocks with a PIN typed on its own screen (the release update, the unlock screen's
@@ -210,6 +221,7 @@ extension VaultManager {
         changeCheck = nil
         newPinAsked = false
         unlockPinStep = .pin
+        phoneSecrets.pinMoved()
     }
 
     /// The unresolved change, nil also when the records cannot be read now (for what is shown; the gate uses
@@ -411,11 +423,17 @@ extension VaultManager {
     func refreshPinStep() {
         guard twoStepOperation() != nil else {
             newPinAsked = false
-            if unlockPinStep != .pin { unlockPinStep = .pin }
+            if unlockPinStep != .pin {
+                unlockPinStep = .pin
+                phoneSecrets.pinMoved()
+            }
             return
         }
         let step: UnlockPinStep = newPinAsked ? .new : .previous
-        if unlockPinStep != step { unlockPinStep = step }
+        if unlockPinStep != step {
+            unlockPinStep = step
+            phoneSecrets.pinMoved()
+        }
     }
 
     /// The operation of the PIN change the unlock's two prompts are for: the unresolved one, else the one whose PIN is

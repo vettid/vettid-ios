@@ -71,6 +71,19 @@ public enum UpdateStepResult: Equatable, Sendable {
     case failed(FailureKind, code: String?, retryAfterSeconds: Int64 = 0)
 }
 
+/// A PIN the member typed on the update's own screen, with ``ReleaseUpdateOps/pinGeneration()`` as it was when the
+/// screen handed it over: an unlock sends nothing once that moved (VAULT-MESSAGING §11.14.9 step 2; chosen; not in the
+/// spec). Held only while a step runs.
+public struct TakenPin: Sendable {
+    public let pin: String
+    public let generation: Int
+
+    public init(pin: String, generation: Int) {
+        self.pin = pin
+        self.generation = generation
+    }
+}
+
 /// What the update needs from the vault. Mirrors vettid-android `ReleaseUpdateOps`.
 @MainActor
 public protocol ReleaseUpdateOps: AnyObject {
@@ -85,10 +98,15 @@ public protocol ReleaseUpdateOps: AnyObject {
 
     /// One unlock with [pin]: approving [approve] (§11.10.3) when non-nil, or abandoning the unconfirmed move ([abandon],
     /// §11.10.4); never following a move by itself. [afterMove]: the unlock right after `moved`, which waits while the
-    /// member API still routes to the release moved from. [onStarting] hears `503 release_starting`.
+    /// member API still routes to the release moved from. [onStarting] hears `503 release_starting`. Nothing is sent when
+    /// ``pinGeneration()`` moved since [pin] was taken (``VaultManager/codePinTakenBefore``).
     func unlock(
-        pin: String, approve: ReleaseView?, abandon: Bool, afterMove: Bool, onStarting: @escaping @MainActor () -> Void
+        pin: TakenPin, approve: ReleaseView?, abandon: Bool, afterMove: Bool, onStarting: @escaping @MainActor () -> Void
     ) async -> UpdateStepResult
+
+    /// (VAULT-MESSAGING §11.14.9 step 2) Read when the update takes a PIN (``TakenPin``): it moves with everything that
+    /// may change which PIN the vault expects (``PhoneSecrets/pinGeneration``).
+    func pinGeneration() -> Int
 
     /// An unconfirmed move can be abandoned: this phone knows the release it moved from.
     func canAbandon() -> Bool
@@ -108,6 +126,7 @@ public protocol ReleaseUpdateOps: AnyObject {
 
 public extension ReleaseUpdateOps {
     func changeHold() -> FailureKind? { nil }
+    func pinGeneration() -> Int { 0 }
     func timeScale() -> UInt64 { 1 }
 }
 

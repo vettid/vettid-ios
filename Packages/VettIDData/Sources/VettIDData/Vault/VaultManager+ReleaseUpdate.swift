@@ -28,7 +28,7 @@ final class VaultReleaseUpdateOps: ReleaseUpdateOps {
     func lock() async throws { try await manager.lockForUpdate() }
 
     func unlock(
-        pin: String, approve: ReleaseView?, abandon: Bool, afterMove: Bool, onStarting: @escaping @MainActor () -> Void
+        pin: TakenPin, approve: ReleaseView?, abandon: Bool, afterMove: Bool, onStarting: @escaping @MainActor () -> Void
     ) async -> UpdateStepResult {
         guard let m = ref.manager else { return .failed(.other, code: "session_dropped") }
         return await m.updateUnlock(pin: pin, approve: approve, abandon: abandon, afterMove: afterMove, onStarting: onStarting)
@@ -41,6 +41,8 @@ final class VaultReleaseUpdateOps: ReleaseUpdateOps {
     func timeScale() -> UInt64 { ref.manager?.timeScale ?? 1 }
 
     func changeHold() -> FailureKind? { ref.manager?.releaseUpdateHold() }
+
+    func pinGeneration() -> Int { ref.manager?.phoneSecrets.pinGeneration ?? 0 }
 }
 
 // The proactive release update (RELEASE-UPDATES §2, VAULT-MESSAGING §11.10): the offer read after every unlock and on
@@ -57,6 +59,18 @@ extension VaultManager {
     nonisolated static let lockedPoll: Duration = .seconds(1)
     /// The code of an update step refused because a PIN or password change is undecided.
     nonisolated static let codeChangeHeld = ReleaseUpdateManager.codeChangeHeld
+    /// (VAULT-MESSAGING §11.14.9 step 2; chosen; not in the spec) The code of an unlock of a flow with a PIN typed on its
+    /// own screen (the release update, "Finish the move") refused with nothing sent: which PIN the vault expects may have
+    /// changed since the PIN was taken (``PhoneSecrets/pinGeneration``). The PIN is asked for again, with the "earlier
+    /// request" text (``FailureKind/credentialUnsettled``); no PIN attempt is spent.
+    public nonisolated static let codePinTakenBefore = "pin_taken_before_change"
+
+    /// The refusal of an unlock whose PIN was taken at [generation] when ``PhoneSecrets/pinGeneration`` moved since; nil
+    /// when it may go out.
+    nonisolated func pinTakenBefore(_ generation: Int?) -> VaultFailure? {
+        guard let generation, phoneSecrets.pinGeneration != generation else { return nil }
+        return VaultFailure(.credentialUnsettled, code: Self.codePinTakenBefore)
+    }
 
     /// (VAULT-MESSAGING §11.14.9 step 2) Whether a release update, the unlock screen's approval and "Finish the move" are
     /// held (``releaseUpdateHold()``).
@@ -110,15 +124,18 @@ extension VaultManager {
         }
     }
 
-    /// One unlock of the update: approving [approve] or abandoning the unconfirmed move, never following a move.
+    /// One unlock of the update: approving [approve] or abandoning the unconfirmed move, never following a move. Nothing
+    /// is sent once which PIN the vault expects moved since [pin] was taken: checked here and again right before the
+    /// request goes out (``UnlockRoute/pinTaken``).
     func updateUnlock(
-        pin: String, approve: ReleaseView?, abandon: Bool, afterMove: Bool = false, onStarting: @escaping @MainActor () -> Void
+        pin: TakenPin, approve: ReleaseView?, abandon: Bool, afterMove: Bool = false, onStarting: @escaping @MainActor () -> Void
     ) async -> UpdateStepResult {
         // (§11.14.9) Nothing is sent while a PIN or password change is undecided: the PIN may be the wrong one of two.
         if let hold = releaseUpdateHold() {
             kickChangeCheck()
             return .failed(hold, code: Self.codeChangeHeld)
         }
+        if let moved = pinTakenBefore(pin.generation) { return .failed(moved.kind, code: moved.code) }
         var release: String?
         if abandon {
             let previous = session?.device.altState.previousRelease ?? ""
@@ -128,12 +145,13 @@ extension VaultManager {
         let options = UnlockOptions(approve: approve.map { Approval(toPcr0: $0.pcr0, toRelease: $0.number) }, abandon: abandon)
         let starting: @Sendable (Int) -> Void = { _ in Task { @MainActor in onStarting() } }
         // The update never moves the unlock's PIN steps (§11.14.9 step 5): a change undecided is refused above.
-        let route = UnlockRoute(followMove: false, release: release, onStarting: starting, pinSteps: false, afterMove: afterMove)
-        var o = await unlockOutcome(pin: pin, options: options, route: route)
+        var route = UnlockRoute(followMove: false, release: release, onStarting: starting, pinSteps: false, afterMove: afterMove)
+        route.pinTaken = pin.generation
+        var o = await unlockOutcome(pin: pin.pin, options: options, route: route)
         if abandon, case .failed(_, let code, _) = o.attempt, code == MemberApiError.vaultBusy {
             // §11.10.5: an instance of the new release holds the vault; lock it first, then return.
             try? await lock()
-            o = await unlockOutcome(pin: pin, options: options, route: route)
+            o = await unlockOutcome(pin: pin.pin, options: options, route: route)
         }
         return Self.stepResult(o)
     }
