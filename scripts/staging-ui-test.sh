@@ -8,8 +8,8 @@
 #   scripts/staging-ui-test.sh --device <id> --test <test> [--inputs <file>] [--fresh] [--skip-build] [--keep-result]
 #
 #   --device <id>     the iPhone (`xcrun devicectl list devices`)
-#   --test <test>     testStagingEnroll, testStagingUnlockLock, testStagingApproveUpdate or
-#                     testStagingApproveUpdateAtUnlock
+#   --test <test>     testStagingEnroll, testStagingUnlockLock, testStagingApproveUpdate,
+#                     testStagingApproveUpdateAtUnlock, testStagingCheckNow or testStagingWrongPinInPasswordChange
 #   --inputs <file>   a private file outside the repository (chmod 600) with lines NAME=value for
 #                     VETTID_STAGING_EMAIL, VETTID_STAGING_CODE, VETTID_STAGING_PIN, VETTID_STAGING_PASSWORD (quotes
 #                     around a value and CRLF line ends are stripped); only the file is read then. Without it they are
@@ -18,6 +18,19 @@
 #                     testStagingEnroll with all four inputs set; asks y/N on a terminal
 #   --skip-build      reuse the last build-for-testing
 #   --keep-result     keep the result bundle (it holds what was typed) in the private cache directory
+#
+# The tests (each ends with the vault locked and the lock confirmed):
+#   testStagingEnroll                    a fresh app enrolled with the code, the PIN and the password
+#   testStagingUnlockLock                unlock with the PIN (and the password when the daily check is due), then lock
+#   testStagingApproveUpdate             Settings -> "Update available", approved with the PIN; skipped without one
+#   testStagingApproveUpdateAtUnlock     the unlock screen's update offer, approved with the unlock; skipped without one
+#   testStagingCheckNow                  Settings -> the daily check's "Check now" with the PIN and the password: the
+#                                        voluntary check passes
+#   testStagingWrongPinInPasswordChange  Settings -> Credential -> Change password with a wrong PIN (the input PIN with
+#                                        its last digit changed): the vault's refusal is shown and the form is left
+#                                        without a retry, so the password is never changed. The wrong PIN counts as
+#                                        a failed owner check (VAULT-MESSAGING §3.6.1), which the next passed check
+#                                        resets; so follow it with testStagingCheckNow.
 #
 # A test without its inputs is skipped. The inputs reach only the test step, as TEST_RUNNER_<NAME> (xcodebuild passes
 # them to the runner as <NAME>), never a command line or the build; xcodebuild's output is shown with them (and the
@@ -51,8 +64,9 @@ while [[ $# -gt 0 ]]; do
 done
 [[ -n "${DEVICE}" ]] || { echo "--device is required" >&2; usage; }
 case "${TEST}" in
-  testStagingEnroll|testStagingUnlockLock|testStagingApproveUpdate|testStagingApproveUpdateAtUnlock) ;;
-  *) echo "--test must be testStagingEnroll, testStagingUnlockLock, testStagingApproveUpdate or testStagingApproveUpdateAtUnlock" >&2
+  testStagingEnroll|testStagingUnlockLock|testStagingApproveUpdate|testStagingApproveUpdateAtUnlock|testStagingCheckNow|testStagingWrongPinInPasswordChange) ;;
+  *) echo "--test must be testStagingEnroll, testStagingUnlockLock, testStagingApproveUpdate," \
+       "testStagingApproveUpdateAtUnlock, testStagingCheckNow or testStagingWrongPinInPasswordChange" >&2
      usage ;;
 esac
 
