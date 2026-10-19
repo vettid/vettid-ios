@@ -41,27 +41,6 @@ jobs:
           git diff --exit-code -- VettID.xcodeproj App/Info.plist
       - name: SwiftLint
         run: swiftlint lint --strict
-      - name: TEMPORARY diagnose the VettIDVault test crash
-        run: |
-          set +e
-          swift test --package-path Packages/VettIDVault --no-parallel 2>&1 | grep -E "started|passed|failed|recorded|signal|Fatal|misuse|error" | tail -40
-          for f in ~/Library/Logs/DiagnosticReports/*VettIDVault*.ips ~/Library/Logs/DiagnosticReports/*xctest*.ips; do
-            [ -f "$f" ] || continue
-            echo "== $f"
-            python3 - "$f" <<'PY'
-          import json,sys
-          raw=open(sys.argv[1]).read().split("\n",1)
-          d=json.loads(raw[1])
-          print("exception:", d.get("exception"), d.get("termination",{}).get("indicator"))
-          print("asi:", d.get("asi"))
-          ft=d.get("faultingThread",0)
-          imgs=d.get("usedImages",[])
-          for fr in d["threads"][ft]["frames"][:30]:
-              img=imgs[fr.get("imageIndex",0)].get("name","?") if imgs else "?"
-              print(img, fr.get("symbol","?"))
-          PY
-          done
-          exit 1
       - name: pure packages (swift test on macOS)
         run: |
           for p in VettIDCrypto VettIDAttestation VettIDRelay VettIDAltChan VettIDVault VettIDKeys VettIDTesting; do

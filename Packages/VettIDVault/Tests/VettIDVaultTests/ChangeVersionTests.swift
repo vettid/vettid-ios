@@ -327,23 +327,29 @@ import VettIDCrypto
         // A short wait for answers: an operation sent by mistake fails fast, after the deposit checked below.
         let h = try await lost.holder(timeout: 0.3)
         let (d, api) = (h.d, h.api)
-        for start in [
-            { try await api.ownerCheck(pin: "975310", password: "pw") },
-            { try await api.secretRenew(pin: "975310", password: "pw", newUnlockSecret: [UInt8](repeating: 7, count: 32), marked: Marked()) },
-        ] as [@Sendable () async throws -> Void] {
-            await d.credentialLock.acquire()
-            let op = Task { try await start() }
-            for _ in 0..<500 where d.credentialLock.waiting == 0 { try await Task.sleep(nanoseconds: 10_000_000) }
-            #expect(d.credentialLock.waiting == 1, "queued")
-            d.secretSent()
-            d.credentialLock.release()
-            #expect(await ops.base.relay.noDeposit(within: 0.3), "nothing sent")
-            do {
-                try await op.value
-                Issue.record("sent")
-            } catch let e as CredentialUnsettled {
-                #expect(e.reason == .inFlight)
-            }
+        // Two plain cases (an array of async closures crashed the Xcode 26.6 test runner).
+        await d.credentialLock.acquire()
+        let check = Task { _ = try await api.ownerCheck(pin: "975310", password: "pw") }
+        try await expectRefusedAfterASecret(d, check)
+        await d.credentialLock.acquire()
+        let renew = Task {
+            _ = try await api.secretRenew(pin: "975310", password: "pw", newUnlockSecret: [UInt8](repeating: 7, count: 32), marked: Marked())
+        }
+        try await expectRefusedAfterASecret(d, renew)
+    }
+
+    /// [op] waits on the credential lock held here, a secret goes out meanwhile, and [op] is then refused, nothing sent.
+    private func expectRefusedAfterASecret(_ d: VaultDevice, _ op: Task<Void, Error>) async throws {
+        for _ in 0..<500 where d.credentialLock.waiting == 0 { try await Task.sleep(nanoseconds: 10_000_000) }
+        #expect(d.credentialLock.waiting == 1, "queued")
+        d.secretSent()
+        d.credentialLock.release()
+        #expect(await ops.base.relay.noDeposit(within: 0.3), "nothing sent")
+        do {
+            try await op.value
+            Issue.record("sent")
+        } catch let e as CredentialUnsettled {
+            #expect(e.reason == .inFlight)
         }
     }
 
