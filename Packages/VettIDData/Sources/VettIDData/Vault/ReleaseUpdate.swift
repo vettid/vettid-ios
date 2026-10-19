@@ -266,17 +266,35 @@ public protocol ReleaseUpdateRepository: AnyObject, Observable, Sendable {
     /// Whether the owner check must come first (§3.6.5).
     func ownerCheckDue() -> Bool
 
+    /// (VAULT-MESSAGING §11.14.9 step 2) Which PIN the vault expects, as a generation (``PhoneSecrets/pinGeneration``):
+    /// a screen reads it when its keypad becomes usable and hands it over with the PIN; an unlock sends nothing once it
+    /// moved since (``VaultManager/codePinTakenBefore``).
+    var pinGeneration: Int { get }
+
     /// The member approved [offer] with [pin] ("Approve and update"): locks, unlocks with the approval, and after `moved`
-    /// unlocks again with the same PIN. False when it cannot start (an update runs, or the check is due).
-    func start(pin: String, offer: ReleaseUpdateOffer) -> Bool
+    /// unlocks again with the same PIN. False when it cannot start (an update runs, or the check is due). [generation]:
+    /// ``pinGeneration`` when the keypad opened (nil: read now).
+    func start(pin: String, offer: ReleaseUpdateOffer, generation: Int?) -> Bool
 
     /// ``UpdateStep/badPin`` or ``UpdateStep/failed``: the approved update again; ``UpdateStep/newReleaseFailed``: the
-    /// unlock again.
-    func retry(pin: String)
+    /// unlock again. [generation] as for ``start(pin:offer:generation:)``.
+    func retry(pin: String, generation: Int?)
 
     /// ``UpdateStep/newReleaseFailed`` with ``UpdateProgress/canAbandon``: back to the previous release (§11.10.4).
-    func abandon(pin: String)
+    /// [generation] as for ``start(pin:offer:generation:)``.
+    func abandon(pin: String, generation: Int?)
 
     /// Leaves the outcome (or gives up): the app follows the vault's phase again. Ignored while a step runs.
     func finish()
+}
+
+public extension ReleaseUpdateRepository {
+    var pinGeneration: Int { 0 }
+
+    /// The PIN's generation read as it is handed over (no keypad reading).
+    func start(pin: String, offer: ReleaseUpdateOffer) -> Bool { start(pin: pin, offer: offer, generation: nil) }
+
+    func retry(pin: String) { retry(pin: pin, generation: nil) }
+
+    func abandon(pin: String) { abandon(pin: pin, generation: nil) }
 }

@@ -127,7 +127,9 @@ extension VaultManager {
     /// uncertain (VAULT-MESSAGING 0.46.0 §11.14.9 step 2: only the unlock screen's two prompts send a PIN with a
     /// candidate), with the hold's text; else `vault.lock` and the unlock with this phone's keys, as the default does.
     /// The PIN is taken here: once which PIN the vault expects moved since (``PhoneSecrets/pinGeneration``), the unlock
-    /// sends nothing and fails with ``codePinTakenBefore``, and the PIN is asked for again.
+    /// sends nothing and fails with ``codePinTakenBefore``, and the PIN is asked for again. Its screen, when it comes, must
+    /// read ``PhoneSecrets/pinGeneration`` when its keypad opens and pass it (``finishMove(pin:taken:)``), as the update's
+    /// screens do, so that a change decided while the member types is covered too.
     public func finishMove(pin: String) async throws -> UnlockAttempt {
         try await finishMove(pin: pin, taken: phoneSecrets.pinGeneration)
     }

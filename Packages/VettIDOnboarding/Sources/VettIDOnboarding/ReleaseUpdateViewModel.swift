@@ -38,9 +38,12 @@ public struct ReleaseUpdateState: Equatable, Sendable {
 @MainActor
 @Observable
 public final class ReleaseUpdateViewModel {
-    public private(set) var state: ReleaseUpdateState
+    public private(set) var state: ReleaseUpdateState {
+        didSet { keypad.follow(state.pinAllowed, updates) }
+    }
 
     @ObservationIgnored private let updates: any ReleaseUpdateRepository
+    @ObservationIgnored private let keypad = KeypadReading()
     @ObservationIgnored private let releaseNotes: any ReleaseNotesRepository
     @ObservationIgnored private let followers = TaskBag()
     @ObservationIgnored private var notesTask: Task<Void, Never>?
@@ -56,6 +59,7 @@ public final class ReleaseUpdateViewModel {
         self.updates = updates
         releaseNotes = notes
         state = ReleaseUpdateState(loading: updates.offer == nil, offer: updates.offer, changeHold: updates.changeHold)
+        keypad.follow(state.pinAllowed, updates)
         followers.add(follow(self, read: { $0.updates.offer }, apply: { $0.offerChanged($1) }))
         followers.add(follow(self, read: { $0.updates.changeHold }, apply: { $0.state.changeHold = $1 }))
         if let ownerCheck {
@@ -99,7 +103,7 @@ public final class ReleaseUpdateViewModel {
     public func approve(pin: String) -> Bool {
         let digits = String(pin.filter { $0.isASCII && $0.isNumber }.prefix(UnlockState.maxPin))
         guard let offer = state.offer, state.submitAllowed(pinTyped: digits.count) else { return false }
-        if updates.start(pin: digits, offer: offer) { return true }
+        if updates.start(pin: digits, offer: offer, generation: keypad.generation) { return true }
         state.checkDue = updates.ownerCheckDue()
         state.changeHold = updates.changeHold
         return false
@@ -139,9 +143,12 @@ public struct ReleaseUpdateFlowState: Equatable, Sendable {
 @MainActor
 @Observable
 public final class ReleaseUpdateFlowViewModel {
-    public private(set) var state: ReleaseUpdateFlowState
+    public private(set) var state: ReleaseUpdateFlowState {
+        didSet { keypad.follow(state.pinAllowed, updates) }
+    }
 
     @ObservationIgnored private let updates: any ReleaseUpdateRepository
+    @ObservationIgnored private let keypad = KeypadReading()
     @ObservationIgnored private let tick: @Sendable () async throws -> Void
     @ObservationIgnored private let followers = TaskBag()
     @ObservationIgnored private var ticker: Task<Void, Never>?
@@ -154,6 +161,7 @@ public final class ReleaseUpdateFlowViewModel {
         self.updates = updates
         self.tick = tick
         state = ReleaseUpdateFlowState(progress: updates.progress)
+        keypad.follow(state.pinAllowed, updates)
         followers.add(follow(self, read: { $0.updates.progress }, apply: { $0.progressChanged($1) }))
     }
 
@@ -175,7 +183,7 @@ public final class ReleaseUpdateFlowViewModel {
     @discardableResult
     public func retry(pin: String) -> Bool {
         guard state.retryAllowed(pinTyped: pin.count) else { return false }
-        updates.retry(pin: pin)
+        updates.retry(pin: pin, generation: keypad.generation)
         return true
     }
 
@@ -190,7 +198,7 @@ public final class ReleaseUpdateFlowViewModel {
     public func confirmAbandon(pin: String) -> Bool {
         state.abandonConfirm = false
         guard state.retryAllowed(pinTyped: pin.count), state.progress?.step == .newReleaseFailed else { return false }
-        updates.abandon(pin: pin)
+        updates.abandon(pin: pin, generation: keypad.generation)
         return true
     }
 
@@ -220,5 +228,23 @@ public final class ReleaseUpdateFlowViewModel {
     func settle() async {
         for _ in 0..<20 { await Task.yield() }
         await ticker?.value
+    }
+}
+
+/// (VAULT-MESSAGING §11.14.9 step 2; chosen; not in the spec) Which PIN the vault expects
+/// (``ReleaseUpdateRepository/pinGeneration``), read when the keypad becomes usable: a change sent or decided while the
+/// member types moves it, and the update then sends nothing with that PIN and asks for it again. Dropped while the keypad
+/// is not usable; read again each time it becomes so.
+@MainActor
+final class KeypadReading {
+    private(set) var generation: Int?
+
+    /// The keypad is usable ([allowed]) or not.
+    func follow(_ allowed: Bool, _ updates: any ReleaseUpdateRepository) {
+        if !allowed {
+            generation = nil
+        } else if generation == nil {
+            generation = updates.pinGeneration
+        }
     }
 }
