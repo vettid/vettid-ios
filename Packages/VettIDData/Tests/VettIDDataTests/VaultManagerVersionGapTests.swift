@@ -164,9 +164,9 @@ import VettIDVault
         defer { phone.close() }
         try await setUp()
         service.lockByItself(reason: "test")
-        let password = await vaultFailure { try await m.changePassword(password, newPassword: newPassword, pin: pin) }
-        #expect(password?.kind == .noResponse, "\(String(describing: password))")
-        let renew = await vaultFailure { try await m.renewPhoneSecret(pin: pin, password: self.password) }
+        let change = await vaultFailure { try await m.changePassword(password, newPassword: newPassword, pin: pin) }
+        #expect(change?.kind == .noResponse, "\(String(describing: change))")
+        let renew = await vaultFailure { try await m.renewPhoneSecret(pin: pin, password: password) }
         #expect(renew?.kind == .noResponse, "\(String(describing: renew))")
         #expect(service.passwordChanges.isEmpty && service.renews.isEmpty)
         #expect(try m.phoneSecrets.unresolvedChange() == nil && m.changeCheck == nil)
