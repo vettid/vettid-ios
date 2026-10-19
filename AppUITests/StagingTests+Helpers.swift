@@ -53,13 +53,32 @@ extension StagingTests {
         XCTFail("iOS offered to save a password (IOS-PLAN §6.5 forbids it).")
     }
 
+    /// The PIN on the keypad, one digit at a time, each key tapped only once it can be hit (not under the keyboard).
+    /// Fails, sending nothing, unless the keypad then holds exactly as many digits as [pin]: a missed tap must never
+    /// send a wrong PIN, which the vault counts as a failed check (VAULT-MESSAGING §3.6.1).
     @MainActor
     func enterPin(_ app: XCUIApplication, _ pin: String) {
+        dismissKeyboard(app)
         for digit in pin {
             let key = app.buttons["pin_\(digit)"]
-            XCTAssertTrue(key.waitForExistence(timeout: 10), "no keypad")
+            XCTAssertTrue(waitUntil(timeout: 10, { key.exists && key.isHittable }), "no keypad")
             key.tap()
         }
+        let dots = app.descendants(matching: .any)["pin_dots"]
+        if dots.exists, let entered = dots.value as? String, entered != String(pin.count) {
+            return fail(app, "The keypad holds \(entered) digits, not \(pin.count); nothing was sent.")
+        }
+    }
+
+    /// Puts the keyboard away (after typing a password) so it cannot cover the keypad.
+    @MainActor
+    func dismissKeyboard(_ app: XCUIApplication) {
+        guard app.keyboards.count > 0 else { return }
+        for name in ["Return", "return", "Done", "done", "Go", "go"] where app.keyboards.buttons[name].exists {
+            app.keyboards.buttons[name].tap()
+            break
+        }
+        _ = waitUntil(timeout: 3, { app.keyboards.count == 0 })
     }
 
     @MainActor
