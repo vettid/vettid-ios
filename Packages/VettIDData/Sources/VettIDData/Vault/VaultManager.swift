@@ -78,9 +78,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored let lockNotices = LockNotices()
     /// Bumped by every lock the member asks for: an unlock or a refresh that began before it publishes no open phase.
     @ObservationIgnored var lockGeneration = 0
-    /// Bumped by every vault event that has the phase read again (`device.unlinked` that is not a replacement): an unlock
-    /// that one reached while it was on its way reads the phase again rather than publish its own, so that the event's
-    /// read is never lost to the unlock's phase (chosen; not in the spec).
+    /// Bumped by each event that has the phase read again (`device.unlinked`, not a replacement): an unlock it reached
+    /// on its way reads the phase again rather than publish its own (chosen; not in the spec).
     @ObservationIgnored var rereads = 0
     /// The pending lock found at the start was taken up (once, after the first-run cleanup and the record).
     @ObservationIgnored private var lockResumed = false
