@@ -51,6 +51,8 @@ public struct CredentialContent: View {
         DetailScaffold(background: colors.groupedBackground, onBack: actions.back) {
             content
         }
+        // A container: the screen's identifier is its own, and the rows keep theirs (UI tests find them).
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("credential")
         .choiceSheet(item: $sheet) { s in
             switch s {

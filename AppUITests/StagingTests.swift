@@ -17,12 +17,16 @@ final class StagingTests: XCTestCase {
     private static let network: TimeInterval = 90
     /// Enrollment: the vault's enclave is made and attested, then the credential.
     private static let enrollment: TimeInterval = 600
+    /// What the test of a wrong PIN appends to the current password to make its new one (never sent with the right PIN).
+    private static let wrongPinSuffix = " wrong-pin"
+    /// The vault's `bad_pin` refusal on a form (`data_failure_bad_pin`, the only localization being English).
+    private static let badPinText = "That PIN is not correct."
     /// A release update: the lock, the unlock with the approval, and the unlock on the new release, which may have to
     /// start first (VAULT-MESSAGING §11.10.5: `503 release_starting`, minutes).
     private static let releaseUpdate: TimeInterval = 900
 
     /// Identifiers of the notices that say why something failed: their text is what a failure reports.
-    private static let failureIds = [
+    static let failureIds = [
         "error", "scan_refused", "pin_error", "pin_confirm_error", "credential_pin_error", "unlock_failed", "unlock_refused",
         "unlock_preflight_error", "unlock_pin_error", "unlock_not_recognised", "unlock_stuck", "unlock_recover_only",
         "unlock_signer_refused", "unlock_owner_check_locked", "unlock_lock_unconfirmed", "move_back_failed",
@@ -197,7 +201,179 @@ final class StagingTests: XCTestCase {
         lock(app)
     }
 
+    /// I1.8a's voluntary owner check (VAULT-MESSAGING §3.6.5): from the open app, Settings → the daily check's "Check
+    /// now", the PIN on the keypad and the credential password; the check passes when its screen closes on Settings with
+    /// no failure shown (the app has no success notice: the screen closes, as on vettid-android). Then the vault is
+    /// locked (STAGING-TESTING §5).
+    @MainActor
+    func testStagingCheckNow() throws {
+        let pin = try Self.pin()
+        let password = try Self.input("VETTID_STAGING_PASSWORD")
+
+        let app = launch()
+        guard openAtStart(app, pin: pin, password: password) else { return }
+        openSettings(app)
+        let row = app.buttons["owner_check_now"]
+        if !reveal(app, row) { return fail(app, "Settings has no \"Check now\": the vault has not reported its owner check.") }
+        row.tap()
+
+        expect(app, "owner_check_pin", timeout: 30)
+        enterPin(app, pin)
+        let field = app.secureTextFields["owner_check_password"]
+        field.tap()
+        field.typeText(password)
+        tapPrimary(app)
+
+        // The answer: the screen closes (or first says that the vault could not record the presence), or it stays with
+        // the wrong entry, the checks left or the failure.
+        var screen: [String: String] = [:]
+        let answered = waitUntil(timeout: Self.network) {
+            screen = shown(app)
+            return screen["owner_check"] == nil || screen["owner_check_passed_unrecorded"] != nil || failureText(in: screen) != nil
+        }
+        if screen["owner_check_passed_unrecorded"] != nil {
+            tapPrimary(app)
+            if !waitUntil(timeout: 30, { shown(app)["owner_check_passed_unrecorded"] == nil }) {
+                return fail(app, "The check's presence notice did not close.")
+            }
+        } else if !answered || screen["owner_check"] != nil {
+            let left = screen["owner_check_left"].map { " \($0)" } ?? ""
+            return fail(app, "The check did not pass: its screen is still open.\(left)")
+        }
+        // Back on Settings, under no check screen, with no failure.
+        if !row.waitForExistence(timeout: 30) { return fail(app, "Settings did not come back after the check.") }
+        if let why = failureText(in: shown(app)) { return fail(app, "The check failed: \(why)") }
+        failOnSavePassword(app)
+        lock(app)
+    }
+
+    /// Settings → Credential → Change password with a deliberately wrong PIN (the input PIN with its last digit changed),
+    /// the current password and a new one the test makes up (the current password followed by
+    /// ``wrongPinSuffix``); the vault refuses it (`bad_pin`, VAULT-MESSAGING §11.14.9) and the form shows "That PIN is not
+    /// correct.". The form is then left without a retry, so the member's password is never changed, and the vault is
+    /// locked. The right PIN is never sent in this test.
+    ///
+    /// A wrong PIN counts as a failed daily check on the vault (§3.6.5): each run spends one of the checks left before
+    /// the vault locks. Skipped (after the lock) when the change asks for no PIN (a vault without a phone secret).
+    @MainActor
+    func testStagingWrongPinInPasswordChange() throws {
+        let pin = try Self.pin()
+        let password = try Self.input("VETTID_STAGING_PASSWORD")
+        guard let last = pin.last?.wholeNumberValue else { throw InputError.pinNotDigits }
+        let wrongPin = String(pin.dropLast()) + String((last + 1) % 10)
+        let newPassword = password + Self.wrongPinSuffix
+
+        let app = launch()
+        guard openAtStart(app, pin: pin, password: password) else { return }
+        guard let currentField = openPasswordChange(app) else { return }
+
+        guard shown(app)["change_password_pin"] != nil else {
+            tap(app.buttons["top_bar_back"].firstMatch)
+            lock(app)
+            throw XCTSkip("The password change asks for no PIN: the vault has no phone secret.")
+        }
+        enterPin(app, wrongPin)
+        currentField.tap()
+        currentField.typeText(password)
+        let newField = app.secureTextFields["change_password_new"]
+        newField.tap()
+        newField.typeText(newPassword)
+        let confirmField = app.secureTextFields["change_password_confirm"]
+        confirmField.tap()
+        confirmField.typeText(newPassword)
+        let primary = app.buttons["form_primary"]
+        if !waitUntil(timeout: 10, { primary.isEnabled }) {
+            let rule = shown(app)["password_rule"] ?? ""
+            return fail(app, "The new password was not accepted: \(rule)")
+        }
+        tapPrimary(app)
+
+        guard badPinRefused(app) else { return }
+        failOnSavePassword(app)
+
+        // Leave without a retry: the member's password stays as it was.
+        tap(app.buttons["top_bar_back"].firstMatch)
+        if !waitUntil(timeout: 30, { !currentField.exists }) { return fail(app, "The password change did not close.") }
+        lock(app)
+    }
+
     // MARK: - Steps
+
+    /// The open app, from whatever it shows at the start (unlocked with the PIN, and the password when the owner check is
+    /// due); false, after the failure, when there is no vault.
+    @MainActor
+    private func openAtStart(_ app: XCUIApplication, pin: String, password: String) -> Bool {
+        switch waitForAny(app, ["unlock", "app_shell", "owner_check", "welcome_recover"], timeout: 60) {
+        case "app_shell": break
+        case "owner_check": ownerCheck(app, pin: pin, password: password)
+        case "unlock": unlock(app, pin: pin, password: password)
+        case let other:
+            fail(app, "No vault on this phone: \(other ?? "no known screen") is shown.")
+            return false
+        }
+        expect(app, "app_shell", timeout: Self.network)
+        return true
+    }
+
+    /// Settings → Credential → Change password; its current-password field, or nil after the failure.
+    @MainActor
+    private func openPasswordChange(_ app: XCUIApplication) -> XCUIElement? {
+        openSettings(app)
+        let credentialRow = app.buttons["credential_row"]
+        guard reveal(app, credentialRow) else {
+            fail(app, "Settings has no Credential row.")
+            return nil
+        }
+        credentialRow.tap()
+        expect(app, "credential", timeout: 30)
+        let changeRow = app.buttons["change_password"]
+        guard reveal(app, changeRow) else {
+            fail(app, "The Credential screen has no \"Change password\".")
+            return nil
+        }
+        changeRow.tap()
+        let currentField = app.secureTextFields["change_password_current"]
+        guard currentField.waitForExistence(timeout: 30) else {
+            fail(app, "The password change did not open.")
+            return nil
+        }
+        return currentField
+    }
+
+    /// The vault's answer to a password change with a wrong PIN: its refusal on the form ("error", "That PIN is not
+    /// correct."), never a change; false after the failure.
+    @MainActor
+    private func badPinRefused(_ app: XCUIApplication) -> Bool {
+        var screen: [String: String] = [:]
+        _ = waitUntil(timeout: Self.network) {
+            screen = shown(app)
+            return ["error", "change_password_done", "change_check"].contains { screen[$0] != nil }
+        }
+        let why: String
+        if screen["change_password_done"] != nil {
+            why = "The vault changed the password with a wrong PIN: it is now the input password followed by "
+                + "\"\(Self.wrongPinSuffix)\"."
+        } else if let check = screen["change_check"] {
+            why = "The change got no plain answer: \(check)"
+        } else if let refusal = screen["error"] {
+            if refusal.contains(Self.badPinText) { return true }
+            why = "Not the wrong PIN's refusal: \(refusal)"
+        } else {
+            why = "The vault's refusal did not appear."
+        }
+        fail(app, why)
+        return false
+    }
+
+    /// Scrolls the screen until [element] can be tapped; false when it never can.
+    @MainActor
+    private func reveal(_ app: XCUIApplication, _ element: XCUIElement) -> Bool {
+        if !element.waitForExistence(timeout: Self.network) { return false }
+        for _ in 0..<6 where !element.isHittable {
+            app.scrollViews.firstMatch.swipeUp(velocity: .slow)
+        }
+        return element.isHittable
+    }
 
     /// The unlock screen ready for a PIN, from whatever the app shows at the start (the open app is locked first); false,
     /// after the failure, when there is no vault.
@@ -289,7 +465,14 @@ final class StagingTests: XCTestCase {
     @MainActor
     private func lock(_ app: XCUIApplication) {
         expect(app, "app_shell", timeout: Self.network)
-        tap(app.buttons["top_bar_account"])
+        // From Settings or a screen pushed over it: back arrows up to the screen with the account button.
+        let account = app.buttons["top_bar_account"]
+        for _ in 0..<4 where !account.waitForExistence(timeout: 2) {
+            let back = app.buttons["top_bar_back"].firstMatch
+            guard back.exists, back.isHittable else { break }
+            back.tap()
+        }
+        tap(account)
         tap(app.buttons["account_lock_vault"])
         expect(app, "unlock", timeout: Self.network)
         // "Locking…" until the vault confirms; only a confirmed lock passes (a vault left open keeps its host running,
@@ -298,162 +481,5 @@ final class StagingTests: XCTestCase {
             return fail(app, "The lock was not confirmed within \(Int(Self.network)) s: the screen still says it is locking.")
         }
         if let why = failureText(in: shown(app)) { fail(app, "The lock was not confirmed: \(why)") }
-    }
-
-    // MARK: - Helpers
-
-    @MainActor
-    private func launch() -> XCUIApplication {
-        // A system alert met while the test acts on the app (the camera) is answered so that the run goes on; a "Save
-        // Password?" is dismissed and remembered, and fails the test (``failOnSavePassword``).
-        addUIInterruptionMonitor(withDescription: "System alert") { alert in
-            Self.answer(alert)
-        }
-        let app = XCUIApplication()
-        app.launch()
-        return app
-    }
-
-    /// The camera prompt comes from SpringBoard as the scan screen opens; it is answered "Allow", so that the QR code can
-    /// still be scanned by hand later.
-    @MainActor
-    private func allowSystemAlert() {
-        let alert = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.firstMatch
-        if alert.waitForExistence(timeout: 5) { _ = Self.answer(alert) }
-    }
-
-    /// A "Save Password?" prompt was met (IOS-PLAN §6.5: there must never be one).
-    @MainActor private static var savePasswordSeen = false
-
-    @MainActor
-    private static func answer(_ alert: XCUIElement) -> Bool {
-        if alert.buttons["Save Password"].exists || alert.label.localizedCaseInsensitiveContains("password") {
-            savePasswordSeen = true
-            if alert.buttons["Not Now"].exists { alert.buttons["Not Now"].tap() }
-            return true
-        }
-        for label in ["Allow", "OK", "Allow While Using App"] where alert.buttons[label].exists {
-            alert.buttons[label].tap()
-            return true
-        }
-        return false
-    }
-
-    /// Fails, with a screenshot of the whole screen, when a "Save Password?" prompt showed or shows (IOS-PLAN §6.5).
-    @MainActor
-    private func failOnSavePassword(_ app: XCUIApplication) {
-        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        let shows = app.buttons["Save Password"].exists || springboard.buttons["Save Password"].exists
-        guard shows || Self.savePasswordSeen else { return }
-        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        shot.name = "save-password"
-        shot.lifetime = .keepAlways
-        add(shot)
-        XCTFail("iOS offered to save a password (IOS-PLAN §6.5 forbids it).")
-    }
-
-    @MainActor
-    private func enterPin(_ app: XCUIApplication, _ pin: String) {
-        for digit in pin {
-            let key = app.buttons["pin_\(digit)"]
-            XCTAssertTrue(key.waitForExistence(timeout: 10), "no keypad")
-            key.tap()
-        }
-    }
-
-    @MainActor
-    private func tapPrimary(_ app: XCUIApplication) {
-        let button = app.buttons["form_primary"]
-        if !waitUntil(timeout: 30, { button.exists && button.isEnabled && button.isHittable }) {
-            return fail(app, "The screen's button stayed disabled.")
-        }
-        button.tap()
-    }
-
-    @MainActor
-    private func tap(_ element: XCUIElement) {
-        XCTAssertTrue(element.waitForExistence(timeout: 30), "\(element.identifier) not found")
-        element.tap()
-    }
-
-    /// Waits for the element [id]; fails at once with the app's own text when a failure notice appears instead.
-    @MainActor
-    private func expect(_ app: XCUIApplication, _ id: String, timeout: TimeInterval) {
-        if waitForAny(app, [id], timeout: timeout) != id { fail(app, "\(id) did not appear.") }
-    }
-
-    /// The first of [ids] that appears, or nil after [timeout] or as soon as a failure notice shows.
-    @MainActor
-    private func waitForAny(_ app: XCUIApplication, _ ids: [String], timeout: TimeInterval) -> String? {
-        var found: String?
-        _ = waitUntil(timeout: timeout) {
-            let screen = shown(app)
-            found = ids.first { screen[$0] != nil }
-            return found != nil || failureText(in: screen) != nil
-        }
-        return found
-    }
-
-    /// Polls [condition] every half second until it holds or [timeout] passes.
-    @MainActor
-    private func waitUntil(timeout: TimeInterval, _ condition: () -> Bool) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        while !condition() {
-            if Date() >= deadline { return false }
-            Thread.sleep(forTimeInterval: 0.5)
-        }
-        return true
-    }
-
-    /// The identifiers on screen with their labels, from one snapshot of the app (one query, not one per identifier).
-    @MainActor
-    private func shown(_ app: XCUIApplication) -> [String: String] {
-        guard let root = try? app.snapshot() else { return [:] }
-        var found: [String: String] = [:]
-        var stack: [any XCUIElementSnapshot] = [root]
-        while let e = stack.popLast() {
-            if !e.identifier.isEmpty, found[e.identifier] == nil { found[e.identifier] = e.label }
-            stack.append(contentsOf: e.children)
-        }
-        return found
-    }
-
-    /// The text of the failure notices in [screen], if any.
-    private func failureText(in screen: [String: String]) -> String? {
-        let texts = Self.failureIds.compactMap { screen[$0] }.filter { !$0.isEmpty }
-        return texts.isEmpty ? nil : texts.joined(separator: " | ")
-    }
-
-    /// Fails with [what] and the app's visible failure text, with a screenshot attached. `continueAfterFailure` is false,
-    /// so the test stops here.
-    @MainActor
-    private func fail(_ app: XCUIApplication, _ what: String, file: StaticString = #filePath, line: UInt = #line) {
-        let shot = XCTAttachment(screenshot: app.screenshot())
-        shot.name = "failure"
-        shot.lifetime = .keepAlways
-        add(shot)
-        let why = failureText(in: shown(app)).map { " The app shows: \($0)" } ?? ""
-        XCTFail(what + why, file: file, line: line)
-    }
-
-    /// An input from the runner's environment (xcodebuild hands `TEST_RUNNER_<NAME>` over as `<NAME>`); the test is
-    /// skipped without it. Only the variable's name is ever reported.
-    private static func input(_ name: String) throws -> String {
-        guard let value = ProcessInfo.processInfo.environment[name], !value.isEmpty else {
-            throw XCTSkip("\(name) is not set: staging tests run only through scripts/staging-ui-test.sh")
-        }
-        return value
-    }
-
-    private static func pin() throws -> String {
-        let pin = try input("VETTID_STAGING_PIN")
-        guard pin.allSatisfy({ $0.isASCII && $0.isNumber }) else { throw InputError.pinNotDigits }
-        return pin
-    }
-
-    private enum InputError: Error, CustomStringConvertible {
-        case pinNotDigits
-
-        var description: String { "VETTID_STAGING_PIN is not all digits" }
     }
 }

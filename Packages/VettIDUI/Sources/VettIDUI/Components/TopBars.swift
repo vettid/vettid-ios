@@ -156,7 +156,7 @@ public struct VettIDBackTopBar<Actions: View>: View {
 
     public var body: some View {
         HStack(spacing: 0) {
-            IconButton(.back, label: UIStrings.back, action: onBack)
+            IconButton(.back, label: UIStrings.back, action: onBack).accessibilityIdentifier("top_bar_back")
             Spacer()
             actions
         }
