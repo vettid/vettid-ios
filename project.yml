@@ -134,6 +134,70 @@ targets:
       - package: VettIDConnections
       - package: VettIDMessages
 
+  # TEST ONLY: the app's sources and screens against the local dev stack on the simulator (IOS-PLAN §8 exit I1 (a)),
+  # with VettIDAltChanTesting's TEST App Attest attester and VettIDKeysTesting's software keys composed by
+  # AppDevStack/DevStackWiring.swift, which only this target compiles. Built in the DevStack configuration only (the
+  # file's #error refuses every other one), by the VettIDDevStack scheme only; never in an archive (SKIP_INSTALL) nor in
+  # the VettID or Staging schemes (scripts/release-check.sh).
+  VettIDDevStack:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+        excludes: [Info.plist]
+      - path: AppDevStack
+        excludes: [Info.plist]
+    info:
+      path: AppDevStack/Info.plist
+      properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        VettIDEnvironment: $(VETTID_ENVIRONMENT)
+        VettIDAccountHost: $(VETTID_ACCOUNT_HOST)
+        VettIDRelayHost: $(VETTID_RELAY_HOST)
+        VettIDManifestHost: $(VETTID_MANIFEST_HOST)
+        VettIDManifestKeys: $(VETTID_MANIFEST_KEYS)
+        # The dev stack's member API and relay are plain HTTP on the Mac's 127.0.0.1.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(VETTID_APP_BUNDLE_ID)
+        PRODUCT_NAME: VettIDDevStack
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: $(VETTID_DISPLAY_NAME)
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
+        INFOPLIST_KEY_NSCameraUsageDescription: "VettID uses the camera only to scan QR codes, such as your setup code or an invitation. Nothing is recorded."
+        MARKETING_VERSION: 2.0.0
+        CURRENT_PROJECT_VERSION: 1
+        SKIP_INSTALL: YES
+      configs:
+        DevStack:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) VETTID_DEVSTACK_APP
+    dependencies:
+      - package: VettIDCrypto
+      - package: VettIDAttestation
+      - package: VettIDRelay
+      - package: VettIDAltChan
+      - package: VettIDVault
+      - package: VettIDKeys
+      - package: VettIDData
+      - package: VettIDMedia
+      - package: VettIDNotify
+      - package: VettIDUI
+      - package: VettIDOnboarding
+      - package: VettIDSettings
+      - package: VettIDShell
+      - package: VettIDConnections
+      - package: VettIDMessages
+      # TEST ONLY: the TEST iOS attester and the software keys.
+      - package: VettIDAltChan
+        product: VettIDAltChanTesting
+      - package: VettIDKeys
+        product: VettIDKeysTesting
+
   VettIDTests:
     type: bundle.unit-test
     platform: iOS
@@ -158,6 +222,21 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: VettID
+
+  # TEST ONLY: DevStackTests against the VettIDDevStack app and the local dev stack (scripts/devstack-test.sh --ui).
+  VettIDDevStackUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: AppUITests/VaultUITestCase.swift
+      - path: AppDevStackUITests
+        excludes: ["*.xctestplan"]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(VETTID_APP_BUNDLE_ID).uitests
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: VettIDDevStack
 
 schemes:
   VettID:
@@ -245,3 +324,25 @@ schemes:
       config: Staging
     archive:
       config: Staging
+
+  # IOS-PLAN §8 exit I1 (a): the VettIDDevStack app and its UI test on the simulator against the local dev stack, in the
+  # DevStack configuration only, through scripts/devstack-test.sh --ui (each test is skipped without the stack's inputs).
+  VettIDDevStack:
+    build:
+      targets:
+        VettIDDevStack: all
+        VettIDDevStackUITests: [test]
+    run:
+      config: DevStack
+    test:
+      config: DevStack
+      # Screenshots, not XCTest's screen recording, which the app's capture hiding (IOS-PLAN §6.4) would cover.
+      testPlans:
+        - path: AppDevStackUITests/DevStackUITests.xctestplan
+          defaultPlan: true
+    profile:
+      config: DevStack
+    analyze:
+      config: DevStack
+    archive:
+      config: DevStack

@@ -1,0 +1,29 @@
+{
+  "configurations" : [
+    {
+      "id" : "7C2D4F61-8B3E-4A92-B6D1-3E5F7A9C0B12",
+      "name" : "DevStack",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "preferredScreenCaptureFormat" : "screenshots",
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:VettID.xcodeproj",
+      "identifier" : "3C282CAF101B02EA852E479D",
+      "name" : "VettIDDevStack"
+    }
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:VettID.xcodeproj",
+        "identifier" : "41217818C1680583607FD843",
+        "name" : "VettIDDevStackUITests"
+      }
+    }
+  ],
+  "version" : 1
+}

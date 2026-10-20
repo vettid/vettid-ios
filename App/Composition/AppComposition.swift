@@ -10,7 +10,13 @@ import VettIDVault
 /// behind their protocols, the first-run cleanup (§6.1) and the vault manager the screens use. One per process.
 @MainActor
 final class AppComposition {
+    #if VETTID_DEVSTACK_APP
+    /// The VettIDDevStack app (DevStack configuration, simulator): the TEST attester, software keys and the dev stack's
+    /// addresses (AppDevStack/DevStackWiring.swift, compiled into that target only).
+    static let shared = AppComposition(environment: DevStackWiring.environment, wiring: DevStackWiring.wiring())
+    #else
     static let shared = AppComposition(environment: .current)
+    #endif
 
     let environment: AppEnvironment
     let protectedData = ProtectedDataMonitor()
@@ -31,12 +37,27 @@ final class AppComposition {
     /// A request to open the update screen (fed by the "Vault updates" notification with phase P, IOS-PLAN §6.7).
     let releaseInbox = ReleaseUpdateInbox()
 
-    init(environment: AppEnvironment) {
+    /// The app's own wiring: the Secure Enclave and App Attest (or ``NoSecureHardware``), and the build's pinned trust.
+    convenience init(environment: AppEnvironment) {
+        let trust: AltTrust
+        do {
+            trust = try environment.trust()
+        } catch {
+            preconditionFailure("the build's manifest keys do not parse")
+        }
+        self.init(environment: environment, wiring: AppWiring(
+            hardware: HardwareKeys.current(protectedData:startOver:),
+            transport: HTTPTransport(session: URLSession(configuration: .ephemeral)),
+            trust: trust
+        ))
+    }
+
+    init(environment: AppEnvironment, wiring: AppWiring) {
         self.environment = environment
         let directory = Self.dataDirectory()
         // Whether a damaged App Attest key record may start over: the vault manager keeps it current.
         let startOver = AttestStartOver()
-        let hardware = HardwareKeys.current(protectedData: protectedData, startOver: startOver)
+        let hardware = wiring.hardware(protectedData, startOver)
         self.hardware = hardware
         let keys = VaultKeys(
             appKeys: hardware.appKeys, seedWrap: hardware.seedWrap, wrapped: KeychainWrappedKeyStore(protectedData: protectedData),
@@ -48,20 +69,14 @@ final class AppComposition {
             directory: directory, protectedData: protectedData, erasers: [KeychainEraser()] + hardware.erasers,
             dataFiles: VaultFiles.all(in: directory)
         ))
-        let trust: AltTrust
-        do {
-            trust = try environment.trust()
-        } catch {
-            preconditionFailure("the build's manifest keys do not parse")
-        }
+        let trust = wiring.trust
         let gate = firstRun
         var config = VaultManagerConfig(
             apiOrigin: environment.apiOrigin,
             manifestURL: environment.manifestURL,
             relayURL: environment.relayURL,
             trust: trust,
-            // The dev stack's relay address mapping (DevStack only) comes with the DevStack app target.
-            transport: HTTPTransport(session: URLSession(configuration: .ephemeral)),
+            transport: wiring.transport,
             directory: directory,
             keys: keys,
             attester: hardware.attester,
@@ -133,4 +148,12 @@ final class AppComposition {
         return URL(fileURLWithPath: NSHomeDirectory())
             .appendingPathComponent("Library/Application Support/\(AppDirectories.dataFolder)")
     }
+}
+
+/// What a build composes besides its environment: its keys and attester, its transport and the trust anchors it pins.
+struct AppWiring {
+    /// The keys and attester, from the protected-data monitor and the App Attest start-over flag.
+    let hardware: @MainActor (any ProtectedData, AttestStartOver) -> HardwareKeys
+    let transport: HTTPTransport
+    let trust: AltTrust
 }

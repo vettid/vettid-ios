@@ -1,16 +1,37 @@
 import XCTest
 
-/// The helpers of ``StagingTests``: launching the app, the system alerts, the keypad and the buttons, waiting for the
-/// app's identifiers, failing with the app's own failure text, and the inputs.
-extension StagingTests {
+/// What the app's UI tests share (``StagingTests`` on a real iPhone, ``DevStackTests`` on the simulator): launching the
+/// app, the system alerts, the keypad and the buttons, waiting for the app's identifiers, failing with the app's own
+/// failure text, and the unlock, owner check and lock steps. It has no tests of its own.
+class VaultUITestCase: XCTestCase {
+    /// Network steps: a redeem, an unlock, a lock.
+    class var network: TimeInterval { 90 }
+    /// Enrollment: the vault's enclave is made and attested, then the credential.
+    class var enrollment: TimeInterval { 600 }
+
+    /// Identifiers of the notices that say why something failed: their text is what a failure reports.
+    static let failureIds = [
+        "error", "scan_refused", "pin_error", "pin_confirm_error", "credential_pin_error", "unlock_failed", "unlock_refused",
+        "unlock_preflight_error", "unlock_pin_error", "unlock_not_recognised", "unlock_stuck", "unlock_recover_only",
+        "unlock_signer_refused", "unlock_owner_check_locked", "unlock_lock_unconfirmed", "move_back_failed",
+        "owner_check_failed", "owner_check_pin_error", "failure",
+    ]
+
+    override func setUp() {
+        continueAfterFailure = false
+        MainActor.assumeIsolated { Self.savePasswordSeen = false }
+    }
+
+    /// [environment]: the app's launch environment (the dev stack's addresses).
     @MainActor
-    func launch() -> XCUIApplication {
+    func launch(environment: [String: String] = [:]) -> XCUIApplication {
         // A system alert met while the test acts on the app (the camera) is answered so that the run goes on; a "Save
         // Password?" is dismissed and remembered, and fails the test (``failOnSavePassword``).
         addUIInterruptionMonitor(withDescription: "System alert") { alert in
             Self.answer(alert)
         }
         let app = XCUIApplication()
+        app.launchEnvironment.merge(environment) { $1 }
         app.launch()
         return app
     }
@@ -169,24 +190,123 @@ extension StagingTests {
         XCTFail(what + why, file: file, line: line)
     }
 
-    /// An input from the runner's environment (xcodebuild hands `TEST_RUNNER_<NAME>` over as `<NAME>`); the test is
-    /// skipped without it. Only the variable's name is ever reported.
-    static func input(_ name: String) throws -> String {
-        guard let value = ProcessInfo.processInfo.environment[name], !value.isEmpty else {
-            throw XCTSkip("\(name) is not set: staging tests run only through scripts/staging-ui-test.sh")
+    @MainActor
+    func unlock(_ app: XCUIApplication, pin: String, password: String) {
+        expect(app, "unlock", timeout: Self.network)
+        // The keypad is enabled once the vault's software is checked (the preflight).
+        let key = app.buttons["pin_1"]
+        if !waitUntil(timeout: Self.network, { key.exists && key.isEnabled }) {
+            return fail(app, "The unlock screen never accepted a PIN.")
         }
-        return value
+        // The owner check is due: the password goes with the PIN (VAULT-MESSAGING §3.6.5).
+        let passwordField = app.secureTextFields["unlock_password"]
+        if passwordField.exists {
+            passwordField.tap()
+            passwordField.typeText(password)
+        }
+        enterPin(app, pin)
+        tapPrimary(app)
+        switch waitForAny(app, ["app_shell", "owner_check"], timeout: Self.network) {
+        case "owner_check":
+            ownerCheck(app, pin: pin, password: password)
+        case "app_shell":
+            failOnSavePassword(app)
+        default:
+            fail(app, "The vault did not open.")
+        }
     }
 
-    static func pin() throws -> String {
-        let pin = try input("VETTID_STAGING_PIN")
-        guard pin.allSatisfy({ $0.isASCII && $0.isNumber }) else { throw InputError.pinNotDigits }
-        return pin
+    /// The daily owner check past its deadline (VAULT-MESSAGING §3.6.5): the PIN and the password together.
+    @MainActor
+    func ownerCheck(_ app: XCUIApplication, pin: String, password: String) {
+        expect(app, "owner_check_pin", timeout: 30)
+        enterPin(app, pin)
+        let field = app.secureTextFields["owner_check_password"]
+        field.tap()
+        field.typeText(password)
+        tapPrimary(app)
+        if waitForAny(app, ["app_shell", "owner_check_passed_unrecorded"], timeout: Self.network) == "owner_check_passed_unrecorded" {
+            tapPrimary(app)
+        }
+        expect(app, "app_shell", timeout: Self.network)
+        failOnSavePassword(app)
     }
 
-    enum InputError: Error, CustomStringConvertible {
-        case pinNotDigits
+    /// "Lock vault" from the account sheet, then the unlock screen once the vault has confirmed the lock.
+    @MainActor
+    func lock(_ app: XCUIApplication) {
+        expect(app, "app_shell", timeout: Self.network)
+        // From Settings or a screen pushed over it: back arrows up to the screen with the account button.
+        let account = app.buttons["top_bar_account"]
+        for _ in 0..<4 where !(account.waitForExistence(timeout: 2) && account.isHittable) {
+            let back = app.buttons["top_bar_back"].firstMatch
+            guard back.exists, back.isHittable else { break }
+            back.tap()
+        }
+        tap(account)
+        tap(app.buttons["account_lock_vault"])
+        expect(app, "unlock", timeout: Self.network)
+        // "Locking…" until the vault confirms; only a confirmed lock passes (a vault left open keeps its host running,
+        // STAGING-TESTING §5).
+        if !waitUntil(timeout: Self.network, { shown(app)["unlock_lock_locking"] == nil }) {
+            return fail(app, "The lock was not confirmed within \(Int(Self.network)) s: the screen still says it is locking.")
+        }
+        if let why = failureText(in: shown(app)) { fail(app, "The lock was not confirmed: \(why)") }
+    }
 
-        var description: String { "VETTID_STAGING_PIN is not all digits" }
+    /// STAGING-TESTING §3 from the welcome screen of a fresh app: "Scan", the typed code with the member's address, "Is
+    /// this your account?", the PIN on the keypad and its confirmation, the credential password (with the PIN when the
+    /// release asks for it), the default backup, the enrollment, and the open app.
+    @MainActor
+    func enroll(_ app: XCUIApplication, email: String, code: String, pin: String, password: String) {
+        // Welcome → scan (iOS asks for the camera here) → type the code instead.
+        tap(app.buttons["form_primary"])
+        allowSystemAlert()
+        expect(app, "setup_scan", timeout: 30)
+        tap(app.buttons["form_secondary"])
+        let emailField = app.textFields["setup_email"]
+        XCTAssertTrue(emailField.waitForExistence(timeout: 30), "the typed-code screen did not open")
+        emailField.tap()
+        emailField.typeText(email)
+        let codeField = app.textFields["setup_code"]
+        codeField.tap()
+        codeField.typeText(code)
+        tapPrimary(app)
+
+        // The redeem (VAULT-MESSAGING §11.12.1): "Is this your account?", or the app's refusal.
+        expect(app, "confirm_account", timeout: Self.network)
+        tapPrimary(app)
+
+        // The PIN and its confirmation, on the in-app keypad.
+        expect(app, "pin", timeout: 30)
+        enterPin(app, pin)
+        tapPrimary(app)
+        expect(app, "pin_confirm", timeout: 30)
+        enterPin(app, pin)
+        tapPrimary(app)
+
+        // The credential password (release R also asks for the PIN here).
+        let passwordField = app.secureTextFields["password"]
+        if !passwordField.waitForExistence(timeout: 30) { return fail(app, "The password screen did not open.") }
+        if shown(app)["credential_pin"] != nil { enterPin(app, pin) }
+        passwordField.tap()
+        passwordField.typeText(password)
+        let confirmField = app.secureTextFields["password_confirm"]
+        confirmField.tap()
+        confirmField.typeText(password)
+        let primary = app.buttons["form_primary"]
+        if !waitUntil(timeout: 10, { primary.isEnabled }) {
+            let rule = shown(app)["password_rule"] ?? ""
+            return fail(app, "The password was not accepted: \(rule)")
+        }
+        if primary.isHittable { primary.tap() } else { confirmField.typeText("\n") }
+
+        // The backup (on, the default) and the enrollment. No "Save Password?" may follow the password (IOS-PLAN §6.5).
+        expect(app, "backup_on", timeout: 30)
+        failOnSavePassword(app)
+        tapPrimary(app)
+        expect(app, "onboarding_done", timeout: Self.enrollment)
+        tapPrimary(app)
+        expect(app, "app_shell", timeout: Self.network)
     }
 }

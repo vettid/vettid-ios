@@ -8,7 +8,16 @@
 #
 #   scripts/devstack-test.sh          # up, run the test on the simulator, down
 #   scripts/devstack-test.sh --host   # the same test with `swift test` on the Mac
+#   scripts/devstack-test.sh --ui     # IOS-PLAN §8 exit I1 (a): the VettIDDevStack
+#                                     # app's UI test on the simulator
 #   scripts/devstack-test.sh up|status|down
+#
+# --ui builds the VettIDDevStack scheme for testing (DevStack configuration),
+# removes VettID Dev Stack from the simulator (a fresh install), issues a
+# setup code for a new member (POST /api/vault/enroll-code, the member being
+# <guid>@example.org on the stack's member API stand-in), reads the stack's
+# TEST-ONLY trust (GET /dev/trust) and runs AppDevStackUITests' DevStackTests
+# with them and run/ready.json's addresses as TEST_RUNNER_VETTID_DEVSTACK_*.
 #
 # The simulator shares the Mac's 127.0.0.1, so it reaches the stack's ports
 # (18080 relay, 18081 member API, 18082 control) directly. A stack already
@@ -212,7 +221,9 @@ run_test() {
     up
   fi
   local rc=0
-  if [[ "${where}" == host ]]; then
+  if [[ "${where}" == ui ]]; then
+    run_ui || rc=$?
+  elif [[ "${where}" == host ]]; then
     VETTID_DEVSTACK=1 swift test --package-path "${REPO}/Packages/VettIDVault" --filter DevStackAcceptanceTests || rc=$?
   else
     # xcodebuild hands TEST_RUNNER_-prefixed variables to the test process without the prefix.
@@ -223,11 +234,45 @@ run_test() {
   return ${rc}
 }
 
+# The VettIDDevStack app's UI test (DevStackTests) on the simulator against the running stack.
+run_ui() {
+  local dest udid ready api relay ctl guid code trust root keys rc=0
+  dest="$(scripts/simulator-destination.sh)"
+  xcodebuild build-for-testing -project VettID.xcodeproj -scheme VettIDDevStack -configuration DevStack \
+    -destination "${dest}" -quiet
+  # A fresh install: the app and its data container are removed (the first launch erases what the keychain kept).
+  udid="${dest##*id=}"
+  if [[ "${udid}" != "${dest}" ]]; then
+    xcrun simctl boot "${udid}" 2>/dev/null || true
+    xcrun simctl uninstall "${udid}" com.vettid.app.devstack 2>/dev/null || true
+  fi
+  ready="${DATA}/run/ready.json"
+  api=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["api"])' "${ready}")
+  relay=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["relay_transport"])' "${ready}")
+  ctl=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["ctl"])' "${ready}")
+  # A new member for each run; the code is issued last, as it lives 5 minutes.
+  trust=$(curl -sf --max-time 10 "${ctl}/dev/trust")
+  root=$(printf '%s' "${trust}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["nitro_root"])')
+  keys=$(printf '%s' "${trust}" | python3 -c 'import json,sys; print(",".join(json.load(sys.stdin)["manifest_keys"]))')
+  guid="ios-ui-$(python3 -c 'import secrets; print(secrets.token_hex(8))')"
+  code=$(curl -sf --max-time 10 -X POST -H "Authorization: Bearer ${guid}" -H 'Content-Type: application/json' \
+    "${api}/api/vault/enroll-code" | python3 -c 'import json,sys; print(json.load(sys.stdin)["code"])')
+  TEST_RUNNER_VETTID_DEVSTACK_API="${api}" TEST_RUNNER_VETTID_DEVSTACK_RELAY="${relay}" \
+    TEST_RUNNER_VETTID_DEVSTACK_CTL="${ctl}" TEST_RUNNER_VETTID_DEVSTACK_NITRO_ROOT="${root}" \
+    TEST_RUNNER_VETTID_DEVSTACK_MANIFEST_KEYS="${keys}" TEST_RUNNER_VETTID_DEVSTACK_EMAIL="${guid}@example.org" \
+    TEST_RUNNER_VETTID_DEVSTACK_CODE="${code}" \
+    xcodebuild test-without-building -project VettID.xcodeproj -scheme VettIDDevStack -configuration DevStack \
+    -destination "${dest}" -parallel-testing-enabled NO \
+    -only-testing:VettIDDevStackUITests/DevStackTests/testDevStackEnrollLockUnlock || rc=$?
+  return ${rc}
+}
+
 case "${1:-}" in
   "") run_test simulator ;;
   --host) run_test host ;;
+  --ui) run_test ui ;;
   up) up ;;
   down) down ;;
   status) status ;;
-  *) echo "usage: $0 [--host|up|status|down]" >&2; exit 2 ;;
+  *) echo "usage: $0 [--host|--ui|up|status|down]" >&2; exit 2 ;;
 esac
