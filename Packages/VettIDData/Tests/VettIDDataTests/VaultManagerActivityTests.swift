@@ -158,6 +158,51 @@ import VettIDVault
         let csv = HistoryCsv.bytes(rows.map { ExportRow(record: $0, label: $0.kind) })
         #expect((String(bytes: csv.dropFirst(3), encoding: .utf8) ?? "").components(separatedBy: "\r\n").count == 42)
         #expect(service.auditKinds.last == "audit.exported" && !rows.contains { $0.kind == "audit.exported" })
+        #expect(service.lastAuditEntry?.ref == "format=csv;count=40;seqs=\(rows.last?.seq ?? 0)-\(rows.first?.seq ?? 0);filters=kinds")
+        // The vault lists this app with an empty name: this phone, not a removed device.
+        let devices = try #require(await m.history.devices())
+        #expect(devices.device("dev-1") == .thisPhone && devices.device("dev-2") == .named("Work laptop") && devices.device("dev-9") == .removed)
+    }
+
+    /// The opening's reads one after the other: the connections, the requests, the approvals' lists and the feed before
+    /// the conversations (one request per connection), so that asks are not kept waiting behind them.
+    @Test func theOpeningReadsInOrder() async throws {
+        defer { phone.close() }
+        _ = try await connected()
+        try await m.lock()
+        let start = service.requestsSeen.count
+        #expect(try await m.unlock(pin: pin) == .success)
+        let order = ["connection.list", "connection.request.list", "grant.list", "critical-secret-use.list", "feed.list", "message.list"]
+        #expect(await eventually { service.requestsSeen.dropFirst(start).contains("message.list") })
+        let seen = Array(service.requestsSeen.dropFirst(start))
+        let at = order.map { t in seen.firstIndex(of: t) ?? -1 }
+        #expect(!at.contains(-1) && at == at.sorted(), "\(seen)")
+    }
+
+    /// Due or held by the owner check's state (§3.6.3, not only on `vault.held`): no feed content is kept; after the
+    /// check the feed is read again.
+    @Test func theFeedIsDroppedWhileTheCheckIsDue() async throws {
+        defer { phone.close() }
+        let id = try await connected()
+        try service.peerAsksForItems(id, [AskedItem(ref: "01JITEM000000000000000000A", label: "Passport")])
+        #expect(await eventually { feed.items.count == 1 })
+        service.advanceVaultClock(86_401)
+        try await m.ownerChecks.refreshOwnerCheck()
+        #expect(m.ownerChecks.ownerCheck?.state != .ok)
+        #expect(feed.items.isEmpty && feed.badge == FeedBadge())
+        #expect(try await m.ownerChecks.check(pin: pin, password: password) == .passed)
+        #expect(await eventually { feed.items.count == 1 }, "read again after the check")
+    }
+
+    /// The vault's `share.decide`: items not waiting are ignored, and the answer names what was decided.
+    @Test func aShareDecisionIgnoresItemsNotWaiting() async throws {
+        defer { phone.close() }
+        let id = try await connected()
+        try service.shareRuleAsks("01JRULE000000000000000000A", id, items: ["01JITEM000000000000000000B", "01JITEM000000000000000000C"])
+        #expect(await eventually { approvals.approvals.count == 1 })
+        try await approvals.decideShare("01JRULE000000000000000000A", include: ["01JITEM000000000000000000B", "01JITEM000000000000000000Z"], decline: ["01JITEM000000000000000000C"])
+        #expect(service.shareQuestion("01JRULE000000000000000000A") == nil)
+        #expect(Array(service.auditKinds.suffix(2)) == ["share.included", "share.declined"])
     }
 }
 

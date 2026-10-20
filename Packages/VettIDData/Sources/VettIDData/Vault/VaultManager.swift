@@ -194,7 +194,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         profiles = Self.profiles(ref, checks: ownerChecks, record: rec)
         connections = Self.connectionsManager(config, ref, rec)
         messages = Self.messagesManager(ref, connections)
-        (feed, approvals, history, historyExport) = Self.activityManagers(config, ref, rec, connections)
+        (feed, approvals, history, historyExport) = Self.activityManagers(config, ref, rec, connections, ownerChecks)
         wiper = config.wipeTargets.map { LocalWipe(targets: $0, hooks: [{ await ref.manager?.runWipeHooks() }]) }
         ref.manager = self
         lockPorts.manager = self

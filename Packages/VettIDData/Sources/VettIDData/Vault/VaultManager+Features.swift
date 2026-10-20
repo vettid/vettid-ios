@@ -81,15 +81,17 @@ extension VaultManager {
     }
 
     /// The vault opened, or an owner check passed (§3.6.3: nothing held back is replayed as events): the connections and
-    /// the requests are read again, then the conversations of the connections, the feed and the approvals' lists, one
-    /// after the other; failures are left for the screens.
+    /// the requests, the approvals' lists, the feed, then the conversations (one request per connection, last, so that asks
+    /// that expire are not kept waiting behind them) are read again, one after the other; failures are left for the
+    /// screens.
     func refreshListsQuietly() {
         Task { [weak self] in
             guard let self else { return }
             try? await connections.refresh(quietly: true)
             try? await connections.refreshRequests(quietly: true)
+            try? await approvals.refreshApprovals(quietly: true, requests: false)
+            await feed.openNow()
             await messages.refreshConversationsQuietly()
-            await refreshActivityQuietly()
         }
     }
 }

@@ -24,7 +24,8 @@ extension VaultManager {
     /// The feed and History in memory only; the approvals that arrive only as events in their encrypted file. Deciding an
     /// ask marks its feed item read.
     static func activityManagers(
-        _ config: VaultManagerConfig, _ ref: ManagerRef, _ rec: AccountRecord, _ connections: ConnectionsManager
+        _ config: VaultManagerConfig, _ ref: ManagerRef, _ rec: AccountRecord, _ connections: ConnectionsManager,
+        _ checks: OwnerCheckManager
     ) -> (FeedManager, ApprovalsManager, HistoryManager, HistoryExportManager) { // swiftlint:disable:this large_tuple
         let feed = FeedManager(
             ops: { try await memberApi(ref) }, quietOps: { try quietApi(ref) },
@@ -45,7 +46,12 @@ extension VaultManager {
             now: config.now
         )
         approvals.onDecided = { [weak feed] kinds, ref in feed?.markReadWhere(kinds: kinds, ref: ref) }
-        return (feed, approvals, HistoryManager { try await memberApi(ref) }, HistoryExportManager { try await memberApi(ref) })
+        followHold(checks, ref, feed)
+        let selfID = { @MainActor in ref.manager?.session?.device.deviceID }
+        return (
+            feed, approvals, HistoryManager(selfID: selfID) { try await memberApi(ref) },
+            HistoryExportManager(ops: { try await memberApi(ref) }, selfID: selfID)
+        )
     }
 
     /// One vault event for the feed and the approvals (only while the vault takes events, ``onEvent(_:)``).
@@ -57,19 +63,24 @@ extension VaultManager {
     /// Entering the hold (§3.6.3): the feed is not shown.
     func activityHeld() { feed.clear() }
 
+    /// Held or due (§3.6.3), as the owner check's state says: no feed content is kept; after the check (here or on
+    /// another device) it is read again. As vettid-android `VaultManager`.
+    static func followHold(_ checks: OwnerCheckManager, _ ref: ManagerRef, _ feed: FeedManager) {
+        checks.onHeldChange = { [weak feed] held in
+            if held {
+                feed?.clear()
+            } else if ref.manager?.phase == .unlocked {
+                feed?.catchUp()
+            }
+        }
+    }
+
     /// The vault is no longer open: the feed, the approvals' lists and History are dropped (the approvals kept by design
     /// stay).
     func forgetActivity() {
         feed.clear()
         approvals.forgetOpenVault()
         history.clear()
-    }
-
-    /// The vault opened, or an owner check passed: the feed and the approvals' lists are read again (the connection
-    /// requests are read with the connections).
-    func refreshActivityQuietly() async {
-        await feed.openNow()
-        try? await approvals.refreshApprovals(quietly: true, requests: false)
     }
 
     /// A wipe, or a deleted vault: every list, and what the phone keeps of them.
