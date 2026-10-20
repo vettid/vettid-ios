@@ -73,6 +73,19 @@ public enum VettIDSymbol: String, CaseIterable, Sendable {
     case privacyTip = "hand.raised" // PrivacyTip
     case keyboard = "keyboard" // Keyboard
 
+    // The Notifications screen (feed kinds' icons and the rows' actions)
+    case archive = "tray.and.arrow.down" // Archive
+    case unarchive = "tray.and.arrow.up" // Unarchive
+    case doneAll = "checklist.checked" // DoneAll
+    case markRead = "envelope.open" // MarkEmailRead
+    case markUnread = "envelope.badge" // MarkEmailUnread
+    case block = "nosign" // Block
+    case location = "mappin.and.ellipse" // LocationOn
+    case agent = "cpu" // SmartToy
+    case accountCircle = "person.crop.circle" // AccountCircle
+    case eventNote = "list.bullet.rectangle" // EventNote
+    case moreVert = "ellipsis.circle" // MoreVert
+
     // States
     case info = "info.circle" // Info
     case checkCircle = "checkmark.circle.fill" // CheckCircle

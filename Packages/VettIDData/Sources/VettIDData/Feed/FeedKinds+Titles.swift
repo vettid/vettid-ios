@@ -52,6 +52,9 @@ public extension FeedKinds {
         return name.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
     }
 
+    /// "Deleted item": a revealed item that is no longer in the vault (the detail sheet's Item line).
+    static var deletedItem: String { DataStrings.feedDeletedItem }
+
     /// The item's name (never a value), when the item or the ask names one.
     static func itemName(_ item: FeedItem, _ names: FeedNames) -> String? {
         let ask = FeedAsks.approvalKey(item.kind, ref: item.ref).flatMap { names.approvals[$0] }
