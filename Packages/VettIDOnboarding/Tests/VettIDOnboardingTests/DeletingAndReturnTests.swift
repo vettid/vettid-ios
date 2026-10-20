@@ -101,4 +101,27 @@ import VettIDDataTesting
         vm.dismissDeletedNotice()
         #expect(!vm.state.deletedNotice && !account.vaultDeletedNotice)
     }
+
+    /// The keypad's question for the way back has a way out ("Not now"), and a PIN handed over while it may not be sent
+    /// (a backoff runs) keeps the question rather than vanishing without a word.
+    @Test func theKeypadsQuestionHasAWayOut() async {
+        vault.unconfirmedMove = Self.move(failed: true)
+        vault.unlockResults = [.backoff(retryAfterSeconds: 30)]
+        let vm = UnlockViewModel(vault: vault, account: vault, tick: { try await Task.sleep(for: .seconds(3600)) })
+        await vm.settle()
+        vm.askReturn()
+        vm.confirmReturn()
+        #expect(vm.state.returnAsksPin)
+        vm.cancelReturn()
+        #expect(!vm.state.returnAsksPin && vault.returnPins.isEmpty)
+        // A backoff starts; the way back confirmed with a PIN then keeps asking, with the countdown shown.
+        vm.setPin("402817")
+        vm.submit()
+        await vm.settle()
+        #expect(vm.state.waitSeconds > 0)
+        vm.askReturn()
+        vm.setPin("402817")
+        vm.confirmReturn()
+        #expect(vm.state.returnAsksPin && vault.returnPins.isEmpty && vm.state.pin.isEmpty)
+    }
 }

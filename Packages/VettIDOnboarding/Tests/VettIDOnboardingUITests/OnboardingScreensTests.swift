@@ -32,9 +32,11 @@ import VettIDUI
         #expect(keys.count == 295)
         let missing = "\u{0}missing"
         // vettid-android's names: the onboarding feature's, its unlock, owner-check and app-lock screens', the app's root
-        // screens', core/ui's erase text, the release update's and What's new's; and the iPhone's own (`ios_`).
+        // screens', core/ui's erase text, the release update's and What's new's, a vault being deleted (`vault_delet`,
+        // IOS-PLAN §4.2); and the iPhone's own (`ios_`).
         let prefixes = [
             "onboarding_", "recover_scan_", "unlock_", "root_", "core_ui_", "ios_", "move_cd_", "ownercheck_", "app_lock_", "release_",
+            "vault_deleting_", "vault_deleted_",
         ]
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)

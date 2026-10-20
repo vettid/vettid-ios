@@ -101,6 +101,7 @@ extension VaultManager {
             let st = s.device.altState
             guard st.releaseNumber != 0 else { return nil }
             let m = try await s.alt.manifest(seen: st.manifestSerial)
+            await pruneMoveMarker(m)
             let sealed = (st.release.isEmpty ? nil : m.byPcr0(st.release)) ?? m.byNumber(st.releaseNumber)
             let current = sealed.flatMap { $0.number == st.releaseNumber ? Self.view($0) : nil }
             let newest = m.newest()

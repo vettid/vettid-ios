@@ -56,9 +56,9 @@ struct DeletingMarker: Codable, Equatable, Sendable {
 /// [onGone] once, in a task of its own.
 @MainActor
 final class DeletionWatch {
-    /// The waits between reads, then ``every`` until the bound.
-    nonisolated static let waits: [TimeInterval] = [5, 10, 30]
-    nonisolated static let every: TimeInterval = 60
+    /// The schedule, in one place: the gaps between reads, each counted from the read before it (reads at 5, 15 and 45 s;
+    /// the owner's decision of 2026-10-20, as vettid-android does), then one read every `then` seconds until the bound.
+    nonisolated static let schedule: (gaps: [TimeInterval], then: TimeInterval) = ([5, 10, 30], 60)
 
     private let now: @Sendable () -> Date
     private let sleep: LockSleep
@@ -81,7 +81,9 @@ final class DeletionWatch {
     }
 
     /// The wait before read [index] (0-based) of the schedule.
-    nonisolated static func wait(_ index: Int) -> TimeInterval { index < waits.count ? waits[index] : every }
+    nonisolated static func wait(_ index: Int) -> TimeInterval {
+        index < schedule.gaps.count ? schedule.gaps[index] : schedule.then
+    }
 
     /// Starts the schedule towards [until] (an earlier one stops). [readFirst]: a start of the process, which reads at
     /// once.

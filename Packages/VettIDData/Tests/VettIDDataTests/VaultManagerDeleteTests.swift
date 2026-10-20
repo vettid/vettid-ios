@@ -101,6 +101,26 @@ import VettIDVault
         #expect(m.vaultDeletedNotice)
     }
 
+    /// The answer lost while the member API still lists the vault, and no `device.unlinked{vault_deleted}` reaches this
+    /// phone: undecided (`delete_unconfirmed`), nothing wiped. A check sends nothing to the vault and finds it still
+    /// listed; once the API says there is no vault, the check erases VettID's data.
+    @Test func aLostAnswerTheApiStillListsIsUnconfirmedUntilChecked() async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.loseAnswers([VaultApi.typeVaultDelete])
+        service.holdsDeletionUnlink = true
+        service.statusLagsDeletion = true
+        let f = await delete()
+        #expect(f?.kind == .noResponse && f?.code == VaultManager.codeDeleteUnconfirmed)
+        #expect(service.vaultDeleted && m.usesPhoneSecret && !files.isEmpty && m.phase == .unlocked)
+        let seen = service.requestsSeen.count
+        #expect(try await m.checkVaultDeleted() == .undecided)
+        service.statusLagsDeletion = false
+        #expect(try await m.checkVaultDeleted() == .deleted)
+        #expect(service.requestsSeen.count == seen && service.deletes.count == 1, "nothing sent to the vault")
+        try expectWiped()
+    }
+
     /// The request lost on its way: undecided, the vault still there; the member's new try deletes it.
     @Test func aLostRequestIsUnconfirmedAndATryAgainDeletes() async throws {
         defer { phone.close() }
@@ -184,6 +204,47 @@ import VettIDVault
         service.statusLagsDeletion = false
         #expect(await m.checkDeletionAgain() == .gone)
         try expectWiped()
+    }
+
+    var noVault: AppPhase { .unreachable(.noVault, longUnreachable: false) }
+
+    /// A `device.unlinked` that has the phase read again (reason `removed`) read while the unlock waits for its answer:
+    /// the read ends before the unlock does, and the unlock's end never puts the open app over its "no vault".
+    @Test func anUnlinkReadEndingBeforeTheUnlockWins() async throws {
+        defer { phone.close() }
+        try await setUp()
+        try await m.lock()
+        service.unlockAnswers(.held)
+        let unlocks = service.unlocks.count
+        let unlock = Task { try await m.unlock(pin: pin) }
+        #expect(await eventually { service.unlocks.count > unlocks })
+        service.status("unlocked", noVault: true)
+        service.unlinkThisPhone(reason: "removed")
+        #expect(await eventually { m.phase == noVault }, "read while the unlock waits for its answer")
+        service.releaseHeldUnlock()
+        #expect(try await unlock.value == .success)
+        #expect(m.phase == noVault)
+    }
+
+    /// The same with the read still on its way when the unlock's answer comes in: it ends after the unlock, and "no
+    /// vault" follows all the same.
+    @Test func anUnlinkReadEndingAfterTheUnlockWins() async throws {
+        defer { phone.close() }
+        try await setUp()
+        try await m.lock()
+        service.unlockAnswers(.held)
+        let unlocks = service.unlocks.count
+        let unlock = Task { try await m.unlock(pin: pin) }
+        #expect(await eventually { service.unlocks.count > unlocks })
+        service.status("unlocked", noVault: true)
+        service.holdStatusReads()
+        service.unlinkThisPhone(reason: "removed")
+        #expect(await eventually { service.heldStatusReads == 1 }, "the read for device.unlinked, held")
+        service.releaseHeldUnlock()
+        #expect(await eventually { m.phase == .unlocked || service.heldStatusReads == 2 })
+        service.releaseStatusReads()
+        #expect(try await unlock.value == .success)
+        #expect(await eventually { m.phase == noVault })
     }
 
     /// The same past the deletion's `exp`: the vault is still listed more than a minute after it, so it was not deleted

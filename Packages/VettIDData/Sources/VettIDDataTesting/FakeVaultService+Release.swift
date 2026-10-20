@@ -22,6 +22,8 @@ struct FakeReleases {
     var busy = false
     /// A route asking for a release (`?release=`) answers `410 release_unavailable` (the release ended).
     var askedUnavailable = false
+    /// The manifest no longer lists release 3.
+    var delisted3 = false
     var answer: FakeVaultService.ReleaseUpdateAnswer = .move
     var updates: [FakeVaultService.UpdateSeen] = []
 }
@@ -91,6 +93,12 @@ extension FakeVaultService {
     public var askedReleaseUnavailable: Bool {
         get { locked { releases.askedUnavailable } }
         set { locked { releases.askedUnavailable = newValue } }
+    }
+
+    /// The served manifest no longer lists release 3 (IOS-PLAN §4.3: release N gone from the trusted manifest).
+    public var delistsRelease3: Bool {
+        get { locked { releases.delisted3 } }
+        set { locked { releases.delisted3 = newValue } }
     }
 
     /// The vault's `sync.event{kind: "vault.release"}` naming release [n] (§11.10.6), sent to this phone.

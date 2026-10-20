@@ -167,4 +167,50 @@ import VettIDDataTesting
             #expect(m.phase == .locked && m.deletion == nil && m.record.value.deleting == nil, "state \(state)")
         }
     }
+
+    /// The event during this phone's own deletion, whose request then failed: the deletion applied all the same, so
+    /// "being deleted" opens (the event is not lost with the request).
+    @Test func theEventDuringAFailedOwnDeletionIsNotLost() async throws {
+        defer { phone.close() }
+        try await setUp()
+        m.ownDelete = OwnDelete()
+        m.onVaultDeletedEvent()
+        #expect(m.phase == .unlocked, "left to the deletion on its way")
+        #expect(m.ownDeleteUnlinked())
+        #expect(m.phase == .deleting && m.record.value.deleting != nil)
+    }
+
+    /// An unlock waiting for the route when "being deleted" begins posts nothing more.
+    @Test func anUnlockInItsRouteWaitPostsNothingOnceDeleting() async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.listsRelease4 = true
+        await m.releaseUpdate.refreshOffer()
+        let offer = try #require(m.releaseUpdate.offer)
+        try await m.lockForUpdate()
+        let taken = TakenPin(pin: pin, generation: m.phoneSecrets.pinGeneration)
+        #expect(await m.updateUnlock(pin: taken, approve: offer.target, abandon: false) {} == .moved)
+        service.lagRoutesAfterMove = 1000
+        let unlocks = service.unlocks.count
+        let unlock = Task { try await m.unlock(pin: pin) }
+        #expect(await eventually { service.lagRoutesAfterMove < 1000 }, "waiting for the route")
+        m.enterDeleting(expOnPhone: nil)
+        service.lagRoutesAfterMove = 0
+        let r = try await unlock.value
+        #expect(r == .failed(.vaultUnavailable, code: VaultManager.codeVaultDeleting))
+        #expect(service.unlocks.count == unlocks, "nothing posted")
+        #expect(m.phase == .deleting)
+    }
+
+    /// A wipe of this phone while the vault is being deleted removes the marker with the record; the notice shows once.
+    @Test func aWipeRemovesTheMarker() async throws {
+        defer { phone.close() }
+        try await deleting()
+        try await m.eraseThisPhone()
+        #expect(m.record.value.deleting == nil && m.deletion == nil && m.phase == .signedOut)
+        #expect(files.isEmpty && m.vaultDeletedNotice)
+        try phone.restart()
+        try await m.refresh()
+        #expect(m.phase == .signedOut && m.deletion == nil && !m.vaultDeletedNotice)
+    }
 }

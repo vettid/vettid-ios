@@ -193,6 +193,7 @@ public final class FakeVaultService: @unchecked Sendable {
     var statusLagsDeletionValue = false
     /// `GET /api/vault/status` answers `401 unauthorized` (the row, and with it the app key, removed).
     var statusUnauthorizedValue = false
+    var holdsDeletionUnlinkValue = false
     var slotQueuedAfterDeletionValue = 0
     var statusGateValue: FakeHTTPServer.Gate?
     // The rotation, a new credential and the clone alarm (FakeVaultService+Credential.swift), under ``cond``.
@@ -336,8 +337,10 @@ public final class FakeVaultService: @unchecked Sendable {
 
     /// The served manifest of [serial], listing this service's release 3 `active` (and release 4 `active` when
     /// [release4]), signed by [signer] (the TEST key).
-    public func servedManifest(serial: UInt64 = 7, signer: P256.Signing.PrivateKey? = nil, release4: Bool = false) throws -> [UInt8] {
-        let entries = (release4 ? [3, 4] : [3]).map { (n: UInt64) in
+    public func servedManifest(
+        serial: UInt64 = 7, signer: P256.Signing.PrivateKey? = nil, release4: Bool = false, release3: Bool = true
+    ) throws -> [UInt8] {
+        let entries = ((release3 ? [3] : []) + (release4 ? [4] : [])).map { (n: UInt64) in
             JsonBuilder().uint("release", n).string("pcr0", Self.pcr0(n)).string("pcr1", Self.pcr1).string("pcr2", Self.pcr2).string("seal_key", "arn:aws:kms:us-east-1:000000000000:key/test\(n == 3 ? "" : String(n))").string("status", "active").string("published_at", "2026-09-01T00:00:00Z").string("notes", "https://vettid.org/security/releases/\(n)/").build()
         }
         let m = JsonBuilder().uint("v", 1).uint("serial", serial).string("issued_at", "2026-10-02T12:00:00Z").raw("releases", JsonBuilder.array(entries)).bytes()

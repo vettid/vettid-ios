@@ -44,14 +44,22 @@ extension VaultManager {
         return routed.pcr0 == m.from.pcr0 && routed.number == m.from.number
     }
 
-    /// (§4.3 point 2) A failure of the new release, not the member's: N+1 did not start or ended, its instance did not
-    /// verify, the unlock got no answer, or the enclave answered an error. Never a wrong PIN, the backoff, a missing
-    /// connection, a locked iPhone, a held change or this phone's own records.
+    /// The codes of N+1's own failures (§4.3 point 2): it did not start in time (`release_starting` past its waits, a
+    /// `503 vault_unavailable`), the route kept naming N, or its enclave answered an error decided before the PIN.
+    nonisolated static let newReleaseFailureCodes: Set<String> = [
+        MemberApiError.releaseStarting, MemberApiError.vaultUnavailable, codeReleaseNotRouted,
+        "retry", "release_key", "vault_missing", "wrong_release",
+    ]
+
+    /// (§4.3 point 2) A failure of the new release, not the member's, listed: N+1 ended (`410 release_unavailable`),
+    /// its instance did not verify, the unlock got no answer, or one of ``newReleaseFailureCodes``. Nothing else: never a
+    /// wrong PIN, the backoff, a missing connection, a locked iPhone, a held change, this phone's own keys, records or
+    /// attestation, or a cancellation.
     nonisolated static func failsNewRelease(_ a: UnlockAttempt) -> Bool {
         guard case .failed(let kind, let code, _) = a else { return false }
         switch kind {
-        case .releaseEnded, .enclave, .releaseUnknown, .noResponse, .vaultUnavailable, .retry: return true
-        case .other: return code != VaultFailures.codeKeystore && code != UnlockAttempt.codeNoUserGuid
+        case .releaseEnded, .enclave, .releaseUnknown, .noResponse: return true
+        case .vaultUnavailable, .retry, .other: return code.map(newReleaseFailureCodes.contains) ?? false
         default: return false
         }
     }
@@ -103,9 +111,34 @@ extension VaultManager {
             await clearMoveMarker()
             return .failed(kind, code: Self.codeReturnConfirmed)
         }
-        guard kind == .releaseEnded || kind == .releaseUnknown else { return nil }
-        await clearMoveMarker()
-        return .failed(kind, code: Self.codeReturnUnavailable)
+        // `410` for `?release=` N's PCR0 is the member API's answer for N itself; a release the manifest does not know is
+        // whatever instance was served, so it ends the way back only when N itself is no longer in the trusted manifest.
+        var ended = kind == .releaseEnded
+        if kind == .releaseUnknown { ended = await moveOriginListed() == false }
+        if ended {
+            await clearMoveMarker()
+            return .failed(kind, code: Self.codeReturnUnavailable)
+        }
+        return nil
+    }
+
+    /// Whether the trusted manifest lists release N (the marker's `from`, number and PCR0); nil without a marker or when
+    /// the manifest cannot be read.
+    func moveOriginListed() async -> Bool? {
+        guard let s = session, s.device.altState.moveUnconfirmed != nil,
+              let m = try? await s.alt.manifest(seen: s.device.altState.manifestSerial)
+        else { return nil }
+        return await pruneMoveMarker(m)
+    }
+
+    /// (§4.3 point 4) Each time the trusted manifest is read: release N gone from it ends the way back. Whether N is
+    /// listed (true without a marker).
+    @discardableResult
+    func pruneMoveMarker(_ m: ReleaseManifest) async -> Bool {
+        guard let marker = session?.device.altState.moveUnconfirmed else { return true }
+        let listed = m.byPcr0(marker.from.pcr0)?.number == marker.from.number
+        if !listed { await clearMoveMarker() }
+        return listed
     }
 
     /// (§4.3 point 3) "Return to release N" on the unlock screen, confirmed, with the unlock screen's PIN: the way back

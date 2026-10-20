@@ -316,6 +316,8 @@ extension VaultManager {
                     unlockSecretFor: { [self] caps in
                         // Before each request is built as well: one held back leaves no standing token recorded as issued.
                         if let moved = pinTakenBefore(taken) { throw moved }
+                        // IOS-PLAN §4.2: nothing goes to a vault that said it is being deleted.
+                        try await refuseWhileDeleting()
                         try ReleasePath.requireR(caps)
                         return secret
                     },
@@ -324,6 +326,8 @@ extension VaultManager {
                         // of this same unlock may have reached the vault already (an expired slot; a sealed `attestation`
                         // or `manifest` refusal, decided before the PIN check); this stops only the requests still to go.
                         if let moved = pinTakenBefore(taken) { throw moved }
+                        // IOS-PLAN §4.2: nothing goes to a vault that said it is being deleted.
+                        try await refuseWhileDeleting()
                     }
                 )
             } catch AltRefused.notYetRouted {

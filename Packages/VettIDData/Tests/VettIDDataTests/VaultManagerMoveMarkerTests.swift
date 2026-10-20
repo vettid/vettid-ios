@@ -165,4 +165,38 @@ import VettIDDataTesting
         #expect(service.unlocks.count == unlocks, "no PIN sent to release 3")
         #expect(m.unconfirmedMove?.failed == true)
     }
+
+    /// A release the manifest does not know served for the way back ends it only when release N itself is no longer in
+    /// the trusted manifest; reading the manifest (the offer after an unlock) ends it too once N is gone.
+    @Test func onlyReleaseNGoneFromTheManifestEndsIt() async throws {
+        defer { phone.close() }
+        try await moved()
+        service.unlockAnswers(.sealed("retry"))
+        _ = try await m.unlock(pin: pin)
+        #expect(await m.returnEnded(.failed(.releaseUnknown, code: "enclave")) == nil)
+        #expect(m.unconfirmedMove?.failed == true, "N still listed: kept")
+        service.delistsRelease3 = true
+        await m.releaseUpdate.refreshOffer()
+        #expect(m.unconfirmedMove == nil)
+    }
+
+    /// Only N+1's own failures set `failed`: never this phone's attestation, keys, records, a cancellation or a dropped
+    /// session.
+    @Test func onlyTheNewReleasesOwnFailuresCount() {
+        let yes: [UnlockAttempt] = [
+            .failed(.releaseEnded, code: "release_unavailable"), .failed(.enclave, code: "enclave"),
+            .failed(.noResponse, code: nil), .failed(.vaultUnavailable, code: "release_starting"),
+            .failed(.vaultUnavailable, code: VaultManager.codeReleaseNotRouted), .failed(.retry, code: "retry"),
+            .failed(.other, code: "release_key"), .failed(.other, code: "vault_missing"),
+        ]
+        let no: [UnlockAttempt] = [
+            .badPin(retryAfterSeconds: 0), .backoff(retryAfterSeconds: 5), .failed(.network, code: nil),
+            .failed(.phoneLocked, code: "phone_locked"), .failed(.retry, code: "app_attest_pending_full"),
+            .failed(.other, code: "app_attest"), .failed(.other, code: "crypto"), .failed(.other, code: "malformed"),
+            .failed(.other, code: "session_dropped"), .failed(.other, code: nil), .failed(.attestation, code: "attestation"),
+            .failed(.changeChecking, code: "change_held"), .failed(.vaultUnavailable, code: VaultManager.codeVaultDeleting),
+        ]
+        for a in yes { #expect(VaultManager.failsNewRelease(a), "\(a)") }
+        for a in no { #expect(!VaultManager.failsNewRelease(a), "\(a)") }
+    }
 }

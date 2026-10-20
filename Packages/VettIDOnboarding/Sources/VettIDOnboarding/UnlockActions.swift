@@ -38,6 +38,8 @@ public protocol UnlockActions: AnyObject, Sendable {
     /// "Return", confirmed: the way back with the PIN handed over just before (``setPin(_:)``), or, without one, the
     /// keypad asks for it first.
     func confirmReturn()
+    /// Leaves the keypad's question for the way back ("Not now"): the unlock screen as it was.
+    func cancelReturn()
 }
 
 /// Actions that do nothing: the screen rendered with sample states (previews, the screen catalog).
@@ -64,4 +66,5 @@ public final class NoUnlockActions: UnlockActions {
     public func askReturn() {}
     public func dismissReturn() {}
     public func confirmReturn() {}
+    public func cancelReturn() {}
 }

@@ -55,7 +55,33 @@ extension VaultManager {
     private func deleteOnce(pin: String, password: String) async throws -> Bool {
         ownDelete = OwnDelete()
         defer { ownDelete = nil }
-        let answered: Bool = try await guarded {
+        let answered: Bool
+        do {
+            answered = try await deleteRequest(pin: pin, password: password)
+        } catch {
+            // The vault's `device.unlinked{vault_deleted}` came while the request failed: the deletion applied all the same.
+            if ownDeleteUnlinked() { return true }
+            throw error
+        }
+        if !answered, await vaultListed() != false {
+            // The vault's `device.unlinked{vault_deleted}` came meanwhile: the deletion applied; wait for the member API.
+            return ownDeleteUnlinked()
+        }
+        await afterVaultDeleted()
+        return true
+    }
+
+    /// The vault said, during this phone's own deletion, that it is being deleted: "being deleted" opens (with the
+    /// request's `exp` in its bound). False when it did not say so.
+    func ownDeleteUnlinked() -> Bool {
+        guard ownDelete?.unlinked == true else { return false }
+        enterDeleting(expOnPhone: ownDelete?.expOnPhone)
+        return true
+    }
+
+    /// The `vault.delete` itself: true when answered, false when its answer was lost.
+    private func deleteRequest(pin: String, password: String) async throws -> Bool {
+        try await guarded {
             // It carries the PIN: refused while the PIN is uncertain too (§11.14.9 step 3).
             try await decideFirst(carriesPin: true)
             let s = try await openSession()
@@ -75,14 +101,6 @@ extension VaultManager {
                 throw e
             }
         }
-        if !answered, await vaultListed() != false {
-            // The vault's `device.unlinked{vault_deleted}` came meanwhile: the deletion applied; wait for the member API.
-            guard ownDelete?.unlinked == true else { return false }
-            enterDeleting(expOnPhone: ownDelete?.expOnPhone)
-            return true
-        }
-        await afterVaultDeleted()
-        return true
     }
 
     /// Whether the member API lists the vault: false when it says explicitly that the account has none; nil when it

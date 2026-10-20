@@ -226,6 +226,11 @@ public final class UnlockViewModel: UnlockActions {
 
     public func dismissReturn() { state.returnConfirm = false }
 
+    public func cancelReturn() {
+        state.returnAsksPin = false
+        state.pin = ""
+    }
+
     public func confirmReturn() {
         state.returnConfirm = false
         guard state.returnOffered, !state.busy else {
@@ -245,7 +250,11 @@ public final class UnlockViewModel: UnlockActions {
     private func returnWithPin() {
         let pin = state.pin
         state.pin = ""
-        guard pin.count >= UnlockState.minPinLength, state.pinAllowed else { return }
+        // Not now (a backoff's countdown runs, or a step is busy): the keypad keeps asking, and says why with its countdown.
+        guard pin.count >= UnlockState.minPinLength, state.pinAllowed else {
+            state.returnAsksPin = true
+            return
+        }
         state.returnAsksPin = false
         state.message = nil
         // Refused before anything was sent (an update running, the owner check or a change first).

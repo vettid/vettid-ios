@@ -114,6 +114,9 @@ public struct UnlockScreen: View {
                         help: state.signerHelp, recovery: state.recoveryText, stagingNote: state.stagingNote, actions: actions
                     )
                 }
+                if state.returnAsksPin {
+                    TextLink(OnboardingStrings.releaseUpdateNotNow, identifier: "unlock_return_cancel") { actions.cancelReturn() }
+                }
                 wayForward
             }
         }

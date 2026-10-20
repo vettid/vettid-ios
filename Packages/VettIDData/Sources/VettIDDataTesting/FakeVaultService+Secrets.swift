@@ -34,6 +34,12 @@ extension FakeVaultService {
     /// Whether the vault deleted itself.
     public var vaultDeleted: Bool { locked { vaultDeletedValue } }
 
+    /// The deletion's `device.unlinked{vault_deleted}` is held back (never reaches this phone).
+    public var holdsDeletionUnlink: Bool {
+        get { locked { holdsDeletionUnlinkValue } }
+        set { locked { holdsDeletionUnlinkValue = newValue } }
+    }
+
     /// The member API still lists the vault after it deleted itself (the `deleted` event not yet recorded), until false.
     public var statusLagsDeletion: Bool {
         get { locked { statusLagsDeletionValue } }
@@ -111,7 +117,7 @@ extension FakeVaultService {
             return try reply(m.type, "{}", re: m.id, error: "bad_password")
         }
         try reply(m.type, "{}", re: m.id)
-        try reply("device.unlinked", #"{"reason":"vault_deleted"}"#)
+        if !holdsDeletionUnlinkValue { try reply("device.unlinked", #"{"reason":"vault_deleted"}"#) }
         vaultDeletedValue = true
         vaultOpen = false
     }
