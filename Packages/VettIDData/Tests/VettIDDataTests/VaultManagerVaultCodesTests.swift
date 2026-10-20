@@ -131,7 +131,8 @@ import VettIDDataTesting
         #expect(m.credentialRequired)
     }
 
-    /// `forbidden` to `pin.change`: "Your vault moved to a new phone" on the change's screen; no root screen, no erase.
+    /// `forbidden` to `pin.change`: the change ends (IOS-PLAN §6.3, 0.1.13) and its failure is ``FailureKind/notHolder``,
+    /// "Your vault moved to a new phone"; no root screen, no erase.
     @Test func forbiddenOnAPinChangeIsNotTheHolder() async throws {
         defer { phone.close() }
         try await setUp()
@@ -139,6 +140,10 @@ import VettIDDataTesting
         service.refuseNext("pin.change", code: "forbidden", message: "not the holder")
         let f = await vaultFailure { try await m.changePin(pin: pin, newPin: "975310", password: password) }
         #expect(f?.kind == .notHolder && f?.code == "forbidden")
-        #expect(!m.credentialRequired && m.phase == .unlocked && phone.phoneKeys.count == keys)
+        #expect(!m.credentialRequired && m.phase == .unlocked && m.changeCheck?.status == .notHolder)
+        // Nothing erased: the current phone key stays (the PIN change's candidate shares it), and the vault opens.
+        #expect(phone.phoneKeys.count == keys && m.usesPhoneSecret)
+        try await m.lock()
+        #expect(try await m.unlock(pin: pin) == .success)
     }
 }

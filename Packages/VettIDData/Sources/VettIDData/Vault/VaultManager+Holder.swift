@@ -46,6 +46,6 @@ extension VaultManager {
         if let op = renewOperation, operations.contains(op) { renewOperation = nil }
         changeCheck = ChangeCheck(.pin, .notHolder)
         refreshPinStep()
-        return VaultFailure(.other, code: Self.codeNotHolder, cause: error)
+        return VaultFailure(.notHolder, code: Self.codeNotHolder, cause: error)
     }
 }

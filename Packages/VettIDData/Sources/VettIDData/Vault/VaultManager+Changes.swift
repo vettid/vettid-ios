@@ -69,7 +69,7 @@ extension VaultManager {
             // VAULT-MESSAGING 0.51.1; IOS-PLAN 0.1.13: the vault's `forbidden` ends the change.
             if let m = box.marker { notTheHolder(m) }
             refreshPinStep()
-            throw VaultFailure(.other, code: Self.codeNotHolder, cause: e)
+            throw VaultFailure(.notHolder, code: Self.codeNotHolder, cause: e)
         } catch let e as VaultOpError where e.code == CredentialOpsCodes.staleCredential {
             // §11.14.9 step 4 (0.45.0): refused before any secret was tested and cached under the request's id, so this
             // change did not apply and no copy of it can; the latest blob was fetched, nothing is resent.
@@ -90,7 +90,7 @@ extension VaultManager {
         case .notApplied?: throw VaultFailure(.other, code: Self.codeChangeNotApplied)
         case .refused(let kind, let code)?: throw VaultFailure(kind, code: code)
         case .ended?: throw VaultFailure(.other)
-        case .notHolder?: throw VaultFailure(.other, code: Self.codeNotHolder)
+        case .notHolder?: throw VaultFailure(.notHolder, code: Self.codeNotHolder)
         case .checking?, .unreachable?, nil: throw VaultFailure(.changeUnresolved, code: Self.codeChangeUnresolved)
         }
     }
