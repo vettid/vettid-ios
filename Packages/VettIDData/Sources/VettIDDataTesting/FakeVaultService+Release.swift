@@ -20,6 +20,10 @@ struct FakeReleases {
     /// The next route asking for a given release answers `409 vault_busy` (an instance of another release holds the
     /// lease) until the vault is locked through the member API.
     var busy = false
+    /// A route asking for a release (`?release=`) answers `410 release_unavailable` (the release ended).
+    var askedUnavailable = false
+    /// The manifest no longer lists release 3.
+    var delisted3 = false
     var answer: FakeVaultService.ReleaseUpdateAnswer = .move
     var updates: [FakeVaultService.UpdateSeen] = []
 }
@@ -83,6 +87,23 @@ extension FakeVaultService {
     public var holdsLeaseElsewhere: Bool {
         get { locked { releases.busy } }
         set { locked { releases.busy = newValue } }
+    }
+
+    /// A route asking for a given release answers `410 release_unavailable` (IOS-PLAN §4.3: release N ended).
+    public var askedReleaseUnavailable: Bool {
+        get { locked { releases.askedUnavailable } }
+        set { locked { releases.askedUnavailable = newValue } }
+    }
+
+    /// The served manifest no longer lists release 3 (IOS-PLAN §4.3: release N gone from the trusted manifest).
+    public var delistsRelease3: Bool {
+        get { locked { releases.delisted3 } }
+        set { locked { releases.delisted3 = newValue } }
+    }
+
+    /// The vault's `sync.event{kind: "vault.release"}` naming release [n] (§11.10.6), sent to this phone.
+    public func sendReleaseSync(_ n: UInt64) {
+        locked { try? reply("sync.event", #"{"kind":"vault.release","release":"\#(Self.pcr0(n))","release_number":\#(n)}"#) }
     }
 
     /// The move recorded and not yet confirmed, if any.

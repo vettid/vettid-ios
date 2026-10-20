@@ -58,6 +58,9 @@ struct LocalAccount: Codable, Equatable, Sendable {
     /// (Release R, ANDROID-PLAN "Transfer") The offer to rotate the vault's keys after a PIN or password change, until a
     /// rotation or the member puts it away; kept so that a restart does not lose it.
     var rotateOffer = false
+    /// (IOS-PLAN §4.2) The vault said it is being deleted: a start opens on "being deleted" until the member API no longer
+    /// lists it. Non-secret; erased with the record.
+    var deleting: DeletingMarker?
 
     enum CodingKeys: String, CodingKey {
         case userGuid = "user_guid"
@@ -79,6 +82,7 @@ struct LocalAccount: Codable, Equatable, Sendable {
         case snapshot
         case nameRequest = "name_request"
         case rotateOffer = "rotate_offer"
+        case deleting
     }
 
     init() {}
@@ -112,6 +116,7 @@ struct LocalAccount: Codable, Equatable, Sendable {
         // Display only: a snapshot or request this build cannot read is no snapshot, never an unreadable record.
         snapshot = try? c.decodeIfPresent(AccountSnapshot.self, forKey: .snapshot)
         nameRequest = try? c.decodeIfPresent(NameRequest.self, forKey: .nameRequest)
+        deleting = try c.decodeIfPresent(DeletingMarker.self, forKey: .deleting)
     }
 
     /// The account as the screens see it: from the last snapshot, or, before one arrived, the masked email only; with

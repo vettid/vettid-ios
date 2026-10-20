@@ -80,6 +80,9 @@ public final class TestVaultPhone {
     /// A change's wait for the credential operations before it (§11.14.9 step 1): ends when the test releases it while
     /// ``holdsChangeWaits``, else after five seconds (room for a late answer on a loaded machine).
     public let changeWaits = TestPauses()
+    /// (IOS-PLAN §4.2) The waits between the re-reads of a vault being deleted: each waits until the test releases it, so
+    /// that only the reads a test asks for (a start, a return to the foreground, Check again) happen meanwhile.
+    public let deletionPauses = TestPauses()
     /// Whether a change's wait lasts until the test releases it (``changeWaits``).
     public var holdsChangeWaits: Bool {
         get { changeWaits.holding }
@@ -112,7 +115,7 @@ public final class TestVaultPhone {
         let startOver = AttestStartOver()
         self.attester = attester
         attestStartOver = startOver
-        let waits = Waits(requestTimeout: requestTimeout, pauses: changePauses, changeWaits: changeWaits)
+        let waits = Waits(requestTimeout: requestTimeout, pauses: changePauses, changeWaits: changeWaits, deletion: deletionPauses)
         manager = VaultManager(config: try Self.configured(
             service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock,
             wipes ? wipeTargets : nil, attester, startOver, waits, uptime
@@ -128,13 +131,16 @@ public final class TestVaultPhone {
         ))
     }
 
-    private var waits: Waits { Waits(requestTimeout: requestTimeout, pauses: changePauses, changeWaits: changeWaits) }
+    private var waits: Waits {
+        Waits(requestTimeout: requestTimeout, pauses: changePauses, changeWaits: changeWaits, deletion: deletionPauses)
+    }
 
     /// A test phone's waits: how long a request waits for its answer, and the pauses the test releases.
     private struct Waits {
         let requestTimeout: TimeInterval
         let pauses: TestPauses
         let changeWaits: TestPauses
+        let deletion: TestPauses
     }
 
     // swiftlint:disable:next function_parameter_count
@@ -155,6 +161,8 @@ public final class TestVaultPhone {
         changeWaits.holding = false
         c.changeWaitSleep = { try await changeWaits.sleep($0) }
         c.releaseUpdateSleep = { _ in try await Task.sleep(for: .milliseconds(5)) }
+        let deletion = waits.deletion
+        c.deletionSleep = { d in try await deletion.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
         c.uptime = { DeviceConfig.monotonicNow() + uptime.ahead }
         return c
     }

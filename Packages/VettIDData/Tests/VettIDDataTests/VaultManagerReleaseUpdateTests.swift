@@ -44,8 +44,7 @@ import VettIDDataTesting
     }
 
     /// "Approve and update": the lock, one unlock carrying the approval for release 4 beside its device assertion, `moved`,
-    /// then the unlock that reaches release 4 with the same PIN and no approval. The phone records release 4 and the
-    /// release it moved from.
+    /// then the unlock that reaches release 4 with the same PIN and no approval. The phone records release 4.
     @Test func approveLocksMovesAndOpensOnTheNewRelease() async throws {
         defer { phone.close() }
         try await setUp()
@@ -66,7 +65,8 @@ import VettIDDataTesting
         #expect(m.phase == .unlocked)
         let st = try #require(m.session?.device.altState)
         #expect(st.releaseNumber == 4 && st.release == FakeVaultService.pcr0(4))
-        #expect(st.previousRelease == FakeVaultService.pcr0)
+        // Release 4 opened the vault: the move is confirmed, and the marker of IOS-PLAN §4.3 is gone with it.
+        #expect(st.previousRelease.isEmpty && st.moveUnconfirmed == nil && m.unconfirmedMove == nil)
         #expect(m.releaseUpdate.offer == nil)
         m.releaseUpdate.finish()
         #expect(m.releaseUpdate.progress == nil)

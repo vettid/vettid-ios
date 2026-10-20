@@ -142,7 +142,11 @@ public struct OnboardingContent: View {
         case .vaultElsewhere:
             VaultElsewhereScreen(state: state, actions: actions, onOpenAccountSite: onOpenAccountSite)
         default:
-            WelcomeScreen(onStart: { actions.start() }, onTransfer: { actions.startTransfer() }, onRecover: { actions.startRecovery() })
+            WelcomeScreen(
+                onStart: { actions.start() }, onTransfer: { actions.startTransfer() }, onRecover: { actions.startRecovery() },
+                deletedNotice: state.deletedNotice, onOpenAccountSite: onOpenAccountSite,
+                onNoticeSeen: { actions.dismissDeletedNotice() }
+            )
         }
     }
 

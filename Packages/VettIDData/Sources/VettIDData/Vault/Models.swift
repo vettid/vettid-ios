@@ -22,6 +22,9 @@ public enum AppPhase: Equatable, Sendable {
     case locked
     /// The vault is open and this app is its holder.
     case unlocked
+    /// (IOS-PLAN §4.2) The vault said it is being deleted (`device.unlinked{vault_deleted}`): closed for good, waiting for
+    /// the member API to no longer list it (``VaultDeletion``). Nothing is sent to the vault.
+    case deleting
 }
 
 /// The steps of setting a vault up on this phone. Mirrors vettid-android `SetupStage`.

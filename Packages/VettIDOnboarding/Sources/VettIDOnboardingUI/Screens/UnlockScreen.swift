@@ -75,6 +75,7 @@ public struct UnlockScreen: View {
     private var blocked: Bool { state.recoverOnly }
 
     private var primaryLabel: String? {
+        if state.returnAsksPin, let m = state.moveUnconfirmed { return OnboardingStrings.releaseUpdateReturn(Int(m.from.number)) }
         if state.preflightError != nil && !blocked { return OnboardingStrings.unlockRetry }
         if blocked || state.recoveryPending { return nil }
         return OnboardingStrings.unlockSubmit
@@ -95,9 +96,9 @@ public struct UnlockScreen: View {
             title: OnboardingStrings.unlockTitle,
             message: state.email.map(OnboardingStrings.unlockBodyAccount) ?? OnboardingStrings.unlockBody,
             primaryLabel: primaryLabel,
-            primaryEnabled: state.preflightError != nil ? state.retryAllowed : canSubmit,
+            primaryEnabled: state.preflightError != nil && !state.returnAsksPin ? state.retryAllowed : canSubmit,
             busy: state.busy || state.loading || state.erasing,
-            onPrimary: { state.preflightError != nil ? actions.retryPreflight() : submit() },
+            onPrimary: { state.preflightError != nil && !state.returnAsksPin ? actions.retryPreflight() : submit() },
             header: {
                 VettIDSymbol.lock.image.font(.system(size: 36)).padding(.top, Spacing.l).accessibilityHidden(true)
             }
@@ -113,6 +114,9 @@ public struct UnlockScreen: View {
                         help: state.signerHelp, recovery: state.recoveryText, stagingNote: state.stagingNote, actions: actions
                     )
                 }
+                if state.returnAsksPin {
+                    TextLink(OnboardingStrings.releaseUpdateNotNow, identifier: "unlock_return_cancel") { actions.cancelReturn() }
+                }
                 wayForward
             }
         }
@@ -126,6 +130,16 @@ public struct UnlockScreen: View {
             destructive: true,
             onConfirm: { actions.confirmErase() }
         )
+        .confirmDialog(
+            isPresented: Binding(get: { state.returnConfirm && state.returnOffered }, set: { if !$0 { actions.dismissReturn() } }),
+            title: OnboardingStrings.releaseUpdateReturnConfirmTitle(returnFrom),
+            message: OnboardingStrings.releaseUpdateReturnConfirmBody(returnFrom, returnTo),
+            confirmLabel: OnboardingStrings.releaseUpdateReturn(returnFrom)
+        ) {
+            // IOS-PLAN §4.3 point 3: the unlock screen's PIN, or the keypad asks for it first.
+            if pin.count >= UnlockState.minPinLength { actions.setPin(pin.take()) }
+            actions.confirmReturn()
+        }
         .onDisappear { pin.clear() }
         .onChange(of: scenePhase) { _, now in
             // IOS-PLAN §6.3: typed secrets are dropped when the app leaves the foreground, and when the iPhone locks.
@@ -136,6 +150,9 @@ public struct UnlockScreen: View {
         }
         .accessibilityIdentifier("unlock")
     }
+
+    private var returnFrom: Int { Int(state.moveUnconfirmed?.from.number ?? 0) }
+    private var returnTo: Int { Int(state.moveUnconfirmed?.to.number ?? 0) }
 
     /// The keypad, the countdown and, with a check due, the password (§3.6.5: one screen for both).
     @ViewBuilder private var pinEntry: some View {
@@ -262,6 +279,17 @@ struct UnlockNotices: View {
             }
             .accessibilityIdentifier("unlock_move_failure")
         }
+        if state.returnOffered, let m = state.moveUnconfirmed {
+            // IOS-PLAN §4.3 point 3: above the keypad, at every start, until the marker is cleared.
+            let (from, to) = (Int(m.from.number), Int(m.to.number))
+            NoticeCard(
+                .warning, title: OnboardingStrings.releaseUpdateNewFailedTitle(to),
+                message: OnboardingStrings.unlockMoveUnconfirmed(to, from)
+            ) {
+                TextLink(OnboardingStrings.releaseUpdateReturn(from)) { actions.askReturn() }
+            }
+            .accessibilityIdentifier("unlock_move_unconfirmed")
+        }
         if state.stateRollback {
             NoticeCard(.urgent, title: OnboardingStrings.unlockRollbackStateTitle, message: OnboardingStrings.unlockRollbackStateBody)
         }
@@ -347,6 +375,9 @@ struct UnlockMessageNotice: View {
             let text = switch code {
             case UnlockState.codeUnreadable: OnboardingStrings.unlockUnreadable
             case UnlockAttempt.codeNoUserGuid: OnboardingStrings.unlockNoUserGuid
+            // IOS-PLAN §4.3 point 6: still routed to the release the move left, never the rollback's text.
+            case VaultManager.codeReleaseNotRouted:
+                OnboardingStrings.releaseUpdateRoutePending(Int(state.moveUnconfirmed?.to.number ?? state.preflight?.lastNumber ?? 0))
             default: kind.message(timeScale: state.timeScale)
             }
             // The service paused for maintenance or not there yet: temporary, not alarming.

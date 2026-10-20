@@ -11,15 +11,25 @@ public struct WelcomeScreen: View {
     let onStart: @MainActor () -> Void
     let onTransfer: @MainActor () -> Void
     let onRecover: @MainActor () -> Void
+    /// (IOS-PLAN §4.2) "Your vault was deleted…", once after a vault was deleted; seen when the member leaves.
+    let deletedNotice: Bool
+    let onOpenAccountSite: @MainActor () -> Void
+    let onNoticeSeen: @MainActor () -> Void
 
     public init(
         onStart: @escaping @MainActor () -> Void,
         onTransfer: @escaping @MainActor () -> Void,
-        onRecover: @escaping @MainActor () -> Void
+        onRecover: @escaping @MainActor () -> Void,
+        deletedNotice: Bool = false,
+        onOpenAccountSite: @escaping @MainActor () -> Void = {},
+        onNoticeSeen: @escaping @MainActor () -> Void = {}
     ) {
         self.onStart = onStart
         self.onTransfer = onTransfer
         self.onRecover = onRecover
+        self.deletedNotice = deletedNotice
+        self.onOpenAccountSite = onOpenAccountSite
+        self.onNoticeSeen = onNoticeSeen
     }
 
     public var body: some View {
@@ -36,10 +46,20 @@ public struct WelcomeScreen: View {
                     .padding(.bottom, Spacing.xl)
             }
         ) {
+            if deletedNotice {
+                NoticeCard(.info, title: OnboardingStrings.vaultDeletedNotice, message: "") {
+                    TextLink(
+                        OnboardingStrings.vaultDeletingAccountSite, identifier: "vault_deleted_account_site", action: onOpenAccountSite
+                    )
+                }
+                .accessibilityIdentifier("vault_deleted_notice")
+                .padding(.bottom, Spacing.l)
+            }
             WelcomePoint(symbol: .key, text: OnboardingStrings.welcomePointKeys)
             WelcomePoint(symbol: .verifiedUser, text: OnboardingStrings.welcomePointMember).padding(.top, Spacing.l)
             TextLink(OnboardingStrings.welcomeRecover, identifier: "welcome_recover", action: onRecover).padding(.top, Spacing.l)
         }
+        .onDisappear { if deletedNotice { onNoticeSeen() } }
     }
 }
 

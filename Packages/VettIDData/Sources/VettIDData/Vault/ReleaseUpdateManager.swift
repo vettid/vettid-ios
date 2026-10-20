@@ -124,15 +124,31 @@ public final class ReleaseUpdateManager: ReleaseUpdateRepository {
               !refusedWhileChangeHeld()
         else { return }
         let pin = taken(pin, generation)
-        launch { [self] in
-            set { $0.step = .abandoning; $0.failure = nil; $0.failureCode = nil }
-            let r = await withStart { s in await self.ops.unlock(pin: pin, approve: nil, abandon: true, afterMove: false, onStarting: s) }
-            switch r {
-            case .abandoned, .opened:
-                set { $0.step = .abandoned; $0.vaultOpen = true; $0.canAbandon = false }
-            default:
-                newReleaseFailed(r)
-            }
+        launch { [self] in await wayBack(pin) }
+    }
+
+    public func returnToPrevious(pin: String, generation: Int?) -> Bool {
+        guard !running, !pin.isEmpty, let m = ops.unconfirmedMove(), m.failed, !ops.ownerCheckDue(), ops.changeHold() == nil else {
+            return false
+        }
+        progress = UpdateProgress(step: .abandoning, from: m.from, to: m.to, canAbandon: true)
+        let pin = taken(pin, generation)
+        launch { [self] in await wayBack(pin) }
+        return true
+    }
+
+    /// The way back (§11.10.4): `abandoned`, or N's `refused` `downgrade` (no move was pending any more), is back on
+    /// release N and open; `wrong_release` and N unavailable end it (IOS-PLAN §4.3 point 4).
+    private func wayBack(_ pin: TakenPin) async {
+        set { $0.step = .abandoning; $0.failure = nil; $0.failureCode = nil }
+        let r = await withStart { s in await self.ops.unlock(pin: pin, approve: nil, abandon: true, afterMove: false, onStarting: s) }
+        switch r {
+        case .abandoned, .opened, .refused("downgrade"):
+            set { $0.step = .abandoned; $0.vaultOpen = true; $0.canAbandon = false }
+        case .failed(let kind, let code, _) where code == VaultManager.codeReturnConfirmed || code == VaultManager.codeReturnUnavailable:
+            set { $0.step = .returnEnded; $0.failure = kind; $0.failureCode = code; $0.vaultOpen = false; $0.canAbandon = false }
+        default:
+            newReleaseFailed(r)
         }
     }
 
