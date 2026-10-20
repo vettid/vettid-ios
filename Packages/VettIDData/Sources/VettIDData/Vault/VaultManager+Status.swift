@@ -5,6 +5,17 @@ import VettIDVault
 
 // Settings → Vault status and Settings → Attestation (IOS-PLAN §8 I1.8).
 extension VaultManager {
+    /// The member API's `state` of an open vault; any other value (`locked`, `deleting`, one this build does not know)
+    /// reads as locked.
+    nonisolated static let stateUnlocked = "unlocked"
+
+    /// `GET /api/vault/status`, following its top-level `service` (MEMBER-API 1.2.0) for the banner.
+    func vaultStatus() async throws -> VaultStatus? {
+        let a = try await member.vaultStatusAnswer()
+        servicePaused = a.servicePaused
+        return a.vault
+    }
+
     /// Vault status: the member API's advisory status (`GET /api/vault/status`) and, while the vault is open, its own
     /// `vault.status` (VAULT-MESSAGING §10.2). vettid-android also reads its own `device.list` entry for the signer line (VAULT-MESSAGING §11.7.1); an
     /// iPhone has no signer (App Attest reports none), and Settings shows "Installed from" from the build instead

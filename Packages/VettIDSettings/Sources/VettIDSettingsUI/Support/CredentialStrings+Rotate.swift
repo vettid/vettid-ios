@@ -210,4 +210,59 @@ extension CredentialStrings {
             bundle: .module
         )
     }
+
+    // ANDROID-PLAN 0.1.51 "A lost answer to New credential" (VAULT-MESSAGING 0.48.0 §11.14.9), drafts shared with the
+    // Android app; the keys are chosen (not in the spec).
+
+    static var newChecking: String {
+        String(
+            localized: "credential_new_checking",
+            defaultValue: """
+                Your vault hasn't answered yet, so VettID is checking whether your new credential was made. Keep your new \
+                password at hand.
+                """,
+            bundle: .module
+        )
+    }
+
+    static var newUnreachable: String {
+        String(
+            localized: "credential_new_unreachable",
+            defaultValue: """
+                VettID can't reach your vault right now, so it doesn't know yet whether your new credential was made. It \
+                will check as soon as it can. Keep both your old and your new password at hand.
+                """,
+            bundle: .module
+        )
+    }
+
+    static var newEnded: String {
+        String(
+            localized: "credential_new_ended",
+            defaultValue: """
+                VettID couldn't confirm whether your new credential was made, because something else changed in your vault \
+                at the same time. Either your previous or your new password may be the current one.
+                """,
+            bundle: .module
+        )
+    }
+
+    static var newApplied: String {
+        String(
+            localized: "credential_new_applied",
+            defaultValue: """
+                Your new credential was made. Use your new password from now on. Your critical items were deleted with the \
+                old credential.
+                """,
+            bundle: .module
+        )
+    }
+
+    static var newNotMade: String {
+        String(
+            localized: "credential_new_not_made",
+            defaultValue: "Your new credential wasn't made. Your credential, its password and your critical items are unchanged.",
+            bundle: .module
+        )
+    }
 }

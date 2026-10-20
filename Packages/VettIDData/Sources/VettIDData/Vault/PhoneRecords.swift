@@ -202,10 +202,11 @@ public struct PhoneRecords: Equatable, Sendable {
     }
 }
 
-/// A change of PIN or password sent and not yet decided (VAULT-MESSAGING §11.14.9 "A lost answer" step 1): its type,
-/// inner id, the blob version the request carries and its `exp`, and for a PIN change the operation of its candidate
-/// record. It holds no PIN, password or secret. Stored form (chosen; not in the spec):
-/// `{"type","id","version","exp","operation"?}`, `exp` in Unix ms.
+/// A change of PIN or password, or a reset, sent and not yet decided (VAULT-MESSAGING §11.14.9 "A lost answer" step 1,
+/// and 0.48.0 "A lost answer to `credential.reset`"): its type, inner id, the blob version the request carries and its
+/// `exp`; for a PIN change the operation of its candidate record, and for a reset the credential key the pre-check
+/// answered (the held key). It holds no PIN, password or secret. Stored form (chosen; not in the spec):
+/// `{"type","id","version","exp","operation"?,"key"?}`, `exp` in Unix ms.
 public struct UnresolvedChange: Equatable, Sendable {
     public let type: ChangeType
     public let id: String
@@ -213,25 +214,29 @@ public struct UnresolvedChange: Equatable, Sendable {
     public let exp: Date
     /// The operation of the PIN change's candidate record (``PhoneRecords/Candidate/operation``).
     public let operation: String?
+    /// A reset's held key: the `key` of the `credential.version` pre-check (VAULT-MESSAGING 0.48.0 §11.14.9).
+    public let heldKey: String?
 
-    public init(type: ChangeType, id: String, version: Int64, exp: Date, operation: String? = nil) {
+    public init(type: ChangeType, id: String, version: Int64, exp: Date, operation: String? = nil, heldKey: String? = nil) {
         self.type = type
         self.id = id
         self.version = version
         // Stored in ms.
         self.exp = Date(timeIntervalSince1970: (exp.timeIntervalSince1970 * 1000).rounded(.down) / 1000)
         self.operation = operation
+        self.heldKey = heldKey
     }
 
     /// The same change, for the PIN change's candidate [operation].
     public func with(operation: String) -> UnresolvedChange {
-        UnresolvedChange(type: type, id: id, version: version, exp: exp, operation: operation)
+        UnresolvedChange(type: type, id: id, version: version, exp: exp, operation: operation, heldKey: heldKey)
     }
 
     func json() -> [UInt8] {
         let b = JsonBuilder().string("type", type.rawValue).string("id", id).uint("version", UInt64(max(0, version)))
             .uint("exp", UInt64(max(0, (exp.timeIntervalSince1970 * 1000).rounded(.down))))
         if let operation { b.string("operation", operation) }
+        if let heldKey { b.string("key", heldKey) }
         return b.bytes()
     }
 
@@ -240,15 +245,19 @@ public struct UnresolvedChange: Equatable, Sendable {
         let exp = try o.uint("exp", min: 0, max: StrictJson.maxSafeInteger)
         return UnresolvedChange(
             type: type, id: try o.string("id"), version: Int64(try o.uint("version", min: 0, max: StrictJson.maxSafeInteger)),
-            exp: Date(timeIntervalSince1970: Double(exp) / 1000), operation: try o.optString("operation")
+            exp: Date(timeIntervalSince1970: Double(exp) / 1000), operation: try o.optString("operation"),
+            heldKey: try o.optString("key")
         )
     }
 }
 
-/// The two changes whose lost answer is decided rather than repeated (VAULT-MESSAGING §11.14.9 "A lost answer").
+/// The changes whose lost answer is decided rather than repeated (VAULT-MESSAGING §11.14.9 "A lost answer", and 0.48.0
+/// "A lost answer to `credential.reset`").
 public enum ChangeType: String, Equatable, Sendable {
     case pin = "pin.change"
     case password = "credential.password.change"
+    /// New credential (`credential.reset`, §3.5.5).
+    case reset = "credential.reset"
 }
 
 /// An answer of the vault that the phone's records react to: `vault.unlock`'s result (VAULT-MESSAGING §11.4), or a

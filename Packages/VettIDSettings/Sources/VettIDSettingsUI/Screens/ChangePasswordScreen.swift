@@ -107,6 +107,7 @@ public struct ChangePasswordContent: View {
         case .unreachable: CredentialStrings.passwordUnreachable
         case .notApplied: CredentialStrings.passwordNotChanged
         case .ended: CredentialStrings.passwordEnded
+        case .notHolder: ChangeCheckNotice.holderMoved
         default: nil
         }
     }

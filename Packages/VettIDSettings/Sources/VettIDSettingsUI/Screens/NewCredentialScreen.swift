@@ -81,6 +81,10 @@ public struct NewCredentialContent: View {
                 )
                 .accessibilityIdentifier("new_credential_confirm")
                 acknowledgement
+                if let check = state.check, let text = Self.text(check) {
+                    // VAULT-MESSAGING 0.48.0 §11.14.9 "A lost answer to `credential.reset`": no failure while it is decided.
+                    NoticeCard(.info, title: CredentialStrings.newTitle, message: text).accessibilityIdentifier("change_check")
+                }
                 if let error = state.error {
                     NoticeCard(.urgent, title: CredentialStrings.newTitle, message: error.message(timeScale: timeScale))
                         .accessibilityIdentifier("error")
@@ -100,6 +104,18 @@ public struct NewCredentialContent: View {
         .forgetsSecrets(scenePhase: scenePhase) {
             pin.clear()
             actions.forgetSecrets()
+        }
+    }
+
+    /// The text of a lost answer's decision shown on the form.
+    static func text(_ check: ChangeCheck.Status) -> String? {
+        switch check {
+        case .checking: CredentialStrings.newChecking
+        case .unreachable: CredentialStrings.newUnreachable
+        case .notApplied: CredentialStrings.newNotMade
+        case .ended: CredentialStrings.newEnded
+        case .notHolder: ChangeCheckNotice.holderMoved
+        default: nil
         }
     }
 

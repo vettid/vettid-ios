@@ -228,7 +228,10 @@ struct AppRoot: View {
     @ViewBuilder private var content: some View {
         // A release update under way, or its outcome, is shown over every phase until it is left (ANDROID-PLAN "Vault
         // update").
-        if vault.releaseUpdate.progress != nil {
+        if vault.phase == .deleting {
+            // IOS-PLAN §4.2: a vault being deleted is shown over everything else (no update, no unlock).
+            VaultDeletingFlow(account: vault) { openPortal() }
+        } else if vault.releaseUpdate.progress != nil {
             ReleaseUpdateFlowRoute(updates: vault.releaseUpdate)
         } else {
             phaseContent
@@ -245,6 +248,8 @@ struct AppRoot: View {
             UnreachableFlow(account: vault, timeScale: vault.timeScale) { openPortal() }
         case .locked:
             UnlockFlow(vault: vault, account: vault, ownerCheck: vault.ownerChecks, releaseNotes: releaseNotes) { openPortal() }
+        case .deleting:
+            VaultDeletingFlow(account: vault) { openPortal() }
         case .unlocked:
             // The check past the deadline closes whatever the shell had open (the drawer, the sheet, an asked check), so
             // that nothing of it comes back for a moment afterwards.

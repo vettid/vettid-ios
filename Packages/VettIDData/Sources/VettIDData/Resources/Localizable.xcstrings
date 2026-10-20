@@ -203,6 +203,17 @@
         }
       }
     },
+    "data_failure_change_undecided_reset": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID is still checking whether your new credential was made. This can take up to about 10 minutes. Try again then."
+          }
+        }
+      }
+    },
     "data_failure_change_unresolved": {
       "extractionState": "manual",
       "localizations": {

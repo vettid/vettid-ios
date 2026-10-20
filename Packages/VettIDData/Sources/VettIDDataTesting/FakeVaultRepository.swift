@@ -32,6 +32,14 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var emailHint = "m***@example.com"
     public var phaseAfterRedeem: AppPhase = .setup(.newVault)
     public var lastRedeemed: SetupCodeInput?
+    /// (IOS-PLAN §4.2) The vault being deleted, what Check again answers, and the notice on "no vault".
+    public var deletion: VaultDeletion?
+    public var deletionReads: [DeletionRead] = []
+    public var vaultDeletedNotice = false
+    /// (IOS-PLAN §4.3) The unconfirmed move, and the PINs "Return to release N" handed over.
+    public var unconfirmedMove: UnconfirmedMove?
+    public var returnPins: [String] = []
+    public var returnStarts = true
 
     // VaultRepository.
     /// Set by a test: the open app was sent to the unlock screen after repeated relay refusals.
@@ -252,6 +260,22 @@ extension FakeVaultRepository: AccountRepository {
         try call("eraseThisPhone")
         account = nil
         phase = .signedOut
+    }
+
+    public func checkDeletionAgain() async -> DeletionRead {
+        calls.append("checkDeletionAgain")
+        return deletionReads.isEmpty ? .listed : deletionReads.removeFirst()
+    }
+
+    public func dismissVaultDeletedNotice() {
+        calls.append("dismissVaultDeletedNotice")
+        vaultDeletedNotice = false
+    }
+
+    public func returnToPreviousRelease(pin: String) -> Bool {
+        calls.append("returnToPreviousRelease")
+        returnPins.append(pin)
+        return returnStarts
     }
 
     public func clearAppData() async -> Bool {

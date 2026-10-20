@@ -28,8 +28,6 @@ struct UnlockRoute: Sendable {
     var onStarting: (@Sendable (Int) -> Void)?
     /// The unlock's PIN steps of an unresolved PIN change apply (§11.14.9 step 5); the release update never moves them.
     var pinSteps = true
-    /// The unlock right after `update: moved`: routed to exactly the release moved from, it waits (``unlockRouted``).
-    var afterMove = false
     /// (VAULT-MESSAGING §11.14.9 step 2) A PIN typed on a flow's own screen (the release update, "Finish the move"):
     /// ``PhoneSecrets/pinGeneration`` when it was taken. Each request is held back, right before it is posted, once it moved
     /// (``VaultManager/pinTakenBefore(_:)``). Nil: the unlock screen's prompts, whose PIN step is read as the unlock starts.
@@ -75,9 +73,13 @@ extension VaultManager {
             let p = try await s.alt.preflight(s.device.altState)
             try ReleasePath.requireR(p.capabilities)
             learnTimeScale(p.timeScale, since: record.generation)
+            // IOS-PLAN §4.3 point 6: routed to the release an unconfirmed move left, not a rollback: the unlock waits for
+            // the route (``unlockRouted``) and never sends the PIN there; nothing is offered meanwhile.
+            let pending = Self.routedToMoveOrigin(p.routed, s.device.altState)
             return PreflightInfo(
-                routed: Self.view(p.routed), lastNumber: p.lastNumber, softwareUpdated: p.softwareUpdated, rollback: p.rollback,
-                offer: p.offer.map(Self.view), between: p.between.map(Self.view)
+                routed: Self.view(p.routed), lastNumber: p.lastNumber, softwareUpdated: p.softwareUpdated,
+                rollback: p.rollback && !pending, offer: pending ? nil : p.offer.map(Self.view),
+                between: pending ? [] : p.between.map(Self.view)
             )
         }
     }
@@ -138,9 +140,17 @@ extension VaultManager {
     /// One unlock (§11.4) along [route]: with ``UnlockRoute/followMove`` (the unlock screen) an `update: moved` is followed
     /// at once by the unlock that reaches the new release (§11.10.6); without it (the release update) the move is reported
     /// and the vault stays locked. ``UnlockRoute/release`` routes to a given release (only to abandon an unconfirmed move,
-    /// §11.10.5).
+    /// §11.10.5). A failure of the new release marks the unconfirmed move (IOS-PLAN §4.3 point 2).
     func unlockOutcome(
         pin: String, options: UnlockOptions, route: UnlockRoute, beforeOpen: @MainActor () async -> Void = {}
+    ) async -> UnlockStepOutcome {
+        let o = await unlockOnce(pin: pin, options: options, route: route, beforeOpen: beforeOpen)
+        await noteMoveOutcome(o.attempt, abandoning: route.release != nil)
+        return o
+    }
+
+    private func unlockOnce(
+        pin: String, options: UnlockOptions, route: UnlockRoute, beforeOpen: @MainActor () async -> Void
     ) async -> UnlockStepOutcome {
         do {
             try prepared()
@@ -168,7 +178,7 @@ extension VaultManager {
         }
         let r = opened.outcome.result
         learnTimeScale(opened.outcome.timeScale, since: marks.record)
-        if let next = afterPinStep(step, ok: r.ok, code: r.code, at: r.at) { return UnlockStepOutcome(next) }
+        if let next = afterPinStep(step, ok: r.ok, code: r.code) { return UnlockStepOutcome(next) }
         guard r.ok else {
             if await holder?.onSealedUnlockResult(HolderPolicy.of(r)) == true { return UnlockStepOutcome(.failed(.other, code: r.code)) }
             return UnlockStepOutcome(Self.refusal(r))
@@ -191,7 +201,7 @@ extension VaultManager {
         let moved = out.ok && out.result.update?.result == Self.updateMoved
         if moved && route.followMove {
             // §11.10.6: after a move the vault is locked under the new release; unlock again, which reaches it.
-            let next = UnlockRoute(onStarting: route.onStarting, afterMove: true)
+            let next = UnlockRoute(onStarting: route.onStarting)
             out = try await unlockWithSecret(s, pin: pin, options: UnlockOptions(), path: .current, route: next)
         }
         // A sealed result: the enclave knows this phone; earlier relay refusals no longer count.
@@ -222,13 +232,10 @@ extension VaultManager {
             if lockedSince { phase = .locked }
             return
         }
-        // A vault event that has the phase read again (a `device.unlinked{vault_deleted}` of a deletion that waited in the
-        // locked vault's mailbox) came while this unlock was on its way: its read may have ended before this, or may end
-        // after it, and either way this unlock's phase is older. The phase is read again instead, and nothing more (no
-        // owner check) is sent to a vault that may be deleting itself (chosen; not in the spec). What this does not cover:
-        // the vault sends `device.unlinked{vault_deleted}` before it erases itself (VAULT-MESSAGING §12.5 "Order", steps 2
-        // and 4), and until step 5 the member API still lists the vault as unlocked, so a read in that window still gives
-        // the open app.
+        // A vault event that has the phase read again (`device.unlinked` for another reason; `vault_deleted` closes the
+        // vault outright, IOS-PLAN §4.2) came while this unlock was on its way: its read may have ended before this, or may
+        // end after it, and either way this unlock's phase is older. The phase is read again instead, and nothing more (no
+        // owner check) is sent (chosen; not in the spec).
         if rereads != marks.rereads { return await rereadPhase() }
         if !s.device.recovering { await beforeOpen() }
         guard locks == lockGeneration, rec == record.generation, !lockGuard.lockedWhatever(unlocked: true) else { return }
@@ -282,22 +289,20 @@ extension VaultManager {
         }
     }
 
-    /// How often, and how far apart, an unlock right after a move is tried again while the member API still routes the
-    /// vault to the release it left (chosen; not in the spec: the API learns the move from the vault's lifecycle event).
-    nonisolated static let routingRetries = 3
-    nonisolated static let routingPause: Duration = .seconds(3)
-    /// The code of an unlock after a move that the member API kept routing to the release the vault left.
+    /// (IOS-PLAN §4.3 point 6) The waits before each new fetch of the route while the member API still routes the vault
+    /// to the release an unconfirmed move left: about a minute in all.
+    nonisolated static let routingWaits: [Duration] = [.seconds(5), .seconds(10), .seconds(15), .seconds(15), .seconds(15)]
+    /// The code of an unlock that the member API kept routing to the release an unconfirmed move left
+    /// (`release_update_route_pending`).
     public nonisolated static let codeReleaseNotRouted = "release_not_routed"
 
-    /// One unlock request with [secret]. Right after a move (``UnlockRoute/afterMove``) the member API may still route to
-    /// exactly the release the vault left, which is not sent to (``AltRefused/notYetRouted``): that is waited out, a few
-    /// times; still so, it is a neutral failure, never the rollback's text (chosen; not in the spec). Any other older
-    /// release, and every other unlock, keeps the rollback refusal (§11.10.6).
+    /// One unlock request with [secret]. While a move is unconfirmed the member API may still route to exactly the release
+    /// the vault left, which is not sent to (``AltRefused/notYetRouted``): the route is fetched again after each of
+    /// ``routingWaits``; still so, it is the neutral failure, never the rollback's text (IOS-PLAN §4.3 point 6). Any other
+    /// older release keeps the rollback refusal (§11.10.6).
     private func unlockRouted(
         _ s: VaultSession, pin: String, options: UnlockOptions, route: UnlockRoute, secret: [UInt8]
     ) async throws -> UnlockOutcome {
-        var options = options
-        options.afterMove = route.afterMove
         let guid = record.value.userGuid
         let attester = config.attester
         let sleep = config.releaseUpdateSleep
@@ -311,6 +316,8 @@ extension VaultManager {
                     unlockSecretFor: { [self] caps in
                         // Before each request is built as well: one held back leaves no standing token recorded as issued.
                         if let moved = pinTakenBefore(taken) { throw moved }
+                        // IOS-PLAN §4.2: nothing goes to a vault that said it is being deleted.
+                        try await refuseWhileDeleting()
                         try ReleasePath.requireR(caps)
                         return secret
                     },
@@ -319,12 +326,14 @@ extension VaultManager {
                         // of this same unlock may have reached the vault already (an expired slot; a sealed `attestation`
                         // or `manifest` refusal, decided before the PIN check); this stops only the requests still to go.
                         if let moved = pinTakenBefore(taken) { throw moved }
+                        // IOS-PLAN §4.2: nothing goes to a vault that said it is being deleted.
+                        try await refuseWhileDeleting()
                     }
                 )
             } catch AltRefused.notYetRouted {
-                guard waited < Self.routingRetries else { throw VaultFailure(.vaultUnavailable, code: Self.codeReleaseNotRouted) }
+                guard waited < Self.routingWaits.count else { throw VaultFailure(.vaultUnavailable, code: Self.codeReleaseNotRouted) }
+                try await sleep(Self.routingWaits[waited])
                 waited += 1
-                try await sleep(Self.routingPause)
             }
         }
     }

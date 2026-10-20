@@ -33,8 +33,13 @@ public struct AltState: Equatable, Sendable, CustomStringConvertible {
 
     public var release = ""
     public var releaseNumber: UInt64 = 0
+    /// The release of an unconfirmed move's origin (§11.10.4, §11.10.6): set by `update: moved`, cleared once the move is
+    /// confirmed or abandoned. Non-empty is the `move_unconfirmed` marker of IOS-PLAN §4.3 (``moveUnconfirmed``).
     public var previousRelease = ""
     public var previousReleaseNumber: UInt64 = 0
+    /// (IOS-PLAN §4.3 point 2) An unlock after the move failed to reach or open the vault on the new release for a reason
+    /// that is not the member's: the unlock screen offers the way back.
+    public var moveFailed = false
     public var manifestSerial: UInt64 = 0
     public var stateSeq: UInt64 = 0
     public var headerSeq: [String: UInt64] = [:]
@@ -60,7 +65,8 @@ public struct AltState: Equatable, Sendable, CustomStringConvertible {
         for k in headerSeq.keys.sorted() { hs.uint(k, headerSeq[k] ?? 0) }
         let b = JsonBuilder().string("release", release).uint("release_number", releaseNumber)
             .string("previous_release", previousRelease).uint("previous_release_number", previousReleaseNumber)
-            .uint("manifest_serial", manifestSerial).uint("state_seq", stateSeq).raw("header_seq", hs.build())
+        if moveFailed { b.bool("move_failed", true) }
+        b.uint("manifest_serial", manifestSerial).uint("state_seq", stateSeq).raw("header_seq", hs.build())
         if let n = enrollNonce { b.base64("enroll_nonce", n) }
         b.string("enroll_pcrs", enrollPcrs).uint("enroll_number", enrollNumber)
         if !enrollVaultID.isEmpty { b.string("enroll_vault_id", enrollVaultID) }
@@ -134,6 +140,26 @@ public struct AltState: Equatable, Sendable, CustomStringConvertible {
         return s
     }
 
+    /// (IOS-PLAN §4.3) The unconfirmed move this phone knows of: from the release it moved from to the one it last
+    /// unlocked into; nil when none.
+    public var moveUnconfirmed: MoveUnconfirmed? {
+        guard !previousRelease.isEmpty, previousReleaseNumber != 0 else { return nil }
+        return MoveUnconfirmed(
+            from: .init(number: previousReleaseNumber, pcr0: previousRelease), to: .init(number: releaseNumber, pcr0: release),
+            failed: moveFailed
+        )
+    }
+
+    /// Without the unconfirmed move: confirmed or abandoned (§11.10.4), or no longer abandonable. N's `header_seq` stays
+    /// with the floors.
+    public func withoutMove() -> AltState {
+        var s = self
+        s.previousRelease = ""
+        s.previousReleaseNumber = 0
+        s.moveFailed = false
+        return s
+    }
+
     public var description: String { "AltState(release=\(releaseNumber), stateSeq=\(stateSeq), manifestSerial=\(manifestSerial))" }
 
     public static func parse(_ o: JsonObject) throws -> AltState {
@@ -143,6 +169,7 @@ public struct AltState: Equatable, Sendable, CustomStringConvertible {
         a.releaseNumber = try o.optUint("release_number", min: 0, max: max) ?? 0
         a.previousRelease = try o.optString("previous_release") ?? ""
         a.previousReleaseNumber = try o.optUint("previous_release_number", min: 0, max: max) ?? 0
+        a.moveFailed = o.has("move_failed") ? try o.bool("move_failed") : false
         a.manifestSerial = try o.optUint("manifest_serial", min: 0, max: max) ?? 0
         a.stateSeq = try o.optUint("state_seq", min: 0, max: max) ?? 0
         if let hs = try o.optObj("header_seq") {
@@ -164,5 +191,29 @@ public struct AltState: Equatable, Sendable, CustomStringConvertible {
         }
         a.enrollPrior = Array(a.enrollPrior.suffix(maxPriorEnrolls))
         return a
+    }
+}
+
+/// The `move_unconfirmed` marker of IOS-PLAN §4.3: the release a move left ([from]) and the one it moved to ([to]), both
+/// public (the manifest), and whether an unlock on [to] has failed for a reason that is not the member's ([failed]).
+public struct MoveUnconfirmed: Equatable, Sendable {
+    public struct Release: Equatable, Sendable {
+        public let number: UInt64
+        public let pcr0: String
+
+        public init(number: UInt64, pcr0: String) {
+            self.number = number
+            self.pcr0 = pcr0
+        }
+    }
+
+    public let from: Release
+    public let to: Release
+    public let failed: Bool
+
+    public init(from: Release, to: Release, failed: Bool) {
+        self.from = from
+        self.to = to
+        self.failed = failed
     }
 }

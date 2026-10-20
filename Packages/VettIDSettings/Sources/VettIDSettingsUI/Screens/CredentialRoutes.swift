@@ -75,17 +75,19 @@ public struct AlarmRoute: View {
 /// Credential → New credential with its view model. Mirrors vettid-android's `CredentialNewRoute` destination.
 public struct NewCredentialRoute: View {
     private let repo: any CredentialRepository
+    private let vault: any VaultRepository
     private let onBack: @MainActor () -> Void
     @State private var model: NewCredentialViewModel?
 
-    public init(repo: any CredentialRepository, onBack: @escaping @MainActor () -> Void) {
+    public init(repo: any CredentialRepository, vault: any VaultRepository, onBack: @escaping @MainActor () -> Void) {
         self.repo = repo
+        self.vault = vault
         self.onBack = onBack
     }
 
     public var body: some View {
         NewCredentialContent(state: model?.state ?? NewCredentialState(), actions: actions)
-            .onAppear { if model == nil { model = NewCredentialViewModel(repo: repo) } }
+            .onAppear { if model == nil { model = NewCredentialViewModel(repo: repo, vault: vault) } }
     }
 
     private var actions: NewCredentialActions {

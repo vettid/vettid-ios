@@ -41,6 +41,7 @@ public final class OnboardingViewModel: OnboardingActions {
         followers.add(follow(self, read: { $0.account.phase }, apply: { $0.route($1) }))
         followers.add(follow(self, read: { $0.inbox.link }, apply: { vm, raw in if let raw { vm.receiveLink(raw) } }))
         followers.add(follow(self, read: { $0.vault.finishMovePending }, apply: { $0.state.finishMovePending = $1 }))
+        followers.add(follow(self, read: { $0.account.vaultDeletedNotice }, apply: { $0.state.deletedNotice = $1 }))
     }
 
     deinit { followers.cancelAll() }
@@ -58,7 +59,7 @@ public final class OnboardingViewModel: OnboardingActions {
         case .signedOut:
             if !codeSteps.contains(s.step) && !moving {
                 enrolled = false
-                state = OnboardingState(devHint: account.devHint)
+                state = freshState()
             }
         case .setup(let stage):
             switch stage {
@@ -333,7 +334,7 @@ public final class OnboardingViewModel: OnboardingActions {
                 // As vettid-android: whatever else the answer, the flow starts over.
             }
             enrolled = false
-            state = OnboardingState(devHint: account.devHint)
+            state = freshState()
         }
     }
 
@@ -495,6 +496,19 @@ public final class OnboardingViewModel: OnboardingActions {
     }
 
     /// Leaves onboarding; a failure is shown, and the member can try again.
+    /// (IOS-PLAN §4.2) Seen once the member leaves the welcome screen.
+    public func dismissDeletedNotice() {
+        state.deletedNotice = false
+        account.dismissVaultDeletedNotice()
+    }
+
+    /// The welcome screen afresh, nothing of before kept but the notice of a deleted vault.
+    private func freshState() -> OnboardingState {
+        var s = OnboardingState(devHint: account.devHint)
+        s.deletedNotice = account.vaultDeletedNotice
+        return s
+    }
+
     public func finish() {
         guard !finishing, !state.busy else { return }
         finishing = true

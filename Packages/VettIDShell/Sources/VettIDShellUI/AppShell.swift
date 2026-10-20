@@ -370,7 +370,7 @@ public struct AppShell: View {
         case .alarm:
             AlarmRoute(repo: credential) { model.pop() }
         case .newCredential:
-            NewCredentialRoute(repo: credential) { model.pop() }
+            NewCredentialRoute(repo: credential, vault: vault) { model.pop() }
         default:
             CredentialRoute(
                 repo: credential, onBack: { model.pop() }, onChangePassword: { model.push(.changePassword) },
