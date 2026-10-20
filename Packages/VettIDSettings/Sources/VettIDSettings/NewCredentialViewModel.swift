@@ -86,7 +86,7 @@ public final class NewCredentialViewModel {
             return
         case .applied:
             state = NewCredentialState(done: true)
-        case .notApplied, .ended:
+        case .notApplied, .ended, .notHolder:
             state = NewCredentialState()
             state.check = c.status
         case .refused(let kind, _):
@@ -176,9 +176,9 @@ public final class NewCredentialViewModel {
             vault.waitForChangeCheck(self)
             return
         }
-        if failure.code == VaultManager.codeChangeNotApplied || check == .ended {
+        if failure.code == VaultManager.codeChangeNotApplied || check == .ended || check == .notHolder {
             state = NewCredentialState()
-            state.check = failure.code == VaultManager.codeChangeNotApplied ? .notApplied : .ended
+            state.check = failure.code == VaultManager.codeChangeNotApplied ? .notApplied : check
         } else {
             refused(error)
         }

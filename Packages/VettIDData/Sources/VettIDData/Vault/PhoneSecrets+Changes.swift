@@ -176,9 +176,10 @@ extension PhoneSecrets {
         }
     }
 
-    /// VAULT-MESSAGING 0.51.1 (owner decision 2026-10-20): the vault answered `forbidden` (not the holder) while
+    /// VAULT-MESSAGING 0.51.1; IOS-PLAN 0.1.13: the vault answered `forbidden` (another phone is the holder) while
     /// [marker] was being decided, a definite outcome. The marker goes with, for a PIN change, its candidate record and
-    /// an uncertain PIN of it, in one write; the candidate's phone key is deleted afterwards.
+    /// an uncertain PIN of it (the PIN is not left uncertain), in one write; the candidate's phone key is deleted
+    /// afterwards.
     public func abandonUnresolved(_ marker: UnresolvedChange) throws {
         try store.exclusive {
             var recs = try readRecords()
@@ -190,6 +191,21 @@ extension PhoneSecrets {
                 recs.candidates.removeAll { $0.operation == op }
                 if recs.uncertainPinOperation == op { recs.uncertainPinOperation = nil }
             }
+            try write(recs)
+            for e in dropped { try? keys.delete(keyVault: e.record.keyVault, keyID: e.keyID) }
+            pinMoved()
+        }
+    }
+
+    /// VAULT-MESSAGING 0.51.1; IOS-PLAN 0.1.13: a renew being decided was answered `forbidden`: the candidates of
+    /// [operations] go, and their phone keys.
+    public func dropCandidates(operations: Set<String>) throws {
+        try store.exclusive {
+            var recs = try readRecords()
+            let dropped = recs.candidates.filter { operations.contains($0.operation) }.map(\.entry)
+            guard !dropped.isEmpty else { return }
+            recs.candidates.removeAll { operations.contains($0.operation) }
+            if let op = recs.uncertainPinOperation, operations.contains(op) { recs.uncertainPinOperation = nil }
             try write(recs)
             for e in dropped { try? keys.delete(keyVault: e.record.keyVault, keyID: e.keyID) }
             pinMoved()

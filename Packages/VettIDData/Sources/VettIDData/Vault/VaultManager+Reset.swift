@@ -74,7 +74,7 @@ extension VaultManager {
             return await applied(marker, api, answer: nil, gen)
         }
         guard version == marker.version, marker.heldKey != nil else {
-            try? await api.credentialFetch()
+            if await endedByForbidden(marker, gen, { try await api.credentialFetch() }) { return }
             guard stillUnresolved(marker, gen) else { return }
             return ended(marker, info)
         }

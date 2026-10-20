@@ -261,10 +261,11 @@ public final class ChangePasswordViewModel {
         case .refused(let kind, _):
             state.check = nil
             refused(VaultFailure(kind))
-        case .ended:
-            // 0.45.0 step 3: either password may be the current one; no retry that sends them again.
+        case .ended, .notHolder:
+            // 0.45.0 step 3: either password may be the current one; no retry that sends them again. (VAULT-MESSAGING
+            // 0.51.1; IOS-PLAN 0.1.13) Another phone is the holder: nothing kept either.
             state = ChangePasswordState(askPin: state.askPin)
-            state.check = .ended
+            state.check = c.status
         }
         vault.waitForChangeCheck(nil)
         vault.acknowledgeChangeCheck()
@@ -359,10 +360,10 @@ public final class ChangePasswordViewModel {
                 state.pin = ""
                 state.check = .notApplied
                 vault.acknowledgeChangeCheck()
-            } else if let check = vault.changeCheck, check.type == .password, check.status == .ended {
-                // §11.14.9 step 3: ended without a decision; nothing is kept for a retry.
+            } else if let check = vault.changeCheck, check.type == .password, check.status == .ended || check.status == .notHolder {
+                // §11.14.9 step 3: ended without a decision (or another phone is the holder); nothing is kept for a retry.
                 state = ChangePasswordState(askPin: s.askPin)
-                state.check = .ended
+                state.check = check.status
                 vault.acknowledgeChangeCheck()
             } else {
                 refused(failure)

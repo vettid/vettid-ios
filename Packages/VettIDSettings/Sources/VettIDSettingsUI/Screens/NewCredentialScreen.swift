@@ -114,6 +114,7 @@ public struct NewCredentialContent: View {
         case .unreachable: CredentialStrings.newUnreachable
         case .notApplied: CredentialStrings.newNotMade
         case .ended: CredentialStrings.newEnded
+        case .notHolder: ChangeCheckNotice.holderMoved
         default: nil
         }
     }

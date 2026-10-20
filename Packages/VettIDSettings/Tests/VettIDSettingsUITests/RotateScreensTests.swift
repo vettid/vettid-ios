@@ -93,6 +93,12 @@ import VettIDUI
         #expect(ChangeCheckNotice.text(ChangeCheck(.reset, .ended), timeScale: 1) == NewCredentialContent.text(.ended))
         #expect(ChangeCheckNotice.text(ChangeCheck(.reset, .checking), timeScale: 1) == nil)
         #expect(!ChangeCheckNotice.offersLockAndUnlock(ChangeCheck(.reset, .ended)))
+        // VAULT-MESSAGING 0.51.1; IOS-PLAN 0.1.13: another phone became the holder, whatever the change; no "Try again".
+        for type in [ChangeType.pin, .password, .reset] {
+            #expect(ChangeCheckNotice.text(ChangeCheck(type, .notHolder), timeScale: 1) == "Your vault moved to a new phone")
+            #expect(!ChangeCheckNotice.offersLockAndUnlock(ChangeCheck(type, .notHolder)))
+        }
+        #expect(NewCredentialContent.text(.notHolder) == "Your vault moved to a new phone")
     }
 
     /// The Credential screen's new rows and the alarm card's "Review" render.

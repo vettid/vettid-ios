@@ -286,9 +286,9 @@ import VettIDVault
         #expect(try m.phoneSecrets.unresolvedChange() == nil && service.pinChanges.isEmpty)
     }
 
-    /// VAULT-MESSAGING 0.51.1 (owner decision 2026-10-20): `forbidden` to the applied path's `credential.get` ends the PIN
-    /// change: its marker and candidate go (the gate opens, the unlock asks for the PIN once) and the app shows that the
-    /// vault refuses this phone. Nothing is erased.
+    /// VAULT-MESSAGING 0.51.1; IOS-PLAN 0.1.13: `forbidden` to the applied path's `credential.get` ends the PIN change:
+    /// its marker and candidate go, the PIN is not uncertain (the unlock asks for it once), and the notice says the vault
+    /// moved to a new phone. Nothing is erased.
     @Test func forbiddenToTheAppliedFetchEndsThePinChange() async throws {
         defer { phone.close() }
         try await setUp()
@@ -296,7 +296,9 @@ import VettIDVault
         service.refuse("credential.get", with: "forbidden")
         #expect(await pinChangeUndecided()?.code == VaultManager.codeNotHolder)
         #expect(try m.phoneSecrets.unresolvedChange() == nil && m.phoneSecrets.records().candidates.isEmpty)
-        #expect(m.refusedByVault && m.phase == .locked && m.unlockPinStep == .pin && m.changeCheck == nil)
+        #expect(try m.phoneSecrets.uncertainPin() == nil && m.unlockPinStep == .pin)
+        #expect(m.changeCheck == ChangeCheck(.pin, .notHolder))
+        #expect(m.phase == .unlocked && m.account != nil && !m.refusedByVault)
     }
 
     /// A restart while undecided: the marker survives (the request does not: it is kept in memory only); the start

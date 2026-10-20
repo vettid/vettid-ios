@@ -15,6 +15,8 @@ struct CredentialOps: Sendable {
     static let codeSignerUnconfirmed = "signer_unconfirmed"
     /// §3.5.3: the blob sent is not the vault's latest (the holder's own retry, after a lost answer).
     static let codeStaleCredential = "stale_credential"
+    /// §3.5.9: this device is not the holder (VAULT-MESSAGING 0.51.1).
+    static let codeForbidden = "forbidden"
 
     let device: VaultDevice
     let normalizePasswords: @Sendable () -> Bool
@@ -353,7 +355,8 @@ struct CredentialOps: Sendable {
     }
 
     /// Once the request may have been deposited, only the vault's own refusal of this request (a ``VaultOpError`` of its
-    /// type) leaves here as itself: every other failure (no answer, a cancellation, the relay, the device state or a key
+    /// type), and the vault's `forbidden` to any request of it (VAULT-MESSAGING 0.51.1; IOS-PLAN 0.1.13: another phone is
+    /// the holder), leave here as themselves: every other failure (no answer, a cancellation, the relay, the device state or a key
     /// that could not be saved after the deposit, a blob that could not be kept after the answer, and a refusal of a
     /// follow-up after its `ok`, such as `credential.ack` or `credential.utk.get`) is ``ChangeUnanswered`` with the
     /// request, so that the change is decided (and can be sent again) rather than taken as not sent or refused.
@@ -363,7 +366,7 @@ struct CredentialOps: Sendable {
                 ? try await device.requestKept(held, sends: VaultDevice.appRetries + 1)
                 : try await device.resend(held)
             return try await answered(held.type, utk: utk, r)
-        } catch let e as VaultOpError where e.type == held.type {
+        } catch let e as VaultOpError where e.type == held.type || e.code == Self.codeForbidden {
             // An earlier credential operation applied without its answer: never resent with the typed secrets.
             if e.code == Self.codeStaleCredential { try? await fetch() }
             throw e

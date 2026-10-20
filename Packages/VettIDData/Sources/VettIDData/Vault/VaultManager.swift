@@ -237,7 +237,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     }
 
     /// The relay kept refusing this phone's messages to the vault (``RefusalWatch``): the unlock screen, which says so.
-    func refusedOnRelay() {
+    private func refusedOnRelay() {
         phase = .locked
         refusedByVault = true
     }

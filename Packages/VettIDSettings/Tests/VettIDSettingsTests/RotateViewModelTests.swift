@@ -222,6 +222,21 @@ import VettIDDataTesting
         #expect(m.state.check == nil && !m.state.done)
     }
 
+    /// VAULT-MESSAGING 0.51.1; IOS-PLAN 0.1.13: another phone became the holder while the reset was decided: the form
+    /// says so, with nothing kept.
+    @Test func anotherHolderEndsTheWait() async {
+        repo.fail["newCredential"] = FakeVaultRepository.failure(.changeUnresolved, code: VaultManager.codeChangeUnresolved)
+        repo.changeCheck = ChangeCheck(.reset, .checking)
+        let m = NewCredentialViewModel(repo: repo, vault: repo)
+        filled(m)
+        m.submit()
+        m.confirm()
+        await m.settle()
+        repo.changeCheck = ChangeCheck(.reset, .notHolder)
+        #expect(await until { m.state.check == .notHolder })
+        #expect(!m.state.done && m.state.error == nil && m.state.password.isEmpty && repo.changeCheck == nil)
+    }
+
     /// Polls the main actor until [condition] holds (at most 2 s).
     func until(_ condition: @MainActor () -> Bool) async -> Bool {
         for _ in 0..<200 {

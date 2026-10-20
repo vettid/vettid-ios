@@ -65,6 +65,11 @@ extension VaultManager {
             refreshPinStep()
             kickChangeCheck()
             throw CancellationError()
+        } catch let e as VaultOpError where Self.notHolder(e) {
+            // VAULT-MESSAGING 0.51.1; IOS-PLAN 0.1.13: the vault's `forbidden` ends the change.
+            if let m = box.marker { notTheHolder(m) }
+            refreshPinStep()
+            throw VaultFailure(.other, code: Self.codeNotHolder, cause: e)
         } catch let e as VaultOpError where e.code == CredentialOpsCodes.staleCredential {
             // §11.14.9 step 4 (0.45.0): refused before any secret was tested and cached under the request's id, so this
             // change did not apply and no copy of it can; the latest blob was fetched, nothing is resent.
@@ -85,7 +90,7 @@ extension VaultManager {
         case .notApplied?: throw VaultFailure(.other, code: Self.codeChangeNotApplied)
         case .refused(let kind, let code)?: throw VaultFailure(kind, code: code)
         case .ended?: throw VaultFailure(.other)
-        case nil where unresolved() == nil && refusedByVault: throw VaultFailure(.other, code: Self.codeNotHolder)
+        case .notHolder?: throw VaultFailure(.other, code: Self.codeNotHolder)
         case .checking?, .unreachable?, nil: throw VaultFailure(.changeUnresolved, code: Self.codeChangeUnresolved)
         }
     }
@@ -345,7 +350,7 @@ extension VaultManager {
         guard version == marker.version else {
             // Another version: this phone's blob is behind the vault's by more than its own retry, so its next credential
             // operation would be taken for a clone (§3.5.9). The latest blob is kept first (chosen; not in the spec).
-            try? await api.credentialFetch()
+            if await endedByForbidden(marker, gen, { try await api.credentialFetch() }) { return }
             guard stillUnresolved(marker, gen) else { return }
             return ended(marker, v.info)
         }
@@ -372,7 +377,7 @@ extension VaultManager {
                 undecided(marker, reachable: false)
                 return
             }
-            try? await api.topUpUTKs()
+            if await endedByForbidden(marker, gen, { try await api.topUpUTKs() }) { return }
             guard stillUnresolved(marker, gen) else { return }
         }
         // Decided by the version: its request can no longer apply as anything else.
@@ -448,27 +453,6 @@ extension VaultManager {
         changeCheck = ChangeCheck(marker.type, .ended)
         refreshPinStep()
     }
-
-    /// VAULT-MESSAGING 0.51.1 (owner decision 2026-10-20): the vault's own answer `forbidden` (not the holder) to a
-    /// holder-only request of the decision (the resend, `credential.get`) is a definite outcome. The unresolved change
-    /// ends (its marker, and a PIN change's candidate, cleared: the gate opens) and the app shows that the vault is
-    /// refusing this phone (``refusedOnRelay()``: the unlock screen, whose PIN asks the enclave; only an authenticated
-    /// proof then erases the phone, ``HolderPolicy``). No failure of the transport or the host counts: those stay "can't
-    /// reach".
-    func notTheHolder(_ marker: UnresolvedChange) {
-        try? phoneSecrets.abandonUnresolved(marker)
-        if marker.operation != nil, marker.operation == pinChangeOperation { pinChangeOperation = nil }
-        heldChange = nil
-        changeCheck = nil
-        refreshPinStep()
-        refusedOnRelay()
-    }
-
-    /// The code of a change ended because the vault answered `forbidden` (not the holder) to its decision.
-    public nonisolated static let codeNotHolder = "forbidden"
-
-    /// Whether [error] is the vault's own `forbidden` answer (a ``VaultOpError``); transport and host failures are not.
-    nonisolated static func notHolder(_ error: any Error) -> Bool { (error as? VaultOpError)?.code == codeNotHolder }
 
     func undecided(_ marker: UnresolvedChange, reachable: Bool) {
         changeCheck = ChangeCheck(marker.type, reachable ? .checking : .unreachable)

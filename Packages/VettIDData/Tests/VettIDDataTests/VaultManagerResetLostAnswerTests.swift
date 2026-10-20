@@ -249,17 +249,50 @@ import VettIDVault
         #expect(service.ownerCheckFailures == 1 && service.currentPassword == password)
     }
 
-    /// VAULT-MESSAGING 0.51.1 (owner decision 2026-10-20): `forbidden` to the applied path's `credential.get` ends the
-    /// reset (the marker cleared, the gate open) and shows that the vault refuses this phone. Nothing is erased.
+    /// VAULT-MESSAGING 0.51.1; IOS-PLAN 0.1.13: the vault's `forbidden` (another phone is the holder) ends the reset.
+    func expectEndedByForbidden() throws {
+        #expect(m.changeCheck == ChangeCheck(.reset, .notHolder))
+        #expect(try m.phoneSecrets.unresolvedChange() == nil && m.heldChange == nil)
+        // Nothing is erased, and the app is not sent to the unlock screen.
+        #expect(m.phase == .unlocked && m.account != nil && !m.refusedByVault && m.session?.device.credentialVersion != nil)
+    }
+
+    /// `forbidden` to the applied path's `credential.get`, after `credential.version` showed "applied".
     @Test func forbiddenToTheAppliedFetchEndsTheReset() async throws {
         defer { phone.close() }
         try await setUp()
         service.loseAnswers(["credential.reset"])
         service.refuse("credential.get", with: "forbidden")
-        let f = await reset()
-        #expect(f?.code == VaultManager.codeNotHolder)
-        #expect(try m.phoneSecrets.unresolvedChange() == nil && m.changeCheck == nil && m.heldChange == nil)
-        #expect(m.refusedByVault && m.phase == .locked && m.account != nil)
+        #expect(await reset()?.code == VaultManager.codeNotHolder)
+        try expectEndedByForbidden()
+        // The gate is open: an owner check goes (the vault, a fake, still answers it).
+        let check = try await m.ownerChecks.check(pin: pin, password: newPassword, holdOff: nil)
+        #expect(check != .failed(.changeCheckingReset, code: VaultManager.codeChangeChecking))
+    }
+
+    /// `forbidden` to the `credential.ack` of the decision's fetch (or of the resend's cached answer).
+    @Test func forbiddenToTheAckEndsTheReset() async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.loseAnswers(["credential.reset", "credential.version"], from: "credential.reset")
+        #expect(await reset()?.kind == .changeUnresolved)
+        service.loseAnswers([])
+        service.refuse("credential.ack", with: "forbidden")
+        await m.checkUnresolvedChange()
+        try expectEndedByForbidden()
+    }
+
+    /// `forbidden` to the UTK top-up after the fetch.
+    @Test func forbiddenToTheTopUpEndsTheReset() async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.loseAnswers(["credential.reset", "credential.version"], from: "credential.reset")
+        #expect(await reset()?.kind == .changeUnresolved)
+        service.loseAnswers(["credential.reset"])
+        service.refuse("credential.utk.get", with: "forbidden")
+        await m.checkUnresolvedChange()
+        try expectEndedByForbidden()
+        #expect(service.requestsSeen.contains("credential.get"))
     }
 
     /// The same fetch lost on its way (no answer from the vault): not the vault's word, so the reset stays undecided.
