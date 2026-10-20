@@ -176,6 +176,26 @@ extension PhoneSecrets {
         }
     }
 
+    /// VAULT-MESSAGING 0.51.1 (owner decision 2026-10-20): the vault answered `forbidden` (not the holder) while
+    /// [marker] was being decided, a definite outcome. The marker goes with, for a PIN change, its candidate record and
+    /// an uncertain PIN of it, in one write; the candidate's phone key is deleted afterwards.
+    public func abandonUnresolved(_ marker: UnresolvedChange) throws {
+        try store.exclusive {
+            var recs = try readRecords()
+            guard recs.unresolved?.id == marker.id else { return }
+            recs.unresolved = nil
+            var dropped: [PhoneRecords.Entry] = []
+            if let op = marker.operation {
+                dropped = recs.candidates.filter { $0.operation == op }.map(\.entry)
+                recs.candidates.removeAll { $0.operation == op }
+                if recs.uncertainPinOperation == op { recs.uncertainPinOperation = nil }
+            }
+            try write(recs)
+            for e in dropped { try? keys.delete(keyVault: e.record.keyVault, keyID: e.keyID) }
+            pinMoved()
+        }
+    }
+
     /// The renew [operation]'s request [id] is decided as not applied, or was never sent (VAULT-MESSAGING 0.46.0 §11.14.9
     /// step 1): nothing is left to decide for it. Its candidate stays as it is.
     public func clearSent(operation: String, id: String? = nil) throws {

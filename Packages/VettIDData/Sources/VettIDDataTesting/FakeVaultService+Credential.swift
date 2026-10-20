@@ -47,6 +47,12 @@ extension FakeVaultService {
     public var alarmState: String? { locked { alarmValue?.state } }
     /// The credential key `credential.version` shows.
     public var credentialKey: String { locked { credentialKeyValue } }
+    /// The next [times] requests of [type] that reach the open vault are refused with [code] before anything is done (a
+    /// `forbidden` to a phone that is no longer the holder; a `credential.ack` refused after the operation's own `ok`).
+    public func refuse(_ type: String, with code: String, times: Int = Int.max) {
+        locked { refusedTypesValue[type] = (code, times) }
+    }
+
     /// `credential.version` answers without its `key`.
     public var versionWithoutKey: Bool {
         get { locked { versionWithoutKeyValue } }

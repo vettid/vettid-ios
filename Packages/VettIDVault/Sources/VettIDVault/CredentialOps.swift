@@ -252,7 +252,7 @@ struct CredentialOps: Sendable {
 
     /// The blob this device holds is still the one [change] was fixed on, right before the request is built: a blob kept
     /// outside the credential lock (a fetch or a UTK top-up of a decision) never goes with a request fixed on another
-    /// version. Else refused with nothing sent (the marker stored stays for the decision).
+    /// version. Else refused with nothing sent; the caller clears the marker it stored (``VaultManager`` `changing`).
     private func sameVersion(_ change: ChangeRequest, _ type: String) throws {
         guard device.credentialVersion == change.version else { throw CredentialUnsettled(type: type, reason: .inFlight) }
     }
@@ -352,17 +352,18 @@ struct CredentialOps: Sendable {
         try await device.credentialLock.withLock { try await sendChange(held, utk: nil, first: false) }
     }
 
-    /// Once the request may have been deposited, only the vault's own refusal (``VaultOpError``) leaves here as itself:
-    /// every other failure (no answer, a cancellation, the relay, the device state or a key that could not be saved after
-    /// the deposit, a blob that could not be kept after the answer) is ``ChangeUnanswered`` with the request, so that the
-    /// change is decided (and can be sent again) rather than taken as not sent.
+    /// Once the request may have been deposited, only the vault's own refusal of this request (a ``VaultOpError`` of its
+    /// type) leaves here as itself: every other failure (no answer, a cancellation, the relay, the device state or a key
+    /// that could not be saved after the deposit, a blob that could not be kept after the answer, and a refusal of a
+    /// follow-up after its `ok`, such as `credential.ack` or `credential.utk.get`) is ``ChangeUnanswered`` with the
+    /// request, so that the change is decided (and can be sent again) rather than taken as not sent or refused.
     private func sendChange(_ held: HeldRequest, utk: UtkRecord?, first: Bool) async throws -> [UInt8] {
         do {
             let r = first
                 ? try await device.requestKept(held, sends: VaultDevice.appRetries + 1)
                 : try await device.resend(held)
             return try await answered(held.type, utk: utk, r)
-        } catch let e as VaultOpError {
+        } catch let e as VaultOpError where e.type == held.type {
             // An earlier credential operation applied without its answer: never resent with the typed secrets.
             if e.code == Self.codeStaleCredential { try? await fetch() }
             throw e

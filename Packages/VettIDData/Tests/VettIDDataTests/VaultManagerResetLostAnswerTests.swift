@@ -193,6 +193,85 @@ import VettIDVault
         try await expectApplied()
     }
 
+    /// The reset's own `ok`, then its `credential.ack` refused (a follow-up, not the reset's refusal): the reset is
+    /// decided, not taken as not made; the resend's cached answer shows it applied.
+    @Test func anAckRefusedAfterTheResetsOkIsNotItsRefusal() async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.refuse("credential.ack", with: "stale_credential", times: 1)
+        try await m.newCredential(pin: pin, password: password, newPassword: newPassword)
+        try await expectApplied()
+    }
+
+    /// The same key with a higher version: something else moved the credential, so the check ends without a decision;
+    /// the latest blob is kept and the notice says either password may be current.
+    @Test func theSameKeyWithAnotherVersionEndsTheCheck() async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.loseRequests(["credential.reset"])
+        #expect(await reset()?.kind == .changeUnresolved)
+        service.moveCredentialWithoutTheApp()
+        await m.checkUnresolvedChange()
+        #expect(m.changeCheck == ChangeCheck(.reset, .ended) && service.resets.isEmpty)
+        #expect(try m.phoneSecrets.unresolvedChange() == nil)
+        #expect(m.session?.device.credentialVersion == service.vaultCredentialVersion, "the latest blob kept")
+    }
+
+    /// An alarm in the version's answer ends the check; the alarm follows its own path.
+    @Test func anAlarmInTheVersionEndsTheCheck() async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.loseRequests(["credential.reset"])
+        _ = await reset()
+        let id = service.raiseCloneAlarm(told: false)
+        await m.checkUnresolvedChange()
+        #expect(m.changeCheck == ChangeCheck(.reset, .ended) && m.alarm?.alarmID == id)
+        #expect(try m.phoneSecrets.unresolvedChange() == nil && service.resets.isEmpty)
+    }
+
+    /// The resend gets the vault's cached refusal (`bad_pin`, then in another run `bad_password`): shown as it is, the
+    /// marker cleared, counted once as a failed owner check.
+    @Test(arguments: [("999999", "correct horse battery", FailureKind.badPin), ("402817", "wrong", FailureKind.badPassword)])
+    func aRefusedResendIsShownAsItIs(typedPin: String, typedPassword: String, kind: FailureKind) async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.loseAnswers(["credential.reset", "credential.version"], from: "credential.reset")
+        let f = await vaultFailure { try await m.newCredential(pin: typedPin, password: typedPassword, newPassword: newPassword) }
+        #expect(f?.kind == .changeUnresolved)
+        service.loseAnswers([])
+        await m.checkUnresolvedChange()
+        guard case .refused(let shown, _)? = m.changeCheck?.status else {
+            Issue.record("not refused: \(String(describing: m.changeCheck))")
+            return
+        }
+        #expect(shown == kind && m.changeCheck?.type == .reset)
+        #expect(try m.phoneSecrets.unresolvedChange() == nil && service.resets.count == 1)
+        #expect(service.ownerCheckFailures == 1 && service.currentPassword == password)
+    }
+
+    /// VAULT-MESSAGING 0.51.1 (owner decision 2026-10-20): `forbidden` to the applied path's `credential.get` ends the
+    /// reset (the marker cleared, the gate open) and shows that the vault refuses this phone. Nothing is erased.
+    @Test func forbiddenToTheAppliedFetchEndsTheReset() async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.loseAnswers(["credential.reset"])
+        service.refuse("credential.get", with: "forbidden")
+        let f = await reset()
+        #expect(f?.code == VaultManager.codeNotHolder)
+        #expect(try m.phoneSecrets.unresolvedChange() == nil && m.changeCheck == nil && m.heldChange == nil)
+        #expect(m.refusedByVault && m.phase == .locked && m.account != nil)
+    }
+
+    /// The same fetch lost on its way (no answer from the vault): not the vault's word, so the reset stays undecided.
+    @Test func aTransportFailureLeavesTheResetUndecided() async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.loseAnswers(["credential.reset", "credential.get"])
+        #expect(await reset()?.kind == .changeUnresolved)
+        #expect(try m.phoneSecrets.unresolvedChange()?.type == .reset && m.changeCheck?.undecided == true)
+        #expect(!m.refusedByVault && m.phase == .unlocked)
+    }
+
     /// The reset's marker round-trips in the records file with its held key.
     @Test func theMarkerKeepsTheHeldKey() throws {
         let marker = UnresolvedChange(

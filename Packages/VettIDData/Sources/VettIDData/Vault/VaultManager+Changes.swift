@@ -85,6 +85,7 @@ extension VaultManager {
         case .notApplied?: throw VaultFailure(.other, code: Self.codeChangeNotApplied)
         case .refused(let kind, let code)?: throw VaultFailure(kind, code: code)
         case .ended?: throw VaultFailure(.other)
+        case nil where unresolved() == nil && refusedByVault: throw VaultFailure(.other, code: Self.codeNotHolder)
         case .checking?, .unreachable?, nil: throw VaultFailure(.changeUnresolved, code: Self.codeChangeUnresolved)
         }
     }
@@ -312,7 +313,9 @@ extension VaultManager {
         do {
             v = try await api.credentialVersionStamped()
         } catch {
-            if stillUnresolved(marker, gen) { undecided(marker, reachable: error is VaultOpError) }
+            guard stillUnresolved(marker, gen) else { return }
+            if Self.notHolder(error) { return notTheHolder(marker) }
+            undecided(marker, reachable: error is VaultOpError)
             return
         }
         guard stillUnresolved(marker, gen) else { return }
@@ -327,7 +330,8 @@ extension VaultManager {
             let body = try await api.resendChange(held)
             if stillUnresolved(marker, gen) { await applied(marker, api, answer: body, gen) }
         } catch let e as VaultOpError {
-            if stillUnresolved(marker, gen) { refused(marker, e) }
+            guard stillUnresolved(marker, gen) else { return true }
+            if Self.notHolder(e) { notTheHolder(marker) } else { refused(marker, e) }
         } catch {
             return !stillUnresolved(marker, gen)
         }
@@ -363,7 +367,9 @@ extension VaultManager {
             do {
                 try await api.credentialFetch()
             } catch {
-                if stillUnresolved(marker, gen) { undecided(marker, reachable: false) }
+                guard stillUnresolved(marker, gen) else { return }
+                if Self.notHolder(error) { return notTheHolder(marker) }
+                undecided(marker, reachable: false)
                 return
             }
             try? await api.topUpUTKs()
@@ -421,7 +427,9 @@ extension VaultManager {
         heldChange = nil
         let f = VaultFailures.map(e) as? VaultFailure ?? VaultFailure(.other)
         // A reset's wrong PIN or password is a failed owner check (§3.6.1): the check's state is read again.
-        if marker.type == .reset { ownerChecks.onOpened() }
+        if marker.type == .reset, e.code == OwnerCheckManager.codeBadPin || e.code == OwnerCheckManager.codeBadPassword {
+            ownerChecks.onOpened()
+        }
         changeCheck = ChangeCheck(marker.type, .refused(f.kind, code: f.code))
         refreshPinStep()
     }
@@ -440,6 +448,27 @@ extension VaultManager {
         changeCheck = ChangeCheck(marker.type, .ended)
         refreshPinStep()
     }
+
+    /// VAULT-MESSAGING 0.51.1 (owner decision 2026-10-20): the vault's own answer `forbidden` (not the holder) to a
+    /// holder-only request of the decision (the resend, `credential.get`) is a definite outcome. The unresolved change
+    /// ends (its marker, and a PIN change's candidate, cleared: the gate opens) and the app shows that the vault is
+    /// refusing this phone (``refusedOnRelay()``: the unlock screen, whose PIN asks the enclave; only an authenticated
+    /// proof then erases the phone, ``HolderPolicy``). No failure of the transport or the host counts: those stay "can't
+    /// reach".
+    func notTheHolder(_ marker: UnresolvedChange) {
+        try? phoneSecrets.abandonUnresolved(marker)
+        if marker.operation != nil, marker.operation == pinChangeOperation { pinChangeOperation = nil }
+        heldChange = nil
+        changeCheck = nil
+        refreshPinStep()
+        refusedOnRelay()
+    }
+
+    /// The code of a change ended because the vault answered `forbidden` (not the holder) to its decision.
+    public nonisolated static let codeNotHolder = "forbidden"
+
+    /// Whether [error] is the vault's own `forbidden` answer (a ``VaultOpError``); transport and host failures are not.
+    nonisolated static func notHolder(_ error: any Error) -> Bool { (error as? VaultOpError)?.code == codeNotHolder }
 
     func undecided(_ marker: UnresolvedChange, reachable: Bool) {
         changeCheck = ChangeCheck(marker.type, reachable ? .checking : .unreachable)
