@@ -198,6 +198,10 @@ public final class FakeVaultService: @unchecked Sendable {
     var credentialKeyValue = FakeVaultService.credentialKeyID
     var rotationsValue: [String] = []
     var resetsValue: [ResetSeen] = []
+    /// `credential.version` answers without its `key` (a vault before staging release 18).
+    var versionWithoutKeyValue = false
+    /// Requests of these types refused with the code, as many more times as the count says (``refuse(_:with:times:)``).
+    var refusedTypesValue: [String: (code: String, times: Int)] = [:]
     var alarmConfirmsValue: [Bool] = []
     /// Which credential the blob is of (a reset makes a new one) and whether the holder confirmed the current version.
     var credentialGeneration = 0

@@ -8,16 +8,27 @@ import VettIDData
 public enum ChangeCheckNotice {
     /// The text of a decided change, nil while undecided; a refusal's text at the vault's [timeScale].
     public static func text(_ c: ChangeCheck, timeScale: UInt64) -> String? {
-        switch (c.type, c.status) {
-        case (_, .checking), (_, .unreachable): nil
-        case (.pin, .applied): ChangeNoticeTexts.pinApplied
-        case (.password, .applied): ChangeNoticeTexts.passwordApplied
-        case (.pin, .notApplied): ChangeNoticeTexts.pinNotChanged
-        case (.password, .notApplied): ChangeNoticeTexts.passwordNotChanged
-        case (_, .refused(let kind, _)): kind.message(timeScale: timeScale)
-        case (.pin, .ended): ChangeNoticeTexts.pinEnded
-        case (.password, .ended): ChangeNoticeTexts.passwordEnded
+        switch c.status {
+        case .checking, .unreachable: nil
+        case .refused(let kind, _): kind.message(timeScale: timeScale)
+        case .applied, .notApplied, .ended: decided(c.type, c.status)
+        case .notHolder: ChangeNoticeTexts.holderMoved
         }
+    }
+
+    /// (VAULT-MESSAGING 0.51.1; IOS-PLAN 0.1.13) Another phone became the holder while a change was decided: the title
+    /// for `device.replaced` (ANDROID-PLAN §4), with no "Try again".
+    public static var holderMoved: String { ChangeNoticeTexts.holderMoved }
+
+    /// The text of a decided change of [type]: applied, not applied, or ended without a decision ([status]).
+    private static func decided(_ type: ChangeType, _ status: ChangeCheck.Status) -> String {
+        let texts: [String] = switch type {
+        case .pin: [ChangeNoticeTexts.pinApplied, ChangeNoticeTexts.pinNotChanged, ChangeNoticeTexts.pinEnded]
+        case .password: [ChangeNoticeTexts.passwordApplied, ChangeNoticeTexts.passwordNotChanged, ChangeNoticeTexts.passwordEnded]
+        // ANDROID-PLAN 0.1.51 "A lost answer to New credential".
+        case .reset: [CredentialStrings.newApplied, CredentialStrings.newNotMade, CredentialStrings.newEnded]
+        }
+        return status == .applied ? texts[0] : status == .notApplied ? texts[1] : texts[2]
     }
 
     /// Whether the notice offers "Lock and unlock now" (§11.14.9 step 3): a PIN change's check ended without a decision,
@@ -30,7 +41,7 @@ public enum ChangeCheckNotice {
     /// A refusal, or a check that ended without a decision.
     public static func urgent(_ c: ChangeCheck) -> Bool {
         switch c.status {
-        case .refused, .ended: true
+        case .refused, .ended, .notHolder: true
         default: false
         }
     }
@@ -39,6 +50,11 @@ public enum ChangeCheckNotice {
 /// The one-time notice's texts (ANDROID-PLAN 0.1.46 and 0.1.47 "Telling the member", shared with the Android app, under
 /// its keys).
 enum ChangeNoticeTexts {
+    /// Android's `data_feed_device_replaced`, under a key of this module (chosen; not in the spec).
+    static var holderMoved: String {
+        String(localized: "root_change_holder_moved", defaultValue: "Your vault moved to a new phone", bundle: .module)
+    }
+
     static var lockUnlock: String {
         String(localized: "root_change_lock_unlock", defaultValue: "Lock and unlock now", bundle: .module)
     }

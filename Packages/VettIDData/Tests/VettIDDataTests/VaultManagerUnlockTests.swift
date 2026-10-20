@@ -4,10 +4,10 @@ import Testing
 import VettIDDataTesting
 import VettIDKeys
 
-/// How long ``eventually(within:_:)`` waits by default: 5 s, and 20 s on CI, whose runners take about three times as long
-/// for a full run and share the main actor among every suite running at once. Every use waits for something that must
-/// happen, so the longer wait only delays a failure.
-let eventuallyDefault: Duration = ProcessInfo.processInfo.environment["CI"] == nil ? .seconds(5) : .seconds(20)
+/// How long ``eventually(within:_:)`` waits by default: 20 s. A full run shares the main actor among every suite running
+/// at once, and the vault's opening now reads several lists one after another; on a loaded machine (and on CI) 5 s was
+/// too short. Every use waits for something that must happen, so the longer wait only delays a failure.
+let eventuallyDefault: Duration = .seconds(20)
 
 /// Waits (up to [within], wall-clock) until [condition] holds; false when it never did.
 @MainActor

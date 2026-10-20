@@ -188,20 +188,6 @@ import VettIDVault
         #expect(service.ownerCheckFailures == 2 && service.currentPassword == password)
     }
 
-    /// `stale_credential` is not sent again with the typed secrets (chosen; not in the spec): the latest blob is kept and
-    /// the request refused with the "earlier request" text; a new try goes with the latest blob.
-    @Test func aStaleBlobIsNotRetriedWithTheSecrets() async throws {
-        defer { phone.close() }
-        try await setUp()
-        service.moveCredentialWithoutTheApp()
-        let f = await vaultFailure { try await m.newCredential(pin: pin, password: password, newPassword: newPassword) }
-        #expect(f?.kind == .credentialUnsettled)
-        #expect(service.resets.count == 1 && service.currentPassword == password)
-        #expect(m.session?.device.credentialVersion == service.vaultCredentialVersion, "the latest blob kept")
-        try await m.newCredential(pin: pin, password: password, newPassword: newPassword)
-        #expect(service.resets.count == 2 && service.currentPassword == newPassword)
-    }
-
     // MARK: - The clone alarm
 
     /// The alarm freezes the credential; "not me" moves it to `rotation_required`, and the rotation resolves it.

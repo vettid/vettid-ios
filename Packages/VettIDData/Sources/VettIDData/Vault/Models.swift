@@ -275,6 +275,9 @@ public struct ChangeCheck: Equatable, Sendable {
         case refused(FailureKind, code: String?)
         /// The check ended without a decision (no credential, another version, a clone alarm): that answer's own path.
         case ended
+        /// (VAULT-MESSAGING 0.51.1; IOS-PLAN 0.1.13) The vault answered `forbidden` to a request of the decision: another
+        /// phone became the holder. The change ended; "Your vault moved to a new phone", with no "Try again".
+        case notHolder
     }
 
     public let type: ChangeType
