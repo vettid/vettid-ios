@@ -240,7 +240,7 @@ extension FakeVaultService {
         }
     }
 
-    private static func rfc3339(_ s: String) -> Date? {
+    static func rfc3339(_ s: String) -> Date? {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         if let d = f.date(from: s) { return d }
