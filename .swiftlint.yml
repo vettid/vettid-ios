@@ -3,6 +3,8 @@ included:
   - App
   - AppTests
   - AppUITests
+  - AppDevStack
+  - AppDevStackUITests
   - Packages
 excluded:
   - build

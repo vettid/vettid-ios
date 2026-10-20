@@ -8,7 +8,16 @@
 #
 #   scripts/devstack-test.sh          # up, run the test on the simulator, down
 #   scripts/devstack-test.sh --host   # the same test with `swift test` on the Mac
+#   scripts/devstack-test.sh --ui     # IOS-PLAN §8 exit I1 (a): the VettIDDevStack
+#                                     # app's UI test on the simulator
 #   scripts/devstack-test.sh up|status|down
+#
+# --ui builds the VettIDDevStack scheme for testing (DevStack configuration),
+# removes VettID Dev Stack from the simulator (a fresh install), issues a
+# setup code for a new member (POST /api/vault/enroll-code, the member being
+# <guid>@example.org on the stack's member API stand-in), reads the stack's
+# TEST-ONLY trust (GET /dev/trust) and runs AppDevStackUITests' DevStackTests
+# with them and run/ready.json's addresses as TEST_RUNNER_VETTID_DEVSTACK_*.
 #
 # The simulator shares the Mac's 127.0.0.1, so it reaches the stack's ports
 # (18080 relay, 18081 member API, 18082 control) directly. A stack already
@@ -212,7 +221,9 @@ run_test() {
     up
   fi
   local rc=0
-  if [[ "${where}" == host ]]; then
+  if [[ "${where}" == ui ]]; then
+    run_ui || rc=$?
+  elif [[ "${where}" == host ]]; then
     VETTID_DEVSTACK=1 swift test --package-path "${REPO}/Packages/VettIDVault" --filter DevStackAcceptanceTests || rc=$?
   else
     # xcodebuild hands TEST_RUNNER_-prefixed variables to the test process without the prefix.
@@ -223,11 +234,71 @@ run_test() {
   return ${rc}
 }
 
+# The VettIDDevStack app's bundle id (project.yml), removed before each --ui run.
+DEVSTACK_UI_APP=com.vettid.app.devstack.ui
+
+# Fails the --ui run, saying what was missing. (run_ui is called as `run_ui || rc=$?`, which turns `set -e` off inside
+# it: every step checks its own result.)
+ui_fail() { echo "devstack --ui: $*" >&2; return 1; }
+
+# One field of a JSON document on stdin (a list joined with commas); empty when it is missing.
+json_field() { python3 -c 'import json,sys
+v = json.load(sys.stdin).get(sys.argv[1], "")
+print(",".join(v) if isinstance(v, list) else v)' "$1" 2>/dev/null || true; }
+
+# The VettIDDevStack app's UI test (DevStackTests) on the simulator against the running stack. It passes only when the
+# test ran and passed: the runner is told it runs from this script (VETTID_DEVSTACK_UI=1), so a missing input fails the
+# test instead of skipping it, and the output must show the test passed.
+run_ui() {
+  local dest udid ready api relay ctl guid code trust root keys out rc=0
+  dest="$(scripts/simulator-destination.sh)" || ui_fail "no simulator" || return 1
+  xcodebuild build-for-testing -project VettID.xcodeproj -scheme VettIDDevStack -configuration DevStack \
+    -destination "${dest}" -quiet || ui_fail "the build failed" || return 1
+  # A fresh install: the app and its data container are removed (the first launch erases what the keychain kept).
+  udid="${dest##*id=}"
+  if [[ "${udid}" != "${dest}" ]]; then
+    xcrun simctl boot "${udid}" 2>/dev/null || true
+    xcrun simctl uninstall "${udid}" "${DEVSTACK_UI_APP}" 2>/dev/null || true
+  fi
+  ready="${DATA}/run/ready.json"
+  [[ -f "${ready}" ]] || ui_fail "no ${ready}" || return 1
+  api=$(json_field api <"${ready}")
+  relay=$(json_field relay_transport <"${ready}")
+  ctl=$(json_field ctl <"${ready}")
+  [[ -n "${api}" && -n "${relay}" && -n "${ctl}" ]] || ui_fail "${ready} lacks api, relay_transport or ctl" || return 1
+  trust=$(curl -sf --max-time 10 "${ctl}/dev/trust") || ui_fail "GET ${ctl}/dev/trust failed" || return 1
+  root=$(printf '%s' "${trust}" | json_field nitro_root)
+  keys=$(printf '%s' "${trust}" | json_field manifest_keys)
+  [[ -n "${root}" && -n "${keys}" ]] || ui_fail "/dev/trust lacks nitro_root or manifest_keys" || return 1
+  # A new member for each run; the code is issued last, as it lives 5 minutes.
+  guid="ios-ui-$(python3 -c 'import secrets; print(secrets.token_hex(8))')"
+  code=$(curl -sf --max-time 10 -X POST -H "Authorization: Bearer ${guid}" -H 'Content-Type: application/json' \
+    "${api}/api/vault/enroll-code" | json_field code)
+  [[ -n "${code}" ]] || ui_fail "POST ${api}/api/vault/enroll-code gave no code" || return 1
+  out=$(mktemp)
+  TEST_RUNNER_VETTID_DEVSTACK_UI=1 \
+    TEST_RUNNER_VETTID_DEVSTACK_API="${api}" TEST_RUNNER_VETTID_DEVSTACK_RELAY="${relay}" \
+    TEST_RUNNER_VETTID_DEVSTACK_CTL="${ctl}" TEST_RUNNER_VETTID_DEVSTACK_NITRO_ROOT="${root}" \
+    TEST_RUNNER_VETTID_DEVSTACK_MANIFEST_KEYS="${keys}" TEST_RUNNER_VETTID_DEVSTACK_EMAIL="${guid}@example.org" \
+    TEST_RUNNER_VETTID_DEVSTACK_CODE="${code}" \
+    xcodebuild test-without-building -project VettID.xcodeproj -scheme VettIDDevStack -configuration DevStack \
+    -destination "${dest}" -parallel-testing-enabled NO \
+    -only-testing:VettIDDevStackUITests/DevStackTests/testDevStackEnrollLockUnlock 2>&1 | tee "${out}"
+  rc=${PIPESTATUS[0]}
+  if [[ ${rc} -eq 0 ]] && ! grep -q "testDevStackEnrollLockUnlock\]' passed" "${out}"; then
+    ui_fail "testDevStackEnrollLockUnlock did not run and pass (skipped?)"
+    rc=1
+  fi
+  rm -f "${out}"
+  return ${rc}
+}
+
 case "${1:-}" in
   "") run_test simulator ;;
   --host) run_test host ;;
+  --ui) run_test ui ;;
   up) up ;;
   down) down ;;
   status) status ;;
-  *) echo "usage: $0 [--host|up|status|down]" >&2; exit 2 ;;
+  *) echo "usage: $0 [--host|--ui|up|status|down]" >&2; exit 2 ;;
 esac
