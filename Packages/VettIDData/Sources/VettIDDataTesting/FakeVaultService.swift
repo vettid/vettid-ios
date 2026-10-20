@@ -94,6 +94,13 @@ public final class FakeVaultService: @unchecked Sendable {
     var device: (kem: KemPublicKey, relay: RelayAddr)?
     var responder: Responder?
     var utks: [String: KemPrivateKey] = [:]
+    /// The UTK the request being handled presented, spent before any check (``spend(_:)``).
+    var presented: (id: String, ltk: KemPrivateKey)?
+    /// A plain `credential.utk.get` answers no UTKs (``vaultPoolFull``).
+    var vaultPoolFullValue = false
+    /// The vault clock of the last UTK resync, and the resyncs asked for (``utkResyncs``).
+    var lastResync: Date?
+    var resyncsValue: [Bool] = []
     var hasCredential = false
     /// This phone is no longer the credential's holder (``notHolder``).
     var notHolderValue = false
@@ -270,6 +277,17 @@ public final class FakeVaultService: @unchecked Sendable {
 
     /// The UTKs issued and not spent yet (the vault's pool for this phone, §3.5.4).
     public var outstandingUTKs: Int { locked { utks.count } }
+
+    /// The vault's pool for this phone is full of UTKs the phone no longer holds: a plain `credential.utk.get` answers
+    /// no UTKs until a resync (VAULT-MESSAGING 0.52.0 §3.5.4 "Resync").
+    public var vaultPoolFull: Bool {
+        get { locked { vaultPoolFullValue } }
+        set { locked { vaultPoolFullValue = newValue } }
+    }
+
+    /// Each `credential.utk.get{"resync": true}` the vault received: true when it was carried out, false when refused
+    /// `too_soon`.
+    public var utkResyncs: [Bool] { locked { resyncsValue } }
 
     /// This phone is no longer the credential's holder (another app holds it): the holder's types are refused
     /// `forbidden` before the UTK is spent, as vettid-vault's `gate` does (§3.5.9).

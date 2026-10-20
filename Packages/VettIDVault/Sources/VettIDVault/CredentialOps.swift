@@ -11,37 +11,14 @@ import VettIDCrypto
 struct CredentialOps: Sendable {
     /// The payload members that carry a password (§11.14.7).
     static let passwordKeys: Set<String> = ["password", "new_password"]
-    /// §6.7.1 step 3 (0.27.0): refused before the UTK was spent; a retry uses the same one.
-    static let codeSignerUnconfirmed = "signer_unconfirmed"
     /// §3.5.3: the blob sent is not the vault's latest (the holder's own retry, after a lost answer).
     static let codeStaleCredential = "stale_credential"
 
-    /// The refusals vettid-vault answers before it spends the UTK (§3.5.4), on every path that takes one; the UTK of a
-    /// refusal among them goes back to the pool (``returnsUTK(onRefusal:)``). Pending the vault's UTK rule (a vault that
-    /// burns the UTK before any refusal, marks the refusals that left it unspent, or lets `credential.utk.get` resync the
-    /// pool would replace this list). Derived from vettid-vault's order of checks:
-    /// - `unsupported_type`, `session_required`, `owner_check_required`, `forbidden`: `vault/inbound.go` (the dispatch,
-    ///   before any handler runs);
-    /// - `forbidden`: `features/credential/credential.go` `Handle` (a recovering app, `credential.recover`) and `gate`
-    ///   (the holder's types, `credential.reset`), `Operate` (an app only), `pinonly.go` `holderGate` (`audit.export`),
-    ///   `features/items/critical.go` `appOnly`; never after `spendNeed`;
-    /// - `signer_unconfirmed`: `credential.go` `Handle` (`device.transfer.approve`, `vault/signer.go`
-    ///   `ConfirmTransferSigner`, §6.7.1 step 3).
-    ///
-    /// Not returned, as answered after the spend on some path: `credential_required` (before it in `inbound.go`, after it
-    /// in `checkBlob`), `credential_frozen` and `rotation_required` (before it in `gate`, `Operate` and `holderGate`,
-    /// after it from `clone`), `bad_request` and `not_found` (the envelope or the request before it, the sealed payload
-    /// or the export's shape after it); and answered after the spend only: `stale_credential` and `backoff` (`checkBlob`,
-    /// `openChecked`), `bad_password`, `bad_pin`, `exists`, `weak_password`, `utk_invalid` (`spendNeed`) and any other
-    /// code.
-    static let utkUnspentCodes: Set<String> = [
-        "unsupported_type", "session_required", "owner_check_required", "forbidden", codeSignerUnconfirmed,
-    ]
-
-    /// Whether a refusal with [code] left its UTK unspent, so that it goes back to the pool (``utkUnspentCodes``).
-    static func returnsUTK(onRefusal code: String?) -> Bool {
-        code.map(utkUnspentCodes.contains) ?? false
-    }
+    /// (VAULT-MESSAGING 0.52.0 §3.5.4 "Resync"; IOS-PLAN 0.1.16 §4.5 (2)) The resync answered again with no UTKs. The
+    /// failure carries this code (shown as IOS-PLAN 0.1.15 §4.4's "Something went wrong (code: …)").
+    static let codeUtkEmpty = "utk_empty"
+    /// A resync within 10 minutes (scaled) of the device's last one, with body `{allowed_after}` (VAULT-MESSAGING §10.1).
+    static let codeTooSoon = "too_soon"
 
     let device: VaultDevice
     let normalizePasswords: @Sendable () -> Bool
@@ -50,32 +27,62 @@ struct CredentialOps: Sendable {
     /// The wait of a change for the credential operations before it (``VaultApi/changeWaitSleep``).
     var changeWaitSleep: @Sendable (TimeInterval) async throws -> Void = VaultApi.sleep
 
-    /// Stores the UTKs and the blob a response carries, and confirms the blob (`credential.ack`, §3.5.3).
-    func keep(_ body: [UInt8]) async throws {
+    /// Stores the UTKs and the blob a response carries, and confirms the blob (`credential.ack`, §3.5.3). Returns how
+    /// many UTKs it carried.
+    @discardableResult
+    func keep(_ body: [UInt8]) async throws -> Int {
         let o = try StrictJson.parseObject(body.isEmpty ? VaultJSON.empty : body)
+        var utks = 0
         if let arr = try o.optArray("utks") {
             let list = try arr.map { v -> UtkRecord in
                 let u = try Utk.parse(try v.asObject())
                 return UtkRecord(id: u.id, ek: Base64s.encodeStd(u.ek.bytes), expiresAtMs: VaultDevice.ms(u.expiresAt))
             }
             try await device.keepUTKs(list)
+            utks = list.count
         }
-        guard let blob = VaultJSON.string(o, "credential") else { return }
+        guard let blob = VaultJSON.string(o, "credential") else { return utks }
         // Item operations carry the item's version as `version` and the credential's as `credential_version` (§10.6).
         guard let v = VaultJSON.int(o, "credential_version") ?? VaultJSON.int(o, "version"), v >= 0 else {
             throw VaultStateError(message: "credential without version")
         }
         try await device.keepCredential(blob: blob, version: v)
         _ = try await device.op("credential.ack", body: JsonBuilder().uint("version", UInt64(v)).bytes())
+        return utks
     }
 
-    /// An unexpired UTK, fetching a pool (`credential.utk.get`) when the device holds none.
+    /// An unexpired UTK, fetching a pool (`credential.utk.get`) when the device holds none. A UTK is spent once the
+    /// request that presents it is sent, whatever the answer, and never goes back to the pool (VAULT-MESSAGING 0.52.0
+    /// §3.5.4 "Using a UTK"; IOS-PLAN 0.1.16 §4.5 (1)). When the top-up carries no UTKs while this device holds none, the
+    /// vault's pool for it is full of UTKs it no longer holds: one resync for this request (``resync()``), and
+    /// `utk_empty` when that too carries none.
     func takeUTK() async throws -> UtkRecord {
-        for _ in 0..<2 {
-            if let u = try await device.takeUTK() { return u }
-            try await keep(try await device.op("credential.utk.get"))
+        if let u = try await device.takeUTK() { return u }
+        let topped = try await keep(try await device.op("credential.utk.get"))
+        if let u = try await device.takeUTK() { return u }
+        guard topped == 0 else { throw VaultStateError(message: "no UTK") }
+        try await resync()
+        if let u = try await device.takeUTK() { return u }
+        throw VaultOpError(type: Self.typeUtkGet, code: Self.codeUtkEmpty, detail: "", body: nil)
+    }
+
+    static let typeUtkGet = "credential.utk.get"
+
+    /// `credential.utk.get{"resync": true}` (VAULT-MESSAGING 0.52.0 §3.5.4 "Resync"): the vault drops this device's pool
+    /// and issues a full one, kept here. Allowed once per 10 minutes (scaled); a `too_soon` is thrown as it is, and until
+    /// its `allowed_after` (on the vault's clock) no resync is sent: the same refusal is thrown with nothing sent.
+    private func resync() async throws {
+        if let after = device.utkResyncAllowedAfter, device.vaultNow() < after {
+            let body = JsonBuilder().string("allowed_after", Timestamps.formatMillis(after)).bytes()
+            throw VaultOpError(type: Self.typeUtkGet, code: Self.codeTooSoon, detail: "", body: body)
         }
-        throw VaultStateError(message: "no UTK")
+        do {
+            try await keep(try await device.op(Self.typeUtkGet, body: JsonBuilder().bool("resync", true).bytes()))
+        } catch let e as VaultOpError where e.code == Self.codeTooSoon {
+            let after = e.body.flatMap { VaultJSON.string(VaultJSON.object($0), "allowed_after") }
+            device.utkResyncAllowedAfter = after.flatMap { (try? Timestamps.parseMillis($0)) ?? (try? Timestamps.parseSeconds($0)) }
+            throw e
+        }
     }
 
     /// A sealed operation without the blob (create): [fields] sealed to a fresh UTK, in this order, each a string; the
@@ -194,7 +201,7 @@ struct CredentialOps: Sendable {
         // Its own `ok` decides before anything else is done with the answer (a blob that cannot be kept after it, or an
         // acknowledgement refused, does not undo it).
         if r.inner.status == Inner.statusOK, let onOK { await onOK() }
-        return (try await answered(type, utk: utk, r), r.ts)
+        return (try await answered(type, r), r.ts)
     }
 
     /// The outer body of a sealed operation: [fields] sealed to [utk] for the inner id [id], the blob when [options] say
@@ -229,12 +236,10 @@ struct CredentialOps: Sendable {
         return outer.bytes()
     }
 
-    /// The answer of a sealed operation: its blob and UTKs kept, or its refusal as ``VaultOpError`` (a UTK refused
-    /// before it was spent goes back to the pool, ``returnsUTK(onRefusal:)``).
-    private func answered(_ type: String, utk: UtkRecord?, _ r: VaultMessage) async throws -> [UInt8] {
+    /// The answer of a sealed operation: its blob and UTKs kept, or its refusal as ``VaultOpError``. Its UTK stays spent
+    /// either way (VAULT-MESSAGING 0.52.0 §3.5.4 "Using a UTK"; `signer_unconfirmed` too: a new attempt takes a fresh one).
+    private func answered(_ type: String, _ r: VaultMessage) async throws -> [UInt8] {
         guard r.inner.status == Inner.statusOK else {
-            // A UTK that cannot be stored back is lost, never the refusal itself (a change's would become unanswered).
-            if let utk, Self.returnsUTK(onRefusal: r.inner.error?.code) { try? await device.returnUTK(utk) }
             // The error's body: `weak_password` carries `reason` (§11.14.7), `backoff` its `retry_after` (§10.1).
             throw VaultOpError(
                 type: type, code: r.inner.error?.code ?? "error", detail: r.inner.error?.message ?? "",
@@ -266,7 +271,7 @@ struct CredentialOps: Sendable {
                 body: try build(type, utk: utk, fields: fields + more, id: change.id, CredOpOptions())
             )
             try await device.trackCredential(change.id, exp: change.exp)
-            return try await sendChange(held, utk: utk, first: true)
+            return try await sendChange(held, first: true)
         }
     }
 
@@ -304,7 +309,8 @@ struct CredentialOps: Sendable {
         guard device.credentialVersion == change.version else { throw CredentialUnsettled(type: type, reason: .inFlight) }
     }
 
-    /// [onMarker] for [change]; [utk] goes back to the pool when it fails (nothing was sent).
+    /// [onMarker] for [change]; [utk] goes back to the pool when it fails: it never left the phone (IOS-PLAN 0.1.16 §4.5
+    /// (1)).
     private func marked(_ change: ChangeRequest, _ utk: UtkRecord, _ onMarker: OnMarker) async throws -> [SealedField] {
         do {
             return try await onMarker(change)
@@ -385,19 +391,19 @@ struct CredentialOps: Sendable {
 
     /// [held] sent again, as the same request (§11.14.9 step 3): one deposit, one wait.
     func resendChange(_ held: HeldRequest) async throws -> [UInt8] {
-        try await device.credentialLock.withLock { try await sendChange(held, utk: nil, first: false) }
+        try await device.credentialLock.withLock { try await sendChange(held, first: false) }
     }
 
     /// Once the request may have been deposited, only the vault's own refusal (``VaultOpError``) leaves here as itself:
     /// every other failure (no answer, a cancellation, the relay, the device state or a key that could not be saved after
     /// the deposit, a blob that could not be kept after the answer) is ``ChangeUnanswered`` with the request, so that the
     /// change is decided (and can be sent again) rather than taken as not sent.
-    private func sendChange(_ held: HeldRequest, utk: UtkRecord?, first: Bool) async throws -> [UInt8] {
+    private func sendChange(_ held: HeldRequest, first: Bool) async throws -> [UInt8] {
         do {
             let r = first
                 ? try await device.requestKept(held, sends: VaultDevice.appRetries + 1)
                 : try await device.resend(held)
-            return try await answered(held.type, utk: utk, r)
+            return try await answered(held.type, r)
         } catch let e as VaultOpError {
             // An earlier credential operation applied without its answer: never resent with the typed secrets.
             if e.code == Self.codeStaleCredential { try? await fetch() }

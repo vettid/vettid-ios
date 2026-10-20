@@ -153,7 +153,7 @@ extension FakeVaultService {
     /// Steps 2–8 of §3.6.1, in vettid-vault's order. Callers hold ``cond``.
     func ownerCheck(_ m: Inner, _ body: JsonObject) throws {
         let utk = try body.string("utk_id")
-        guard let ltk = utks.removeValue(forKey: utk) else { return try reply(m.type, "{}", re: m.id, error: "utk_invalid") }
+        guard let ltk = spend(utk) else { return try reply(m.type, "{}", re: m.id, error: "utk_invalid") }
         let pt = try CredentialSeal.openPayload(ltk: ltk, vaultID: vaultID, utkID: utk, type: m.type, innerID: m.id, sealed: try body.base64("sealed"))
         let p = try StrictJson.parseObject(pt)
         let pin = (try? p.string("pin")) ?? ""

@@ -73,7 +73,8 @@ public final class ProfileManager: ProfileRepository {
 
     private func failed(_ e: VaultFailure) async -> NameChangeOutcome {
         switch e.code {
-        case Self.codeTooSoon:
+        // The name change's own `too_soon`, not a UTK resync's before it (VAULT-MESSAGING 0.52.0 §3.5.4).
+        case Self.codeTooSoon where (e.cause as? VaultOpError)?.type != "credential.utk.get":
             let after = ((e.cause as? VaultOpError)?.body).flatMap { VaultJSON.string(VaultJSON.object($0), "allowed_after") }
             return .tooSoon(allowedAfter: OwnerCheckManager.instant(after))
         case Self.codeBadRequest: return .invalid
