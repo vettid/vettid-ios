@@ -191,6 +191,8 @@ public final class FakeVaultService: @unchecked Sendable {
     /// The vault deleted itself (§12.5): it answers nothing more and its mailbox refuses every deposit.
     var vaultDeletedValue = false
     var statusLagsDeletionValue = false
+    /// `GET /api/vault/status` answers `401 unauthorized` (the row, and with it the app key, removed).
+    var statusUnauthorizedValue = false
     var slotQueuedAfterDeletionValue = 0
     var statusGateValue: FakeHTTPServer.Gate?
     // The rotation, a new credential and the clone alarm (FakeVaultService+Credential.swift), under ``cond``.
@@ -276,6 +278,12 @@ public final class FakeVaultService: @unchecked Sendable {
         }
     }
 
+    /// `GET /api/vault/status` answers `401 unauthorized` to the app key.
+    public var statusUnauthorized: Bool {
+        get { locked { statusUnauthorizedValue } }
+        set { locked { statusUnauthorizedValue = newValue } }
+    }
+
     /// The enclave route cannot be reached: an enrollment fails before any request is posted.
     public var enclaveOffline: Bool {
         get { locked { enclaveOfflineValue } }
@@ -353,6 +361,7 @@ public final class FakeVaultService: @unchecked Sendable {
             case ("POST", "/api/vault/unlock"): return unlock(r)
             case ("POST", "/api/vault/lock"): return memberLock(r)
             case ("GET", "/api/vault/status"):
+                if statusUnauthorizedValue { return .json(401, #"{"error":"unauthorized"}"#) }
                 let a: FakeHTTPServer.Answer = if noVault || vaultDeletedValue && !statusLagsDeletionValue {
                     .json(200, #"{"vault":null}"#)
                 } else {
@@ -382,6 +391,7 @@ public final class FakeVaultService: @unchecked Sendable {
 
     private func enclave(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer {
         if enclaveOfflineValue { return .failure(.notConnectedToInternet) }
+        if releases.askedUnavailable, Self.askedRelease(r) != nil { return .json(410, #"{"error":"release_unavailable"}"#) }
         guard let n = route(asked: Self.askedRelease(r)) else { return .json(409, #"{"error":"vault_busy","retry_after":1}"#) }
         let release = Self.pcr0(n)
         let d = Descriptor.marshal(instanceID: instanceID, etk: etk.publicKey, release: release, notAfter: Date().addingTimeInterval(3600), capabilities: capabilitiesValue, timeScale: timeScaleValue)

@@ -136,6 +136,8 @@ public struct VaultManagerConfig: Sendable {
     /// The release update's waits: for the member API to see the vault locked, and for the API to route an unlock to the
     /// release a vault just moved to (a virtual clock in the tests).
     public var releaseUpdateSleep: LockSleep = realLockSleep
+    /// (IOS-PLAN §4.2) The waits between the re-reads of a vault being deleted (a virtual clock in the tests).
+    public var deletionSleep: LockSleep = realLockSleep
     /// The pause before a change whose answer was lost is checked again (VAULT-MESSAGING §11.14.9 "A lost answer": 30 s,
     /// doubling up to 5 minutes), in seconds.
     public var changeCheckSleep: @Sendable (TimeInterval) async throws -> Void

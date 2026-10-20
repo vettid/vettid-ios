@@ -88,6 +88,13 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     /// (VAULT-MESSAGING §11.14.9 "A lost answer" step 5) Which PIN is asked for: while a PIN change is unresolved, the
     /// previous PIN, then the new one after the vault showed that it holds the change.
     public var pinStep: UnlockPinStep = .pin
+    /// (IOS-PLAN §4.3) The unconfirmed move this phone knows of; with `failed`, "Return to release N" is offered.
+    public var moveUnconfirmed: UnconfirmedMove?
+    /// "Return to release N?" is asked.
+    public var returnConfirm = false
+    /// The member confirmed the way back without a PIN on the keypad: the keypad asks for it, and the primary action
+    /// sends it to the way back.
+    public var returnAsksPin = false
 
     public init(loading: Bool = true, email: String? = nil, phoneSecret: Bool = false) {
         self.loading = loading
@@ -108,8 +115,13 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     /// Whether "Try again" (after a failed release check) may be pressed now.
     public var retryAllowed: Bool { serviceWaitSeconds == 0 && !loading }
 
-    /// Whether the PIN may be entered and sent now: never while the last check of the vault's software failed.
+    /// (IOS-PLAN §4.3 point 3) "Return to release N" is offered: the marker of an unconfirmed move has `failed`.
+    public var returnOffered: Bool { moveUnconfirmed?.failed == true && !recoveryPending }
+
+    /// Whether the PIN may be entered and sent now: never while the last check of the vault's software failed (except for
+    /// the way back, which does not go to the routed release).
     public var pinAllowed: Bool {
+        if returnAsksPin { return waitSeconds == 0 && serviceWaitSeconds == 0 && !busy }
         guard let p = preflight, preflightError == nil else { return false }
         return !p.rollback && (!p.softwareUpdated || updateAcknowledged) && waitSeconds == 0 && serviceWaitSeconds == 0 && !busy
     }
@@ -118,7 +130,7 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     public var submitAllowed: Bool { pinAllowed && pin.count >= Self.minPinLength && (!checkDue || !password.isEmpty) }
 
     /// The PIN field is shown: the vault's software verified, nothing blocking, no recovery pending.
-    public var showsPin: Bool { !recoverOnly && !recoveryPending && preflight != nil && preflightError == nil }
+    public var showsPin: Bool { returnAsksPin || (!recoverOnly && !recoveryPending && preflight != nil && preflightError == nil) }
 
     /// A recovery's delay at the vault's time scale ("24 hours"; on staging "1 hour").
     public var recoveryText: String { TimeScales.text(TimeScales.recoveryDelay, by: timeScale) }

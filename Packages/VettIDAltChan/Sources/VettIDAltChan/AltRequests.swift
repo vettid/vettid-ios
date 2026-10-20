@@ -6,8 +6,8 @@ import VettIDCrypto
 public enum AltRefused: Error, Equatable, Sendable {
     /// Never send a PIN to an older release than the last one unlocked into.
     case rollbackRelease
-    /// The unlock right after a move (``UnlockOptions/afterMove``) is routed to exactly the release the vault left: the
-    /// member API has not learnt the move yet. Nothing is sent; the caller may wait and try again.
+    /// While a move is unconfirmed (``AltState/moveUnconfirmed``) an unlock is routed to exactly the release the vault
+    /// left: the member API has not learnt the move yet. Nothing is sent; the caller may wait and try again.
     case notYetRouted
     /// The manifest is older than one already seen.
     case manifestOlder
@@ -74,9 +74,6 @@ public struct UnlockOptions: Sendable, CustomStringConvertible {
     public var cancelRecovery = false
     public var sendChain = false
     public var unlockSecret: [UInt8]?
-    /// The unlock right after `update: moved` (§11.10.6): routed to exactly the release moved from, it is
-    /// ``AltRefused/notYetRouted`` rather than a rollback.
-    public var afterMove = false
 
     public init(
         approve: Approval? = nil, abandon: Bool = false, cancelRecovery: Bool = false, sendChain: Bool = false, unlockSecret: [UInt8]? = nil
@@ -159,7 +156,9 @@ public enum AltRequests {
         let rel = enclave.release
         let changed = !state.release.isEmpty && state.release != rel.pcr0
         if state.releaseNumber != 0, rel.number < state.releaseNumber {
-            if options.afterMove, !options.abandon, !state.previousRelease.isEmpty, rel.pcr0 == state.previousRelease {
+            // IOS-PLAN §4.3 point 6: routed to exactly the release an unconfirmed move left (number and PCR0), the member
+            // API has not learnt the move yet; the PIN goes there only to abandon the move.
+            if !options.abandon, let m = state.moveUnconfirmed, rel.pcr0 == m.from.pcr0, rel.number == m.from.number {
                 throw AltRefused.notYetRouted
             }
             guard options.abandon, rel.pcr0 == state.previousRelease else { throw AltRefused.rollbackRelease }
@@ -214,7 +213,8 @@ public enum AltRequests {
     }
 
     /// Applies an opened unlock result to the app state (§11.4, §11.10.4): floors only move up; a result from another
-    /// release than the attested one is refused; a move records the previous release for abandonment.
+    /// release than the attested one is refused; a move records the previous release for abandonment (the
+    /// `move_unconfirmed` marker of IOS-PLAN §4.3), and any other opening confirms or ends it.
     public static func applyUnlock(_ state: AltState, _ p: PendingUnlock, _ r: UnlockResult) throws -> AltState {
         var s = state
         guard r.ok else {
@@ -228,14 +228,19 @@ public enum AltRequests {
         var number = p.number
         switch r.update?.result {
         case "moved":
+            // IOS-PLAN §4.3 point 1: the marker, in the same write that records the new release.
             s.previousRelease = p.release
             s.previousReleaseNumber = p.number
+            s.moveFailed = false
             release = r.update?.to ?? release
             number = p.toNumber
-        case "abandoned":
-            s.previousRelease = ""
-            s.previousReleaseNumber = 0
-        default: break
+        case "refused" where r.update?.code != "downgrade" && p.release == s.previousRelease:
+            // The way back refused for another reason by the release moved from, which opened: the move stays pending.
+            break
+        default:
+            // Any other opening confirms the move (the new release opened the vault) or ends it (`abandoned`, or the way
+            // back answered `downgrade`: no move was pending any more), §11.10.4.
+            s = s.withoutMove()
         }
         if r.headerSeq > (s.headerSeq[release] ?? 0) { s.headerSeq[release] = r.headerSeq }
         s.release = release

@@ -11,8 +11,8 @@ import VettIDVault
 // member's confirmed deletion means it applied, and VettID's data on this phone is erased as after the vault's own answer; the vault still
 // listed more than a minute after `exp` means it did not and never will; anything else is undecided
 // (``codeDeleteUnconfirmed``): the screen says so and offers to check again (nothing sent to the vault) besides a new try.
-// `device.unlinked{vault_deleted}` re-reads the phase, and a check after a restart reaches the root's "no vault" screen
-// and its "Start over" (``forgetMissingVault()``), so the member is never stuck.
+// `device.unlinked{vault_deleted}` opens "being deleted" (IOS-PLAN §4.2, ``enterDeleting(expOnPhone:)``), which waits
+// for the member API to no longer list the vault, so the member is never stuck.
 extension VaultManager {
     /// The code of a deletion whose answer was lost and which the member API did not yet show as done.
     public nonisolated static let codeDeleteUnconfirmed = "delete_unconfirmed"
@@ -50,19 +50,23 @@ extension VaultManager {
         return await task.value
     }
 
-    /// One deletion: true when VettID's data on this phone was erased after it, false when its answer was lost and it is undecided.
+    /// One deletion: true when VettID's data on this phone was erased after it (or, its answer lost, the vault said it is
+    /// being deleted: IOS-PLAN §4.2), false when its answer was lost and it is undecided.
     private func deleteOnce(pin: String, password: String) async throws -> Bool {
+        ownDelete = OwnDelete()
+        defer { ownDelete = nil }
         let answered: Bool = try await guarded {
             // It carries the PIN: refused while the PIN is uncertain too (§11.14.9 step 3).
             try await decideFirst(carriesPin: true)
             let s = try await openSession()
             let api = try openApi(s)
             let exp = try await api.requestExp()
+            ownDelete?.expOnPhone = UnansweredDelete.onPhone(exp, device: s.device, now: config.now())
             do {
                 try await api.deleteVault(pin: pin, password: password, exp: exp)
                 return true
             } catch is RequestUnanswered {
-                deleteUnanswered = UnansweredDelete(exp: exp, device: s.device, uptime: config.uptime())
+                deleteUnanswered = UnansweredDelete(exp: exp, device: s.device, uptime: config.uptime(), now: config.now())
                 return false
             } catch let e as VaultOpError {
                 // The vault answered: an earlier deletion's copy, deposited before this one, was handled before it and did
@@ -71,8 +75,11 @@ extension VaultManager {
                 throw e
             }
         }
-        if !answered {
-            guard await vaultListed() == false else { return false }
+        if !answered, await vaultListed() != false {
+            // The vault's `device.unlinked{vault_deleted}` came meanwhile: the deletion applied; wait for the member API.
+            guard ownDelete?.unlinked == true else { return false }
+            enterDeleting(expOnPhone: ownDelete?.expOnPhone)
+            return true
         }
         await afterVaultDeleted()
         return true
@@ -92,7 +99,7 @@ extension VaultManager {
     /// else of the phone) is erased through ``HolderWatch`` (one wipe at a time, the crash-safe wipe of
     /// ``WipeRun``), or, in a build that cannot wipe, its keys for the vault are forgotten and the record reset, as
     /// vettid-android's `afterVaultDeleted` does.
-    private func afterVaultDeleted() async {
+    func afterVaultDeleted() async {
         deleteUnanswered = nil
         if wiper != nil, let holder {
             await holder.wipeNow()
@@ -117,12 +124,21 @@ extension VaultManager {
 struct UnansweredDelete {
     /// The monotonic time after which no copy can apply; nil when the device had no time from the vault (never decided).
     let deadline: TimeInterval?
+    /// The request's `exp` on the phone's clock (IOS-PLAN §4.2: the bound of a vault being deleted).
+    let expOnPhone: Date
 
     @MainActor
-    init(exp: Date, device: VaultDevice, uptime: TimeInterval) {
+    init(exp: Date, device: VaultDevice, uptime: TimeInterval, now: Date) {
         deadline = device.knowsVaultTime
             ? uptime + exp.timeIntervalSince(device.vaultNow()) + VaultManager.decidedAfterExp
             : nil
+        expOnPhone = Self.onPhone(exp, device: device, now: now)
+    }
+
+    /// [exp] (the vault's clock) on the phone's clock at [now]; as it is when the device had no time from the vault.
+    @MainActor
+    static func onPhone(_ exp: Date, device: VaultDevice, now: Date) -> Date {
+        device.knowsVaultTime ? now.addingTimeInterval(exp.timeIntervalSince(device.vaultNow())) : exp
     }
 
     /// Whether the deadline has passed at the monotonic time [now].

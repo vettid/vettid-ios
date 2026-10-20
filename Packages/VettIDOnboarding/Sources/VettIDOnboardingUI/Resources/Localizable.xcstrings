@@ -3162,6 +3162,149 @@
           }
         }
       }
+    },
+    "vault_deleting_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault is being deleted"
+          }
+        }
+      }
+    },
+    "vault_deleting_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID is erasing everything in your vault. This usually takes a few minutes. Nothing in it can be opened or restored. You will get an email when it is done."
+          }
+        }
+      }
+    },
+    "vault_deleting_slow_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Still finishing"
+          }
+        }
+      }
+    },
+    "vault_deleting_slow_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault can no longer be opened, but VettID has not finished deleting it yet. Check back later."
+          }
+        }
+      }
+    },
+    "vault_deleting_check_again": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check again"
+          }
+        }
+      }
+    },
+    "vault_deleting_still": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not finished yet. Try again later."
+          }
+        }
+      }
+    },
+    "vault_deleting_unreachable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID couldn't be reached. Check your connection and try again."
+          }
+        }
+      }
+    },
+    "vault_deleting_account_site": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open the account site"
+          }
+        }
+      }
+    },
+    "vault_deleted_notice": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault was deleted. To start again, get a setup code on the account site."
+          }
+        }
+      }
+    },
+    "unlock_move_unconfirmed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault moved to release %lld and has not opened there yet. You can try again with your PIN, or return to release %lld."
+          }
+        }
+      }
+    },
+    "release_update_route_pending": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault moved to release %lld, but VettID is not ready to open it there yet. Try again in a minute."
+          }
+        }
+      }
+    },
+    "release_update_return_confirmed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Release %lld has already opened your vault, so it can't go back to release %lld. Unlock it with your PIN."
+          }
+        }
+      }
+    },
+    "release_update_return_unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Release %lld is no longer available, so your vault can't go back to it. Try again with your PIN, or contact VettID."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

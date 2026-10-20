@@ -105,10 +105,27 @@ public protocol AccountRepository: AnyObject, Observable, Sendable {
     /// local only, every keychain item, key and file of the app. True when nothing is left (``phase`` is then
     /// ``AppPhase/signedOut``); false when something could not be erased. Default: false.
     func clearAppData() async -> Bool
+
+    /// (IOS-PLAN §4.2) The vault being deleted (``AppPhase/deleting``): since when, the bound, "still finishing". Default:
+    /// nil.
+    var deletion: VaultDeletion? { get }
+
+    /// (IOS-PLAN §4.2) Check again: one read of the member API's status (a second waits for the first). Default: gone.
+    func checkDeletionAgain() async -> DeletionRead
+
+    /// (IOS-PLAN §4.2) "Your vault was deleted…", once, on "no vault" after a vault was deleted. Default: false.
+    var vaultDeletedNotice: Bool { get }
+
+    /// The member has seen it.
+    func dismissVaultDeletedNotice()
 }
 
 public extension AccountRepository {
     func clearAppData() async -> Bool { false }
+    var deletion: VaultDeletion? { nil }
+    func checkDeletionAgain() async -> DeletionRead { .gone }
+    var vaultDeletedNotice: Bool { false }
+    func dismissVaultDeletedNotice() {}
     var servicePaused: Bool { false }
     func onForeground() {}
     func forgetMissingVault() async throws {}
@@ -269,6 +286,14 @@ public protocol VaultRepository: AnyObject, Observable, Sendable {
     /// unlock (chosen; not in the spec, where vettid-android has the same gap). Default: false.
     var releaseUpdateHeld: Bool { get }
 
+    /// (IOS-PLAN §4.3) The unconfirmed move this phone knows of; with ``UnconfirmedMove/failed`` the unlock screen offers
+    /// "Return to release N". Default: nil.
+    var unconfirmedMove: UnconfirmedMove? { get }
+
+    /// (IOS-PLAN §4.3 point 3) "Return to release N", confirmed on the unlock screen, with its PIN: the release update's
+    /// way back, shown over every phase. False when it did not start. Default: false.
+    func returnToPreviousRelease(pin: String) -> Bool
+
     /// (iPhone, IOS-PLAN §6.3 item 5) The earlier-secret step, only on the member's tap: an unlock with [pin] and each
     /// replaced record of the phone secret, newest first, each once. Default: ``FailureKind/notSupported``.
     func unlockWithEarlierSecret(pin: String) async throws -> UnlockAttempt
@@ -299,6 +324,8 @@ public extension VaultRepository {
     func dismissLockNotice() {}
     var earlierSecretOffered: Bool { false }
     var releaseUpdateHeld: Bool { false }
+    var unconfirmedMove: UnconfirmedMove? { nil }
+    func returnToPreviousRelease(pin: String) -> Bool { false }
     var renewSecretSuggested: Bool { false }
     func dismissRenewSuggestion() {}
     func checkVaultDeleted() async throws -> DeletionCheck { .undecided }

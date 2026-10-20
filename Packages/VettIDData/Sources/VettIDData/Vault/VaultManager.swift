@@ -18,18 +18,21 @@ struct VaultSession: Sendable {
 /// client and the alternate channel. Implements the repositories the features use; nothing in a feature touches
 /// transport or crypto. One instance per process, on the main actor; the work it waits for runs off it.
 ///
-/// The slices so far (IOS-PLAN §8): what onboarding needs (I1.6: the phase at start, the setup code, enrollment with the
-/// phone's unlock secret of epoch 1, §11.14.1 "On an iPhone", the first handshake, the credential and Finish setup),
-/// the unlock and the member's lock (I1.7a: §11.4 with the phone secret, VAULT-LOCK as vettid-android implements it, the
-/// vault events they follow), Settings (I1.8: the account, the name, the credential screen, the PIN), the connections
-/// (I2.1: ``connections``) and the messages (I2.2: ``messages``), fed this manager's events. Every other operation keeps its protocol default until the row
-/// that brings it. Mirrors vettid-android `VaultManager`.
+/// The slices so far (IOS-PLAN §8): onboarding (I1.6), the unlock and the member's lock (I1.7a), Settings (I1.8), the
+/// connections (I2.1: ``connections``) and the messages (I2.2: ``messages``), fed this manager's events; a vault being
+/// deleted (IOS-PLAN §4.2). Every other operation keeps its protocol default until the row that brings it. Mirrors
+/// vettid-android `VaultManager`.
 @MainActor
 @Observable
 public final class VaultManager: AccountRepository, VaultRepository, CredentialRepository {
-    // AccountRepository.
-    public internal(set) var phase: AppPhase = .starting {
+    // AccountRepository. ``phase`` reads ``AppPhase/deleting`` over the phase set while a vault is being deleted.
+    public internal(set) var phase: AppPhase {
+        get { deletion != nil ? .deleting : storedPhase }
+        set { storedPhase = newValue }
+    }
+    var storedPhase: AppPhase = .starting {
         didSet {
+            let phase = storedPhase
             phaseChanges += 1
             // The account is read again whenever the vault opens (an unlock, the end of onboarding, a start while open).
             if phase == .unlocked, oldValue != .unlocked { onOpened() }
@@ -58,6 +61,14 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     public internal(set) var alarm: CredentialAlarm?
     /// Until when the unlock window is open (§3.5.3), as this app opened it.
     public internal(set) var unlockWindow: Date?
+    /// (IOS-PLAN §4.2) The vault being deleted, and the one-time notice on "no vault" after it.
+    public internal(set) var deletion: VaultDeletion?
+    public internal(set) var vaultDeletedNotice = false
+    /// (IOS-PLAN §4.3) The unconfirmed move from the device's release records (``readMoveMarker()``).
+    public internal(set) var unconfirmedMove: UnconfirmedMove?
+    @ObservationIgnored var deletionWatch: DeletionWatch?
+    /// This phone's own `vault.delete` on its way, and whether `device.unlinked{vault_deleted}` came meanwhile.
+    @ObservationIgnored var ownDelete: OwnDelete?
 
     @ObservationIgnored let config: VaultManagerConfig
     @ObservationIgnored let record: AccountRecord
@@ -326,6 +337,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         if let session { return session }
         if let opening { return try await opening.value }
         try prepared()
+        try refuseWhileDeleting()
         let c = config
         let member = member
         let source = canary.store
@@ -519,6 +531,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             return phase
         }
         try prepared()
+        // IOS-PLAN §4.2: a vault being deleted, before anything else is read or opened.
+        if let d = record.value.deleting { return resumeDeleting(d) }
         usesPhoneSecret = phoneSecrets.inUse
         // §11.14.9 step 5: a PIN change left unresolved by an earlier run makes the unlock ask for the previous PIN.
         refreshPinStep()
@@ -575,15 +589,6 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         // Only the phone whose enrollment made the vault confirms it.
         if !local.enrollConfirmed, local.enrolledHere { try await confirmEnrollment(s, backup: local.backupChoice) { _ in } }
         return local.setupComplete ? .unlocked : .setup(.finishing)
-    }
-
-    nonisolated static let stateUnlocked = "unlocked"
-
-    /// `GET /api/vault/status`, following its top-level `service` (MEMBER-API 1.2.0) for the banner.
-    func vaultStatus() async throws -> VaultStatus? {
-        let a = try await member.vaultStatusAnswer()
-        servicePaused = a.servicePaused
-        return a.vault
     }
 }
 

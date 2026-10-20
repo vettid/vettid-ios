@@ -31,10 +31,14 @@ final class VaultReleaseUpdateOps: ReleaseUpdateOps {
         pin: TakenPin, approve: ReleaseView?, abandon: Bool, afterMove: Bool, onStarting: @escaping @MainActor () -> Void
     ) async -> UpdateStepResult {
         guard let m = ref.manager else { return .failed(.other, code: "session_dropped") }
-        return await m.updateUnlock(pin: pin, approve: approve, abandon: abandon, afterMove: afterMove, onStarting: onStarting)
+        // [afterMove] needs nothing of its own: every unlock waits while the route names the release the move left.
+        return await m.updateUnlock(pin: pin, approve: approve, abandon: abandon, onStarting: onStarting)
     }
 
-    func canAbandon() -> Bool { ref.manager?.session?.device.altState.previousRelease.isEmpty == false }
+    /// (IOS-PLAN §4.3) Read from the marker, so that leaving the screen and a restart keep the offer.
+    func canAbandon() -> Bool { ref.manager?.session?.device.altState.moveUnconfirmed != nil }
+
+    func unconfirmedMove() -> UnconfirmedMove? { ref.manager?.unconfirmedMove }
 
     func releaseNumber() -> UInt64 { ref.manager?.session?.device.altState.releaseNumber ?? 0 }
 
@@ -128,7 +132,7 @@ extension VaultManager {
     /// is sent once which PIN the vault expects moved since [pin] was taken: checked here and again right before each
     /// request is posted (``UnlockRoute/pinTaken``).
     func updateUnlock(
-        pin: TakenPin, approve: ReleaseView?, abandon: Bool, afterMove: Bool = false, onStarting: @escaping @MainActor () -> Void
+        pin: TakenPin, approve: ReleaseView?, abandon: Bool, onStarting: @escaping @MainActor () -> Void
     ) async -> UpdateStepResult {
         // (§11.14.9) Nothing is sent while a PIN or password change is undecided: the PIN may be the wrong one of two.
         if let hold = releaseUpdateHold() {
@@ -145,7 +149,7 @@ extension VaultManager {
         let options = UnlockOptions(approve: approve.map { Approval(toPcr0: $0.pcr0, toRelease: $0.number) }, abandon: abandon)
         let starting: @Sendable (Int) -> Void = { _ in Task { @MainActor in onStarting() } }
         // The update never moves the unlock's PIN steps (§11.14.9 step 5): a change undecided is refused above.
-        var route = UnlockRoute(followMove: false, release: release, onStarting: starting, pinSteps: false, afterMove: afterMove)
+        var route = UnlockRoute(followMove: false, release: release, onStarting: starting, pinSteps: false)
         route.pinTaken = pin.generation
         var o = await unlockOutcome(pin: pin.pin, options: options, route: route)
         if abandon, case .failed(_, let code, _) = o.attempt, code == MemberApiError.vaultBusy {
@@ -155,6 +159,8 @@ extension VaultManager {
             try? await lock()
             o = await unlockOutcome(pin: pin.pin, options: options, route: route)
         }
+        // IOS-PLAN §4.3 point 4: the way back refused for good (`wrong_release`), or release N unavailable.
+        if abandon, let ended = await returnEnded(o.attempt) { return ended }
         return Self.stepResult(o)
     }
 

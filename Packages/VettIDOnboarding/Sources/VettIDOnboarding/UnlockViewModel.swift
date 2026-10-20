@@ -52,6 +52,7 @@ public final class UnlockViewModel: UnlockActions {
         // §11.14.9 "A lost answer" step 5: the previous PIN, then the new one.
         followers.add(follow(self, read: { $0.vault.unlockPinStep }, apply: { $0.state.pinStep = $1 }))
         followers.add(follow(self, read: { $0.vault.releaseUpdateHeld }, apply: { $0.state.updateHeld = $1 }))
+        followers.add(follow(self, read: { $0.vault.unconfirmedMove }, apply: { $0.state.moveUnconfirmed = $1 }))
         if let ownerCheck {
             followers.add(follow(
                 ownerCheck,
@@ -169,7 +170,10 @@ public final class UnlockViewModel: UnlockActions {
         state.password = ""
     }
 
-    public func submit() { attempt(.unlock(cancelRecovery: false)) }
+    public func submit() {
+        if state.returnAsksPin { return returnWithPin() }
+        attempt(.unlock(cancelRecovery: false))
+    }
 
     public func cancelRecoveryAndUnlock() {
         guard state.cancelAllowed else { return }
@@ -212,6 +216,40 @@ public final class UnlockViewModel: UnlockActions {
                 state.erasing = false
             }
         }
+    }
+
+    // MARK: - The way back to release N (IOS-PLAN §4.3)
+
+    public func askReturn() {
+        if state.returnOffered && !state.busy { state.returnConfirm = true }
+    }
+
+    public func dismissReturn() { state.returnConfirm = false }
+
+    public func confirmReturn() {
+        state.returnConfirm = false
+        guard state.returnOffered, !state.busy else {
+            state.pin = ""
+            return
+        }
+        if state.pin.count >= UnlockState.minPinLength {
+            returnWithPin()
+        } else {
+            state.pin = ""
+            state.returnAsksPin = true
+        }
+    }
+
+    /// The PIN goes to release N only here, on the member's confirmed tap: the release update's way back, which the root
+    /// shows over this screen.
+    private func returnWithPin() {
+        let pin = state.pin
+        state.pin = ""
+        guard pin.count >= UnlockState.minPinLength, state.pinAllowed else { return }
+        state.returnAsksPin = false
+        state.message = nil
+        // Refused before anything was sent (an update running, the owner check or a change first).
+        if !vault.returnToPreviousRelease(pin: pin) { state.message = .failed(.other, code: nil) }
     }
 
     // MARK: - The lock and the move
