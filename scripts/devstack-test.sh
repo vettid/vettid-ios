@@ -234,36 +234,62 @@ run_test() {
   return ${rc}
 }
 
-# The VettIDDevStack app's UI test (DevStackTests) on the simulator against the running stack.
+# The VettIDDevStack app's bundle id (project.yml), removed before each --ui run.
+DEVSTACK_UI_APP=com.vettid.app.devstack.ui
+
+# Fails the --ui run, saying what was missing. (run_ui is called as `run_ui || rc=$?`, which turns `set -e` off inside
+# it: every step checks its own result.)
+ui_fail() { echo "devstack --ui: $*" >&2; return 1; }
+
+# One field of a JSON document on stdin (a list joined with commas); empty when it is missing.
+json_field() { python3 -c 'import json,sys
+v = json.load(sys.stdin).get(sys.argv[1], "")
+print(",".join(v) if isinstance(v, list) else v)' "$1" 2>/dev/null || true; }
+
+# The VettIDDevStack app's UI test (DevStackTests) on the simulator against the running stack. It passes only when the
+# test ran and passed: the runner is told it runs from this script (VETTID_DEVSTACK_UI=1), so a missing input fails the
+# test instead of skipping it, and the output must show the test passed.
 run_ui() {
-  local dest udid ready api relay ctl guid code trust root keys rc=0
-  dest="$(scripts/simulator-destination.sh)"
+  local dest udid ready api relay ctl guid code trust root keys out rc=0
+  dest="$(scripts/simulator-destination.sh)" || ui_fail "no simulator" || return 1
   xcodebuild build-for-testing -project VettID.xcodeproj -scheme VettIDDevStack -configuration DevStack \
-    -destination "${dest}" -quiet
+    -destination "${dest}" -quiet || ui_fail "the build failed" || return 1
   # A fresh install: the app and its data container are removed (the first launch erases what the keychain kept).
   udid="${dest##*id=}"
   if [[ "${udid}" != "${dest}" ]]; then
     xcrun simctl boot "${udid}" 2>/dev/null || true
-    xcrun simctl uninstall "${udid}" com.vettid.app.devstack 2>/dev/null || true
+    xcrun simctl uninstall "${udid}" "${DEVSTACK_UI_APP}" 2>/dev/null || true
   fi
   ready="${DATA}/run/ready.json"
-  api=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["api"])' "${ready}")
-  relay=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["relay_transport"])' "${ready}")
-  ctl=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["ctl"])' "${ready}")
+  [[ -f "${ready}" ]] || ui_fail "no ${ready}" || return 1
+  api=$(json_field api <"${ready}")
+  relay=$(json_field relay_transport <"${ready}")
+  ctl=$(json_field ctl <"${ready}")
+  [[ -n "${api}" && -n "${relay}" && -n "${ctl}" ]] || ui_fail "${ready} lacks api, relay_transport or ctl" || return 1
+  trust=$(curl -sf --max-time 10 "${ctl}/dev/trust") || ui_fail "GET ${ctl}/dev/trust failed" || return 1
+  root=$(printf '%s' "${trust}" | json_field nitro_root)
+  keys=$(printf '%s' "${trust}" | json_field manifest_keys)
+  [[ -n "${root}" && -n "${keys}" ]] || ui_fail "/dev/trust lacks nitro_root or manifest_keys" || return 1
   # A new member for each run; the code is issued last, as it lives 5 minutes.
-  trust=$(curl -sf --max-time 10 "${ctl}/dev/trust")
-  root=$(printf '%s' "${trust}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["nitro_root"])')
-  keys=$(printf '%s' "${trust}" | python3 -c 'import json,sys; print(",".join(json.load(sys.stdin)["manifest_keys"]))')
   guid="ios-ui-$(python3 -c 'import secrets; print(secrets.token_hex(8))')"
   code=$(curl -sf --max-time 10 -X POST -H "Authorization: Bearer ${guid}" -H 'Content-Type: application/json' \
-    "${api}/api/vault/enroll-code" | python3 -c 'import json,sys; print(json.load(sys.stdin)["code"])')
-  TEST_RUNNER_VETTID_DEVSTACK_API="${api}" TEST_RUNNER_VETTID_DEVSTACK_RELAY="${relay}" \
+    "${api}/api/vault/enroll-code" | json_field code)
+  [[ -n "${code}" ]] || ui_fail "POST ${api}/api/vault/enroll-code gave no code" || return 1
+  out=$(mktemp)
+  TEST_RUNNER_VETTID_DEVSTACK_UI=1 \
+    TEST_RUNNER_VETTID_DEVSTACK_API="${api}" TEST_RUNNER_VETTID_DEVSTACK_RELAY="${relay}" \
     TEST_RUNNER_VETTID_DEVSTACK_CTL="${ctl}" TEST_RUNNER_VETTID_DEVSTACK_NITRO_ROOT="${root}" \
     TEST_RUNNER_VETTID_DEVSTACK_MANIFEST_KEYS="${keys}" TEST_RUNNER_VETTID_DEVSTACK_EMAIL="${guid}@example.org" \
     TEST_RUNNER_VETTID_DEVSTACK_CODE="${code}" \
     xcodebuild test-without-building -project VettID.xcodeproj -scheme VettIDDevStack -configuration DevStack \
     -destination "${dest}" -parallel-testing-enabled NO \
-    -only-testing:VettIDDevStackUITests/DevStackTests/testDevStackEnrollLockUnlock || rc=$?
+    -only-testing:VettIDDevStackUITests/DevStackTests/testDevStackEnrollLockUnlock 2>&1 | tee "${out}"
+  rc=${PIPESTATUS[0]}
+  if [[ ${rc} -eq 0 ]] && ! grep -q "testDevStackEnrollLockUnlock\]' passed" "${out}"; then
+    ui_fail "testDevStackEnrollLockUnlock did not run and pass (skipped?)"
+    rc=1
+  fi
+  rm -f "${out}"
   return ${rc}
 }
 

@@ -713,8 +713,10 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "$(VETTID_APP_BUNDLE_ID).uitests";
+				PRODUCT_BUNDLE_IDENTIFIER = com.vettid.app.devstack.ui.uitests;
 				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = iphonesimulator;
+				SUPPORTS_MACCATALYST = NO;
 				TEST_TARGET_NAME = VettIDDevStack;
 			};
 			name = Release;
@@ -753,10 +755,14 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 2.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(VETTID_APP_BUNDLE_ID)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.vettid.app.devstack.ui;
 				PRODUCT_NAME = VettIDDevStack;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = iphonesimulator;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 			};
 			name = Staging;
 		};
@@ -804,10 +810,14 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 2.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(VETTID_APP_BUNDLE_ID)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.vettid.app.devstack.ui;
 				PRODUCT_NAME = VettIDDevStack;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = iphonesimulator;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 			};
 			name = Release;
 		};
@@ -890,10 +900,14 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 2.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(VETTID_APP_BUNDLE_ID)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.vettid.app.devstack.ui;
 				PRODUCT_NAME = VettIDDevStack;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = iphonesimulator;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VETTID_DEVSTACK_APP";
 			};
 			name = DevStack;
@@ -924,8 +938,10 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "$(VETTID_APP_BUNDLE_ID).uitests";
+				PRODUCT_BUNDLE_IDENTIFIER = com.vettid.app.devstack.ui.uitests;
 				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = iphonesimulator;
+				SUPPORTS_MACCATALYST = NO;
 				TEST_TARGET_NAME = VettIDDevStack;
 			};
 			name = Staging;
@@ -1010,8 +1026,10 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "$(VETTID_APP_BUNDLE_ID).uitests";
+				PRODUCT_BUNDLE_IDENTIFIER = com.vettid.app.devstack.ui.uitests;
 				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = iphonesimulator;
+				SUPPORTS_MACCATALYST = NO;
 				TEST_TARGET_NAME = VettIDDevStack;
 			};
 			name = DevStack;
@@ -1026,8 +1044,10 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "$(VETTID_APP_BUNDLE_ID).uitests";
+				PRODUCT_BUNDLE_IDENTIFIER = com.vettid.app.devstack.ui.uitests;
 				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = iphonesimulator;
+				SUPPORTS_MACCATALYST = NO;
 				TEST_TARGET_NAME = VettIDDevStack;
 			};
 			name = Debug;
@@ -1050,10 +1070,14 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 2.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "$(VETTID_APP_BUNDLE_ID)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.vettid.app.devstack.ui;
 				PRODUCT_NAME = VettIDDevStack;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = iphonesimulator;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 			};
 			name = Debug;
 		};

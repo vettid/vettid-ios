@@ -162,8 +162,15 @@ targets:
           NSAllowsLocalNetworking: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: $(VETTID_APP_BUNDLE_ID)
+        # Its own bundle id, beside the VettID app built in the DevStack configuration (com.vettid.app.devstack).
+        PRODUCT_BUNDLE_IDENTIFIER: com.vettid.app.devstack.ui
         PRODUCT_NAME: VettIDDevStack
+        # The simulator only: an app with software keys and the TEST attester is never built for an iPhone or a Mac
+        # (scripts/release-check.sh checks these).
+        SUPPORTED_PLATFORMS: iphonesimulator
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: NO
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: $(VETTID_DISPLAY_NAME)
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
@@ -233,8 +240,10 @@ targets:
         excludes: ["*.xctestplan"]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: $(VETTID_APP_BUNDLE_ID).uitests
+        PRODUCT_BUNDLE_IDENTIFIER: com.vettid.app.devstack.ui.uitests
         GENERATE_INFOPLIST_FILE: YES
+        SUPPORTED_PLATFORMS: iphonesimulator
+        SUPPORTS_MACCATALYST: NO
     dependencies:
       - target: VettIDDevStack
 

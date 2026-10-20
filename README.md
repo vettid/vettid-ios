@@ -56,8 +56,9 @@ differ.
 | DevStack | `com.vettid.app.devstack` | VettID Dev Stack | the local dev stack |
 
 All four install side by side. The DevStack configuration also builds the
-**VettIDDevStack** app (its own target and scheme, simulator only, never
-archived): the same app with the TEST App Attest attester and software keys
+**VettIDDevStack** app (`com.vettid.app.devstack.ui`, its own target and
+scheme, simulator only, never archived; it installs beside the other four):
+the same app with the TEST App Attest attester and software keys
 (`AppDevStack/`), driven by its UI test against the local dev stack:
 
 ```bash

@@ -14,8 +14,9 @@ import XCTest
 /// - `VETTID_DEVSTACK_NITRO_ROOT`, `VETTID_DEVSTACK_MANIFEST_KEYS`: its TEST-ONLY trust (`GET /dev/trust`);
 /// - `VETTID_DEVSTACK_EMAIL`, `VETTID_DEVSTACK_CODE`: the new member's address and typed code.
 ///
-/// The addresses and the trust go on to the app in its launch environment. Skipped without them. Everything here is
-/// TEST-ONLY: the member, the code, the PIN and the password exist only on the dev stack.
+/// The addresses and the trust go on to the app in its launch environment. Skipped without them, unless the script runs
+/// it (`VETTID_DEVSTACK_UI=1`), which makes a missing input a failure. Everything here is TEST-ONLY: the member, the
+/// code, the PIN and the password exist only on the dev stack.
 final class DevStackTests: VaultUITestCase {
     /// The dev stack's enclave starts on a small VM: an unlock or a lock may wait for it.
     override static var network: TimeInterval { 180 }
@@ -47,12 +48,21 @@ final class DevStackTests: VaultUITestCase {
         lock(app)
     }
 
-    /// An input from the runner's environment (xcodebuild hands `TEST_RUNNER_<NAME>` over as `<NAME>`); the test is
-    /// skipped without it.
+    /// An input from the runner's environment (xcodebuild hands `TEST_RUNNER_<NAME>` over as `<NAME>`). Without it the
+    /// test is skipped, except when the script runs it (`VETTID_DEVSTACK_UI=1`): then a missing input fails it, so that
+    /// `--ui` never passes on a test that did not run.
     static func input(_ name: String) throws -> String {
-        guard let value = ProcessInfo.processInfo.environment[name], !value.isEmpty else {
+        let env = ProcessInfo.processInfo.environment
+        guard let value = env[name], !value.isEmpty else {
+            if env["VETTID_DEVSTACK_UI"] == "1" { throw MissingInput(name: name) }
             throw XCTSkip("\(name) is not set: the dev stack UI test runs only through scripts/devstack-test.sh --ui")
         }
         return value
+    }
+
+    struct MissingInput: Error, CustomStringConvertible {
+        let name: String
+
+        var description: String { "\(name) is not set although scripts/devstack-test.sh --ui runs the test" }
     }
 }

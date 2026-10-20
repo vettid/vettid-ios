@@ -54,7 +54,9 @@ enum DevStackWiring {
 
     @MainActor
     static func wiring() -> AppWiring {
-        AppWiring(
+        // Said once at launch, and so kept in the binary whatever the optimizer drops (the release check refuses it).
+        NSLog("%@", testOnlyMarker)
+        return AppWiring(
             hardware: { _, _ in hardware() },
             // The relay URL that tokens name (`https://relay.vettid.test`) goes to the relay's plain-HTTP port.
             transport: HTTPTransport(
