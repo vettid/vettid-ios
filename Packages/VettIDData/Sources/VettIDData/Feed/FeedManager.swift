@@ -217,6 +217,8 @@ public final class FeedManager: FeedRepository {
     }
 
     private func readNow(full: Bool, quietly: Bool) async throws {
+        // Held or due: nothing is read, so a read queued after the clear cannot fill the feed again.
+        guard !gated() else { return }
         let g = generation
         if full { load = .loading }
         do {
