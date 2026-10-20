@@ -46,10 +46,12 @@ public enum VaultFiles {
     /// The canary manifest installed out of band (``CanaryManifestManager``). Not one of ``all(in:)``: it holds nothing
     /// of a vault, so its presence alone does not refuse the first-run cleanup (chosen; not in the spec).
     public static let canary = "canary-manifest"
+    /// What only this phone learns of connection requests (``ConnectionsManager``).
+    public static let connections = "connections"
 
     /// Every data file of the vault manager in [directory].
     public static func all(in directory: URL) -> [URL] {
-        [account, device, phoneSecrets, lock, ownerCheck].map { directory.appendingPathComponent($0) }
+        [account, device, phoneSecrets, lock, ownerCheck, connections].map { directory.appendingPathComponent($0) }
     }
 }
 

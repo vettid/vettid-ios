@@ -1,10 +1,11 @@
 import Foundation
 import VettIDCrypto
 
-/// One function per VAULT-MESSAGING §10.2 and §10.3 type the app sends, plus the events it receives (§10.1 `sync.event`,
-/// §10.2 `vault.held`), and the credential calls of enrollment (§10.6, ``credentialCreate(password:pin:)``). Errors are
-/// ``VaultOpError`` with the spec's code. The other §10 sections (connections, messaging, items, the other credential
-/// operations, …) come with the phases that use them. Mirrors vettid-android `VaultApi`.
+/// One function per VAULT-MESSAGING §10.2, §10.3 and §10.4 type the app sends (§10.4 in `VaultApi+Connections.swift`),
+/// plus the events it receives (§10.1 `sync.event`, §10.2 `vault.held`), and the credential calls of enrollment (§10.6,
+/// ``credentialCreate(password:pin:)``). Errors are ``VaultOpError`` with the spec's code. The other §10 sections
+/// (messaging, items, the other credential operations, …) come with the phases that use them. Mirrors vettid-android
+/// `VaultApi`.
 public struct VaultApi: Sendable {
     /// How long the app waits for the vault's answer to `vault.lock`.
     public static let lockAnswer: TimeInterval = 10
