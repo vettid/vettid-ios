@@ -48,10 +48,12 @@ public enum VaultFiles {
     public static let canary = "canary-manifest"
     /// What only this phone learns of connection requests (``ConnectionsManager``).
     public static let connections = "connections"
+    /// The approvals that arrive only as events (``ApprovalsManager``).
+    public static let approvals = "approvals"
 
     /// Every data file of the vault manager in [directory].
     public static func all(in directory: URL) -> [URL] {
-        [account, device, phoneSecrets, lock, ownerCheck, connections].map { directory.appendingPathComponent($0) }
+        [account, device, phoneSecrets, lock, ownerCheck, connections, approvals].map { directory.appendingPathComponent($0) }
     }
 }
 

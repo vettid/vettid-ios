@@ -18,12 +18,11 @@ struct VaultSession: Sendable {
 /// client and the alternate channel. Implements the repositories the features use; nothing in a feature touches
 /// transport or crypto. One instance per process, on the main actor; the work it waits for runs off it.
 ///
-/// The slices so far (IOS-PLAN §8): what onboarding needs (I1.6: the phase at start, the setup code, enrollment with the
-/// phone's unlock secret of epoch 1, §11.14.1 "On an iPhone", the first handshake, the credential and Finish setup),
-/// the unlock and the member's lock (I1.7a: §11.4 with the phone secret, VAULT-LOCK as vettid-android implements it, the
-/// vault events they follow), Settings (I1.8: the account, the name, the credential screen, the PIN), the connections
-/// (I2.1: ``connections``) and the messages (I2.2: ``messages``), fed this manager's events. Every other operation keeps its protocol default until the row
-/// that brings it. Mirrors vettid-android `VaultManager`.
+/// The slices so far (IOS-PLAN §8): onboarding (I1.6: the setup code, enrollment with the phone's unlock secret of epoch
+/// 1, §11.14.1, the first handshake, the credential, Finish setup), the unlock and the member's lock (I1.7a: §11.4,
+/// VAULT-LOCK as vettid-android implements it), Settings (I1.8), the connections and messages (I2.1, I2.2), the feed,
+/// the approvals and History (I2.3), fed this manager's events. Every other operation keeps its protocol default until
+/// the row that brings it. Mirrors vettid-android `VaultManager`.
 @MainActor
 @Observable
 public final class VaultManager: AccountRepository, VaultRepository, CredentialRepository {
@@ -95,6 +94,11 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored public let connections: ConnectionsManager
     /// Messages with connections (VAULT-MESSAGING §10.5, §10.5.2), in memory only.
     @ObservationIgnored public let messages: MessagesManager
+    /// The feed, the approvals, History and its export (VAULT-MESSAGING §10.9, §10.12, §10.13; ``VaultManager+Activity``).
+    @ObservationIgnored public let feed: FeedManager
+    @ObservationIgnored public let approvals: ApprovalsManager
+    @ObservationIgnored public let history: HistoryManager
+    @ObservationIgnored public let historyExport: HistoryExportManager
     /// The canary manifest installed out of band (VAULT-RELEASES §10.1 step 9, VAULT-MESSAGING §11.10.1): used by the
     /// alternate channel instead of the published manifest only while it is newer.
     @ObservationIgnored public let canary: CanaryManifestManager
@@ -190,6 +194,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         profiles = Self.profiles(ref, checks: ownerChecks, record: rec)
         connections = Self.connectionsManager(config, ref, rec)
         messages = Self.messagesManager(ref, connections)
+        (feed, approvals, history, historyExport) = Self.activityManagers(config, ref, rec, connections)
         wiper = config.wipeTargets.map { LocalWipe(targets: $0, hooks: [{ await ref.manager?.runWipeHooks() }]) }
         ref.manager = self
         lockPorts.manager = self
@@ -286,6 +291,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         ownerChecks.loadIfNeeded()
         canary.loadIfNeeded()
         connections.loadIfNeeded()
+        approvals.loadIfNeeded()
         memberVault.set(recorded: record.value.vaultID)
         if account == nil { account = record.value.info }
         if !lockResumed {

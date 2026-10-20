@@ -72,21 +72,24 @@ extension VaultManager {
         return messages
     }
 
-    /// The vault is no longer open on this phone: what was read from it is dropped (the connections, the requests and the
-    /// messages).
+    /// The vault is no longer open on this phone: what was read from it is dropped (the connections, the requests, the
+    /// messages, the feed, the approvals' lists and History).
     func forgetOpenLists() {
         connections.forgetOpenVault()
         messages.forgetOpenVault()
+        forgetActivity()
     }
 
     /// The vault opened, or an owner check passed (§3.6.3: nothing held back is replayed as events): the connections and
-    /// the requests are read again, then the conversations of the connections read; failures are left for the screens.
+    /// the requests are read again, then the conversations of the connections, the feed and the approvals' lists, one
+    /// after the other; failures are left for the screens.
     func refreshListsQuietly() {
         Task { [weak self] in
             guard let self else { return }
             try? await connections.refresh(quietly: true)
             try? await connections.refreshRequests(quietly: true)
             await messages.refreshConversationsQuietly()
+            await refreshActivityQuietly()
         }
     }
 }
