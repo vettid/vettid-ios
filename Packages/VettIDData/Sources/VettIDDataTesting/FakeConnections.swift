@@ -24,6 +24,9 @@ public final class FakeConnections: ConnectionsRepository, ConnectionRequestsRep
     public var requests: [PendingConnection] = []
     public var requestEnds: [String: RequestEnd] = [:]
     public var peerDeclines: [PeerDecline] = []
+    /// A decision that fails with `notFound` ends the request as ``RequestEnd/gone`` first, as ``ConnectionsManager``
+    /// does (off by default).
+    public var goneOnNotFound = false
 
     public init() {}
 
@@ -113,6 +116,16 @@ public final class FakeConnections: ConnectionsRepository, ConnectionRequestsRep
 
     public func refreshRequests() async throws { try call("refreshRequests") }
 
+    /// A decision on request [id]: with ``goneOnNotFound``, a `notFound` failure ends it as ``RequestEnd/gone``.
+    private func decide(_ name: String, _ id: String) throws {
+        do {
+            try call(name)
+        } catch let f as VaultFailure where goneOnNotFound && f.kind == .notFound {
+            end(id, .gone)
+            throw f
+        }
+    }
+
     private func end(_ id: String, _ e: RequestEnd) {
         requests.removeAll { $0.id == id }
         requestEnds[id] = e
@@ -124,27 +137,27 @@ public final class FakeConnections: ConnectionsRepository, ConnectionRequestsRep
     }
 
     public func approveConnection(_ pendingID: String) async throws {
-        try call("approveConnection")
+        try decide("approveConnection", pendingID)
         approve(pendingID)
     }
 
     public func declineConnection(_ pendingID: String) async throws {
-        try call("declineConnection")
+        try decide("declineConnection", pendingID)
         end(pendingID, .declined)
     }
 
     public func blockConnectionRequest(_ pendingID: String) async throws {
-        try call("blockConnectionRequest")
+        try decide("blockConnectionRequest", pendingID)
         end(pendingID, .declined)
     }
 
     public func approveOutgoing(_ connectionID: String) async throws {
-        try call("approveOutgoing")
+        try decide("approveOutgoing", connectionID)
         approve(connectionID)
     }
 
     public func declineOutgoing(_ connectionID: String) async throws {
-        try call("declineOutgoing")
+        try decide("declineOutgoing", connectionID)
         end(connectionID, .declined)
     }
 }
