@@ -243,4 +243,18 @@ import VettIDVault
         #expect(try await m.ownerChecks.check(pin: pin, password: "correct horse battery", holdOff: nil) == .passed)
         #expect(await eventually { reads() == 4 })
     }
+
+    /// In the background (the session dropped) a read nobody asked for sends nothing and opens no session.
+    @Test func aBackgroundReadOpensNoSession() async throws {
+        defer { phone.close() }
+        try await setUp()
+        func reads() -> Int { service.requestsSeen.filter { $0 == "connection.list" || $0 == "connection.request.list" }.count }
+        #expect(await eventually { reads() == 2 })
+        await m.onBackground()
+        #expect(m.session == nil)
+        c.refreshAllQuietly()
+        c.onEvent(VaultMessage(inner: Inner(id: Ulid.new(), type: "sync.event", ts: Date(), body: Array(#"{"kind":"block.added"}"#.utf8))))
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(m.session == nil && reads() == 2)
+    }
 }

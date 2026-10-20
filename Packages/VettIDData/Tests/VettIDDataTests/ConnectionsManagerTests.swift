@@ -228,7 +228,11 @@ final class MemoryFile {
         try await m.declineOutgoing("c1")
         #expect(ops.calls == ["decline:p1", "block:p2", "approve:p3", "approveOutgoing:c1", "declineOutgoing:c1"])
         #expect(m.requests.isEmpty)
-        #expect(m.requestEnds == ["p1": .declined, "p2": .declined, "c1": .declined])
+        #expect(m.requestEnds == ["p1": .declined, "p2": .declined, "p3": .gone, "c1": .declined])
+        // A list read sent before the vault said `not_found` does not bring the request back.
+        ops.requests = #"{"incoming":[{"pending_id":"p3","sas":"042817","state":"pending"}],"outgoing":[]}"#
+        try await m.refreshRequests()
+        #expect(m.requests.isEmpty)
     }
 
     /// The vault's list replaces what events brought; expired requests are not shown; newest first.
@@ -349,6 +353,30 @@ final class MemoryFile {
         #expect(m.requests.map(\.id).sorted() == ["c1", "p1"])
         #expect(m.requests.first { $0.id == "p1" }?.state == .approved)
         #expect(m.requests.first { $0.id == "c1" }?.sas == "111111" && m.requests.first { $0.id == "c1" }?.name == "Sam")
+    }
+
+    /// The reads nobody asked for go over the quiet calls only: when the session is gone between the two reads of an
+    /// opening (the app went to the background), the second is not sent and nothing opens a session.
+    @Test func backgroundReadsNeverUseTheCallsThatOpenASession() async throws {
+        let ops = ops, now = now
+        var quietCalls = 0
+        let m = ConnectionsManager(
+            ops: {
+                Issue.record("a background read used the calls that open a session")
+                return ops
+            },
+            quietOps: {
+                quietCalls += 1
+                if quietCalls > 1 { throw VaultFailure(.other, code: "session_dropped") }
+                return ops
+            },
+            now: { now }
+        )
+        m.refreshAllQuietly()
+        #expect(await eventually { quietCalls == 2 })
+        #expect(ops.calls == ["list"])
+        m.onEvent(event("sync.event", #"{"kind":"connection.changed","connection_id":"c1","version":1}"#))
+        #expect(await eventually { quietCalls == 3 })
     }
 }
 

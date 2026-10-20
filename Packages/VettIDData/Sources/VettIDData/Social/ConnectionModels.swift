@@ -213,6 +213,9 @@ public enum RequestEnd: Equatable, Sendable {
     case failed
     /// The other member declined (`connection.declined`, 0.10.5).
     case peerDeclined
+    /// A decision found the request unknown to the vault (`not_found`): it ended another way, on another device or by
+    /// its expiry, before this app learned how.
+    case gone
 }
 
 /// The other member declined a connection request of this member's (0.10.5, §6.4): shown once, until the member

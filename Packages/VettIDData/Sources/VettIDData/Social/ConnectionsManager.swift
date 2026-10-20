@@ -21,6 +21,9 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
     public internal(set) var peerDeclines: [PeerDecline] = []
 
     @ObservationIgnored let ops: @MainActor () async throws -> any ConnectionOps
+    /// The calls of a read nobody asked for (at the opening, after an owner check, on an event): only over the session
+    /// already open, never opening one.
+    @ObservationIgnored let quietOps: @MainActor () async throws -> any ConnectionOps
     @ObservationIgnored private let load: @MainActor () throws -> [UInt8]?
     @ObservationIgnored private let persist: @MainActor ([UInt8]) throws -> Void
     @ObservationIgnored let now: @Sendable () -> Date
@@ -33,15 +36,17 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
     /// the spec).
     @ObservationIgnored var generation = 0
 
-    /// [ops] the vault's calls, opened when needed; [load] and [persist] the encrypted file (read by
-    /// ``loadIfNeeded()``; an empty write clears it).
+    /// [ops] the vault's calls, opened when needed; [quietOps] those of the background reads (nil: [ops]); [load] and
+    /// [persist] the encrypted file (read by ``loadIfNeeded()``; an empty write clears it).
     public init(
         ops: @escaping @MainActor () async throws -> any ConnectionOps,
+        quietOps: (@MainActor () async throws -> any ConnectionOps)? = nil,
         load: @escaping @MainActor () throws -> [UInt8]? = { nil },
         persist: @escaping @MainActor ([UInt8]) throws -> Void = { _ in },
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.ops = ops
+        self.quietOps = quietOps ?? ops
         self.load = load
         self.persist = persist
         self.now = now
@@ -110,8 +115,8 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
     /// The vault opened: the connections and the requests are read again; failures are left for the screens to retry.
     public func refreshAllQuietly() {
         Task { [weak self] in
-            try? await self?.refresh()
-            try? await self?.refreshRequests()
+            try? await self?.refresh(quietly: true)
+            try? await self?.refreshRequests(quietly: true)
         }
     }
 
@@ -126,9 +131,12 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
 
     // MARK: - ConnectionsRepository
 
-    public func refresh() async throws {
+    public func refresh() async throws { try await refresh(quietly: false) }
+
+    func refresh(quietly: Bool) async throws {
         let g = generation
-        let list = try await guarded { try await ops().connectionList() }
+        let o = quietly ? quietOps : ops
+        let list = try await guarded { try await o().connectionList() }
         guard g == generation else { return }
         connections = list.filter { $0.kind == "connection" }.map(ConnectionParser.connection)
     }

@@ -55,7 +55,7 @@ extension ConnectionsManager {
         case "removed": forget(conn)
         default: break
         }
-        Task { [weak self] in try? await self?.refresh() }
+        Task { [weak self] in try? await self?.refresh(quietly: true) }
     }
 
     /// A new connection: the request it came from ([request], §10.4 `pending_id`) is done with.
@@ -68,7 +68,7 @@ extension ConnectionsManager {
     private func onSync(_ kind: String, _ b: JsonObject) {
         switch kind {
         case "connection.changed", "block.added", "block.removed":
-            Task { [weak self] in try? await self?.refresh() }
+            Task { [weak self] in try? await self?.refresh(quietly: true) }
         case "connection.request":
             onRequestSync(b)
         default:
@@ -110,12 +110,12 @@ extension ConnectionsManager {
         open[i] = f(open[i])
     }
 
-    /// The request ended without a connection ([end] nil: the vault no longer knows it). The other member's decline is
+    /// The request ended without a connection. The other member's decline is
     /// what the member is told, whatever end follows it; a bare `failed` keeps the name, since an older ordering may
     /// still bring the peer's decline (0.10.5).
-    func endRequest(_ id: String, _ end: RequestEnd?) {
+    func endRequest(_ id: String, _ end: RequestEnd) {
         open.removeAll { $0.id == id }
-        if let end, requestEnds[id] != .peerDeclined { requestEnds[id] = end }
+        if requestEnds[id] != .peerDeclined { requestEnds[id] = end }
         if end != .failed { edit { $0.requestNames[id] = nil } }
     }
 
@@ -142,9 +142,12 @@ extension ConnectionsManager {
 
     // MARK: - ConnectionRequestsRepository
 
-    public func refreshRequests() async throws {
+    public func refreshRequests() async throws { try await refreshRequests(quietly: false) }
+
+    func refreshRequests(quietly: Bool) async throws {
         let g = generation
-        let list = try await guarded { try await ops().requestList() }
+        let o = quietly ? quietOps : ops
+        let list = try await guarded { try await o().requestList() }
         guard g == generation else { return }
         let t = now()
         let parsed: [PendingConnection] = VaultJSON.objects(list, "incoming").compactMap { ConnectionParser.incoming($0, at: t) }
@@ -162,7 +165,7 @@ extension ConnectionsManager {
         do {
             try await guarded { try await body(try await ops()) }
         } catch let f as VaultFailure where f.kind == .notFound {
-            endRequest(id, nil)
+            endRequest(id, .gone)
             throw f
         }
     }

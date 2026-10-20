@@ -25,9 +25,19 @@ extension VaultManager {
     static func connectionsManager(_ config: VaultManagerConfig, _ ref: ManagerRef, _ rec: AccountRecord) -> ConnectionsManager {
         let file = config.file(VaultFiles.connections)
         return ConnectionsManager(
+            // Nothing goes to a vault whose lock is pending, and no session is opened for it.
             ops: {
                 guard let m = ref.manager else { throw VaultFailure(.other, code: "session_dropped") }
+                guard m.lockGuard.admits() else { throw VaultFailure(.other, code: Self.codeLockPending) }
                 return try m.openApi(try await m.openSession())
+            },
+            // A read nobody asked for goes only over the session open now, while the vault is open and collecting: it
+            // never opens one (in the background, after a lock).
+            quietOps: {
+                guard let m = ref.manager, m.phase == .unlocked, !m.backgrounded, let s = m.session else {
+                    throw VaultFailure(.other, code: "session_dropped")
+                }
+                return try m.openApi(s)
             },
             load: { try file.load() },
             // Nothing is written while a wipe runs or after one that did not finish.
