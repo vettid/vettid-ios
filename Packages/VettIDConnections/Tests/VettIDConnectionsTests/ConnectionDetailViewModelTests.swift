@@ -33,10 +33,16 @@ import VettIDDataTesting
     }
 
     /// A failed read keeps the screen, saying why.
-    @Test func aFailedReadSaysWhy() async {
+    @Test func aFailedReadSaysWhyAndTriesAgain() async {
+        fake.connections = [Samples.active("c1")]
         fake.fail["connection"] = VaultFailure(.network)
-        let m = await model()
+        let m = ConnectionDetailViewModel(connectionID: "c1", connections: fake)
+        await m.settle()
         #expect(!m.state.gone && m.state.error == .network && !m.state.loading)
+        m.load()
+        #expect(m.state.loading && m.state.error == nil)
+        await m.settle()
+        #expect(!m.state.loading && m.state.error == nil && m.state.connection?.id == "c1")
     }
 
     /// The list's copy wins: a change made elsewhere shows at once.
@@ -77,9 +83,25 @@ import VettIDDataTesting
         m.ask(.remove)
         m.confirm()
         await m.settle()
-        #expect(m.state.gone && fake.connections.isEmpty)
-        // The last copy read stays on screen while it closes.
-        #expect(m.state.connection?.id == "c1")
+        // Closed, and nothing of it stays on screen.
+        #expect(m.state.gone && fake.connections.isEmpty && m.state.connection == nil)
+    }
+
+    /// Removed on another device, or the vault locked and the lists were emptied: the screen closes and drops the names
+    /// and the profile it showed.
+    @Test func aConnectionThatLeavesTheListCloses() async {
+        fake.connections = [Samples.active("c1"), Samples.active("c2")]
+        let m = await model()
+        fake.connections.removeAll { $0.id == "c2" }
+        await m.settle()
+        #expect(!m.state.gone && m.state.connection != nil)
+        fake.connections = []
+        await m.settle()
+        #expect(m.state.gone && m.state.connection == nil)
+        // It does not come back with the list.
+        fake.connections = [Samples.active("c1")]
+        await m.settle()
+        #expect(m.state.connection == nil)
     }
 
     /// Mute and unmute; resume a pause or the cooldowns (0.23.0 §10.4.1). Unmuting does not resume, resuming does not

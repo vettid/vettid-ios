@@ -250,7 +250,10 @@ public struct AppShell: View {
             HelpScreen { model.back() }
         case .connections:
             if let connections, let connectionRequests {
-                ConnectionsRoute(connections: connections, requests: connectionRequests, chrome: chrome, host: connectHost)
+                ConnectionsRoute(
+                    connections: connections, requests: connectionRequests, ownerChecks: ownerChecks, account: account, chrome: chrome,
+                    host: connectHost
+                )
             } else {
                 ComingLaterScreen(destination: model.destination, chrome: chrome)
             }

@@ -3,7 +3,8 @@ import Observation
 import VettIDData
 
 /// A connection request that ended without a connection while the member was deciding it on the list (VAULT-MESSAGING
-/// §6.4): ``RequestEnd/gone`` when the vault no longer knew it (decided on another device, or expired).
+/// §6.4): ``RequestEnd/gone`` when the vault no longer knew it (decided on another device, or expired). Never
+/// ``RequestEnd/peerDeclined``, which the other member's decline notice tells.
 public struct EndedRequest: Equatable, Sendable {
     public var requestID: String
     public var end: RequestEnd
@@ -72,17 +73,63 @@ public extension ConnectionInfo {
 public final class ConnectionsViewModel {
     @ObservationIgnored private let connections: any ConnectionsRepository
     @ObservationIgnored private let requests: any ConnectionRequestsRepository
+    @ObservationIgnored private let ownerChecks: (any OwnerCheckRepository)?
+    @ObservationIgnored private let account: (any AccountRepository)?
     @ObservationIgnored private let work = Work()
+    @ObservationIgnored private let follows = TaskBag()
+    /// The vault was open at the last look (``account``'s phase).
+    @ObservationIgnored private var wasOpen = true
     /// What the screen holds itself; the lists come from the repositories (``state``).
     private var local = ConnectionsState()
 
-    public init(connections: any ConnectionsRepository, requests: any ConnectionRequestsRepository) {
+    /// [ownerChecks]: a list refused because the daily check was due (``FailureKind/ownerCheckRequired``) reads again by
+    /// itself once a check passes, as vettid-android's. [account]: the invitations read are dropped when the vault is no
+    /// longer open, and read again when it opens.
+    public init(
+        connections: any ConnectionsRepository,
+        requests: any ConnectionRequestsRepository,
+        ownerChecks: (any OwnerCheckRepository)? = nil,
+        account: (any AccountRepository)? = nil
+    ) {
         self.connections = connections
         self.requests = requests
+        self.ownerChecks = ownerChecks
+        self.account = account
+        refresh()
+        if ownerChecks != nil {
+            follows.add(follow(self, read: { $0.ownerChecks?.ownerCheck }, apply: { $0.onOwnerCheck($1) }))
+        }
+        if account != nil {
+            follows.add(follow(self, read: { $0.vaultOpen }, apply: { $0.onVaultOpen($1) }))
+        }
+    }
+
+    deinit {
+        work.cancelAll()
+        follows.cancelAll()
+    }
+
+    private var vaultOpen: Bool {
+        if case .unlocked = account?.phase { return true }
+        return false
+    }
+
+    /// The daily check passed (or the hold ended): a list it refused is read again.
+    private func onOwnerCheck(_ v: OwnerCheckView?) {
+        guard v?.state == .ok, local.error == .ownerCheckRequired else { return }
         refresh()
     }
 
-    deinit { work.cancelAll() }
+    /// Locked (or left): what was read from the open vault goes; an unlock reads it again.
+    private func onVaultOpen(_ open: Bool) {
+        defer { wasOpen = open }
+        if !open {
+            local.invites = []
+            local.cancelling = nil
+        } else if !wasOpen {
+            refresh()
+        }
+    }
 
     public var state: ConnectionsState {
         var s = local
@@ -185,7 +232,8 @@ public final class ConnectionsViewModel {
                 try await call()
             } catch {
                 if let end = requests.requestEnds[id] {
-                    self?.local.ended = EndedRequest(requestID: id, end: end)
+                    // The other member's decline has its own notice (``ConnectionsState/peerDeclines``).
+                    if end != .peerDeclined { self?.local.ended = EndedRequest(requestID: id, end: end) }
                 } else {
                     self?.local.error = failureKind(error)
                 }

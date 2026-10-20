@@ -186,7 +186,11 @@ import VettIDUI
         full.connection = c
         var cooled = full
         cooled.connection?.asks = AskState(cooldowns: 1)
-        return [loading, bare, full, cooled]
+        // The first read failed: the error card with "Try again", not a blank page.
+        var failed = ConnectionDetailState(connectionID: "c1")
+        failed.loading = false
+        failed.error = .network
+        return [loading, bare, full, cooled, failed]
     }
 
     private func height(_ view: some View) -> CGFloat {

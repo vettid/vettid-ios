@@ -150,6 +150,59 @@ import VettIDDataTesting
         #expect(m.state.error == .network && m.state.ended == nil && m.state.requests.map(\.id) == ["o1"])
     }
 
+    /// The other member declined while this member was deciding (0.10.5): their decline notice tells it, no second
+    /// notice and no failure.
+    @Test func aPeersDeclineRacingADecisionIsToldOnce() async {
+        fake.requests = [Samples.outgoing("o1")]
+        let m = await model()
+        fake.requestEnds["o1"] = .peerDeclined
+        fake.peerDeclines = [PeerDecline(requestID: "o1", name: "Inviter", outgoing: true, at: Date())]
+        fake.fail["approveOutgoing"] = VaultFailure(.notFound)
+        m.approve(m.state.requests[0])
+        await m.settle()
+        #expect(m.state.ended == nil && m.state.error == nil && m.state.peerDeclines.count == 1)
+    }
+
+    /// A list refused because the daily check was due reads again by itself once a check passes (vettid-android
+    /// `checkCleared`); a passed check leaves another failure alone.
+    @Test func aPassedCheckReadsARefusedListAgain() async {
+        let vault = FakeVaultRepository(.unlocked)
+        vault.ownerCheck = OwnerCheckView(state: .due, deadline: nil, hold: false)
+        fake.fail["refresh"] = VaultFailure(.ownerCheckRequired)
+        let m = ConnectionsViewModel(connections: fake, requests: fake, ownerChecks: vault, account: vault)
+        await m.settle()
+        #expect(m.state.error == .ownerCheckRequired && m.state.invites.isEmpty)
+        let invite = OutstandingInvite(inviteID: "i1", exp: nil, remote: false)
+        fake.outstanding = [invite]
+        vault.ownerCheck = OwnerCheckView(state: .ok, deadline: Date(), hold: false)
+        await m.settle()
+        #expect(m.state.error == nil && m.state.invites == [invite])
+        fake.fail["refresh"] = VaultFailure(.network)
+        m.refresh()
+        await m.settle()
+        let reads = fake.calls.filter { $0 == "refresh" }.count
+        vault.ownerCheck = OwnerCheckView(state: .ok, deadline: Date().addingTimeInterval(60), hold: false)
+        await m.settle()
+        #expect(m.state.error == .network && fake.calls.filter { $0 == "refresh" }.count == reads)
+    }
+
+    /// Locked: the invitations read from the open vault go; an unlock reads them again.
+    @Test func aLockDropsTheInvitations() async {
+        let vault = FakeVaultRepository(.unlocked)
+        let invite = OutstandingInvite(inviteID: "i1", exp: nil, remote: false)
+        fake.outstanding = [invite]
+        let m = ConnectionsViewModel(connections: fake, requests: fake, ownerChecks: vault, account: vault)
+        await m.settle()
+        m.askCancel(invite)
+        #expect(m.state.invites == [invite])
+        vault.phase = .locked
+        await m.settle()
+        #expect(m.state.invites.isEmpty && m.state.cancelling == nil)
+        vault.phase = .unlocked
+        await m.settle()
+        #expect(m.state.invites == [invite] && fake.calls.filter { $0 == "outstandingInvites" }.count == 2)
+    }
+
     /// The state never prints the names it holds.
     @Test func theStateDoesNotPrintNames() async {
         fake.connections = [Self.connection("c1", "Ada", "Lovelace")]

@@ -84,14 +84,45 @@ public extension ConnectionInfo {
 public final class ConnectionDetailViewModel {
     @ObservationIgnored private let connections: any ConnectionsRepository
     @ObservationIgnored private let work = Work()
+    @ObservationIgnored private let follows = TaskBag()
+    /// The connection was in the repository's list: once it is not, it is gone.
+    @ObservationIgnored private var listed = false
     private var local: ConnectionDetailState
 
     public init(connectionID: String, connections: any ConnectionsRepository) {
         self.connections = connections
         local = ConnectionDetailState(connectionID: connectionID)
+        load()
+        follows.add(follow(self, read: { $0.inList }, apply: { $0.onListed($1) }))
+    }
+
+    deinit {
+        work.cancelAll()
+        follows.cancelAll()
+    }
+
+    private var inList: Bool { connections.connections.contains { $0.id == local.connectionID } }
+
+    /// The connection left the list (removed on another device, or the vault locked and the lists were emptied): the
+    /// screen closes and drops what it showed, its names and profile included. vettid-android keeps the last copy on
+    /// screen (chosen; not in the spec: nothing read from the vault stays shown once the vault no longer lists it).
+    private func onListed(_ present: Bool) {
+        if present {
+            listed = true
+        } else if listed {
+            local.connection = nil
+            local.gone = true
+        }
+    }
+
+    /// Reads the connection (on opening, and "Try again" after a failure).
+    public func load() {
+        local.loading = true
+        local.error = nil
+        let (connections, id) = (connections, local.connectionID)
         work.launch { [weak self] in
             do {
-                let c = try await connections.connection(connectionID)
+                let c = try await connections.connection(id)
                 self?.local.loading = false
                 self?.local.connection = c
             } catch {
@@ -103,12 +134,11 @@ public final class ConnectionDetailViewModel {
         }
     }
 
-    deinit { work.cancelAll() }
-
-    /// The connection as the list has it now (a change from another device shows at once), else as read.
+    /// The connection as the list has it now (a change from another device shows at once), else as read; nothing once
+    /// it is gone.
     public var state: ConnectionDetailState {
         var s = local
-        if let c = connections.connections.first(where: { $0.id == s.connectionID }) { s.connection = c }
+        if !s.gone, let c = connections.connections.first(where: { $0.id == s.connectionID }) { s.connection = c }
         return s
     }
 

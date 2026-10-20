@@ -136,22 +136,36 @@ struct AcceptRoute: View {
 public struct ConnectionsRoute: View {
     private let connections: any ConnectionsRepository
     private let requests: any ConnectionRequestsRepository
+    private let ownerChecks: (any OwnerCheckRepository)?
+    private let account: (any AccountRepository)?
     private let chrome: ShellChrome
     private let host: ConnectHost
     @State private var model: ConnectionsViewModel?
 
+    /// [ownerChecks] and [account]: ``ConnectionsViewModel``'s, for reading again after a passed check and dropping the
+    /// invitations on a lock.
     public init(
-        connections: any ConnectionsRepository, requests: any ConnectionRequestsRepository, chrome: ShellChrome, host: ConnectHost
+        connections: any ConnectionsRepository,
+        requests: any ConnectionRequestsRepository,
+        ownerChecks: (any OwnerCheckRepository)? = nil,
+        account: (any AccountRepository)? = nil,
+        chrome: ShellChrome,
+        host: ConnectHost
     ) {
         self.connections = connections
         self.requests = requests
+        self.ownerChecks = ownerChecks
+        self.account = account
         self.chrome = chrome
         self.host = host
     }
 
     public var body: some View {
         ConnectionsScreen(state: model?.state ?? ConnectionsState(), chrome: chrome, actions: actions)
-            .onAppear { if model == nil { model = ConnectionsViewModel(connections: connections, requests: requests) } }
+            .onAppear {
+                guard model == nil else { return }
+                model = ConnectionsViewModel(connections: connections, requests: requests, ownerChecks: ownerChecks, account: account)
+            }
     }
 
     private var actions: ConnectionsActions {
@@ -202,6 +216,7 @@ public struct ConnectionDetailRoute: View {
         a.onDismissNotice = { m.dismissNotice() }
         a.onMuteAsks = { m.muteAsks($0) }
         a.onResumeAsks = { m.resumeAsks() }
+        a.onRetry = { m.load() }
         return a
     }
 }

@@ -18,6 +18,8 @@ public struct DetailActions {
     public var onMuteAsks: @MainActor (Bool) -> Void = { _ in }
     /// Resumes paused asks, or allows declined ones again (`connection.asks.resume`).
     public var onResumeAsks: @MainActor () -> Void = {}
+    /// Reads the connection again after a failed first read.
+    public var onRetry: @MainActor () -> Void = {}
 
     public init() {}
 }
@@ -52,7 +54,12 @@ public struct ConnectionDetailScreen: View {
                 DetailContent(state: state, connection: c, title: title, actions: actions)
             } else {
                 ZStack {
-                    if state.loading { ProgressView().tint(colors.primary.color) }
+                    if state.loading {
+                        ProgressView().tint(colors.primary.color)
+                    } else if let error = state.error, !state.gone {
+                        // The first read failed (other than an unknown connection, which closes the screen).
+                        ConnectionsError(kind: error, actionLabel: ConnectStrings.retry, action: actions.onRetry).padding(Spacing.xl)
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -73,11 +80,13 @@ public struct ConnectionDetailScreen: View {
 
     /// Message (once the messages are there), favourite, remove.
     func pill(_ c: ConnectionInfo) -> [PillAction] {
+        // The connection's own name, as vettid-android's pill (its name from the shown connection).
+        let named = AccountNames.isolate(c.displayName.isEmpty ? ConnectStrings.nameNotShared : c.displayName)
         var list: [PillAction] = []
         if let onMessage = actions.onMessage, c.state == .active {
-            list.append(PillAction(.messages, label: ConnectStrings.detailMessage(isolated), action: onMessage))
+            list.append(PillAction(.messages, label: ConnectStrings.detailMessage(named), action: onMessage))
         }
-        list.append(PillAction(c.favorite ? .star : .starOutline, label: ConnectionRow.favoriteLabel(isolated, favorite: c.favorite),
+        list.append(PillAction(c.favorite ? .star : .starOutline, label: ConnectionRow.favoriteLabel(named, favorite: c.favorite),
                                action: actions.onFavorite))
         list.append(PillAction(.personRemove, label: ConnectStrings.remove, destructive: true) { actions.onAsk(.remove) })
         return list

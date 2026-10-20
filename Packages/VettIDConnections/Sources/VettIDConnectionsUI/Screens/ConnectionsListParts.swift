@@ -68,11 +68,7 @@ struct EndedRequestNotice: View {
     }
 
     static func title(_ end: RequestEnd) -> String {
-        switch end {
-        case .gone: ConnectStrings.goneTitle
-        case .peerDeclined: PeerDeclineText.title(outgoing: true, name: nil)
-        default: ConnectStrings.endedTitle
-        }
+        end == .gone ? ConnectStrings.goneTitle : ConnectStrings.endedTitle
     }
 
     static func body(_ end: RequestEnd) -> String {
