@@ -1056,6 +1056,656 @@
           }
         }
       }
+    },
+    "connections_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connections"
+          }
+        }
+      }
+    },
+    "connections_search_open": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search connections"
+          }
+        }
+      }
+    },
+    "connections_search": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search by name"
+          }
+        }
+      }
+    },
+    "connections_no_match_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No connections match"
+          }
+        }
+      }
+    },
+    "connections_no_match_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try another name"
+          }
+        }
+      }
+    },
+    "connections_empty_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No connections yet"
+          }
+        }
+      }
+    },
+    "connections_empty_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invite someone or scan their code to connect"
+          }
+        }
+      }
+    },
+    "connections_error_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not load connections"
+          }
+        }
+      }
+    },
+    "connections_retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try again"
+          }
+        }
+      }
+    },
+    "connections_header": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connections"
+          }
+        }
+      }
+    },
+    "connections_invites_header": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open invitations"
+          }
+        }
+      }
+    },
+    "connections_invite_in_person": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In-person invitation"
+          }
+        }
+      }
+    },
+    "connections_invite_remote": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invitation link"
+          }
+        }
+      }
+    },
+    "connections_invite_expires": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expires %@"
+          }
+        }
+      }
+    },
+    "connections_cancel_invite_cd": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel invitation"
+          }
+        }
+      }
+    },
+    "connections_cancel_invite_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel this invitation?"
+          }
+        }
+      }
+    },
+    "connections_cancel_invite_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Its QR code and link stop working at once. Anyone who has not used it yet cannot connect with it."
+          }
+        }
+      }
+    },
+    "connections_cancel_invite_confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel invitation"
+          }
+        }
+      }
+    },
+    "connections_name_not_shared": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name not shared yet"
+          }
+        }
+      }
+    },
+    "connections_state_active": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connected"
+          }
+        }
+      }
+    },
+    "connections_state_pending": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for approval"
+          }
+        }
+      }
+    },
+    "connections_state_stale": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Out of reach: needs a new invitation"
+          }
+        }
+      }
+    },
+    "connections_state_blocked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blocked"
+          }
+        }
+      }
+    },
+    "connections_state_other": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unavailable"
+          }
+        }
+      }
+    },
+    "approvals_type_connection": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection request"
+          }
+        }
+      }
+    },
+    "approvals_type_connection_remote": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection request (link)"
+          }
+        }
+      }
+    },
+    "approvals_type_outgoing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your connection request"
+          }
+        }
+      }
+    },
+    "approvals_gone_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Already decided"
+          }
+        }
+      }
+    },
+    "approvals_gone_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This request was decided on another device, or it expired."
+          }
+        }
+      }
+    },
+    "connections_detail_profile": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profile shared with you"
+          }
+        }
+      }
+    },
+    "connections_detail_profile_name": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Display name"
+          }
+        }
+      }
+    },
+    "connections_detail_account_name": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID account name"
+          }
+        }
+      }
+    },
+    "connections_detail_shared_items": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Items they share"
+          }
+        }
+      }
+    },
+    "connections_detail_profile_none": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Their vault has not sent its profile yet."
+          }
+        }
+      }
+    },
+    "connections_detail_about": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "About this connection"
+          }
+        }
+      }
+    },
+    "connections_detail_since": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connected"
+          }
+        }
+      }
+    },
+    "connections_detail_last_active": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last active"
+          }
+        }
+      }
+    },
+    "connections_detail_key": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault key fingerprint"
+          }
+        }
+      }
+    },
+    "connections_detail_key_note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Identifies their vault, the one you compared the safety code with, not a person. It changes only when their vault rotates its key."
+          }
+        }
+      }
+    },
+    "connections_remove": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove"
+          }
+        }
+      }
+    },
+    "connections_remove_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove %@?"
+          }
+        }
+      }
+    },
+    "connections_remove_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The connection with %@ ends and they are told it was removed. Connecting again needs a new invitation."
+          }
+        }
+      }
+    },
+    "connections_share_theirs_unnamed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Theirs"
+          }
+        }
+      }
+    },
+    "connections_asks_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requests from %@"
+          }
+        }
+      }
+    },
+    "connections_asks_title_unnamed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requests from this connection"
+          }
+        }
+      }
+    },
+    "connections_asks_normal": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ can ask you for things: to see items, to use a critical item, to authenticate, to introduce someone or for your location. You decide each time."
+          }
+        }
+      }
+    },
+    "connections_asks_paused_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requests paused"
+          }
+        }
+      }
+    },
+    "connections_asks_paused": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@’s requests are paused after you declined several. They are refused without asking you until you resume them."
+          }
+        }
+      }
+    },
+    "connections_asks_paused_since": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paused %@"
+          }
+        }
+      }
+    },
+    "connections_asks_muted_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requests muted"
+          }
+        }
+      }
+    },
+    "connections_asks_muted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You muted %@’s requests: they are refused without asking you. Messages, profile updates and sharing go on."
+          }
+        }
+      }
+    },
+    "connections_asks_neutral": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is not told whether you declined, muted or paused: they only see that a request was not accepted."
+          }
+        }
+      }
+    },
+    "connections_asks_mute": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mute requests"
+          }
+        }
+      }
+    },
+    "connections_asks_unmute": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unmute requests"
+          }
+        }
+      }
+    },
+    "connections_asks_resume": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resume requests"
+          }
+        }
+      }
+    },
+    "connections_asks_allow_again": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow declined requests again"
+          }
+        }
+      }
+    },
+    "connections_asks_cooldowns": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld request you declined is refused for 7 days."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld requests you declined are refused for 7 days."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "connections_detail_message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Message %@"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

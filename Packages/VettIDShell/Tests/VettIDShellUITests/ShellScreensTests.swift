@@ -148,6 +148,23 @@ import VettIDUI
             version: AppVersion(name: "2.0.0", build: 1), installedFrom: .apple, promptReason: "Unlock VettID"
         ) {}
         #expect(height(shell) > 0)
+        // Connections: the list in the placeholder's place, and a connection's detail over it.
+        let connections = FakeConnections()
+        var c = ConnectionInfo(id: "c1", name: "", state: .active)
+        c.firstName = "Ada"
+        c.lastName = "Lovelace"
+        connections.connections = [c]
+        let model = ShellModel(account: repo, vault: repo, ownerChecks: repo)
+        model.navigate(.connections)
+        for path in [[], [ShellRoute.connection("c1")]] {
+            model.path = path
+            let withConnections = AppShell(
+                account: repo, vault: repo, ownerChecks: repo, credential: repo, profiles: repo, appLock: StillAppLock(),
+                model: model, gate: gate, now: now, version: AppVersion(name: "2.0.0", build: 1), installedFrom: .apple,
+                promptReason: "Unlock VettID", connections: connections, connectionRequests: connections
+            ) {}
+            #expect(height(withConnections) > 0)
+        }
     }
 
     private func height(_ view: some View) -> CGFloat {

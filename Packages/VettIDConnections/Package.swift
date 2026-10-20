@@ -2,7 +2,8 @@
 import PackageDescription
 
 // Connections (vettid-android `feature/connections`): inviting with a QR code or a link, scanning or pasting an
-// invitation, the safety code and both approvals (IOS-PLAN §8 I2.1); the Connections list and detail follow.
+// invitation, the safety code and both approvals, the Connections list, a connection's detail and favourites (IOS-PLAN
+// §8 I2.1).
 let package = Package(
     name: "VettIDConnections",
     defaultLocalization: "en",
