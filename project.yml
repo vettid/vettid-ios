@@ -87,6 +87,17 @@ targets:
           - CFBundleURLName: org.vettid.connect
             CFBundleTypeRole: Viewer
             CFBundleURLSchemes: [vettid]
+    # The entitlements of every configuration, written by XcodeGen. App Attest's production environment (IOS-PLAN §6.2):
+    # the vault refuses the development one, and TestFlight and App Store builds are always production. The Universal
+    # Link of invitations, https://relay.vettid.org/connect (IOS-PLAN §6.8, RELAY-PROTOCOL): iOS verifies the domain
+    # once the relay serves its apple-app-site-association for this App ID (path /connect); until then such a link opens
+    # in the browser, whose relay page offers vettid://connect.
+    entitlements:
+      path: Config/VettID-production.entitlements
+      properties:
+        com.apple.developer.devicecheck.appattest-environment: production
+        com.apple.developer.associated-domains:
+          - applinks:relay.vettid.org
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(VETTID_APP_BUNDLE_ID)
@@ -102,8 +113,7 @@ targets:
         INFOPLIST_KEY_NSFaceIDUsageDescription: "VettID uses Face ID only to open the app when you turn on the app lock."
         MARKETING_VERSION: 2.0.0
         CURRENT_PROJECT_VERSION: 1
-        # App Attest's production environment in every configuration (IOS-PLAN §6.2): the vault refuses the development
-        # one, and TestFlight and App Store builds are always production.
+        # The entitlements above, in every configuration.
         CODE_SIGN_ENTITLEMENTS: Config/VettID-production.entitlements
     dependencies:
       - package: VettIDCrypto
