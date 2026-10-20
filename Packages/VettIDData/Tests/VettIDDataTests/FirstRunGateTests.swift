@@ -42,6 +42,6 @@ import VettIDKeys
     @Test func theManagersFilesRefuseTheCleanup() {
         let dir = URL(fileURLWithPath: "/data")
         let names = VaultFiles.all(in: dir).map(\.lastPathComponent)
-        #expect(names == ["account", "vault-device", "phone-secrets", "lock-record", "owner-check"])
+        #expect(names == ["account", "vault-device", "phone-secrets", "lock-record", "owner-check", "connections"])
     }
 }

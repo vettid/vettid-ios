@@ -162,14 +162,14 @@ extension FakeVaultService {
 
     // MARK: - The requests
 
-    /// `credential.alarm.confirm`, `credential.rotate` and `credential.reset`; `unsupported_type` for any other. Callers
-    /// hold ``cond``.
+    /// `credential.alarm.confirm`, `credential.rotate` and `credential.reset`; then the connections
+    /// (``connectionsRequest(_:_:)``). Callers hold ``cond``.
     func credentialRequest(_ m: Inner, _ body: JsonObject) throws {
         switch m.type {
         case "credential.alarm.confirm": try alarmConfirm(m, body)
         case "credential.rotate": try rotate(m, body)
         case "credential.reset": try reset(m, body)
-        default: try reply(m.type, "{}", re: m.id, error: "unsupported_type")
+        default: try connectionsRequest(m, body)
         }
     }
 

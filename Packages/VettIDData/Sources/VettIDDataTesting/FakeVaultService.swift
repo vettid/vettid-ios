@@ -206,6 +206,8 @@ public final class FakeVaultService: @unchecked Sendable {
     var deviceIk: [UInt8]?
     var rekeying: Initiator?
     var identityRotationsValue = 0
+    /// Connections, invitations, requests and blocks, and the emulated peer (FakeVaultService+Connections.swift).
+    var social = FakeSocial()
 
     public init() throws {
         etk = try KemPrivateKey.generate()
