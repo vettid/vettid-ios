@@ -11,8 +11,13 @@ public struct ConnectHost {
     public var replace: @MainActor (ConnectDestination) -> Void = { _ in }
     /// The conversation with a connection; nil until the messages are in the iPhone app (IOS-PLAN §8 I2.2).
     public var onOpenConversation: (@MainActor (String) -> Void)?
-    /// A connection's page; nil until it is in the iPhone app (IOS-PLAN §8 I2.1).
+    /// A connection's page, over the current screen (from the list).
     public var onOpenConnection: (@MainActor (String) -> Void)?
+    /// A connection's page in place of the current screen (the accept screen's "Open the connection", as vettid-android's
+    /// `host.replace`); nil: [onOpenConnection].
+    public var replaceWithConnection: (@MainActor (String) -> Void)?
+    /// Opens a screen of the connect flow (the list's add button).
+    public var push: @MainActor (ConnectDestination) -> Void = { _ in }
 
     public init() {}
 }
@@ -116,12 +121,87 @@ struct AcceptRoute: View {
         a.onBack = host.onBack
         a.onScan = { host.replace(.scan) }
         a.onMessage = host.onOpenConversation
-        a.onOpenConnection = host.onOpenConnection
+        a.onOpenConnection = host.replaceWithConnection ?? host.onOpenConnection
         guard let m = model else { return a }
         a.onInput = { m.setInput($0) }
         a.onAccept = { m.accept() }
         a.onApprove = { m.approve() }
         a.onDecline = { m.decline() }
+        return a
+    }
+}
+
+/// The Connections screen with its view model, made when it first appears and released when it goes. Mirrors
+/// vettid-android `connectionsDestination`'s `ConnectionsRoute`.
+public struct ConnectionsRoute: View {
+    private let connections: any ConnectionsRepository
+    private let requests: any ConnectionRequestsRepository
+    private let chrome: ShellChrome
+    private let host: ConnectHost
+    @State private var model: ConnectionsViewModel?
+
+    public init(
+        connections: any ConnectionsRepository, requests: any ConnectionRequestsRepository, chrome: ShellChrome, host: ConnectHost
+    ) {
+        self.connections = connections
+        self.requests = requests
+        self.chrome = chrome
+        self.host = host
+    }
+
+    public var body: some View {
+        ConnectionsScreen(state: model?.state ?? ConnectionsState(), chrome: chrome, actions: actions)
+            .onAppear { if model == nil { model = ConnectionsViewModel(connections: connections, requests: requests) } }
+    }
+
+    private var actions: ConnectionsActions {
+        var a = ConnectionsActions()
+        a.onOpen = { host.onOpenConnection?($0) }
+        a.onConnect = host.push
+        guard let m = model else { return a }
+        a.onFavorite = { m.setFavorite($0, $1) }
+        a.onCancelInvite = { m.askCancel($0) }
+        a.onConfirmCancel = { m.confirmCancel() }
+        a.onRetry = { m.refresh() }
+        a.onDismissError = { m.dismissError() }
+        a.onDismissPeerDecline = { m.dismissPeerDecline($0) }
+        a.onQuery = { m.setQuery($0) }
+        a.onApprove = { m.approve($0) }
+        a.onDecline = { m.decline($0) }
+        a.onDismissEnded = { m.dismissEnded() }
+        return a
+    }
+}
+
+/// A connection's detail with its view model. Mirrors vettid-android `connectionsDestination`'s `ConnectionDetailRoute`.
+public struct ConnectionDetailRoute: View {
+    private let connectionID: String
+    private let connections: any ConnectionsRepository
+    private let host: ConnectHost
+    @State private var model: ConnectionDetailViewModel?
+
+    public init(_ connectionID: String, connections: any ConnectionsRepository, host: ConnectHost) {
+        self.connectionID = connectionID
+        self.connections = connections
+        self.host = host
+    }
+
+    public var body: some View {
+        ConnectionDetailScreen(state: model?.state ?? ConnectionDetailState(connectionID: connectionID), actions: actions)
+            .onAppear { if model == nil { model = ConnectionDetailViewModel(connectionID: connectionID, connections: connections) } }
+    }
+
+    private var actions: DetailActions {
+        var a = DetailActions()
+        a.onBack = host.onBack
+        a.onMessage = opening(host.onOpenConversation, connectionID)
+        guard let m = model else { return a }
+        a.onFavorite = { m.toggleFavorite() }
+        a.onAsk = { m.ask($0) }
+        a.onConfirm = { m.confirm() }
+        a.onDismissNotice = { m.dismissNotice() }
+        a.onMuteAsks = { m.muteAsks($0) }
+        a.onResumeAsks = { m.resumeAsks() }
         return a
     }
 }

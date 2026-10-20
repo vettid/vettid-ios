@@ -4,8 +4,8 @@ import VettIDConnections
 import VettIDUI
 
 /// Connections' add button (ANDROID-PLAN 0.1.11) and its sheet, at the bottom of the screen: [onOpen] opens the chosen
-/// screen of the connect flow once the sheet has closed. The Connections list (IOS-PLAN §8 I2.1) hosts it; until then
-/// the shell's Connections placeholder does. Mirrors vettid-android `ConnectionsScreen`'s floating button and `AddSheet`.
+/// screen of the connect flow once the sheet has closed. The Connections list hosts it. Mirrors vettid-android
+/// `ConnectionsScreen`'s floating button and `AddSheet`.
 public struct AddConnectionControls: View {
     @Environment(\.vettIDColors) private var colors
     let onOpen: @MainActor (ConnectDestination) -> Void
