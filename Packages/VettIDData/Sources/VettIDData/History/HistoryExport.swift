@@ -35,8 +35,8 @@ public protocol HistoryExportRepository: AnyObject, Sendable {
     /// dropped some meanwhile). [onProgress] gets the number read so far. Cancellable between pages.
     func entries(_ filter: AuditFilter, answer: AuditExportAnswer, onProgress: @MainActor (Int) -> Void) async throws -> [AuditRecord]
 
-    /// id → name of the vault's devices (`device.list`, §10.3), for the file's device names.
-    func deviceNames() async throws -> [String: String]
+    /// The vault's devices (`device.list`, §10.3), for the file's device names as History shows them.
+    func devices() async throws -> HistoryDevices
 }
 
 /// ``HistoryExportRepository`` over ``AuditOps``. The paging reads `audit.list` directly, never with
@@ -54,10 +54,15 @@ public final class HistoryExportManager: HistoryExportRepository {
 
     private let ops: @MainActor () async throws -> any AuditOps
     private let pageSize: Int
+    private let selfID: @MainActor () -> String?
 
-    public init(ops: @escaping @MainActor () async throws -> any AuditOps, pageSize: Int = HistoryExportManager.pageSize) {
+    public init(
+        ops: @escaping @MainActor () async throws -> any AuditOps, pageSize: Int = HistoryExportManager.pageSize,
+        selfID: @escaping @MainActor () -> String? = { nil }
+    ) {
         self.ops = ops
         self.pageSize = pageSize
+        self.selfID = selfID
     }
 
     private func guarded<T>(_ body: () async throws -> T) async throws -> T {
@@ -110,9 +115,7 @@ public final class HistoryExportManager: HistoryExportRepository {
         return out
     }
 
-    public func deviceNames() async throws -> [String: String] {
-        let list = try await guarded { try await ops().deviceList() }
-        let named = list.compactMap { d in d.name.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : (d.id, $0) } }
-        return Dictionary(named, uniquingKeysWith: { a, _ in a })
+    public func devices() async throws -> HistoryDevices {
+        HistoryDevices(try await guarded { try await ops().deviceList() }, selfID: selfID())
     }
 }

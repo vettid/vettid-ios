@@ -254,13 +254,16 @@ public final class ApprovalsManager: ApprovalsRepository {
 
     public func loadCriticalUse(_ requestID: String) async throws {
         let key = "critical:\(requestID)"
+        let g = generation
         let body: JsonObject
         do {
             body = try await guarded { try await ops().criticalUseGet(requestID) }
         } catch let f as VaultFailure where f.kind == .notFound {
-            drop(key)
+            if g == generation { drop(key) }
             throw f
         }
+        // An answer from before a lock or a wipe is not kept (the file is not written again).
+        guard g == generation else { return }
         // Kept as the event would have been; the payload is shown only if it matches the listed hash.
         keep("critical-secret-use.pending", body)
     }

@@ -75,19 +75,28 @@ extension ApprovalsManager {
     }
 
     /// Includes [include] and declines [decline] in one change (§10.12 `share.decide{include, decline}`, 0.21.0: one
-    /// flush, nothing changed on an error). A vault before 0.21.0 refuses that form (`bad_request`, nothing changed): the
-    /// two lists then go as two `{items, approve}` calls.
+    /// flush, nothing changed on an error). A vault before 0.21.0 refuses that form (`unsupported_type`, or `bad_request`
+    /// with nothing changed): the two lists then go as two `{items, approve}` calls. A request that is malformed in either
+    /// form (more than 500 items together, an item twice or in both lists) is refused here and never split into two calls
+    /// that are not atomic (chosen; not in the spec). With the fallback, an inclusion that went through stays when the
+    /// decline after it fails: the failure is shown, and the question keeps the declined items.
     public func decideShare(_ ruleID: String, include: [String], decline: [String]) async throws {
-        guard !include.isEmpty || !decline.isEmpty else { throw VaultFailure(.other, code: "bad_request") }
+        let all = include + decline
+        guard !all.isEmpty, all.count <= Self.maxShareDecide, Set(all).count == all.count else {
+            throw VaultFailure(.other, code: "bad_request")
+        }
         try await decide("share:\(ruleID)") { o in
             do {
                 _ = try await o.shareDecide(ruleID, include: include, decline: decline)
-            } catch let e as VaultOpError where e.code == "bad_request" {
+            } catch let e as VaultOpError where e.code == "bad_request" || e.code == "unsupported_type" {
                 if !include.isEmpty { _ = try await o.shareDecide(ruleID, items: include, approve: true) }
                 if !decline.isEmpty { _ = try await o.shareDecide(ruleID, items: decline, approve: false) }
             }
         }
     }
+
+    /// `share.decide`'s limit: 1–500 distinct items in all (vettid-vault `MaxDecide`).
+    static let maxShareDecide = 500
 
     public func declineDeviceRequest(_ key: String) async throws {
         guard case .device(let d)? = pending(key) else { throw VaultFailure(.notFound) }

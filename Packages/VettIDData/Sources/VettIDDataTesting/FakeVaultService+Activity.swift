@@ -219,8 +219,22 @@ extension FakeVaultService {
             return try reply(m.type, "{}", re: m.id, error: "bad_pin")
         }
         let summary = exportAnswer(q, upto: upto, entrySeq: nil)
-        record("audit.exported", ref: "format=\(format)")
+        record("audit.exported", ref: exportSummary(q, format: format, upto: upto))
         try reply(m.type, String(summary.dropLast()) + #","entry_seq":\#(activity.entries.last?.seq ?? 0)}"#, re: m.id)
+    }
+
+    /// `audit.exported`'s `ref` (§10.9): `format=…;count=…;seqs=…;filters=…` then `;since=…` and `;until=…`.
+    private func exportSummary(_ q: AuditQuery, format: String, upto: Int64) -> String {
+        let sel = activity.entries.filter { $0.seq <= upto && matches($0, q) }
+        var filters: [String] = []
+        if q.connectionID != nil { filters.append("connection") }
+        if q.kinds != nil { filters.append("kinds") }
+        if q.q != nil { filters.append("q") }
+        if q.since != nil || q.until != nil { filters.append("dates") }
+        var s = "format=\(format);count=\(sel.count);seqs=\(sel.first?.seq ?? 0)-\(sel.last?.seq ?? 0);filters=\(filters.isEmpty ? "none" : filters.joined(separator: ","))"
+        if let t = q.since { s += ";since=\(Timestamps.formatMillis(t))" }
+        if let t = q.until { s += ";until=\(Timestamps.formatMillis(t))" }
+        return s
     }
 
     private func exportAnswer(_ q: AuditQuery, upto: Int64, entrySeq: Int64?) -> String {
@@ -269,6 +283,9 @@ extension FakeVaultService {
     public var exportsSeen: [ExportSeen] { locked { activity.exports } }
 
     public var auditKinds: [String] { locked { activity.entries.map(\.kind) } }
+
+    /// The log's last entry: its kind and `ref`.
+    public var lastAuditEntry: (kind: String, ref: String?)? { locked { activity.entries.last.map { ($0.kind, $0.ref) } } }
 }
 
 /// TEST ONLY. An `audit.export` the fake vault was asked for (not a preview).

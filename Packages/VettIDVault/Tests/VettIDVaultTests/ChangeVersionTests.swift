@@ -320,6 +320,23 @@ import VettIDCrypto
         #expect(await ops.base.relay.noDeposit(within: 0.3), "nothing asked")
     }
 
+    /// `audit.export` carries the PIN (VAULT-MESSAGING §10.9): the gate refuses it while the PIN is uncertain or a change
+    /// is on its way, and one that waited while a secret went out is refused; nothing is sent either way.
+    @Test func anAuditExportRunsTheGateAndTheSecretCheck() async throws {
+        struct Refused: Error {}
+        let h = try await lost.holder(timeout: 0.3)
+        let gated = VaultApi(device: h.d, credentialGate: { carriesPin in
+            if carriesPin { throw Refused() }
+        })
+        await #expect(throws: Refused.self) {
+            _ = try await gated.auditExport(AuditExportFilters(), format: "csv", uptoSeq: 1, pin: "975310")
+        }
+        #expect(await ops.base.relay.noDeposit(within: 0.3), "nothing asked")
+        await h.d.credentialLock.acquire()
+        let export = Task { _ = try await h.api.auditExport(AuditExportFilters(), format: "csv", uptoSeq: 1, pin: "975310") }
+        try await expectRefusedAfterASecret(h.d, export)
+    }
+
     /// VAULT-MESSAGING 0.47.0 §11.14.9 step 2: an operation that began before a change or a renew went out, and waited
     /// for the credential lock meanwhile, is refused with nothing sent, also when no gate sees that change any more (it
     /// was answered and decided before the operation got the lock). Here the test holds the lock as the change would.

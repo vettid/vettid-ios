@@ -16,6 +16,7 @@ final class FakeApprovalOps: ApprovalOps, @unchecked Sendable {
     var critical = #"{"incoming":[]}"#
     var criticalBody = "{}"
     var listsFail = false
+    var getGate: TestDeferred<Void>?
 
     private func call(_ name: String) throws {
         calls.append(name)
@@ -41,6 +42,7 @@ final class FakeApprovalOps: ApprovalOps, @unchecked Sendable {
     }
     func criticalUseGet(_ requestID: String) async throws -> JsonObject {
         try call("criticalGet:\(requestID)")
+        if let g = getGate { try await g.value() }
         return try StrictJson.parseObject(criticalBody)
     }
     func criticalUseApprove(_ requestID: String, password: String, payloadSha256: [UInt8]) async throws -> String? {
@@ -217,6 +219,34 @@ final class FakeApprovalOps: ApprovalOps, @unchecked Sendable {
         gate.complete(())
         try await read.value
         #expect(m.approvals.map(\.key) == ["grant:g2"])
+    }
+
+    /// A payload fetched before a wipe is not written to the file after it.
+    @Test func aPayloadFromBeforeAWipeIsNotKept() async throws {
+        let m = manager()
+        ops.criticalBody = #"{"request_id":"k1","connection_id":"c1","payload":"\#(Self.payload)","payload_sha256":"\#(Self.sha)","exp":"\#(exp)"}"#
+        let gate = TestDeferred<Void>()
+        ops.getGate = gate
+        let load = Task { try await m.loadCriticalUse("k1") }
+        try await Task.sleep(for: .milliseconds(50))
+        m.clear()
+        gate.complete(())
+        try await load.value
+        #expect(m.approvals.isEmpty && file.bytes == nil)
+    }
+
+    /// `share.decide` falls back to the old form only for a request the new form would accept; one that is malformed in
+    /// either form is never split.
+    @Test func theShareFallbackNeverSplitsAMalformedRequest() async throws {
+        let m = manager()
+        m.onEvent(event("share.pending", #"{"rule_id":"r1","subject":{"connection_id":"c1"},"items":[{"item_id":"i1"},{"item_id":"i2"}]}"#))
+        #expect(await kind { try await m.decideShare("r1", include: ["i1"], decline: ["i1"]) } == .other)
+        #expect(await kind { try await m.decideShare("r1", include: (0...500).map { "x\($0)" }, decline: []) } == .other)
+        #expect(await kind { try await m.decideShare("r1", include: ["i1", "i1"], decline: []) } == .other)
+        #expect(ops.calls.isEmpty, "nothing sent")
+        ops.errors["shareBoth"] = FakeApprovalOps.error("unsupported_type")
+        try await m.decideShare("r1", include: ["i1"], decline: ["i2"])
+        #expect(ops.calls == ["shareBoth:r1:[\"i1\"]:[\"i2\"]", "shareOne:r1:[\"i1\"]:true", "shareOne:r1:[\"i2\"]:false"])
     }
 
     /// The connection requests are listed here and decided through the connections (IOS-PLAN §8 I2.3).

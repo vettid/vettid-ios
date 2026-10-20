@@ -206,10 +206,52 @@ public protocol HistoryRepository: AnyObject, Sendable {
     /// sent and the app filters the entries it loads (``AuditFilter/acceptsExceptSearch(_:)``, ``AuditFilter/matches``).
     func searchIgnored()
 
-    /// id → name of the vault's devices (`device.list`, §10.3), for an entry's device. Read once while the vault is open
-    /// and kept; [refresh] reads it again. Nil when it was never read (the call failed): no device is then named, rather
-    /// than every device called removed.
-    func deviceNames(refresh: Bool) async -> [String: String]?
+    /// The vault's devices (`device.list`, §10.3), for an entry's device. Read once while the vault is open and kept;
+    /// [refresh] reads it again. Nil when it was never read (the call failed): no device is then named, rather than every
+    /// device called removed.
+    func devices(refresh: Bool) async -> HistoryDevices?
+}
+
+/// The vault's devices as History names them (§10.3, §10.9 History export): every listed device by id, with its name, or
+/// "" when it has none (the vault lists this app with an empty name), and this phone's own device id. Only a device
+/// that is not listed is a removed one.
+public struct HistoryDevices: Equatable, Sendable {
+    public var names: [String: String]
+    public var selfID: String?
+
+    public init(names: [String: String], selfID: String? = nil) {
+        self.names = names
+        self.selfID = selfID
+    }
+
+    /// `device.list`'s entries, names trimmed; a blank name stays as "" (the device is known, not removed).
+    public init(_ list: [DeviceEntry], selfID: String?) {
+        let pairs = list.map { ($0.id, ($0.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)) }
+        self.init(names: Dictionary(pairs, uniquingKeysWith: { a, _ in a }), selfID: selfID)
+    }
+
+    /// How History shows [deviceID]: a name, this phone, a listed device without a name (its id alone in the detail, no
+    /// name on the row), or a removed device. Nil for an entry without a device.
+    public func device(_ deviceID: String?) -> HistoryDevice? {
+        guard let id = deviceID else { return nil }
+        guard let name = names[id] else { return .removed }
+        if id == selfID { return .thisPhone }
+        return name.isEmpty ? .unnamed : .named(name)
+    }
+}
+
+/// An entry's device as History shows it.
+public enum HistoryDevice: Equatable, Sendable {
+    case named(String)
+    /// This phone's own app (the row shows no name; the detail says "This phone").
+    case thisPhone
+    /// Listed, without a name: no name on the row; the detail shows the device id only.
+    case unnamed
+    /// Not in `device.list`: "Removed device".
+    case removed
+
+    /// The name a row shows; nil for any device without one.
+    public var rowName: String? { if case .named(let n) = self { n } else { nil } }
 }
 
 /// ``HistoryRepository`` over ``AuditOps``. The search (`q`, `since`, `until`, 0.20.0) has no capability signal: it is
@@ -222,10 +264,17 @@ public final class HistoryManager: HistoryRepository {
 
     public private(set) var searchUnsupported = false
     private var cache: [Int64: AuditRecord] = [:]
-    private var devices: [String: String]?
+    private var devicesRead: HistoryDevices?
+    /// Bumped by ``clear()``: an answer to a call made before is not kept.
+    private var generation = 0
     private let ops: @MainActor () async throws -> any AuditOps
+    private let selfID: @MainActor () -> String?
 
-    public init(ops: @escaping @MainActor () async throws -> any AuditOps) { self.ops = ops }
+    /// [selfID] this phone's device id (its pairing), to mark this phone's own entries.
+    public init(selfID: @escaping @MainActor () -> String? = { nil }, ops: @escaping @MainActor () async throws -> any AuditOps) {
+        self.selfID = selfID
+        self.ops = ops
+    }
 
     public func cached(_ seq: Int64) -> AuditRecord? { cache[seq] }
 
@@ -233,32 +282,37 @@ public final class HistoryManager: HistoryRepository {
 
     /// Forgets what was read (the vault locked, or a wipe).
     public func clear() {
+        generation += 1
         cache = [:]
-        devices = nil
+        devicesRead = nil
         searchUnsupported = false
     }
 
-    public func deviceNames(refresh: Bool = false) async -> [String: String]? {
-        if let devices, !refresh { return devices }
-        guard let list = try? await ops().deviceList() else { return devices }
-        let named = list.compactMap { d in d.name.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : (d.id, $0) } }
-        let map = Dictionary(named, uniquingKeysWith: { a, _ in a })
-        devices = map
-        return map
+    public func devices(refresh: Bool = false) async -> HistoryDevices? {
+        if let devicesRead, !refresh { return devicesRead }
+        let g = generation
+        guard let list = try? await ops().deviceList(), g == generation else { return devicesRead }
+        let d = HistoryDevices(list, selfID: selfID())
+        devicesRead = d
+        return d
     }
 
     public func auditPage(_ request: AuditRequest) async throws -> AuditResult {
         let withSearch = request.hasSearch && !searchUnsupported
+        let g = generation
         let page: AuditPage
         do {
             page = try await fetch(request, search: withSearch)
         } catch let f as VaultFailure where withSearch && f.code == "bad_request" {
-            searchUnsupported = true
+            if g == generation { searchUnsupported = true }
             page = try await fetch(request, search: false)
         }
         let records = page.entries.map(AuditRecord.init)
-        if cache.count > Self.maxCache { cache = [:] }
-        for r in records { cache[r.seq] = r }
+        // Read before a lock or a wipe: answered, but not kept.
+        if g == generation {
+            if cache.count > Self.maxCache { cache = [:] }
+            for r in records { cache[r.seq] = r }
+        }
         return AuditResult(
             entries: records, nextBeforeSeq: page.nextBeforeSeq, searchSent: withSearch && !searchUnsupported, partial: page.partial
         )

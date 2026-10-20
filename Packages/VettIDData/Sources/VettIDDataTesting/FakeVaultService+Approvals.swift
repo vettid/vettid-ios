@@ -56,6 +56,8 @@ extension FakeVaultService {
             try reply(m.type, "{}", re: m.id)
         case "connection.authenticate.approve", "connection.authenticate.deny": try authenticateDecide(m, id)
         case "share.decide": try shareDecide(m, body)
+        // vettid-vault lists the app itself with an empty name; another device of the owner here has one.
+        case "device.list": try reply(m.type, #"{"devices":[{"id":"dev-1","kind":"app","state":"active","name":""},{"id":"dev-2","kind":"desktop","state":"active","name":"Work laptop"}]}"#, re: m.id)
         default: try reply(m.type, "{}", re: m.id, error: "unsupported_type")
         }
     }
@@ -94,6 +96,8 @@ extension FakeVaultService {
     /// `critical-secret-use.approve`, a credential operation: the UTK, the blob, the password, then the payload's hash
     /// and the request bound in the sealed payload (`bad_request` otherwise); the CEK rotates.
     private func criticalApprove(_ m: Inner, _ body: JsonObject) throws {
+        // An unknown request is refused before the UTK is spent or the password tried.
+        guard let outer = try? body.string("request_id"), activity.asks.critical[outer] != nil else { return try reply(m.type, "{}", re: m.id, error: "not_found") }
         guard let p = try opened(m, body) else { return }
         guard try checkBlob(m, try body.optString("credential")) else { return }
         guard (try? p.string("password")) == vaultPassword else {
@@ -124,15 +128,26 @@ extension FakeVaultService {
         try reply(m.type, "{}", re: m.id)
     }
 
-    /// `share.decide{include, decline}` (0.21.0) or `{items, approve}`: the items decided leave the rule's question.
+    /// `share.decide` as vettid-vault's `decide`: `{items, approve}` or (0.21.0) `{include?, decline?}`, mixing the forms
+    /// `bad_request`, 1–500 distinct items; items not waiting are ignored (`bad_request` when none is); answers
+    /// `{included, declined}` and audits `share.included` / `share.declined`.
     private func shareDecide(_ m: Inner, _ body: JsonObject) throws {
-        guard let rule = try? body.string("rule_id"), let waiting = activity.asks.shares[rule] else { return try reply(m.type, "{}", re: m.id, error: "not_found") }
-        let decided = VaultJSONLite.strings(body, "include") + VaultJSONLite.strings(body, "decline") + VaultJSONLite.strings(body, "items")
-        guard !decided.isEmpty, decided.allSatisfy(waiting.contains) else { return try reply(m.type, "{}", re: m.id, error: "bad_request") }
-        let left = waiting.filter { !decided.contains($0) }
+        let old = body.has("items") || body.has("approve"), new = body.has("include") || body.has("decline")
+        guard let rule = try? body.string("rule_id"), old != new else { return try reply(m.type, "{}", re: m.id, error: "bad_request") }
+        let approve = (try? body.bool("approve")) ?? false
+        let include = old ? (approve ? VaultJSONLite.strings(body, "items") : []) : VaultJSONLite.strings(body, "include")
+        let decline = old ? (approve ? [] : VaultJSONLite.strings(body, "items")) : VaultJSONLite.strings(body, "decline")
+        let all = include + decline
+        guard !all.isEmpty, all.count <= 500, Set(all).count == all.count, !old || body.has("approve") else { return try reply(m.type, "{}", re: m.id, error: "bad_request") }
+        guard let waiting = activity.asks.shares[rule] else { return try reply(m.type, "{}", re: m.id, error: "not_found") }
+        let included = include.filter(waiting.contains), declined = decline.filter(waiting.contains)
+        guard !included.isEmpty || !declined.isEmpty else { return try reply(m.type, "{}", re: m.id, error: "bad_request") }
+        let left = waiting.filter { !included.contains($0) && !declined.contains($0) }
         activity.asks.shares[rule] = left.isEmpty ? nil : left
-        for i in VaultJSONLite.strings(body, "include") + ((try? body.bool("approve")) == true ? VaultJSONLite.strings(body, "items") : []) { record("share.included", ref: i) }
-        try reply(m.type, "{}", re: m.id)
+        for i in included { record("share.included", ref: i) }
+        for i in declined { record("share.declined", ref: i) }
+        let list = { (ids: [String]) in JsonBuilder.array(ids.map(JsonBuilder.quote)) }
+        try reply(m.type, #"{"included":\#(list(included)),"declined":\#(list(declined))}"#, re: m.id)
     }
 
     // MARK: - The connections ask, and the owner's other devices decide

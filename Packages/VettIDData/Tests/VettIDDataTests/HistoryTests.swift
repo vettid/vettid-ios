@@ -16,9 +16,11 @@ final class FakeAuditOps: AuditOps, @unchecked Sendable {
     var exportErrors: [String] = []
     /// A search that runs out of its budget after this many entries per request (§10.9 Scan budget).
     var budget: Int?
+    var listGate: TestDeferred<Void>?
 
     func auditPage(connectionID: String?, kinds: [String]?, beforeSeq: Int64?, limit: Int, search: AuditSearch) async throws -> AuditPage {
         calls.append("list:\(beforeSeq.map(String.init) ?? "-"):\(search.q ?? "-")")
+        if let g = listGate { try await g.value() }
         if refuseSearch, search != AuditSearch() { throw VaultOpError(type: "audit.list", code: "bad_request", detail: "", body: nil) }
         let pool = entries.reversed().filter { beforeSeq == nil || $0.seq < beforeSeq! }.filter { e in kinds == nil || kinds!.contains { e.kind.hasPrefix($0) } }
         let scanned = budget.map { Array(pool.prefix($0)) } ?? pool
@@ -43,7 +45,7 @@ final class FakeAuditOps: AuditOps, @unchecked Sendable {
     }
 
     func deviceList() async throws -> [DeviceEntry] {
-        try VaultJSON.decode([DeviceEntry].self, Array(#"[{"id":"d1","kind":"app","state":"active","name":"iPhone"},{"id":"d2","kind":"desktop","state":"active","name":" "}]"#.utf8))
+        try VaultJSON.decode([DeviceEntry].self, Array(#"[{"id":"d1","kind":"app","state":"active","name":""},{"id":"d2","kind":"desktop","state":"active","name":" "},{"id":"d3","kind":"desktop","state":"active","name":"Laptop"}]"#.utf8))
     }
 
     /// [n] entries chained as §10.9 says, the kinds in turn.
@@ -91,9 +93,33 @@ final class FakeAuditOps: AuditOps, @unchecked Sendable {
         #expect(!r.searchSent && h.searchUnsupported && r.entries.count == 5)
         #expect(ops.calls == ["list:-:rotated", "list:-:-"])
         #expect(h.cached(3)?.kind == "credential.rotated")
-        #expect(await h.deviceNames() == ["d1": "iPhone"])
         h.clear()
         #expect(h.cached(3) == nil && !h.searchUnsupported)
+    }
+
+    /// A listed device without a name is known, not removed: this phone, or a device shown by its id (the vault lists the
+    /// app with an empty name). Only a device not listed is removed.
+    @Test func devicesWithoutANameAreNotRemoved() async throws {
+        let h = HistoryManager(selfID: { "d1" }) { [ops] in ops }
+        let d = try #require(await h.devices())
+        #expect(d.device("d1") == .thisPhone && d.device("d2") == .unnamed && d.device("d3") == .named("Laptop"))
+        #expect(d.device("d9") == .removed && d.device(nil) == nil && d.device("d2")?.rowName == nil && d.device("d3")?.rowName == "Laptop")
+        let x = HistoryExportManager(ops: { [ops] in ops }, selfID: { "d1" })
+        #expect(try await x.devices() == d)
+    }
+
+    /// What was read before a lock or a wipe is not kept after it.
+    @Test func aPageFromBeforeAClearIsNotKept() async throws {
+        ops.entries = FakeAuditOps.chain(3)
+        let h = HistoryManager { [ops] in ops }
+        let gate = TestDeferred<Void>()
+        ops.listGate = gate
+        let read = Task { try await h.auditPage(AuditRequest()) }
+        try await Task.sleep(for: .milliseconds(50))
+        h.clear()
+        gate.complete(())
+        #expect(try await read.value.entries.count == 3)
+        #expect(h.cached(1) == nil)
     }
 
     @Test func theChainCheck() {
