@@ -22,6 +22,9 @@ import VettIDDataTesting
         service = try FakeVaultService()
         service.stampsOnVaultClock = true
         phone = try TestVaultPhone(service: service, requestTimeout: 0.4)
+        // A change waits for the credential lock the test holds (the app's 30 s, §11.14.9 step 1), not the test phone's
+        // five seconds, which a loaded machine can spend before the test lets it go.
+        phone.holdsChangeWaits = true
     }
 
     var m: VaultManager { phone.manager }
