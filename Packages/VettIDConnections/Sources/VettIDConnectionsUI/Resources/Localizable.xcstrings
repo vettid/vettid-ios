@@ -1,0 +1,1062 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "connections_done": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done"
+          }
+        }
+      }
+    },
+    "connections_ok": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
+          }
+        }
+      }
+    },
+    "connections_add_invite": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invite with a QR code or link"
+          }
+        }
+      }
+    },
+    "connections_add_invite_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show your code in person, or send a link"
+          }
+        }
+      }
+    },
+    "connections_add_scan": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan a QR code"
+          }
+        }
+      }
+    },
+    "connections_add_scan_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan the code on their phone"
+          }
+        }
+      }
+    },
+    "connections_add_paste": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste an invitation link"
+          }
+        }
+      }
+    },
+    "connections_add_paste_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A link they sent you"
+          }
+        }
+      }
+    },
+    "connections_invite_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invite a connection"
+          }
+        }
+      }
+    },
+    "connections_invite_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose how long the invitation works. Each invitation connects one person, once."
+          }
+        }
+      }
+    },
+    "connections_invite_create": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create invitation"
+          }
+        }
+      }
+    },
+    "connections_ttl_10m": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In person · 10 minutes"
+          }
+        }
+      }
+    },
+    "connections_ttl_1h": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Link · 1 hour"
+          }
+        }
+      }
+    },
+    "connections_ttl_24h": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Link · 24 hours"
+          }
+        }
+      }
+    },
+    "connections_ttl_7d": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Link · 7 days"
+          }
+        }
+      }
+    },
+    "connections_ttl_in_person_hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "They scan the code on your screen"
+          }
+        }
+      }
+    },
+    "connections_ttl_remote_hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send the link through another app"
+          }
+        }
+      }
+    },
+    "connections_remote_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You approve every link connection"
+          }
+        }
+      }
+    },
+    "connections_remote_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anyone who sees the link could use it, so the connection waits until you approve it. Compare the safety code with them over a call you trust first."
+          }
+        }
+      }
+    },
+    "connections_show_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Let them scan this code"
+          }
+        }
+      }
+    },
+    "connections_show_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open VettID on their phone, tap Invite a connection on Connections, then Scan a QR code."
+          }
+        }
+      }
+    },
+    "connections_show_remote_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send this link"
+          }
+        }
+      }
+    },
+    "connections_show_remote_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send it through an app you trust. They paste it in VettID under Invite a connection on Connections."
+          }
+        }
+      }
+    },
+    "connections_qr_cd": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invitation QR code"
+          }
+        }
+      }
+    },
+    "connections_expires_in": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expires in %lld min, at %@"
+          }
+        }
+      }
+    },
+    "connections_link_label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invitation link"
+          }
+        }
+      }
+    },
+    "connections_copy": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy link"
+          }
+        }
+      }
+    },
+    "connections_copied": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copied"
+          }
+        }
+      }
+    },
+    "connections_share": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share link"
+          }
+        }
+      }
+    },
+    "connections_share_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID invitation"
+          }
+        }
+      }
+    },
+    "connections_share_text": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect with me on VettID: open this link on a phone with VettID (or paste it under Invite a connection, Paste an invitation link):\n\n%@"
+          }
+        }
+      }
+    },
+    "connections_waiting_scan": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for them to use it…"
+          }
+        }
+      }
+    },
+    "connections_invite_cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel invitation"
+          }
+        }
+      }
+    },
+    "connections_invite_expired_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The invitation expired"
+          }
+        }
+      }
+    },
+    "connections_invite_expired_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nobody used it in time. Create a new one when you are ready."
+          }
+        }
+      }
+    },
+    "connections_invite_again": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New invitation"
+          }
+        }
+      }
+    },
+    "connections_request_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compare the safety code"
+          }
+        }
+      }
+    },
+    "connections_request_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ used your invitation. Compare this code with %@: it must match the code on their phone."
+          }
+        }
+      }
+    },
+    "connections_request_body_remote": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ used your invitation link. Anyone who saw the link could have used it: compare this code with %@ over a call or another channel you trust."
+          }
+        }
+      }
+    },
+    "connections_request_someone": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Someone"
+          }
+        }
+      }
+    },
+    "connections_request_them": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the other person"
+          }
+        }
+      }
+    },
+    "connections_request_name_label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name on their VettID account"
+          }
+        }
+      }
+    },
+    "connections_request_display_name": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Display name they chose: %@"
+          }
+        }
+      }
+    },
+    "connections_names_note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The name they gave VettID for their account. VettID does not check it against any ID."
+          }
+        }
+      }
+    },
+    "connections_request_no_name": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name not shared yet"
+          }
+        }
+      }
+    },
+    "connections_self_asserted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "They chose this themselves; VettID has not checked it."
+          }
+        }
+      }
+    },
+    "connections_safety_code": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safety code"
+          }
+        }
+      }
+    },
+    "connections_sas_hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compare it with them now. Approve only if the codes match."
+          }
+        }
+      }
+    },
+    "connections_sas_hint_remote": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compare it with them over a call or another channel you trust. Approve only if the codes match."
+          }
+        }
+      }
+    },
+    "connections_sas_hint_invitee": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compare it with %@: it must match the code on their phone. Both of you approve, then you are connected."
+          }
+        }
+      }
+    },
+    "connections_sas_hint_invitee_remote": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compare it with %@ over a call or another channel you trust: it must match the code on their phone. Both of you approve, then you are connected."
+          }
+        }
+      }
+    },
+    "connections_waiting_peer": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for %@ to approve on their phone…"
+          }
+        }
+      }
+    },
+    "connections_auto_approved_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approved automatically"
+          }
+        }
+      }
+    },
+    "connections_auto_approved": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault approved this in-person request for you. Compare the code with %@; decline if it does not match."
+          }
+        }
+      }
+    },
+    "connections_request_approve": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The codes match: connect"
+          }
+        }
+      }
+    },
+    "connections_request_decline": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Decline"
+          }
+        }
+      }
+    },
+    "connections_block_request": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Block this request"
+          }
+        }
+      }
+    },
+    "connections_block_request_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Block this request?"
+          }
+        }
+      }
+    },
+    "connections_block_request_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The request is declined and its vault cannot ask to connect again unless you unblock it."
+          }
+        }
+      }
+    },
+    "connections_block": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Block"
+          }
+        }
+      }
+    },
+    "connections_connected_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You are connected"
+          }
+        }
+      }
+    },
+    "connections_connected_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You and %@ can now message each other through your vaults."
+          }
+        }
+      }
+    },
+    "connections_connected_body_unnamed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can now message each other through your vaults."
+          }
+        }
+      }
+    },
+    "connections_send_message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send a message"
+          }
+        }
+      }
+    },
+    "connections_accept_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste an invitation"
+          }
+        }
+      }
+    },
+    "connections_accept_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste the link someone sent you. Your vault uses it to ask them to connect."
+          }
+        }
+      }
+    },
+    "connections_accept_field": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invitation link"
+          }
+        }
+      }
+    },
+    "connections_accept_connect": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect"
+          }
+        }
+      }
+    },
+    "connections_accept_scan_instead": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan a QR code instead"
+          }
+        }
+      }
+    },
+    "connections_waiting_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contacting %@"
+          }
+        }
+      }
+    },
+    "connections_waiting_title_unnamed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contacting their vault"
+          }
+        }
+      }
+    },
+    "connections_waiting_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault is setting up a secure session with theirs. A safety code appears here once it is done; you can leave this screen and find the request under Approvals."
+          }
+        }
+      }
+    },
+    "connections_waiting_handshake": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for their vault…"
+          }
+        }
+      }
+    },
+    "connections_compare_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compare the safety code"
+          }
+        }
+      }
+    },
+    "connections_compare_approve": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The codes match: approve"
+          }
+        }
+      }
+    },
+    "connections_approved_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You approved"
+          }
+        }
+      }
+    },
+    "connections_approved_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The connection is made once %@ approves too. You can leave this screen: it appears under Connections then."
+          }
+        }
+      }
+    },
+    "connections_exists_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You're already connected"
+          }
+        }
+      }
+    },
+    "connections_exists_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault is already connected to %@, or has asked to connect. This invitation was not used. If the connection is broken, remove it and ask for a new invitation."
+          }
+        }
+      }
+    },
+    "connections_exists_open": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open the connection"
+          }
+        }
+      }
+    },
+    "connections_ended_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No connection was made"
+          }
+        }
+      }
+    },
+    "connections_ended_declined": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You declined the request."
+          }
+        }
+      }
+    },
+    "connections_ended_expired": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The request expired before both of you approved."
+          }
+        }
+      }
+    },
+    "connections_ended_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The other vault did not complete the request in time, or the request was refused. Ask for a new invitation."
+          }
+        }
+      }
+    },
+    "connections_peer_declined_outgoing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ declined your connection request"
+          }
+        }
+      }
+    },
+    "connections_peer_declined_incoming": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ declined the connection"
+          }
+        }
+      }
+    },
+    "connections_peer_declined_someone": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Someone"
+          }
+        }
+      }
+    },
+    "connections_peer_declined_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No connection was made."
+          }
+        }
+      }
+    },
+    "connections_open_link_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open an invitation"
+          }
+        }
+      }
+    },
+    "connections_open_link_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You opened an invitation link. Connect only if you know who sent it; you compare a safety code with them next."
+          }
+        }
+      }
+    },
+    "connections_scan_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan a QR code"
+          }
+        }
+      }
+    },
+    "connections_scan_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Point the camera at the invitation code on their screen."
+          }
+        }
+      }
+    },
+    "connections_scan_allow": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow camera"
+          }
+        }
+      }
+    },
+    "connections_scan_paste_instead": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste a link instead"
+          }
+        }
+      }
+    },
+    "connections_scan_permission_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Camera access needed"
+          }
+        }
+      }
+    },
+    "connections_scan_permission_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID uses the camera only to read the code; nothing is recorded or stored. You can paste a link instead."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

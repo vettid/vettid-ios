@@ -91,7 +91,8 @@ struct RootView: View {
     private var appRoot: some View {
         AppRoot(
             environment: environment, vault: composition.vault, inbox: composition.inbox, canaryInbox: composition.canaryInbox,
-            appLock: composition.appLock, releaseNotes: composition.releaseNotes, releaseInbox: composition.releaseInbox
+            appLock: composition.appLock, releaseNotes: composition.releaseNotes, releaseInbox: composition.releaseInbox,
+            inviteInbox: composition.inviteInbox
         )
     }
 }
@@ -107,6 +108,8 @@ struct AppRoot: View {
     /// What's new from the channel's release log (RELEASE-UPDATES §5).
     let releaseNotes: any ReleaseNotesRepository
     let releaseInbox: ReleaseUpdateInbox
+    /// An invitation link the app was opened with (VAULT-MESSAGING §6.4): the open app's accept screen takes it.
+    let inviteInbox: InviteLinkInbox
     /// Where the member is in the open app, kept while the check past the deadline takes the shell's place.
     @State private var shell: ShellModel
     @Environment(\.openURL) private var openURL
@@ -116,7 +119,7 @@ struct AppRoot: View {
 
     init(
         environment: AppEnvironment, vault: VaultManager, inbox: SetupLinkInbox, canaryInbox: CanaryManifestInbox, appLock: AppLock,
-        releaseNotes: any ReleaseNotesRepository, releaseInbox: ReleaseUpdateInbox
+        releaseNotes: any ReleaseNotesRepository, releaseInbox: ReleaseUpdateInbox, inviteInbox: InviteLinkInbox
     ) {
         self.environment = environment
         self.vault = vault
@@ -125,6 +128,7 @@ struct AppRoot: View {
         self.appLock = appLock
         self.releaseNotes = releaseNotes
         self.releaseInbox = releaseInbox
+        self.inviteInbox = inviteInbox
         _shell = State(initialValue: ShellModel(account: vault, vault: vault, ownerChecks: vault.ownerChecks))
     }
 
@@ -161,14 +165,22 @@ struct AppRoot: View {
                 // The vault is no longer open (locked, signed out, unreachable): the allowance ends.
                 screenshots.vaultClosed()
             }
+            // SwiftUI hands Universal Links (`applinks:`) here too, as well as the `vettid` scheme and opened files.
             .onOpenURL { url in
-                if SetupCodes.isSetupLink(url.absoluteString) {
-                    inbox.offer(url.absoluteString)
-                } else if let doc = CanaryManifestFiles.receive(url) {
-                    // A file opened with VettID: only verified and shown; nothing is installed before the member confirms.
-                    canaryInbox.offer(doc)
+                // An invitation is kept until the vault is open (``OpenedLink``).
+                switch OpenedLink.route(url) {
+                case .invite(let link): inviteInbox.offer(link)
+                case .setup(let link): inbox.offer(link)
+                case .other: openFile(url)
                 }
             }
+    }
+
+    private func openFile(_ url: URL) {
+        if let doc = CanaryManifestFiles.receive(url) {
+            // A file opened with VettID: only verified and shown; nothing is installed before the member confirms.
+            canaryInbox.offer(doc)
+        }
     }
 
     private static var protectedDataAvailable: NotificationCenter.Publisher {
@@ -242,7 +254,8 @@ struct AppRoot: View {
                     appLock: appLock, model: shell, gate: gate, now: now,
                     version: .of(Bundle.main.infoDictionary ?? [:]), installedFrom: InstalledFromBuild.current,
                     promptReason: AppLockTexts.reason, canary: vault.canary, canaryInbox: canaryInbox,
-                    releaseUpdates: vault.releaseUpdate, releaseNotes: releaseNotes, releaseInbox: releaseInbox
+                    releaseUpdates: vault.releaseUpdate, releaseNotes: releaseNotes, releaseInbox: releaseInbox,
+                    connections: vault.connections, connectionRequests: vault.connections, inviteInbox: inviteInbox
                 ) { openPortal() }
             }
         }

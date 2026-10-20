@@ -34,6 +34,13 @@ enum UIStrings {
     static var back: String { String(localized: "core_ui_cd_back", defaultValue: "Back", bundle: .module) }
     static var logo: String { String(localized: "core_ui_cd_logo", defaultValue: "VettID", bundle: .module) }
     static var cancel: String { String(localized: "core_ui_cancel", defaultValue: "Cancel", bundle: .module) }
+    static var scannerNoCamera: String {
+        String(
+            localized: "core_ui_scanner_no_camera",
+            defaultValue: "This device has no camera that VettID can use. Type or paste the code instead.",
+            bundle: .module
+        )
+    }
     static func badgeCount(_ count: Int) -> String {
         String(localized: "core_ui_badge_count", defaultValue: "\(count) pending", bundle: .module)
     }

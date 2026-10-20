@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import VettIDConnections
 import VettIDData
 import VettIDDataTesting
 import VettIDOnboarding
@@ -56,6 +57,26 @@ import VettIDOnboarding
         m.showAccount = true
         m.reset()
         #expect(m.destination == .messages && m.path.isEmpty && !m.showAccount && m.asked == nil)
+    }
+
+    /// The connect flow (VAULT-MESSAGING §6.4): the scanner is replaced by the accept screen; an opened invitation link
+    /// opens the accept screen over the current one, once, the drawer and the sheet closed (vettid-android `AppShell`).
+    @Test func theConnectFlowAndAnOpenedInvitation() {
+        let m = model
+        m.navigate(.connections)
+        m.push(.connect(.scan))
+        m.replace(.connect(.accept(AcceptInput(link: "scanned"))))
+        #expect(m.path == [.connect(.accept(AcceptInput(link: "scanned")))])
+        m.pop()
+        m.drawerOpen = true
+        m.showAccount = true
+        m.openInvite("an-opened-link")
+        m.openInvite("an-opened-link")
+        #expect(m.path == [.connect(.accept(AcceptInput(link: "an-opened-link", opened: true)))] && !m.drawerOpen && !m.showAccount)
+        // The path never prints the link.
+        #expect(!"\(m.path)".contains("an-opened-link") && !String(reflecting: m.path).contains("an-opened-link"))
+        m.replace(.connect(.scan))
+        #expect(m.path == [.connect(.scan)])
     }
 
     /// vettid-android `RootViewModel.lockVault`: the sheet closes and the vault locks; a lock that fails reads the phase

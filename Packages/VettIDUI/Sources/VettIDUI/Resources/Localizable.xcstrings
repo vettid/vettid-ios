@@ -411,6 +411,17 @@
           }
         }
       }
+    },
+    "core_ui_scanner_no_camera": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This device has no camera that VettID can use. Type or paste the code instead."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

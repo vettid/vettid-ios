@@ -27,6 +27,11 @@ public enum VettIDSymbol: String, CaseIterable, Sendable {
     case edit = "square.and.pencil" // Edit
     case reply = "arrowshape.turn.up.left" // Reply
     case qrCode = "qrcode" // QrCode2
+    case qrCodeScanner = "qrcode.viewfinder" // QrCodeScanner
+    case personAdd = "person.badge.plus" // PersonAdd
+    case contentCopy = "doc.on.doc" // ContentCopy
+    case contentPaste = "doc.on.clipboard" // ContentPaste
+    case share = "square.and.arrow.up" // Share
     case delete = "trash" // Delete
     case show = "eye" // Visibility
     case hide = "eye.slash" // VisibilityOff

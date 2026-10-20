@@ -1,5 +1,7 @@
 #if os(iOS)
 import SwiftUI
+import VettIDConnections
+import VettIDConnectionsUI
 import VettIDData
 import VettIDOnboarding
 import VettIDOnboardingUI
@@ -32,12 +34,17 @@ public struct AppShell: View {
     private let releaseUpdates: (any ReleaseUpdateRepository)?
     private let releaseNotes: (any ReleaseNotesRepository)?
     private let releaseInbox: ReleaseUpdateInbox?
+    private let connections: (any ConnectionsRepository)?
+    private let connectionRequests: (any ConnectionRequestsRepository)?
+    private let inviteInbox: InviteLinkInbox?
     private let onOpenPortal: @MainActor () -> Void
 
     /// [model]: where the member is, owned above the owner check's gate. [gate]: the owner check at [now] (the root re-reads
     /// it as time passes). [promptReason]: what the Face ID, Touch ID or passcode prompt says when the app lock is turned on.
     /// [canary] and [canaryInbox]: the canary manifest on Settings → Attestation (VAULT-RELEASES §10.1 step 9).
     /// [releaseUpdates] and [releaseNotes]: Settings → Vault → "Update available" and its screen (RELEASE-UPDATES §2).
+    /// [connections], [connectionRequests] and [inviteInbox]: the connect flow and an invitation link the app was opened
+    /// with (VAULT-MESSAGING §6.4).
     public init(
         account: any AccountRepository,
         vault: any VaultRepository,
@@ -56,6 +63,9 @@ public struct AppShell: View {
         releaseUpdates: (any ReleaseUpdateRepository)? = nil,
         releaseNotes: (any ReleaseNotesRepository)? = nil,
         releaseInbox: ReleaseUpdateInbox? = nil,
+        connections: (any ConnectionsRepository)? = nil,
+        connectionRequests: (any ConnectionRequestsRepository)? = nil,
+        inviteInbox: InviteLinkInbox? = nil,
         onOpenPortal: @escaping @MainActor () -> Void
     ) {
         self.account = account
@@ -75,6 +85,9 @@ public struct AppShell: View {
         self.releaseUpdates = releaseUpdates
         self.releaseNotes = releaseNotes
         self.releaseInbox = releaseInbox
+        self.connections = connections
+        self.connectionRequests = connectionRequests
+        self.inviteInbox = inviteInbox
         self.onOpenPortal = onOpenPortal
     }
 
@@ -187,8 +200,14 @@ public struct AppShell: View {
         .animation(.easeOut(duration: 0.25), value: model.asked)
         // A request to open the update screen (on Android a notification tap; on the iPhone with phase P) waits until the
         // open app is shown.
-        .onAppear { openRequestedUpdate() }
+        .onAppear {
+            openRequestedUpdate()
+            openInvite()
+        }
         .onChange(of: releaseInbox?.pending) { _, _ in openRequestedUpdate() }
+        // An invitation link the app was opened with (§6.4) waits until the open app is shown: the accept screen, where
+        // the member confirms.
+        .onChange(of: inviteInbox?.link) { _, _ in openInvite() }
         .avatarSheet(isPresented: $model.showAccount) {
             AccountSheet(
                 account: account.account,
@@ -203,6 +222,12 @@ public struct AppShell: View {
         guard let inbox = releaseInbox, inbox.pending else { return }
         inbox.consume()
         if releaseUpdates != nil, model.path.last != .releaseUpdate { model.push(.releaseUpdate) }
+    }
+
+    private func openInvite() {
+        guard let inbox = inviteInbox, let link = inbox.link else { return }
+        inbox.consume()
+        if connections != nil, connectionRequests != nil { model.openInvite(link) }
     }
 
     private var chrome: ShellChrome {
@@ -223,6 +248,14 @@ public struct AppShell: View {
         case .help:
             // A back arrow, as on Android, where it returns to the start destination.
             HelpScreen { model.back() }
+        case .connections:
+            // Until the Connections list (IOS-PLAN §8 I2.1): the placeholder with the list's add button.
+            ComingLaterScreen(destination: model.destination, chrome: chrome)
+                .overlay(alignment: .bottom) {
+                    if connections != nil, connectionRequests != nil {
+                        AddConnectionControls { model.push(.connect($0)) }
+                    }
+                }
         default:
             ComingLaterScreen(destination: model.destination, chrome: chrome)
         }
@@ -244,10 +277,24 @@ public struct AppShell: View {
             NewPhoneSecretRoute(vault: vault) { model.pop() }
         case .deleteVault:
             DeleteVaultRoute(vault: vault) { model.pop() }
+        case .releaseUpdate, .connect:
+            featureDetail(route)
+        }
+    }
+
+    /// The screens of the features over the vault: the release update, the connect flow.
+    @ViewBuilder private func featureDetail(_ route: ShellRoute) -> some View {
+        switch route {
         case .releaseUpdate:
             if let releaseUpdates, let releaseNotes {
                 ReleaseUpdateRoute(updates: releaseUpdates, ownerCheck: ownerChecks, notes: releaseNotes) { model.pop() }
             }
+        case .connect(let destination):
+            if let connections, let connectionRequests {
+                ConnectRoute(destination, connections: connections, requests: connectionRequests, host: connectHost)
+            }
+        default:
+            EmptyView()
         }
     }
 
@@ -277,6 +324,14 @@ public struct AppShell: View {
         l.onReviewAlarm = { model.push(.alarm) }
         l.onNewCredential = { model.push(.newCredential) }
         return l
+    }
+
+    private var connectHost: ConnectHost {
+        let model = model
+        var h = ConnectHost()
+        h.onBack = { model.pop() }
+        h.replace = { model.replace(.connect($0)) }
+        return h
     }
 
     private var settingsHost: SettingsHost {
