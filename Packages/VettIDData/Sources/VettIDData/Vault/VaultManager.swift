@@ -598,9 +598,3 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         return local.setupComplete ? .unlocked : .setup(.finishing)
     }
 }
-
-/// The vault manager, for what it makes before it is fully initialised (the owner check's operations).
-@MainActor
-final class ManagerRef {
-    weak var manager: VaultManager?
-}
