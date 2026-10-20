@@ -92,6 +92,11 @@ public final class TestVaultPhone {
     /// Whether this build can wipe (false: a manager without ``LocalWipe``).
     private let wipes: Bool
 
+    /// The request timeout of the tests that make answers go missing: short, so that a lost answer is seen quickly, but
+    /// long enough for the reads every opening of the vault makes (the connections and their requests, as
+    /// vettid-android's) to be answered on a loaded machine before the test's own requests time out (0.4 s was not).
+    public static let shortRequestTimeout: TimeInterval = 1.0
+
     /// [requestTimeout]: how long a request waits for its answer before it is sent again (§8.6). [wipes]: false for a
     /// build that cannot wipe.
     public init(service: FakeVaultService, requestTimeout: TimeInterval = 5, wipes: Bool = true) throws {

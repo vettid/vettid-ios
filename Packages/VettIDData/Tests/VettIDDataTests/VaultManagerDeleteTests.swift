@@ -19,7 +19,7 @@ import VettIDVault
     init() throws {
         service = try FakeVaultService()
         service.stampsOnVaultClock = true
-        phone = try TestVaultPhone(service: service, requestTimeout: 0.4)
+        phone = try TestVaultPhone(service: service, requestTimeout: TestVaultPhone.shortRequestTimeout)
     }
 
     var m: VaultManager { phone.manager }
@@ -246,7 +246,7 @@ import VettIDVault
     /// screen follows and a new setup code can be redeemed.
     @Test func aDeletionWithoutAWiperForgetsTheVault() async throws {
         let service = try FakeVaultService()
-        let phone = try TestVaultPhone(service: service, requestTimeout: 0.4, wipes: false)
+        let phone = try TestVaultPhone(service: service, requestTimeout: TestVaultPhone.shortRequestTimeout, wipes: false)
         defer { phone.close() }
         let m = phone.manager
         _ = try await m.redeemSetupCode(.secret(service.secret))
