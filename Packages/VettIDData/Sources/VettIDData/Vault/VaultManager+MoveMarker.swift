@@ -45,10 +45,11 @@ extension VaultManager {
     }
 
     /// The codes of N+1's own failures (§4.3 point 2): it did not start in time (`release_starting` past its waits, a
-    /// `503 vault_unavailable`), the route kept naming N, or its enclave answered an error decided before the PIN.
+    /// `503 vault_unavailable`), the route kept naming N, or its enclave answered an error decided before the PIN (incl.
+    /// `manifest`, VAULT-MESSAGING §11.10.4 step 1).
     nonisolated static let newReleaseFailureCodes: Set<String> = [
         MemberApiError.releaseStarting, MemberApiError.vaultUnavailable, codeReleaseNotRouted,
-        "retry", "release_key", "vault_missing", "wrong_release",
+        "retry", "release_key", "vault_missing", "wrong_release", "manifest",
     ]
 
     /// (§4.3 point 2) A failure of the new release, not the member's, listed: N+1 ended (`410 release_unavailable`),

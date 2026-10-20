@@ -187,7 +187,7 @@ import VettIDDataTesting
             .failed(.releaseEnded, code: "release_unavailable"), .failed(.enclave, code: "enclave"),
             .failed(.noResponse, code: nil), .failed(.vaultUnavailable, code: "release_starting"),
             .failed(.vaultUnavailable, code: VaultManager.codeReleaseNotRouted), .failed(.retry, code: "retry"),
-            .failed(.other, code: "release_key"), .failed(.other, code: "vault_missing"),
+            .failed(.other, code: "release_key"), .failed(.other, code: "vault_missing"), .failed(.other, code: "manifest"),
         ]
         let no: [UnlockAttempt] = [
             .badPin(retryAfterSeconds: 0), .backoff(retryAfterSeconds: 5), .failed(.network, code: nil),
