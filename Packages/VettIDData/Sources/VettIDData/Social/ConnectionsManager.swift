@@ -35,6 +35,8 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
     /// Bumped whenever what was read from the open vault is dropped: a list read before is not published (chosen; not in
     /// the spec).
     @ObservationIgnored var generation = 0
+    /// Told of every connection that is gone (removed, blocked, or removed by the peer): its messages go with it.
+    @ObservationIgnored public var onForget: @MainActor (String) -> Void = { _ in }
 
     /// [ops] the vault's calls, opened when needed; [quietOps] those of the background reads (nil: [ops]); [load] and
     /// [persist] the encrypted file (read by ``loadIfNeeded()``; an empty write clears it).
@@ -252,7 +254,10 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
         forget(id)
     }
 
-    func forget(_ id: String) { connections.removeAll { $0.id == id } }
+    func forget(_ id: String) {
+        connections.removeAll { $0.id == id }
+        onForget(id)
+    }
 
     public func setAsksMuted(_ id: String, muted: Bool) async throws {
         try await guarded { try await ops().connectionAsksMute(id, muted: muted) }

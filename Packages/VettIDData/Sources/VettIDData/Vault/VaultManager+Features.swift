@@ -1,8 +1,8 @@
 import Foundation
 import VettIDVault
 
-// The managers of the features over this manager's session: the name change (VAULT-MESSAGING §10.8) and the connections
-// (§6.4, §10.4).
+// The managers of the features over this manager's session: the name change (VAULT-MESSAGING §10.8), the connections
+// (§6.4, §10.4) and the messages (§10.5).
 extension VaultManager {
     /// The name change over this manager's session: the request kept with the account record it was sent for, the checks
     /// left read again after a wrong PIN or password.
@@ -47,5 +47,46 @@ extension VaultManager {
             },
             now: config.now
         )
+    }
+
+    /// The messages over this manager's session, with the same session rules as the connections (``connectionsManager``):
+    /// nothing goes to a vault whose lock is pending, and a read nobody asked for never opens a session. Nothing of them
+    /// is written to the phone.
+    static func messagesManager(_ ref: ManagerRef, _ connections: ConnectionsManager) -> MessagesManager {
+        let messages = MessagesManager(
+            ops: {
+                guard let m = ref.manager else { throw VaultFailure(.other, code: "session_dropped") }
+                guard m.lockGuard.admits() else { throw VaultFailure(.other, code: Self.codeLockPending) }
+                return try m.openApi(try await m.openSession())
+            },
+            quietOps: {
+                guard let m = ref.manager, m.phase == .unlocked, !m.backgrounded, let s = m.session else {
+                    throw VaultFailure(.other, code: "session_dropped")
+                }
+                return try m.openApi(s)
+            },
+            connections: { [weak connections] in connections?.connections ?? [] },
+            refreshConnections: { [weak connections] in try await connections?.refresh() }
+        )
+        connections.onForget = { [weak messages] id in messages?.forgetConversation(id) }
+        return messages
+    }
+
+    /// The vault is no longer open on this phone: what was read from it is dropped (the connections, the requests and the
+    /// messages).
+    func forgetOpenLists() {
+        connections.forgetOpenVault()
+        messages.forgetOpenVault()
+    }
+
+    /// The vault opened, or an owner check passed (§3.6.3: nothing held back is replayed as events): the connections and
+    /// the requests are read again, then the conversations of the connections read; failures are left for the screens.
+    func refreshListsQuietly() {
+        Task { [weak self] in
+            guard let self else { return }
+            try? await connections.refresh(quietly: true)
+            try? await connections.refreshRequests(quietly: true)
+            await messages.refreshConversationsQuietly()
+        }
     }
 }

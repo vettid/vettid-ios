@@ -93,7 +93,7 @@ extension VaultManager {
     /// The vault opened (an unlock, the end of onboarding, a start while open): the account is read again.
     func onOpened() {
         Task { [weak self] in await self?.refreshAccount() }
-        connections.refreshAllQuietly()
+        refreshListsQuietly()
         // A change whose answer was lost is decided as soon as the vault runs (§11.14.9 step 2).
         kickChangeCheck()
         // The proactive release notice (ANDROID-PLAN "Vault update"): the manifest, read after every unlock.
