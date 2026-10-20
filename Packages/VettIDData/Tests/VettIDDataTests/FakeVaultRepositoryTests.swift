@@ -116,6 +116,26 @@ import VettIDDataTesting
         #expect(FakeVaultRepository.failure(.backoff, retry: 30).retryAfterSeconds == 30)
     }
 
+    /// The messages fake (for the I2.2b view models): calls recorded, the send limits, reads, older pages and failures.
+    @Test func theMessagesFakeBehavesAsTheManager() async throws {
+        let f = FakeMessages()
+        f.connections = [ConnectionInfo(id: "c1", name: "", state: .active), ConnectionInfo(id: "c2", name: "", state: .stale)]
+        f.byConnection["c1"] = [MessageInfo(connectionID: "c1", messageID: "m2", outgoing: false, text: "hi", sentAt: Date())]
+        f.olderPages["c1"] = [[MessageInfo(connectionID: "c1", messageID: "m1", outgoing: true, text: "first", sentAt: Date())]]
+        #expect(f.conversations.map(\.id) == ["c1"] && f.conversations.first?.unread == 1 && f.olderAvailable("c1"))
+        try await f.loadOlder("c1")
+        #expect(f.messages("c1").map(\.messageID) == ["m1", "m2"] && !f.olderAvailable("c1"))
+        try await f.markRead("c1")
+        #expect(f.conversations.first?.unread == 0)
+        await #expect(throws: VaultFailure.self) { try await f.send("c1", text: "") }
+        let sent = try await f.send("c1", text: "hello")
+        #expect(f.messages("c1").last == sent && sent.outgoing)
+        f.fail["delete"] = VaultFailure(.network)
+        await #expect(throws: VaultFailure.self) { try await f.delete("c1", messageID: sent.messageID) }
+        try await f.delete("c1", messageID: sent.messageID)
+        #expect(f.calls == ["loadOlder:c1", "markRead:c1", "send:c1", "delete:c1", "delete:c1"])
+    }
+
     /// A typed code whose check matches the production origin (VAULT-MESSAGING §16, TEST ONLY).
     private static func typedCode() -> TypedRecoveryCode? {
         let typed = "7ZK3M9QX2HTDCDEFGHJKMNPQRSTVWXYZ0123456789ABV3A1"
