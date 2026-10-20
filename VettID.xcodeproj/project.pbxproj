@@ -10,6 +10,7 @@
 		01B22EFC531F1254BBFF19EC /* VettIDMedia in Frameworks */ = {isa = PBXBuildFile; productRef = 119A448A26B03C3DFE1408E4 /* VettIDMedia */; };
 		07487421CFD203C6665CF8A6 /* KeychainTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B4477541F907F6E92A131BB /* KeychainTests.swift */; };
 		0847C4526D3C1991B627B07F /* DebugCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F26B1FBF5F334471A59B5B8C /* DebugCatalog.swift */; };
+		0E4BA253AB8E8655B797C7F6 /* StagingTests+Messages.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D4DA90211D97D9417FAC02C /* StagingTests+Messages.swift */; };
 		11EB34205C201C9FADCB6AF5 /* VettIDOnboarding in Frameworks */ = {isa = PBXBuildFile; productRef = 91A37563B26A13BAAC113A58 /* VettIDOnboarding */; };
 		16CC7F1AD834271FC0C79440 /* StagingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A34C0ED8CB57521C8F3EF6D6 /* StagingTests.swift */; };
 		23443E7E900490A2D4B5AE6E /* VettIDConnections in Frameworks */ = {isa = PBXBuildFile; productRef = 969025AEB4FA66964C8A134E /* VettIDConnections */; };
@@ -86,6 +87,7 @@
 		27784FA957AF2CC5794ED472 /* SecureInputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureInputTests.swift; sourceTree = "<group>"; };
 		2AA52F91061EA0543A5AE9B8 /* VettIDTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = VettIDTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2B11C310596A4F2C26AACAFC /* DevStack.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = DevStack.xcconfig; sourceTree = "<group>"; };
+		2D4DA90211D97D9417FAC02C /* StagingTests+Messages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StagingTests+Messages.swift"; sourceTree = "<group>"; };
 		2EAA1051D68BE8B6888B7634 /* VettIDVault */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDVault; path = Packages/VettIDVault; sourceTree = SOURCE_ROOT; };
 		412ACBC39A6E3761D83FDE48 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		413317A388BA8F9F2776CB1B /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
@@ -195,6 +197,7 @@
 				A34C0ED8CB57521C8F3EF6D6 /* StagingTests.swift */,
 				A84B69E505CEC2E1129233E9 /* StagingTests+Connect.swift */,
 				0AD7F60FD2F81A1D30A5A802 /* StagingTests+Helpers.swift */,
+				2D4DA90211D97D9417FAC02C /* StagingTests+Messages.swift */,
 				73029356B90552AC0C29EE9F /* StagingUITests.xctestplan */,
 			);
 			path = AppUITests;
@@ -490,6 +493,7 @@
 				91EB5DA7D60B53E6CE50FCE0 /* GalleryScreenshots.swift in Sources */,
 				27B46D91B919FFCEA4228483 /* StagingTests+Connect.swift in Sources */,
 				6FFEE77FE1828A19B428CCAB /* StagingTests+Helpers.swift in Sources */,
+				0E4BA253AB8E8655B797C7F6 /* StagingTests+Messages.swift in Sources */,
 				16CC7F1AD834271FC0C79440 /* StagingTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

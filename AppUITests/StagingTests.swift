@@ -10,6 +10,9 @@ import XCTest
 /// - `VETTID_STAGING_PASSWORD`: the credential password;
 /// - `VETTID_STAGING_LINK`: another member's invitation link, for ``testStagingConnectAccept``;
 /// - `VETTID_STAGING_SAFETY_CODE`: optional, the safety code ``testStagingConnectApprove`` must find.
+/// - `VETTID_STAGING_PEER_NAME`: a connection's shown name, for the message tests;
+/// - `VETTID_STAGING_MESSAGE`: the text ``testStagingMessageSend`` sends;
+/// - `VETTID_STAGING_EXPECT`: the text ``testStagingMessageReceive`` waits for from the connection.
 ///
 /// A test whose inputs are missing is skipped, so CI and every other run never execute it. The inputs are never printed
 /// and no failure message carries them (XCTest's own activity log names what is typed and tapped: the script redacts its
@@ -32,7 +35,7 @@ final class StagingTests: XCTestCase {
         "error", "scan_refused", "pin_error", "pin_confirm_error", "credential_pin_error", "unlock_failed", "unlock_refused",
         "unlock_preflight_error", "unlock_pin_error", "unlock_not_recognised", "unlock_stuck", "unlock_recover_only",
         "unlock_signer_refused", "unlock_owner_check_locked", "unlock_lock_unconfirmed", "move_back_failed",
-        "owner_check_failed", "owner_check_pin_error", "failure",
+        "owner_check_failed", "owner_check_pin_error", "failure", "messages_error", "conversation_error",
     ]
 
     override func setUp() {
@@ -296,6 +299,22 @@ final class StagingTests: XCTestCase {
     @MainActor
     func testStagingConnectApprove() throws {
         try connectApprove()
+    }
+
+    /// I2.2 on staging (VAULT-MESSAGING §10.5): Messages → the conversation with the connection shown as
+    /// `VETTID_STAGING_PEER_NAME` (or the compose button's picker when there is none yet), `VETTID_STAGING_MESSAGE`
+    /// typed and sent, and its bubble followed to "Delivered"; the last state is reported on a `MESSAGE_STATE:` line.
+    /// Then the vault is locked.
+    @MainActor
+    func testStagingMessageSend() throws {
+        try messageSend()
+    }
+
+    /// The other side of ``testStagingMessageSend``: the conversation with the connection, until a message from it shows
+    /// `VETTID_STAGING_EXPECT` (within a minute); reported on a `MESSAGE_RECEIVED:` line. Then the vault is locked.
+    @MainActor
+    func testStagingMessageReceive() throws {
+        try messageReceive()
     }
 
     // MARK: - Steps
