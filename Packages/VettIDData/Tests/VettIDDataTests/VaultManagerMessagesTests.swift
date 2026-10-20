@@ -12,6 +12,10 @@ import VettIDVault
 /// peer): this phone against ``FakeVaultService``, which answers the message types as vettid-vault's
 /// `features/messaging` does and emulates the other member's vault (its messages, its receipts) and the owner's other
 /// devices. On the dev stack the other member is `vaultctl`'s peer.
+/// The conversations are the last of the opening's reads, one after another (connections, requests, approvals, feed,
+/// conversations): under a loaded full run they can take longer than `eventually`'s default.
+private let openingReads: Duration = .seconds(30)
+
 @MainActor
 @Suite(.serialized) struct VaultManagerMessagesTests {
     let service: FakeVaultService
@@ -169,7 +173,7 @@ import VettIDVault
             #expect(data.range(of: Data("kept in the vault only".utf8)) == nil, "\(f)")
         }
         #expect(try await m.unlock(pin: pin) == .success)
-        #expect(await eventually { msgs.messages(id).map(\.text) == ["kept in the vault only"] }, "read again at the opening")
+        #expect(await eventually(within: openingReads) { msgs.messages(id).map(\.text) == ["kept in the vault only"] }, "read again at the opening")
         try await c.remove(id)
         #expect(msgs.messages(id).isEmpty && msgs.conversations.isEmpty)
     }
@@ -196,9 +200,9 @@ import VettIDVault
         _ = try await connected()
         try await m.lock()
         #expect(try await m.unlock(pin: pin) == .success)
-        #expect(await eventually { reads() == 1 }, "the conversation read at the opening")
+        #expect(await eventually(within: openingReads) { reads() == 1 }, "the conversation read at the opening")
         #expect(try await m.ownerChecks.check(pin: pin, password: "correct horse battery", holdOff: nil) == .passed)
-        #expect(await eventually { reads() == 2 })
+        #expect(await eventually(within: openingReads) { reads() == 2 })
         await m.onBackground()
         #expect(m.session == nil)
         await msgs.refreshConversationsQuietly()
