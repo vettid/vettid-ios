@@ -4,10 +4,16 @@ import Testing
 import VettIDDataTesting
 import VettIDKeys
 
-/// Waits (up to 5 s) until [condition] holds; false when it never did.
+/// How long ``eventually(within:_:)`` waits by default: 5 s, and 20 s on CI, whose runners take about three times as long
+/// for a full run and share the main actor among every suite running at once. Every use waits for something that must
+/// happen, so the longer wait only delays a failure.
+let eventuallyDefault: Duration = ProcessInfo.processInfo.environment["CI"] == nil ? .seconds(5) : .seconds(20)
+
+/// Waits (up to [within], wall-clock) until [condition] holds; false when it never did.
 @MainActor
-func eventually(_ condition: @MainActor () -> Bool) async -> Bool {
-    for _ in 0..<250 {
+func eventually(within: Duration = eventuallyDefault, _ condition: @MainActor () -> Bool) async -> Bool {
+    let deadline = ContinuousClock.now + within
+    while ContinuousClock.now < deadline {
         if condition() { return true }
         try? await Task.sleep(for: .milliseconds(20))
     }
