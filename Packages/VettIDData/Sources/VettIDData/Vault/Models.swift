@@ -22,6 +22,9 @@ public enum AppPhase: Equatable, Sendable {
     case locked
     /// The vault is open and this app is its holder.
     case unlocked
+    /// (IOS-PLAN §4.2) The vault said it is being deleted (`device.unlinked{vault_deleted}`): closed for good, waiting for
+    /// the member API to no longer list it (``VaultDeletion``). Nothing is sent to the vault.
+    case deleting
 }
 
 /// The steps of setting a vault up on this phone. Mirrors vettid-android `SetupStage`.
@@ -275,6 +278,9 @@ public struct ChangeCheck: Equatable, Sendable {
         case refused(FailureKind, code: String?)
         /// The check ended without a decision (no credential, another version, a clone alarm): that answer's own path.
         case ended
+        /// (VAULT-MESSAGING 0.51.1; IOS-PLAN 0.1.13) The vault answered `forbidden` to a request of the decision: another
+        /// phone became the holder. The change ended; "Your vault moved to a new phone", with no "Try again".
+        case notHolder
     }
 
     public let type: ChangeType

@@ -117,6 +117,8 @@ public enum FailureKind: Hashable, Sendable, CaseIterable {
     case changeChecking
     /// (§11.14.9) The same after a password change.
     case changeCheckingPassword
+    /// (VAULT-MESSAGING 0.48.0 §11.14.9 "A lost answer to `credential.reset`") The same after a new credential.
+    case changeCheckingReset
     /// (§11.14.9 step 1, 0.45.0) A change of PIN or password refused with nothing sent: an earlier credential operation
     /// was still in flight after 30 s, or had moved the vault's blob past this phone's.
     case credentialUnsettled

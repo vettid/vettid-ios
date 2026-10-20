@@ -1,0 +1,114 @@
+import Foundation
+import Testing
+import VettIDApprovals
+@testable import VettIDApprovalsUI
+@testable import VettIDData
+
+// Expected texts stay on one line each.
+// swiftlint:disable line_length
+
+/// The Approvals screens' texts: every key of vettid-android's `feature/approvals` `strings.xml` (word for word, under its
+/// names), and what each kind of request says in its row and on its decision screen. Free of SwiftUI, so they run on any
+/// platform. Mirrors vettid-android's Approvals screen tests' texts.
+@Suite struct ApprovalTextsTests {
+    /// Every key of the package's `Localizable.xcstrings` resolves, in the built bundle, to its own non-empty text.
+    @Test func everyStringResolves() throws {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Sources/VettIDApprovalsUI/Resources/Localizable.xcstrings")
+        let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        let keys = try #require((doc["strings"] as? [String: Any])?.keys)
+        #expect(keys.count == 142)
+        let missing = "\u{0}missing"
+        for key in keys {
+            let text = ApprovalsStrings.bundle.localizedString(forKey: key, value: missing, table: nil)
+            #expect(!text.isEmpty && text != key && text != missing, "\(key)")
+            #expect(key.hasPrefix("approvals_"), "\(key)")
+        }
+    }
+
+    @Test func theFormattedTextsAreAndroids() {
+        #expect(ApprovalsStrings.title == "Approvals" && ApprovalsStrings.emptyTitle == "Nothing to approve")
+        #expect(ApprovalsStrings.batchTitle("Sam", 1) == "Sam asks for 1 thing" && ApprovalsStrings.batchTitle("Sam", 3) == "Sam asks for 3 things")
+        #expect(ApprovalsStrings.summaryItems(1) == "1 item" && ApprovalsStrings.summaryItems(2) == "2 items")
+        #expect(ApprovalsStrings.grantUses(1) == "They can read it once." && ApprovalsStrings.grantUses(3) == "They can read it 3 times.")
+        #expect(ApprovalsStrings.grantDays(1) == "1 day" && ApprovalsStrings.grantDays(7) == "7 days")
+        #expect(ApprovalsStrings.outgoingBody("Ada") == "You accepted Ada's invitation. Compare this code with Ada: it must match the code on their phone. Both of you approve, then you are connected.")
+        #expect(ApprovalsStrings.ruleNameUntil("medical", "Nov 1") == "your “medical” rule (until Nov 1)")
+        #expect(ApprovalsStrings.backoff(12) == "Too many wrong passwords. Try again in 12 s")
+        #expect(ApprovalsStrings.criticalDoneBody("Sam") == "Your vault used the item once and sent Sam only the result. Nothing else left your vault.")
+        #expect(ApprovalsStrings.pausedTitle("Sam") == "Sam’s requests are paused" && ApprovalsStrings.removeTitle("Sam") == "Remove Sam?")
+    }
+
+    @Test func eachKindHasItsTitle() {
+        #expect(ApprovalTexts.title(.connection(Samples.incoming())) == "Connection request")
+        var remote = ConnectionRequest(pendingID: "p", sas: "1", remote: true, name: nil, receivedAt: Date(), exp: nil)
+        remote.state = .pending
+        #expect(ApprovalTexts.title(.connection(.incoming(remote))) == "Connection request (link)")
+        #expect(ApprovalTexts.title(.connection(Samples.outgoing())) == "Your connection request")
+        #expect(ApprovalTexts.title(Samples.auth()) == "Authenticate to a connection" && ApprovalTexts.title(Samples.grant()) == "Request to see your items")
+        #expect(ApprovalTexts.title(Samples.critical()) == "Use of a critical item" && ApprovalTexts.title(Samples.share()) == "Share with a connection?")
+        #expect(ApprovalTexts.title(Samples.device()) == "Request from a device" && ApprovalTexts.title(Samples.device("device.session.pending")) == "Access session request")
+    }
+
+    @Test func aRowSaysWhoAndWhat() {
+        #expect(ApprovalTexts.supporting(.connection(Samples.incoming()), name: nil) == "Ada Lovelace · code 042817")
+        #expect(ApprovalTexts.supporting(.connection(Samples.incoming(state: .approved)), name: nil) == "Ada Lovelace · code 042817 · waiting for them to approve")
+        #expect(ApprovalTexts.supporting(.connection(Samples.outgoing(sas: nil)), name: nil) == "Grace Hopper · waiting for their vault")
+        #expect(ApprovalTexts.supporting(Samples.auth(), name: "Sam Lee") == "Sam Lee · Sign-in")
+        #expect(ApprovalTexts.supporting(Samples.grant(), name: nil) == "A connection · 3 items")
+        #expect(ApprovalTexts.supporting(Samples.critical(), name: "Sam Lee") == "Sam Lee · Signing key · Seed")
+        #expect(ApprovalTexts.supporting(Samples.share(), name: nil) == "2 items")
+        #expect(ApprovalTexts.supporting(Samples.device(), name: nil) == "Laptop · sign")
+    }
+
+    @Test func aDecisionSaysWhatItDoes() {
+        #expect(ApprovalTexts.body(.connection(Samples.incoming()), name: nil) == "Ada Lovelace used your invitation. Compare this code with Ada Lovelace: it must match the code on their phone.")
+        #expect(ApprovalTexts.body(.connection(Samples.outgoing(sas: nil)), name: nil) == "Your vault is still setting up a secure session with theirs. The safety code appears here once it is done.")
+        #expect(ApprovalTexts.body(.connection(Samples.outgoing()), name: nil).hasPrefix("You accepted Grace Hopper's invitation link."))
+        #expect(ApprovalTexts.body(Samples.auth(), name: "Sam Lee") == "Sam Lee asks you to prove it is you. Approving signs their challenge with your credential key.")
+        #expect(ApprovalTexts.body(Samples.grant(), name: nil) == "A connection asks to see items from your vault.")
+        #expect(ApprovalTexts.body(Samples.share(), name: "Sam Lee") == "A share rule asks whether to share these items with Sam Lee.")
+        #expect(ApprovalTexts.body(Samples.device(), name: nil) == "A desktop or agent of yours asks for a decision.")
+        #expect(ApprovalTexts.approveLabel(.connection(Samples.incoming())) == "The codes match: connect")
+        #expect(ApprovalTexts.approveLabel(.connection(Samples.incoming(state: .approved))) == nil)
+        #expect(ApprovalTexts.approveLabel(.connection(Samples.outgoing())) == "The codes match: approve")
+        #expect(ApprovalTexts.approveLabel(.connection(Samples.outgoing(sas: nil))) == nil && ApprovalTexts.approveLabel(Samples.device()) == nil)
+        #expect(ApprovalTexts.approveLabel(Samples.critical()) == "Allow this one use" && ApprovalTexts.approveLabel(Samples.share()) == "Share the ticked items")
+        #expect(ApprovalTexts.denyLabel(Samples.share()) == "Do not share" && ApprovalTexts.denyLabel(Samples.auth()) == "Deny")
+    }
+
+    @Test func failuresAndResults() {
+        let now = Date()
+        #expect(ApprovalTexts.failure(.backoff, retryUntil: now.addingTimeInterval(9.2), limit: nil, now: now) == "Too many wrong passwords. Try again in 10 s")
+        #expect(ApprovalTexts.failure(.backoff, retryUntil: now.addingTimeInterval(-1), limit: nil, now: now) == "You can try again now")
+        #expect(ApprovalTexts.failure(.backoff, retryUntil: nil, limit: nil, now: now) == FailureKind.backoff.message(timeScale: 1))
+        let limit = VaultLimit("grants_given", max: 3)
+        #expect(ApprovalTexts.failure(.limit, retryUntil: nil, limit: limit, now: now) == limit.message)
+        #expect(ApprovalTexts.failure(.network, retryUntil: nil, limit: limit, now: now) == FailureKind.network.message(timeScale: 1))
+        #expect(ApprovalTexts.criticalResult("ok", name: nil).title == "Done")
+        #expect(ApprovalTexts.criticalResult("unsuitable", name: nil).body.hasPrefix("This field cannot be used this way"))
+        #expect(ApprovalTexts.criticalResult("unavailable", name: nil) == ("Not used", "The item or field is no longer available to them. They were told."))
+    }
+
+    @Test func grantsSharesAndChoices() {
+        #expect(ApprovalTexts.grantEntry(Samples.entry("i1")) == "Passport")
+        #expect(ApprovalTexts.grantEntry(Samples.entry("i2", available: false)) == "Their words (not in your vault)")
+        #expect(ApprovalTexts.grantEntry(GrantEntry(kind: "category", ref: "health_card", label: nil, available: false)) == "Any Health card item (you choose which)")
+        #expect(ApprovalTexts.usesOptions(requested: 3) == [nil, 1, 10] && ApprovalTexts.usesOptions(requested: nil) == [nil, 3, 10])
+        #expect(ApprovalTexts.expiryOptions(requested: nil) == [nil, 86_400, 2_592_000])
+        #expect(ApprovalTexts.expiryLabel(nil, requested: 3_600) == "1 day" && ApprovalTexts.usesLabel(nil, requested: 3) == "They can read it 3 times.")
+        #expect(ApprovalTexts.kind("otp") == "One-time code" && ApprovalTexts.kind("x") == "Other" && ApprovalTexts.operation("auth") == "Sign in (authenticate)")
+        guard case .share(let d) = Samples.share() else { return }
+        let lines = ShareExplanations.of(d.items[1], d)
+        #expect(lines == [.asksFirst(ruleID: "r9"), .alreadyShared] && ShareExplanations.of(d.items[0], d).isEmpty)
+        #expect(ApprovalTexts.shareLine(lines[0], who: "Sam") == "Also covered by another of your rules, which asks you first")
+        #expect(ApprovalTexts.shareLine(lines[1], who: "Sam") == "Already shared with Sam by another rule. Not sharing it stops that sharing.")
+        #expect(ApprovalTexts.peerDeclined(PeerDecline(requestID: "r", name: nil, outgoing: true, at: Date())) == "Someone declined your connection request")
+        #expect(ApprovalTexts.peerDeclined(PeerDecline(requestID: "r", name: "Ada", outgoing: false, at: Date())) == "Ada declined the connection")
+        #expect(ApprovalTexts.pausedTitle(ConnectionInfo(id: "c", name: "", state: .active)) == "A connection’s requests are paused")
+        #expect(ApprovalTexts.batchTitle(asks: 2, name: nil) == "A connection asks for 2 things")
+    }
+}
+
+// swiftlint:enable line_length

@@ -66,6 +66,7 @@ public extension FailureKind {
         case .changeUnresolved: DataStrings.failureChangeUnresolved
         case .changeChecking: DataStrings.failureChangeChecking
         case .changeCheckingPassword: DataStrings.failureChangeCheckingPassword
+        case .changeCheckingReset: DataStrings.failureChangeCheckingReset
         case .credentialUnsettled: DataStrings.failureCredentialUnsettled
         case .pinUncertain: DataStrings.failurePinUncertain
         case .renewUnconfirmed: DataStrings.failureRenewUnconfirmed
@@ -167,6 +168,7 @@ public extension FailureKind {
         case .changeUnresolved: "data_failure_change_unresolved"
         case .changeChecking: "data_failure_change_undecided"
         case .changeCheckingPassword: "data_failure_change_undecided_password"
+        case .changeCheckingReset: "data_failure_change_undecided_reset"
         case .credentialUnsettled: "data_failure_credential_unsettled"
         case .pinUncertain: "data_failure_pin_uncertain"
         case .renewUnconfirmed: "data_failure_renew_unconfirmed"

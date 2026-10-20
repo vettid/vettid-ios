@@ -21,6 +21,11 @@ public struct CredentialState: Equatable, Sendable, CustomStringConvertible, Cus
     public var windowPassword = ""
     public var windowError: FailureKind?
 
+    /// Whether the screen offers New credential (`credential.reset`, VAULT-MESSAGING §3.5.5). Held back until a lost answer
+    /// to it was decided (IOS-PLAN 0.1.9 §6.3, ANDROID-PLAN 0.1.51), which VaultManager+Reset.swift now does (0.48.0
+    /// §11.14.9 "A lost answer to `credential.reset`"), so it is shown.
+    public static let offersNewCredential = true
+
     public init(
         loading: Bool = true,
         status: CredentialStatus? = nil,
@@ -256,10 +261,11 @@ public final class ChangePasswordViewModel {
         case .refused(let kind, _):
             state.check = nil
             refused(VaultFailure(kind))
-        case .ended:
-            // 0.45.0 step 3: either password may be the current one; no retry that sends them again.
+        case .ended, .notHolder:
+            // 0.45.0 step 3: either password may be the current one; no retry that sends them again. (VAULT-MESSAGING
+            // 0.51.1; IOS-PLAN 0.1.13) Another phone is the holder: nothing kept either.
             state = ChangePasswordState(askPin: state.askPin)
-            state.check = .ended
+            state.check = c.status
         }
         vault.waitForChangeCheck(nil)
         vault.acknowledgeChangeCheck()
@@ -354,10 +360,10 @@ public final class ChangePasswordViewModel {
                 state.pin = ""
                 state.check = .notApplied
                 vault.acknowledgeChangeCheck()
-            } else if let check = vault.changeCheck, check.type == .password, check.status == .ended {
-                // §11.14.9 step 3: ended without a decision; nothing is kept for a retry.
+            } else if let check = vault.changeCheck, check.type == .password, check.status == .ended || check.status == .notHolder {
+                // §11.14.9 step 3: ended without a decision (or another phone is the holder); nothing is kept for a retry.
                 state = ChangePasswordState(askPin: s.askPin)
-                state.check = .ended
+                state.check = check.status
                 vault.acknowledgeChangeCheck()
             } else {
                 refused(failure)

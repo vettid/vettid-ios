@@ -63,11 +63,12 @@ import VettIDDataTesting
     }
 
     /// `device.unlinked{replaced}` (§11.11.5 step 3), authenticated in the session, wipes; another reason does not. Events
-    /// are handled in order: when the wipe of the second has run, the first was handled without one.
+    /// are handled in order: when the wipe of the second has run, the first was handled without one. (`vault_deleted`
+    /// closes the vault instead: VaultManagerDeletingTests.)
     @Test func anAuthenticatedUnlinkWipes() async throws {
         defer { phone.close() }
         try await setUp()
-        service.unlinkThisPhone(reason: "vault_deleted")
+        service.unlinkThisPhone(reason: "removed")
         service.unlinkThisPhone(reason: "replaced")
         #expect(await eventually { m.phase == .signedOut })
         #expect(m.holder?.count == 1)

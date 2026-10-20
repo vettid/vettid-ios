@@ -91,6 +91,8 @@ public struct OnboardingState: Equatable, Sendable, CustomStringConvertible, Cus
     public var movedIn = false
     /// (Release R) The move still has to be finished with the PIN on this phone ("Finish the move").
     public var finishMovePending = false
+    /// (IOS-PLAN §4.2) "Your vault was deleted…", once, on the welcome screen after a vault was deleted.
+    public var deletedNotice = false
     /// The vault has a phone secret (release R): the move's last screen says so in its words.
     public var phoneSecret = false
     public var progress: [ProgressEntry] = []

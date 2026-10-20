@@ -110,6 +110,17 @@ public struct ReleaseUpdateFlowContent: View {
                 OnboardingStrings.releaseUpdateAbandonedTitle(from), OnboardingStrings.releaseUpdateAbandonedBody(from, to),
                 "release_update_abandoned"
             )
+        case .returnEnded:
+            // IOS-PLAN §4.3 point 4 (the title chosen; not in the spec): the way back's label over its outcome.
+            FormScaffold(
+                title: OnboardingStrings.releaseUpdateReturn(from),
+                message: p.failureCode == VaultManager.codeReturnConfirmed
+                    ? OnboardingStrings.releaseUpdateReturnConfirmed(to, from) : OnboardingStrings.releaseUpdateReturnUnavailable(from),
+                primaryLabel: OnboardingStrings.releaseUpdateContinue, onPrimary: actions.finish, header: { UpdateGlyph() }
+            ) {
+                EmptyView()
+            }
+            .accessibilityIdentifier("release_update_return_ended")
         case .badPin, .failed:
             UpdateRetryScreen(progress: p, state: state, pin: pin, retry: retry, onSecondary: actions.finish)
         case .newReleaseFailed:
@@ -218,6 +229,8 @@ func updateFailureText(_ p: UpdateProgress, timeScale: UInt64) -> String {
     if p.failure == .badPin { return OnboardingStrings.unlockBadPin }
     if p.failure == .backoff { return OnboardingStrings.releaseUpdateBackoff }
     if p.failureCode == ReleaseUpdateManager.codeReleaseStarting { return OnboardingStrings.releaseUpdateStartFailed }
+    // IOS-PLAN §4.3 point 6: still routed to the release the move left.
+    if p.failureCode == VaultManager.codeReleaseNotRouted { return OnboardingStrings.releaseUpdateRoutePending(Int(p.to.number)) }
     return (p.failure ?? .other).message(timeScale: timeScale)
 }
 

@@ -111,6 +111,9 @@ public protocol ReleaseUpdateOps: AnyObject {
     /// An unconfirmed move can be abandoned: this phone knows the release it moved from.
     func canAbandon() -> Bool
 
+    /// (IOS-PLAN §4.3) The unconfirmed move's marker, for the way back from the unlock screen; nil when none.
+    func unconfirmedMove() -> UnconfirmedMove?
+
     /// The release number this phone last unlocked into (0 when it has none).
     func releaseNumber() -> UInt64
 
@@ -125,6 +128,7 @@ public protocol ReleaseUpdateOps: AnyObject {
 }
 
 public extension ReleaseUpdateOps {
+    func unconfirmedMove() -> UnconfirmedMove? { nil }
     func changeHold() -> FailureKind? { nil }
     func pinGeneration() -> Int { 0 }
     func timeScale() -> UInt64 { 1 }
@@ -200,6 +204,9 @@ public enum UpdateStep: Equatable, Sendable {
     case abandoning
     /// Back on the previous release, open.
     case abandoned
+    /// (IOS-PLAN §4.3 point 4) The way back cannot be taken any more ([UpdateProgress/failureCode]: release N refused it
+    /// with `wrong_release`, or N is no longer available); the marker is cleared and the vault stays locked.
+    case returnEnded
 
     /// A step that runs (no input from the member).
     public var running: Bool { [.locking, .approving, .reopening, .abandoning].contains(self) }
@@ -284,12 +291,18 @@ public protocol ReleaseUpdateRepository: AnyObject, Observable, Sendable {
     /// [generation] as for ``start(pin:offer:generation:)``.
     func abandon(pin: String, generation: Int?)
 
+    /// (IOS-PLAN §4.3 point 3) "Return to release N" from the unlock screen while the unconfirmed move's marker has
+    /// `failed`: the same way back, its progress and outcome shown over every phase. False when it cannot start.
+    func returnToPrevious(pin: String, generation: Int?) -> Bool
+
     /// Leaves the outcome (or gives up): the app follows the vault's phase again. Ignored while a step runs.
     func finish()
 }
 
 public extension ReleaseUpdateRepository {
     var pinGeneration: Int { 0 }
+
+    func returnToPrevious(pin: String, generation: Int?) -> Bool { false }
 
     /// The PIN's generation read as it is handed over (no keypad reading).
     func start(pin: String, offer: ReleaseUpdateOffer) -> Bool { start(pin: pin, offer: offer, generation: nil) }

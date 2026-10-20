@@ -5,9 +5,8 @@ import VettIDDataTesting
 @testable import VettIDConnections
 
 /// The Connections list (ANDROID-PLAN §4; VAULT-MESSAGING §6.4, §10.4): loading, empty and failed reads, favourites
-/// first then by name, the search, the invitations and their cancelling, the other member's declines, and the open
-/// requests decided here, including one that ended meanwhile. Mirrors vettid-android `ConnectionsViewModelsTest`'s list
-/// part.
+/// first then by name, the search, the invitations and their cancelling, and the other member's declines (the requests
+/// are decided in Approvals). Mirrors vettid-android `ConnectionsViewModelsTest`'s list part.
 @MainActor
 @Suite struct ConnectionsViewModelTests {
     let fake = FakeConnections()
@@ -30,7 +29,7 @@ import VettIDDataTesting
         #expect(m.state.loading && m.state.connections.isEmpty)
         await m.settle()
         #expect(!m.state.loading && m.state.error == nil && m.state.isEmpty && !m.state.searchable)
-        #expect(fake.calls == ["refresh", "outstandingInvites", "refreshRequests"])
+        #expect(fake.calls == ["refresh", "outstandingInvites"])
     }
 
     @Test func aFailedReadSaysWhyAndRetries() async {
@@ -110,57 +109,6 @@ import VettIDDataTesting
         #expect(m.state.peerDeclines.count == 1 && !m.state.isEmpty)
         m.dismissPeerDecline("r1")
         #expect(m.state.peerDeclines.isEmpty && fake.calls.contains("dismissPeerDecline"))
-    }
-
-    /// Incoming requests go to the inviter's calls, outgoing ones to the accepter's.
-    @Test func requestsAreApprovedAndDeclinedOnTheirSide() async {
-        fake.requests = [Samples.incoming("p1"), Samples.outgoing("o1")]
-        let m = await model()
-        #expect(m.state.requests.map(\.id) == ["p1", "o1"])
-        m.approve(m.state.requests[0])
-        #expect(m.state.deciding == ["p1"])
-        await m.settle()
-        #expect(m.state.deciding.isEmpty && m.state.requests[0].state == .approved)
-        m.approve(m.state.requests[1])
-        await m.settle()
-        #expect(fake.calls.suffix(2) == ["approveConnection", "approveOutgoing"])
-        m.decline(m.state.requests[1])
-        m.decline(m.state.requests[0])
-        await m.settle()
-        #expect(fake.calls.suffix(2) == ["declineOutgoing", "declineConnection"] && m.state.requests.isEmpty)
-        #expect(m.state.ended == nil && m.state.error == nil)
-    }
-
-    /// A decision on a request the vault no longer has (decided on another device, or expired): told as "already
-    /// decided", not as a failure; another failure keeps the request and says why.
-    @Test func aRequestThatEndedMeanwhileIsToldSo() async {
-        fake.goneOnNotFound = true
-        fake.requests = [Samples.incoming("p1"), Samples.outgoing("o1")]
-        let m = await model()
-        fake.fail["approveConnection"] = VaultFailure(.notFound)
-        m.approve(m.state.requests[0])
-        await m.settle()
-        #expect(m.state.ended == EndedRequest(requestID: "p1", end: .gone) && m.state.error == nil)
-        #expect(m.state.requests.map(\.id) == ["o1"])
-        m.dismissEnded()
-        #expect(m.state.ended == nil)
-        fake.fail["declineOutgoing"] = VaultFailure(.network)
-        m.decline(m.state.requests[0])
-        await m.settle()
-        #expect(m.state.error == .network && m.state.ended == nil && m.state.requests.map(\.id) == ["o1"])
-    }
-
-    /// The other member declined while this member was deciding (0.10.5): their decline notice tells it, no second
-    /// notice and no failure.
-    @Test func aPeersDeclineRacingADecisionIsToldOnce() async {
-        fake.requests = [Samples.outgoing("o1")]
-        let m = await model()
-        fake.requestEnds["o1"] = .peerDeclined
-        fake.peerDeclines = [PeerDecline(requestID: "o1", name: "Inviter", outgoing: true, at: Date())]
-        fake.fail["approveOutgoing"] = VaultFailure(.notFound)
-        m.approve(m.state.requests[0])
-        await m.settle()
-        #expect(m.state.ended == nil && m.state.error == nil && m.state.peerDeclines.count == 1)
     }
 
     /// A list refused because the daily check was due reads again by itself once a check passes (vettid-android

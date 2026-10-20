@@ -3,8 +3,8 @@ import SwiftUI
 import VettIDShell
 import VettIDUI
 
-/// A drawer destination whose screens later rows of IOS-PLAN §8 bring (Messages, Approvals, Vault,
-/// History): its title in the top bar, with the menu and the avatar, and a line that it is not in the iPhone app yet.
+/// A drawer destination whose screens later rows of IOS-PLAN §8 bring (Vault, History), or whose repositories the app
+/// was not given: its title in the top bar, with the menu and the avatar, and a line that it is not in the iPhone app yet.
 /// (Chosen; not in the spec: the iPhone app ships before these screens.)
 public struct ComingLaterScreen: View {
     let destination: TopLevelDestination
@@ -48,9 +48,10 @@ public extension TopLevelDestination {
         }
     }
 
-    /// The drawer's sections as rows (no counts yet: approvals and unread messages come with I2).
-    @MainActor static var drawerSections: [[DrawerItem]] {
-        sections.map { group in group.map { DrawerItem(key: $0.key, label: $0.label, icon: $0.symbol) } }
+    /// The drawer's sections as rows, with [badges]' counts (vettid-android `drawerSections`: approvals waiting for a
+    /// decision, conversations with unread messages).
+    @MainActor static func drawerSections(badges: [TopLevelDestination: Int] = [:]) -> [[DrawerItem]] {
+        sections.map { group in group.map { DrawerItem(key: $0.key, label: $0.label, icon: $0.symbol, badge: badges[$0] ?? 0) } }
     }
 }
 #endif

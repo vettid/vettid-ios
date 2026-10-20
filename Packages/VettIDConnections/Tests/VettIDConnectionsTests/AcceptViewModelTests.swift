@@ -99,8 +99,7 @@ import VettIDDataTesting
     @Test func theSafetyCodeComesWithTheHandshakeThenBothApprove() async {
         let m = await waiting()
         fake.requests = [Samples.outgoing(sas: nil, state: .waiting)]
-        await m.settle()
-        #expect(m.state.step == .waiting && m.state.sas == nil)
+        #expect(await until { m.state.step == .waiting && m.state.sas == nil })
         fake.requests = [Samples.outgoing(remote: true)]
         await m.settle()
         #expect(m.state.step == .compare && m.state.sas == "042817" && m.state.remote)
@@ -109,8 +108,7 @@ import VettIDDataTesting
         #expect(fake.calls.contains("approveOutgoing") && m.state.step == .approved && !m.state.busy)
         // The request read again as pending (an older list) does not take the approval back.
         fake.requests = [Samples.outgoing(state: .pending)]
-        await m.settle()
-        #expect(m.state.step == .approved)
+        #expect(await until { m.state.step == .approved })
         fake.connections = [Samples.active("conn-new")]
         await m.settle()
         #expect(m.state.step == .connected && m.state.connectionName == "Ada Lovelace")
@@ -125,8 +123,7 @@ import VettIDDataTesting
     @Test func approvedElsewhereIsApproved() async {
         let m = await waiting()
         fake.requests = [Samples.outgoing(state: .approved)]
-        await m.settle()
-        #expect(m.state.step == .approved)
+        #expect(await until { m.state.step == .approved })
     }
 
     @Test func aFailedApprovalSaysWhy() async {
@@ -157,8 +154,7 @@ import VettIDDataTesting
             let m = await waiting()
             fake.requests = []
             fake.requestEnds = ["conn-new": end]
-            await m.settle()
-            #expect(m.state.step == .ended && m.state.end == end)
+            #expect(await until { m.state.step == .ended && m.state.end == end })
             fake.requestEnds = [:]
         }
     }
@@ -170,8 +166,7 @@ import VettIDDataTesting
         fake.peerDeclines = [PeerDecline(requestID: "conn-new", name: "Inviter", outgoing: true, at: Date())]
         fake.requests = []
         fake.requestEnds = ["conn-new": .peerDeclined]
-        await m.settle()
-        #expect(m.state.step == .ended && m.state.end == .peerDeclined)
+        #expect(await until { m.state.step == .ended && m.state.end == .peerDeclined })
         #expect(fake.calls.contains("dismissPeerDecline") && fake.peerDeclines.isEmpty)
     }
 

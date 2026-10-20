@@ -97,6 +97,8 @@ extension VaultManager {
     private func wipeEnded(_ p: AppPhase) {
         if p == .signedOut { account = nil }
         phase = p
+        // A vault being deleted ends with the wipe (IOS-PLAN §4.2: the marker goes with the record).
+        endDeletion()
     }
 
     /// "Erase VettID's data on this phone", offered only after a wipe that did not finish (``FailureKind/eraseFailed``):

@@ -123,6 +123,23 @@ extension VaultDevice: AltParty {
         }
     }
 
+    /// (IOS-PLAN §4.3) The unconfirmed move's marker changed by [change] (``AltState/moveFailed`` set, or the marker
+    /// cleared), under the device's lock and stored before this returns; nothing is written when it is unchanged. The
+    /// state as it is now.
+    @discardableResult
+    public func changeMoveMarker(_ change: @Sendable (AltState) -> AltState) async throws -> AltState {
+        try await lock.withLock {
+            let (before, after): (AltState, AltState) = mem.withLock {
+                let a = alt()
+                return (a, change(a))
+            }
+            guard after != before else { return before }
+            mem.withLock { setAlt(after) }
+            try save()
+            return after
+        }
+    }
+
     /// The vault bundle of a recovering app's unlock result pins the vault (§11.11.5). Callers hold ``mem``.
     func adoptBundle(_ bundle: [UInt8]) throws {
         let bo = try StrictJson.parseObject(bundle)

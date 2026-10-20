@@ -4,11 +4,6 @@ import Foundation
 // the app does not map"), approved by the owner (2026-10-20) and shared with the Android app.
 
 extension DataStrings {
-    /// "Your vault moved to a new phone": the title of `vault_not_holder` and of the notices that say another phone became
-    /// the holder (vettid-android `data_feed_device_replaced`).
-    static var feedDeviceReplaced: String {
-        String(localized: "data_feed_device_replaced", defaultValue: "Your vault moved to a new phone", bundle: .module)
-    }
     static var notHolder: String {
         String(
             localized: "vault_not_holder",

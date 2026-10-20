@@ -201,6 +201,33 @@ final class FakeFeedOps: FeedOps, @unchecked Sendable {
         #expect(f.items.isEmpty && f.load == .notLoaded, "a read from before the lock is not shown")
     }
 
+    /// IOS-PLAN §4.1 (de-duplication): one recovery raises one notification, `recovery.completed`; `credential.recovered`,
+    /// `recovery.device_paired` and a PIN change are neither listed, counted nor arrivals, and the cursor moves past them.
+    @Test func theHistoryOnlyKindsAreNeitherListedCountedNorArrivals() async throws {
+        ops.add("vault.pin_changed", at: now)
+        ops.add("message.received", at: now)
+        let f = manager()
+        var arrived: [String] = []
+        f.onArrival = { arrived.append($0.kind) }
+        try await f.refresh()
+        #expect(f.items.map(\.kind) == ["message.received"] && f.badge.unread == 1)
+        for kind in ["credential.recovered", "recovery.device_paired", "recovery.completed"] {
+            f.onEvent(event(ops.add(kind, at: now)))
+        }
+        #expect(f.cursor == 5 && ops.calls == ["list:0"], "in order: no catch-up")
+        #expect(arrived == ["recovery.completed"])
+        #expect(Set(f.items.map(\.kind)) == ["message.received", "recovery.completed"] && f.badge.unread == 2)
+        // Nor from a catch-up.
+        ops.add("vault.pin_changed", at: now)
+        f.onEvent(sync("feed.updated"))
+        #expect(await eventually { f.cursor == 6 })
+        #expect(arrived == ["recovery.completed"] && f.items.count == 2)
+        // A closure item that is not a rollback is hidden too; a rollback is listed and arrives.
+        f.onEvent(event(ops.add("recovery.generation_closed", at: now, priority: "urgent", ref: "4/stale")))
+        f.onEvent(event(ops.add("recovery.generation_closed", at: now, priority: "urgent", ref: "5/rollback")))
+        #expect(arrived == ["recovery.completed", "recovery.generation_closed"] && f.items.count == 3 && f.badge.urgent)
+    }
+
     @Test func kindsTargetsAndAsks() throws {
         let item = { (kind: String, conn: String?, ref: String?) in FeedItem(itemID: "i", seq: 1, kind: kind, at: "", status: "active", connectionID: conn, ref: ref) }
         #expect(FeedKinds.classify("grant.request") == .shown && FeedKinds.classify("leash.item.run") == .later)
@@ -217,6 +244,8 @@ final class FakeFeedOps: FeedOps, @unchecked Sendable {
         #expect(FeedKinds.holdChange("off_until:2026-11-01T00:00:00.000Z") == .offUntil(OwnerCheckManager.instant("2026-11-01T00:00:00.000Z")))
         #expect(FeedKinds.holdChange("on:expired") == .backOn && FeedKinds.holdChange(nil) == .on)
         #expect(FeedKinds.signerChange("google_play:vettid")?.new == "vettid" && FeedKinds.signerChange("x") == nil)
+        #expect(FeedKinds.classify("recovery.attempt") == .shown && FeedKinds.classify("recovery.generation_closed") == .shown)
+        #expect(FeedKinds.target(item("recovery.attempt", nil, "2/3/not_success/counter")) == .sheet)
     }
 }
 

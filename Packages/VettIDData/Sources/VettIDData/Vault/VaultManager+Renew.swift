@@ -82,6 +82,15 @@ extension VaultManager {
     func settleRenews(_ api: VaultApi) async throws {
         let pending = try phoneSecrets.records().candidates.filter { $0.sent != nil }
         guard !pending.isEmpty else { return }
+        do {
+            try await settle(pending, api)
+        } catch let e as VaultOpError where Self.notHolder(e) {
+            // VAULT-MESSAGING 0.51.1; IOS-PLAN 0.1.13: another phone is the holder.
+            throw renewsEndedByForbidden(Set(pending.map(\.operation)), e)
+        }
+    }
+
+    private func settle(_ pending: [PhoneRecords.Candidate], _ api: VaultApi) async throws {
         guard await api.credentialAwaitSettled() else {
             throw VaultFailure(.credentialUnsettled, code: VaultFailures.codeCredentialUnsettled)
         }
@@ -92,7 +101,13 @@ extension VaultManager {
             }
             if version == sent.version + 1 {
                 try await api.credentialFetch()
-                try? await api.topUpUTKs()
+                do {
+                    try await api.topUpUTKs()
+                } catch let e as VaultOpError where Self.notHolder(e) {
+                    throw e
+                } catch {
+                    // A top-up that fails is left to the next operation.
+                }
                 if renewOperation == c.operation { renewOperation = nil }
                 guard (try? phoneSecrets.confirmChange(operation: c.operation)) == true else {
                     throw VaultFailure(.renewUnconfirmed, code: Self.codeRenewUnconfirmed)

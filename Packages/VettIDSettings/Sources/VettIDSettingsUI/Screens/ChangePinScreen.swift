@@ -134,6 +134,7 @@ public struct ChangePinContent: View {
         case .unreachable: PinStrings.pinUnreachable
         case .notApplied: PinStrings.pinNotChanged
         case .ended: PinStrings.pinEnded
+        case .notHolder: ChangeCheckNotice.holderMoved
         default: nil
         }
     }

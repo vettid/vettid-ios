@@ -53,29 +53,6 @@ struct ConnectionsError: View {
     }
 }
 
-/// A request that ended before the member's decision reached the vault: "Already decided" when the vault no longer knew
-/// it (``RequestEnd/gone``, vettid-android Approvals' text for the same case; chosen; not in the spec), otherwise why no
-/// connection was made.
-struct EndedRequestNotice: View {
-    let ended: EndedRequest
-    let onDismiss: @MainActor () -> Void
-
-    var body: some View {
-        NoticeCard(.info, title: Self.title(ended.end), message: Self.body(ended.end)) {
-            ListNoticeAction(label: ConnectStrings.ok, identifier: "request_ended_ok", action: onDismiss)
-        }
-        .accessibilityIdentifier("request_ended")
-    }
-
-    static func title(_ end: RequestEnd) -> String {
-        end == .gone ? ConnectStrings.goneTitle : ConnectStrings.endedTitle
-    }
-
-    static func body(_ end: RequestEnd) -> String {
-        end == .gone ? ConnectStrings.goneBody : AcceptScreen.endedBody(end)
-    }
-}
-
 /// A section's header ("Open invitations", "Connections").
 struct SectionHeader: View {
     @Environment(\.vettIDColors) private var colors
@@ -119,80 +96,6 @@ struct InviteRow: View {
         .padding(.trailing, Spacing.xs)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("invite_\(invite.inviteID)")
-    }
-}
-
-/// An open connection request of either side (VAULT-MESSAGING §6.4, 0.10.3): who (the names on their account, never
-/// called verified), the safety code to compare (out of captures), and approve or decline; after this member's approval,
-/// the wait for the other member; before the handshake, the wait for their vault. Texts of vettid-android's request
-/// screens (`ConnectionRequestContent`, the accept screen).
-struct RequestCard: View {
-    @Environment(\.vettIDColors) private var colors
-    let request: PendingConnection
-    let deciding: Bool
-    let actions: ConnectionsActions
-
-    var body: some View {
-        DetailCard {
-            VStack(alignment: .leading, spacing: Spacing.s) {
-                Text(Self.type(request)).vettIDFont(.labelLarge).foregroundStyle(colors.onSurfaceVariant)
-                Text(request.name ?? ConnectStrings.requestNoName).vettIDFont(.titleMedium)
-                    .accessibilityIdentifier("request_name")
-                if request.name != nil {
-                    Text(ConnectStrings.namesNote).vettIDFont(.bodySmall).foregroundStyle(colors.onSurfaceVariant)
-                }
-                decision
-            }
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("request_\(request.id)")
-    }
-
-    @ViewBuilder private var decision: some View {
-        if let sas = request.sas {
-            Text(Self.body(request)).vettIDFont(.bodyMedium)
-            LabeledSas(sas: sas)
-            if request.state == .approved {
-                WaitingRow(text: ConnectStrings.waitingPeer(who))
-            } else {
-                PrimaryButton(Self.approveLabel(request), busy: deciding) { actions.onApprove(request) }
-                    .accessibilityIdentifier("request_approve")
-            }
-        } else {
-            WaitingRow(text: ConnectStrings.waitingHandshake, identifier: "waiting_handshake")
-        }
-        SecondaryButton(ConnectStrings.requestDecline) { actions.onDecline(request) }
-            .disabled(deciding)
-            .accessibilityIdentifier("request_decline")
-    }
-
-    private var who: String { request.name.map(AccountNames.isolate) ?? ConnectStrings.requestThem }
-
-    static func remote(_ r: PendingConnection) -> Bool {
-        switch r {
-        case .incoming(let x): x.remote
-        case .outgoing(let x): x.remote
-        }
-    }
-
-    /// "Connection request", "Connection request (link)", or "Your connection request" (vettid-android Approvals).
-    static func type(_ r: PendingConnection) -> String {
-        if case .outgoing = r { return ConnectStrings.typeOutgoing }
-        return remote(r) ? ConnectStrings.typeConnectionRemote : ConnectStrings.typeConnection
-    }
-
-    /// What to compare, as the invite screen (incoming) and the accept screen (outgoing) say it.
-    static func body(_ r: PendingConnection) -> String {
-        let named = r.name.map(AccountNames.isolate) ?? ConnectStrings.requestSomeone
-        if case .outgoing = r {
-            return remote(r) ? ConnectStrings.sasHintInviteeRemote(named) : ConnectStrings.sasHintInvitee(named)
-        }
-        return remote(r) ? ConnectStrings.requestBodyRemote(named) : ConnectStrings.requestBody(named)
-    }
-
-    static func approveLabel(_ r: PendingConnection) -> String {
-        if case .outgoing = r { return ConnectStrings.compareApprove }
-        return ConnectStrings.requestApprove
     }
 }
 #endif

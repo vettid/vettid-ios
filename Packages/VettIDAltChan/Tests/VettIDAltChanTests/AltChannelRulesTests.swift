@@ -141,16 +141,19 @@ struct ChainAttester: Attester {
         moved.previousRelease = FakeEnclave.pcr0
         moved.previousReleaseNumber = 3
         #expect(try body(UnlockOptions(abandon: true), moved).obj("release_update").string("to") == FakeEnclave.pcr0)
-        // Right after the move, routed to exactly the release moved from: not yet routed (waited out), nothing sent.
-        var afterMove = UnlockOptions()
-        afterMove.afterMove = true
-        #expect(throws: AltRefused.notYetRouted) { _ = try body(afterMove, moved) }
-        // Any other unlock routed there, or right after a move to an older release that is not the one moved from: a
+        // While the move is unconfirmed, an unlock routed to exactly the release moved from (number and PCR0): not yet
+        // routed (waited out), nothing sent (IOS-PLAN §4.3 point 6).
+        #expect(throws: AltRefused.notYetRouted) { _ = try body(UnlockOptions(), moved) }
+        // An older release that is not the one moved from (another PCR0, or the same PCR0 under another number): a
         // rollback.
-        #expect(throws: AltRefused.rollbackRelease) { _ = try body(UnlockOptions(), moved) }
         var elsewhere = moved
         elsewhere.previousRelease = String(repeating: "b2", count: 48)
-        #expect(throws: AltRefused.rollbackRelease) { _ = try body(afterMove, elsewhere) }
+        #expect(throws: AltRefused.rollbackRelease) { _ = try body(UnlockOptions(), elsewhere) }
+        var otherNumber = moved
+        otherNumber.previousReleaseNumber = 2
+        #expect(throws: AltRefused.rollbackRelease) { _ = try body(UnlockOptions(), otherNumber) }
+        // Without the marker, the same route is a rollback.
+        #expect(throws: AltRefused.rollbackRelease) { _ = try body(UnlockOptions(), moved.withoutMove()) }
         let abandoned = try AltRequests.applyUnlock(moved, PendingUnlock(requestID: "r", release: FakeEnclave.pcr0, number: 3, serial: 7, toNumber: 3), {
             var r = UnlockResult(ok: true)
             r.release = FakeEnclave.pcr0
@@ -159,6 +162,48 @@ struct ChainAttester: Attester {
             return r
         }())
         #expect(abandoned.previousRelease == "" && abandoned.releaseNumber == 3 && abandoned.release == FakeEnclave.pcr0)
+        #expect(abandoned.moveUnconfirmed == nil)
+    }
+
+    /// The `move_unconfirmed` marker (IOS-PLAN §4.3): set by `moved` with `failed` false, kept across a restart (the state
+    /// is marshalled), and cleared by an opening on the new release, by `abandoned`, and by the way back refused
+    /// `downgrade`; another refusal of the way back by the release moved from keeps it.
+    @Test func theMoveMarker() throws {
+        let n = FakeEnclave.pcr0
+        let n1 = String(repeating: "c5", count: 48)
+        var start = AltState()
+        start.release = n
+        start.releaseNumber = 3
+        func result(_ release: String, _ number: UInt64, update: UnlockResult.Update? = nil) -> UnlockResult {
+            var r = UnlockResult(ok: true)
+            r.release = release
+            r.releaseNumber = number
+            r.update = update
+            return r
+        }
+        let moved = try AltRequests.applyUnlock(
+            start, PendingUnlock(requestID: "r1", release: n, number: 3, serial: 7, toNumber: 4),
+            result(n, 3, update: UnlockResult.Update(to: n1, result: "moved", code: nil))
+        )
+        let marker = try #require(moved.moveUnconfirmed)
+        #expect(marker == MoveUnconfirmed(from: .init(number: 3, pcr0: n), to: .init(number: 4, pcr0: n1), failed: false))
+        var failed = moved
+        failed.moveFailed = true
+        let reread = try AltState.parse(try StrictJson.parseObject(Array(failed.marshal().utf8)))
+        #expect(reread.moveUnconfirmed?.failed == true && reread.moveUnconfirmed?.from == marker.from)
+        // An opening on N+1 confirms the move.
+        let confirmed = try AltRequests.applyUnlock(failed, PendingUnlock(requestID: "r2", release: n1, number: 4, serial: 7, toNumber: 0), result(n1, 4))
+        #expect(confirmed.moveUnconfirmed == nil && confirmed.releaseNumber == 4 && !confirmed.moveFailed)
+        // The way back answered `downgrade` by N: no move was pending; N is recorded.
+        let back = PendingUnlock(requestID: "r3", release: n, number: 3, serial: 7, toNumber: 3)
+        let downgrade = try AltRequests.applyUnlock(failed, back, result(n, 3, update: UnlockResult.Update(to: n, result: "refused", code: "downgrade")))
+        #expect(downgrade.moveUnconfirmed == nil && downgrade.releaseNumber == 3 && downgrade.release == n)
+        // Another refusal of the way back by N keeps the marker.
+        let kept = try AltRequests.applyUnlock(failed, back, result(n, 3, update: UnlockResult.Update(to: n, result: "refused", code: "approval")))
+        #expect(kept.moveUnconfirmed?.failed == true)
+        // A failed unlock changes nothing of it.
+        let refused = try AltRequests.applyUnlock(failed, back, UnlockResult(ok: false))
+        #expect(refused.moveUnconfirmed?.failed == true)
     }
 
     @Test func theUniversalLinksPortHostAndPath() {

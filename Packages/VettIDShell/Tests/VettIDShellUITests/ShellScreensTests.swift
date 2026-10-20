@@ -12,6 +12,7 @@ import VettIDSettings
 import VettIDShell
 @testable import VettIDShellUI
 import VettIDUI
+import VettIDVault
 
 /// The shell: its texts (vettid-android's, word for word), the owner check's banners and the avatar sheet's lines, and
 /// every view rendered.
@@ -187,6 +188,37 @@ import VettIDUI
             ) {}
             #expect(height(withMessages) > 0)
         }
+    }
+
+    /// Approvals in the placeholder's place, a decision and the Notifications screens over it; the drawer's counts.
+    @Test func theApprovalsAndNotificationsRender() {
+        let repo = FakeVaultRepository(.unlocked)
+        let gate = OwnerCheckGate(gated: false, warning: false, holdOff: false, notices: [], presenceUnrecorded: false)
+        let connections = FakeConnections()
+        let request = ConnectionRequest(pendingID: "p1", sas: "123456", remote: false, name: "Ada Lovelace", receivedAt: now, exp: nil)
+        connections.requests = [.incoming(request)]
+        let approvals = FakeApprovals(connections: connections)
+        let feed = FakeFeed()
+        feed.items = [
+            FeedItem(
+                itemID: "f1", seq: 1, kind: "recovery.attempt", at: "2026-10-19T12:00:00.000Z", status: "active", priority: "urgent",
+                ref: "2/3/not_success/counter"
+            ),
+        ]
+        let model = ShellModel(account: repo, vault: repo, ownerChecks: repo)
+        model.navigate(.approvals)
+        let routes: [[ShellRoute]] = [[], [.approval("connection:p1")], [.notifications(archived: false)], [.notifications(archived: true)]]
+        for path in routes {
+            model.path = path
+            let shell = AppShell(
+                account: repo, vault: repo, ownerChecks: repo, credential: repo, profiles: repo, appLock: StillAppLock(),
+                model: model, gate: gate, now: now, version: AppVersion(name: "2.0.0", build: 1), installedFrom: .apple,
+                promptReason: "Unlock VettID", connections: connections, connectionRequests: connections, feed: feed, approvals: approvals
+            ) {}
+            #expect(height(shell) > 0)
+        }
+        let items = TopLevelDestination.drawerSections(badges: [.approvals: 1]).flatMap { $0 }
+        #expect(items.first { $0.key == "approvals" }?.badge == 1 && items.first { $0.key == "messages" }?.badge == 0)
     }
 
     private func height(_ view: some View) -> CGFloat {

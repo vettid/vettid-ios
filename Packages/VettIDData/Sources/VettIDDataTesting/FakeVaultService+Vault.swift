@@ -175,10 +175,15 @@ extension FakeVaultService {
         }
     }
 
-    /// A request refused before anything is done: one the test made fail (`retry`), or, until the credential exists,
-    /// everything but what creates it (§3.5.7, `credential_required`). Callers hold ``cond``.
+    /// A request refused before anything is done: one the test made fail (`retry`, or ``refuse(_:with:times:)``'s code),
+    /// or, until the credential exists, everything but what creates it (§3.5.7, `credential_required`). Callers hold
+    /// ``cond``.
     private func refusal(_ type: String) -> String? {
         if failNextTypes.remove(type) != nil { return "retry" }
+        if let r = refusedTypesValue[type], r.times > 0 {
+            refusedTypesValue[type] = r.times > 1 ? (r.code, r.times - 1) : nil
+            return r.code
+        }
         let beforeCredential: Set = ["credential.utk.get", "credential.create", "credential.version", "vault.status", "vault.lock"]
         return !hasCredential && !beforeCredential.contains(type) ? "credential_required" : nil
     }

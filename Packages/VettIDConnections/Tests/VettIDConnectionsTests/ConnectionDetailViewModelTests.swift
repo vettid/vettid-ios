@@ -93,15 +93,13 @@ import VettIDDataTesting
         fake.connections = [Samples.active("c1"), Samples.active("c2")]
         let m = await model()
         fake.connections.removeAll { $0.id == "c2" }
-        await m.settle()
-        #expect(!m.state.gone && m.state.connection != nil)
+        #expect(await until { !m.state.gone && m.state.connection != nil })
         fake.connections = []
         await m.settle()
         #expect(m.state.gone && m.state.connection == nil)
         // It does not come back with the list.
         fake.connections = [Samples.active("c1")]
-        await m.settle()
-        #expect(m.state.connection == nil)
+        #expect(await until { m.state.connection == nil })
     }
 
     /// Mute and unmute; resume a pause or the cooldowns (0.23.0 §10.4.1). Unmuting does not resume, resuming does not

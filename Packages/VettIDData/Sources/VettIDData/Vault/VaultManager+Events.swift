@@ -12,6 +12,7 @@ extension VaultManager {
     /// Follows [s]'s events and refusal counts until the session is dropped.
     func observe(_ s: VaultSession) {
         stopObserving()
+        readMoveMarker()
         let events = s.device.events()
         let counts = s.device.vaultRefusalCounts()
         let required = s.device.ownerCheckRequired()
@@ -45,6 +46,11 @@ extension VaultManager {
         foregrounds += 1
         backgrounded = false
         guard phase != .signedOut else { return }
+        // IOS-PLAN §4.2: a vault being deleted is read again, and nothing else runs.
+        if deletion != nil {
+            Task { [weak self] in _ = await self?.checkDeletionAgain() }
+            return
+        }
         // A vault past its owner-check deadline, or near it, is read again: the check screen shows what is waiting.
         let t = config.now()
         if phase == .unlocked, let v = ownerChecks.ownerCheck, v.gated(t) || v.warning(t) { ownerChecks.onOpened() }
@@ -116,8 +122,11 @@ extension VaultManager {
         case Self.typeSync:
             syncAlarm(m)
             syncAccount(m)
-        // `transferred` (§6.7.1 step 4) and `replaced` (§11.11.5 step 3) mean this phone was replaced; another reason is
-        // re-read like any change of the vault.
+            syncRelease(m)
+        // `transferred` (§6.7.1 step 4) and `replaced` (§11.11.5 step 3) mean this phone was replaced; `vault_deleted`
+        // (§12.5 step 1) closes the vault for good (IOS-PLAN §4.2); another reason is re-read like any change of the vault.
+        case HolderPolicy.deviceUnlinked where VaultJSON.string(m.object, "reason") == Self.reasonVaultDeleted:
+            onVaultDeletedEvent()
         case HolderPolicy.deviceUnlinked:
             if holder?.onVaultEvent(HolderPolicy.of(m)) != true {
                 rereads += 1

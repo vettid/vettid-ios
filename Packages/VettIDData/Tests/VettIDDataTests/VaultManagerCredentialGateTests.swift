@@ -274,15 +274,17 @@ import VettIDDataTesting
         #expect(service.rotations.isEmpty && service.passwordFailureCount == 0)
     }
 
-    /// The same for an operation that began while the reset was out (the count already moved for its send): refused
-    /// when it gets the lock, with nothing sent, so the replaced password never goes.
+    /// The same for an operation that began while the reset was out (the count already moved for its send, and its
+    /// unresolved change is stored): refused when it gets the lock, with nothing sent, so the replaced password never goes.
+    /// The reset's answer is lost, so it stays out (VAULT-MESSAGING 0.48.0 §11.14.9: it is sent after a pre-check, which
+    /// is answered).
     @Test func anUnlockWindowQueuedWhileAResetIsOutIsRefused() async throws {
         defer { phone.close() }
         try await setUp()
         let api = try m.openApi(try await m.openSession())
         let lock = try #require(m.session?.device.credentialLock)
         let (pin, password, newPassword) = (pin, password, newPassword)
-        service.holdMessages = true
+        service.loseAnswers(["credential.reset"])
         let reset = Task { try await m.newCredential(pin: pin, password: password, newPassword: newPassword) }
         #expect(await eventually { service.resets.count == 1 })
         let op = Task { () -> (any Error)? in
@@ -294,10 +296,11 @@ import VettIDDataTesting
             }
         }
         #expect(await eventually { lock.waiting == 1 })
-        service.holdMessages = false
+        service.loseAnswers([])
         _ = try? await reset.value
         let error = await op.value
-        #expect(error is CredentialUnsettled, "\(String(describing: error))")
+        let refused = error is CredentialUnsettled || [FailureKind.busy, .changeUnresolved].contains((error as? VaultFailure)?.kind)
+        #expect(refused, "\(String(describing: error))")
         #expect(count("credential.unlock") == 0 && service.passwordFailureCount == 0)
     }
 }
