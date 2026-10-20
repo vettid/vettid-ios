@@ -35,6 +35,8 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
     /// Bumped whenever what was read from the open vault is dropped: a list read before is not published (chosen; not in
     /// the spec).
     @ObservationIgnored var generation = 0
+    /// Told of every connection that is gone (removed, blocked, or removed by the peer): its messages go with it.
+    @ObservationIgnored public var onForget: @MainActor (String) -> Void = { _ in }
 
     /// [ops] the vault's calls, opened when needed; [quietOps] those of the background reads (nil: [ops]); [load] and
     /// [persist] the encrypted file (read by ``loadIfNeeded()``; an empty write clears it).
@@ -135,10 +137,18 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
 
     func refresh(quietly: Bool) async throws {
         let g = generation
+        let asked = Set(connections.map(\.id))
         let o = quietly ? quietOps : ops
         let list = try await guarded { try await o().connectionList() }
         guard g == generation else { return }
-        connections = list.filter { $0.kind == "connection" }.map(ConnectionParser.connection)
+        let next = list.filter { $0.kind == "connection" }.map(ConnectionParser.connection)
+        let kept = Set(next.map(\.id))
+        // A connection read while the list was on its way (``connection(_:)``) stays; one the vault no longer lists that
+        // was known when the list was asked for (removed on another device) goes, and takes its conversation with it.
+        let added = connections.filter { !asked.contains($0.id) && !kept.contains($0.id) }
+        let gone = connections.map(\.id).filter { asked.contains($0) && !kept.contains($0) }
+        connections = next + added
+        for id in gone { onForget(id) }
     }
 
     public func connection(_ id: String) async throws -> ConnectionInfo {
@@ -252,7 +262,10 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
         forget(id)
     }
 
-    func forget(_ id: String) { connections.removeAll { $0.id == id } }
+    func forget(_ id: String) {
+        connections.removeAll { $0.id == id }
+        onForget(id)
+    }
 
     public func setAsksMuted(_ id: String, muted: Bool) async throws {
         try await guarded { try await ops().connectionAsksMute(id, muted: muted) }

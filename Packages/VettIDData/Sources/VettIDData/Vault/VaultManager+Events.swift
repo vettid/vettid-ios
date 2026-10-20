@@ -99,7 +99,10 @@ extension VaultManager {
         if lockNotices.stale(m) { return }
         ownerChecks.onEvent(m)
         // Nothing the vault sends is taken into the app's lists while a lock is pending (as vettid-android).
-        if lockGuard.takesEvents() { connections.onEvent(m) }
+        if lockGuard.takesEvents() {
+            connections.onEvent(m)
+            messages.onEvent(m)
+        }
         switch m.type {
         // §3.6.3: entering the hold ends the credential's unlock window.
         case Self.typeHeld:

@@ -21,8 +21,8 @@ struct VaultSession: Sendable {
 /// The slices so far (IOS-PLAN §8): what onboarding needs (I1.6: the phase at start, the setup code, enrollment with the
 /// phone's unlock secret of epoch 1, §11.14.1 "On an iPhone", the first handshake, the credential and Finish setup),
 /// the unlock and the member's lock (I1.7a: §11.4 with the phone secret, VAULT-LOCK as vettid-android implements it, the
-/// vault events they follow), Settings (I1.8: the account, the name, the credential screen, the PIN) and the connections
-/// (I2.1: ``connections``, fed this manager's events). Every other operation keeps its protocol default until the row
+/// vault events they follow), Settings (I1.8: the account, the name, the credential screen, the PIN), the connections
+/// (I2.1: ``connections``) and the messages (I2.2: ``messages``), fed this manager's events. Every other operation keeps its protocol default until the row
 /// that brings it. Mirrors vettid-android `VaultManager`.
 @MainActor
 @Observable
@@ -33,7 +33,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             phaseChanges += 1
             // The account is read again whenever the vault opens (an unlock, the end of onboarding, a start while open).
             if phase == .unlocked, oldValue != .unlocked { onOpened() }
-            if phase != .unlocked, oldValue == .unlocked { connections.forgetOpenVault() } // not kept once it is locked
+            if phase != .unlocked, oldValue == .unlocked { forgetOpenLists() } // not kept once it is locked
         }
     }
     public internal(set) var account: AccountInfo?
@@ -93,6 +93,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored public let profiles: ProfileManager
     /// Connections, invitations and connection requests (VAULT-MESSAGING §6.4, §10.4), kept in their encrypted file.
     @ObservationIgnored public let connections: ConnectionsManager
+    /// Messages with connections (VAULT-MESSAGING §10.5, §10.5.2), in memory only.
+    @ObservationIgnored public let messages: MessagesManager
     /// The canary manifest installed out of band (VAULT-RELEASES §10.1 step 9, VAULT-MESSAGING §11.10.1): used by the
     /// alternate channel instead of the published manifest only while it is newer.
     @ObservationIgnored public let canary: CanaryManifestManager
@@ -187,6 +189,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         ownerChecks = Self.ownerCheckManager(config, ref, rec, scale)
         profiles = Self.profiles(ref, checks: ownerChecks, record: rec)
         connections = Self.connectionsManager(config, ref, rec)
+        messages = Self.messagesManager(ref, connections)
         wiper = config.wipeTargets.map { LocalWipe(targets: $0, hooks: [{ await ref.manager?.runWipeHooks() }]) }
         ref.manager = self
         lockPorts.manager = self
@@ -216,7 +219,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
                 if b.isEmpty { try checkFile.clear() } else { try checkFile.save(b) }
             },
             // §3.6.3: nothing held back is replayed as events; the lists are read again (as vettid-android).
-            onPassed: { ref.manager?.connections.refreshAllQuietly() },
+            onPassed: { ref.manager?.refreshListsQuietly() },
             onRecoveryStatus: { r, since in ref.manager?.noteRecoveryStatus(r, since: since) },
             now: config.now,
             mark: { rec.generation },

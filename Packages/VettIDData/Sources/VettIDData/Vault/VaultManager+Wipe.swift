@@ -72,6 +72,7 @@ extension VaultManager {
         }
         ownerChecks.clear()
         connections.clear()
+        messages.clear()
         releaseUpdate.clear()
         // The canary manifest's file is in the data directory the wipe erases.
         canary.forget()
@@ -109,6 +110,7 @@ extension VaultManager {
         guard wiper.clearAll() else { return false }
         ownerChecks.clear()
         connections.clear()
+        messages.clear()
         releaseUpdate.clear()
         canary.forget()
         record.endWipe(complete: true)

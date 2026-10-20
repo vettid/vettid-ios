@@ -94,6 +94,8 @@ struct FakeSocial {
     /// What this vault sent the other vaults: `connection.approved` and `connection.declined`, by request id.
     var approvedSent: [String] = []
     var declinedSent: [String] = []
+    /// The conversations and the emulated peer's side of them (FakeVaultService+Messages.swift).
+    var messages = FakeMessaging()
 }
 
 extension FakeVaultService {
@@ -102,7 +104,7 @@ extension FakeVaultService {
     static let outgoingTtl: TimeInterval = 8 * 86_400
     static let incomingTtl: TimeInterval = 7 * 86_400
 
-    /// The connection requests (§10.4, §10.4.1); `unsupported_type` for any other. Callers hold ``cond``.
+    /// The connection requests (§10.4, §10.4.1), then the messages (``messagesRequest(_:_:)``). Callers hold ``cond``.
     func connectionsRequest(_ m: Inner, _ body: JsonObject) throws { // swiftlint:disable:this cyclomatic_complexity
         switch m.type {
         case "connection.invite.create": try inviteCreate(m, body)
@@ -136,7 +138,7 @@ extension FakeVaultService {
             guard social.blocks.removeValue(forKey: try body.string("block_id")) != nil else { return try reply(m.type, "{}", re: m.id, error: "not_found") }
             try reply(m.type, "{}", re: m.id)
         case "connection.asks.mute", "connection.asks.resume": try asks(m, body)
-        default: try reply(m.type, "{}", re: m.id, error: "unsupported_type")
+        default: try messagesRequest(m, body)
         }
     }
 
