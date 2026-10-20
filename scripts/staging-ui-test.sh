@@ -9,11 +9,13 @@
 #
 #   --device <id>     the iPhone (`xcrun devicectl list devices`)
 #   --test <test>     testStagingEnroll, testStagingUnlockLock, testStagingApproveUpdate,
-#                     testStagingApproveUpdateAtUnlock, testStagingCheckNow or testStagingWrongPinInPasswordChange
+#                     testStagingApproveUpdateAtUnlock, testStagingCheckNow, testStagingWrongPinInPasswordChange,
+#                     testStagingConnectAccept or testStagingConnectApprove
 #   --inputs <file>   a private file outside the repository (chmod 600) with lines NAME=value for
-#                     VETTID_STAGING_EMAIL, VETTID_STAGING_CODE, VETTID_STAGING_PIN, VETTID_STAGING_PASSWORD (quotes
-#                     around a value and CRLF line ends are stripped); only the file is read then. Without it they are
-#                     read from the environment of the same names. Prefer the file: nothing lands in the shell history.
+#                     VETTID_STAGING_EMAIL, VETTID_STAGING_CODE, VETTID_STAGING_PIN, VETTID_STAGING_PASSWORD and, for
+#                     the connect tests, VETTID_STAGING_LINK and VETTID_STAGING_SAFETY_CODE (quotes around a value and
+#                     CRLF line ends are stripped); only the file is read then. Without it they are read from the
+#                     environment of the same names. Prefer the file: nothing lands in the shell history.
 #   --fresh           remove VettID Staging from the iPhone first, and its vault keys with it: only for
 #                     testStagingEnroll with all four inputs set; asks y/N on a terminal
 #   --skip-build      reuse the last build-for-testing
@@ -31,20 +33,40 @@
 #                                        without a retry, so the password is never changed. The wrong PIN counts as
 #                                        a failed owner check (VAULT-MESSAGING §3.6.1), which the next passed check
 #                                        resets; so follow it with testStagingCheckNow.
+#   testStagingConnectAccept             Connections -> add -> "Paste a link" with VETTID_STAGING_LINK (another
+#                                        member's https invitation link), "Connect", and the compare screen; prints
+#                                        "SAFETY_CODE: <code>" for the other member to compare (and keeps it as the
+#                                        attachment "safety-code"). Nothing is approved.
+#   testStagingConnectApprove            Connections -> the request card that can be approved (the one showing
+#                                        VETTID_STAGING_SAFETY_CODE when it is set, which then must match or nothing is
+#                                        approved; otherwise the only one), "Approve"; prints "SAFETY_CODE: <code>" and
+#                                        "CONNECT_STATE: <state>" (approved_waiting_for_peer or connected when it
+#                                        passes; ended, peer_declined, error or unknown when it fails).
+#
+# Inputs per test: testStagingEnroll needs all four of EMAIL, CODE, PIN and PASSWORD; every other test PIN and PASSWORD;
+# testStagingConnectAccept also VETTID_STAGING_LINK; VETTID_STAGING_SAFETY_CODE is optional (testStagingConnectApprove).
 #
 # A test without its inputs is skipped. The inputs reach only the test step, as TEST_RUNNER_<NAME> (xcodebuild passes
-# them to the runner as <NAME>), never a command line or the build; xcodebuild's output is shown with them (and the
-# keypad's digits) redacted; the result bundle is deleted, an interrupted run's too, unless --keep-result. The build and
-# results live under ${XDG_CACHE_HOME:-~/Library/Caches}/vettid-ios/staging-ui-test (mode 700).
+# them to the runner as <NAME>), never a command line or the build; xcodebuild's output is shown with them (the link
+# included, and the keypad's digits) redacted, except the SAFETY_CODE and CONNECT_STATE lines, which are printed with
+# the code or the state alone; the result bundle is deleted, an interrupted run's too, unless --keep-result. The build
+# and results live under ${XDG_CACHE_HOME:-~/Library/Caches}/vettid-ios/staging-ui-test (mode 700).
 #
 # Example (enrollment; the code was issued a minute ago and is in the private file):
 #   scripts/staging-ui-test.sh --device <id> --test testStagingEnroll --inputs <private file> --fresh
+# Example (connect: the accepting phone's private file also holds VETTID_STAGING_LINK; then, on the inviter's phone,
+# with the printed code as VETTID_STAGING_SAFETY_CODE in its file):
+#   scripts/staging-ui-test.sh --device <id> --test testStagingConnectAccept --inputs <private file>
+#   scripts/staging-ui-test.sh --device <id> --test testStagingConnectApprove --inputs <private file>
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 REPO=$(pwd -P)
 
 NAMES=(VETTID_STAGING_EMAIL VETTID_STAGING_CODE VETTID_STAGING_PIN VETTID_STAGING_PASSWORD)
+# The connect tests' inputs: optional, never counted as missing for the others.
+OPTIONAL=(VETTID_STAGING_LINK VETTID_STAGING_SAFETY_CODE)
+ALL=("${NAMES[@]}" "${OPTIONAL[@]}")
 BUNDLE_ID=com.vettid.app.staging
 
 usage() { sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//' >&2; exit 2; }
@@ -64,15 +86,24 @@ while [[ $# -gt 0 ]]; do
 done
 [[ -n "${DEVICE}" ]] || { echo "--device is required" >&2; usage; }
 case "${TEST}" in
-  testStagingEnroll|testStagingUnlockLock|testStagingApproveUpdate|testStagingApproveUpdateAtUnlock|testStagingCheckNow|testStagingWrongPinInPasswordChange) ;;
+  testStagingEnroll|testStagingUnlockLock|testStagingApproveUpdate|testStagingApproveUpdateAtUnlock|testStagingCheckNow) ;;
+  testStagingWrongPinInPasswordChange|testStagingConnectAccept|testStagingConnectApprove) ;;
   *) echo "--test must be testStagingEnroll, testStagingUnlockLock, testStagingApproveUpdate," \
-       "testStagingApproveUpdateAtUnlock, testStagingCheckNow or testStagingWrongPinInPasswordChange" >&2
+       "testStagingApproveUpdateAtUnlock, testStagingCheckNow, testStagingWrongPinInPasswordChange," \
+       "testStagingConnectAccept or testStagingConnectApprove" >&2
      usage ;;
+esac
+
+# The inputs this test needs (the others are passed when set, and unused).
+case "${TEST}" in
+  testStagingEnroll) NEEDED=("${NAMES[@]}") ;;
+  testStagingConnectAccept) NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_LINK) ;;
+  *) NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD) ;;
 esac
 
 # The inputs are kept in IN_<NAME>, unexported, and the variables of the same names leave the environment: nothing the
 # build runs sees them.
-for n in "${NAMES[@]}"; do
+for n in "${ALL[@]}"; do
   if [[ -z "${INPUTS}" ]]; then printf -v "IN_${n}" '%s' "${!n:-}"; else printf -v "IN_${n}" '%s' ""; fi
   unset "${n}"
 done
@@ -100,14 +131,14 @@ if [[ -n "${INPUTS}" ]]; then
       value=${value:1:${#value}-2}
     fi
     known=0
-    for n in "${NAMES[@]}"; do [[ "${name}" == "${n}" ]] && known=1; done
+    for n in "${ALL[@]}"; do [[ "${name}" == "${n}" ]] && known=1; done
     [[ ${known} -eq 1 ]] || { echo "unknown name in the input file: ${name}" >&2; exit 1; }
     printf -v "IN_${name}" '%s' "${value}"
   done <"${file}"
 fi
 
 missing=()
-for n in "${NAMES[@]}"; do v="IN_${n}"; [[ -n "${!v}" ]] || missing+=("${n}"); done
+for n in "${NEEDED[@]}"; do v="IN_${n}"; [[ -n "${!v}" ]] || missing+=("${n}"); done
 if [[ ${#missing[@]} -gt 0 ]]; then
   echo "note: not set: ${missing[*]} (a test without its inputs is skipped)"
 fi
@@ -157,7 +188,7 @@ if [[ ${FRESH} -eq 1 ]]; then
 fi
 
 # The runner's inputs, from here on and through the environment only.
-for n in "${NAMES[@]}"; do
+for n in "${ALL[@]}"; do
   v="IN_${n}"
   if [[ -n "${!v}" ]]; then export "TEST_RUNNER_${n}=${!v}"; fi
 done
@@ -178,8 +209,11 @@ xcodebuild test-without-building \
   perl -pe '
     BEGIN {
       @s = grep { length } map { $ENV{"TEST_RUNNER_$_"} // "" }
-        qw(VETTID_STAGING_EMAIL VETTID_STAGING_CODE VETTID_STAGING_PIN VETTID_STAGING_PASSWORD)
+        qw(VETTID_STAGING_EMAIL VETTID_STAGING_CODE VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_LINK)
     }
+    # The connect tests report lines: the code or the state alone, never anything else of the line.
+    if (/SAFETY_CODE: ([0-9]{6})\s*$/) { $_ = "SAFETY_CODE: $1\n"; next }
+    if (/CONNECT_STATE: ([a-z_]+)\s*$/) { $_ = "CONNECT_STATE: $1\n"; next }
     for my $v (@s) { s/\Q$v\E/<redacted>/g }
     s/Type .*? into/Type <redacted> into/g;
     s/pin_[0-9]/pin_#/g;
