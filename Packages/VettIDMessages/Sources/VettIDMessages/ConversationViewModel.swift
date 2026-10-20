@@ -12,6 +12,41 @@ public struct LinkPrompt: Equatable, Sendable {
         self.url = url
         self.host = host
     }
+
+    /// The longest URL the question shows whole.
+    public static let shownLength = 300
+    /// What is kept of a longer URL's start (at least up to the end of its host) and end.
+    static let shownStart = 180
+    static let shownEnd = 100
+
+    /// The URL as the question shows it: whole up to ``shownLength`` characters, else its start through the host and
+    /// its end around an ellipsis (chosen; not in the spec).
+    public var shownURL: String {
+        let s = url.absoluteString
+        guard s.count > Self.shownLength else { return s }
+        let afterScheme = s.index(s.startIndex, offsetBy: min(8, s.count))
+        let hostEnd = s[afterScheme...].firstIndex { "/?#".contains($0) } ?? s.endIndex
+        let start = max(s.distance(from: s.startIndex, to: hostEnd), Self.shownStart)
+        guard start + Self.shownEnd < s.count else { return s }
+        return String(s.prefix(start)) + "…" + String(s.suffix(Self.shownEnd))
+    }
+}
+
+/// Where a confirmed link goes: VettID's own invitation links (an `https` URL whose path is `/connect`, the rule of an
+/// opened link, VAULT-MESSAGING §6.4) to the app's accept screen, since iOS hands an app's own Universal Link back to
+/// Safari when the app opens it; any other link to the system.
+public enum LinkTarget: Equatable, Sendable {
+    case open(URL)
+    case invite(String)
+
+    /// The longest invitation taken (as for an opened link).
+    static let maxInviteLength = 4_096
+
+    public static func of(_ url: URL) -> LinkTarget {
+        let s = url.absoluteString
+        if s.utf8.count <= maxInviteLength, InviteLinks.isConnectURL(s) { return .invite(s) }
+        return .open(url)
+    }
 }
 
 /// A conversation's state. Names, drafts and message text are the members' own: never printed, dumped or mirrored.
@@ -65,6 +100,12 @@ public final class ConversationViewModel {
     @ObservationIgnored private let connections: any ConnectionsRepository
     @ObservationIgnored private let work = Work()
     @ObservationIgnored private let follows = TaskBag()
+    /// The conversation is on screen (not covered by a screen pushed over it) and the app in the foreground.
+    @ObservationIgnored private var shown = false
+    @ObservationIgnored private var foreground = true
+    /// A `markRead` is under way; [markAgain]: unread messages changed meanwhile.
+    @ObservationIgnored private var marking = false
+    @ObservationIgnored private var markAgain = false
     private var local: ConversationState
 
     public init(connectionID: String, messages: any MessagesRepository, connections: any ConnectionsRepository) {
@@ -73,8 +114,8 @@ public final class ConversationViewModel {
         self.connections = connections
         local = ConversationState(connectionID: connectionID)
         load()
-        // Read while open: every new incoming message is marked read (best effort; a failure is left for the next arrival
-        // or the next visit).
+        // Read while shown: every new incoming message is marked read (best effort; a failure is left for the next arrival
+        // or the next showing).
         follows.add(follow(self, read: { $0.unreadIDs }, apply: { $0.onUnread($1) }))
     }
 
@@ -95,9 +136,43 @@ public final class ConversationViewModel {
     private var unreadIDs: [String] { messages.messages(connectionID).filter { !$0.outgoing && !$0.read }.map(\.messageID) }
 
     private func onUnread(_ ids: [String]) {
-        guard !ids.isEmpty else { return }
+        if marking {
+            markAgain = true
+        } else {
+            markRead()
+        }
+    }
+
+    /// The conversation came on screen or left it (a screen pushed over it, the screen closed). Incoming messages are
+    /// marked read only while it is shown and the app is in the foreground (chosen; not in the spec: vettid-android marks
+    /// them while its view model lives).
+    public func setShown(_ on: Bool) {
+        shown = on
+        markRead()
+    }
+
+    /// The app came to the foreground or left it.
+    public func setForeground(_ on: Bool) {
+        foreground = on
+        markRead()
+    }
+
+    /// Marks the unread incoming messages read, one call at a time (as vettid-android's collector): unread messages that
+    /// arrive meanwhile are marked after it; a failure waits for the next arrival or showing.
+    private func markRead() {
+        guard shown, foreground, !marking, !unreadIDs.isEmpty else { return }
+        marking = true
+        markAgain = false
         let (messages, id) = (messages, connectionID)
-        work.launch { try? await messages.markRead(id) }
+        work.launch { [weak self] in
+            try? await messages.markRead(id)
+            guard let self else { return }
+            marking = false
+            if markAgain {
+                markAgain = false
+                markRead()
+            }
+        }
     }
 
     private func load() {
@@ -185,11 +260,11 @@ public final class ConversationViewModel {
         local.link = LinkPrompt(url: l.url, host: l.host)
     }
 
-    /// The member confirmed: the URL to hand to the system, checked once more against the link rule; nil when it fails.
-    public func confirmLink() -> URL? {
+    /// The member confirmed: where the link goes, checked once more against the link rule; nil when it fails.
+    public func confirmLink() -> LinkTarget? {
         guard let p = local.link else { return nil }
         local.link = nil
-        return MessageLinks.link(p.url.absoluteString)?.url
+        return MessageLinks.link(p.url.absoluteString).map { LinkTarget.of($0.url) }
     }
 
     public func dismissLink() { local.link = nil }

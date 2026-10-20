@@ -15,6 +15,9 @@ public struct MessagesHost {
     public var onOpenConnection: @MainActor (String) -> Void = { _ in }
     /// Invite a connection (the connections feature).
     public var onInvite: @MainActor () -> Void = {}
+    /// A confirmed link that is a VettID invitation: the accept screen (the connections feature), where the member
+    /// confirms before anything is sent.
+    public var onInviteLink: @MainActor (String) -> Void = { _ in }
 
     public init() {}
 }
@@ -62,6 +65,7 @@ public struct ConversationRoute: View {
     private let connections: any ConnectionsRepository
     private let host: MessagesHost
     @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
     @State private var model: ConversationViewModel?
 
     public init(_ connectionID: String, messages: any MessagesRepository, connections: any ConnectionsRepository, host: MessagesHost) {
@@ -74,9 +78,14 @@ public struct ConversationRoute: View {
     public var body: some View {
         ConversationScreen(state: model?.state ?? ConversationState(connectionID: connectionID), actions: actions)
             .onAppear {
-                guard model == nil else { return }
-                model = ConversationViewModel(connectionID: connectionID, messages: messages, connections: connections)
+                let m = model ?? ConversationViewModel(connectionID: connectionID, messages: messages, connections: connections)
+                model = m
+                m.setForeground(scenePhase == .active)
+                m.setShown(true)
             }
+            // Covered by a screen pushed over it, or closed: nothing more is marked read until it shows again.
+            .onDisappear { model?.setShown(false) }
+            .onChange(of: scenePhase) { _, phase in model?.setForeground(phase == .active) }
     }
 
     private var actions: ConversationActions {
@@ -92,9 +101,21 @@ public struct ConversationRoute: View {
         a.onDismissError = { m.dismissError() }
         a.onLoadOlder = { m.loadOlder() }
         a.onLink = { m.askOpen($0) }
-        a.onConfirmLink = { if let url = m.confirmLink() { openURL(url) } }
+        a.onConfirmLink = { LinkOpening.perform(m.confirmLink(), open: { openURL($0) }, invite: host.onInviteLink) }
         a.onDismissLink = { m.dismissLink() }
         return a
+    }
+}
+
+/// The confirmed link's last step: VettID's own invitation to the accept screen, any other link to the system.
+enum LinkOpening {
+    @MainActor
+    static func perform(_ target: LinkTarget?, open: @MainActor (URL) -> Void, invite: @MainActor (String) -> Void) {
+        switch target {
+        case .open(let url): open(url)
+        case .invite(let link): invite(link)
+        case nil: break
+        }
     }
 }
 

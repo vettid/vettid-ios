@@ -64,7 +64,7 @@ struct MessageList: View {
             meta: status.map { "\(time) · \($0)" } ?? time,
             accessibilityLabel: status.map { MessagesStrings.outgoingLabel(m.text, time, $0) }
                 ?? MessagesStrings.incomingLabel(name, m.text, time),
-            onLink: actions.onLink,
+            links: BubbleLinks(name: BubbleText.linkName, open: actions.onLink),
             delete: (label: MessagesStrings.deleteConfirm, action: { actions.onAskDelete(m) })
         )
     }
@@ -152,6 +152,9 @@ struct OlderRow: View {
 /// A message's text with its tappable links (VAULT-MESSAGING §10.5 "Links", IOS-PLAN §6.8): only the ranges
 /// ``MessageLinks`` finds carry a link; everything else, other schemes included, stays plain text.
 enum BubbleText {
+    /// A link's name for VoiceOver: the host the question shows, lower case and ASCII.
+    static func linkName(_ url: URL) -> String { MessageLinks.link(url.absoluteString)?.host ?? "" }
+
     static func attributed(_ text: String) -> AttributedString {
         var out = AttributedString()
         var cursor = text.startIndex

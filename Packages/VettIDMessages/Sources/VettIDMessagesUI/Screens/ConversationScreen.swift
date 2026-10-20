@@ -20,7 +20,7 @@ public struct ConversationActions {
     public var onLoadOlder: @MainActor () -> Void = {}
     /// A link tapped in a bubble.
     public var onLink: @MainActor (URL) -> Void = { _ in }
-    /// "Open": the route hands the re-checked URL to the system.
+    /// "Open": the route hands the re-checked URL to the system, or an invitation to the accept screen.
     public var onConfirmLink: @MainActor () -> Void = {}
     public var onDismissLink: @MainActor () -> Void = {}
 
@@ -77,7 +77,7 @@ public struct ConversationScreen: View {
         .confirmDialog(
             isPresented: Binding(get: { state.link != nil }, set: { if !$0 { actions.onDismissLink() } }),
             title: MessagesStrings.openLink(state.link?.host ?? ""),
-            message: state.link?.url.absoluteString ?? "",
+            message: state.link?.shownURL ?? "",
             confirmLabel: MessagesStrings.openLinkConfirm,
             onConfirm: actions.onConfirmLink
         )

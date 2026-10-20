@@ -111,3 +111,28 @@ struct ProfilePhotosTests {
         #expect(ProfilePhotos.decode(big.base64EncodedString()) == nil)
     }
 }
+
+/// A bubble's links (VAULT-MESSAGING §10.5 "Links"): a tapped link goes to the caller, never to the system; the link runs
+/// are the ones VoiceOver offers.
+@MainActor
+struct BubbleLinksTests {
+    @Test func aTappedLinkGoesToTheCaller() throws {
+        var opened: [URL] = []
+        let links = BubbleLinks(name: { $0.host() ?? "" }) { opened.append($0) }
+        let url = try #require(URL(string: "https://example.org/a"))
+        BubbleLinks.intercepting(links)(url)
+        #expect(opened == [url])
+        // Without links nothing opens, and the system is not asked either.
+        BubbleLinks.intercepting(nil)(url)
+        #expect(opened == [url])
+    }
+
+    @Test func theLinkRunsAreFound() throws {
+        var text = AttributedString("see ")
+        var link = AttributedString("https://example.org")
+        link.link = try #require(URL(string: "https://example.org"))
+        text += link
+        #expect(MessageBubble.linkURLs(text).map(\.absoluteString) == ["https://example.org"])
+        #expect(MessageBubble.linkURLs(AttributedString("plain")).isEmpty)
+    }
+}

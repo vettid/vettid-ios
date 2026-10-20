@@ -153,6 +153,24 @@ import VettIDUI
         #expect(first && again)
     }
 
+    /// The confirmed link's last step: an invitation to the accept screen, another link to the system, nothing otherwise.
+    @Test func aConfirmedLinkGoesWhereItBelongs() throws {
+        var opened: [URL] = []
+        var invited: [String] = []
+        let url = try #require(URL(string: "https://example.org/a"))
+        LinkOpening.perform(.open(url), open: { opened.append($0) }, invite: { invited.append($0) })
+        LinkOpening.perform(.invite("https://relay.vettid.org/connect#x"), open: { opened.append($0) }, invite: { invited.append($0) })
+        LinkOpening.perform(nil, open: { opened.append($0) }, invite: { invited.append($0) })
+        #expect(opened == [url] && invited == ["https://relay.vettid.org/connect#x"])
+    }
+
+    /// VoiceOver names a link by the host the question shows: lower case, ASCII.
+    @Test func aLinkIsNamedByItsASCIIHost() throws {
+        let link = try #require(MessageLinks.links(in: "https://Bücher.Example/x").first)
+        #expect(BubbleText.linkName(link.url) == "xn--bcher-kva.example")
+        #expect(BubbleText.linkName(try #require(URL(string: "https://EXAMPLE.org"))) == "example.org")
+    }
+
     /// The conversation's link question names the host and, once answered, the route opens nothing by itself.
     @Test func theLinkQuestionNamesTheHost() throws {
         var s = ConversationState(connectionID: "c1")

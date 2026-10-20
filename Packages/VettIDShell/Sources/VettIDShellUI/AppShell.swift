@@ -377,6 +377,7 @@ public struct AppShell: View {
         h.onCompose = { model.push(.newMessage) }
         h.onOpenConnection = { model.push(.connection($0)) }
         h.onInvite = { model.push(.connect(.invite)) }
+        h.onInviteLink = { model.openInvite($0) }
         return h
     }
 
