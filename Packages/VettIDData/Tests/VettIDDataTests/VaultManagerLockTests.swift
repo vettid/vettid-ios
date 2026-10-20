@@ -67,12 +67,13 @@ import VettIDKeys
     @Test func theBackgroundFinishesTheLockThenStopsCollecting() async throws {
         defer { phone.close() }
         try await openVault()
-        let relays = service.relayLocks
+        // The lock in openVault() may have gone to the member API too (its relay answer late on a loaded machine).
+        let (relays, members) = (service.relayLocks, service.memberLocks)
         service.relayLockAnswer = .noAnswer
         let locking = Task { @MainActor in try await m.lock() }
-        await Task.yield()
+        #expect(await eventually { m.lockPending })
         await m.onBackground()
-        #expect(service.relayLocks == relays + 1 && service.memberLocks == 1, "the lock request went out first")
+        #expect(service.relayLocks == relays + 1 && service.memberLocks == members + 1, "the lock request went out first")
         #expect(m.session == nil, "the collection stopped")
         try await locking.value
     }

@@ -47,8 +47,9 @@ import VettIDDataTesting
     @Test func pastTheDeadlineTheVaultHoldsAndTheCheckOpensIt() async throws {
         defer { phone.close() }
         try await pastTheDeadline()
-        // vault.held at the start of the gate, then with what arrived.
-        #expect(await eventually { checks.ownerCheck?.waiting == WaitingCounts() })
+        // vault.held at the start of the gate (handled: the status read already said nothing waits), then with what
+        // arrived.
+        #expect(await eventually { checks.heldTs != nil && checks.ownerCheck?.waiting == WaitingCounts() })
         service.heldArrived(messages: 3, requests: 1)
         #expect(await eventually { checks.ownerCheck?.waiting == WaitingCounts(messages: 3, requests: 1) })
         // Nothing else is answered while gated (a settings change, here).

@@ -200,12 +200,11 @@ import VettIDKeysTesting
 
     /// Waits until the device holds the vault `vault.enrolled` pinned (the collector delivers it).
     func awaitPinned() async throws {
-        for _ in 0..<200 where m.session?.device.vaultID == nil { try await Task.sleep(nanoseconds: 10_000_000) }
+        #expect(await eventually { m.session?.device.vaultID != nil })
         #expect(m.session?.device.vaultID == service.vaultID)
         // The device pins the vault in memory while it handles `vault.enrolled` and writes its state only once the message
         // is handled (`VaultDevice.handle`): a restart in between would read a device without the vault.
-        for _ in 0..<200 where try !storedPinned() { try await Task.sleep(nanoseconds: 10_000_000) }
-        #expect(try storedPinned())
+        #expect(await eventually { (try? storedPinned()) == true })
     }
 
     /// Whether the device state on disk names the vault.
@@ -217,14 +216,17 @@ import VettIDKeysTesting
     }
 
     /// The enrollment's answer lost on the way back while the vault was made (it deposits `vault.enrolled` and answers
-    /// any later request `vault_exists`): the retry sends no second request, confirms the epoch-1 record the vault holds
-    /// and goes on with the handshake and the credential.
+    /// any later request `vault_exists`): once that `vault.enrolled` was handled, the retry sends no second request,
+    /// confirms the epoch-1 record the vault holds and goes on with the handshake and the credential. (A retry made
+    /// before it arrived sends a second request, which the vault answers `vault_exists`:
+    /// ``vaultExistsFromThePhonesOwnLostRequestIsNotAnotherPhones()``.)
     @Test func aRetryAfterALostAnswerUsesTheVaultItMade() async throws {
         defer { phone.close() }
         try await redeemed()
         service.enrollAnswers(.answerLost)
         #expect(await vaultFailure { try await m.enroll(pin: "402817") { _ in } }?.kind == .network)
         #expect(try m.phoneSecrets.current() == nil, "unconfirmed until the vault answers")
+        try await awaitPinned()
         try await m.enroll(pin: "402817") { _ in }
         let sent = try #require(service.enrolls.first?.unlockSecret)
         #expect(service.enrolls.count == 1)

@@ -62,7 +62,7 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     /// its interval), so that only a presence recorded since then ends the notice; nil when the answer did not say.
     @ObservationIgnored private var presenceCheckAt: Date?
     /// The `ts` of the newest `vault.held` applied (an older one never overwrites newer counts).
-    @ObservationIgnored private var heldTs: Date?
+    @ObservationIgnored private(set) var heldTs: Date?
 
     /// [ops] the vault's operations, opened when needed; [load] and [persist] the kept state, read by ``loadIfNeeded()``
     /// (never before the first-run cleanup and a pending wipe); [onPassed] the catch-up after a passed check (§3.6.3);
