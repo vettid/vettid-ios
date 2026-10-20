@@ -44,8 +44,10 @@ public enum LinkTarget: Equatable, Sendable {
 
     public static func of(_ url: URL) -> LinkTarget {
         let s = url.absoluteString
-        if s.utf8.count <= maxInviteLength, InviteLinks.isConnectURL(s) { return .invite(s) }
-        return .open(url)
+        // A `/connect` URL whose content is no invitation at all stays an ordinary link (chosen; not in the spec).
+        guard s.utf8.count <= maxInviteLength, InviteLinks.isConnectURL(s) else { return .open(url) }
+        if case .invalid = InviteLinks.parse(s) { return .open(url) }
+        return .invite(s)
     }
 }
 

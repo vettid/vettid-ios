@@ -98,16 +98,17 @@ public struct MessageBubble: View {
 
 /// What a bubble does with its links: [open] takes a tapped link (the caller asks before anything opens), [name] names a
 /// link for VoiceOver (the host the caller's question shows).
-public struct BubbleLinks {
-    public let name: @MainActor (URL) -> String
-    public let open: @MainActor (URL) -> Void
+public struct BubbleLinks: Sendable {
+    public let name: @MainActor @Sendable (URL) -> String
+    public let open: @MainActor @Sendable (URL) -> Void
 
-    public init(name: @escaping @MainActor (URL) -> String, open: @escaping @MainActor (URL) -> Void) {
+    public init(name: @escaping @MainActor @Sendable (URL) -> String, open: @escaping @MainActor @Sendable (URL) -> Void) {
         self.name = name
         self.open = open
     }
 
     /// The bubble's `openURL`: every link goes to [links] (or nowhere), never to the system.
+    @MainActor
     public static func intercepting(_ links: BubbleLinks?) -> OpenURLAction {
         OpenURLAction { url in
             MainActor.assumeIsolated { links?.open(url) }

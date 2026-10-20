@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import Testing
+import VettIDCrypto
 import VettIDData
 import VettIDDataTesting
 @testable import VettIDMessages
@@ -232,11 +233,19 @@ import VettIDDataTesting
     /// VettID's own invitation link goes to the accept screen, not to the system (which would hand it to Safari).
     @Test func anInvitationLinkGoesToTheAcceptScreen() async throws {
         let m = await model()
-        let link = "https://relay.vettid.org/connect#abc"
+        let payload = try InviteQr(
+            kind: .connection, relay: "https://relay.vettid.org", claimID: "abcdefghijklmnopqrstuvwxyz",
+            hash: [UInt8](repeating: 1, count: 32), key: [UInt8](repeating: 2, count: 32),
+            exp: UInt64(Date().addingTimeInterval(600).timeIntervalSince1970)
+        ).link()
+        let link = "https://relay.vettid.org/connect#" + payload
         m.askOpen(try #require(URL(string: link)))
         #expect(m.confirmLink() == .invite(link))
-        let slash = "https://relay.vettid.org/connect/#x"
+        let slash = "https://relay.vettid.org/connect/#" + payload
         #expect(LinkTarget.of(try #require(URL(string: slash))) == .invite(slash))
+        // A `/connect` URL with no invitation in it is an ordinary link.
+        let notInvite = try #require(URL(string: "https://example.org/connect#hello"))
+        #expect(LinkTarget.of(notInvite) == .open(notInvite))
         let other = try #require(URL(string: "https://relay.vettid.org/connected"))
         #expect(LinkTarget.of(other) == .open(other))
         let long = try #require(URL(string: "https://relay.vettid.org/connect#" + String(repeating: "a", count: 5_000)))

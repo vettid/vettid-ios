@@ -11,6 +11,7 @@ let package = Package(
         .library(name: "VettIDMessages", targets: ["VettIDMessages", "VettIDMessagesUI"]),
     ],
     dependencies: [
+        .package(path: "../VettIDCrypto"),
         .package(path: "../VettIDData"),
         .package(path: "../VettIDUI"),
     ],
@@ -36,6 +37,7 @@ let package = Package(
             name: "VettIDMessagesTests",
             dependencies: [
                 "VettIDMessages",
+                .product(name: "VettIDCrypto", package: "VettIDCrypto"),
                 .product(name: "VettIDData", package: "VettIDData"),
                 .product(name: "VettIDDataTesting", package: "VettIDData"),
             ]
