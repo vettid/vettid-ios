@@ -134,7 +134,13 @@ struct AppRoot: View {
 
     var body: some View {
         // A canary manifest handed to the app is asked about over whatever is shown (VAULT-RELEASES §10.1 step 9).
-        CanaryManifestHost(inbox: canaryInbox, repo: vault.canary) { content }
+        CanaryManifestHost(inbox: canaryInbox, repo: vault.canary) {
+            // IOS-PLAN §4.4 (1): the vault does not count this phone as its credential's holder; over whatever sent the
+            // request, which stays. Nothing is erased.
+            content.credentialRequiredCover(
+                vault.credentialRequired, onRetry: { vault.credentialRequiredTryAgain() }, onLock: { Task { try? await vault.lock() } }
+            )
+        }
             // The vault's time scale for every failure text below (STAGING-TIME-SCALE §5.2).
             .environment(\.vettIDTimeScale, vault.timeScale)
             .task { try? await vault.refresh() }
@@ -230,9 +236,6 @@ struct AppRoot: View {
         // update").
         if vault.releaseUpdate.progress != nil {
             ReleaseUpdateFlowRoute(updates: vault.releaseUpdate)
-        } else if vault.credentialRequired {
-            // IOS-PLAN §4.4 (1): the vault does not count this phone as its credential's holder; nothing is erased.
-            CredentialRequiredScreen(onRetry: { vault.dismissCredentialRequired() }, onLock: { Task { try? await vault.lock() } })
         } else {
             phaseContent
         }

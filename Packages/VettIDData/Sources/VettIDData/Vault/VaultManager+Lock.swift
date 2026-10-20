@@ -92,6 +92,7 @@ extension VaultManager {
         unlockWindow = nil
         // IOS-PLAN §4.4 (1): "Lock vault" on "This phone can't use your vault" returns to the unlock screen.
         credentialRequired = false
+        credentialRequiredRetry = nil
         phase = .locked
         // Pending, durably, before anything else is done for the lock: a process that dies from here on starts locked.
         let keeper: LockKeeper = lockGuard.keeper

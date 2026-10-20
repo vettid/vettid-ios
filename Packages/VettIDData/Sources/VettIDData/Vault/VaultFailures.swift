@@ -90,6 +90,8 @@ enum VaultFailures {
         case "vault_exists": .vaultExists
         case "attestation": .attestation
         case "manifest", "release_key": .manifest
+        // IOS-PLAN §4.4 (2): the enclave's code names itself.
+        case let code?: .vaultCode(shownCode(code))
         default: .other
         }
     }
@@ -111,7 +113,9 @@ enum VaultFailures {
         }
     }
 
-    /// The vault's error [code] to a request of [type] (the type matters only for `forbidden`, IOS-PLAN §4.4 (3)).
+    /// The vault's error [code] to a request of [type] (the type matters only for `forbidden`, IOS-PLAN §4.4 (3)). This is
+    /// the request-level mapping: `forbidden` while an unresolved change is being decided ("Another phone became the
+    /// holder", IOS-PLAN §6.3, 0.1.13) is handled where the change is decided, by a change of its own.
     static func opFailure(_ code: String, type: String = "") -> FailureKind {
         switch code {
         // §3.5.9, §10.1 (0.51.2, 0.52.0): with or without `{"reason": "no_holder"}`.

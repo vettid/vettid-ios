@@ -43,25 +43,26 @@ public final class ProfileManager: ProfileRepository {
     private let onRequest: @MainActor (NameRequestView, _ mark: Int) -> Void
     private let checksLeft: @MainActor () async -> Int?
     private let mark: @MainActor () -> Int
-    private let noted: @MainActor (any Error) -> any Error
+    private let notes: FailureNotes
 
     public init(
         ops: @escaping @MainActor () async throws -> any ProfileOps,
         onRequest: @escaping @MainActor (NameRequestView, _ mark: Int) -> Void,
         checksLeft: @escaping @MainActor () async -> Int?,
         mark: @escaping @MainActor () -> Int = { 0 },
-        noted: @escaping @MainActor (any Error) -> any Error = { $0 }
+        notes: FailureNotes = .none
     ) {
         self.ops = ops
         self.onRequest = onRequest
         self.checksLeft = checksLeft
         self.mark = mark
-        self.noted = noted
+        self.notes = notes
     }
 
     public func changeName(pin: String, password: String, firstName: String, lastName: String) async -> NameChangeOutcome {
         guard let first = AccountNames.normalize(firstName), let last = AccountNames.normalize(lastName) else { return .invalid }
         let since = mark()
+        let noteMark = notes.mark()
         do {
             let r = try await ops().accountNameSet(pin: pin, password: password, firstName: first, lastName: last)
             let view = NameRequestView.of(r)
@@ -69,7 +70,7 @@ public final class ProfileManager: ProfileRepository {
             onRequest(view, since)
             return .requested(view)
         } catch {
-            let f = noted(VaultFailures.map(error)) as? VaultFailure ?? VaultFailure(.other)
+            let f = notes.note(VaultFailures.map(error), noteMark, nil) as? VaultFailure ?? VaultFailure(.other)
             return await failed(f)
         }
     }

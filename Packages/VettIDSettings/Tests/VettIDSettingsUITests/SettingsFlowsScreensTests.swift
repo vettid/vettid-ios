@@ -149,6 +149,16 @@ import VettIDUI
         }
     }
 
+    /// IOS-PLAN §4.4 (3): `forbidden` to `pin.change` shows "Your vault moved to a new phone" and `vault_not_holder`.
+    @Test func aPinChangeRefusedAsNotTheHolder() {
+        #expect(ChangePinContent.failureTitle(.notHolder) == "Your vault moved to a new phone")
+        #expect(ChangePinContent.failureTitle(.badPin) == ChangePinContent.failureTitle(.vaultCode("internal")))
+        #expect(FailureKind.notHolder.message.hasPrefix("Another phone now holds your vault's credential"))
+        var s = ChangePinState(withPassword: true)
+        s.error = .notHolder
+        #expect(height(ChangePinContent(state: s)) > 0)
+    }
+
     @Test func everyCredentialStateRenders() {
         let status = CredentialStatus(
             exists: true, version: 3, keyFingerprint: "k1-012345678", updatedAt: "2026-10-04T12:00:00Z", alarm: nil, backup: false,

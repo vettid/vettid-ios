@@ -34,13 +34,18 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             if phase == .unlocked, oldValue != .unlocked { onOpened() }
             if phase != .unlocked, oldValue == .unlocked { forgetOpenLists() } // not kept once it is locked
             // IOS-PLAN §4.4 (1): the root screen is for an open or locked vault only.
-            if phase != .unlocked, phase != .locked { credentialRequired = false }
+            if phase != .unlocked, phase != .locked {
+                credentialRequired = false
+                credentialRequiredRetry = nil
+            }
         }
     }
     public internal(set) var account: AccountInfo?
     public internal(set) var servicePaused = false
     /// (IOS-PLAN §4.4 (1)) The vault answered `credential_required`: the root screen "This phone can't use your vault".
     public internal(set) var credentialRequired = false
+    /// What "Try again" sends again (``credentialRequiredTryAgain()``): the request without a secret that raised it.
+    @ObservationIgnored var credentialRequiredRetry: RetryAction?
     public let apiOrigin: String
     /// DevStack hints come with the dev stack's helpers (I1.3).
     public var devHint: String? { nil }
@@ -233,7 +238,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             now: config.now,
             mark: { rec.generation },
             sleep: config.lockTiming.sleep, timeScale: { scale.value },
-            noted: { e in ref.manager?.noted(e) ?? e }
+            notes: Self.failureNotes(ref)
         )
     }
 

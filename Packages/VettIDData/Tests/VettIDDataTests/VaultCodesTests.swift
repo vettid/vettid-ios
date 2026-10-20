@@ -114,63 +114,40 @@ import VettIDRelay
             #expect(k != .notHolder && k != .credentialRequired)
         }
     }
-}
 
-/// The root screen and `forbidden` over ``FakeVaultService``: no erase, "Lock vault" and "Try again".
-@MainActor
-@Suite(.serialized) struct VaultManagerVaultCodesTests {
-    let service: FakeVaultService
-    let phone: TestVaultPhone
-    let pin = "402817"
-    let password = "correct horse battery"
-
-    init() throws {
-        service = try FakeVaultService()
-        phone = try TestVaultPhone(service: service)
+    /// An error response without a code, an unknown code in a sealed unlock result and in the enclave's enrollment
+    /// result: each shows its checked code, `unknown` without one.
+    @MainActor @Test func everyVaultAnswerNamesItsCode() {
+        #expect(failure("")?.kind == .vaultCode("unknown"))
+        let unknown = VaultManager.refusal(UnlockResult(ok: false, code: "some_new_code"))
+        #expect(unknown == .failed(.vaultCode("some_new_code"), code: "some_new_code"))
+        #expect(VaultManager.refusal(UnlockResult(ok: false, code: nil)) == .failed(.vaultCode("unknown"), code: nil))
+        #expect(VaultFailures.enrollFailure("Odd Code") == .vaultCode("unknown"))
+        #expect(VaultFailures.enrollFailure("new_one") == .vaultCode("new_one"))
+        #expect(VaultFailures.enrollFailure(nil) == .other)
     }
 
-    var m: VaultManager { phone.manager }
-
-    func setUp() async throws {
-        _ = try await m.redeemSetupCode(.secret(service.secret))
-        try await m.enroll(pin: pin) { _ in }
-        try await m.createCredential(password: password, backup: true, pin: pin) { _ in }
-        try await m.finishSetup()
-        #expect(m.phase == .unlocked)
+    /// The body names a recovery's time: the approved words in real time, the time at the vault's scale on staging.
+    @Test func theRecoveryTimeFollowsTheTimeScale() {
+        let real = FailureKind.credentialRequired.message
+        #expect(FailureKind.credentialRequired.message(timeScale: 1) == real)
+        let staging = real.replacingOccurrences(of: "one to three days", with: "1 hour to 3 hours")
+        #expect(staging != real && FailureKind.credentialRequired.message(timeScale: 24) == staging)
+        #expect(FailureKind.notHolder.message(timeScale: 24) == FailureKind.notHolder.message)
     }
 
-    /// `credential_required{no_holder}` to the daily check: the root screen, nothing erased; "Try again" leaves it, and a
-    /// vault that has a holder again answers the next check; "Lock vault" locks, and the unlock opens the vault.
-    @Test func credentialRequiredShowsTheRootScreenAndErasesNothing() async throws {
-        defer { phone.close() }
-        try await setUp()
-        let keys = phone.phoneKeys.count
-        let vaultID = m.record.value.vaultID
-        service.refuseNext("vault.owner-check", code: "credential_required", message: "no holder", body: #"{"reason":"no_holder"}"#)
-        let r = try await m.ownerChecks.check(pin: pin, password: password)
-        #expect(r == .failed(.credentialRequired, code: "credential_required"))
-        #expect(m.credentialRequired && m.phase == .unlocked)
-        #expect(phone.phoneKeys.count == keys && m.record.value.vaultID == vaultID && m.usesPhoneSecret)
-        m.dismissCredentialRequired()
-        #expect(!m.credentialRequired)
-        #expect(try await m.ownerChecks.check(pin: pin, password: password) == .passed)
-
-        service.refuseNext("vault.owner-check", code: "credential_required")
-        _ = try await m.ownerChecks.check(pin: pin, password: password)
-        #expect(m.credentialRequired)
-        try await m.lock()
-        #expect(!m.credentialRequired && m.phase == .locked)
-        #expect(try await m.unlock(pin: pin) == .success)
-    }
-
-    /// `forbidden` to `pin.change`: "Your vault moved to a new phone" on the change's screen; no root screen, no erase.
-    @Test func forbiddenOnAPinChangeIsNotTheHolder() async throws {
-        defer { phone.close() }
-        try await setUp()
-        let keys = phone.phoneKeys.count
-        service.refuseNext("pin.change", code: "forbidden", message: "not the holder")
-        let f = await vaultFailure { try await m.changePin(pin: pin, newPin: "975310", password: password) }
-        #expect(f?.kind == .notHolder && f?.code == "forbidden")
-        #expect(!m.credentialRequired && m.phase == .unlocked && phone.phoneKeys.count == keys)
+    /// Only the owner-facing requests the member sends raise the root screen; never the reads the app sends by itself.
+    @Test func onlyTheMembersRequestsRaiseTheScreen() throws {
+        let member = [
+            "vault.owner-check", "pin.change", "account.name.set", "credential.unlock", "settings.set", "vault.delete",
+            "device.transfer.create",
+        ]
+        for type in member {
+            #expect(VaultFailures.memberRequest(try #require(failure("credential_required", type: type))), "\(type)")
+        }
+        for type in ["vault.status", "account.get", "credential.version", "connection.list", "feed.list"] {
+            #expect(!VaultFailures.memberRequest(try #require(failure("credential_required", type: type))), "\(type)")
+        }
+        #expect(!VaultFailures.memberRequest(VaultFailure(.credentialRequired)))
     }
 }

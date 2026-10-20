@@ -35,6 +35,9 @@ public struct ChangePinActions {
 /// notice about recovery attempts it warns first that the password should change too. Mirrors vettid-android
 /// `ChangePinContent`.
 public struct ChangePinContent: View {
+    /// A failure's title: the screen's own, or "Your vault moved to a new phone" for `forbidden` (IOS-PLAN §4.4 (3)).
+    static func failureTitle(_ kind: FailureKind) -> String { kind.title(or: PinStrings.pinTitle) }
+
     @Environment(\.vettIDTimeScale) private var timeScale
     @Environment(\.scenePhase) private var scenePhase
     let state: ChangePinState
@@ -103,7 +106,7 @@ public struct ChangePinContent: View {
                     NoticeCard(.info, title: PinStrings.pinTitle, message: text).accessibilityIdentifier("change_check")
                 }
                 if let error = state.error {
-                    NoticeCard(.urgent, title: error.title(or: PinStrings.pinTitle), message: error.message(timeScale: timeScale))
+                    NoticeCard(.urgent, title: Self.failureTitle(error), message: error.message(timeScale: timeScale))
                         .accessibilityIdentifier("error")
                 }
                 if actions.offersLockAndUnlock {

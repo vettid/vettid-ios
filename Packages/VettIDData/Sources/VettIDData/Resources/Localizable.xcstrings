@@ -1481,6 +1481,17 @@
         }
       }
     },
+    "vault_credential_required_body_scaled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault does not count this phone as the one that holds its credential, so it refused the request. Nothing was disclosed, and your PIN and password were not checked. This usually means a recovery of your vault was started and has not finished. If you recovered your vault on another phone, open VettID on that phone and unlock it to finish. Otherwise, start a recovery on the account site: it takes %1$@ to %2$@, and you need your PIN and your password. If another phone of yours now opens your vault, use 'Move to a new phone' there instead."
+          }
+        }
+      }
+    },
     "vault_credential_required_title": {
       "extractionState": "manual",
       "localizations": {

@@ -36,6 +36,23 @@ extension DataStrings {
             bundle: .module
         )
     }
+    /// ``credentialRequiredBody`` on a scaled vault (STAGING-TIME-SCALE §5.2): [from] and [to], a recovery's shortest and
+    /// longest time at the vault's time scale, as ``failureDeviceSecretScaled`` says them. The key is chosen; not in the
+    /// spec.
+    static func credentialRequiredBodyScaled(_ from: String, _ to: String) -> String {
+        String(
+            localized: "vault_credential_required_body_scaled",
+            defaultValue: """
+                Your vault does not count this phone as the one that holds its credential, so it refused the request. Nothing \
+                was disclosed, and your PIN and password were not checked. This usually means a recovery of your vault was \
+                started and has not finished. If you recovered your vault on another phone, open VettID on that phone and \
+                unlock it to finish. Otherwise, start a recovery on the account site: it takes \(from) to \(to), and you \
+                need your PIN and your password. If another phone of yours now opens your vault, use 'Move to a new phone' \
+                there instead.
+                """,
+            bundle: .module
+        )
+    }
     /// [code] is already checked (``VaultFailures/shownCode(_:)``).
     static func errorVaultCode(_ code: String) -> String {
         String(

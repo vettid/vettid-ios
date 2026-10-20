@@ -18,7 +18,7 @@ extension VaultManager {
                 return checks.ownerCheck?.checksLeft
             },
             mark: { rec.generation },
-            noted: { e in ref.manager?.noted(e) ?? e }
+            notes: Self.failureNotes(ref)
         )
     }
 

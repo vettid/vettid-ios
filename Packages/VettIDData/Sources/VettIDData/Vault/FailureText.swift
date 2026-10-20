@@ -77,10 +77,23 @@ public extension FailureKind {
         }
     }
 
-    /// ``message`` at the vault's time scale (STAGING-TIME-SCALE §5.2): the one text that names a scaled wait (a
-    /// recovery's time, ``deviceSecret``) says it divided by [timeScale]; every other text is ``message``.
+    /// ``message`` at the vault's time scale (STAGING-TIME-SCALE §5.2): the texts that name a scaled wait (a recovery's
+    /// time, ``deviceSecret`` and ``credentialRequired``) say it divided by [timeScale]; every other text is ``message``.
     func message(timeScale: UInt64) -> String {
-        self == .deviceSecret ? Self.deviceSecretText(timeScale: timeScale) : message
+        switch self {
+        case .deviceSecret: Self.deviceSecretText(timeScale: timeScale)
+        case .credentialRequired: Self.credentialRequiredText(timeScale: timeScale)
+        default: message
+        }
+    }
+
+    /// ``credentialRequired``'s text: the approved words in real time, a recovery's time at [timeScale] on a scaled vault,
+    /// as ``deviceSecretText(timeScale:)``.
+    private static func credentialRequiredText(timeScale: UInt64) -> String {
+        guard timeScale > TimeScale.real else { return DataStrings.credentialRequiredBody }
+        return DataStrings.credentialRequiredBodyScaled(
+            TimeScales.text(TimeScales.recoveryDelay, by: timeScale), TimeScales.text(TimeScales.recoveryQuiet, by: timeScale)
+        )
     }
 
     /// ``deviceSecret``'s text. In real time the approved text verbatim ("one to three days"); on a scaled vault a
