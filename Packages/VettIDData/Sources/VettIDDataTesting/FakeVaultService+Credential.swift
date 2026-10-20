@@ -47,6 +47,11 @@ extension FakeVaultService {
     public var alarmState: String? { locked { alarmValue?.state } }
     /// The credential key `credential.version` shows.
     public var credentialKey: String { locked { credentialKeyValue } }
+    /// `credential.version` answers without its `key`.
+    public var versionWithoutKey: Bool {
+        get { locked { versionWithoutKeyValue } }
+        set { locked { versionWithoutKeyValue = newValue } }
+    }
     /// The password the credential opens with now.
     public var currentPassword: String? { locked { vaultPassword } }
 

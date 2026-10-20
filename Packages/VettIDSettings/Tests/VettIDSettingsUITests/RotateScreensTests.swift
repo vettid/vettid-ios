@@ -65,9 +65,34 @@ import VettIDUI
         var confirming = filled
         confirming.pin = "402817"
         confirming.confirming = true
-        for s in [NewCredentialState(), filled, wrong, confirming, NewCredentialState(done: true)] {
+        var checks: [NewCredentialState] = []
+        for status in [ChangeCheck.Status.checking, .unreachable, .notApplied, .ended] {
+            var c = NewCredentialState()
+            c.check = status
+            checks.append(c)
+        }
+        for s in [NewCredentialState(), filled, wrong, confirming, NewCredentialState(done: true)] + checks {
             #expect(height(NewCredentialContent(state: s)) > 0)
         }
+    }
+
+    /// A lost answer to New credential (ANDROID-PLAN 0.1.51, VAULT-MESSAGING 0.48.0 §11.14.9): the form's texts and the
+    /// shell's one-time notice, word for word.
+    @Test func theResetDecisionTexts() {
+        #expect(NewCredentialContent.text(.checking) == "Your vault hasn't answered yet, so VettID is checking whether your new "
+            + "credential was made. Keep your new password at hand.")
+        #expect(NewCredentialContent.text(.unreachable) == "VettID can't reach your vault right now, so it doesn't know yet whether "
+            + "your new credential was made. It will check as soon as it can. Keep both your old and your new password at hand.")
+        #expect(NewCredentialContent.text(.notApplied) == "Your new credential wasn't made. Your credential, its password and your "
+            + "critical items are unchanged.")
+        #expect(NewCredentialContent.text(.ended) == "VettID couldn't confirm whether your new credential was made, because "
+            + "something else changed in your vault at the same time. Either your previous or your new password may be the current one.")
+        #expect(ChangeCheckNotice.text(ChangeCheck(.reset, .applied), timeScale: 1) == "Your new credential was made. Use your new "
+            + "password from now on. Your critical items were deleted with the old credential.")
+        #expect(ChangeCheckNotice.text(ChangeCheck(.reset, .notApplied), timeScale: 1) == NewCredentialContent.text(.notApplied))
+        #expect(ChangeCheckNotice.text(ChangeCheck(.reset, .ended), timeScale: 1) == NewCredentialContent.text(.ended))
+        #expect(ChangeCheckNotice.text(ChangeCheck(.reset, .checking), timeScale: 1) == nil)
+        #expect(!ChangeCheckNotice.offersLockAndUnlock(ChangeCheck(.reset, .ended)))
     }
 
     /// The Credential screen's new rows and the alarm card's "Review" render.

@@ -85,18 +85,21 @@ extension VaultApi {
 
     /// `credential.reset` (§3.5.5, §10.6) by the holder: a new credential under [newPassword]; the old one and every
     /// critical item are destroyed. The PIN and the password are verified as in an owner check, and a `bad_pin` or
-    /// `bad_password` counts as a failed check (§3.6.1). A `stale_credential` is not retried with the typed secrets: the
-    /// latest blob is fetched and the request refused as ``CredentialUnsettled`` (chosen; not in the spec). That answer
-    /// means an earlier credential operation applied without its answer reaching the phone (a lost reset leaves a blob
-    /// of another credential, which the vault takes for a clone, not as stale), and the reset is a change of password:
-    /// as for the changes of §11.14.9 step 4, the member decides again rather than the app resending the secrets.
-    /// The reset replaces the password, so it counts as a secret sent (``VaultDevice/secretsSent``): a credential
-    /// operation that waited for the lock behind it, from before the reset went out or while it was out, is refused with
-    /// nothing sent (§11.14.9 step 2). Mirrors vettid-android
-    /// `VaultApi.credentialResetHolder`.
-    public func credentialReset(pin: String, password: String, newPassword: String) async throws {
+    /// `bad_password` counts as a failed check (§3.6.1). Sent and decided as a change is (VAULT-MESSAGING 0.48.0 §11.14.9
+    /// "A lost answer to `credential.reset`", ``CredentialOps/reset(_:_:since:onMarker:)``): once the request is fixed,
+    /// [onMarker] stores its unresolved change with the held key; no answer is ``ChangeUnanswered``; a `stale_credential`
+    /// is not retried with the typed secrets (the latest blob is fetched and the refusal thrown). The reset counts as a
+    /// secret sent (``VaultDevice/secretsSent``). [since]: ``VaultDevice/secretsSent`` as the caller read it before its own
+    /// checks (nil: read here). Mirrors vettid-android `VaultApi.credentialResetHolder`.
+    public func credentialReset(
+        pin: String, password: String, newPassword: String, since: Int? = nil,
+        onMarker: @escaping @Sendable (ChangeRequest) async throws -> Void
+    ) async throws {
         let fields: [SealedField] = [.string("pin", pin), .string("password", password), .string("new_password", newPassword)]
-        _ = try await credential.credOp(Self.typeReset, fields, CredOpOptions(retriesStale: false, replacesSecret: true))
+        _ = try await credential.reset(Self.typeReset, fields, since: since) { change in
+            try await onMarker(change)
+            return []
+        }
     }
 
     public static let typeReset = "credential.reset"

@@ -4,7 +4,8 @@ import VettIDVault
 
 // A lost answer to `pin.change` or `credential.password.change` (VAULT-MESSAGING §11.14.9 "A lost answer", IOS-PLAN
 // §6.3, ANDROID-PLAN 0.1.45 and 0.1.46 "A lost answer to a PIN or password change"): the change is decided, never
-// repeated.
+// repeated. `credential.reset` goes the same way, with its own decision by the credential key (0.48.0,
+// VaultManager+Reset.swift).
 //
 // - Before the send, an unresolved change (type, inner id, blob version, `exp`; no secret) is stored with the PIN
 //   change's candidate, in the same atomic write (``PhoneSecrets``). The request goes with that id and an `exp` 10
@@ -108,7 +109,16 @@ extension VaultManager {
         }
         kickChangeCheck()
         if changeCheck?.status == .unreachable { throw VaultFailure(.changeUnresolved, code: Self.codeChangeUnresolved) }
-        throw VaultFailure(marker.type == .pin ? .changeChecking : .changeCheckingPassword, code: Self.codeChangeChecking)
+        throw VaultFailure(Self.checkingKind(marker.type), code: Self.codeChangeChecking)
+    }
+
+    /// The gate's "still checking" refusal for a change of [type] (0.45.0 "The gate"; a reset's, 0.48.0).
+    nonisolated static func checkingKind(_ type: ChangeType) -> FailureKind {
+        switch type {
+        case .pin: .changeChecking
+        case .password: .changeCheckingPassword
+        case .reset: .changeCheckingReset
+        }
     }
 
     /// The code of an operation that carries the PIN, refused while the PIN is uncertain (§11.14.9 step 3).
@@ -160,7 +170,7 @@ extension VaultManager {
         do {
             if let marker = try strictUnresolved() {
                 if changeCheck?.status == .unreachable { return VaultFailure(.changeUnresolved, code: Self.codeChangeUnresolved) }
-                return VaultFailure(marker.type == .pin ? .changeChecking : .changeCheckingPassword, code: Self.codeChangeChecking)
+                return VaultFailure(Self.checkingKind(marker.type), code: Self.codeChangeChecking)
             }
             return try strictUncertainPin() == nil ? nil : VaultFailure(.pinUncertain, code: Self.codePinUncertain)
         } catch {
@@ -325,6 +335,7 @@ extension VaultManager {
     }
 
     private func decide(_ marker: UnresolvedChange, _ v: StampedCredentialInfo, _ api: VaultApi, _ gen: Int) async {
+        if marker.type == .reset { return await decideReset(marker, v, api, gen) }
         guard v.info.exists, let version = v.info.version, v.info.alarm?.alarmID == nil else { return ended(marker, v.info) }
         if version == marker.version + 1 { return await applied(marker, api, answer: nil, gen) }
         guard version == marker.version else {
@@ -334,16 +345,20 @@ extension VaultManager {
             guard stillUnresolved(marker, gen) else { return }
             return ended(marker, v.info)
         }
-        if v.ts > marker.exp.addingTimeInterval(Self.decidedAfterExp) { return notApplied(marker) }
+        if pastDecision(marker, v.ts) { return notApplied(marker) }
         undecided(marker, reachable: true)
     }
+
+    /// Whether an answer stamped [ts] by the vault's clock comes more than a minute after [marker]'s `exp`: no copy of its
+    /// request can apply any more (§11.14.9 step 3, the vault's properties listed after step 6).
+    func pastDecision(_ marker: UnresolvedChange, _ ts: Date) -> Bool { ts > marker.exp.addingTimeInterval(Self.decidedAfterExp) }
 
     // MARK: - The decisions
 
     /// Applied: by the request's own answer (its blob and UTKs kept already; a PIN change's candidate made current only
     /// with `epoch_advanced`), or by the version (the latest blob fetched, UTKs topped up, the candidate made current).
     /// A confirmation that cannot be written is still a success; the marker then stays for the next check or unlock.
-    private func applied(_ marker: UnresolvedChange, _ api: VaultApi, answer: [UInt8]?, _ gen: Int) async {
+    func applied(_ marker: UnresolvedChange, _ api: VaultApi, answer: [UInt8]?, _ gen: Int) async {
         if answer == nil {
             do {
                 try await api.credentialFetch()
@@ -358,6 +373,7 @@ extension VaultManager {
         if answer == nil { await api.device.settleCredential(marker.id) }
         confirmApplied(marker, epochAdvanced: answer.map(VaultApi.epochAdvanced) ?? true)
         heldChange = nil
+        if marker.type == .reset { resetApplied() }
         changeCheck = ChangeCheck(marker.type, .applied)
         refreshPinStep()
     }
@@ -390,7 +406,7 @@ extension VaultManager {
     }
 
     /// Did not apply and never will: the candidate stays as §11.14.1 rules 3–5 say.
-    private func notApplied(_ marker: UnresolvedChange) {
+    func notApplied(_ marker: UnresolvedChange) {
         try? phoneSecrets.clearUnresolved(id: marker.id)
         heldChange = nil
         changeCheck = ChangeCheck(marker.type, .notApplied)
@@ -399,11 +415,13 @@ extension VaultManager {
 
     /// The resend's own answer refused the change: shown as it is. `stale_credential` (step 4): the latest blob was
     /// fetched and nothing is sent again; the change this request carried did not apply.
-    private func refused(_ marker: UnresolvedChange, _ e: VaultOpError) {
+    func refused(_ marker: UnresolvedChange, _ e: VaultOpError) {
         if e.code == CredentialOpsCodes.staleCredential { return notApplied(marker) }
         try? phoneSecrets.clearUnresolved(id: marker.id)
         heldChange = nil
         let f = VaultFailures.map(e) as? VaultFailure ?? VaultFailure(.other)
+        // A reset's wrong PIN or password is a failed owner check (§3.6.1): the check's state is read again.
+        if marker.type == .reset { ownerChecks.onOpened() }
         changeCheck = ChangeCheck(marker.type, .refused(f.kind, code: f.code))
         refreshPinStep()
     }
@@ -411,7 +429,7 @@ extension VaultManager {
     /// No credential, another version or a clone alarm: no decision; the candidate is left to the next unlock and the
     /// alarm follows its own path (§3.5.9). No retry that sends a secret is offered; after a PIN change the PIN is
     /// uncertain (``FailureKind/pinUncertain``).
-    private func ended(_ marker: UnresolvedChange, _ info: CredentialInfo) {
+    func ended(_ marker: UnresolvedChange, _ info: CredentialInfo) {
         // After a PIN change the PIN is uncertain until an unlock with step 5's prompts settles it (0.45.0); if that
         // cannot be written, the marker stays and the next check decides again.
         guard (try? phoneSecrets.endUnresolved(marker)) != nil else { return undecided(marker, reachable: true) }
@@ -423,7 +441,7 @@ extension VaultManager {
         refreshPinStep()
     }
 
-    private func undecided(_ marker: UnresolvedChange, reachable: Bool) {
+    func undecided(_ marker: UnresolvedChange, reachable: Bool) {
         changeCheck = ChangeCheck(marker.type, reachable ? .checking : .unreachable)
     }
 
@@ -470,13 +488,12 @@ extension VaultManager {
 
     /// An unlock answered while a PIN change was unresolved or its PIN uncertain ([step] when it was sent). `device_secret`
     /// to the previous PIN: the vault holds the candidate, and the new PIN is asked for (nil otherwise: the answer is the
-    /// unlock's own). `ok` to the previous PIN leaves the change to the check after the unlock (0.45.0 step 5), except
-    /// when the unlock's answer is stamped more than a minute after the change's `exp`: no copy can apply any more, and
-    /// the change is decided as not applied at once (chosen; not in the spec, which waits for the check). Its candidate
+    /// unlock's own). `ok` to the previous PIN never decides the change, however late it is stamped: the check after the
+    /// unlock decides it as step 3 says, by `credential.version` (VAULT-MESSAGING 0.45.0 §11.14.9 step 5). Its candidate
     /// stays a candidate meanwhile (``PhoneSecrets`` treats the unresolved change's operation as in flight). `bad_pin` to
     /// the previous PIN leaves the change unresolved, and the previous PIN is asked for again (chosen; not in the spec,
     /// where only `ok` and `device_secret` decide).
-    func afterPinStep(_ step: UnlockPinStep, ok: Bool, code: String?, at: Date?) -> UnlockAttempt? {
+    func afterPinStep(_ step: UnlockPinStep, ok: Bool, code: String?) -> UnlockAttempt? {
         defer { refreshPinStep() }
         switch step {
         case .pin:
@@ -485,9 +502,6 @@ extension VaultManager {
             if !ok, code == UnlockEpoch.deviceSecret {
                 newPinAsked = true
                 return .newPinNeeded
-            }
-            if ok, let m = unresolved(), m.type == .pin, let at, at > m.exp.addingTimeInterval(Self.decidedAfterExp) {
-                notApplied(m)
             }
             return nil
         case .new:

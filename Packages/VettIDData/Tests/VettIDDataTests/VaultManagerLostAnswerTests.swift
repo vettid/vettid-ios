@@ -236,8 +236,9 @@ import VettIDVault
         try expectApplied(.pin)
     }
 
-    /// A locked vault with the PIN change undecided that never arrived: the previous PIN opens it; the vault's clock past
-    /// `exp` decides it not applied at once, and the unlock asks for the PIN as usual again.
+    /// A locked vault with the PIN change undecided that never arrived: the previous PIN opens it; the check after the
+    /// unlock, its version stamped more than a minute past `exp`, decides it not applied, and the unlock asks for the PIN
+    /// as usual again.
     @Test func aLockedVaultWhoseChangeNeverArrivedOpensWithThePreviousPin() async throws {
         defer { phone.close() }
         try await setUp()
@@ -248,6 +249,39 @@ import VettIDVault
         pastTheChangesExp()
         #expect(m.unlockPinStep == .previous)
         #expect(try await m.unlock(pin: pin) == .success)
+        #expect(await eventually { m.changeCheck == ChangeCheck(.pin, .notApplied) && m.unlockPinStep == .pin })
+        #expect(try m.phoneSecrets.unresolvedChange() == nil && service.pinChanges.isEmpty)
+    }
+
+    /// VAULT-MESSAGING 0.45.0 §11.14.9 step 5: `ok` to the previous PIN never decides the change by itself, even stamped
+    /// past `exp`; step 3 decides it, by `credential.version`, and only once its answer is stamped more than a minute
+    /// after `exp`. Before that (past `exp`, within the minute) the same version leaves it undecided.
+    @Test func okToThePreviousPinLeavesTheDecisionToTheVersion() async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.loseRequests(["pin.change"])
+        _ = await pinChangeUndecided()
+        try await m.lock()
+        // Past `exp`, within the minute: the version decides nothing yet.
+        let withinMargin = ChangeRequest.validFor + VaultManager.decidedAfterExp / 2
+        service.advanceVaultClock(withinMargin)
+        phone.clockAhead = withinMargin
+        #expect(try await m.unlock(pin: pin) == .success)
+        await m.checkUnresolvedChange()
+        #expect(m.changeCheck == ChangeCheck(.pin, .checking) && m.unlockPinStep == .previous)
+        #expect(try m.phoneSecrets.unresolvedChange() != nil)
+        // Past `exp` and the minute, but the version cannot be asked: the unlock's `ok` alone decides nothing.
+        try await m.lock()
+        service.loseAnswers(["credential.version"])
+        service.advanceVaultClock(VaultManager.decidedAfterExp)
+        phone.clockAhead = withinMargin + VaultManager.decidedAfterExp
+        #expect(try await m.unlock(pin: pin) == .success)
+        await m.checkUnresolvedChange()
+        #expect(m.changeCheck?.undecided == true && m.unlockPinStep == .previous)
+        #expect(try m.phoneSecrets.unresolvedChange() != nil)
+        // The version answers, stamped more than a minute after `exp`: not applied.
+        service.loseAnswers([])
+        await m.checkUnresolvedChange()
         #expect(m.changeCheck == ChangeCheck(.pin, .notApplied) && m.unlockPinStep == .pin)
         #expect(try m.phoneSecrets.unresolvedChange() == nil && service.pinChanges.isEmpty)
     }

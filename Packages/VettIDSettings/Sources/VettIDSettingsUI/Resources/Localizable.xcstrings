@@ -3490,6 +3490,61 @@
         }
       }
     },
+    "credential_new_checking": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault hasn't answered yet, so VettID is checking whether your new credential was made. Keep your new password at hand."
+          }
+        }
+      }
+    },
+    "credential_new_unreachable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID can't reach your vault right now, so it doesn't know yet whether your new credential was made. It will check as soon as it can. Keep both your old and your new password at hand."
+          }
+        }
+      }
+    },
+    "credential_new_ended": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID couldn't confirm whether your new credential was made, because something else changed in your vault at the same time. Either your previous or your new password may be the current one."
+          }
+        }
+      }
+    },
+    "credential_new_applied": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your new credential was made. Use your new password from now on. Your critical items were deleted with the old credential."
+          }
+        }
+      }
+    },
+    "credential_new_not_made": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your new credential wasn't made. Your credential, its password and your critical items are unchanged."
+          }
+        }
+      }
+    },
     "help_title": {
       "extractionState": "manual",
       "localizations": {

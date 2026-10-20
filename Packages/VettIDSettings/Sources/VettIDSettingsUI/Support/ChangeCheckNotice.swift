@@ -8,16 +8,22 @@ import VettIDData
 public enum ChangeCheckNotice {
     /// The text of a decided change, nil while undecided; a refusal's text at the vault's [timeScale].
     public static func text(_ c: ChangeCheck, timeScale: UInt64) -> String? {
-        switch (c.type, c.status) {
-        case (_, .checking), (_, .unreachable): nil
-        case (.pin, .applied): ChangeNoticeTexts.pinApplied
-        case (.password, .applied): ChangeNoticeTexts.passwordApplied
-        case (.pin, .notApplied): ChangeNoticeTexts.pinNotChanged
-        case (.password, .notApplied): ChangeNoticeTexts.passwordNotChanged
-        case (_, .refused(let kind, _)): kind.message(timeScale: timeScale)
-        case (.pin, .ended): ChangeNoticeTexts.pinEnded
-        case (.password, .ended): ChangeNoticeTexts.passwordEnded
+        switch c.status {
+        case .checking, .unreachable: nil
+        case .refused(let kind, _): kind.message(timeScale: timeScale)
+        case .applied, .notApplied, .ended: decided(c.type, c.status)
         }
+    }
+
+    /// The text of a decided change of [type]: applied, not applied, or ended without a decision ([status]).
+    private static func decided(_ type: ChangeType, _ status: ChangeCheck.Status) -> String {
+        let texts: [String] = switch type {
+        case .pin: [ChangeNoticeTexts.pinApplied, ChangeNoticeTexts.pinNotChanged, ChangeNoticeTexts.pinEnded]
+        case .password: [ChangeNoticeTexts.passwordApplied, ChangeNoticeTexts.passwordNotChanged, ChangeNoticeTexts.passwordEnded]
+        // ANDROID-PLAN 0.1.51 "A lost answer to New credential".
+        case .reset: [CredentialStrings.newApplied, CredentialStrings.newNotMade, CredentialStrings.newEnded]
+        }
+        return status == .applied ? texts[0] : status == .notApplied ? texts[1] : texts[2]
     }
 
     /// Whether the notice offers "Lock and unlock now" (§11.14.9 step 3): a PIN change's check ended without a decision,

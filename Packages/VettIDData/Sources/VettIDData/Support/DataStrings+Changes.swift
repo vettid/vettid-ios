@@ -40,6 +40,19 @@ extension DataStrings {
         )
     }
 
+    /// VAULT-MESSAGING 0.48.0 §11.14.9 "A lost answer to `credential.reset`" step 2, ANDROID-PLAN 0.1.51 "A lost answer
+    /// to New credential" (the gate, vault reachable; draft shared with the Android app; the key chosen, not in the spec).
+    static var failureChangeCheckingReset: String {
+        String(
+            localized: "data_failure_change_undecided_reset",
+            defaultValue: """
+                VettID is still checking whether your new credential was made. This can take up to about 10 minutes. Try \
+                again then.
+                """,
+            bundle: .module
+        )
+    }
+
     /// VAULT-MESSAGING 0.45.0 §11.14.9 step 1 (shared with the Android app): a change refused with nothing sent while an
     /// earlier credential operation is not settled.
     static var failureCredentialUnsettled: String {

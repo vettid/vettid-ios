@@ -117,7 +117,7 @@ import VettIDDataTesting
 
     /// The form, the final confirmation, then the reset with the PIN, the current password and the new one.
     @Test func aNewCredentialIsConfirmedThenSent() async {
-        let m = NewCredentialViewModel(repo: repo)
+        let m = NewCredentialViewModel(repo: repo, vault: repo)
         filled(m)
         m.setAcknowledged(false)
         #expect(!m.state.filled(pinTyped: 0))
@@ -133,7 +133,7 @@ import VettIDDataTesting
 
     /// A mismatch is said before the confirmation; a cancelled confirmation drops the PIN.
     @Test func aMismatchAndACancel() async {
-        let m = NewCredentialViewModel(repo: repo)
+        let m = NewCredentialViewModel(repo: repo, vault: repo)
         filled(m)
         m.setConfirm("a much better passphrase her")
         m.submit()
@@ -150,7 +150,7 @@ import VettIDDataTesting
 
     /// A refusal clears the PIN and the current password; `weak_password` shows its reason under the new password.
     @Test func refusalsClearTheSecretsThatWereChecked() async {
-        let m = NewCredentialViewModel(repo: repo)
+        let m = NewCredentialViewModel(repo: repo, vault: repo)
         repo.fail["newCredential"] = FakeVaultRepository.failure(.badPin, code: "bad_pin")
         filled(m)
         m.submit()
@@ -168,6 +168,58 @@ import VettIDDataTesting
         #expect(m.state.rule == .common && m.state.refused && m.state.error == nil && !m.state.done)
         m.forgetSecrets()
         #expect(m.state.password.isEmpty && m.state.confirm.isEmpty && !m.state.refused)
+    }
+
+    /// IOS-PLAN 0.1.9 §6.3: New credential is offered again, now that a lost answer to it is decided.
+    @Test func theNewCredentialRowIsShown() {
+        #expect(CredentialState.offersNewCredential)
+    }
+
+    /// VAULT-MESSAGING 0.48.0 §11.14.9 "A lost answer to `credential.reset`": no answer is no failure; the form says it is
+    /// checking, nothing typed is kept, and the decision arrives (applied: the usual success, acknowledged).
+    @Test func aResetWithoutAnAnswerIsCheckedNotFailed() async {
+        repo.fail["newCredential"] = FakeVaultRepository.failure(.changeUnresolved, code: VaultManager.codeChangeUnresolved)
+        repo.changeCheck = ChangeCheck(.reset, .unreachable)
+        let m = NewCredentialViewModel(repo: repo, vault: repo)
+        filled(m)
+        m.submit()
+        m.confirm()
+        await m.settle()
+        #expect(m.state.check == .unreachable && m.state.error == nil && !m.state.done && !m.state.busy)
+        #expect(m.state.pin.isEmpty && m.state.current.isEmpty && m.state.password.isEmpty)
+        repo.changeCheck = ChangeCheck(.reset, .checking)
+        #expect(await until { m.state.check == .checking })
+        repo.changeCheck = ChangeCheck(.reset, .applied)
+        #expect(await until { m.state.done })
+        #expect(repo.changeCheck == nil && m.state.check == nil)
+    }
+
+    /// Decided not applied (`stale_credential`, or the same key and version after `exp`): said on the form, nothing kept.
+    @Test func aResetNotAppliedIsSaid() async {
+        repo.fail["newCredential"] = FakeVaultRepository.failure(.other, code: VaultManager.codeChangeNotApplied)
+        let m = NewCredentialViewModel(repo: repo, vault: repo)
+        filled(m)
+        m.submit()
+        m.confirm()
+        await m.settle()
+        #expect(m.state.check == .notApplied && m.state.error == nil && !m.state.done && m.state.password.isEmpty)
+    }
+
+    /// A refusal decided while the form waits is shown as it is; a password change's decision is not this form's.
+    @Test func aLaterRefusalOfTheResetIsShown() async {
+        repo.fail["newCredential"] = FakeVaultRepository.failure(.changeUnresolved, code: VaultManager.codeChangeUnresolved)
+        repo.changeCheck = ChangeCheck(.reset, .checking)
+        let m = NewCredentialViewModel(repo: repo, vault: repo)
+        filled(m)
+        m.submit()
+        m.confirm()
+        await m.settle()
+        repo.changeCheck = ChangeCheck(.password, .applied)
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        #expect(!m.state.done && m.state.check == .checking)
+        repo.changeCheck = ChangeCheck(.reset, .refused(.badPassword, code: "bad_password"))
+        #expect(await until { m.state.error == .badPassword })
+        #expect(m.state.check == nil && !m.state.done)
     }
 
     /// Polls the main actor until [condition] holds (at most 2 s).

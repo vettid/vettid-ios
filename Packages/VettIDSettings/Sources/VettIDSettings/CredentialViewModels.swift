@@ -21,6 +21,11 @@ public struct CredentialState: Equatable, Sendable, CustomStringConvertible, Cus
     public var windowPassword = ""
     public var windowError: FailureKind?
 
+    /// Whether the screen offers New credential (`credential.reset`, VAULT-MESSAGING §3.5.5). Held back until a lost answer
+    /// to it was decided (IOS-PLAN 0.1.9 §6.3, ANDROID-PLAN 0.1.51), which VaultManager+Reset.swift now does (0.48.0
+    /// §11.14.9 "A lost answer to `credential.reset`"), so it is shown.
+    public static let offersNewCredential = true
+
     public init(
         loading: Bool = true,
         status: CredentialStatus? = nil,
