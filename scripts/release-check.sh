@@ -144,14 +144,19 @@ check_archive_products() {
   echo "${config} archive: VettID.app alone"
 }
 
-# The VettID app target (whatever the scheme) links no TEST product (`*Testing`) and compiles no file of AppDevStack/,
-# read from the project file: its package products and its Sources phase.
+# The package products the VettID app links: exactly these (one per shipping package of project.yml).
+APP_PRODUCTS="VettIDCrypto VettIDAttestation VettIDRelay VettIDAltChan VettIDVault VettIDKeys VettIDData VettIDMedia
+VettIDNotify VettIDUI VettIDOnboarding VettIDSettings VettIDShell VettIDConnections VettIDMessages"
+
+# The VettID app target (whatever the scheme) links exactly APP_PRODUCTS (each product id resolved to its productName)
+# and compiles no file of AppDevStack/, read from the project file: its package products and its Sources phase.
 check_app_target() {
   local pbxproj=$1
-  python3 - "${pbxproj}" AppDevStack <<'PY'
+  python3 - "${pbxproj}" AppDevStack "${APP_PRODUCTS}" <<'PY'
 import os, re, sys
 text = open(sys.argv[1]).read()
 devstack = {f for f in os.listdir(sys.argv[2]) if f.endswith(".swift")}
+allowed = set(sys.argv[3].split())
 m = re.search(r"\n\t\t(\w+) /\* VettID \*/ = \{\n\t\t\tisa = PBXNativeTarget;(.*?)\n\t\t\};", text, re.S)
 if not m:
     sys.exit("no VettID target in the project file")
@@ -159,7 +164,11 @@ target = m.group(2)
 def listed(key, block):
     l = re.search(r"\t" + key + r" = \((.*?)\);", block, re.S)
     return re.findall(r"(\w+) /\* (.*?) \*/", l.group(1)) if l else []
-products = [name for _, name in listed("packageProductDependencies", target)]
+def product(pid):
+    d = re.search(r"\n\t\t" + pid + r" /\* .*? \*/ = \{\n\t\t\tisa = XCSwiftPackageProductDependency;(.*?)\n\t\t\};", text, re.S)
+    n = re.search(r"\n\t\t\tproductName = \"?([^\";]+)\"?;", d.group(1)) if d else None
+    return n.group(1) if n else "<unresolved " + pid + ">"
+products = [product(pid) for pid, _ in listed("packageProductDependencies", target)]
 phases = [i for i, name in listed("buildPhases", target) if name == "Sources"]
 if not products or len(phases) != 1:
     sys.exit("the VettID target's package products or Sources phase not found")
@@ -167,10 +176,12 @@ phase = re.search(r"\n\t\t" + phases[0] + r" /\* Sources \*/ = \{(.*?)\n\t\t\};"
 sources = [re.sub(r" in Sources$", "", name) for _, name in listed("files", phase)]
 if not sources:
     sys.exit("the VettID target's Sources phase is empty")
-bad = [p for p in products if "Testing" in p] + [f for f in sources if f in devstack]
+if set(products) != allowed or len(products) != len(allowed):
+    sys.exit("the VettID target links " + ", ".join(sorted(set(products) ^ allowed)) + " against the allowlist")
+bad = [f for f in sources if f in devstack]
 if bad:
-    sys.exit("the VettID target links or compiles TEST-only " + ", ".join(bad))
-print(f"VettID target: {len(products)} package products and {len(sources)} sources, none TEST-only")
+    sys.exit("the VettID target compiles TEST-only " + ", ".join(bad))
+print(f"VettID target: the {len(products)} allowed package products, {len(sources)} sources, none TEST-only")
 PY
 }
 
@@ -368,9 +379,10 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
     exit 1
   fi
   echo "self-test: the scheme check refuses a shipping scheme naming VettIDDevStack"
-  # A VettID target that links a TEST product, or compiles the dev stack wiring, must be refused.
+  # A VettID target that links a product off the allowlist (a TEST one), or compiles the dev stack wiring, must be refused.
   planted_pbx="${OUT}/planted/project.pbxproj"
-  for swap in "s|/\* VettIDKeys \*/,|/* VettIDKeysTesting */,|" "s|/\* AppDelegate.swift in Sources \*/|/* DevStackWiring.swift in Sources */|"; do
+  for swap in "s|productName = VettIDKeys;|productName = VettIDKeysTesting;|" \
+    "s|/\* AppDelegate.swift in Sources \*/|/* DevStackWiring.swift in Sources */|"; do
     sed "${swap}" VettID.xcodeproj/project.pbxproj >"${planted_pbx}"
     if cmp -s "${planted_pbx}" VettID.xcodeproj/project.pbxproj; then
       echo "self-test FAILED: '${swap}' changed nothing in the project file" >&2

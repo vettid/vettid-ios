@@ -10,11 +10,13 @@
 #   --device <id>     the iPhone (`xcrun devicectl list devices`)
 #   --test <test>     testStagingEnroll, testStagingUnlockLock, testStagingApproveUpdate,
 #                     testStagingApproveUpdateAtUnlock, testStagingCheckNow, testStagingWrongPinInPasswordChange,
-#                     testStagingConnectAccept or testStagingConnectApprove
+#                     testStagingConnectAccept, testStagingConnectApprove, testStagingMessageSend or
+#                     testStagingMessageReceive
 #   --inputs <file>   a private file outside the repository (chmod 600) with lines NAME=value for
 #                     VETTID_STAGING_EMAIL, VETTID_STAGING_CODE, VETTID_STAGING_PIN, VETTID_STAGING_PASSWORD and, for
-#                     the connect tests, VETTID_STAGING_LINK and VETTID_STAGING_SAFETY_CODE (quotes around a value and
-#                     CRLF line ends are stripped); only the file is read then. Without it they are read from the
+#                     the connect tests, VETTID_STAGING_LINK and VETTID_STAGING_SAFETY_CODE, and for the message
+#                     tests, VETTID_STAGING_PEER_NAME, VETTID_STAGING_MESSAGE and VETTID_STAGING_EXPECT (quotes around
+#                     a value and CRLF line ends are stripped); only the file is read then. Without it they are read from the
 #                     environment of the same names. Prefer the file: nothing lands in the shell history.
 #   --fresh           remove VettID Staging from the iPhone first, and its vault keys with it: only for
 #                     testStagingEnroll with all four inputs set; asks y/N on a terminal
@@ -42,14 +44,23 @@
 #                                        approved; otherwise the only one), "Approve"; prints "SAFETY_CODE: <code>" and
 #                                        "CONNECT_STATE: <state>" (approved_waiting_for_peer or connected when it
 #                                        passes; ended, peer_declined, error or unknown when it fails).
+#   testStagingMessageSend               Messages -> the conversation with the connection shown as
+#                                        VETTID_STAGING_PEER_NAME (or the compose button's picker when there is none
+#                                        yet), VETTID_STAGING_MESSAGE typed and sent, its bubble followed to
+#                                        "Delivered"; prints "MESSAGE_STATE: <state>" (delivered or read when it passes;
+#                                        sent or none when it fails).
+#   testStagingMessageReceive            the conversation with VETTID_STAGING_PEER_NAME, until a message from it shows
+#                                        VETTID_STAGING_EXPECT (within a minute); prints "MESSAGE_RECEIVED: yes|no".
 #
 # Inputs per test: testStagingEnroll needs all four of EMAIL, CODE, PIN and PASSWORD; every other test PIN and PASSWORD;
-# testStagingConnectAccept also VETTID_STAGING_LINK; VETTID_STAGING_SAFETY_CODE is optional (testStagingConnectApprove).
+# testStagingConnectAccept also VETTID_STAGING_LINK; VETTID_STAGING_SAFETY_CODE is optional (testStagingConnectApprove);
+# testStagingMessageSend also VETTID_STAGING_PEER_NAME and VETTID_STAGING_MESSAGE, testStagingMessageReceive
+# VETTID_STAGING_PEER_NAME and VETTID_STAGING_EXPECT.
 #
 # A test without its inputs is skipped. The inputs reach only the test step, as TEST_RUNNER_<NAME> (xcodebuild passes
 # them to the runner as <NAME>), never a command line or the build; xcodebuild's output is shown with them (the link
-# included, and the keypad's digits) redacted, except the SAFETY_CODE and CONNECT_STATE lines, which are printed with
-# the code or the state alone; the result bundle is deleted, an interrupted run's too, unless --keep-result. The build
+# included, the connection's name, the message texts, and the keypad's digits) redacted, except the SAFETY_CODE,
+# CONNECT_STATE, MESSAGE_STATE and MESSAGE_RECEIVED lines, which are printed with the code, the state or the answer alone; the result bundle is deleted, an interrupted run's too, unless --keep-result. The build
 # and results live under ${XDG_CACHE_HOME:-~/Library/Caches}/vettid-ios/staging-ui-test (mode 700).
 #
 # Example (enrollment; the code was issued a minute ago and is in the private file):
@@ -58,14 +69,17 @@
 # with the printed code as VETTID_STAGING_SAFETY_CODE in its file):
 #   scripts/staging-ui-test.sh --device <id> --test testStagingConnectAccept --inputs <private file>
 #   scripts/staging-ui-test.sh --device <id> --test testStagingConnectApprove --inputs <private file>
+# Example (messages: one phone sends, the other, whose file has the same text as VETTID_STAGING_EXPECT, receives):
+#   scripts/staging-ui-test.sh --device <id> --test testStagingMessageSend --inputs <private file>
+#   scripts/staging-ui-test.sh --device <id> --test testStagingMessageReceive --inputs <private file>
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 REPO=$(pwd -P)
 
 NAMES=(VETTID_STAGING_EMAIL VETTID_STAGING_CODE VETTID_STAGING_PIN VETTID_STAGING_PASSWORD)
-# The connect tests' inputs: optional, never counted as missing for the others.
-OPTIONAL=(VETTID_STAGING_LINK VETTID_STAGING_SAFETY_CODE)
+# The connect and message tests' inputs: optional, never counted as missing for the others.
+OPTIONAL=(VETTID_STAGING_LINK VETTID_STAGING_SAFETY_CODE VETTID_STAGING_PEER_NAME VETTID_STAGING_MESSAGE VETTID_STAGING_EXPECT)
 ALL=("${NAMES[@]}" "${OPTIONAL[@]}")
 BUNDLE_ID=com.vettid.app.staging
 
@@ -88,9 +102,10 @@ done
 case "${TEST}" in
   testStagingEnroll|testStagingUnlockLock|testStagingApproveUpdate|testStagingApproveUpdateAtUnlock|testStagingCheckNow) ;;
   testStagingWrongPinInPasswordChange|testStagingConnectAccept|testStagingConnectApprove) ;;
+  testStagingMessageSend|testStagingMessageReceive) ;;
   *) echo "--test must be testStagingEnroll, testStagingUnlockLock, testStagingApproveUpdate," \
        "testStagingApproveUpdateAtUnlock, testStagingCheckNow, testStagingWrongPinInPasswordChange," \
-       "testStagingConnectAccept or testStagingConnectApprove" >&2
+       "testStagingConnectAccept, testStagingConnectApprove, testStagingMessageSend or testStagingMessageReceive" >&2
      usage ;;
 esac
 
@@ -98,6 +113,10 @@ esac
 case "${TEST}" in
   testStagingEnroll) NEEDED=("${NAMES[@]}") ;;
   testStagingConnectAccept) NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_LINK) ;;
+  testStagingMessageSend)
+    NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_PEER_NAME VETTID_STAGING_MESSAGE) ;;
+  testStagingMessageReceive)
+    NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_PEER_NAME VETTID_STAGING_EXPECT) ;;
   *) NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD) ;;
 esac
 
@@ -208,12 +227,17 @@ xcodebuild test-without-building \
   -resultBundlePath "${RESULT}" 2>&1 |
   perl -pe '
     BEGIN {
-      @s = grep { length } map { $ENV{"TEST_RUNNER_$_"} // "" }
-        qw(VETTID_STAGING_EMAIL VETTID_STAGING_CODE VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_LINK)
+      # Longest first, so that a value holding another (a message holding the name) goes whole.
+      @s = sort { length($b) <=> length($a) } grep { length } map { $ENV{"TEST_RUNNER_$_"} // "" }
+        qw(VETTID_STAGING_EMAIL VETTID_STAGING_CODE VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_LINK
+           VETTID_STAGING_PEER_NAME VETTID_STAGING_MESSAGE VETTID_STAGING_EXPECT)
     }
-    # The connect tests report lines: the code or the state alone, never anything else of the line.
+    # The connect and message tests report lines: the code, the state or the answer alone, never anything else of the
+    # line.
     if (/SAFETY_CODE: ([0-9]{6})\s*$/) { $_ = "SAFETY_CODE: $1\n"; next }
     if (/CONNECT_STATE: ([a-z_]+)\s*$/) { $_ = "CONNECT_STATE: $1\n"; next }
+    if (/MESSAGE_STATE: (none|sent|delivered|read)\s*$/) { $_ = "MESSAGE_STATE: $1\n"; next }
+    if (/MESSAGE_RECEIVED: (yes|no)\s*$/) { $_ = "MESSAGE_RECEIVED: $1\n"; next }
     for my $v (@s) { s/\Q$v\E/<redacted>/g }
     s/Type .*? into/Type <redacted> into/g;
     s/pin_[0-9]/pin_#/g;

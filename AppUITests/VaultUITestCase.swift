@@ -14,7 +14,7 @@ class VaultUITestCase: XCTestCase {
         "error", "scan_refused", "pin_error", "pin_confirm_error", "credential_pin_error", "unlock_failed", "unlock_refused",
         "unlock_preflight_error", "unlock_pin_error", "unlock_not_recognised", "unlock_stuck", "unlock_recover_only",
         "unlock_signer_refused", "unlock_owner_check_locked", "unlock_lock_unconfirmed", "move_back_failed",
-        "owner_check_failed", "owner_check_pin_error", "failure",
+        "owner_check_failed", "owner_check_pin_error", "failure", "messages_error", "conversation_error",
     ]
 
     override func setUp() {

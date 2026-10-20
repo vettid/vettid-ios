@@ -10,6 +10,9 @@ import XCTest
 /// - `VETTID_STAGING_PASSWORD`: the credential password;
 /// - `VETTID_STAGING_LINK`: another member's invitation link, for ``testStagingConnectAccept``;
 /// - `VETTID_STAGING_SAFETY_CODE`: optional, the safety code ``testStagingConnectApprove`` must find.
+/// - `VETTID_STAGING_PEER_NAME`: a connection's shown name, for the message tests;
+/// - `VETTID_STAGING_MESSAGE`: the text ``testStagingMessageSend`` sends;
+/// - `VETTID_STAGING_EXPECT`: the text ``testStagingMessageReceive`` waits for from the connection.
 ///
 /// A test whose inputs are missing is skipped, so CI and every other run never execute it. The inputs are never printed
 /// and no failure message carries them (XCTest's own activity log names what is typed and tapped: the script redacts its
@@ -231,6 +234,22 @@ final class StagingTests: VaultUITestCase {
     @MainActor
     func testStagingConnectApprove() throws {
         try connectApprove()
+    }
+
+    /// I2.2 on staging (VAULT-MESSAGING §10.5): Messages → the conversation with the connection shown as
+    /// `VETTID_STAGING_PEER_NAME` (or the compose button's picker when there is none yet), `VETTID_STAGING_MESSAGE`
+    /// typed and sent, and its bubble followed to "Delivered"; the last state is reported on a `MESSAGE_STATE:` line.
+    /// Then the vault is locked.
+    @MainActor
+    func testStagingMessageSend() throws {
+        try messageSend()
+    }
+
+    /// The other side of ``testStagingMessageSend``: the conversation with the connection, until a message from it shows
+    /// `VETTID_STAGING_EXPECT` (within a minute); reported on a `MESSAGE_RECEIVED:` line. Then the vault is locked.
+    @MainActor
+    func testStagingMessageReceive() throws {
+        try messageReceive()
     }
 
     // MARK: - Steps
