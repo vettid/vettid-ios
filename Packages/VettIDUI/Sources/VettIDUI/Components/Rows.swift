@@ -150,6 +150,12 @@ public struct ConnectionRow: View {
         self.onTap = onTap
     }
 
+    /// The star's label: "Add <name> to favourites", or "Remove <name> from favourites" for a favourite (also a detail
+    /// screen's favourite action).
+    public static func favoriteLabel(_ name: String, favorite: Bool) -> String {
+        favorite ? UIStrings.favoriteRemove(name) : UIStrings.favoriteAdd(name)
+    }
+
     public var body: some View {
         VettIDListRow(
             title: name,
@@ -159,7 +165,7 @@ public struct ConnectionRow: View {
             emphasized: emphasized,
             action: RowAction(
                 icon: favorite ? .star : .starOutline,
-                label: favorite ? UIStrings.favoriteRemove(name) : UIStrings.favoriteAdd(name),
+                label: Self.favoriteLabel(name, favorite: favorite),
                 active: favorite
             ) { onFavoriteChange(!favorite) },
             tilePhoto: photo,

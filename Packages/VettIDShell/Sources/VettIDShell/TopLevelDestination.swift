@@ -66,6 +66,8 @@ public enum ShellRoute: Hashable, Sendable {
     /// Inviting, scanning an invitation or accepting one (VAULT-MESSAGING §6.4): from Connections' add button, or an
     /// invitation link the app was opened with.
     case connect(ConnectDestination)
+    /// A connection's detail (VAULT-MESSAGING §10.4), from the Connections list or the accept screen.
+    case connection(String)
 }
 
 /// This build's version as the drawer's footer shows it ("VettID 2.0.0 (1)", vettid-android `drawer_version`).

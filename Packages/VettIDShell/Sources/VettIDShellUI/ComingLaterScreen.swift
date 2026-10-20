@@ -3,7 +3,7 @@ import SwiftUI
 import VettIDShell
 import VettIDUI
 
-/// A drawer destination whose screens later rows of IOS-PLAN §8 bring (Messages, Connections, Approvals, Vault,
+/// A drawer destination whose screens later rows of IOS-PLAN §8 bring (Messages, Approvals, Vault,
 /// History): its title in the top bar, with the menu and the avatar, and a line that it is not in the iPhone app yet.
 /// (Chosen; not in the spec: the iPhone app ships before these screens.)
 public struct ComingLaterScreen: View {

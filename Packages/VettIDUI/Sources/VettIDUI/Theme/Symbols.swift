@@ -29,6 +29,7 @@ public enum VettIDSymbol: String, CaseIterable, Sendable {
     case qrCode = "qrcode" // QrCode2
     case qrCodeScanner = "qrcode.viewfinder" // QrCodeScanner
     case personAdd = "person.badge.plus" // PersonAdd
+    case personRemove = "person.badge.minus" // PersonRemove
     case contentCopy = "doc.on.doc" // ContentCopy
     case contentPaste = "doc.on.clipboard" // ContentPaste
     case share = "square.and.arrow.up" // Share

@@ -79,6 +79,21 @@ import VettIDOnboarding
         #expect(m.path == [.connect(.scan)])
     }
 
+    /// A connection's detail (VAULT-MESSAGING §10.4): pushed from the list; the accept screen's "Open the connection"
+    /// takes the accept screen's place (vettid-android `host.replace`); a drawer destination drops it.
+    @Test func aConnectionsDetail() {
+        let m = model
+        m.navigate(.connections)
+        m.push(.connection("c1"))
+        #expect(m.path == [.connection("c1")])
+        m.pop()
+        m.push(.connect(.accept(AcceptInput())))
+        m.replace(.connection("c2"))
+        #expect(m.path == [.connection("c2")])
+        m.navigate(.connections)
+        #expect(m.path.isEmpty && m.destination == .connections)
+    }
+
     /// vettid-android `RootViewModel.lockVault`: the sheet closes and the vault locks; a lock that fails reads the phase
     /// again.
     @Test func lockVaultFromTheSheet() async {
