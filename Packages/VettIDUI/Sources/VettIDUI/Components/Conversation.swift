@@ -3,19 +3,43 @@ import SwiftUI
 /// One message in a conversation (ANDROID-PLAN §4): the member's own messages on the right in a gold fill, the
 /// connection's on the left in a card colour. [meta] is the time and, for own messages, the delivery state; the whole
 /// bubble reads as one item ([accessibilityLabel]). Mirrors vettid-android `MessageBubble`.
+///
+/// [text] may carry `.link` runs (the message's tappable links, VAULT-MESSAGING §10.5 "Links"): a tap on one is handed
+/// to [onLink] and never opened by the system here; VoiceOver offers each link as an action named by its host. With
+/// [deleteLabel] and [onDelete], the bubble's context menu (a long press) offers the delete.
 public struct MessageBubble: View {
     @Environment(\.vettIDColors) private var colors
-    let text: String
+    let text: AttributedString
     let outgoing: Bool
     let meta: String
     let accessibilityText: String
+    let onLink: (@MainActor (URL) -> Void)?
+    let deleteLabel: String?
+    let onDelete: (@MainActor () -> Void)?
 
     public init(_ text: String, outgoing: Bool, meta: String, accessibilityLabel: String) {
+        self.init(AttributedString(text), outgoing: outgoing, meta: meta, accessibilityLabel: accessibilityLabel)
+    }
+
+    public init(
+        _ text: AttributedString,
+        outgoing: Bool,
+        meta: String,
+        accessibilityLabel: String,
+        onLink: (@MainActor (URL) -> Void)? = nil,
+        delete: (label: String, action: @MainActor () -> Void)? = nil
+    ) {
         self.text = text
         self.outgoing = outgoing
         self.meta = meta
         self.accessibilityText = accessibilityLabel
+        self.onLink = onLink
+        self.deleteLabel = delete?.label
+        self.onDelete = delete?.action
     }
+
+    /// The link runs of [text], in order.
+    static func links(_ text: AttributedString) -> [URL] { text.runs.compactMap(\.link) }
 
     public var body: some View {
         let shape = UnevenRoundedRectangle(
@@ -32,13 +56,22 @@ public struct MessageBubble: View {
             HStack(spacing: 0) {
                 VStack(alignment: .trailing, spacing: Spacing.xxs) {
                     Text(text).vettIDFont(.bodyLarge).foregroundStyle(ink).multilineTextAlignment(.leading)
+                        .tint(ink)
                     Text(meta).vettIDFont(.labelSmall).foregroundStyle(metaInk)
                 }
                 .padding(.horizontal, Spacing.m + Spacing.xxs)
                 .padding(.vertical, Spacing.s)
                 .background(outgoing ? colors.primaryContainer : colors.surfaceContainerHigh, in: shape)
+                // A link is the caller's to open, after its question: never the system's from here.
+                .environment(\.openURL, OpenURLAction { url in
+                    onLink?(url)
+                    return .handled
+                })
+                .contentShape(.contextMenuPreview, shape)
+                .contextMenu { deleteMenu }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(accessibilityText)
+                .accessibilityActions { linkActions }
             }
             // The bubble hugs its text, up to 78 % of the row.
             .containerRelativeFrame(.horizontal, alignment: outgoing ? .trailing : .leading) { width, _ in
@@ -48,6 +81,21 @@ public struct MessageBubble: View {
         }
         .padding(.horizontal, Spacing.gutter)
         .padding(.vertical, Spacing.xxs)
+    }
+
+    @ViewBuilder private var deleteMenu: some View {
+        if let deleteLabel, let onDelete {
+            Button(role: .destructive, action: onDelete) { Label(deleteLabel, systemImage: VettIDSymbol.delete.rawValue) }
+        }
+    }
+
+    @ViewBuilder private var linkActions: some View {
+        if let deleteLabel, let onDelete { Button(deleteLabel, action: onDelete) }
+        if let onLink {
+            ForEach(Array(Self.links(text).enumerated()), id: \.offset) { _, url in
+                Button(url.host() ?? url.absoluteString) { onLink(url) }
+            }
+        }
     }
 }
 
