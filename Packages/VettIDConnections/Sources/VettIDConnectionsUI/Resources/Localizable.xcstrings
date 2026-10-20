@@ -1321,61 +1321,6 @@
         }
       }
     },
-    "approvals_type_connection": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connection request"
-          }
-        }
-      }
-    },
-    "approvals_type_connection_remote": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connection request (link)"
-          }
-        }
-      }
-    },
-    "approvals_type_outgoing": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Your connection request"
-          }
-        }
-      }
-    },
-    "approvals_gone_title": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Already decided"
-          }
-        }
-      }
-    },
-    "approvals_gone_body": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This request was decided on another device, or it expired."
-          }
-        }
-      }
-    },
     "connections_detail_profile": {
       "extractionState": "manual",
       "localizations": {

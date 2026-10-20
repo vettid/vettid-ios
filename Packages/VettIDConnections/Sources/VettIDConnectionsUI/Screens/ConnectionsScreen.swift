@@ -4,8 +4,7 @@ import VettIDConnections
 import VettIDData
 import VettIDUI
 
-/// What the Connections screen can ask for. Mirrors vettid-android `ConnectionsActions`, with the connection requests'
-/// decisions (the iPhone lists them here until its Approvals screen, IOS-PLAN §8 I2.3; chosen; not in the spec).
+/// What the Connections screen can ask for. Mirrors vettid-android `ConnectionsActions`.
 public struct ConnectionsActions {
     public var onOpen: @MainActor (String) -> Void = { _ in }
     public var onFavorite: @MainActor (String, Bool) -> Void = { _, _ in }
@@ -17,15 +16,12 @@ public struct ConnectionsActions {
     public var onDismissError: @MainActor () -> Void = {}
     public var onDismissPeerDecline: @MainActor (String) -> Void = { _ in }
     public var onQuery: @MainActor (String) -> Void = { _ in }
-    public var onApprove: @MainActor (PendingConnection) -> Void = { _ in }
-    public var onDecline: @MainActor (PendingConnection) -> Void = { _ in }
-    public var onDismissEnded: @MainActor () -> Void = {}
 
     public init() {}
 }
 
 /// Connections (ANDROID-PLAN §4, Proton's contacts): initial tiles (teal for favourites), state, a star per row; the
-/// other member's declines and the open connection requests first, then the outstanding invitations; the top bar's
+/// other member's declines first, then the outstanding invitations; the top bar's
 /// search by name; the add button offers invite (QR or link), scan, or paste. Mirrors vettid-android `ConnectionsScreen`.
 public struct ConnectionsScreen: View {
     @Environment(\.vettIDColors) private var colors
@@ -87,8 +83,8 @@ public struct ConnectionsScreen: View {
     }
 }
 
-/// The list itself: a failure notice, then (unless searching) the declines, the requests and the invitations, then the
-/// connections.
+/// The list itself: a failure notice, then (unless searching) the declines and the invitations, then the connections.
+/// The connection requests are listed under Approvals (ANDROID-PLAN §4 Approvals).
 struct ConnectionList: View {
     let state: ConnectionsState
     let actions: ConnectionsActions
@@ -109,20 +105,12 @@ struct ConnectionList: View {
     }
 
     @ViewBuilder private var pending: some View {
-        if let ended = state.ended {
-            EndedRequestNotice(ended: ended, onDismiss: actions.onDismissEnded)
-                .padding(.horizontal, Spacing.gutter).padding(.vertical, Spacing.s)
-        }
         ForEach(state.peerDeclines, id: \.requestID) { d in
             NoticeCard(.info, title: PeerDeclineText.title(outgoing: d.outgoing, name: d.name), message: ConnectStrings.peerDeclinedBody) {
                 ListNoticeAction(label: ConnectStrings.ok, identifier: "peer_declined_ok") { actions.onDismissPeerDecline(d.requestID) }
             }
             .accessibilityIdentifier("peer_declined_\(d.requestID)")
             .padding(.horizontal, Spacing.gutter).padding(.vertical, Spacing.s)
-        }
-        ForEach(state.requests, id: \.key) { r in
-            RequestCard(request: r, deciding: state.deciding.contains(r.id), actions: actions)
-                .padding(.vertical, Spacing.s)
         }
         if !state.invites.isEmpty {
             SectionHeader(text: ConnectStrings.invitesHeader)

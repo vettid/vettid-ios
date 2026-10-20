@@ -2,22 +2,8 @@ import Foundation
 import Observation
 import VettIDData
 
-/// A connection request that ended without a connection while the member was deciding it on the list (VAULT-MESSAGING
-/// §6.4): ``RequestEnd/gone`` when the vault no longer knew it (decided on another device, or expired). Never
-/// ``RequestEnd/peerDeclined``, which the other member's decline notice tells.
-public struct EndedRequest: Equatable, Sendable {
-    public var requestID: String
-    public var end: RequestEnd
-
-    public init(requestID: String, end: RequestEnd) {
-        self.requestID = requestID
-        self.end = end
-    }
-}
-
 /// The Connections screen's state. Names are the members' own: never printed, dumped or mirrored. Mirrors vettid-android
-/// `ConnectionsUiState`, with the open connection requests ([requests], [deciding], [ended]) the iPhone lists here until
-/// its Approvals screen (IOS-PLAN §8 I2.3; chosen; not in the spec: vettid-android lists them under Approvals only).
+/// `ConnectionsUiState`; the connection requests are listed under Approvals (ANDROID-PLAN §4 Approvals).
 public struct ConnectionsState: Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     public var loading = true
     /// Favourites first, then by name; while searching, only the matching ones.
@@ -27,12 +13,6 @@ public struct ConnectionsState: Equatable, Sendable, CustomStringConvertible, Cu
     public var cancelling: OutstandingInvite?
     /// Requests the other member declined (0.10.5), until dismissed.
     public var peerDeclines: [PeerDecline] = []
-    /// The open connection requests of either side, newest first.
-    public var requests: [PendingConnection] = []
-    /// The requests whose decision is under way.
-    public var deciding: Set<String> = []
-    /// A request that ended before the member's decision reached the vault.
-    public var ended: EndedRequest?
     public var error: FailureKind?
     /// The top bar's search by name; while it is set only matching connections show.
     public var query = ""
@@ -44,11 +24,11 @@ public struct ConnectionsState: Equatable, Sendable, CustomStringConvertible, Cu
     public var searching: Bool { !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     /// Nothing at all to show: the empty state.
-    public var isEmpty: Bool { connections.isEmpty && invites.isEmpty && peerDeclines.isEmpty && requests.isEmpty }
+    public var isEmpty: Bool { connections.isEmpty && invites.isEmpty && peerDeclines.isEmpty }
 
     public var description: String {
         "ConnectionsState(loading: \(loading), connections: \(connections.count), invites: \(invites.count), "
-            + "requests: \(requests.count), error: \(error.map { "\($0)" } ?? "nil"))"
+            + "error: \(error.map { "\($0)" } ?? "nil"))"
     }
     public var debugDescription: String { description }
     public var customMirror: Mirror { Mirror(self, children: [:]) }
@@ -65,9 +45,8 @@ public extension ConnectionInfo {
 
 /// Connections (ANDROID-PLAN §4, Proton's contacts): favourites first, then by name; a star toggles the owner's
 /// `favorite` flag (VAULT-MESSAGING §10.4); outstanding invitations on top, each cancellable (confirmed); the other
-/// member's declines (0.10.5) until dismissed; and the open connection requests with their safety codes, approved or
-/// declined here (chosen; not in the spec, until the Approvals screen of IOS-PLAN §8 I2.3). Mirrors vettid-android
-/// `ConnectionsViewModel`.
+/// member's declines (0.10.5) until dismissed (here or in Approvals). The connection requests are decided in Approvals.
+/// Mirrors vettid-android `ConnectionsViewModel`.
 @MainActor
 @Observable
 public final class ConnectionsViewModel {
@@ -137,7 +116,6 @@ public final class ConnectionsViewModel {
         s.connections = Self.listed(all, query: s.query)
         s.searchable = !all.isEmpty
         s.peerDeclines = requests.peerDeclines
-        s.requests = requests.requests
         return s
     }
 
@@ -150,11 +128,10 @@ public final class ConnectionsViewModel {
         }.map(\.element)
     }
 
-    /// Reads the connections and the outstanding invitations again; the requests too, quietly (their failure is left for
-    /// the next read).
+    /// Reads the connections and the outstanding invitations again.
     public func refresh() {
         local.error = nil
-        let (connections, requests) = (connections, requests)
+        let connections = connections
         work.launch { [weak self] in
             do {
                 try await connections.refresh()
@@ -165,7 +142,6 @@ public final class ConnectionsViewModel {
                 self?.local.loading = false
                 self?.local.error = failureKind(error)
             }
-            try? await requests.refreshRequests()
         }
     }
 
@@ -193,54 +169,6 @@ public final class ConnectionsViewModel {
 
     /// The member saw that the other member declined [requestID] (0.10.5): not shown again.
     public func dismissPeerDecline(_ requestID: String) { requests.dismissPeerDecline(requestID) }
-
-    /// This member's approval of [r] after comparing the safety code: the inviter's side (incoming) or the accepter's
-    /// (outgoing). The connection is made once the other member approves too (0.10.3).
-    public func approve(_ r: PendingConnection) {
-        let requests = requests
-        decide(r) {
-            switch r {
-            case .incoming(let x): try await requests.approveConnection(x.pendingID)
-            case .outgoing(let x): try await requests.approveOutgoing(x.connectionID)
-            }
-        }
-    }
-
-    /// Declines [r]; on the accepter's side the vault tells the inviter's vault (0.10.5).
-    public func decline(_ r: PendingConnection) {
-        let requests = requests
-        decide(r) {
-            switch r {
-            case .incoming(let x): try await requests.declineConnection(x.pendingID)
-            case .outgoing(let x): try await requests.declineOutgoing(x.connectionID)
-            }
-        }
-    }
-
-    public func dismissEnded() { local.ended = nil }
-
-    /// A decision on [r]: a request the vault no longer has (decided on another device, or expired: ``RequestEnd/gone``)
-    /// is told as such rather than as a failure.
-    private func decide(_ r: PendingConnection, _ call: @escaping @MainActor () async throws -> Void) {
-        let id = r.id
-        guard !local.deciding.contains(id) else { return }
-        local.deciding.insert(id)
-        local.error = nil
-        let requests = requests
-        work.launch { [weak self] in
-            do {
-                try await call()
-            } catch {
-                if let end = requests.requestEnds[id] {
-                    // The other member's decline has its own notice (``ConnectionsState/peerDeclines``).
-                    if end != .peerDeclined { self?.local.ended = EndedRequest(requestID: id, end: end) }
-                } else {
-                    self?.local.error = failureKind(error)
-                }
-            }
-            self?.local.deciding.remove(id)
-        }
-    }
 
     private func act(_ body: @escaping @MainActor () async throws -> Void) {
         work.launch { [weak self] in

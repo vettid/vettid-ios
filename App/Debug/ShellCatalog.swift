@@ -155,7 +155,7 @@ enum ShellCatalog {
         case .drawer:
             DrawerContainer(isOpen: .constant(true)) {
                 VettIDDrawerSheet(
-                    sections: TopLevelDestination.drawerSections, selectedKey: "messages", versionLabel: "VettID 2.0.0 (1)"
+                    sections: TopLevelDestination.drawerSections(), selectedKey: "messages", versionLabel: "VettID 2.0.0 (1)"
                 ) { _ in }
             } content: {
                 ComingLaterScreen(destination: .messages, chrome: chrome)

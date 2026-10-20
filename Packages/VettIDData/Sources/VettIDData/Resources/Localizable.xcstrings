@@ -1458,6 +1458,1008 @@
           }
         }
       }
+    },
+    "data_feed_someone": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Someone"
+          }
+        }
+      }
+    },
+    "data_feed_removed_connection": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Removed connection"
+          }
+        }
+      }
+    },
+    "data_feed_name_not_shared": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A connection"
+          }
+        }
+      }
+    },
+    "data_feed_deleted_item": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deleted item"
+          }
+        }
+      }
+    },
+    "data_feed_connection_request": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ wants to connect"
+          }
+        }
+      }
+    },
+    "data_feed_connection_peer_declined": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ did not accept your request"
+          }
+        }
+      }
+    },
+    "data_feed_connection_added": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You are now connected with %@"
+          }
+        }
+      }
+    },
+    "data_feed_connection_removed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ was removed"
+          }
+        }
+      }
+    },
+    "data_feed_connection_stale": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ has not been reachable"
+          }
+        }
+      }
+    },
+    "data_feed_asks_paused": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@’s requests are paused"
+          }
+        }
+      }
+    },
+    "data_feed_authenticate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ asks you to confirm it is you"
+          }
+        }
+      }
+    },
+    "data_feed_message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New message from %@"
+          }
+        }
+      }
+    },
+    "data_feed_call_missed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Missed call from %@"
+          }
+        }
+      }
+    },
+    "data_feed_photo_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photo to %@ not delivered"
+          }
+        }
+      }
+    },
+    "data_feed_photo_refused": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photo from %@ refused: your vault is full"
+          }
+        }
+      }
+    },
+    "data_feed_grant_request": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ asks for %@"
+          }
+        }
+      }
+    },
+    "data_feed_grant_request_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ asks for an item"
+          }
+        }
+      }
+    },
+    "data_feed_grant_request_batch": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ asks for %#@count@"
+          },
+          "substitutions": {
+            "count": {
+              "argNum": 2,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg thing"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg things"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "data_feed_things": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld thing"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld things"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "data_feed_grant_shared": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ shared an item with you"
+          }
+        }
+      }
+    },
+    "data_feed_grant_revoked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ stopped sharing an item"
+          }
+        }
+      }
+    },
+    "data_feed_share_pending": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your %@ rule for %@ needs a decision"
+          }
+        }
+      }
+    },
+    "data_feed_share_pending_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A share rule for %@ needs a decision"
+          }
+        }
+      }
+    },
+    "data_feed_share_rate_limited": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ reached the limit of a share rule"
+          }
+        }
+      }
+    },
+    "data_feed_critical_use": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ asks to use %@"
+          }
+        }
+      }
+    },
+    "data_feed_critical_use_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ asks to use a critical item"
+          }
+        }
+      }
+    },
+    "data_feed_item_revealed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ was revealed"
+          }
+        }
+      }
+    },
+    "data_feed_item_revealed_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A critical item was revealed"
+          }
+        }
+      }
+    },
+    "data_feed_device_pair_pending": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A device asks to pair"
+          }
+        }
+      }
+    },
+    "data_feed_device_paired": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A device was paired"
+          }
+        }
+      }
+    },
+    "data_feed_device_unlinked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A device was removed"
+          }
+        }
+      }
+    },
+    "data_feed_device_transferred": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault moved to this phone"
+          }
+        }
+      }
+    },
+    "data_feed_device_replaced": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault moved to a new phone"
+          }
+        }
+      }
+    },
+    "data_feed_device_signer_changed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault moved to another version of VettID"
+          }
+        }
+      }
+    },
+    "data_feed_signer_from_to": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From %@ to %@"
+          }
+        }
+      }
+    },
+    "data_signer_google_play": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google Play (signed by Google)"
+          }
+        }
+      }
+    },
+    "data_signer_vettid": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "F-Droid or direct (signed by VettID)"
+          }
+        }
+      }
+    },
+    "data_signer_development": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a development build"
+          }
+        }
+      }
+    },
+    "data_signer_other": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "another signer"
+          }
+        }
+      }
+    },
+    "data_feed_device_session": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A device asks for access"
+          }
+        }
+      }
+    },
+    "data_feed_device_approval": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A device asks to approve a request"
+          }
+        }
+      }
+    },
+    "data_feed_credential_alarm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your credential was used somewhere else"
+          }
+        }
+      }
+    },
+    "data_feed_password_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wrong credential password entered"
+          }
+        }
+      }
+    },
+    "data_feed_credential_rotated": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your credential was renewed"
+          }
+        }
+      }
+    },
+    "data_feed_credential_reset": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your credential was reset"
+          }
+        }
+      }
+    },
+    "data_feed_check_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A daily check failed"
+          }
+        }
+      }
+    },
+    "data_feed_check_failed_pin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A daily check failed: wrong PIN"
+          }
+        }
+      }
+    },
+    "data_feed_check_failed_password": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A daily check failed: wrong password"
+          }
+        }
+      }
+    },
+    "data_feed_check_locked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault locked after 10 failed checks"
+          }
+        }
+      }
+    },
+    "data_feed_hold_off_until": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hold turned off until %@"
+          }
+        }
+      }
+    },
+    "data_feed_hold_off": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hold turned off"
+          }
+        }
+      }
+    },
+    "data_feed_hold_on": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hold turned on"
+          }
+        }
+      }
+    },
+    "data_feed_hold_back_on": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hold back on"
+          }
+        }
+      }
+    },
+    "data_feed_guide": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A tip from VettID"
+          }
+        }
+      }
+    },
+    "data_feed_leash": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent activity"
+          }
+        }
+      }
+    },
+    "data_feed_leash_rate_limited": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An agent reached its limit"
+          }
+        }
+      }
+    },
+    "data_feed_leash_item_read": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An agent read an item"
+          }
+        }
+      }
+    },
+    "data_feed_leash_suspended": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An agent was suspended"
+          }
+        }
+      }
+    },
+    "data_feed_leash_referrals": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An agent’s referrals were limited"
+          }
+        }
+      }
+    },
+    "data_feed_action_request": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ asks you to run an action"
+          }
+        }
+      }
+    },
+    "data_feed_intro_request": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ wants to introduce someone"
+          }
+        }
+      }
+    },
+    "data_feed_location_shared": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ shared a location"
+          }
+        }
+      }
+    },
+    "data_feed_location_request": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ asks for your location"
+          }
+        }
+      }
+    },
+    "data_feed_wallet_signed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A wallet transaction was signed"
+          }
+        }
+      }
+    },
+    "data_feed_pin_changed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your PIN was changed"
+          }
+        }
+      }
+    },
+    "data_feed_secret_renewed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your phone now uses a new secret for your vault"
+          }
+        }
+      }
+    },
+    "data_feed_credential_recovered": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your credential was restored from its backup"
+          }
+        }
+      }
+    },
+    "data_feed_recovery_device_paired": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your new phone was connected to your vault"
+          }
+        }
+      }
+    },
+    "data_feed_recovery_completed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovery finished: your vault is on your new phone"
+          }
+        }
+      }
+    },
+    "data_feed_recovery_attempt_someone": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Someone tried to recover your vault (attempt %lld of %lld)"
+          }
+        }
+      }
+    },
+    "data_feed_recovery_attempt_someone_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Someone tried to recover your vault"
+          }
+        }
+      }
+    },
+    "data_feed_recovery_attempt_recovered": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault was recovered (attempt %lld of %lld)"
+          }
+        }
+      }
+    },
+    "data_feed_recovery_attempt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovery attempt %lld of %lld"
+          }
+        }
+      }
+    },
+    "data_feed_recovery_attempt_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovery attempt"
+          }
+        }
+      }
+    },
+    "data_feed_change_required_password": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a stronger password to keep recovery on"
+          }
+        }
+      }
+    },
+    "data_feed_change_required_password_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your password is too weak for recovery. Recovery stays off until you change it."
+          }
+        }
+      }
+    },
+    "data_feed_change_required": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change your PIN or password to turn recovery back on"
+          }
+        }
+      }
+    },
+    "data_feed_change_required_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovery attempts were used. A change gives you 10 new attempts."
+          }
+        }
+      }
+    },
+    "data_feed_counter_unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault cannot check its recovery attempts"
+          }
+        }
+      }
+    },
+    "data_feed_recovery_rollback": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault was given an older recovery record"
+          }
+        }
+      }
+    },
+    "data_feed_recovery_rollback_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A host may have served an older copy of your vault's recovery record, one on which recovery attempts had already been used. Your vault moved past it. If you did not try to recover your vault, change your PIN and your password now, and contact VettID."
+          }
+        }
+      }
+    },
+    "data_feed_rotation_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault could not update its keys"
+          }
+        }
+      }
+    },
+    "data_feed_rotation_failed_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your connections still know your old keys. VettID will offer the update again."
+          }
+        }
+      }
+    },
+    "data_feed_rotate_conflict": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: verify again"
+          }
+        }
+      }
+    },
+    "data_feed_rotate_conflict_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This connection's vault announced two different new keys. That can mean someone holds an old copy of their vault. Nothing is sent or received until you check."
+          }
+        }
+      }
+    },
+    "data_feed_leash_item_used": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An agent used %@"
+          }
+        }
+      }
+    },
+    "data_feed_leash_item_used_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An agent used an item"
+          }
+        }
+      }
+    },
+    "data_feed_unknown": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activity: %@"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

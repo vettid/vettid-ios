@@ -51,6 +51,10 @@ packages:
     path: Packages/VettIDConnections
   VettIDMessages:
     path: Packages/VettIDMessages
+  VettIDApprovals:
+    path: Packages/VettIDApprovals
+  VettIDNotifications:
+    path: Packages/VettIDNotifications
   # TEST ONLY: linked by test targets, never by the app (release check).
   VettIDTesting:
     path: Packages/VettIDTesting
@@ -133,6 +137,8 @@ targets:
       - package: VettIDShell
       - package: VettIDConnections
       - package: VettIDMessages
+      - package: VettIDApprovals
+      - package: VettIDNotifications
 
   # TEST ONLY: the app's sources and screens against the local dev stack on the simulator (IOS-PLAN §8 exit I1 (a)),
   # with VettIDAltChanTesting's TEST App Attest attester and VettIDKeysTesting's software keys composed by
@@ -199,6 +205,8 @@ targets:
       - package: VettIDShell
       - package: VettIDConnections
       - package: VettIDMessages
+      - package: VettIDApprovals
+      - package: VettIDNotifications
       # TEST ONLY: the TEST iOS attester and the software keys.
       - package: VettIDAltChan
         product: VettIDAltChanTesting
@@ -279,6 +287,10 @@ schemes:
         - package: VettIDConnections/VettIDConnectionsUITests
         - package: VettIDMessages/VettIDMessagesTests
         - package: VettIDMessages/VettIDMessagesUITests
+        - package: VettIDApprovals/VettIDApprovalsTests
+        - package: VettIDApprovals/VettIDApprovalsUITests
+        - package: VettIDNotifications/VettIDNotificationsTests
+        - package: VettIDNotifications/VettIDNotificationsUITests
         - package: VettIDTesting/VettIDTestingTests
     profile:
       config: Release

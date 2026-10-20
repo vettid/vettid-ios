@@ -138,4 +138,37 @@ import VettIDOnboarding
         await m.dismissNotices()
         #expect(repo.calls.contains("turnHoldOn"))
     }
+
+    /// The bell opens Notifications once; a feed item's target opens its screen as vettid-android's `openFeedTarget`.
+    @Test func theBellAndAFeedItemOpenTheirScreens() {
+        let m = model
+        m.openNotifications()
+        m.openNotifications()
+        #expect(m.path == [.notifications(archived: false)])
+        m.openNotifications(archived: true)
+        m.openFeedTarget(.approval(key: "grant:g1"))
+        m.openFeedTarget(.approval(key: "grant:g1"))
+        #expect(m.path == [.notifications(archived: false), .notifications(archived: true), .approval("grant:g1")])
+        m.path = [.notifications(archived: false)]
+        m.openFeedTarget(.conversation("c1"))
+        m.openFeedTarget(.connection("c2"))
+        m.openFeedTarget(.sharedWithYou("c3"))
+        m.openFeedTarget(.shareRule(connectionID: "c4", ruleID: "r"))
+        m.openFeedTarget(.alarm)
+        m.openFeedTarget(.credential)
+        m.openFeedTarget(.devices)
+        m.openFeedTarget(.item("i"))
+        m.openFeedTarget(.sheet)
+        #expect(m.path == [
+            .notifications(archived: false), .conversation("c1"), .connection("c2"), .connection("c3"), .connection("c4"), .alarm,
+            .credential, .vaultStatus,
+        ])
+        m.openFeedTarget(.connections)
+        #expect(m.destination == .connections && m.path.isEmpty)
+        m.openFeedTarget(.history)
+        #expect(m.destination == .history)
+        m.push(.notifications(archived: false))
+        m.openFeedTarget(.security)
+        #expect(m.destination == .settings && m.path.isEmpty)
+    }
 }

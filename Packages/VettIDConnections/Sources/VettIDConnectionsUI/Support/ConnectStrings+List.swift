@@ -96,28 +96,4 @@ extension ConnectStrings {
         case .other: stateOther
         }
     }
-
-    // MARK: - Connection requests (vettid-android `feature/approvals`)
-
-    static var typeConnection: String {
-        String(localized: "approvals_type_connection", defaultValue: "Connection request", bundle: .module)
-    }
-
-    static var typeConnectionRemote: String {
-        String(localized: "approvals_type_connection_remote", defaultValue: "Connection request (link)", bundle: .module)
-    }
-
-    static var typeOutgoing: String {
-        String(localized: "approvals_type_outgoing", defaultValue: "Your connection request", bundle: .module)
-    }
-
-    static var goneTitle: String { String(localized: "approvals_gone_title", defaultValue: "Already decided", bundle: .module) }
-
-    static var goneBody: String {
-        String(
-            localized: "approvals_gone_body",
-            defaultValue: "This request was decided on another device, or it expired.",
-            bundle: .module
-        )
-    }
 }

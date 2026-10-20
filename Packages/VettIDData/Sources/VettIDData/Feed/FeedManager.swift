@@ -89,6 +89,9 @@ public protocol FeedRepository: AnyObject, Observable, Sendable {
 /// - **Own changes** (``setStatus(_:status:)``, ``delete(_:)``) apply the answer at once: the vault sends no `sync.event`
 ///   to the sender.
 /// - **Retention**: items older than `feed.retention_days` (default 30) are dropped here as well.
+/// - **History only** (IOS-PLAN §4.1): `vault.pin_changed`, `credential.recovered`, `recovery.device_paired` and a
+///   closure item that is not a `rollback` are neither listed, counted nor passed to ``onArrival``; the cursor moves past
+///   them (``FeedKinds/isHidden(_:)``).
 /// - **Held or due** ([gated]): nothing is listed and events are ignored; after the check, a full read.
 ///
 /// Mirrors vettid-android `FeedManager`.
@@ -186,7 +189,7 @@ public final class FeedManager: FeedRepository {
         let next = item.seq == cursor + 1
         apply([item])
         if next { cursor = item.seq }
-        if item.status == Self.statusActive { onArrival(item) }
+        if item.status == Self.statusActive { arrived(item) }
         if !next { catchUp() }
     }
 
@@ -234,7 +237,7 @@ public final class FeedManager: FeedRepository {
             guard !full else { return }
             var seen = Set<String>()
             for c in changed where c.status == Self.statusActive && (known[c.itemID]?.seq ?? 0) < c.seq && seen.insert(c.itemID).inserted {
-                if let now = byID[c.itemID] { onArrival(now) }
+                if let now = byID[c.itemID] { arrived(now) }
             }
         } catch {
             if full, g == generation { load = .failed }
@@ -262,10 +265,17 @@ public final class FeedManager: FeedRepository {
         retentionDays = d
     }
 
-    /// Replaces each item by id, removes the deleted ones, drops what is past retention, and publishes.
+    /// A notification's source, except the History-only kinds (IOS-PLAN §4.1, de-duplication).
+    private func arrived(_ item: FeedItem) {
+        if !FeedKinds.isHidden(item) { onArrival(item) }
+    }
+
+    /// Replaces each item by id, removes the deleted ones, drops what is past retention, and publishes. The History-only
+    /// kinds (IOS-PLAN §4.1) are neither listed nor counted.
     private func apply(_ changed: [FeedItem]) {
         for item in changed {
-            if item.status == Self.statusDeleted { byID[item.itemID] = nil } else { byID[item.itemID] = item }
+            let gone = item.status == Self.statusDeleted || FeedKinds.isHidden(item)
+            byID[item.itemID] = gone ? nil : item
         }
         publish()
     }
