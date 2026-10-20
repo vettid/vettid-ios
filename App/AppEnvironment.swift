@@ -68,9 +68,9 @@ struct AppEnvironment: Equatable, Sendable {
     var relayURL: String { "https://\(relayHost)" }
 
     /// The pinned Nitro root and manifest keys (§11.2, §11.10.1): production's in Release; the staging channel's key A
-    /// in Staging and Debug. The dev stack's TEST-ONLY anchors come from its control port (VettIDAltChanTesting's
-    /// DevStack); until an app target links it, a DevStack build pins what Debug pins and verifies nothing the dev stack
-    /// serves.
+    /// in Staging and Debug. The dev stack's TEST-ONLY anchors come from its control port, in the VettIDDevStack app only
+    /// (AppDevStack/DevStackWiring.swift); the VettID app built in the DevStack configuration pins what Debug pins and
+    /// verifies nothing the dev stack serves.
     func trust() throws -> AltTrust {
         guard kind != .production else { return .production }
         return AltTrust(

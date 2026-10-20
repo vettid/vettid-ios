@@ -55,7 +55,16 @@ differ.
 | Debug | `com.vettid.app.dev` | VettID Dev | staging (the dev stack, chosen at launch, from I1) |
 | DevStack | `com.vettid.app.devstack` | VettID Dev Stack | the local dev stack |
 
-All four install side by side.
+All four install side by side. The DevStack configuration also builds the
+**VettIDDevStack** app (`com.vettid.app.devstack.ui`, its own target and
+scheme, simulator only, never archived; it installs beside the other four):
+the same app with the TEST App Attest attester and software keys
+(`AppDevStack/`), driven by its UI test against the local dev stack:
+
+```bash
+# IOS-PLAN §8 exit I1 (a): fresh install, enroll, lock, unlock (XCUITest)
+scripts/devstack-test.sh --ui
+```
 
 ## Build and test
 

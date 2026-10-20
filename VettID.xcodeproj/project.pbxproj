@@ -8,33 +8,62 @@
 
 /* Begin PBXBuildFile section */
 		01B22EFC531F1254BBFF19EC /* VettIDMedia in Frameworks */ = {isa = PBXBuildFile; productRef = 119A448A26B03C3DFE1408E4 /* VettIDMedia */; };
+		0386ED9C399A68C00F474BBD /* VettIDShell in Frameworks */ = {isa = PBXBuildFile; productRef = 107C0901CAA734BF084319C3 /* VettIDShell */; };
+		039C435319F2F8D86814A15A /* VettIDUI in Frameworks */ = {isa = PBXBuildFile; productRef = 0C260A66FF726563F6333AFA /* VettIDUI */; };
 		07487421CFD203C6665CF8A6 /* KeychainTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B4477541F907F6E92A131BB /* KeychainTests.swift */; };
 		0847C4526D3C1991B627B07F /* DebugCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F26B1FBF5F334471A59B5B8C /* DebugCatalog.swift */; };
+		0E4B145E2620EAAB01C19410 /* OnboardingCatalogScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA04E2F7EF12B3C666A4CDC7 /* OnboardingCatalogScreen.swift */; };
 		0E4BA253AB8E8655B797C7F6 /* StagingTests+Messages.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D4DA90211D97D9417FAC02C /* StagingTests+Messages.swift */; };
+		117ADD9B0DFAFE411ACEC12E /* VettIDRelay in Frameworks */ = {isa = PBXBuildFile; productRef = BCC442EBCEF6BFA141997796 /* VettIDRelay */; };
 		11EB34205C201C9FADCB6AF5 /* VettIDOnboarding in Frameworks */ = {isa = PBXBuildFile; productRef = 91A37563B26A13BAAC113A58 /* VettIDOnboarding */; };
+		154378D4143FFC3C81EFB544 /* CanaryManifestFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F2EA67554B107444FF813EF /* CanaryManifestFiles.swift */; };
 		16CC7F1AD834271FC0C79440 /* StagingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A34C0ED8CB57521C8F3EF6D6 /* StagingTests.swift */; };
+		1CC08682E5472A741A8D68B7 /* VettIDApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5C81B56C71C53452A052D2A /* VettIDApp.swift */; };
+		1DDCB5CC9A61A5860F3A956B /* VettIDConnections in Frameworks */ = {isa = PBXBuildFile; productRef = 77A776902039E904AFFB0F35 /* VettIDConnections */; };
+		1FD9FB481111790D7463CEB0 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 412ACBC39A6E3761D83FDE48 /* AppEnvironment.swift */; };
 		23443E7E900490A2D4B5AE6E /* VettIDConnections in Frameworks */ = {isa = PBXBuildFile; productRef = 969025AEB4FA66964C8A134E /* VettIDConnections */; };
 		23564D229DBA01C44595AF8A /* VettIDUI in Frameworks */ = {isa = PBXBuildFile; productRef = 5E3CFB54BBE2282AAB5B06B5 /* VettIDUI */; };
+		24E37CE5B67EBE2441B36FFE /* OwnerCheckCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABB2FC11CCF6AAD6F6399524 /* OwnerCheckCatalog.swift */; };
+		2531D1F4F006A6465CB52D7B /* DevStackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 230165DE55462B18B29FACFD /* DevStackTests.swift */; };
 		27B46D91B919FFCEA4228483 /* StagingTests+Connect.swift in Sources */ = {isa = PBXBuildFile; fileRef = A84B69E505CEC2E1129233E9 /* StagingTests+Connect.swift */; };
 		2B7C58D7CD92999F58FB865D /* SettingsFlowsCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93AFC9E49CAEEB5D0ABC86DF /* SettingsFlowsCatalog.swift */; };
 		2DB59791D7D6903F1DE6E8CB /* VettIDAltChan in Frameworks */ = {isa = PBXBuildFile; productRef = 2022889C73B639A3FEDD0CBE /* VettIDAltChan */; };
 		2ED9F7D436AE5EBE6EC6A918 /* VettIDCrypto in Frameworks */ = {isa = PBXBuildFile; productRef = 2628100D3340AAA9869F33DF /* VettIDCrypto */; };
+		34D5AD803AA496D57470232B /* VaultUITestCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 461CF475BEF16D6D464D6ECE /* VaultUITestCase.swift */; };
+		3BDC50D1B60B3C9D8BFF60CF /* OnboardingCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F75EB86F0AEDA6ABA253BBC1 /* OnboardingCatalog.swift */; };
 		3DA939459B79AF971E911C98 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18D27D877D6472CB1E622763 /* AppDelegate.swift */; };
+		4458E614973C93BE7AB0089C /* AppLockGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CBB4C9A8E482B333CED7362 /* AppLockGate.swift */; };
+		4790B24DD7B2AF69BB6923F1 /* SecureHardware.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BC7B2415F948B243F5CAD54 /* SecureHardware.swift */; };
 		48C14D9734DD1B7FCF3CF6B0 /* AppLockWindowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB1D13186B27047D3E39486C /* AppLockWindowTests.swift */; };
+		4A0056FD27140A0BEDA20DEC /* NoSecureHardware.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DAFB636C365A57D892BA212 /* NoSecureHardware.swift */; };
+		518BE854550899264F951BA4 /* VettIDVault in Frameworks */ = {isa = PBXBuildFile; productRef = F31EB6E3CE01034FEB597AE6 /* VettIDVault */; };
 		56E730CA2E4280BD26BA2CBF /* VettIDRelay in Frameworks */ = {isa = PBXBuildFile; productRef = 2373D4A3A26B7B0852A64CED /* VettIDRelay */; };
+		57980359429661BC8F1B2A55 /* UnlockCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA46D6F62E13C2404BDC26A2 /* UnlockCatalog.swift */; };
+		6085BB158AB86E6AEA865472 /* VaultUITestCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 461CF475BEF16D6D464D6ECE /* VaultUITestCase.swift */; };
+		61E7FF33E738CD4854250E6D /* VettIDNotify in Frameworks */ = {isa = PBXBuildFile; productRef = 192F7580C9DB53918B812AF4 /* VettIDNotify */; };
+		65086DDF33F9D356B8748B74 /* OpenedLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 651F1FB251573B18571FE4F0 /* OpenedLinks.swift */; };
+		654547B4EC49A73319C61AD0 /* VettIDAltChan in Frameworks */ = {isa = PBXBuildFile; productRef = BBA89661E15D4F545B0FEB9B /* VettIDAltChan */; };
 		6C78BEF34322DEFA23FAF443 /* SecureInputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27784FA957AF2CC5794ED472 /* SecureInputTests.swift */; };
-		6FFEE77FE1828A19B428CCAB /* StagingTests+Helpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AD7F60FD2F81A1D30A5A802 /* StagingTests+Helpers.swift */; };
 		732235F0D7CDBADC340E6D41 /* AppWipeTargets.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDBF1FF3D70DF0D8E826048E /* AppWipeTargets.swift */; };
 		73BB80548EC5E12691B5059B /* SecureHardware.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BC7B2415F948B243F5CAD54 /* SecureHardware.swift */; };
 		79EF40CF165A7802AA53B55D /* AppComposition.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9AE8109566BB532DFAC5A50 /* AppComposition.swift */; };
+		7E153901143C2E137C50D8BB /* VettIDOnboarding in Frameworks */ = {isa = PBXBuildFile; productRef = DDE00D69B69BBE5573334D60 /* VettIDOnboarding */; };
+		8216EC5366C9E37FFD6DCD23 /* AppComposition.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9AE8109566BB532DFAC5A50 /* AppComposition.swift */; };
 		87ED7C9081CC9E7EE5314F6F /* LockedPhoneDeviceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E07961C2D265B2A813664FD6 /* LockedPhoneDeviceTests.swift */; };
 		88AF4E861941438E01BE51AE /* OnboardingCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F75EB86F0AEDA6ABA253BBC1 /* OnboardingCatalog.swift */; };
+		8A1371DFC969D905FB2C31BA /* SettingsFlowsCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93AFC9E49CAEEB5D0ABC86DF /* SettingsFlowsCatalog.swift */; };
+		8CC360517FEF53D1466BF68E /* InstalledFromBuild.swift in Sources */ = {isa = PBXBuildFile; fileRef = E19B16C3C80D7D44FEA75D72 /* InstalledFromBuild.swift */; };
+		8D3B44667E8E29EB3A60E1F7 /* VettIDCrypto in Frameworks */ = {isa = PBXBuildFile; productRef = 468822D31A2BF6DFFEEBB639 /* VettIDCrypto */; };
+		8E9A1625101D58F902888447 /* VettIDAttestation in Frameworks */ = {isa = PBXBuildFile; productRef = 73264074A41C7BB3907652CB /* VettIDAttestation */; };
 		8F0C6136B60FB2202ED10C8F /* VettIDTesting in Frameworks */ = {isa = PBXBuildFile; productRef = CDD27B7550D27193C8607EDA /* VettIDTesting */; };
 		91EB5DA7D60B53E6CE50FCE0 /* GalleryScreenshots.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEAFD630960C3CA7D7885DEB /* GalleryScreenshots.swift */; };
 		926662D958BB0CF0087EB183 /* AppEnvironmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D78BD3F6C3BB2643C264466A /* AppEnvironmentTests.swift */; };
 		944241F35F84B24040C3C97F /* CanaryManifestFilesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6026316F2864710BB7DFBBCB /* CanaryManifestFilesTests.swift */; };
 		947B90F626615FBFDC4AB60F /* VettIDMessages in Frameworks */ = {isa = PBXBuildFile; productRef = 29121F6C29BAE98F04C4EFAC /* VettIDMessages */; };
+		952798E17BA70F638B502377 /* DevStackWiring.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF184030262E43FB151252EE /* DevStackWiring.swift */; };
+		9AC6E6766E388B3332491622 /* VettIDMessages in Frameworks */ = {isa = PBXBuildFile; productRef = E159DF0BD64E08CD3DE1DD88 /* VettIDMessages */; };
 		9AFDE19700D4376ECAACFF6B /* OwnerCheckCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABB2FC11CCF6AAD6F6399524 /* OwnerCheckCatalog.swift */; };
+		A077B81949DB0342605E9D4C /* VettIDKeysTesting in Frameworks */ = {isa = PBXBuildFile; productRef = 3A78AA1376A65038AD0045E2 /* VettIDKeysTesting */; };
 		A360D45B8318FDF8128CA89C /* OnboardingCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABC062C8E50CF3A935F64F87 /* OnboardingCatalogTests.swift */; };
 		A3AE95670EF0C2711A08679E /* UnlockCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA46D6F62E13C2404BDC26A2 /* UnlockCatalog.swift */; };
 		A404E200ACF0AAD3C6729CBD /* VettIDNotify in Frameworks */ = {isa = PBXBuildFile; productRef = CB04C08D571D6A92DD0A5FB1 /* VettIDNotify */; };
@@ -42,16 +71,26 @@
 		AA35614CE1F4D97BC627B12F /* VettIDApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5C81B56C71C53452A052D2A /* VettIDApp.swift */; };
 		AA5AD3F7057CFA0BB16F4515 /* ShellCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2C4EF17933B13C37D62C1ED /* ShellCatalog.swift */; };
 		ADB09CCE535DE329A04819EC /* CanaryManifestFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F2EA67554B107444FF813EF /* CanaryManifestFiles.swift */; };
+		AE2A786C5512D1AB236F0388 /* VettIDKeys in Frameworks */ = {isa = PBXBuildFile; productRef = 00B2C3E2552616DC4B11AB58 /* VettIDKeys */; };
+		AE4084C7B01741C3B0050BA5 /* AppWipeTargets.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDBF1FF3D70DF0D8E826048E /* AppWipeTargets.swift */; };
 		AE50D9820C7612104F1F51CF /* CompositionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EBB51B3CAEFFF548475E972 /* CompositionTests.swift */; };
 		AF0565C4247366AAC4EA95B8 /* InstalledFromBuild.swift in Sources */ = {isa = PBXBuildFile; fileRef = E19B16C3C80D7D44FEA75D72 /* InstalledFromBuild.swift */; };
+		B2675BEF10177187CB6F6F9E /* GalleryScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FA837F1B3F48BDD0B340707 /* GalleryScreen.swift */; };
+		B50130497163FB4B3BF29F45 /* VettIDData in Frameworks */ = {isa = PBXBuildFile; productRef = 84E4992E2D7CA65376E82527 /* VettIDData */; };
 		B80076DE16F2BEDB9AC3AE54 /* SecureEnclaveDeviceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0D14B2DBE5EF0620ED73CEC /* SecureEnclaveDeviceTests.swift */; };
 		B8FE96EB5C7249F6899AE2E2 /* VettIDAttestation in Frameworks */ = {isa = PBXBuildFile; productRef = 83E6F916B2AD81D983010440 /* VettIDAttestation */; };
+		BB5A5073F54CB1B3491349D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18D27D877D6472CB1E622763 /* AppDelegate.swift */; };
 		BE1A5C782200D278726FE11A /* OnboardingCatalogScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA04E2F7EF12B3C666A4CDC7 /* OnboardingCatalogScreen.swift */; };
+		C0637A00FD1447A4A4C583B6 /* ShellCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2C4EF17933B13C37D62C1ED /* ShellCatalog.swift */; };
 		C5D7F03C08449B0C0839B40D /* VettIDKeys in Frameworks */ = {isa = PBXBuildFile; productRef = 7F7CDB0CA3D4891C7BC81EED /* VettIDKeys */; };
 		C6FDE6FB207680D30A950256 /* NoSecureHardware.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DAFB636C365A57D892BA212 /* NoSecureHardware.swift */; };
+		CC9EEF03E7D81A1EEBAA10C2 /* VettIDAltChanTesting in Frameworks */ = {isa = PBXBuildFile; productRef = 5A3EEF226DB58AF9D30CC799 /* VettIDAltChanTesting */; };
 		CFBE64FEEE60DFB5A0D4D48D /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 412ACBC39A6E3761D83FDE48 /* AppEnvironment.swift */; };
 		D39F8F4D752750849F93CF4F /* OpenedLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 651F1FB251573B18571FE4F0 /* OpenedLinks.swift */; };
+		D4845078E7AA2C525E8E979A /* VettIDMedia in Frameworks */ = {isa = PBXBuildFile; productRef = 175F65451CA4BCACD57D04D5 /* VettIDMedia */; };
 		DBACC8BECCC6A93B92DD9D69 /* ShellCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99011BCFDF16002458067C88 /* ShellCatalogTests.swift */; };
+		DEC1680139C8789B3CB5D70D /* VettIDSettings in Frameworks */ = {isa = PBXBuildFile; productRef = FC29162B7CA798AA95BE2B66 /* VettIDSettings */; };
+		E077D76E9DFBC0587596D6B0 /* DebugCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F26B1FBF5F334471A59B5B8C /* DebugCatalog.swift */; };
 		E31752E547A8824927CA5268 /* OpenedLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B98D2160C0CA834233FD82C /* OpenedLinkTests.swift */; };
 		E439EBDBA3C877F67536A6AB /* ThemeChoiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC218FA20D284028E26100BA /* ThemeChoiceTests.swift */; };
 		E47F8A336CA8647AB9653FFA /* GalleryScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FA837F1B3F48BDD0B340707 /* GalleryScreen.swift */; };
@@ -64,6 +103,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		8BAA20917CF5A7F2DE33FBC5 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 00BAA813C825F9285EF1D6FD /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 3C282CAF101B02EA852E479D;
+			remoteInfo = VettIDDevStack;
+		};
 		91600F00913C99A2ABF9C3B1 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 00BAA813C825F9285EF1D6FD /* Project object */;
@@ -81,9 +127,10 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		0AD7F60FD2F81A1D30A5A802 /* StagingTests+Helpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StagingTests+Helpers.swift"; sourceTree = "<group>"; };
 		0FA837F1B3F48BDD0B340707 /* GalleryScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GalleryScreen.swift; sourceTree = "<group>"; };
 		18D27D877D6472CB1E622763 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		1DD0D11876110A4C2EEEAF0E /* VettIDDevStack.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = VettIDDevStack.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		230165DE55462B18B29FACFD /* DevStackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevStackTests.swift; sourceTree = "<group>"; };
 		27784FA957AF2CC5794ED472 /* SecureInputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureInputTests.swift; sourceTree = "<group>"; };
 		2AA52F91061EA0543A5AE9B8 /* VettIDTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = VettIDTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2B11C310596A4F2C26AACAFC /* DevStack.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = DevStack.xcconfig; sourceTree = "<group>"; };
@@ -91,6 +138,7 @@
 		2EAA1051D68BE8B6888B7634 /* VettIDVault */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDVault; path = Packages/VettIDVault; sourceTree = SOURCE_ROOT; };
 		412ACBC39A6E3761D83FDE48 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		413317A388BA8F9F2776CB1B /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
+		461CF475BEF16D6D464D6ECE /* VaultUITestCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultUITestCase.swift; sourceTree = "<group>"; };
 		4CEC8D115B6CD5EAB8C1F445 /* Staging.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Staging.xcconfig; sourceTree = "<group>"; };
 		4DAFB636C365A57D892BA212 /* NoSecureHardware.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoSecureHardware.swift; sourceTree = "<group>"; };
 		55434C49B97C4353C6D68569 /* UnlockCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnlockCatalogTests.swift; sourceTree = "<group>"; };
@@ -109,6 +157,7 @@
 		727E92D6080D834DD959858F /* VettIDAppUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = VettIDAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		73029356B90552AC0C29EE9F /* StagingUITests.xctestplan */ = {isa = PBXFileReference; path = StagingUITests.xctestplan; sourceTree = "<group>"; };
 		73DDC346A3EF2FEF621FF3BD /* VettIDSettings */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDSettings; path = Packages/VettIDSettings; sourceTree = SOURCE_ROOT; };
+		79889C52954429AEC439F28D /* VettIDDevStackUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = VettIDDevStackUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		7B2D61CBC349989091764337 /* VettIDMessages */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDMessages; path = Packages/VettIDMessages; sourceTree = SOURCE_ROOT; };
 		7E77B96EF99D2D40E1073B67 /* VettIDKeys */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDKeys; path = Packages/VettIDKeys; sourceTree = SOURCE_ROOT; };
 		7F2EA67554B107444FF813EF /* CanaryManifestFiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanaryManifestFiles.swift; sourceTree = "<group>"; };
@@ -131,6 +180,7 @@
 		CA9F0084CA34E6D53027BDA1 /* VettIDTesting */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDTesting; path = Packages/VettIDTesting; sourceTree = SOURCE_ROOT; };
 		CEAFD630960C3CA7D7885DEB /* GalleryScreenshots.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GalleryScreenshots.swift; sourceTree = "<group>"; };
 		D78BD3F6C3BB2643C264466A /* AppEnvironmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironmentTests.swift; sourceTree = "<group>"; };
+		DF184030262E43FB151252EE /* DevStackWiring.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevStackWiring.swift; sourceTree = "<group>"; };
 		E07961C2D265B2A813664FD6 /* LockedPhoneDeviceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockedPhoneDeviceTests.swift; sourceTree = "<group>"; };
 		E19B16C3C80D7D44FEA75D72 /* InstalledFromBuild.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstalledFromBuild.swift; sourceTree = "<group>"; };
 		E2C4EF17933B13C37D62C1ED /* ShellCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellCatalog.swift; sourceTree = "<group>"; };
@@ -176,9 +226,41 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BC83DD04962253EF7794B5F9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8D3B44667E8E29EB3A60E1F7 /* VettIDCrypto in Frameworks */,
+				8E9A1625101D58F902888447 /* VettIDAttestation in Frameworks */,
+				117ADD9B0DFAFE411ACEC12E /* VettIDRelay in Frameworks */,
+				654547B4EC49A73319C61AD0 /* VettIDAltChan in Frameworks */,
+				518BE854550899264F951BA4 /* VettIDVault in Frameworks */,
+				AE2A786C5512D1AB236F0388 /* VettIDKeys in Frameworks */,
+				B50130497163FB4B3BF29F45 /* VettIDData in Frameworks */,
+				D4845078E7AA2C525E8E979A /* VettIDMedia in Frameworks */,
+				61E7FF33E738CD4854250E6D /* VettIDNotify in Frameworks */,
+				039C435319F2F8D86814A15A /* VettIDUI in Frameworks */,
+				7E153901143C2E137C50D8BB /* VettIDOnboarding in Frameworks */,
+				DEC1680139C8789B3CB5D70D /* VettIDSettings in Frameworks */,
+				0386ED9C399A68C00F474BBD /* VettIDShell in Frameworks */,
+				1DDCB5CC9A61A5860F3A956B /* VettIDConnections in Frameworks */,
+				9AC6E6766E388B3332491622 /* VettIDMessages in Frameworks */,
+				CC9EEF03E7D81A1EEBAA10C2 /* VettIDAltChanTesting in Frameworks */,
+				A077B81949DB0342605E9D4C /* VettIDKeysTesting in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		1C8617C0934B9CA1CC893C0B /* AppDevStackUITests */ = {
+			isa = PBXGroup;
+			children = (
+				230165DE55462B18B29FACFD /* DevStackTests.swift */,
+			);
+			path = AppDevStackUITests;
+			sourceTree = "<group>";
+		};
 		1CD0EE4DB58B61E3FCFF4DD5 /* Config */ = {
 			isa = PBXGroup;
 			children = (
@@ -196,9 +278,9 @@
 				CEAFD630960C3CA7D7885DEB /* GalleryScreenshots.swift */,
 				A34C0ED8CB57521C8F3EF6D6 /* StagingTests.swift */,
 				A84B69E505CEC2E1129233E9 /* StagingTests+Connect.swift */,
-				0AD7F60FD2F81A1D30A5A802 /* StagingTests+Helpers.swift */,
 				2D4DA90211D97D9417FAC02C /* StagingTests+Messages.swift */,
 				73029356B90552AC0C29EE9F /* StagingUITests.xctestplan */,
+				461CF475BEF16D6D464D6ECE /* VaultUITestCase.swift */,
 			);
 			path = AppUITests;
 			sourceTree = "<group>";
@@ -239,10 +321,20 @@
 			path = Debug;
 			sourceTree = "<group>";
 		};
+		72A128862692D1999421FA7B /* AppDevStack */ = {
+			isa = PBXGroup;
+			children = (
+				DF184030262E43FB151252EE /* DevStackWiring.swift */,
+			);
+			path = AppDevStack;
+			sourceTree = "<group>";
+		};
 		79E59A74B2E42E30487875F1 = {
 			isa = PBXGroup;
 			children = (
 				9FC0EB68C6119F7487673862 /* App */,
+				72A128862692D1999421FA7B /* AppDevStack */,
+				1C8617C0934B9CA1CC893C0B /* AppDevStackUITests */,
 				62784A6FFC43A9CA3605D642 /* AppTests */,
 				4457A56F27B54941A7232901 /* AppUITests */,
 				1CD0EE4DB58B61E3FCFF4DD5 /* Config */,
@@ -272,6 +364,8 @@
 			children = (
 				68A8C5609514F8561E9D7D9F /* VettID.app */,
 				727E92D6080D834DD959858F /* VettIDAppUITests.xctest */,
+				1DD0D11876110A4C2EEEAF0E /* VettIDDevStack.app */,
+				79889C52954429AEC439F28D /* VettIDDevStackUITests.xctest */,
 				2AA52F91061EA0543A5AE9B8 /* VettIDTests.xctest */,
 			);
 			name = Products;
@@ -314,6 +408,59 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		3C282CAF101B02EA852E479D /* VettIDDevStack */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3A3235C2965977DD280A7A05 /* Build configuration list for PBXNativeTarget "VettIDDevStack" */;
+			buildPhases = (
+				C3224774852425774F1BA7BB /* Sources */,
+				BC83DD04962253EF7794B5F9 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = VettIDDevStack;
+			packageProductDependencies = (
+				468822D31A2BF6DFFEEBB639 /* VettIDCrypto */,
+				73264074A41C7BB3907652CB /* VettIDAttestation */,
+				BCC442EBCEF6BFA141997796 /* VettIDRelay */,
+				BBA89661E15D4F545B0FEB9B /* VettIDAltChan */,
+				F31EB6E3CE01034FEB597AE6 /* VettIDVault */,
+				00B2C3E2552616DC4B11AB58 /* VettIDKeys */,
+				84E4992E2D7CA65376E82527 /* VettIDData */,
+				175F65451CA4BCACD57D04D5 /* VettIDMedia */,
+				192F7580C9DB53918B812AF4 /* VettIDNotify */,
+				0C260A66FF726563F6333AFA /* VettIDUI */,
+				DDE00D69B69BBE5573334D60 /* VettIDOnboarding */,
+				FC29162B7CA798AA95BE2B66 /* VettIDSettings */,
+				107C0901CAA734BF084319C3 /* VettIDShell */,
+				77A776902039E904AFFB0F35 /* VettIDConnections */,
+				E159DF0BD64E08CD3DE1DD88 /* VettIDMessages */,
+				5A3EEF226DB58AF9D30CC799 /* VettIDAltChanTesting */,
+				3A78AA1376A65038AD0045E2 /* VettIDKeysTesting */,
+			);
+			productName = VettIDDevStack;
+			productReference = 1DD0D11876110A4C2EEEAF0E /* VettIDDevStack.app */;
+			productType = "com.apple.product-type.application";
+		};
+		41217818C1680583607FD843 /* VettIDDevStackUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D27C49723F5EDA071368A03E /* Build configuration list for PBXNativeTarget "VettIDDevStackUITests" */;
+			buildPhases = (
+				9586AA4DC4A37B37D1543B62 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				EBF4869E17C417A985929E64 /* PBXTargetDependency */,
+			);
+			name = VettIDDevStackUITests;
+			packageProductDependencies = (
+			);
+			productName = VettIDDevStackUITests;
+			productReference = 79889C52954429AEC439F28D /* VettIDDevStackUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		8E7B383155AA2840971E1D41 /* VettID */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 69DAD667CFF4EE7AD20329F1 /* Build configuration list for PBXNativeTarget "VettID" */;
@@ -394,6 +541,9 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					41217818C1680583607FD843 = {
+						TestTargetID = 3C282CAF101B02EA852E479D;
+					};
 					A425F235B5986E4656DD8A8F = {
 						TestTargetID = 8E7B383155AA2840971E1D41;
 					};
@@ -432,8 +582,10 @@
 			projectRoot = "";
 			targets = (
 				8E7B383155AA2840971E1D41 /* VettID */,
+				3C282CAF101B02EA852E479D /* VettIDDevStack */,
 				A3B8A0394F811245DD7737EA /* VettIDTests */,
 				A425F235B5986E4656DD8A8F /* VettIDAppUITests */,
+				41217818C1680583607FD843 /* VettIDDevStackUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -465,6 +617,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		9586AA4DC4A37B37D1543B62 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2531D1F4F006A6465CB52D7B /* DevStackTests.swift in Sources */,
+				6085BB158AB86E6AEA865472 /* VaultUITestCase.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B1038337DBCBF916CFE2E0B5 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -486,15 +647,42 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C3224774852425774F1BA7BB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8216EC5366C9E37FFD6DCD23 /* AppComposition.swift in Sources */,
+				BB5A5073F54CB1B3491349D9 /* AppDelegate.swift in Sources */,
+				1FD9FB481111790D7463CEB0 /* AppEnvironment.swift in Sources */,
+				4458E614973C93BE7AB0089C /* AppLockGate.swift in Sources */,
+				AE4084C7B01741C3B0050BA5 /* AppWipeTargets.swift in Sources */,
+				154378D4143FFC3C81EFB544 /* CanaryManifestFiles.swift in Sources */,
+				E077D76E9DFBC0587596D6B0 /* DebugCatalog.swift in Sources */,
+				952798E17BA70F638B502377 /* DevStackWiring.swift in Sources */,
+				B2675BEF10177187CB6F6F9E /* GalleryScreen.swift in Sources */,
+				8CC360517FEF53D1466BF68E /* InstalledFromBuild.swift in Sources */,
+				4A0056FD27140A0BEDA20DEC /* NoSecureHardware.swift in Sources */,
+				3BDC50D1B60B3C9D8BFF60CF /* OnboardingCatalog.swift in Sources */,
+				0E4B145E2620EAAB01C19410 /* OnboardingCatalogScreen.swift in Sources */,
+				65086DDF33F9D356B8748B74 /* OpenedLinks.swift in Sources */,
+				24E37CE5B67EBE2441B36FFE /* OwnerCheckCatalog.swift in Sources */,
+				4790B24DD7B2AF69BB6923F1 /* SecureHardware.swift in Sources */,
+				8A1371DFC969D905FB2C31BA /* SettingsFlowsCatalog.swift in Sources */,
+				C0637A00FD1447A4A4C583B6 /* ShellCatalog.swift in Sources */,
+				57980359429661BC8F1B2A55 /* UnlockCatalog.swift in Sources */,
+				1CC08682E5472A741A8D68B7 /* VettIDApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		EB394C62EAB9D144D84D74AE /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				91EB5DA7D60B53E6CE50FCE0 /* GalleryScreenshots.swift in Sources */,
 				27B46D91B919FFCEA4228483 /* StagingTests+Connect.swift in Sources */,
-				6FFEE77FE1828A19B428CCAB /* StagingTests+Helpers.swift in Sources */,
 				0E4BA253AB8E8655B797C7F6 /* StagingTests+Messages.swift in Sources */,
 				16CC7F1AD834271FC0C79440 /* StagingTests.swift in Sources */,
+				34D5AD803AA496D57470232B /* VaultUITestCase.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -511,9 +699,32 @@
 			target = 8E7B383155AA2840971E1D41 /* VettID */;
 			targetProxy = 99D90074BDA393946B77FB59 /* PBXContainerItemProxy */;
 		};
+		EBF4869E17C417A985929E64 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 3C282CAF101B02EA852E479D /* VettIDDevStack */;
+			targetProxy = 8BAA20917CF5A7F2DE33FBC5 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		021A7B7731CF9AA27D1660C0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.vettid.app.devstack.ui.uitests;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = iphonesimulator;
+				SUPPORTS_MACCATALYST = NO;
+				TEST_TARGET_NAME = VettIDDevStack;
+			};
+			name = Release;
+		};
 		0E5CC226119D9A2410E7E86A /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -529,6 +740,35 @@
 				TEST_TARGET_NAME = VettID;
 			};
 			name = Debug;
+		};
+		0E7217B6D310F76F145E12ED /* Staging */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = AppDevStack/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "$(VETTID_DISPLAY_NAME)";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera only to scan QR codes, such as your setup code or an invitation. Nothing is recorded.";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 2.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.vettid.app.devstack.ui;
+				PRODUCT_NAME = VettIDDevStack;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = iphonesimulator;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+			};
+			name = Staging;
 		};
 		1742EEC4E9BDFA0EC50CB122 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -553,6 +793,35 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "$(VETTID_APP_BUNDLE_ID)";
 				PRODUCT_NAME = VettID;
 				SDKROOT = iphoneos;
+			};
+			name = Release;
+		};
+		1F3F5FBDFE17797B5F06A521 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = AppDevStack/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "$(VETTID_DISPLAY_NAME)";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera only to scan QR codes, such as your setup code or an invitation. Nothing is recorded.";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 2.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.vettid.app.devstack.ui;
+				PRODUCT_NAME = VettIDDevStack;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = iphonesimulator;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 			};
 			name = Release;
 		};
@@ -617,6 +886,36 @@
 			};
 			name = DevStack;
 		};
+		3B28DE23EFA5E8015D03AAC6 /* DevStack */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = AppDevStack/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "$(VETTID_DISPLAY_NAME)";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera only to scan QR codes, such as your setup code or an invitation. Nothing is recorded.";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 2.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.vettid.app.devstack.ui;
+				PRODUCT_NAME = VettIDDevStack;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = iphonesimulator;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) VETTID_DEVSTACK_APP";
+			};
+			name = DevStack;
+		};
 		5DB232F05C901B60BCD29616 /* Staging */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -630,6 +929,24 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "$(VETTID_APP_BUNDLE_ID).uitests";
 				SDKROOT = iphoneos;
 				TEST_TARGET_NAME = VettID;
+			};
+			name = Staging;
+		};
+		61959FE080193428E27D5CF1 /* Staging */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.vettid.app.devstack.ui.uitests;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = iphonesimulator;
+				SUPPORTS_MACCATALYST = NO;
+				TEST_TARGET_NAME = VettIDDevStack;
 			};
 			name = Staging;
 		};
@@ -700,6 +1017,71 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "$(VETTID_APP_BUNDLE_ID).tests";
 				SDKROOT = iphoneos;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VettID.app/VettID";
+			};
+			name = Debug;
+		};
+		7D099354C9A29C14C9825164 /* DevStack */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.vettid.app.devstack.ui.uitests;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = iphonesimulator;
+				SUPPORTS_MACCATALYST = NO;
+				TEST_TARGET_NAME = VettIDDevStack;
+			};
+			name = DevStack;
+		};
+		9234947FBCD4F14843BD267E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.vettid.app.devstack.ui.uitests;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = iphonesimulator;
+				SUPPORTS_MACCATALYST = NO;
+				TEST_TARGET_NAME = VettIDDevStack;
+			};
+			name = Debug;
+		};
+		94968B6381DE14DDF541B3BC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = AppDevStack/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "$(VETTID_DISPLAY_NAME)";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera only to scan QR codes, such as your setup code or an invitation. Nothing is recorded.";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 2.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.vettid.app.devstack.ui;
+				PRODUCT_NAME = VettIDDevStack;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = iphonesimulator;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 			};
 			name = Debug;
 		};
@@ -990,6 +1372,17 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
+		3A3235C2965977DD280A7A05 /* Build configuration list for PBXNativeTarget "VettIDDevStack" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				94968B6381DE14DDF541B3BC /* Debug */,
+				3B28DE23EFA5E8015D03AAC6 /* DevStack */,
+				1F3F5FBDFE17797B5F06A521 /* Release */,
+				0E7217B6D310F76F145E12ED /* Staging */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		69DAD667CFF4EE7AD20329F1 /* Build configuration list for PBXNativeTarget "VettID" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -1008,6 +1401,17 @@
 				DF62750B17691EB5AB0C45AE /* DevStack */,
 				B2DD45A13E95580CCE093474 /* Release */,
 				5DB232F05C901B60BCD29616 /* Staging */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		D27C49723F5EDA071368A03E /* Build configuration list for PBXNativeTarget "VettIDDevStackUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9234947FBCD4F14843BD267E /* Debug */,
+				7D099354C9A29C14C9825164 /* DevStack */,
+				021A7B7731CF9AA27D1660C0 /* Release */,
+				61959FE080193428E27D5CF1 /* Staging */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
@@ -1093,9 +1497,29 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		00B2C3E2552616DC4B11AB58 /* VettIDKeys */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = VettIDKeys;
+		};
+		0C260A66FF726563F6333AFA /* VettIDUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = VettIDUI;
+		};
+		107C0901CAA734BF084319C3 /* VettIDShell */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = VettIDShell;
+		};
 		119A448A26B03C3DFE1408E4 /* VettIDMedia */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = VettIDMedia;
+		};
+		175F65451CA4BCACD57D04D5 /* VettIDMedia */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = VettIDMedia;
+		};
+		192F7580C9DB53918B812AF4 /* VettIDNotify */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = VettIDNotify;
 		};
 		2022889C73B639A3FEDD0CBE /* VettIDAltChan */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -1113,6 +1537,18 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = VettIDMessages;
 		};
+		3A78AA1376A65038AD0045E2 /* VettIDKeysTesting */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = VettIDKeysTesting;
+		};
+		468822D31A2BF6DFFEEBB639 /* VettIDCrypto */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = VettIDCrypto;
+		};
+		5A3EEF226DB58AF9D30CC799 /* VettIDAltChanTesting */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = VettIDAltChanTesting;
+		};
 		5E3CFB54BBE2282AAB5B06B5 /* VettIDUI */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = VettIDUI;
@@ -1121,6 +1557,14 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = VettIDSettings;
 		};
+		73264074A41C7BB3907652CB /* VettIDAttestation */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = VettIDAttestation;
+		};
+		77A776902039E904AFFB0F35 /* VettIDConnections */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = VettIDConnections;
+		};
 		7F7CDB0CA3D4891C7BC81EED /* VettIDKeys */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = VettIDKeys;
@@ -1128,6 +1572,10 @@
 		83E6F916B2AD81D983010440 /* VettIDAttestation */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = VettIDAttestation;
+		};
+		84E4992E2D7CA65376E82527 /* VettIDData */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = VettIDData;
 		};
 		91A37563B26A13BAAC113A58 /* VettIDOnboarding */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -1141,6 +1589,14 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = VettIDVault;
 		};
+		BBA89661E15D4F545B0FEB9B /* VettIDAltChan */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = VettIDAltChan;
+		};
+		BCC442EBCEF6BFA141997796 /* VettIDRelay */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = VettIDRelay;
+		};
 		CB04C08D571D6A92DD0A5FB1 /* VettIDNotify */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = VettIDNotify;
@@ -1153,9 +1609,25 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = VettIDData;
 		};
+		DDE00D69B69BBE5573334D60 /* VettIDOnboarding */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = VettIDOnboarding;
+		};
+		E159DF0BD64E08CD3DE1DD88 /* VettIDMessages */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = VettIDMessages;
+		};
+		F31EB6E3CE01034FEB597AE6 /* VettIDVault */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = VettIDVault;
+		};
 		F62CD449BCA20CC8250CE063 /* VettIDShell */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = VettIDShell;
+		};
+		FC29162B7CA798AA95BE2B66 /* VettIDSettings */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = VettIDSettings;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

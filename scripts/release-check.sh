@@ -8,14 +8,20 @@
 #     VettIDDataTesting target, VettIDKeys's VettIDKeysTesting target with
 #     the software phone key, VettIDAltChan's VettIDAltChanTesting target
 #     with the TEST iOS attester and the dev stack's helpers, the TEST
-#     attester's App ID),
+#     attester's App ID, the VettIDDevStack app's wiring and the symbols of
+#     the TEST attester and the software keys),
 #   - a dev-stack address or a debug-only tool,
 #   - the other environment's hosts,
 #   - the VAULT-MESSAGING §16 TEST manifest key (a canary manifest is
 #     accepted only under the keys the build pins),
 # or lacks its own account host, the Secure Enclave phone key or the JSON
 # document type a canary manifest is opened with, or has another bundle id,
-# or is not signed for App Attest's production environment.
+# or is not signed for App Attest's production environment. The archives
+# must hold the VettID app alone; the VettID and VettIDStagingUITests
+# schemes must not name the VettIDDevStack app or its UI tests (IOS-PLAN
+# §8 exit I1 (a): built by its own scheme, in the DevStack configuration);
+# the VettID target must link no `*Testing` product and compile no file of
+# AppDevStack/; and the VettIDDevStack targets must be simulator only.
 #
 #   scripts/release-check.sh              build both, check both
 #   scripts/release-check.sh --self-test  also plant a TEST string and a
@@ -33,7 +39,10 @@ SELF_TEST=0
 # The deterministic randomness hook of VettIDCrypto (debug builds only), VettIDDataTesting's fake, VettIDKeysTesting's
 # software keys (IOS-PLAN §6.3: no software phone key in Release or Staging) and VettIDAltChanTesting's TEST iOS
 # attester (IOS-PLAN §6.2) carry "VETTID TEST ONLY".
-TEST_MARKERS=("VettIDTesting" "VettIDDataTesting" "VettIDKeysTesting" "VettIDAltChanTesting" "TESTTEAM00" "VETTID TEST ONLY")
+# The VettIDDevStack app's wiring (AppDevStack/DevStackWiring.swift), its launch environment's names, and the type names of
+# the TEST attester and the software keys it composes are refused by name too.
+TEST_MARKERS=("VettIDTesting" "VettIDDataTesting" "VettIDKeysTesting" "VettIDAltChanTesting" "TESTTEAM00" "VETTID TEST ONLY"
+  "DevStackWiring" "VETTID_DEVSTACK" "TestIOSAttester" "SoftwareAppKeyStore" "SoftwarePhoneSecretSource")
 # "Scan: another environment", "Keys gone, earlier keys to try", "Held: messages and a call waiting" and "Drawer open"
 # are titles of the onboarding, unlock, owner-check and shell screen catalogs (App/Debug, debug builds only); "Xcode
 # (development)" is the development builds' "Installed from" line (IOS-PLAN ID15, App/InstalledFromBuild.swift).
@@ -127,6 +136,83 @@ check_staging() {
 
 app_of() { echo "${OUT}/$1.xcarchive/Products/Applications/VettID.app"; }
 
+# An archive holds the VettID app alone: never the VettIDDevStack app (SKIP_INSTALL, and not in the VettID scheme).
+check_archive_products() {
+  local config=$1 products
+  products=$(find "${OUT}/${config}.xcarchive/Products" -mindepth 1 -maxdepth 3 -name '*.app' -exec basename {} \; | sort | tr '\n' ' ')
+  [[ "${products}" == "VettID.app " ]] || { echo "${config} archive: apps '${products}', expected VettID.app alone" >&2; return 1; }
+  echo "${config} archive: VettID.app alone"
+}
+
+# The package products the VettID app links: exactly these (one per shipping package of project.yml).
+APP_PRODUCTS="VettIDCrypto VettIDAttestation VettIDRelay VettIDAltChan VettIDVault VettIDKeys VettIDData VettIDMedia
+VettIDNotify VettIDUI VettIDOnboarding VettIDSettings VettIDShell VettIDConnections VettIDMessages"
+
+# The VettID app target (whatever the scheme) links exactly APP_PRODUCTS (each product id resolved to its productName)
+# and compiles no file of AppDevStack/, read from the project file: its package products and its Sources phase.
+check_app_target() {
+  local pbxproj=$1
+  python3 - "${pbxproj}" AppDevStack "${APP_PRODUCTS}" <<'PY'
+import os, re, sys
+text = open(sys.argv[1]).read()
+devstack = {f for f in os.listdir(sys.argv[2]) if f.endswith(".swift")}
+allowed = set(sys.argv[3].split())
+m = re.search(r"\n\t\t(\w+) /\* VettID \*/ = \{\n\t\t\tisa = PBXNativeTarget;(.*?)\n\t\t\};", text, re.S)
+if not m:
+    sys.exit("no VettID target in the project file")
+target = m.group(2)
+def listed(key, block):
+    l = re.search(r"\t" + key + r" = \((.*?)\);", block, re.S)
+    return re.findall(r"(\w+) /\* (.*?) \*/", l.group(1)) if l else []
+def product(pid):
+    d = re.search(r"\n\t\t" + pid + r" /\* .*? \*/ = \{\n\t\t\tisa = XCSwiftPackageProductDependency;(.*?)\n\t\t\};", text, re.S)
+    n = re.search(r"\n\t\t\tproductName = \"?([^\";]+)\"?;", d.group(1)) if d else None
+    return n.group(1) if n else "<unresolved " + pid + ">"
+products = [product(pid) for pid, _ in listed("packageProductDependencies", target)]
+phases = [i for i, name in listed("buildPhases", target) if name == "Sources"]
+if not products or len(phases) != 1:
+    sys.exit("the VettID target's package products or Sources phase not found")
+phase = re.search(r"\n\t\t" + phases[0] + r" /\* Sources \*/ = \{(.*?)\n\t\t\};", text, re.S).group(1)
+sources = [re.sub(r" in Sources$", "", name) for _, name in listed("files", phase)]
+if not sources:
+    sys.exit("the VettID target's Sources phase is empty")
+if set(products) != allowed or len(products) != len(allowed):
+    sys.exit("the VettID target links " + ", ".join(sorted(set(products) ^ allowed)) + " against the allowlist")
+bad = [f for f in sources if f in devstack]
+if bad:
+    sys.exit("the VettID target compiles TEST-only " + ", ".join(bad))
+print(f"VettID target: the {len(products)} allowed package products, {len(sources)} sources, none TEST-only")
+PY
+}
+
+# The VettIDDevStack app and its UI tests are built for the simulator only: never an iPhone, a Mac or a headset.
+check_devstack_platforms() {
+  local target settings
+  for target in VettIDDevStack VettIDDevStackUITests; do
+    settings=$(xcodebuild -showBuildSettings -project VettID.xcodeproj -target "${target}" -configuration DevStack 2>/dev/null)
+    grep -qE '^ *SUPPORTED_PLATFORMS = iphonesimulator$' <<<"${settings}" ||
+      { echo "${target}: SUPPORTED_PLATFORMS is not iphonesimulator alone" >&2; return 1; }
+    grep -qE '^ *SUPPORTS_MACCATALYST = NO$' <<<"${settings}" ||
+      { echo "${target}: SUPPORTS_MACCATALYST is not NO" >&2; return 1; }
+  done
+  echo "VettIDDevStack, VettIDDevStackUITests: simulator only"
+}
+
+# The schemes that archive Release and Staging never build the VettIDDevStack app or its UI tests.
+SHIPPING_SCHEMES=(VettID VettIDStagingUITests)
+check_schemes() {
+  local scheme file
+  for scheme in "${SHIPPING_SCHEMES[@]}"; do
+    file="VettID.xcodeproj/xcshareddata/xcschemes/${scheme}.xcscheme"
+    [[ -f "${file}" ]] || { echo "no scheme ${scheme}" >&2; return 1; }
+    if grep -qF "VettIDDevStack" "${file}"; then
+      echo "the ${scheme} scheme names the VettIDDevStack app or its UI tests" >&2
+      return 1
+    fi
+  done
+  echo "schemes ${SHIPPING_SCHEMES[*]}: no VettIDDevStack target"
+}
+
 # The archives are unsigned, so their entitlements are checked at the source: Release and Staging sign with the
 # production App Attest environment (IOS-PLAN §6.2; the vault accepts only it).
 check_entitlements_file() {
@@ -181,12 +267,17 @@ check_package_hooks() {
 }
 
 check_package_hooks VettIDCrypto "VETTID TEST ONLY"
+check_schemes
+check_app_target VettID.xcodeproj/project.pbxproj
+check_devstack_platforms
 check_entitlements Release
 check_entitlements Staging
 
 rm -rf "${OUT}/Release.xcarchive" "${OUT}/Staging.xcarchive"
 archive Release
 archive Staging
+check_archive_products Release
+check_archive_products Staging
 check_release "$(app_of Release)"
 check_staging "$(app_of Staging)"
 
@@ -232,6 +323,13 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
   plant Staging check_staging "VettIDAltChanTesting"
   plant Staging check_staging "VETTID TEST ONLY: the TEST App Attest attester"
   plant Release check_release "VETTID TEST ONLY: the local dev stack's helpers"
+  plant Release check_release "VETTID TEST ONLY: the dev stack app's wiring"
+  plant Staging check_staging "VETTID TEST ONLY: the dev stack app's wiring"
+  plant Release check_release "DevStackWiring"
+  plant Staging check_staging "VETTID_DEVSTACK_NITRO_ROOT"
+  plant Release check_release "TestIOSAttester"
+  plant Staging check_staging "SoftwareAppKeyStore"
+  plant Release check_release "SoftwarePhoneSecretSource"
   plant Release check_release "account.staging.vettid.org"
   plant Release check_release "Scan: another environment"
   plant Staging check_staging "Scan: another environment"
@@ -256,6 +354,46 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
     fi
   done
   echo "self-test: the entitlement check refuses the development environment and a missing file"
+  # An archive that also holds the VettIDDevStack app, and a shipping scheme that names it, must be refused.
+  extra="${OUT}/Release.xcarchive/Products/Applications/VettIDDevStack.app"
+  mkdir -p "${extra}"
+  if check_archive_products Release >/dev/null 2>&1; then
+    rm -rf "${extra}"
+    echo "self-test FAILED: the archive check accepted an archive with VettIDDevStack.app" >&2
+    exit 1
+  fi
+  rm -rf "${extra}"
+  echo "self-test: the archive check refuses an archive with VettIDDevStack.app"
+  planted_schemes="${OUT}/planted/schemes"
+  rm -rf "${planted_schemes}"
+  mkdir -p "${planted_schemes}"
+  cp VettID.xcodeproj/xcshareddata/xcschemes/VettID.xcscheme "${planted_schemes}/"
+  if (
+    cd "${planted_schemes}" && mkdir -p VettID.xcodeproj/xcshareddata/xcschemes &&
+      cp VettID.xcscheme VettID.xcodeproj/xcshareddata/xcschemes/ &&
+      cp VettID.xcscheme VettID.xcodeproj/xcshareddata/xcschemes/VettIDStagingUITests.xcscheme &&
+      printf '%s\n' '<BuildableReference BlueprintName = "VettIDDevStack">' >>VettID.xcodeproj/xcshareddata/xcschemes/VettID.xcscheme &&
+      check_schemes
+  ) >/dev/null 2>&1; then
+    echo "self-test FAILED: the scheme check accepted a VettID scheme naming VettIDDevStack" >&2
+    exit 1
+  fi
+  echo "self-test: the scheme check refuses a shipping scheme naming VettIDDevStack"
+  # A VettID target that links a product off the allowlist (a TEST one), or compiles the dev stack wiring, must be refused.
+  planted_pbx="${OUT}/planted/project.pbxproj"
+  for swap in "s|productName = VettIDKeys;|productName = VettIDKeysTesting;|" \
+    "s|/\* AppDelegate.swift in Sources \*/|/* DevStackWiring.swift in Sources */|"; do
+    sed "${swap}" VettID.xcodeproj/project.pbxproj >"${planted_pbx}"
+    if cmp -s "${planted_pbx}" VettID.xcodeproj/project.pbxproj; then
+      echo "self-test FAILED: '${swap}' changed nothing in the project file" >&2
+      exit 1
+    fi
+    if check_app_target "${planted_pbx}" >/dev/null 2>&1; then
+      echo "self-test FAILED: the target check accepted a project file after '${swap}'" >&2
+      exit 1
+    fi
+  done
+  echo "self-test: the target check refuses a VettID target with a TEST product or the dev stack wiring"
   # A required string removed (renamed in place, same length) from a copy of each app must fail the check.
   unplant() {
     local config=$1 checker=$2 required=$3

@@ -8,8 +8,9 @@ import VettIDKeys
 /// your vault's keys in its secure hardware." (``FailureKind/hardwareKeys``), before anything is made or sent
 /// (IOS-PLAN §6.2, §6.3). No software key is linked into any build of the app (IOS-PLAN §6.3: never into Release or
 /// Staging; XcodeGen links a package product for every configuration of a target alike, so Debug and DevStack refuse
-/// too). The simulator's dev stack will use VettIDAltChanTesting's TEST iOS attester and VettIDKeysTesting's software
-/// keys once an app target of its own, built only in the DevStack configuration, links them.
+/// too). On the simulator's dev stack, the VettIDDevStack app (its own target, built only in the DevStack configuration)
+/// composes VettIDAltChanTesting's TEST iOS attester and VettIDKeysTesting's software keys instead
+/// (AppDevStack/DevStackWiring.swift).
 struct NoSecureHardware: AppKeyStore, SeedWrapKeySource, PhoneSecretSource, Attester {
     /// One phone key source serves one records file (``PhoneSecretSource``): the app's own, unless a test names another.
     let sourceID: String
