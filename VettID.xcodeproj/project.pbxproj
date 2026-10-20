@@ -14,6 +14,7 @@
 		16CC7F1AD834271FC0C79440 /* StagingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A34C0ED8CB57521C8F3EF6D6 /* StagingTests.swift */; };
 		23443E7E900490A2D4B5AE6E /* VettIDConnections in Frameworks */ = {isa = PBXBuildFile; productRef = 969025AEB4FA66964C8A134E /* VettIDConnections */; };
 		23564D229DBA01C44595AF8A /* VettIDUI in Frameworks */ = {isa = PBXBuildFile; productRef = 5E3CFB54BBE2282AAB5B06B5 /* VettIDUI */; };
+		27B46D91B919FFCEA4228483 /* StagingTests+Connect.swift in Sources */ = {isa = PBXBuildFile; fileRef = A84B69E505CEC2E1129233E9 /* StagingTests+Connect.swift */; };
 		2B7C58D7CD92999F58FB865D /* SettingsFlowsCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93AFC9E49CAEEB5D0ABC86DF /* SettingsFlowsCatalog.swift */; };
 		2DB59791D7D6903F1DE6E8CB /* VettIDAltChan in Frameworks */ = {isa = PBXBuildFile; productRef = 2022889C73B639A3FEDD0CBE /* VettIDAltChan */; };
 		2ED9F7D436AE5EBE6EC6A918 /* VettIDCrypto in Frameworks */ = {isa = PBXBuildFile; productRef = 2628100D3340AAA9869F33DF /* VettIDCrypto */; };
@@ -114,6 +115,7 @@
 		9B4477541F907F6E92A131BB /* KeychainTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainTests.swift; sourceTree = "<group>"; };
 		9D2B5CA030BC6FA62B3EEF7D /* AppAttestDeviceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAttestDeviceTests.swift; sourceTree = "<group>"; };
 		A34C0ED8CB57521C8F3EF6D6 /* StagingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StagingTests.swift; sourceTree = "<group>"; };
+		A84B69E505CEC2E1129233E9 /* StagingTests+Connect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StagingTests+Connect.swift"; sourceTree = "<group>"; };
 		A95A3D47EF72656899839626 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		ABB2FC11CCF6AAD6F6399524 /* OwnerCheckCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OwnerCheckCatalog.swift; sourceTree = "<group>"; };
 		ABC062C8E50CF3A935F64F87 /* OnboardingCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingCatalogTests.swift; sourceTree = "<group>"; };
@@ -188,6 +190,7 @@
 			children = (
 				CEAFD630960C3CA7D7885DEB /* GalleryScreenshots.swift */,
 				A34C0ED8CB57521C8F3EF6D6 /* StagingTests.swift */,
+				A84B69E505CEC2E1129233E9 /* StagingTests+Connect.swift */,
 				0AD7F60FD2F81A1D30A5A802 /* StagingTests+Helpers.swift */,
 				73029356B90552AC0C29EE9F /* StagingUITests.xctestplan */,
 			);
@@ -479,6 +482,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				91EB5DA7D60B53E6CE50FCE0 /* GalleryScreenshots.swift in Sources */,
+				27B46D91B919FFCEA4228483 /* StagingTests+Connect.swift in Sources */,
 				6FFEE77FE1828A19B428CCAB /* StagingTests+Helpers.swift in Sources */,
 				16CC7F1AD834271FC0C79440 /* StagingTests.swift in Sources */,
 			);

@@ -7,14 +7,16 @@ import XCTest
 /// - `VETTID_STAGING_EMAIL`: the test member's address;
 /// - `VETTID_STAGING_CODE`: the 8-character code from the account site's "Enroll a phone" (it lives 5 minutes);
 /// - `VETTID_STAGING_PIN`: the vault PIN;
-/// - `VETTID_STAGING_PASSWORD`: the credential password.
+/// - `VETTID_STAGING_PASSWORD`: the credential password;
+/// - `VETTID_STAGING_LINK`: another member's invitation link, for ``testStagingConnectAccept``;
+/// - `VETTID_STAGING_SAFETY_CODE`: optional, the safety code ``testStagingConnectApprove`` must find.
 ///
 /// A test whose inputs are missing is skipped, so CI and every other run never execute it. The inputs are never printed
 /// and no failure message carries them (XCTest's own activity log names what is typed and tapped: the script redacts its
 /// output and keeps the result bundle private).
 final class StagingTests: XCTestCase {
     /// Network steps: a redeem, an unlock, a lock.
-    private static let network: TimeInterval = 90
+    static let network: TimeInterval = 90
     /// Enrollment: the vault's enclave is made and attested, then the credential.
     private static let enrollment: TimeInterval = 600
     /// What the test of a wrong PIN appends to the current password to make its new one (never sent with the right PIN).
@@ -30,7 +32,7 @@ final class StagingTests: XCTestCase {
         "error", "scan_refused", "pin_error", "pin_confirm_error", "credential_pin_error", "unlock_failed", "unlock_refused",
         "unlock_preflight_error", "unlock_pin_error", "unlock_not_recognised", "unlock_stuck", "unlock_recover_only",
         "unlock_signer_refused", "unlock_owner_check_locked", "unlock_lock_unconfirmed", "move_back_failed",
-        "owner_check_failed", "owner_check_pin_error",
+        "owner_check_failed", "owner_check_pin_error", "failure",
     ]
 
     override func setUp() {
@@ -280,12 +282,28 @@ final class StagingTests: XCTestCase {
         lock(app)
     }
 
+    /// I2.1 on staging (VAULT-MESSAGING §6.4): Connections → add → "Paste a link" with another member's invitation
+    /// (`VETTID_STAGING_LINK`), "Connect", and the compare screen; its safety code is reported (an attachment named
+    /// `safety-code` and a `SAFETY_CODE:` line) for the other member to compare. Nothing is approved; the vault is locked.
+    @MainActor
+    func testStagingConnectAccept() throws {
+        try connectAccept()
+    }
+
+    /// The other side of ``testStagingConnectAccept``: Connections → the request card, its safety code checked against
+    /// `VETTID_STAGING_SAFETY_CODE` when given (a different code fails, sending nothing), "Approve", and the outcome
+    /// reported on a `CONNECT_STATE:` line. Then the vault is locked.
+    @MainActor
+    func testStagingConnectApprove() throws {
+        try connectApprove()
+    }
+
     // MARK: - Steps
 
     /// The open app, from whatever it shows at the start (unlocked with the PIN, and the password when the owner check is
     /// due); false, after the failure, when there is no vault.
     @MainActor
-    private func openAtStart(_ app: XCUIApplication, pin: String, password: String) -> Bool {
+    func openAtStart(_ app: XCUIApplication, pin: String, password: String) -> Bool {
         switch waitForAny(app, ["unlock", "app_shell", "owner_check", "welcome_recover"], timeout: 60) {
         case "app_shell": break
         case "owner_check": ownerCheck(app, pin: pin, password: password)
@@ -389,7 +407,7 @@ final class StagingTests: XCTestCase {
 
     /// Scrolls the screen until [element] can be tapped; false when it never can.
     @MainActor
-    private func reveal(_ app: XCUIApplication, _ element: XCUIElement) -> Bool {
+    func reveal(_ app: XCUIApplication, _ element: XCUIElement) -> Bool {
         if !element.waitForExistence(timeout: Self.network) { return false }
         for _ in 0..<6 where !element.isHittable {
             app.scrollViews.firstMatch.swipeUp(velocity: .slow)
@@ -485,7 +503,7 @@ final class StagingTests: XCTestCase {
 
     /// "Lock vault" from the account sheet, then the unlock screen once the vault has confirmed the lock.
     @MainActor
-    private func lock(_ app: XCUIApplication) {
+    func lock(_ app: XCUIApplication) {
         expect(app, "app_shell", timeout: Self.network)
         // From Settings or a screen pushed over it: back arrows up to the screen with the account button.
         let account = app.buttons["top_bar_account"]
