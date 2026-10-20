@@ -30,6 +30,12 @@ extension FakeVaultService {
     /// The types a frozen credential still accepts; in state `rotation_required` also ``allowedRotation``.
     static let allowedFrozen: Set = ["credential.utk.get", "credential.version", "credential.lock", "credential.alarm.confirm"]
     static let allowedRotation: Set = ["credential.get", "credential.ack", "credential.rotate"]
+    /// vettid-vault's `holderOnly` (§3.5.9), with `credential.reset` (the holder's only): refused `forbidden` to an app
+    /// that is not the holder.
+    static let holderTypes: Set = [
+        "credential.get", "credential.ack", "credential.alarm.confirm", "device.transfer.create", "device.transfer.reject",
+        "vault.delete", typeOwnerCheck, "account.name.set", "pin.change", "vault.secret.renew", "credential.reset",
+    ]
     /// The credential feature's types the fake handles (the alarm's gate applies to them).
     static let credentialTypes: Set = [
         "credential.get", "credential.ack", "credential.unlock", "credential.rotate", "credential.password.change", "credential.reset",

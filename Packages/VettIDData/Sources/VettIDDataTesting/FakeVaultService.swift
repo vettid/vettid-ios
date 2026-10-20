@@ -95,6 +95,8 @@ public final class FakeVaultService: @unchecked Sendable {
     var responder: Responder?
     var utks: [String: KemPrivateKey] = [:]
     var hasCredential = false
+    /// This phone is no longer the credential's holder (``notHolder``).
+    var notHolderValue = false
     var vaultMade = false
     var failNextTypes: Set<String> = []
     /// A vault.enrolled held back until the next enrollment request (``EnrollAnswer/answerLostEnrolledLate``).
@@ -265,6 +267,16 @@ public final class FakeVaultService: @unchecked Sendable {
     /// The next request of [type] in the session is answered `retry` (nothing done): the app stops there, as if it
     /// crashed before the vault acted.
     public func failNext(_ type: String) { locked { _ = failNextTypes.insert(type) } }
+
+    /// The UTKs issued and not spent yet (the vault's pool for this phone, §3.5.4).
+    public var outstandingUTKs: Int { locked { utks.count } }
+
+    /// This phone is no longer the credential's holder (another app holds it): the holder's types are refused
+    /// `forbidden` before the UTK is spent, as vettid-vault's `gate` does (§3.5.9).
+    public var notHolder: Bool {
+        get { locked { notHolderValue } }
+        set { locked { notHolderValue = newValue } }
+    }
 
     /// The vault already holds this phone's credential (a `credential.create` whose answer was lost): the next create is
     /// answered `exists`.

@@ -16,6 +16,33 @@ struct CredentialOps: Sendable {
     /// §3.5.3: the blob sent is not the vault's latest (the holder's own retry, after a lost answer).
     static let codeStaleCredential = "stale_credential"
 
+    /// The refusals vettid-vault answers before it spends the UTK (§3.5.4), on every path that takes one; the UTK of a
+    /// refusal among them goes back to the pool (``returnsUTK(onRefusal:)``). Pending the vault's UTK rule (a vault that
+    /// burns the UTK before any refusal, marks the refusals that left it unspent, or lets `credential.utk.get` resync the
+    /// pool would replace this list). Derived from vettid-vault's order of checks:
+    /// - `unsupported_type`, `session_required`, `owner_check_required`, `forbidden`: `vault/inbound.go` (the dispatch,
+    ///   before any handler runs);
+    /// - `forbidden`: `features/credential/credential.go` `Handle` (a recovering app, `credential.recover`) and `gate`
+    ///   (the holder's types, `credential.reset`), `Operate` (an app only), `pinonly.go` `holderGate` (`audit.export`),
+    ///   `features/items/critical.go` `appOnly`; never after `spendNeed`;
+    /// - `signer_unconfirmed`: `credential.go` `Handle` (`device.transfer.approve`, `vault/signer.go`
+    ///   `ConfirmTransferSigner`, §6.7.1 step 3).
+    ///
+    /// Not returned, as answered after the spend on some path: `credential_required` (before it in `inbound.go`, after it
+    /// in `checkBlob`), `credential_frozen` and `rotation_required` (before it in `gate`, `Operate` and `holderGate`,
+    /// after it from `clone`), `bad_request` and `not_found` (the envelope or the request before it, the sealed payload
+    /// or the export's shape after it); and answered after the spend only: `stale_credential` and `backoff` (`checkBlob`,
+    /// `openChecked`), `bad_password`, `bad_pin`, `exists`, `weak_password`, `utk_invalid` (`spendNeed`) and any other
+    /// code.
+    static let utkUnspentCodes: Set<String> = [
+        "unsupported_type", "session_required", "owner_check_required", "forbidden", codeSignerUnconfirmed,
+    ]
+
+    /// Whether a refusal with [code] left its UTK unspent, so that it goes back to the pool (``utkUnspentCodes``).
+    static func returnsUTK(onRefusal code: String?) -> Bool {
+        code.map(utkUnspentCodes.contains) ?? false
+    }
+
     let device: VaultDevice
     let normalizePasswords: @Sendable () -> Bool
     /// ``VaultApi/credentialGate``: called with whether the operation's payload carries the PIN.
@@ -203,10 +230,11 @@ struct CredentialOps: Sendable {
     }
 
     /// The answer of a sealed operation: its blob and UTKs kept, or its refusal as ``VaultOpError`` (a UTK refused
-    /// before it was spent goes back to the pool).
+    /// before it was spent goes back to the pool, ``returnsUTK(onRefusal:)``).
     private func answered(_ type: String, utk: UtkRecord?, _ r: VaultMessage) async throws -> [UInt8] {
         guard r.inner.status == Inner.statusOK else {
-            if let utk, r.inner.error?.code == Self.codeSignerUnconfirmed { try await device.returnUTK(utk) }
+            // A UTK that cannot be stored back is lost, never the refusal itself (a change's would become unanswered).
+            if let utk, Self.returnsUTK(onRefusal: r.inner.error?.code) { try? await device.returnUTK(utk) }
             // The error's body: `weak_password` carries `reason` (§11.14.7), `backoff` its `retry_after` (§10.1).
             throw VaultOpError(
                 type: type, code: r.inner.error?.code ?? "error", detail: r.inner.error?.message ?? "",

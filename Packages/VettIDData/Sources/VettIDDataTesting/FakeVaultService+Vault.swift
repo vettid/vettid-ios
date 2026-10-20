@@ -136,7 +136,9 @@ extension FakeVaultService {
         // §3.6.3: the owner check's clock before each batch, then its gate on the app.
         try ownerCheckTick()
         if !holdAllows(m.type) { return try reply(m.type, "{}", re: m.id, error: "owner_check_required") }
-        // §3.5.9: a clone alarm holds the credential operations, before the UTK is spent.
+        // §3.5.9: the holder's types to another app, then a clone alarm holding the credential operations, before the
+        // UTK is spent (vettid-vault's `gate`).
+        if notHolderValue, Self.holderTypes.contains(m.type) { return try reply(m.type, "{}", re: m.id, error: "forbidden") }
         if let freeze = alarmRefusal(m.type) { return try reply(m.type, "{}", re: m.id, error: freeze) }
         switch m.type {
         case "credential.utk.get": try reply(m.type, #"{"utks":\#(try issueUTKs(3))}"#, re: m.id)
@@ -188,13 +190,14 @@ extension FakeVaultService {
         try reply(m.type, #"{"version":\#(settingsVersion)}"#, re: m.id)
     }
 
-    /// credential.create (§3.5.5; release R `sealed{pin, password}`, §11.14.9): `exists` once the vault has one; a weak
-    /// password when the test asked for it (§11.14.7). Callers hold ``cond``.
+    /// credential.create (§3.5.5; release R `sealed{pin, password}`, §11.14.9) in vettid-vault's order: the UTK spent,
+    /// then `exists` once the vault has one; a weak password when the test asked for it (§11.14.7). Callers hold
+    /// ``cond``.
     private func create(_ m: Inner, _ body: JsonObject) throws {
-        if hasCredential { return try reply(m.type, "{}", re: m.id, error: "exists") }
         let utk = try body.string("utk_id")
         guard let ltk = utks.removeValue(forKey: utk) else { return try reply(m.type, "{}", re: m.id, error: "utk_invalid") }
         let pt = try CredentialSeal.openPayload(ltk: ltk, vaultID: vaultID, utkID: utk, type: m.type, innerID: m.id, sealed: try body.base64("sealed"))
+        if hasCredential { return try reply(m.type, "{}", re: m.id, error: "exists") }
         let p = try StrictJson.parseObject(pt)
         if let reason = weakPasswordReason {
             weakPasswordReason = nil
