@@ -3,6 +3,7 @@ import Testing
 import VettIDCrypto
 @testable import VettIDData
 import VettIDDataTesting
+import VettIDVault
 
 /// Connecting end to end (VAULT-MESSAGING §6.4, §10.4, §10.4.1; IOS-PLAN §8 I2.1's acceptance: an invitation, the same
 /// safety code on both screens, both members approve): this phone against ``FakeVaultService``, which answers the
@@ -196,5 +197,36 @@ import VettIDDataTesting
         try phone.restart()
         try await m.refresh()
         #expect(c.peerDeclines.map(\.name) == ["Sam"])
+    }
+
+    /// Nothing the vault sends is taken into the lists while a lock is pending (as vettid-android): a request that
+    /// arrives between the lock and its confirmation is neither shown nor kept.
+    @Test func eventsWhileALockIsPendingAreNotTaken() async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.relayLockAnswer = .noAnswer
+        service.memberLockAnswer = .queued
+        try await m.lock()
+        #expect(m.lockPending)
+        let event = #"{"pending_id":"p1","sas":"042817","state":"pending","profile":{"first_name":"Alex","last_name":"Kim"}}"#
+        m.onEvent(VaultMessage(inner: Inner(id: Ulid.new(), type: "connection.request.pending", ts: Date(), body: Array(event.utf8))))
+        #expect(c.requests.isEmpty && c.connections.isEmpty && c.local.requestNames.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: phone.directory.appendingPathComponent(VaultFiles.connections).path))
+    }
+
+    /// The fake refuses what vettid-vault's `connection.update` refuses: members of the wrong type and the limits.
+    @Test func theFakeRefusesBadUpdatesAsTheVaultDoes() async throws {
+        defer { phone.close() }
+        try await setUp()
+        let id = try await connectByAccepting()
+        let api = try m.openApi(try await m.openSession())
+        for bad in [#""favorite":"yes""#, #""archived":1"#, #""tags":"family""#, #""tags":["Family"]"#, #""tags":["a","a"]"#,
+                    #""alias":"\#(String(repeating: "a", count: 129))""#, #""note":7"#, #""other":true"#] {
+            let body = Array(#"{"connection_id":"\#(id)","version":0,\#(bad)}"#.utf8)
+            await #expect(throws: VaultOpError.self, "\(bad)") { _ = try await api.device.op("connection.update", body: body) }
+        }
+        #expect(try await api.connectionUpdate(id, version: 0, change: ConnectionMetaChange(alias: "Mo", tags: ["family"])) == 1)
+        let got = try await api.connectionGet(id)
+        #expect(got.alias == "Mo" && got.tags == ["family"])
     }
 }

@@ -62,6 +62,8 @@ struct FakeSocial {
         var version: UInt64 = 0
         var favorite = false
         var archived = false
+        var alias = ""
+        var note = ""
         var tags: [String] = []
         var muted = false
         var paused = false
@@ -71,6 +73,8 @@ struct FakeSocial {
             var b = JsonBuilder().string("id", id).string("kind", "connection").string("state", "active").string("name", peer.name ?? "").base64("ik", peer.ik)
             if let profile { b = b.raw("profile", profile) }
             b = b.string("created_at", Timestamps.formatMillis(created)).uint("version", version)
+            if !alias.isEmpty { b = b.string("alias", alias) }
+            if !note.isEmpty { b = b.string("note", note) }
             if !tags.isEmpty { b = b.raw("tags", JsonBuilder.array(tags.map(JsonBuilder.quote))) }
             b = b.bool("favorite", favorite).bool("archived", archived)
             let asks = JsonBuilder().bool("muted", muted).bool("paused", paused).uint("cooldowns", UInt64(cooldowns))
@@ -157,7 +161,9 @@ extension FakeVaultService {
     private func inviteCreate(_ m: Inner, _ body: JsonObject) throws {
         guard let ttl = try? body.uint("ttl_seconds", min: 1, max: 30 * 86_400) else { return try reply(m.type, "{}", re: m.id, error: "bad_request") }
         guard ttl <= Self.relayInviteLimit else { return try reply(m.type, "{}", re: m.id, error: "ttl_not_allowed") }
-        let exp = Date(timeIntervalSince1970: (Date().timeIntervalSince1970 + Double(ttl)).rounded(.down))
+        // The bundle's exp is the open token's: the relay client backdates its iat by min(60 s, ttl/2) (vettid-vault
+        // `createInvite`, RELAY-PROTOCOL §5.2).
+        let exp = Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down) - Double(min(60, ttl / 2)) + Double(ttl))
         let inv = FakeSocial.Invite(id: Ulid.new(), exp: exp, remote: ttl > 600)
         social.invites[inv.id] = inv
         let link = try Self.inviteLink(relay: vaultRelay.baseURL, claimID: Self.claimID(), exp: exp)
@@ -241,15 +247,51 @@ extension FakeVaultService {
         return b.string("exp", Timestamps.formatMillis(r.exp)).raw("profile", r.peer.hsInitProfile).build()
     }
 
-    /// `connection.update` (vettid-vault `hConnUpdate`): against the current version (`conflict`), at least one member.
+    /// What `connection.update` changes, read as vettid-vault's `ParseMetaUpdate` does: `bad_request` for a member of the
+    /// wrong type, an alias above 128 bytes, a note above 1,024, more than 16 tags or one not `[a-z0-9_.-]{1,32}` or
+    /// repeated, and for no change at all.
+    struct MetaUpdate {
+        var alias: String?
+        var note: String?
+        var tags: [String]?
+        var favorite: Bool?
+        var archived: Bool?
+
+        init?(_ body: JsonObject) {
+            do {
+                alias = try body.optString("alias")
+                note = try body.optString("note")
+            } catch {
+                return nil
+            }
+            guard (alias?.utf8.count ?? 0) <= 128, (note?.utf8.count ?? 0) <= 1_024 else { return nil }
+            for (name, path) in [("favorite", \MetaUpdate.favorite), ("archived", \MetaUpdate.archived)] where body.has(name) {
+                guard let v = try? body.bool(name) else { return nil }
+                self[keyPath: path] = v
+            }
+            if body.has("tags") {
+                guard let arr = try? body.array("tags"), arr.count <= 16 else { return nil }
+                let tags = arr.compactMap { try? $0.asString() }
+                guard tags.count == arr.count, Set(tags).count == tags.count,
+                      tags.allSatisfy({ $0.wholeMatch(of: /[a-z0-9_.\-]{1,32}/) != nil }) else { return nil }
+                self.tags = tags
+            }
+            if alias == nil, note == nil, tags == nil, favorite == nil, archived == nil { return nil }
+        }
+    }
+
+    /// `connection.update` (vettid-vault `hConnUpdate`): the body checked first, then the connection and its version
+    /// (`conflict`).
     private func connectionUpdate(_ m: Inner, _ body: JsonObject) throws {
-        guard var c = social.connections[try body.string("connection_id")] else { return try reply(m.type, "{}", re: m.id, error: "not_found") }
-        guard try body.uint("version", min: 0, max: StrictJson.maxSafeInteger) == c.version else { return try reply(m.type, "{}", re: m.id, error: "conflict") }
-        let favorite = try? body.bool("favorite"), archived = try? body.bool("archived"), tags = try? body.array("tags")
-        guard favorite != nil || archived != nil || tags != nil || body.has("alias") || body.has("note") else { return try reply(m.type, "{}", re: m.id, error: "bad_request") }
-        if let favorite { c.favorite = favorite }
-        if let archived { c.archived = archived }
-        if let tags { c.tags = tags.compactMap { try? $0.asString() } }
+        guard let id = try? body.string("connection_id"), let version = try? body.uint("version", min: 0, max: StrictJson.maxSafeInteger),
+              let u = MetaUpdate(body) else { return try reply(m.type, "{}", re: m.id, error: "bad_request") }
+        guard var c = social.connections[id] else { return try reply(m.type, "{}", re: m.id, error: "not_found") }
+        guard version == c.version else { return try reply(m.type, "{}", re: m.id, error: "conflict") }
+        if let a = u.alias { c.alias = a }
+        if let n = u.note { c.note = n }
+        if let t = u.tags { c.tags = t }
+        if let f = u.favorite { c.favorite = f }
+        if let a = u.archived { c.archived = a }
         c.version += 1
         social.connections[c.id] = c
         try reply(m.type, #"{"version":\#(c.version)}"#, re: m.id)

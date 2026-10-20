@@ -134,8 +134,9 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
     }
 
     public func connection(_ id: String) async throws -> ConnectionInfo {
+        let g = generation
         let c = ConnectionParser.connection(try await guarded { try await ops().connectionGet(id) })
-        replace(c, addIfMissing: true)
+        if g == generation { replace(c, addIfMissing: true) }
         return c
     }
 
@@ -182,8 +183,9 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
         case .notAConnection: throw VaultFailure(.inviteNotConnection)
         case .invalid: throw VaultFailure(.inviteInvalid)
         }
+        let g = generation
         let r = try await guarded { try await accepted(link) }
-        if !r.exists { addWaiting(r) }
+        if !r.exists, g == generation { addWaiting(r) }
         return r
     }
 

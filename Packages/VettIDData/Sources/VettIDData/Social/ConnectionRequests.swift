@@ -142,11 +142,12 @@ public enum PendingConnection: Equatable, Sendable {
     }
 
     /// [newer] (a request event, or the list) over this one: an event never takes back what a decision already moved on
-    /// (approved stays approved), and an outgoing request keeps its name.
+    /// (approved stays approved), and an outgoing request keeps its name and its code.
     func merged(_ newer: PendingConnection) -> PendingConnection {
         let next = newer.with(state: max(state, newer.state), peerApproved: peerApproved || newer.peerApproved)
-        if case .outgoing(var n) = next, case .outgoing(let old) = self, n.name == nil {
-            n.name = old.name
+        if case .outgoing(var n) = next, case .outgoing(let old) = self {
+            n.name = n.name ?? old.name
+            n.sas = n.sas ?? old.sas
             return .outgoing(n)
         }
         return next

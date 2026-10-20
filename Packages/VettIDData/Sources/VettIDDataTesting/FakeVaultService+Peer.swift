@@ -86,15 +86,15 @@ extension FakeVaultService {
 
     // MARK: - The other member decides
 
-    /// The other member approved request [id] (`connection.approved` arrived): the connection is made if this member
-    /// approved too, else this phone is told (`sync.event{connection.request, state: "peer_approved"}`).
+    /// The other member approved request [id] (`connection.approved` arrived): this phone is told
+    /// (`sync.event{connection.request, state: "peer_approved"}`), and the connection is made if this member approved too.
     public func peerApproves(_ id: String) throws {
         try locked {
             guard var r = social.requests[id], r.sas != nil, !r.peerApproved else { return }
             r.peerApproved = true
             social.requests[id] = r
-            if r.approved { return try activate(r) }
             try reply("sync.event", requestSync(r, "peer_approved"))
+            if r.approved { try activate(r) }
         }
     }
 

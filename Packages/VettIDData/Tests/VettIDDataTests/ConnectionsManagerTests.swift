@@ -16,6 +16,9 @@ final class FakeConnectionOps: ConnectionOps, @unchecked Sendable {
     var failing: Set<String> = []
     /// Set: `connection.list` waits for it (a read still under way).
     var listGate: TestDeferred<Void>?
+    /// Set: `connection.invite.accept` and `connection.request.list` wait for theirs.
+    var acceptGate: TestDeferred<Void>?
+    var requestGate: TestDeferred<Void>?
     var limit: UInt64 = 86_400
     var invite = Invite(inviteID: "inv1", link: "", exp: "2026-10-04T12:10:00Z", remote: false)
     var accepted = AcceptedInvite(connectionID: "c-new", state: "waiting", remote: false, exp: "2026-10-12T12:00:00.000Z", name: "Morgan")
@@ -37,12 +40,20 @@ final class FakeConnectionOps: ConnectionOps, @unchecked Sendable {
     func inviteCreate(ttlSeconds: Int) async throws -> Invite { try call("inviteCreate:\(ttlSeconds)"); return invite }
     func inviteList() async throws -> JsonObject { try call("inviteList"); return try StrictJson.parseObject(invites) }
     func inviteCancel(_ inviteID: String) async throws { try call("inviteCancel:\(inviteID)") }
-    func inviteAccept(_ link: String) async throws -> AcceptedInvite { try call("inviteAccept"); return accepted }
+    func inviteAccept(_ link: String) async throws -> AcceptedInvite {
+        try call("inviteAccept")
+        if let g = acceptGate { try await g.value() }
+        return accepted
+    }
     func connectionApprove(pendingID: String) async throws { try call("approve:\(pendingID)") }
     func connectionDecline(pendingID: String) async throws { try call("decline:\(pendingID)") }
     func outgoingApprove(connectionID: String) async throws { try call("approveOutgoing:\(connectionID)") }
     func outgoingDecline(connectionID: String) async throws { try call("declineOutgoing:\(connectionID)") }
-    func requestList() async throws -> JsonObject { try call("requestList"); return try StrictJson.parseObject(requests) }
+    func requestList() async throws -> JsonObject {
+        try call("requestList")
+        if let g = requestGate { try await g.value() }
+        return try StrictJson.parseObject(requests)
+    }
     func connectionList() async throws -> [Connection] {
         try call("list")
         if let g = listGate { try await g.value() }
@@ -291,6 +302,53 @@ final class MemoryFile {
         ops.listGate = nil
         try await m.refresh()
         #expect(m.connections.map(\.id) == ["c1"])
+    }
+
+    /// `connection.event{removed}`: gone at once, then the list is read again.
+    @Test func aRemovedConnectionGoesAtOnceThenTheListIsRead() async throws {
+        ops.connections = [Self.connection("c1"), Self.connection("c2")]
+        let m = manager()
+        try await m.refresh()
+        ops.failing = ["list"]
+        m.onEvent(event("connection.event", #"{"connection_id":"c1","event":"removed"}"#))
+        #expect(m.connections.map(\.id) == ["c2"])
+        #expect(await eventually { ops.calls.filter { $0 == "list" }.count == 2 })
+    }
+
+    /// An accept answered after the vault locked publishes no request (chosen; not in the spec).
+    @Test func anAcceptAnsweredAfterALockAddsNothing() async throws {
+        let gate = TestDeferred<Void>()
+        ops.acceptGate = gate
+        let m = manager()
+        let l = try link()
+        let accepting = Task { try await m.acceptInvite(l) }
+        #expect(await eventually { ops.calls == ["inviteAccept"] })
+        m.forgetOpenVault()
+        gate.complete(())
+        #expect(try await accepting.value.connectionID == "c-new")
+        #expect(m.requests.isEmpty && m.local.requestNames.isEmpty)
+    }
+
+    /// A list read sent before this member's decisions and answered after them takes nothing back (chosen; not in the
+    /// spec): the approval stays, the declined request does not come back.
+    @Test func aListReadBeforeADecisionTakesNothingBack() async throws {
+        let m = manager()
+        m.onEvent(event("connection.request.pending", #"{"pending_id":"p1","sas":"042817"}"#))
+        m.onEvent(event("connection.request.pending", #"{"pending_id":"p2","sas":"042817"}"#))
+        m.onEvent(event("connection.request.outgoing", #"{"connection_id":"c1","sas":"111111","name":"Sam"}"#))
+        ops.requests = #"{"incoming":[{"pending_id":"p1","sas":"042817","state":"pending"},{"pending_id":"p2","sas":"042817","state":"pending"}],"outgoing":[{"connection_id":"c1","state":"waiting"}]}"#
+        let gate = TestDeferred<Void>()
+        ops.requestGate = gate
+        let reading = Task { try await m.refreshRequests() }
+        #expect(await eventually { ops.calls == ["requestList"] })
+        ops.requestGate = nil
+        try await m.approveConnection("p1")
+        try await m.declineConnection("p2")
+        gate.complete(())
+        try await reading.value
+        #expect(m.requests.map(\.id).sorted() == ["c1", "p1"])
+        #expect(m.requests.first { $0.id == "p1" }?.state == .approved)
+        #expect(m.requests.first { $0.id == "c1" }?.sas == "111111" && m.requests.first { $0.id == "c1" }?.name == "Sam")
     }
 }
 

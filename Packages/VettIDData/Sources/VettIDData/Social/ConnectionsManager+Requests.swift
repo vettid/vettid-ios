@@ -150,7 +150,10 @@ extension ConnectionsManager {
         let parsed: [PendingConnection] = VaultJSON.objects(list, "incoming").compactMap { ConnectionParser.incoming($0, at: t) }
             .map(PendingConnection.incoming)
             + VaultJSON.objects(list, "outgoing").compactMap { ConnectionParser.outgoing($0, at: t) }.map(PendingConnection.outgoing)
-        open = parsed
+        // The list is authoritative for which requests are open, but a read sent before this member's decision and
+        // answered after it takes nothing back: a request decided here keeps its state, and one that ended here does not
+        // come back (chosen; not in the spec: vettid-android replaces its list wholesale).
+        open = parsed.filter { requestEnds[$0.id] == nil }.map { r in open.first { $0.id == r.id }.map { $0.merged(r) } ?? r }
         rememberNames(parsed.compactMap { r in r.name.map { (r.id, $0) } })
     }
 
