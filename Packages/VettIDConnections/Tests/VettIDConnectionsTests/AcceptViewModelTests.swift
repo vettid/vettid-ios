@@ -50,6 +50,18 @@ import VettIDDataTesting
         #expect(fake.calls.filter { $0 == "acceptInvite" }.count == 2 && opened.state.step == .waiting)
     }
 
+    /// One invitation is sent once: a second "Connect" while the first is under way, or after it, sends nothing.
+    @Test func acceptingTwiceSendsOnce() async {
+        let m = await model()
+        m.setInput(Samples.link())
+        m.accept()
+        m.accept()
+        await m.settle()
+        m.accept()
+        await m.settle()
+        #expect(fake.calls.filter { $0 == "acceptInvite" }.count == 1 && m.state.step == .waiting)
+    }
+
     @Test func refusalsAreSaidAndTheTextStays() async {
         let cases: [(String, FailureKind)] = [
             ("not a link", .inviteInvalid),

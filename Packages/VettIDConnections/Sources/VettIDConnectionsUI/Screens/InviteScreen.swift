@@ -152,6 +152,9 @@ struct ShowInvite: View {
     let actions: InviteActions
     @State private var copied = false
 
+    /// How long a copied link stays on the pasteboard: 5 minutes at most, never past the invitation's expiry.
+    static func clipboardLifetime(exp: Date, now: Date) -> TimeInterval { max(0, min(exp.timeIntervalSince(now), 300)) }
+
     var body: some View {
         FormScaffold(
             title: invite.remote ? ConnectStrings.showRemoteTitle : ConnectStrings.showTitle,
@@ -196,9 +199,9 @@ struct ShowInvite: View {
     private var linkButtons: some View {
         HStack(spacing: Spacing.s) {
             Button {
-                // Local to this iPhone (never on Universal Clipboard), gone when the invitation expires (IOS-PLAN §6.5;
-                // chosen; not in the spec).
-                SecurePasteboard.copy(invite.url, lifetime: max(invite.exp.timeIntervalSinceNow, SecurePasteboard.defaultLifetime))
+                // Local to this iPhone (never on Universal Clipboard), gone after 5 minutes, or sooner when the
+                // invitation expires (IOS-PLAN §6.5; chosen; not in the spec).
+                SecurePasteboard.copy(invite.url, lifetime: Self.clipboardLifetime(exp: invite.exp, now: Date()))
                 copied = true
             } label: {
                 OutlinedLabel(symbol: .contentCopy, text: copied ? ConnectStrings.copied : ConnectStrings.copy)

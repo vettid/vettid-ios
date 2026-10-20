@@ -165,18 +165,22 @@ struct AppRoot: View {
                 // The vault is no longer open (locked, signed out, unreachable): the allowance ends.
                 screenshots.vaultClosed()
             }
+            // SwiftUI hands Universal Links (`applinks:`) here too, as well as the `vettid` scheme and opened files.
             .onOpenURL { url in
-                // An invitation (`https://<relay>/connect#…`, `vettid://connect#…`, IOS-PLAN §6.8): kept until the vault
-                // is open; nothing is sent before the member confirms. As vettid-android, checked before the setup link.
-                if InviteLinks.isConnectURL(url.absoluteString) {
-                    inviteInbox.offer(url.absoluteString)
-                } else if SetupCodes.isSetupLink(url.absoluteString) {
-                    inbox.offer(url.absoluteString)
-                } else if let doc = CanaryManifestFiles.receive(url) {
-                    // A file opened with VettID: only verified and shown; nothing is installed before the member confirms.
-                    canaryInbox.offer(doc)
+                // An invitation is kept until the vault is open (``OpenedLink``).
+                switch OpenedLink.route(url) {
+                case .invite(let link): inviteInbox.offer(link)
+                case .setup(let link): inbox.offer(link)
+                case .other: openFile(url)
                 }
             }
+    }
+
+    private func openFile(_ url: URL) {
+        if let doc = CanaryManifestFiles.receive(url) {
+            // A file opened with VettID: only verified and shown; nothing is installed before the member confirms.
+            canaryInbox.offer(doc)
+        }
     }
 
     private static var protectedDataAvailable: NotificationCenter.Publisher {

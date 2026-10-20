@@ -59,6 +59,14 @@ import VettIDUI
         #expect(ExpiryLine.text(exp: exp, now: exp.addingTimeInterval(5)) == "Expires in 0 min, at \(time)")
     }
 
+    /// A copied link stays 5 minutes at most, never past the invitation's expiry.
+    @Test func aCopiedLinkDoesNotStay() {
+        let now = Date(timeIntervalSince1970: 1_791_115_200)
+        #expect(ShowInvite.clipboardLifetime(exp: now.addingTimeInterval(7 * 86_400), now: now) == 300)
+        #expect(ShowInvite.clipboardLifetime(exp: now.addingTimeInterval(90), now: now) == 90)
+        #expect(ShowInvite.clipboardLifetime(exp: now.addingTimeInterval(-5), now: now) == 0)
+    }
+
     @Test func everyInviteStateRenders() {
         for s in inviteStates() {
             #expect(height(InviteScreen(state: s, actions: InviteActions())) > 0, "\(s.step)")
@@ -116,7 +124,7 @@ import VettIDUI
     @Test func theDrawnCodeReadsBackAsTheInvitation() throws {
         let exp = Date().addingTimeInterval(600)
         let link = try InviteQr(
-            kind: .connection, relay: "https://relay.vettid.org", claimID: "01JABCDEFGHJKMNPQRSTVWXYZ0",
+            kind: .connection, relay: "https://relay.vettid.org", claimID: "abcdefghijklmnopqrstuvwxyz",
             hash: [UInt8](repeating: 7, count: 32), key: [UInt8](repeating: 9, count: 32), exp: UInt64(exp.timeIntervalSince1970)
         ).link()
         let payload = try InviteLinks.qrPayload(link)
@@ -148,6 +156,11 @@ import VettIDUI
             let allowed = host(InviteScreen(state: s, actions: InviteActions()).environment(ScreenshotAllowance(onByDefault: true)))
             #expect(!views(in: allowed).contains(where: onSecureLayer), "\(s.step)")
         }
+        // A pasted or opened link: its field (a text field, with a canvas of its own) on the secure layer too.
+        let link = AcceptState(input: "link", fromLink: true)
+        let protected = host(AcceptScreen(state: link, actions: AcceptActions()).environment(ScreenshotAllowance(onByDefault: false)))
+        let allowed = host(AcceptScreen(state: link, actions: AcceptActions()).environment(ScreenshotAllowance(onByDefault: true)))
+        #expect(views(in: protected).filter(onSecureLayer).count > views(in: allowed).filter(onSecureLayer).count)
     }
 
     /// The secure text field's layout canvas, which ``SecureContainer`` hosts its content on (VettIDUI `SecureLayer`).

@@ -187,19 +187,24 @@ public struct QrScannerView: UIViewRepresentable {
 public struct QrScanner: View {
     let label: String
     let onText: @MainActor (String) -> Void
-    @State private var failed: Bool
+    /// Whether there is no camera to use; nil until the view appears and asks iOS (once, not at every redraw).
+    @State private var failed: Bool?
 
-    /// [access]: the camera access to start from (tests force one; by default what iOS says now).
-    public init(label: String, onText: @escaping @MainActor (String) -> Void, access: CameraAccess = CameraAccess.current()) {
+    /// [access]: the camera access to start from (tests force one; by default what iOS says when the view appears).
+    public init(label: String, onText: @escaping @MainActor (String) -> Void, access: CameraAccess? = nil) {
         self.label = label
         self.onText = onText
-        _failed = State(initialValue: access == .unavailable)
+        _failed = State(initialValue: access.map { $0 == .unavailable })
     }
 
     public var body: some View {
-        if failed {
+        switch failed {
+        case nil:
+            ScannerFrame(label: label) { Color.clear }
+                .onAppear { failed = CameraAccess.current() == .unavailable }
+        case true?:
             ScannerFrame(label: nil) { ScannerNoCameraNote() }
-        } else {
+        case false?:
             ScannerFrame(label: label) { QrScannerView(onText: onText) { failed = true } }
         }
     }
@@ -219,8 +224,9 @@ public struct ScannerNoCameraNote: View {
             .multilineTextAlignment(.center)
             .padding(Spacing.l)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .accessibilityAddTraits(.updatesFrequently)
             .accessibilityIdentifier("scanner_no_camera")
+            // Appears by itself where the preview would be: spoken (vettid-android's polite live region).
+            .onAppear { AccessibilityNotification.Announcement(UIStrings.scannerNoCamera).post() }
     }
 }
 

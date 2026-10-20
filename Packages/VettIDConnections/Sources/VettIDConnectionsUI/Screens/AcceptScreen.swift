@@ -70,11 +70,15 @@ public struct AcceptScreen: View {
                     .vettIDFont(.labelMedium)
                     .foregroundStyle(state.error == nil ? colors.onSurfaceVariant : colors.error)
                 // No AutoFill, suggestions or keyboard learning for the link (IOS-PLAN §6.5, vettid-android
-                // `excludeFromAutofill`); one line, which a pasted link fills (chosen; not in the spec).
-                VisibleSecretField(
-                    ConnectStrings.acceptField, text: Binding(get: { state.input }, set: { actions.onInput($0) }),
-                    placeholder: "", monospaced: true, isError: state.error != nil, onSubmit: actions.onAccept
-                )
+                // `excludeFromAutofill`); one line, which a pasted link fills, and no submit key: "Connect" sends it, as
+                // on Android (chosen; not in the spec). Out of captures like the invitation's own link (chosen; not in
+                // the spec).
+                CaptureProtected {
+                    VisibleSecretField(
+                        ConnectStrings.acceptField, text: Binding(get: { state.input }, set: { actions.onInput($0) }),
+                        placeholder: "", monospaced: true, isError: state.error != nil
+                    )
+                }
                 .accessibilityIdentifier("invite_input")
             }
             FailureLine(kind: state.error)

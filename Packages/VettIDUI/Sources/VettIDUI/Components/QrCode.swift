@@ -6,12 +6,14 @@ import SwiftUI
 /// apply. Error correction M, as vettid-android's; one pixel per module, scaled without interpolation so that every
 /// module stays sharp at any size. Mirrors vettid-android `QrCode`.
 public struct QrCode: View {
-    let content: String
+    /// Encoded when the view is made (its parent's redraws, such as an expiry line's, do not remake it); nothing of it is
+    /// kept elsewhere once the screen goes.
+    let image: CGImage?
     let label: String
     let size: CGFloat
 
     public init(_ content: String, accessibilityLabel: String, size: CGFloat = 240) {
-        self.content = content
+        image = Self.image(content)
         self.label = accessibilityLabel
         self.size = size
     }
@@ -21,7 +23,7 @@ public struct QrCode: View {
 
     public var body: some View {
         Group {
-            if let image = QrImages.image(content) {
+            if let image {
                 Image(decorative: image, scale: 1)
                     .interpolation(.none)
                     .antialiased(false)
@@ -40,23 +42,7 @@ public struct QrCode: View {
 
     /// The QR code of [content] with error correction M, one pixel per module, without the generator's margin; nil if it
     /// does not fit.
-    static func image(_ content: String) -> CGImage? { QrImages.make(content) }
-}
-
-/// The QR images, the last one kept: a screen that redraws every second (an invitation's expiry) does not encode its
-/// code again each time.
-@MainActor
-enum QrImages {
-    private static var last: (content: String, image: CGImage)?
-
     static func image(_ content: String) -> CGImage? {
-        if let last, last.content == content { return last.image }
-        guard let image = make(content) else { return nil }
-        last = (content, image)
-        return image
-    }
-
-    nonisolated static func make(_ content: String) -> CGImage? {
         let filter = CIFilter.qrCodeGenerator()
         filter.message = Data(content.utf8)
         filter.correctionLevel = "M"

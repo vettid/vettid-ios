@@ -137,9 +137,10 @@ public final class AcceptViewModel {
         state.error = nil
     }
 
+    /// Sends the invitation once: only from the input step (never a second time while one is under way).
     public func accept() {
         let text = state.input
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard state.step == .input, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         state.step = .accepting
         state.error = nil
         let (connections, requests) = (connections, requests)

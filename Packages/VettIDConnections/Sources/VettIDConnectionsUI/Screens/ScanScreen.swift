@@ -20,9 +20,10 @@ public struct ScanScreen: View {
     let onPaste: @MainActor () -> Void
     let onLink: @MainActor (String) -> Void
     let camera: AnyView?
-    @State private var access: CameraAccess
+    /// nil until the screen appears and asks iOS (once, not at every redraw).
+    @State private var access: CameraAccess?
 
-    /// [access]: the camera access to start from (tests force one; by default what iOS says now).
+    /// [access]: the camera access to start from (tests force one; by default what iOS says when the screen appears).
     public init(
         state: ScanState,
         onBack: @escaping @MainActor () -> Void,
@@ -30,7 +31,7 @@ public struct ScanScreen: View {
         onPaste: @escaping @MainActor () -> Void,
         onLink: @escaping @MainActor (String) -> Void,
         camera: AnyView? = nil,
-        access: CameraAccess = CameraAccess.current()
+        access: CameraAccess? = nil
     ) {
         self.state = state
         self.onBack = onBack
@@ -57,7 +58,9 @@ public struct ScanScreen: View {
         .accessibilityIdentifier("scan_screen")
         .onChange(of: state.link, initial: true) { _, link in if let link { onLink(link) } }
         .task {
-            guard camera == nil, access == .notDetermined else { return }
+            guard camera == nil else { return }
+            if access == nil { access = CameraAccess.current() }
+            guard access == .notDetermined else { return }
             access = await CameraAccess.request()
         }
         // Back from Settings: the member may have allowed the camera there.
@@ -70,9 +73,9 @@ public struct ScanScreen: View {
         if let camera {
             ScannerFrame(label: ConnectStrings.scanTitle) { camera }
         } else {
-            switch access {
+            switch access ?? .notDetermined {
             case .granted:
-                QrScanner(label: ConnectStrings.scanTitle, onText: onScanned)
+                QrScanner(label: ConnectStrings.scanTitle, onText: onScanned, access: .granted)
             case .notDetermined:
                 ScannerFrame(label: ConnectStrings.scanTitle) { colors.surfaceContainer.color }
             case .denied:

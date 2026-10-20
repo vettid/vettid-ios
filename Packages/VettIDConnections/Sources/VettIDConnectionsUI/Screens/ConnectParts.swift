@@ -28,9 +28,9 @@ struct FailureLine: View {
 }
 
 /// Kept out of screenshots and screen recordings (IOS-PLAN §6.4 protection 3) unless the member allowed screenshots
-/// (Settings → App): the invitation's QR code and link, and the safety code. vettid-android keeps the whole app out of
-/// captures (`FLAG_SECURE`); on the iPhone these screens' codes are what a capture must not carry (chosen; not in the
-/// spec).
+/// (Settings → App): the invitation's QR code and link, a pasted or opened link, and the safety code. vettid-android
+/// keeps the whole app out of captures (`FLAG_SECURE`); on the iPhone these codes are what a capture must not carry, on
+/// top of the app-switcher cover and capture hiding that are always on (chosen; not in the spec).
 struct CaptureProtected<Content: View>: View {
     @Environment(ScreenshotAllowance.self) private var allowance: ScreenshotAllowance?
     @ViewBuilder let content: () -> Content
