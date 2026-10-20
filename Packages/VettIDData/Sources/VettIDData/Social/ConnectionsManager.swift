@@ -140,7 +140,12 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
         let o = quietly ? quietOps : ops
         let list = try await guarded { try await o().connectionList() }
         guard g == generation else { return }
-        connections = list.filter { $0.kind == "connection" }.map(ConnectionParser.connection)
+        let next = list.filter { $0.kind == "connection" }.map(ConnectionParser.connection)
+        let kept = Set(next.map(\.id))
+        let gone = connections.map(\.id).filter { !kept.contains($0) }
+        connections = next
+        // A connection the vault no longer lists (removed on another device) takes its conversation with it.
+        for id in gone { onForget(id) }
     }
 
     public func connection(_ id: String) async throws -> ConnectionInfo {

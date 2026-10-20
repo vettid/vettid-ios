@@ -121,4 +121,24 @@ import Testing
         #expect(MessageLinks.link("https://example.com/a b") == nil)
         #expect(MessageLinks.link(" https://example.com") == nil)
     }
+
+    /// Peer text is scanned in linear time: 16 KiB of each pattern that made the scan quadratic before takes well under
+    /// 0.2 s (a debug build).
+    @Test func adversarialTextIsScannedQuickly() {
+        let size = 16 * 1_024
+        func rep(_ s: String) -> String { String(repeating: s, count: size / s.utf8.count) }
+        let patterns = [
+            "https://a" + String(repeating: ")", count: size - 9), rep("https://u@x/"),
+            rep("https://"), rep("https:// "), "https://a" + String(repeating: "(", count: size - 9),
+            "https://a" + String(repeating: ".", count: size - 9), rep("xhttps://a"), rep("https://a.example/ "),
+        ]
+        for text in patterns {
+            let start = ContinuousClock.now
+            _ = MessageLinks.links(in: text)
+            let took = ContinuousClock.now - start
+            #expect(took < .milliseconds(200), "\(text.prefix(16)): \(took)")
+        }
+        #expect(MessageLinks.links(in: rep("https://a.example/ ")).count == size / 19)
+        #expect(linked("https://a" + String(repeating: ")", count: 100)) == ["https://a"])
+    }
 }

@@ -26,10 +26,37 @@ public final class MessagesManager: MessagesRepository {
     /// Bumped whenever what was read from the open vault is dropped: an answer to a call made before is not taken in
     /// (chosen; not in the spec).
     @ObservationIgnored var generation = 0
+    /// Per conversation, bumped when it is forgotten (its connection gone): an answer for it asked for before is not
+    /// taken in either (chosen; not in the spec).
+    @ObservationIgnored var forgotten: [String: Int] = [:]
+    /// Receipts for outgoing messages not here yet (`sync.event{message.receipt}` can overtake the answer to
+    /// `message.send`), applied when the message lands; at most ``maxPendingReceipts``, oldest dropped, gone at the lock
+    /// (chosen; not in the spec: vettid-android drops them).
+    @ObservationIgnored var pendingReceipts: [PendingReceipt] = []
+
+    struct PendingReceipt: Equatable {
+        var connectionID: String
+        var messageID: String
+        var read: Bool
+    }
+
+    /// What an answer is taken in against: the vault opened as it was, and the conversation not forgotten since.
+    struct Mark: Equatable {
+        var generation: Int
+        var conversation: Int
+    }
+
+    static let maxPendingReceipts = 32
+
+    func mark(_ connectionID: String) -> Mark { Mark(generation: generation, conversation: forgotten[connectionID] ?? 0) }
+
+    /// Whether an answer asked for at [m] is still taken in for [connectionID].
+    func holds(_ m: Mark, _ connectionID: String) -> Bool { m == mark(connectionID) }
 
     /// Messages asked for per `message.list` page (vettid-android's); the vault also stops at 131,072 bytes (§10.5.2).
     static let pageSize = 100
     static let codeTooLarge = "response_too_large"
+    static let codeDropped = "session_dropped"
 
     /// [ops] the vault's calls, opened when needed; [quietOps] those of the background reads (nil: [ops]); [connections]
     /// the connections as last read (the conversations are theirs) and [refreshConnections] reads them again.
@@ -61,6 +88,8 @@ public final class MessagesManager: MessagesRepository {
         generation += 1
         byConnection = [:]
         paging = [:]
+        forgotten = [:] // every earlier mark is of an older generation
+        pendingReceipts = []
     }
 
     /// Forgets everything (a wipe, or a deleted vault). Nothing of the messages is on the phone, so it is the same.
@@ -68,8 +97,10 @@ public final class MessagesManager: MessagesRepository {
 
     /// The connection is gone (removed, blocked, or removed by the peer): its conversation goes with it.
     public func forgetConversation(_ connectionID: String) {
+        forgotten[connectionID, default: 0] += 1
         byConnection[connectionID] = nil
         paging[connectionID] = nil
+        pendingReceipts.removeAll { $0.connectionID == connectionID }
     }
 
     /// The newest page of every active connection, read only over the session already open; failures are left for the
@@ -104,9 +135,9 @@ public final class MessagesManager: MessagesRepository {
     /// (``MessagePages/newest(_:nextBefore:current:paging:)``); [fresh] drops them first (a position the vault no longer
     /// holds).
     private func load(_ connectionID: String, quietly: Bool, fresh: Bool) async throws {
-        let g = generation
-        let page = try await guarded { try await pageFitting(quietly ? quietOps : ops, connectionID, before: nil) }
-        guard g == generation else { return }
+        let g = mark(connectionID)
+        let page = try await guarded { try await pageFitting(quietly ? quietOps : ops, connectionID, before: nil, g) }
+        guard holds(g, connectionID) else { return }
         let start = fresh ? MessagePaging() : paging[connectionID] ?? MessagePaging()
         let merged = MessagePages.newest(
             page.messages.map(MessageInfo.of), nextBefore: page.nextBefore, current: messages(connectionID), paging: start
@@ -119,29 +150,32 @@ public final class MessagesManager: MessagesRepository {
     /// message was deleted meanwhile, on another device) starts again from the newest page.
     public func loadOlder(_ connectionID: String) async throws {
         guard let before = paging[connectionID]?.nextBefore else { return }
-        let g = generation
+        let g = mark(connectionID)
         let page: MessagePage
         do {
-            page = try await guarded { try await pageFitting(ops, connectionID, before: before) }
+            page = try await guarded { try await pageFitting(ops, connectionID, before: before, g) }
         } catch let f as VaultFailure where f.kind == .notFound {
-            guard g == generation else { return }
+            guard holds(g, connectionID) else { return }
             return try await load(connectionID, quietly: false, fresh: true)
         }
         // A reload may have replaced the position meanwhile: then this page is not the next one.
-        guard g == generation, paging[connectionID]?.nextBefore == before else { return }
+        guard holds(g, connectionID), paging[connectionID]?.nextBefore == before else { return }
         let merged = MessagePages.older(page.messages.map(MessageInfo.of), nextBefore: page.nextBefore, current: messages(connectionID))
         byConnection[connectionID] = merged.messages
         paging[connectionID] = merged.paging
     }
 
     /// A page asked for with ``pageSize`` messages and, when the answer could not be sealed (`response_too_large`, §8.1),
-    /// asked for again with half as many, down to one: a page of long messages still arrives (as vettid-android).
+    /// asked for again with half as many, down to one: a page of long messages still arrives (as vettid-android). Each try
+    /// goes through [opener] again (nothing goes to a vault whose lock is pending), and none once the answer would no
+    /// longer be taken in ([g]).
     private func pageFitting(
-        _ opener: @MainActor () async throws -> any MessageOps, _ connectionID: String, before: String?
+        _ opener: @MainActor () async throws -> any MessageOps, _ connectionID: String, before: String?, _ g: Mark
     ) async throws -> MessagePage {
-        let o = try await opener()
         var limit = Self.pageSize
         while true {
+            guard holds(g, connectionID) else { throw VaultFailure(.other, code: Self.codeDropped) }
+            let o = try await opener()
             do {
                 return try await o.messagePage(connectionID, limit: limit, before: before)
             } catch let e as VaultOpError where e.code == Self.codeTooLarge && limit > 1 {
@@ -152,42 +186,43 @@ public final class MessagesManager: MessagesRepository {
 
     public func send(_ connectionID: String, text: String) async throws -> MessageInfo {
         guard MessageLimits.fits(text) else { throw VaultFailure(.limit) }
-        let g = generation
+        let g = mark(connectionID)
         let sent = try await guarded { try await ops().messageSend(connectionID, text: text) }
         let m = MessageInfo(
             connectionID: connectionID, messageID: sent.messageID, outgoing: true, text: text,
             sentAt: ConnectionParser.instant(sent.sentAt) ?? now()
         )
         // The vault tells only the owner's other devices (vettid-vault `send`: `NotifyDevices`): this one adds it here.
-        if g == generation { upsert(m) }
+        if holds(g, connectionID) { upsert(m) }
         return m
     }
 
     /// One `message.read` per unread incoming message, in order. One the vault no longer holds (deleted on another device;
     /// `message.delete` sends no event) is dropped here and the others go on (chosen; not in the spec: vettid-android
-    /// stops at it).
+    /// stops at it). Each read goes through [ops] again (nothing goes to a vault whose lock is pending), and none once the
+    /// vault was locked or the conversation forgotten meanwhile: no read receipt is sent then.
     public func markRead(_ connectionID: String) async throws {
         let unread = messages(connectionID).filter { !$0.outgoing && !$0.read }
         guard !unread.isEmpty else { return }
-        let g = generation
-        let o = try await guarded { try await ops() }
+        let g = mark(connectionID)
         for m in unread {
+            guard holds(g, connectionID) else { return }
             do {
-                try await guarded { try await o.messageRead(connectionID, messageID: m.messageID) }
-                if g == generation { patch(connectionID, m.messageID) { $0.read = true } }
+                try await guarded { try await ops().messageRead(connectionID, messageID: m.messageID) }
+                if holds(g, connectionID) { patch(connectionID, m.messageID) { $0.read = true } }
             } catch let f as VaultFailure where f.kind == .notFound {
-                if g == generation { byConnection[connectionID]?.removeAll { $0.messageID == m.messageID } }
+                if holds(g, connectionID) { byConnection[connectionID]?.removeAll { $0.messageID == m.messageID } }
             }
         }
     }
 
     /// `message.delete`; a message the vault no longer holds is already deleted (chosen; not in the spec).
     public func delete(_ connectionID: String, messageID: String) async throws {
-        let g = generation
+        let g = mark(connectionID)
         do {
             try await guarded { try await ops().messageDelete(connectionID, messageID: messageID) }
         } catch let f as VaultFailure where f.kind == .notFound {}
-        if g == generation { byConnection[connectionID]?.removeAll { $0.messageID == messageID } }
+        if holds(g, connectionID) { byConnection[connectionID]?.removeAll { $0.messageID == messageID } }
     }
 
     // MARK: - Events
@@ -211,12 +246,13 @@ public final class MessagesManager: MessagesRepository {
         switch VaultJSON.string(b, "kind") {
         case "message.receipt":
             let read = VaultJSON.string(b, "receipt") == "read"
-            patch(conn, id) { m in
+            let found = patch(conn, id) { m in
                 m.delivered = true
                 m.read = m.read || read
             }
+            if !found { keepReceipt(PendingReceipt(connectionID: conn, messageID: id, read: read)) }
         case "message.read":
-            patch(conn, id) { $0.read = true }
+            _ = patch(conn, id) { $0.read = true }
         default:
             break
         }
@@ -226,20 +262,38 @@ public final class MessagesManager: MessagesRepository {
     /// never by `sent_at`; one already there is replaced, keeping the receipts it had.
     func upsert(_ m: MessageInfo) {
         var list = messages(m.connectionID)
-        if let i = list.firstIndex(where: { $0.messageID == m.messageID }) {
-            var next = m
-            next.delivered = m.delivered || list[i].delivered
-            next.read = m.read || list[i].read
-            list[i] = next
-        } else {
-            list.append(m)
+        var next = m
+        let at = list.firstIndex { $0.messageID == m.messageID }
+        if let at {
+            next.delivered = m.delivered || list[at].delivered
+            next.read = m.read || list[at].read
         }
+        if m.outgoing, let p = pendingReceipts.firstIndex(where: { $0.messageID == m.messageID && $0.connectionID == m.connectionID }) {
+            next.delivered = true
+            next.read = next.read || pendingReceipts[p].read
+            pendingReceipts.remove(at: p)
+        }
+        if let at { list[at] = next } else { list.append(next) }
         byConnection[m.connectionID] = list
     }
 
-    private func patch(_ conn: String, _ id: String, _ f: (inout MessageInfo) -> Void) {
-        guard var list = byConnection[conn], let i = list.firstIndex(where: { $0.messageID == id }) else { return }
+    /// A receipt whose message is not here yet; a later one for the same message replaces it.
+    private func keepReceipt(_ r: PendingReceipt) {
+        var keep = r
+        if let i = pendingReceipts.firstIndex(where: { $0.messageID == r.messageID && $0.connectionID == r.connectionID }) {
+            keep.read = keep.read || pendingReceipts[i].read
+            pendingReceipts.remove(at: i)
+        }
+        pendingReceipts.append(keep)
+        if pendingReceipts.count > Self.maxPendingReceipts { pendingReceipts.removeFirst() }
+    }
+
+    /// Changes the message [id] of [conn]; false when it is not here.
+    @discardableResult
+    private func patch(_ conn: String, _ id: String, _ f: (inout MessageInfo) -> Void) -> Bool {
+        guard var list = byConnection[conn], let i = list.firstIndex(where: { $0.messageID == id }) else { return false }
         f(&list[i])
         byConnection[conn] = list
+        return true
     }
 }

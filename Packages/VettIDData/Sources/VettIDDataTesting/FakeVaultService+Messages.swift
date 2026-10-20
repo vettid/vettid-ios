@@ -33,6 +33,8 @@ struct FakeMessaging {
     var receiptsSent: [(messageID: String, receipt: String)] = []
     /// The peer's vault answers each delivery with its `delivered` receipt at once, unless the test holds them.
     var holdReceipts = false
+    /// The peer's `delivered` receipt reaches this phone before the answer to its `message.send`.
+    var receiptFirst = false
     /// The peer's mailbox cannot be reached: `message.send` is `connection_unavailable`.
     var peerUnreachable = false
     /// A page of more messages than this cannot be sealed (`response_too_large`, §8.1); nil: no such limit.
@@ -92,8 +94,10 @@ extension FakeVaultService {
         let msg = FakeMessaging.Message(id: Ulid.new(), outgoing: true, text: text, sentAt: Self.millis(Date()))
         social.messages.conversations[conn, default: []].append(msg)
         social.messages.delivered.append(FakeMessaging.Delivered(connectionID: conn, messageID: msg.id, text: text))
+        let early = social.messages.receiptFirst && !social.messages.holdReceipts
+        if early { try receiptArrived(conn, msg.id, "delivered") }
         try reply(m.type, JsonBuilder().string("message_id", msg.id).string("sent_at", Timestamps.formatMillis(msg.sentAt)).build(), re: m.id)
-        if !social.messages.holdReceipts { try receiptArrived(conn, msg.id, "delivered") }
+        if !social.messages.holdReceipts, !early { try receiptArrived(conn, msg.id, "delivered") }
     }
 
     static func millis(_ d: Date) -> Date { Date(timeIntervalSince1970: (d.timeIntervalSince1970 * 1_000).rounded(.down) / 1_000) }
@@ -193,6 +197,11 @@ extension FakeVaultService {
     public var holdsReceipts: Bool {
         get { locked { social.messages.holdReceipts } }
         set { locked { social.messages.holdReceipts = newValue } }
+    }
+
+    public var receiptsBeforeAnswers: Bool {
+        get { locked { social.messages.receiptFirst } }
+        set { locked { social.messages.receiptFirst = newValue } }
     }
 
     public var peerUnreachable: Bool {

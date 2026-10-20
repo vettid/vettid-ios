@@ -19,6 +19,9 @@ final class FakeMessageOps: MessageOps, @unchecked Sendable {
     var sealable = Int.max
     /// Set: `message.list` waits for it.
     var listGate: TestDeferred<Void>?
+    /// Set: `message.send` and `message.read` wait for theirs.
+    var sendGate: TestDeferred<Void>?
+    var readGate: TestDeferred<Void>?
     private var sent = 0
 
     private func call(_ name: String) throws {
@@ -34,6 +37,7 @@ final class FakeMessageOps: MessageOps, @unchecked Sendable {
 
     func messageSend(_ connectionID: String, text: String) async throws -> SentMessage {
         try call("send:\(connectionID)")
+        if let g = sendGate { try await g.value() }
         sent += 1
         return SentMessage(messageID: "s\(sent)", sentAt: "2026-10-20T12:30:00.000Z")
     }
@@ -53,7 +57,10 @@ final class FakeMessageOps: MessageOps, @unchecked Sendable {
         return MessagePage(messages: Array(all[start..<end]), nextBefore: start > 0 ? all[start].messageID : nil)
     }
 
-    func messageRead(_ connectionID: String, messageID: String) async throws { try call("read:\(messageID)") }
+    func messageRead(_ connectionID: String, messageID: String) async throws {
+        try call("read:\(messageID)")
+        if let g = readGate { try await g.value() }
+    }
     func messageDelete(_ connectionID: String, messageID: String) async throws { try call("delete:\(messageID)") }
 }
 
@@ -273,6 +280,103 @@ final class FakeMessageOps: MessageOps, @unchecked Sendable {
         #expect(await kind { try await m.send("c1", text: "x") } == .notFound)
         ops.errors["list"] = FakeMessageOps.error("message.list", "bad_request")
         #expect(await kind { try await m.load("c1") } != nil)
+    }
+
+    /// Three unread messages from c1, loaded.
+    func unreadThree() async throws -> MessagesManager {
+        ops.stored["c1"] = ["m1", "m2", "m3"].map { FakeMessageOps.message("c1", $0) }
+        let m = manager()
+        try await m.load("c1")
+        ops.calls = []
+        return m
+    }
+
+    /// A lock while the reads go out: no further `message.read` (no read receipt to the peer of a vault whose lock is
+    /// pending), and nothing patched.
+    @Test func noReadIsSentOnceTheVaultLocked() async throws {
+        let m = try await unreadThree()
+        let gate = TestDeferred<Void>()
+        ops.readGate = gate
+        let read = Task { try await m.markRead("c1") }
+        #expect(await eventually { ops.calls == ["read:m1"] })
+        m.forgetOpenVault()
+        gate.complete(())
+        try await read.value
+        #expect(ops.calls == ["read:m1"] && m.messages("c1").isEmpty)
+    }
+
+    /// The same when the conversation is forgotten (its connection removed) meanwhile.
+    @Test func noReadIsSentOnceTheConversationIsForgotten() async throws {
+        let m = try await unreadThree()
+        let gate = TestDeferred<Void>()
+        ops.readGate = gate
+        let read = Task { try await m.markRead("c1") }
+        #expect(await eventually { ops.calls == ["read:m1"] })
+        m.forgetConversation("c1")
+        gate.complete(())
+        try await read.value
+        #expect(ops.calls == ["read:m1"] && m.messages("c1").isEmpty)
+    }
+
+    /// A page too large is not asked for again once the vault locked.
+    @Test func noSmallerPageIsAskedForOnceTheVaultLocked() async throws {
+        store("c1", 5)
+        ops.sealable = 10
+        let m = manager()
+        let gate = TestDeferred<Void>()
+        ops.listGate = gate
+        let load = Task { try await m.load("c1") }
+        #expect(await eventually { ops.calls.count == 1 })
+        m.forgetOpenVault()
+        gate.complete(())
+        #expect(await kind { try await load.value } == .other)
+        #expect(ops.calls == ["list:c1:100:"] && m.messages("c1").isEmpty)
+    }
+
+    /// A page or a sent message answered after the conversation was forgotten does not bring it back.
+    @Test func answersAfterTheConversationIsForgottenAreDropped() async throws {
+        store("c1", 5)
+        let m = manager()
+        let gate = TestDeferred<Void>()
+        ops.listGate = gate
+        let load = Task { try await m.load("c1") }
+        #expect(await eventually { ops.calls.count == 1 })
+        m.forgetConversation("c1")
+        gate.complete(())
+        try await load.value
+        #expect(m.messages("c1").isEmpty && !m.olderAvailable("c1"))
+        let sendGate = TestDeferred<Void>()
+        ops.sendGate = sendGate
+        let send = Task { try await m.send("c1", text: "x") }
+        #expect(await eventually { ops.calls.last == "send:c1" })
+        m.forgetConversation("c1")
+        sendGate.complete(())
+        _ = try await send.value
+        #expect(m.messages("c1").isEmpty)
+        ops.listGate = nil
+        try await m.load("c1")
+        #expect(m.messages("c1").count == 5, "a later read is taken in")
+    }
+
+    /// A receipt that overtakes the answer to `message.send` is applied when the message lands; at most 32 are kept,
+    /// and none past the lock (chosen; not in the spec).
+    @Test func aReceiptBeforeTheSendAnswerIsKept() async throws {
+        let m = manager()
+        m.onEvent(event("sync.event", #"{"kind":"message.receipt","connection_id":"c1","message_id":"s1","receipt":"delivered"}"#))
+        m.onEvent(event("sync.event", #"{"kind":"message.receipt","connection_id":"c1","message_id":"s1","receipt":"read"}"#))
+        #expect(m.messages("c1").isEmpty && m.pendingReceipts.count == 1)
+        let sent = try await m.send("c1", text: "hello")
+        #expect(sent.messageID == "s1" && m.messages("c1").first?.delivered == true && m.messages("c1").first?.read == true)
+        #expect(m.pendingReceipts.isEmpty)
+        for n in 0..<40 {
+            m.onEvent(event("sync.event", #"{"kind":"message.receipt","connection_id":"c1","message_id":"x\#(n)","receipt":"delivered"}"#))
+        }
+        #expect(m.pendingReceipts.count == MessagesManager.maxPendingReceipts && m.pendingReceipts.first?.messageID == "x8")
+        m.forgetOpenVault()
+        #expect(m.pendingReceipts.isEmpty)
+        m.onEvent(event("sync.event", #"{"kind":"message.receipt","connection_id":"c1","message_id":"s2","receipt":"read"}"#))
+        m.onEvent(event("message.new", #"{"connection_id":"c1","message_id":"s2","direction":"in","text":"x","sent_at":"t"}"#))
+        #expect(m.messages("c1").first?.read == false, "a receipt is for an outgoing message only")
     }
 }
 

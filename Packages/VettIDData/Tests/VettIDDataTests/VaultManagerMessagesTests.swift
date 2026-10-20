@@ -161,9 +161,11 @@ import VettIDVault
         #expect(await eventually { msgs.messages(id).count == 1 })
         try await m.lock()
         #expect(msgs.messages(id).isEmpty && msgs.conversations.isEmpty)
+        // The device keeps saving its state (atomic writes): a temporary file listed here may be renamed before it is
+        // read, and is then read under its final name.
         let files = try FileManager.default.contentsOfDirectory(atPath: phone.directory.path)
         for f in files {
-            let data = try Data(contentsOf: phone.directory.appendingPathComponent(f))
+            guard let data = try? Data(contentsOf: phone.directory.appendingPathComponent(f)) else { continue }
             #expect(data.range(of: Data("kept in the vault only".utf8)) == nil, "\(f)")
         }
         #expect(try await m.unlock(pin: pin) == .success)
@@ -201,6 +203,17 @@ import VettIDVault
         #expect(m.session == nil)
         await msgs.refreshConversationsQuietly()
         #expect(m.session == nil && reads() == 2)
+    }
+
+    /// The peer's receipt can reach this phone before the answer to its send: it is kept and applied (chosen; not in the
+    /// spec).
+    @Test func aReceiptBeforeTheAnswerIsApplied() async throws {
+        defer { phone.close() }
+        let id = try await connected()
+        service.receiptsBeforeAnswers = true
+        let sent = try await msgs.send(id, text: "fast peer")
+        #expect(msgs.messages(id).map(\.messageID) == [sent.messageID])
+        #expect(msgs.messages(id).first?.delivered == true && msgs.pendingReceipts.isEmpty)
     }
 }
 

@@ -31,11 +31,14 @@ public enum MessageLinks {
         var from = text.startIndex
         while let r = text.range(of: scheme, options: [.caseInsensitive, .literal], range: from..<text.endIndex) {
             from = r.upperBound
-            guard text[r].lowercased() == scheme, startsWord(text, at: r.lowerBound) else { continue }
-            let end = trimmed(text, r.lowerBound, linkEnd(text, from: r.upperBound))
+            guard text[r].lowercased() == scheme else { continue }
+            // A candidate that is not a link is passed over whole, so that the text is scanned once.
+            let runEnd = linkEnd(text, from: r.upperBound)
+            from = runEnd
+            guard startsWord(text, at: r.lowerBound) else { continue }
+            let end = trimmed(text, r.lowerBound, runEnd)
             guard end > r.upperBound, let link = link(String(text[r.lowerBound..<end])) else { continue }
             found.append(MessageLink(range: r.lowerBound..<end, url: link.url, host: link.host))
-            from = end
         }
         return found
     }
@@ -82,21 +85,28 @@ public enum MessageLinks {
         text[i...].firstIndex { $0.isWhitespace || isControl($0) || $0 == "<" || $0 == ">" || $0 == "\"" } ?? text.endIndex
     }
 
-    /// [end] moved back over trailing punctuation and unbalanced closing brackets.
+    /// The closing brackets a link keeps only with their opening one in it.
+    private static let pairs: [Character: Character] = [")": "(", "]": "[", "}": "{"]
+    private static let trailing: Set<Character> = [".", ",", ":", ";", "!", "?", "'", "*", "\u{2019}", "\u{201D}", "\u{00BB}"]
+
+    /// [end] moved back over trailing punctuation and unbalanced closing brackets. The brackets are counted once and the
+    /// counts kept as characters are dropped, so that the work is linear in the link's length.
     private static func trimmed(_ text: String, _ start: String.Index, _ end: String.Index) -> String.Index {
+        var count: [Character: Int] = [:]
+        for ch in text[start..<end] where pairs[ch] != nil || pairs.values.contains(ch) { count[ch, default: 0] += 1 }
         var e = end
         while e > start {
             let last = text[text.index(before: e)]
-            let pairs: [Character: Character] = [")": "(", "]": "[", "}": "{"]
-            if ".,:;!?'*\u{2019}\u{201D}\u{00BB}".contains(last) {
+            if trailing.contains(last) {
                 e = text.index(before: e)
-            } else if let open = pairs[last] {
-                let s = text[start..<e]
-                guard s.count(where: { $0 == open }) < s.count(where: { $0 == last }) else { break }
-                e = text.index(before: e)
-            } else {
-                break
+                continue
             }
+            guard let open = pairs[last] else { break }
+            let opens = count[open] ?? 0
+            let closes = count[last] ?? 0
+            guard opens < closes else { break }
+            count[last] = closes - 1
+            e = text.index(before: e)
         }
         return e
     }

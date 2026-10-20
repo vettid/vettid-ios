@@ -378,6 +378,20 @@ final class MemoryFile {
         m.onEvent(event("sync.event", #"{"kind":"connection.changed","connection_id":"c1","version":1}"#))
         #expect(await eventually { quietCalls == 3 })
     }
+
+    /// A connection the vault no longer lists (removed on another device) is forgotten with its conversation; one that
+    /// stays, or a new one, is not.
+    @Test func aConnectionGoneFromTheListTakesItsConversation() async throws {
+        ops.connections = [Self.connection("c1"), Self.connection("c2")]
+        let m = manager()
+        var forgotten: [String] = []
+        m.onForget = { forgotten.append($0) }
+        try await m.refresh()
+        #expect(forgotten.isEmpty)
+        ops.connections = [Self.connection("c2"), Self.connection("c3")]
+        try await m.refresh()
+        #expect(forgotten == ["c1"] && m.connections.map(\.id) == ["c2", "c3"])
+    }
 }
 
 // swiftlint:enable line_length
