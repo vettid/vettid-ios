@@ -1,10 +1,14 @@
 #if os(iOS)
 import SwiftUI
+import VettIDApprovals
+import VettIDApprovalsUI
 import VettIDConnections
 import VettIDConnectionsUI
 import VettIDData
 import VettIDMessages
 import VettIDMessagesUI
+import VettIDNotifications
+import VettIDNotificationsUI
 import VettIDOnboarding
 import VettIDOnboardingUI
 import VettIDSettings
@@ -25,7 +29,7 @@ public struct AppShell: View {
     private let credential: any CredentialRepository
     private let profiles: any ProfileRepository
     private let appLock: any AppLockSettings
-    @Bindable private var model: ShellModel
+    @Bindable var model: ShellModel
     private let gate: OwnerCheckGate
     private let now: Date
     private let version: AppVersion
@@ -36,10 +40,12 @@ public struct AppShell: View {
     private let releaseUpdates: (any ReleaseUpdateRepository)?
     private let releaseNotes: (any ReleaseNotesRepository)?
     private let releaseInbox: ReleaseUpdateInbox?
-    private let connections: (any ConnectionsRepository)?
+    let connections: (any ConnectionsRepository)?
     private let connectionRequests: (any ConnectionRequestsRepository)?
     private let inviteInbox: InviteLinkInbox?
     private let messages: (any MessagesRepository)?
+    let feed: (any FeedRepository)?
+    let approvals: (any ApprovalsRepository)?
     private let onOpenPortal: @MainActor () -> Void
 
     /// [model]: where the member is, owned above the owner check's gate. [gate]: the owner check at [now] (the root re-reads
@@ -48,7 +54,8 @@ public struct AppShell: View {
     /// [releaseUpdates] and [releaseNotes]: Settings → Vault → "Update available" and its screen (RELEASE-UPDATES §2).
     /// [connections], [connectionRequests] and [inviteInbox]: the connect flow and an invitation link the app was opened
     /// with (VAULT-MESSAGING §6.4). [messages]: Messages, its conversations and the new-message picker (§10.5), with
-    /// [connections].
+    /// [connections]. [feed]: the bell and the Notifications screen (§10.9); [approvals]: Approvals and its decisions
+    /// (§10.4, §10.12, §10.13), with [connections].
     public init(
         account: any AccountRepository,
         vault: any VaultRepository,
@@ -71,6 +78,8 @@ public struct AppShell: View {
         connectionRequests: (any ConnectionRequestsRepository)? = nil,
         inviteInbox: InviteLinkInbox? = nil,
         messages: (any MessagesRepository)? = nil,
+        feed: (any FeedRepository)? = nil,
+        approvals: (any ApprovalsRepository)? = nil,
         onOpenPortal: @escaping @MainActor () -> Void
     ) {
         self.account = account
@@ -94,6 +103,8 @@ public struct AppShell: View {
         self.connectionRequests = connectionRequests
         self.inviteInbox = inviteInbox
         self.messages = messages
+        self.feed = feed
+        self.approvals = approvals
         self.onOpenPortal = onOpenPortal
     }
 
@@ -158,7 +169,7 @@ public struct AppShell: View {
         ZStack {
             DrawerContainer(isOpen: $model.drawerOpen) {
                 VettIDDrawerSheet(
-                    sections: TopLevelDestination.drawerSections,
+                    sections: TopLevelDestination.drawerSections(badges: badges),
                     selectedKey: model.destination.key,
                     versionLabel: ShellStrings.drawerVersion(version.name, version.build)
                 ) { item in
@@ -236,9 +247,21 @@ public struct AppShell: View {
         if connections != nil, connectionRequests != nil { model.openInvite(link) }
     }
 
+    /// The drawer's counts (vettid-android `ShellBadges`): the approvals waiting for a decision, the conversations with
+    /// unread messages.
+    private var badges: [TopLevelDestination: Int] {
+        [
+            .approvals: approvals?.approvals.count { $0.needsDecision } ?? 0,
+            .messages: messages?.conversations.count { $0.unread > 0 } ?? 0,
+        ]
+    }
+
     private var chrome: ShellChrome {
-        ShellChrome(
+        let model = model
+        return ShellChrome(
             accountName: AccountHeader.name(account.account, placeholder: ShellStrings.accountPlaceholderName),
+            // The bell on every drawer screen; none while the vault is held or the daily check is due (§3.6.3).
+            bell: NotificationsBell.of(feed, held: gate.gated) { model.openNotifications() },
             onMenu: { model.drawerOpen = true },
             onAvatar: { model.showAccount = true }
         )
@@ -257,6 +280,14 @@ public struct AppShell: View {
         case .messages:
             if let messages, connections != nil {
                 MessagesRoute(messages: messages, ownerChecks: ownerChecks, chrome: chrome, host: messagesHost)
+            } else {
+                ComingLaterScreen(destination: model.destination, chrome: chrome)
+            }
+        case .approvals:
+            if let approvals, let connections {
+                ApprovalsRoute(
+                    approvals: approvals, connections: connections, ownerChecks: ownerChecks, chrome: chrome, host: approvalsHost
+                )
             } else {
                 ComingLaterScreen(destination: model.destination, chrome: chrome)
             }
@@ -294,6 +325,8 @@ public struct AppShell: View {
             featureDetail(route)
         case .conversation, .newMessage:
             messagesDetail(route)
+        case .notifications, .approval:
+            activityDetail(route)
         }
     }
 

@@ -13,11 +13,15 @@ let package = Package(
     dependencies: [
         .package(path: "../VettIDData"),
         .package(path: "../VettIDKeys"),
+        // TEST ONLY: the feed items of the shell's screen tests.
+        .package(path: "../VettIDVault"),
         .package(path: "../VettIDUI"),
         .package(path: "../VettIDOnboarding"),
         .package(path: "../VettIDSettings"),
         .package(path: "../VettIDConnections"),
         .package(path: "../VettIDMessages"),
+        .package(path: "../VettIDApprovals"),
+        .package(path: "../VettIDNotifications"),
     ],
     targets: [
         // What the shell decides (destinations, the account's lines, the notices' texts): no UI, so `swift test` runs
@@ -40,6 +44,8 @@ let package = Package(
                 .product(name: "VettIDSettings", package: "VettIDSettings"),
                 .product(name: "VettIDConnections", package: "VettIDConnections"),
                 .product(name: "VettIDMessages", package: "VettIDMessages"),
+                .product(name: "VettIDApprovals", package: "VettIDApprovals"),
+                .product(name: "VettIDNotifications", package: "VettIDNotifications"),
                 .product(name: "VettIDUI", package: "VettIDUI", condition: .when(platforms: [.iOS])),
             ],
             resources: [.process("Resources/Localizable.xcstrings")]
@@ -64,6 +70,7 @@ let package = Package(
                 .product(name: "VettIDSettings", package: "VettIDSettings"),
                 .product(name: "VettIDDataTesting", package: "VettIDData"),
                 .product(name: "VettIDKeys", package: "VettIDKeys"),
+                .product(name: "VettIDVault", package: "VettIDVault"),
                 .product(name: "VettIDUI", package: "VettIDUI", condition: .when(platforms: [.iOS])),
             ]
         ),

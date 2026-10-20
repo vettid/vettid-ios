@@ -64,6 +64,36 @@ public final class ShellModel {
         if path.last != route { push(route) }
     }
 
+    /// The bell: the Notifications screen (or its Archived view) over the current screen, once.
+    public func openNotifications(archived: Bool = false) {
+        let route = ShellRoute.notifications(archived: archived)
+        if path.last != route { push(route) }
+    }
+
+    /// The screen a feed item opens (ANDROID-PLAN §4 Notifications, 4), as vettid-android's `openFeedTarget`: Connections,
+    /// History and Settings (the daily check) as drawer destinations, the others over the current screen. A target whose
+    /// screen the iPhone app does not have yet goes to the nearest one (chosen; not in the spec): Shared with you and a
+    /// share rule to the connection's page (IOS-PLAN §8 I3.2). An item (Vault, I3.1) and ``FeedTarget/sheet`` stay with
+    /// the Notifications screen's sheet.
+    public func openFeedTarget(_ t: FeedTarget) {
+        switch t {
+        case .connections: navigate(.connections)
+        case .history: navigate(.history)
+        case .security: navigate(.settings)
+        case .devices: pushOnce(.vaultStatus)
+        case .approval(let key): pushOnce(.approval(key))
+        case .connection(let id), .sharedWithYou(let id), .shareRule(let id, _): pushOnce(.connection(id))
+        case .conversation(let id): openConversation(id)
+        case .alarm: pushOnce(.alarm)
+        case .credential: pushOnce(.credential)
+        case .item, .sheet: break
+        }
+    }
+
+    private func pushOnce(_ r: ShellRoute) {
+        if path.last != r { push(r) }
+    }
+
     /// An invitation link the app was opened with (VAULT-MESSAGING §6.4, IOS-PLAN §6.8): the accept screen over the
     /// current one (also a VettID invitation confirmed in a message), where the member confirms before anything is sent.
     /// The drawer and the sheet close. Mirrors vettid-android `AppShell`'s `inviteLink`.

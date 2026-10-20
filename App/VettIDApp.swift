@@ -256,7 +256,7 @@ struct AppRoot: View {
                     promptReason: AppLockTexts.reason, canary: vault.canary, canaryInbox: canaryInbox,
                     releaseUpdates: vault.releaseUpdate, releaseNotes: releaseNotes, releaseInbox: releaseInbox,
                     connections: vault.connections, connectionRequests: vault.connections, inviteInbox: inviteInbox,
-                    messages: vault.messages
+                    messages: vault.messages, feed: vault.feed, approvals: vault.approvals
                 ) { openPortal() }
             }
         }
