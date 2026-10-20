@@ -40,3 +40,16 @@ enum Samples {
         return c
     }
 }
+
+/// Waits (up to 20 s, wall-clock) until [condition] holds; false when it never did. A view model follows a repository on
+/// a later turn of the main actor (`onChange` runs before the change), so a test that changes a fake waits for what must
+/// follow instead of checking right after `settle()`. Only a failing test waits the whole time.
+@MainActor
+func until(_ condition: @MainActor () -> Bool) async -> Bool {
+    let deadline = ContinuousClock.now + .seconds(20)
+    while ContinuousClock.now < deadline {
+        if condition() { return true }
+        try? await Task.sleep(for: .milliseconds(10))
+    }
+    return condition()
+}

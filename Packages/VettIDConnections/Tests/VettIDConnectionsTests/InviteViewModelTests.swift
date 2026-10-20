@@ -75,8 +75,7 @@ import VettIDDataTesting
     @Test func theRequestForThisInvitationBringsTheSafetyCode() async {
         let m = await showing()
         fake.requests = [Samples.incoming("other", invite: "another-invite")]
-        await m.settle()
-        #expect(m.state.step == .showing)
+        #expect(await until { m.state.step == .showing })
         fake.requests = [Samples.incoming()]
         await m.settle()
         #expect(m.state.step == .request && m.state.request?.sas == "042817" && !m.state.autoApproved)
@@ -86,8 +85,7 @@ import VettIDDataTesting
     @Test func anInPersonRequestApprovedByTheVaultStillShowsTheCode() async {
         let m = await showing()
         fake.requests = [Samples.incoming(state: .approved)]
-        await m.settle()
-        #expect(m.state.step == .connecting && m.state.autoApproved && m.state.request?.sas == "042817")
+        #expect(await until { m.state.step == .connecting && m.state.autoApproved && m.state.request?.sas == "042817" })
     }
 
     @Test func bothApprovalsMakeTheConnection() async {
@@ -101,8 +99,7 @@ import VettIDDataTesting
         #expect(m.state.step == .connecting && !m.state.busy)
         // An existing connection changing is not this one.
         fake.connections = [Samples.active("old", first: "Grace")]
-        await m.settle()
-        #expect(m.state.step == .connecting)
+        #expect(await until { m.state.step == .connecting })
         fake.connections = [Samples.active("old"), Samples.active("conn-1")]
         await m.settle()
         #expect(m.state.step == .connected && m.state.connectionID == "conn-1" && m.state.connectionName == "Ada Lovelace")
@@ -113,8 +110,7 @@ import VettIDDataTesting
         fake.requests = [Samples.incoming()]
         await m.settle()
         fake.connections = [Samples.active("conn-1", first: nil, last: nil)]
-        await m.settle()
-        #expect(m.state.step == .connected && m.state.connectionName == nil)
+        #expect(await until { m.state.step == .connected && m.state.connectionName == nil })
     }
 
     @Test func aFailedApprovalSaysWhyAndKeepsTheCode() async {
@@ -191,8 +187,7 @@ import VettIDDataTesting
         // An outgoing decline is another request's.
         #expect(m.state.step == .connecting)
         fake.peerDeclines = [PeerDecline(requestID: "pend-1", name: nil, outgoing: false, at: Date())]
-        await m.settle()
-        #expect(m.state.step == .declined && m.state.declinedName == "Ada Lovelace")
+        #expect(await until { m.state.step == .declined && m.state.declinedName == "Ada Lovelace" })
         #expect(fake.calls.contains("dismissPeerDecline") && fake.peerDeclines.isEmpty)
     }
 
