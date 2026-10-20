@@ -42,7 +42,10 @@ public extension View {
     func credentialRequiredCover(
         _ shown: Bool, onRetry: @escaping @MainActor () -> Void, onLock: @escaping @MainActor () -> Void
     ) -> some View {
-        accessibilityHidden(shown)
+        // Every sheet and alert under it closes first (``EnvironmentValues/vettIDCovered``): a presentation would stay
+        // above the cover.
+        environment(\.vettIDCovered, shown)
+            .accessibilityHidden(shown)
             .allowsHitTesting(!shown)
             .overlay {
                 if shown { CredentialRequiredScreen(onRetry: onRetry, onLock: onLock) }

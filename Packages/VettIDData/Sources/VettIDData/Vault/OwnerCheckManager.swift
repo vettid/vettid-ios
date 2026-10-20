@@ -65,7 +65,7 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     @ObservationIgnored private let sleep: LockSleep
     /// The vault's time scale now (STAGING-TIME-SCALE §5.2; ``LocalAccount/timeScale``).
     @ObservationIgnored private let scaleNow: @MainActor () -> UInt64
-    /// What a failure shows beyond the check's screen (``VaultManager/noted(_:since:retry:)``: `credential_required`'s root
+    /// What a failure shows beyond the check's screen (``VaultManager/noted(_:since:resend:)``: `credential_required`'s root
     /// screen).
     @ObservationIgnored private let notes: FailureNotes
     /// (Release R) When the check whose presence was not recorded passed, on the vault's clock (its answer's deadline less
@@ -326,8 +326,8 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     }
 
     private func setSetting(_ key: String, _ json: String) async throws {
-        // `settings.set` carries no secret: "Try again" on the root screen sends it again (IOS-PLAN §4.4 (1)).
-        try await vault(retry: { [weak self] in try? await self?.setSetting(key, json) }) {
+        // `settings.set` carries no secret and sets the same value again: "Try again" on the root screen resends it.
+        try await vault(resend: .setting(key: key, json: json)) {
             let o = try await self.ops()
             let current = try await o.settingsGet()
             if current.values[key] != json { try await o.settingsSet(version: current.version, set: [(key, json)]) }
@@ -405,8 +405,8 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     }
 
     /// Runs [body] and turns every failure into a ``VaultFailure``.
-    private func vault<T>(retry: RetryAction? = nil, _ body: () async throws -> T) async throws -> T {
-        try await notes.run(retry: retry, body)
+    private func vault<T>(resend: Resend? = nil, _ body: () async throws -> T) async throws -> T {
+        try await notes.run(resend: resend, body)
     }
 
     private static func counts(_ h: HeldCounts?) -> WaitingCounts? {

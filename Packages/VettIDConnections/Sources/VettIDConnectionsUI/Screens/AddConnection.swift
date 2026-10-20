@@ -10,6 +10,7 @@ public struct AddConnectionControls: View {
     @Environment(\.vettIDColors) private var colors
     let onOpen: @MainActor (ConnectDestination) -> Void
     @State private var showing = false
+    @Environment(\.vettIDCovered) private var covered
     @State private var chosen: ConnectDestination?
 
     public init(onOpen: @escaping @MainActor (ConnectDestination) -> Void) { self.onOpen = onOpen }
@@ -22,7 +23,7 @@ public struct AddConnectionControls: View {
             VettIDFab(.personAdd, label: ConnectStrings.inviteTitle) { showing = true }
                 .accessibilityIdentifier("add_connection")
         }
-        .sheet(isPresented: $showing, onDismiss: {
+        .sheet(isPresented: uncovered($showing, covered: covered), onDismiss: {
             if let chosen { onOpen(chosen) }
             chosen = nil
         }) {
@@ -33,6 +34,10 @@ public struct AddConnectionControls: View {
             .presentationDragIndicator(.visible)
             .presentationBackground(colors.surfaceContainerLow.color)
             .environment(\.vettIDColors, colors)
+        }
+        .closesWhenCovered {
+            chosen = nil
+            showing = false
         }
     }
 

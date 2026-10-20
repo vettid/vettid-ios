@@ -90,17 +90,19 @@ extension View {
 
 private struct ChoiceSheetModifier<Item: Identifiable, Sheet: View>: ViewModifier {
     @Environment(\.vettIDColors) private var colors
+    @Environment(\.vettIDCovered) private var covered
     @Binding var item: Item?
     let sheet: (Item) -> Sheet
 
     func body(content: Content) -> some View {
-        content.sheet(item: $item) { i in
+        content.sheet(item: Binding(get: { covered ? nil : item }, set: { item = $0 })) { i in
             sheet(i)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(colors.surfaceContainerLow.color)
                 .environment(\.vettIDColors, colors)
         }
+        .closesWhenCovered { item = nil }
     }
 }
 

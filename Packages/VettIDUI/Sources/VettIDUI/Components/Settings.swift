@@ -331,28 +331,53 @@ public extension View {
         dismissLabel: String? = nil,
         onConfirm: @escaping @MainActor () -> Void
     ) -> some View {
-        alert(title, isPresented: isPresented) {
+        modifier(
+            ConfirmDialogModifier(
+                isPresented: isPresented, title: title, message: message, confirmLabel: confirmLabel, destructive: destructive,
+                dismissLabel: dismissLabel, onConfirm: onConfirm
+            )
+        )
+    }
+}
+
+/// ``View/confirmDialog(isPresented:title:message:confirmLabel:destructive:dismissLabel:onConfirm:)``, closed by a cover
+/// (``EnvironmentValues/vettIDCovered``).
+private struct ConfirmDialogModifier: ViewModifier {
+    @Environment(\.vettIDCovered) private var covered
+    @Binding var isPresented: Bool
+    let title: String
+    let message: String
+    let confirmLabel: String
+    let destructive: Bool
+    let dismissLabel: String?
+    let onConfirm: @MainActor () -> Void
+
+    func body(content: Content) -> some View {
+        content.alert(title, isPresented: uncovered($isPresented, covered: covered)) {
             Button(confirmLabel, role: destructive ? .destructive : nil, action: onConfirm)
                 .accessibilityIdentifier("confirm_button")
             Button(dismissLabel ?? UIStrings.cancel, role: .cancel) {}
         } message: {
             Text(message)
         }
+        .closesWhenCovered { isPresented = false }
     }
 }
 
 private struct AvatarSheetModifier<Sheet: View>: ViewModifier {
     @Environment(\.vettIDColors) private var colors
+    @Environment(\.vettIDCovered) private var covered
     @Binding var isPresented: Bool
     let sheet: () -> Sheet
 
     func body(content: Content) -> some View {
-        content.sheet(isPresented: $isPresented) {
+        content.sheet(isPresented: uncovered($isPresented, covered: covered)) {
             sheet()
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(colors.groupedBackground.color)
                 .environment(\.vettIDColors, colors)
         }
+        .closesWhenCovered { isPresented = false }
     }
 }

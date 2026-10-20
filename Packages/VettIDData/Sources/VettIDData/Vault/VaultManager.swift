@@ -33,10 +33,12 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             // The account is read again whenever the vault opens (an unlock, the end of onboarding, a start while open).
             if phase == .unlocked, oldValue != .unlocked { onOpened() }
             if phase != .unlocked, oldValue == .unlocked { forgetOpenLists() } // not kept once it is locked
-            // IOS-PLAN §4.4 (1): the root screen is for an open or locked vault only.
-            if phase != .unlocked, phase != .locked {
+            // IOS-PLAN §4.4 (1): the root screen ends with the lock (``lock()``), "Try again", and when nothing is set up
+            // any more (a sign-out, a wipe, a deletion); not in between, so that a refusal during an unlock that includes
+            // the daily check still shows it.
+            if phase == .signedOut {
                 credentialRequired = false
-                credentialRequiredRetry = nil
+                credentialRequiredResend = nil
             }
         }
     }
@@ -44,8 +46,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     public internal(set) var servicePaused = false
     /// (IOS-PLAN §4.4 (1)) The vault answered `credential_required`: the root screen "This phone can't use your vault".
     public internal(set) var credentialRequired = false
-    /// What "Try again" sends again (``credentialRequiredTryAgain()``): the request without a secret that raised it.
-    @ObservationIgnored var credentialRequiredRetry: RetryAction?
+    /// What "Try again" sends again (``credentialRequiredTryAgain()``): the ``Resend`` of the request that raised it.
+    @ObservationIgnored var credentialRequiredResend: Resend?
     public let apiOrigin: String
     /// DevStack hints come with the dev stack's helpers (I1.3).
     public var devHint: String? { nil }

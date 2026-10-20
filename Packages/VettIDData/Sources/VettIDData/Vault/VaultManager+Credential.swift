@@ -110,17 +110,13 @@ extension VaultManager {
     }
 
     public func setBackup(_ on: Bool) async throws {
-        // `settings.set` carries no secret: "Try again" on the root screen sends it again (IOS-PLAN §4.4 (1)).
-        try await guarded(retry: { [weak self] in try? await self?.setBackup(on) }) {
-            try await setSetting(try await openSession(), Self.keyBackup, on ? "true" : "false")
-        }
+        // `settings.set` carries no secret and sets the same value again: "Try again" on the root screen resends it.
+        try await resend(.setting(key: Self.keyBackup, json: on ? "true" : "false"))
     }
 
     public func setUnlockTtl(seconds: Int) async throws {
         guard Self.unlockTtlRange.contains(seconds) else { throw VaultFailure(.other, code: "bad_request") }
-        try await guarded(retry: { [weak self] in try? await self?.setUnlockTtl(seconds: seconds) }) {
-            try await setSetting(try await openSession(), Self.keyUnlockTtl, String(seconds))
-        }
+        try await resend(.setting(key: Self.keyUnlockTtl, json: String(seconds)))
     }
 
     // MARK: - The PIN (release R)

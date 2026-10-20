@@ -32,6 +32,7 @@ public struct DeleteVaultActions {
 /// spec). Mirrors vettid-android `DeleteVaultContent`.
 public struct DeleteVaultContent: View {
     @Environment(\.vettIDTimeScale) private var timeScale
+    @Environment(\.vettIDCovered) private var covered
     @Environment(\.vettIDColors) private var colors
     @Environment(\.scenePhase) private var scenePhase
     let state: DeleteVaultState
@@ -81,7 +82,7 @@ public struct DeleteVaultContent: View {
         .accessibilityIdentifier("delete_vault_screen")
         // The final confirmation (vettid-android `ConfirmDialog`). Each button tells the view model, which ends the
         // confirmation; the alert's own dismissal changes nothing, whichever comes first.
-        .alert(SecurityStrings.deleteConfirmTitle, isPresented: Binding(get: { state.confirming }, set: { _ in })) {
+        .alert(SecurityStrings.deleteConfirmTitle, isPresented: Binding(get: { !covered && state.confirming }, set: { _ in })) {
             Button(SecurityStrings.deleteConfirm, role: .destructive, action: actions.confirm).accessibilityIdentifier("confirm_button")
             Button(SettingsStrings.cancel, role: .cancel, action: actions.cancelConfirm)
         } message: {

@@ -64,6 +64,9 @@ import VettIDVault
         #expect(await eventually { approvals.approvals.count == 4 && feed.badge.unread == 4 })
         #expect(Set(feed.items.compactMap { FeedKinds.target($0) == .approval(key: "grant:\(grant)") ? $0.ref : nil }) == [grant])
 
+        // IOS-PLAN §4.4 (2): a code this app does not map names itself; the approval stays.
+        service.refuseNext("grant.decide", code: "some_new_code")
+        #expect(await kind { try await approvals.decideGrant(grant, approve: true) } == .vaultCode("some_new_code"))
         try await approvals.decideGrant(grant, approve: true)
         guard case .critical(let c)? = approvals.approvals.first(where: { $0.key == "critical:\(use)" }) else { throw CocoaError(.featureUnsupported) }
         #expect(c.payloadVerified)

@@ -41,7 +41,7 @@ import VettIDDataTesting
         service.refuseNext("vault.owner-check", code: "credential_required", message: "no holder", body: noHolder)
         let r = try await m.ownerChecks.check(pin: pin, password: password)
         #expect(r == .failed(.credentialRequired, code: "credential_required"))
-        #expect(m.credentialRequired && m.credentialRequiredRetry == nil && m.phase == .unlocked)
+        #expect(m.credentialRequired && m.credentialRequiredResend == nil && m.phase == .unlocked)
         #expect(phone.phoneKeys.count == keys && m.record.value.vaultID == vaultID && m.usesPhoneSecret)
         m.credentialRequiredTryAgain()
         #expect(!m.credentialRequired)
@@ -76,17 +76,34 @@ import VettIDDataTesting
         #expect(m.credentialRequired && m.phase == .unlocked)
     }
 
-    /// A request without a secret (`settings.set`) is sent again by "Try again".
+    /// A request without a secret that sets the same value again (`settings.set`) is sent again by "Try again"; it is the
+    /// only kind of request ever kept (``Resend``).
     @Test func tryAgainResendsASettingsChange() async throws {
         defer { phone.close() }
         try await setUp()
         #expect(service.backupSetting)
         service.refuseNext("settings.set", code: "credential_required", body: noHolder)
         #expect(await vaultFailure { try await m.setBackup(false) }?.kind == .credentialRequired)
-        #expect(m.credentialRequired && m.credentialRequiredRetry != nil && service.backupSetting)
+        #expect(m.credentialRequired && m.credentialRequiredResend == .setting(key: VaultManager.keyBackup, json: "false"))
+        #expect(service.backupSetting)
         m.credentialRequiredTryAgain()
-        #expect(!m.credentialRequired && m.credentialRequiredRetry == nil)
+        #expect(!m.credentialRequired && m.credentialRequiredResend == nil)
         #expect(await eventually { !service.backupSetting })
+    }
+
+    /// A refusal of the daily check that an unlock includes (the vault past its deadline) shows the screen, the phase still
+    /// locked; it ends with "Lock vault", not with the phase.
+    @Test func aRefusalDuringAnUnlockWithTheCheckShowsTheScreen() async throws {
+        defer { phone.close() }
+        try await setUp()
+        try await m.lock()
+        service.advanceVaultClock(86_401)
+        service.refuseNext("vault.owner-check", code: "credential_required", body: noHolder)
+        _ = try await m.unlockWithCheck(pin: pin, password: password)
+        #expect(m.ownerChecks.unlockCheckOutcome == .failed(.credentialRequired, code: "credential_required"))
+        #expect(m.credentialRequired)
+        try await m.lock()
+        #expect(!m.credentialRequired)
     }
 
     /// The reads the app sends by itself (the owner check's status, the account) never raise the screen.

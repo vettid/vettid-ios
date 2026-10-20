@@ -1,40 +1,46 @@
 import Foundation
 import VettIDVault
 
-/// A request that "Try again" on the root screen "This phone can't use your vault" sends again (IOS-PLAN §4.4 (1)).
-public typealias RetryAction = @MainActor () async -> Void
+/// The only requests that "Try again" on the root screen "This phone can't use your vault" sends again by itself (IOS-PLAN
+/// §4.4 (1), as the owner reads it): idempotent and without a secret. A request with the PIN, the password or a sealed
+/// body, and a write that is not idempotent (a message, a connection's or an approval's decision), is never kept: its
+/// screen sends it again.
+public enum Resend: Equatable, Sendable {
+    /// `settings.set` of one setting to [json]: the same value set again.
+    case setting(key: String, json: String)
+}
 
-/// How the failures of a manager over the vault manager's session reach ``VaultManager/noted(_:since:retry:)``: [mark]
-/// is read before the request is sent (the vault manager's lock generation), [note] gets the failure with it and, for a
-/// request without a secret, the action that sends it again. ``none`` notes nothing.
+/// How the failures of a manager over the vault manager's session reach ``VaultManager/noted(_:since:resend:)``: [mark]
+/// is read before the request is sent (the vault manager's lock generation), [note] gets the failure with it and the
+/// ``Resend`` of the request, if it has one. ``none`` notes nothing.
 public struct FailureNotes {
     let mark: @MainActor () -> Int
-    let note: @MainActor (_ e: any Error, _ since: Int, _ retry: RetryAction?) -> any Error
+    let note: @MainActor (_ e: any Error, _ since: Int, _ resend: Resend?) -> any Error
 
     public static var none: FailureNotes { FailureNotes(mark: { 0 }, note: { e, _, _ in e }) }
 
-    /// Runs [body] and turns every failure into a ``VaultFailure``, noted with [retry].
+    /// Runs [body] and turns every failure into a ``VaultFailure``, noted with [resend].
     @MainActor
-    func run<T>(retry: RetryAction? = nil, _ body: () async throws -> T) async throws -> T {
+    func run<T>(resend: Resend? = nil, _ body: () async throws -> T) async throws -> T {
         let since = mark()
         do {
             return try await body()
         } catch {
-            throw note(VaultFailures.map(error), since, retry)
+            throw note(VaultFailures.map(error), since, resend)
         }
     }
 }
 
 extension VaultManager {
-    /// Runs [body] and turns every failure into a ``VaultFailure`` (a cancellation stays one); [retry] sends a request
-    /// without a secret again from the root screen (``noted(_:since:retry:)``). Mirrors vettid-android `VaultManager.guard`.
+    /// Runs [body] and turns every failure into a ``VaultFailure`` (a cancellation stays one); [resend] is the request
+    /// "Try again" on the root screen sends again (``noted(_:since:resend:)``). Mirrors vettid-android `VaultManager.guard`.
     @discardableResult
-    func guarded<T>(retry: RetryAction? = nil, _ body: () async throws -> T) async throws -> T {
+    func guarded<T>(resend: Resend? = nil, _ body: () async throws -> T) async throws -> T {
         let since = lockGeneration
         do {
             return try await body()
         } catch {
-            throw noted(VaultFailures.map(error), since: since, retry: retry)
+            throw noted(VaultFailures.map(error), since: since, resend: resend)
         }
     }
 
@@ -48,11 +54,11 @@ extension VaultManager {
         }
     }
 
-    /// The managers' way to ``noted(_:since:retry:)``.
+    /// The managers' way to ``noted(_:since:resend:)``.
     static func failureNotes(_ ref: ManagerRef) -> FailureNotes {
         FailureNotes(
             mark: { ref.manager?.lockGeneration ?? 0 },
-            note: { e, since, retry in ref.manager?.noted(e, since: since, retry: retry) ?? e }
+            note: { e, since, resend in ref.manager?.noted(e, since: since, resend: resend) ?? e }
         )
     }
 
@@ -60,25 +66,33 @@ extension VaultManager {
     /// may not have been read yet). IOS-PLAN §4.4 (1): `credential_required` to a request the member sent
     /// (``VaultFailures/memberRequest(_:)``; never one the app sends by itself, such as the reads on every open) shows the
     /// root screen (``credentialRequired``), unless a lock was asked for since the request was sent ([since], the lock
-    /// generation then). [retry] is kept for "Try again": a request without a secret is sent again as it was.
-    func noted(_ e: any Error, since: Int, retry: RetryAction? = nil) -> any Error {
+    /// generation then). [resend] is kept for "Try again".
+    func noted(_ e: any Error, since: Int, resend: Resend? = nil) -> any Error {
         guard let f = e as? VaultFailure else { return e }
         if f.kind == .servicePaused { servicePaused = true }
         if f.kind == .credentialRequired, since == lockGeneration, VaultFailures.memberRequest(f) {
             credentialRequired = true
-            credentialRequiredRetry = retry
+            credentialRequiredResend = resend
         }
         return e
     }
 
     /// "Try again" on the root screen "This phone can't use your vault" (IOS-PLAN §4.4 (1), as the owner reads it): a
-    /// request without a secret (a setting) is sent again as it was; for a request with the PIN or the password, the
-    /// screen that sent it is shown again with its secret fields empty, and its own action sends it (nothing was counted).
+    /// ``Resend`` (a setting) is sent again as it was; for any other request the screen that sent it is shown again, with
+    /// its secret fields empty, and its own action sends it (nothing was counted).
     public func credentialRequiredTryAgain() {
         credentialRequired = false
-        let retry = credentialRequiredRetry
-        credentialRequiredRetry = nil
-        if let retry { Task { await retry() } }
+        let resend = credentialRequiredResend
+        credentialRequiredResend = nil
+        if let resend { Task { try? await self.resend(resend) } }
+    }
+
+    /// Sends [r] again, noted as it was.
+    func resend(_ r: Resend) async throws {
+        switch r {
+        case .setting(let key, let json):
+            try await guarded(resend: r) { try await setSetting(try await openSession(), key, json) }
+        }
     }
 }
 
