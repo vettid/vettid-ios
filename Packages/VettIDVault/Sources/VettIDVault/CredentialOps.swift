@@ -63,6 +63,19 @@ struct CredentialOps: Sendable {
         }
     }
 
+    /// A sealed operation without the blob that carries the PIN (`audit.export`, VAULT-MESSAGING §10.9 History export):
+    /// [fields] sealed to a fresh UTK, [outer] (members as encoded JSON) beside them, after the gate with the PIN.
+    /// Returns the response body and the `ts` of the vault's answer.
+    func sealedOpAt(_ type: String, _ fields: [SealedField], outer: [(String, String)]) async throws -> (body: [UInt8], ts: Date) {
+        let since = device.secretsSent
+        return try await device.credentialLock.withLock {
+            try await gate(Self.carriesPin(fields))
+            try noSecretSent(since, type)
+            let utk = try await takeUTK()
+            return try await sealedAt(type, utk: utk, fields: fields, CredOpOptions(withBlob: false, outerRaw: outer))
+        }
+    }
+
     /// A credential operation with the blob (§3.5.3): [fields] sealed to a fresh UTK, the blob this device holds beside
     /// them (and [options]' outer members); on `stale_credential` the latest blob is fetched once and the operation sent
     /// again with a fresh UTK.
@@ -123,6 +136,14 @@ struct CredentialOps: Sendable {
         _ type: String, utk: UtkRecord, fields: [SealedField], _ options: CredOpOptions, id: String? = nil,
         onOK: (@Sendable () async -> Void)? = nil
     ) async throws -> [UInt8] {
+        try await sealedAt(type, utk: utk, fields: fields, options, id: id, onOK: onOK).body
+    }
+
+    /// ``sealed(_:utk:fields:_:id:onOK:)`` with the `ts` of the vault's answer.
+    private func sealedAt(
+        _ type: String, utk: UtkRecord, fields: [SealedField], _ options: CredOpOptions, id: String? = nil,
+        onOK: (@Sendable () async -> Void)? = nil
+    ) async throws -> (body: [UInt8], ts: Date) {
         let id = id ?? device.newRequestID()
         let body = try build(type, utk: utk, fields: fields, id: id, options)
         // Every credential request carries an `exp` and stays unsettled until its answer or its `exp` has passed by more
@@ -146,7 +167,7 @@ struct CredentialOps: Sendable {
         // Its own `ok` decides before anything else is done with the answer (a blob that cannot be kept after it, or an
         // acknowledgement refused, does not undo it).
         if r.inner.status == Inner.statusOK, let onOK { await onOK() }
-        return try await answered(type, utk: utk, r)
+        return (try await answered(type, utk: utk, r), r.ts)
     }
 
     /// The outer body of a sealed operation: [fields] sealed to [utk] for the inner id [id], the blob when [options] say
@@ -177,6 +198,7 @@ struct CredentialOps: Sendable {
         let outer = JsonBuilder().string("utk_id", utk.id).base64("sealed", sealedPayload)
         if let blob { outer.string("credential", blob) }
         for (k, v) in options.outer { outer.string(k, v) }
+        for (k, v) in options.outerRaw { outer.raw(k, v) }
         return outer.bytes()
     }
 
@@ -408,6 +430,8 @@ public struct CredentialUnsettled: Error, Sendable, CustomStringConvertible {
 struct CredOpOptions: Sendable {
     var withBlob = true
     var outer: [(String, String)] = []
+    /// Outer members whose values are encoded JSON (`audit.export`'s filters, `format` and `upto_seq`).
+    var outerRaw: [(String, String)] = []
     var unanswered = false
     var exp: Date?
     var retriesStale = true

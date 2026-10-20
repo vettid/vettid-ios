@@ -48,7 +48,7 @@ extension FakeVaultService {
     static let defaultPageLimit: UInt64 = 100
     static let pageBytes = 131_072
 
-    /// The message requests (§10.5); `unsupported_type` for any other. Callers hold ``cond``.
+    /// The message requests (§10.5), then the feed, History and the approvals (``activityRequest(_:_:)``). Callers hold ``cond``.
     func messagesRequest(_ m: Inner, _ body: JsonObject) throws {
         switch m.type {
         case "message.send": try messageSend(m, body)
@@ -57,7 +57,7 @@ extension FakeVaultService {
             guard let conn = try? body.string("connection_id"), let id = try? body.string("message_id") else { return try reply(m.type, "{}", re: m.id, error: "bad_request") }
             guard let i = social.messages.conversations[conn]?.firstIndex(where: { $0.id == id }) else { return try reply(m.type, "{}", re: m.id, error: "not_found") }
             try messageAt(m, conn, i)
-        default: try reply(m.type, "{}", re: m.id, error: "unsupported_type")
+        default: try activityRequest(m, body)
         }
     }
 

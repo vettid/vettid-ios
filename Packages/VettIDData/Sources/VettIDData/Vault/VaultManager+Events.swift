@@ -108,11 +108,13 @@ extension VaultManager {
         if lockGuard.takesEvents() {
             connections.onEvent(m)
             messages.onEvent(m)
+            activityEvent(m)
         }
         switch m.type {
         // §3.6.3: entering the hold ends the credential's unlock window.
         case Self.typeHeld:
             unlockWindow = nil
+            activityHeld()
         case LockNotices.type:
             locking(m)
         case Self.typeAlarm:
