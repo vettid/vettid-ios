@@ -1,4 +1,5 @@
 import Foundation
+import VettIDConnections
 
 /// The drawer's destinations (ANDROID-PLAN §4 "Drawer"; IOS-PLAN ID14), in drawer order and groups: Messages,
 /// Connections, Approvals | Vault, History | Settings, Help. The only top-level navigation: no tab bar. Mirrors
@@ -39,8 +40,8 @@ public enum TopLevelDestination: String, CaseIterable, Sendable {
     public var available: Bool { self == .settings || self == .help }
 }
 
-/// The screens pushed over a top-level screen so far (vettid-android's routes of `feature/settings` and
-/// `feature/credential`).
+/// The screens pushed over a top-level screen so far (vettid-android's routes of `feature/settings`,
+/// `feature/credential` and the connect flow of `feature/connections`).
 public enum ShellRoute: Hashable, Sendable {
     case vaultStatus
     case attestation
@@ -62,6 +63,9 @@ public enum ShellRoute: Hashable, Sendable {
     case deleteVault
     /// Settings → Vault → "Update available" (RELEASE-UPDATES §2).
     case releaseUpdate
+    /// Inviting, scanning an invitation or accepting one (VAULT-MESSAGING §6.4): from Connections' add button, or an
+    /// invitation link the app was opened with.
+    case connect(ConnectDestination)
 }
 
 /// This build's version as the drawer's footer shows it ("VettID 2.0.0 (1)", vettid-android `drawer_version`).

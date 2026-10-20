@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import VettIDConnections
 import VettIDData
 import VettIDOnboarding
 
@@ -47,6 +48,24 @@ public final class ShellModel {
 
     public func pop() {
         if !path.isEmpty { path.removeLast() }
+    }
+
+    /// Replaces the screen on top (the connect flow's scanner with the accept screen, and back), as vettid-android's
+    /// `host.replace` does.
+    public func replace(_ r: ShellRoute) {
+        if !path.isEmpty { path.removeLast() }
+        path.append(r)
+    }
+
+    /// An invitation link the app was opened with (VAULT-MESSAGING §6.4, IOS-PLAN §6.8): the accept screen over the
+    /// current one, where the member confirms before anything is sent. The drawer and the sheet close. Mirrors
+    /// vettid-android `AppShell`'s `inviteLink`.
+    public func openInvite(_ link: String) {
+        showAccount = false
+        drawerOpen = false
+        let route = ShellRoute.connect(.accept(AcceptInput(link: link, opened: true)))
+        if path.last == route { return }
+        push(route)
     }
 
     /// "Check now" (the banner, Settings) or, with [holdOff], turning the hold off, which only a check may do

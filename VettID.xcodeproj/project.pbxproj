@@ -519,7 +519,7 @@
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "$(VETTID_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera only to scan QR codes, such as your setup code. Nothing is recorded.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera only to scan QR codes, such as your setup code or an invitation. Nothing is recorded.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "VettID uses Face ID only to open the app when you turn on the app lock.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -740,7 +740,7 @@
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "$(VETTID_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera only to scan QR codes, such as your setup code. Nothing is recorded.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera only to scan QR codes, such as your setup code or an invitation. Nothing is recorded.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "VettID uses Face ID only to open the app when you turn on the app lock.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -766,7 +766,7 @@
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "$(VETTID_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera only to scan QR codes, such as your setup code. Nothing is recorded.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera only to scan QR codes, such as your setup code or an invitation. Nothing is recorded.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "VettID uses Face ID only to open the app when you turn on the app lock.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -923,7 +923,7 @@
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "$(VETTID_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera only to scan QR codes, such as your setup code. Nothing is recorded.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera only to scan QR codes, such as your setup code or an invitation. Nothing is recorded.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "VettID uses Face ID only to open the app when you turn on the app lock.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;

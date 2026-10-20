@@ -15,6 +15,8 @@ final class AppComposition {
     let environment: AppEnvironment
     let protectedData = ProtectedDataMonitor()
     let inbox = SetupLinkInbox()
+    /// An invitation link the app was opened with (VAULT-MESSAGING §6.4), waiting for the open app's accept screen.
+    let inviteInbox = InviteLinkInbox()
     /// A canary manifest opened with VettID or picked in Settings → Attestation, waiting for the root's dialog.
     let canaryInbox = CanaryManifestInbox()
     let firstRun: FirstRunGate
