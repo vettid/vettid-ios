@@ -219,8 +219,10 @@ public extension FeedKinds {
         case "recovery.change_required":
             return item.ref == passwordRef ? DataStrings.feedChangeRequiredPassword : DataStrings.feedChangeRequired
         case "recovery.counter_unavailable": return DataStrings.feedCounterUnavailable
-        // VAULT-MESSAGING 0.50.0 (owner decision of 2026-10-20): the vault makes this item only for `rollback`.
-        case "recovery.generation_closed": return DataStrings.feedRecoveryRollback
+        // VAULT-MESSAGING 0.50.0 (owner decision of 2026-10-20): the vault makes this item only for `rollback`; another or
+        // an unreadable `ref` never raises the alarm (the item is not listed, ``FeedKinds/isHidden(_:)``).
+        case "recovery.generation_closed":
+            return RecoveryRefs.rollback(item.kind, ref: item.ref) ? DataStrings.feedRecoveryRollback : DataStrings.feedUnknown(item.kind)
         case "identity.rotation_failed": return DataStrings.feedRotationFailed
         case "identity.rotate_conflict": return DataStrings.feedRotateConflict(connectionName(item, names))
         case "leash.item.run", "leash.item.proxy":
@@ -252,7 +254,7 @@ public extension FeedKinds {
             item.ref == passwordRef ? DataStrings.feedChangeRequiredPasswordBody : DataStrings.feedChangeRequiredBody
         case "identity.rotation_failed": DataStrings.feedRotationFailedBody
         case "identity.rotate_conflict": DataStrings.feedRotateConflictBody
-        case "recovery.generation_closed": DataStrings.feedRecoveryRollbackBody
+        case "recovery.generation_closed": RecoveryRefs.rollback(item.kind, ref: item.ref) ? DataStrings.feedRecoveryRollbackBody : nil
         default: nil
         }
     }

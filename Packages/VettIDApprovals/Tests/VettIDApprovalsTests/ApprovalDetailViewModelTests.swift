@@ -275,6 +275,26 @@ import VettIDDataTesting
         await m.settle()
         #expect(fake.calls == ["decideShare:r1"])
     }
+
+    /// A request past its `exp` is no longer approvable; member authentication respects the password backoff as a critical
+    /// use does.
+    @Test func anExpiredRequestOrABackoffRefusesTheApproval() async {
+        let t = Date()
+        guard case .authentication(var a) = Samples.auth() else { return }
+        a.exp = t.addingTimeInterval(60)
+        fake.listed = [.authentication(a)]
+        let m = await model("auth:a1")
+        m.setPassword("correct horse")
+        #expect(m.state.canApprove(at: t) && !m.state.expired(at: t))
+        #expect(m.state.expired(at: t.addingTimeInterval(60)) && !m.state.canApprove(at: t.addingTimeInterval(61)))
+        var s = m.state
+        s.retryUntil = t.addingTimeInterval(30)
+        #expect(!s.canApprove(at: t.addingTimeInterval(10)) && s.canApprove(at: t.addingTimeInterval(31)))
+        // A request without `exp` never expires here.
+        fake.listed = [Samples.auth("a2")]
+        let other = await model("auth:a2")
+        #expect(!other.state.expired(at: .distantFuture))
+    }
 }
 
 // swiftlint:enable line_length

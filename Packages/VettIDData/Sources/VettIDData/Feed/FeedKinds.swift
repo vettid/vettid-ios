@@ -71,6 +71,13 @@ public enum FeedKinds {
 
     public static func isHistoryOnly(_ kind: String) -> Bool { historyOnly.contains(kind) }
 
+    /// Neither listed, counted nor notified: the History-only kinds, and a `recovery.generation_closed` item whose `ref`
+    /// is not a `rollback` closure (the vault makes the item only for `rollback`; a `stale` one is hidden, IOS-PLAN §4.1),
+    /// so that no other `ref` can raise the alarm.
+    public static func isHidden(_ item: FeedItem) -> Bool {
+        isHistoryOnly(item.kind) || (item.kind == RecoveryRefs.kindClosed && !RecoveryRefs.rollback(item.kind, ref: item.ref))
+    }
+
     /// A kind of §10.9 (`leash.*` included); one this app does not know shows its kind on the detail sheet.
     public static func isKnown(_ kind: String) -> Bool { known.contains(kind) || kind.hasPrefix("leash.") }
 

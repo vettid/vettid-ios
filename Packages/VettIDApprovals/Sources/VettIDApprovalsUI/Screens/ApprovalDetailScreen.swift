@@ -46,18 +46,15 @@ public struct ApprovalDetailScreen: View {
             if let a = state.approval, !state.gone {
                 if let status = state.criticalResult {
                     result(status)
-                } else if state.retryUntil != nil {
-                    // A password backoff counts down; the approve button comes back at its end.
-                    TimelineView(.periodic(from: .now, by: 1)) { context in decision(a, now: context.date) }
+                } else if state.retryUntil != nil || a.exp != nil {
+                    // A password backoff counts down and the approve button comes back at its end; a request that expires
+                    // while open turns into "Already decided".
+                    TimelineView(.periodic(from: .now, by: 1)) { context in live(a, now: context.date) }
                 } else {
                     decision(a, now: Date())
                 }
             } else {
-                FormScaffold(
-                    title: ApprovalsStrings.goneTitle, message: ApprovalsStrings.goneBody, primaryLabel: ApprovalsStrings.back,
-                    onPrimary: actions.onBack, onBack: actions.onBack
-                ) { EmptyView() }
-                .accessibilityIdentifier("approval_gone")
+                gone
             }
         }
         .onChange(of: state.done, initial: true) { _, done in if done { actions.onBack() } }
@@ -66,6 +63,19 @@ public struct ApprovalDetailScreen: View {
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.protectedDataWillBecomeUnavailableNotification)) { _ in
             actions.onForgetSecrets()
         }
+    }
+
+    /// Decided on another device, or expired.
+    private var gone: some View {
+        FormScaffold(
+            title: ApprovalsStrings.goneTitle, message: ApprovalsStrings.goneBody, primaryLabel: ApprovalsStrings.back,
+            onPrimary: actions.onBack, onBack: actions.onBack
+        ) { EmptyView() }
+        .accessibilityIdentifier("approval_gone")
+    }
+
+    @ViewBuilder private func live(_ a: PendingApproval, now: Date) -> some View {
+        if state.expired(at: now) { gone } else { decision(a, now: now) }
     }
 
     private func result(_ status: String) -> some View {

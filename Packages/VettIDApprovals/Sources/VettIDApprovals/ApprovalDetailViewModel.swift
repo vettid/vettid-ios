@@ -79,9 +79,19 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
         }
     }
 
-    /// Whether the approve button is offered now ([now]: for a password backoff).
+    /// Whether the request's `exp` has passed: it is no longer offered and the screen says it is decided or expired, as
+    /// the vault would refuse it (chosen; not in the spec: vettid-android leaves the button until the list drops it).
+    public func expired(at now: Date = Date()) -> Bool { approval?.exp.map { $0 <= now } ?? false }
+
+    /// Whether the password backoff (`retry_after`) is over at [now].
+    func backoffOver(_ now: Date) -> Bool { retryUntil.map { now > $0 } ?? true }
+
+    /// Whether the approve button is offered now ([now]: for a password backoff and the request's expiry). Member
+    /// authentication respects the backoff as a critical use does (chosen; not in the spec: vettid-android checks it for
+    /// the critical use only; the vault refuses both alike).
     public func canApprove(at now: Date = Date()) -> Bool {
-        switch approval {
+        guard !expired(at: now) else { return false }
+        return switch approval {
         case nil, .device?: false
         case .grant?: !grantIndexes.isEmpty
         // 0.10.3: only once the safety code is known, and only once per member.
@@ -89,9 +99,9 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
         case .connection(.outgoing(let r))?: r.state == .pending && r.sas != nil
         // §10.13: only a payload that matches its hash, shown to the member, can be approved; a field that cannot hold a
         // seed (0.21.0) only denied.
-        case .critical(let c)?: c.suitable != false && c.payloadVerified && !password.isEmpty && (retryUntil.map { now > $0 } ?? true)
+        case .critical(let c)?: c.suitable != false && c.payloadVerified && !password.isEmpty && backoffOver(now)
         case .share(let d)?: d.items.contains { !shareExcluded.contains($0.itemID) }
-        case .authentication?: !password.isEmpty
+        case .authentication?: !password.isEmpty && backoffOver(now)
         }
     }
 

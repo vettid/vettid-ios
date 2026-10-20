@@ -103,6 +103,10 @@ public enum RecoveryRefs {
     /// Unicode format characters (category Cf: the direction controls, ALM, zero-width characters, U+FEFF), the line and
     /// paragraph separators, U+FFFD and the quotation marks “ ” " (so that a name cannot close the quote and fake a
     /// sentence after it); trimmed, and at most 64 code points (a code point is never split). Nil if nothing is left.
+    ///
+    /// Stricter than vettid-android in two ways, kept on purpose: padded base64url is refused (VAULT-MESSAGING §11.14.11
+    /// writes it without padding; Java's decoder accepts padding), and the trim removes every Unicode white space (no-break
+    /// and ideographic spaces included; Java's `trim` only characters up to U+0020).
     public static func phoneName(_ b64: String) -> String? {
         guard let bytes = try? Base64s.decodeRawUrl(b64) else { return nil }
         // An invalid sequence becomes U+FFFD, which the cleaning removes (as vettid-android's decoding does).

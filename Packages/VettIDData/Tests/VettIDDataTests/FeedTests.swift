@@ -222,6 +222,10 @@ final class FakeFeedOps: FeedOps, @unchecked Sendable {
         f.onEvent(sync("feed.updated"))
         #expect(await eventually { f.cursor == 6 })
         #expect(arrived == ["recovery.completed"] && f.items.count == 2)
+        // A closure item that is not a rollback is hidden too; a rollback is listed and arrives.
+        f.onEvent(event(ops.add("recovery.generation_closed", at: now, priority: "urgent", ref: "4/stale")))
+        f.onEvent(event(ops.add("recovery.generation_closed", at: now, priority: "urgent", ref: "5/rollback")))
+        #expect(arrived == ["recovery.completed", "recovery.generation_closed"] && f.items.count == 3 && f.badge.urgent)
     }
 
     @Test func kindsTargetsAndAsks() throws {

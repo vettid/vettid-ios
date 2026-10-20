@@ -95,7 +95,8 @@ struct FeedRow: View {
                 .foregroundStyle(attention ? red.onContainer : lineColor)
                 .lineLimit(2)
             if let line = FeedKinds.supporting(item, names) {
-                Text(line).vettIDFont(.bodyMedium).foregroundStyle(attention ? red.onContainer : colors.onSurfaceVariant).lineLimit(1)
+                Text(line).vettIDFont(.bodyMedium).foregroundStyle(attention ? red.onContainer : colors.onSurfaceVariant)
+                    .lineLimit(Self.lineLimit(item))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -118,6 +119,10 @@ struct FeedRow: View {
         if item.priority == "low" && !unread { return colors.onSurfaceVariant }
         return unread ? colors.onSurface : colors.onSurfaceVariant
     }
+
+    /// The second line's lines in the list (owner decision of 2026-10-20, IOS-PLAN 0.1.14): up to 3 for an urgent item
+    /// (the rollback warning, a failed recovery attempt), 1 for the others; the detail sheet shows it in full.
+    static func lineLimit(_ item: FeedItem) -> Int { FeedKinds.urgent(item) ? 3 : 1 }
 
     /// "Unread, Important" and the like, for VoiceOver.
     static func stateText(_ item: FeedItem, unread: Bool) -> String {

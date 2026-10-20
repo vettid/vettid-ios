@@ -5,7 +5,7 @@ import VettIDNotifications
 import VettIDUI
 import VettIDVault
 
-/// The detail sheet (ANDROID-PLAN §4 Notifications, 4): the title, the exact time, the connection or item as History
+/// The detail sheet (ANDROID-PLAN §4 Notifications, 4): the title and the full second line, the exact time, the connection or item as History
 /// resolves them; "This is no longer waiting." for an ask that is gone; "Not available in this version of the app." for
 /// kinds that come later; an unknown kind shows the kind itself; a guide its body. Mirrors vettid-android `DetailSheet`.
 struct FeedDetailSheet: View {
@@ -18,6 +18,13 @@ struct FeedDetailSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.s) {
                 Text(FeedKinds.title(item, names)).vettIDFont(.titleMedium).accessibilityAddTraits(.isHeader)
+                // The second line in full, under the title, for every kind that has one (owner decision of 2026-10-20,
+                // IOS-PLAN 0.1.14): the rollback warning and the other long lines a row cuts short. A guide shows its whole
+                // body below instead of its first line.
+                if let line = Self.secondLine(item, names) {
+                    Text(line).vettIDFont(.bodyLarge).fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("feed_sheet_line")
+                }
                 ForEach(Self.lines(item, names), id: \.label) { l in
                     VStack(alignment: .leading, spacing: 0) {
                         Text(l.label).vettIDFont(.labelMedium).foregroundStyle(colors.onSurfaceVariant)
@@ -60,6 +67,10 @@ struct FeedDetailSheet: View {
         }
         if !FeedKinds.isKnown(item.kind) { out.append(Line(label: NotificationsStrings.sheetKind, value: item.kind)) }
         return out
+    }
+
+    static func secondLine(_ item: FeedItem, _ names: FeedNames) -> String? {
+        item.kind == "guide" ? nil : FeedKinds.supporting(item, names)
     }
 
     static func note(_ item: FeedItem, gone: Bool) -> String? {

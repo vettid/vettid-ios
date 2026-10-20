@@ -82,6 +82,20 @@ import VettIDVault
         #expect(FeedDetailSheet.note(Self.item("m"), gone: false) == nil)
     }
 
+    /// Owner decision of 2026-10-20 (IOS-PLAN 0.1.14): the sheet shows the whole second line under the title; urgent rows
+    /// show up to 3 of its lines, the others 1.
+    @Test func theSecondLineIsShownInFullInTheSheet() {
+        let rollback = Self.item("r", "recovery.generation_closed", priority: "urgent", ref: "4/rollback")
+        #expect(FeedDetailSheet.secondLine(rollback, FeedNames())?.hasSuffix("change your PIN and your password now, and contact VettID.") == true)
+        let conflict = Self.item("c", "identity.rotate_conflict", priority: "high", connection: "c1")
+        #expect(FeedDetailSheet.secondLine(conflict, FeedNames())?.hasPrefix("This connection's vault announced two different new keys.") == true)
+        #expect(FeedDetailSheet.secondLine(Self.item("p", "recovery.change_required", ref: "password"), FeedNames())
+            == "Your password is too weak for recovery. Recovery stays off until you change it.")
+        #expect(FeedDetailSheet.secondLine(Self.item("m"), FeedNames()) == nil && FeedDetailSheet.secondLine(Self.item("g", "guide"), FeedNames()) == nil)
+        #expect(FeedRow.lineLimit(rollback) == 3 && FeedRow.lineLimit(conflict) == 1 && FeedRow.lineLimit(Self.item("m")) == 1)
+        _ = host(FeedDetailSheet(item: rollback, names: FeedNames(), gone: false))
+    }
+
     @Test func deletingABatchSaysLaterRequestsStartANewOne() {
         var sam = ConnectionInfo(id: "c1", name: "", state: .active)
         sam.firstName = "Sam"

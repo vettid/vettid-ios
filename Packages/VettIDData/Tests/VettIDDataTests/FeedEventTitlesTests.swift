@@ -78,7 +78,14 @@ import VettIDVault
         #expect(title(r) == "Your vault was given an older recovery record")
         #expect(line(r) == "A host may have served an older copy of your vault's recovery record, one on which recovery attempts had already been used. Your vault moved past it. If you did not try to recover your vault, change your PIN and your password now, and contact VettID.")
         #expect(FeedKinds.isKnown("recovery.generation_closed") && FeedKinds.urgent(r))
-        #expect(RecoveryRefs.rollback(r.kind, ref: r.ref))
+        #expect(RecoveryRefs.rollback(r.kind, ref: r.ref) && !FeedKinds.isHidden(r))
+        // A `stale` or unreadable ref never raises the alarm: no rollback words, and not listed.
+        for ref in ["4/stale", "rollback", "x/rollback", nil] {
+            let other = Self.item("recovery.generation_closed", ref, "urgent")
+            #expect(title(other) == "Activity: recovery.generation_closed" && line(other) == nil, "\(ref ?? "nil")")
+            #expect(FeedKinds.isHidden(other), "\(ref ?? "nil")")
+        }
+        #expect(FeedKinds.isHidden(Self.item("vault.pin_changed")) && !FeedKinds.isHidden(Self.item("recovery.completed")))
     }
 
     /// Decision 8: "An agent used <item>"; without details (names only) or once the item is gone, no item name.
@@ -105,7 +112,7 @@ import VettIDVault
         ]
         for k in added {
             #expect(FeedKinds.isKnown(k), "\(k)")
-            #expect(!title(Self.item(k)).hasPrefix("Activity:"), "\(k)")
+            #expect(!title(Self.item(k, k == "recovery.generation_closed" ? "4/rollback" : nil)).hasPrefix("Activity:"), "\(k)")
         }
     }
 
