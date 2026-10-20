@@ -2,7 +2,7 @@ import Foundation
 import VettIDVault
 
 /// Why an action failed, for the UI (``FailureText``). Mirrors vettid-android `FailureKind`.
-public enum FailureKind: Equatable, Sendable, CaseIterable {
+public enum FailureKind: Hashable, Sendable, CaseIterable {
     case network
     case unauthorized
     /// A setup code the member API refused (`404 invalid_code`: wrong, expired, used, or another email's).
@@ -129,7 +129,37 @@ public enum FailureKind: Equatable, Sendable, CaseIterable {
     /// (VAULT-MESSAGING 0.43.0 §11.10.9) The vault's instance (or a transfer bundle) carries a time scale this build does
     /// not accept (a production build and any value other than 1): treated as malformed, nothing was sent.
     case timeScale
+
+    // Vault error codes the app did not map (IOS-PLAN §4.4; ANDROID-PLAN 0.1.57, 0.1.58).
+
+    /// The vault does not count this phone as the holder of its credential (`credential_required`, with or without
+    /// `{"reason": "no_holder"}`, VAULT-MESSAGING §3.5.9, §10.1): answered before any handler, so nothing was disclosed
+    /// and no PIN or password checked. The root screen "This phone can't use your vault" (``VaultManager/credentialRequired``);
+    /// never a proof for ``HolderPolicy``: nothing is erased.
+    case credentialRequired
+    /// `forbidden` to a holder-only type (VAULT-MESSAGING §3.5.9): another live app holds the credential. Shown on the
+    /// screen that sent the request with the title ``FailureKind/notHolderTitle``; never a proof for ``HolderPolicy``.
+    case notHolder
+    /// Any other vault error code the app does not map: the text names the code (``VaultFailures/shownCode(_:)``: the
+    /// error's `code` alone, `unknown` unless it is `[a-z0-9_]{1,40}`), never the vault's `message` or body.
+    case vaultCode(String)
     case other
+
+    /// Every kind, ``vaultCode(_:)`` once (with ``VaultFailures/unknownCode``).
+    public static var allCases: [FailureKind] {
+        [
+            .network, .unauthorized, .setupCodeInvalid, .termsRequired, .rateLimited, .vaultUnavailable, .servicePaused,
+            .releaseEnded, .badPin, .badPassword, .backoff, .credentialFrozen, .rotationRequired, .notSupported, .noResponse,
+            .vaultExists, .attestation, .rollback, .capabilityRollback, .releaseTooOld, .enrollmentStarted, .manifest,
+            .manifestUnavailable, .releaseUnknown, .enclave, .notFound, .connectionUnavailable, .inviteInvalid, .inviteExpired,
+            .inviteNotConnection, .inviteUnavailable, .blocked, .credentialLocked, .conflict, .limit, .inUse,
+            .ownerCheckRequired, .rejected, .signerRefused, .clock, .noVault, .localState, .eraseFailed, .deviceSecret,
+            .transferIncomplete, .busy, .retry, .counterUnavailable, .storedMismatch, .weakPassword, .hardwareKeys,
+            .appleUnreachable, .phoneLocked, .unconfirmedChanges, .responseTooLarge, .changeUnresolved, .changeChecking,
+            .changeCheckingPassword, .credentialUnsettled, .pinUncertain, .renewUnconfirmed, .timeScale, .credentialRequired,
+            .notHolder, .vaultCode(VaultFailures.unknownCode), .other,
+        ]
+    }
 }
 
 /// A failed action: [kind] for the UI, [code] the spec's or API's code; [limit] the limit a `limit` error names

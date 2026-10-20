@@ -83,7 +83,7 @@ public struct ChangePasswordContent: View {
                     NoticeCard(.info, title: CredentialStrings.title, message: text).accessibilityIdentifier("change_check")
                 }
                 if let error = state.error {
-                    NoticeCard(.urgent, title: CredentialStrings.title, message: error.message(timeScale: timeScale))
+                    NoticeCard(.urgent, title: error.title(or: CredentialStrings.title), message: error.message(timeScale: timeScale))
                         .accessibilityIdentifier("error")
                 }
             }

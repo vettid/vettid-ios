@@ -230,6 +230,9 @@ struct AppRoot: View {
         // update").
         if vault.releaseUpdate.progress != nil {
             ReleaseUpdateFlowRoute(updates: vault.releaseUpdate)
+        } else if vault.credentialRequired {
+            // IOS-PLAN §4.4 (1): the vault does not count this phone as its credential's holder; nothing is erased.
+            CredentialRequiredScreen(onRetry: { vault.dismissCredentialRequired() }, onLock: { Task { try? await vault.lock() } })
         } else {
             phaseContent
         }

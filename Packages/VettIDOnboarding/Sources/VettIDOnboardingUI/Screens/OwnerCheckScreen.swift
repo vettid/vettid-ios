@@ -221,7 +221,7 @@ struct OwnerCheckMessageView: View {
         } else if state.message == .backoff {
             Text(OnboardingStrings.ownerCheckBackoff).vettIDFont(.bodyMedium)
         } else if case .failed(let kind, _)? = state.message {
-            NoticeCard(.urgent, title: title, message: kind.message(timeScale: state.timeScale))
+            NoticeCard(.urgent, title: kind.title(or: title), message: kind.message(timeScale: state.timeScale))
                 .accessibilityIdentifier("owner_check_failed")
         }
     }

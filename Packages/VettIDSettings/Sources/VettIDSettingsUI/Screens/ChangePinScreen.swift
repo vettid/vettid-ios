@@ -103,7 +103,7 @@ public struct ChangePinContent: View {
                     NoticeCard(.info, title: PinStrings.pinTitle, message: text).accessibilityIdentifier("change_check")
                 }
                 if let error = state.error {
-                    NoticeCard(.urgent, title: PinStrings.pinTitle, message: error.message(timeScale: timeScale))
+                    NoticeCard(.urgent, title: error.title(or: PinStrings.pinTitle), message: error.message(timeScale: timeScale))
                         .accessibilityIdentifier("error")
                 }
                 if actions.offersLockAndUnlock {

@@ -97,6 +97,8 @@ public final class FakeVaultService: @unchecked Sendable {
     var hasCredential = false
     var vaultMade = false
     var failNextTypes: Set<String> = []
+    /// The next request of a type is refused with this error (``refuseNext(_:code:message:body:)``).
+    var refuseNextAnswers: [String: (error: InnerError, body: String)] = [:]
     /// A vault.enrolled held back until the next enrollment request (``EnrollAnswer/answerLostEnrolledLate``).
     struct LateEnrolled {
         let kem: KemPublicKey
@@ -265,6 +267,12 @@ public final class FakeVaultService: @unchecked Sendable {
     /// The next request of [type] in the session is answered `retry` (nothing done): the app stops there, as if it
     /// crashed before the vault acted.
     public func failNext(_ type: String) { locked { _ = failNextTypes.insert(type) } }
+
+    /// The next request of [type] is refused with [code], its [message] and [body] (IOS-PLAN §4.4: a code the app does not
+    /// map, `credential_required{no_holder}`, `forbidden`), before anything is done or any UTK spent.
+    public func refuseNext(_ type: String, code: String, message: String = "", body: String = "{}") {
+        locked { refuseNextAnswers[type] = (InnerError(code, message), body) }
+    }
 
     /// The vault already holds this phone's credential (a `credential.create` whose answer was lost): the next create is
     /// answered `exists`.

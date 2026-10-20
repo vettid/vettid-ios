@@ -43,17 +43,20 @@ public final class ProfileManager: ProfileRepository {
     private let onRequest: @MainActor (NameRequestView, _ mark: Int) -> Void
     private let checksLeft: @MainActor () async -> Int?
     private let mark: @MainActor () -> Int
+    private let noted: @MainActor (any Error) -> any Error
 
     public init(
         ops: @escaping @MainActor () async throws -> any ProfileOps,
         onRequest: @escaping @MainActor (NameRequestView, _ mark: Int) -> Void,
         checksLeft: @escaping @MainActor () async -> Int?,
-        mark: @escaping @MainActor () -> Int = { 0 }
+        mark: @escaping @MainActor () -> Int = { 0 },
+        noted: @escaping @MainActor (any Error) -> any Error = { $0 }
     ) {
         self.ops = ops
         self.onRequest = onRequest
         self.checksLeft = checksLeft
         self.mark = mark
+        self.noted = noted
     }
 
     public func changeName(pin: String, password: String, firstName: String, lastName: String) async -> NameChangeOutcome {
@@ -66,7 +69,7 @@ public final class ProfileManager: ProfileRepository {
             onRequest(view, since)
             return .requested(view)
         } catch {
-            let f = VaultFailures.map(error) as? VaultFailure ?? VaultFailure(.other)
+            let f = noted(VaultFailures.map(error)) as? VaultFailure ?? VaultFailure(.other)
             return await failed(f)
         }
     }

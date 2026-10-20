@@ -100,7 +100,7 @@ public struct CredentialContent: View {
         } else if state.status == nil, let error = state.error {
             VStack(spacing: Spacing.l) {
                 LargeTitle(CredentialStrings.title)
-                NoticeCard(.warning, title: CredentialStrings.title, message: error.message(timeScale: timeScale))
+                NoticeCard(.warning, title: error.title(or: CredentialStrings.title), message: error.message(timeScale: timeScale))
                 SecondaryButton(CredentialStrings.retry, action: actions.retry)
                 Spacer()
             }

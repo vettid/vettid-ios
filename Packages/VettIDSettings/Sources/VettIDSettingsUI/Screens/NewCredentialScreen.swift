@@ -82,7 +82,7 @@ public struct NewCredentialContent: View {
                 .accessibilityIdentifier("new_credential_confirm")
                 acknowledgement
                 if let error = state.error {
-                    NoticeCard(.urgent, title: CredentialStrings.newTitle, message: error.message(timeScale: timeScale))
+                    NoticeCard(.urgent, title: error.title(or: CredentialStrings.newTitle), message: error.message(timeScale: timeScale))
                         .accessibilityIdentifier("error")
                 }
             }

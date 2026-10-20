@@ -26,7 +26,7 @@ enum VaultFailures {
         case let m as MemberApiError:
             VaultFailure(memberFailure(m), code: m.code, retryAfterSeconds: Int64(m.retryAfterSeconds), cause: m)
         case let o as VaultOpError:
-            VaultFailure(opFailure(o.code), code: o.code, retryAfterSeconds: retryAfter(o), cause: o, limit: limit(o))
+            VaultFailure(opFailure(o.code, type: o.type), code: o.code, retryAfterSeconds: retryAfter(o), cause: o, limit: limit(o))
         case let r as AltRefused: refused(r)
         case let t as TimeScaleRefused: VaultFailure(.timeScale, code: "time_scale", cause: t)
         case let a as AttestationError: VaultFailure(enclaveFailure(a), code: "enclave", cause: a)
@@ -111,8 +111,18 @@ enum VaultFailures {
         }
     }
 
+    /// The vault's error [code] to a request of [type] (the type matters only for `forbidden`, IOS-PLAN §4.4 (3)).
+    static func opFailure(_ code: String, type: String = "") -> FailureKind {
+        switch code {
+        // §3.5.9, §10.1 (0.51.2, 0.52.0): with or without `{"reason": "no_holder"}`.
+        case codeCredentialRequired: .credentialRequired
+        case codeForbidden: holderOnly(type) ? .notHolder : .vaultCode(codeForbidden)
+        default: mappedOpFailure(code) ?? .vaultCode(shownCode(code))
+        }
+    }
+
     // swiftlint:disable:next cyclomatic_complexity
-    static func opFailure(_ code: String) -> FailureKind {
+    private static func mappedOpFailure(_ code: String) -> FailureKind? {
         switch code {
         case "bad_pin": .badPin
         case "bad_password": .badPassword
@@ -139,8 +149,32 @@ enum VaultFailures {
         case "device_secret": .deviceSecret
         case "transfer_incomplete": .transferIncomplete
         case "response_too_large": .responseTooLarge
-        default: .other
+        default: nil
         }
+    }
+
+    static let codeCredentialRequired = "credential_required"
+    static let codeForbidden = "forbidden"
+    /// What ``FailureKind/vaultCode(_:)`` shows for a code that is not `[a-z0-9_]{1,40}`.
+    public static let unknownCode = "unknown"
+
+    /// The holder-only types of VAULT-MESSAGING §3.5.9 the app sends: ANDROID-PLAN 0.1.57's list, with `credential.unlock`
+    /// (0.52.0), `.rotate`, `.password.change` and every `device.transfer.*` that §3.5.9 also names.
+    static let holderOnlyTypes: Set<String> = [
+        "vault.owner-check", "pin.change", "vault.secret.renew", "account.name.set", "vault.delete", "credential.get",
+        "credential.ack", "credential.reset", "credential.unlock", "credential.rotate", "credential.password.change",
+    ]
+
+    static func holderOnly(_ type: String) -> Bool { holderOnlyTypes.contains(type) || type.hasPrefix("device.transfer.") }
+
+    /// The code as ``FailureKind/vaultCode(_:)`` shows it (IOS-PLAN §4.4 (2)): [code] when it matches `[a-z0-9_]{1,40}`,
+    /// else ``unknownCode``. Nothing else of the error (its `message`, its body) is ever shown.
+    public static func shownCode(_ code: String) -> String {
+        let allowed = { (b: UInt8) in
+            (UInt8(ascii: "a")...UInt8(ascii: "z")).contains(b) || (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(b)
+                || b == UInt8(ascii: "_")
+        }
+        return (1...40).contains(code.utf8.count) && code.utf8.allSatisfy(allowed) ? code : unknownCode
     }
 
     /// What a failed check of the vault's software means for the member (§11.2, §11.10.1). None of these is

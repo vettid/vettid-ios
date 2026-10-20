@@ -17,7 +17,8 @@ extension VaultManager {
                 try? await checks.refreshOwnerCheck()
                 return checks.ownerCheck?.checksLeft
             },
-            mark: { rec.generation }
+            mark: { rec.generation },
+            noted: { e in ref.manager?.noted(e) ?? e }
         )
     }
 

@@ -70,6 +70,9 @@ public extension FailureKind {
         case .pinUncertain: DataStrings.failurePinUncertain
         case .renewUnconfirmed: DataStrings.failureRenewUnconfirmed
         case .timeScale: DataStrings.failureTimeScale
+        case .credentialRequired: DataStrings.credentialRequiredBody
+        case .notHolder: DataStrings.notHolder
+        case .vaultCode(let code): DataStrings.errorVaultCode(VaultFailures.shownCode(code))
         case .other: DataStrings.failureOther
         }
     }
@@ -155,12 +158,33 @@ public extension FailureKind {
         case .pinUncertain: "data_failure_pin_uncertain"
         case .renewUnconfirmed: "data_failure_renew_unconfirmed"
         case .timeScale: "data_failure_time_scale"
+        case .credentialRequired: "vault_credential_required_body"
+        case .notHolder: "vault_not_holder"
+        case .vaultCode: "error_vault_code"
         case .other: "data_failure_other"
         }
     }
 }
 
 public extension FailureKind {
+    /// "Your vault moved to a new phone" (`data_feed_device_replaced`): the title of ``notHolder`` (IOS-PLAN §4.4 (3)) and
+    /// of every notice that another phone became the holder, one string for all of them.
+    static var notHolderTitle: String { DataStrings.feedDeviceReplaced }
+
+    /// "This phone can't use your vault" (`vault_credential_required_title`): the title of ``credentialRequired``'s root
+    /// screen (IOS-PLAN §4.4 (1)).
+    static var credentialRequiredTitle: String { DataStrings.credentialRequiredTitle }
+
+    /// The title a screen shows above this failure's ``message``: [fallback] (the screen's own), except for ``notHolder``
+    /// (``notHolderTitle``) and ``credentialRequired`` (``credentialRequiredTitle``).
+    func title(or fallback: String) -> String {
+        switch self {
+        case .notHolder: Self.notHolderTitle
+        case .credentialRequired: Self.credentialRequiredTitle
+        default: fallback
+        }
+    }
+
     /// ``enrollmentStarted``'s text with the time from which the start-over is possible (iPhone only, no Android text).
     static func enrollmentStartedText(after: Date) -> String {
         DataStrings.failureEnrollmentStartedAfter(after.formatted(date: .abbreviated, time: .shortened))

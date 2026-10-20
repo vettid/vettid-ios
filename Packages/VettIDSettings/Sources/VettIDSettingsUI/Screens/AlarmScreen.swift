@@ -64,7 +64,7 @@ public struct AlarmContent: View {
             VStack(alignment: .leading, spacing: Spacing.l) {
                 NoticeCard(.info, title: CredentialStrings.alarmMine, message: CredentialStrings.alarmMineBody)
                 if let error = state.error {
-                    NoticeCard(.urgent, title: CredentialStrings.title, message: error.message(timeScale: timeScale))
+                    NoticeCard(.urgent, title: error.title(or: CredentialStrings.title), message: error.message(timeScale: timeScale))
                         .accessibilityIdentifier("error")
                 }
             }
@@ -98,7 +98,7 @@ public struct AlarmContent: View {
                 )
                 .accessibilityIdentifier("alarm_password")
                 if let error = state.error {
-                    NoticeCard(.urgent, title: CredentialStrings.title, message: error.message(timeScale: timeScale))
+                    NoticeCard(.urgent, title: error.title(or: CredentialStrings.title), message: error.message(timeScale: timeScale))
                         .accessibilityIdentifier("error")
                 }
             }

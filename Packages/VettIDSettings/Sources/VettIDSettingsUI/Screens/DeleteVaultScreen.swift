@@ -72,7 +72,7 @@ public struct DeleteVaultContent: View {
                         .accessibilityIdentifier("delete_not_deleted")
                 }
                 if let error = state.error {
-                    NoticeCard(.urgent, title: SecurityStrings.deleteTitle, message: error.message(timeScale: timeScale))
+                    NoticeCard(.urgent, title: error.title(or: SecurityStrings.deleteTitle), message: error.message(timeScale: timeScale))
                         .accessibilityIdentifier("error")
                 }
             }

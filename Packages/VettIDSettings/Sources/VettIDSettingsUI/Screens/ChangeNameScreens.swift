@@ -238,7 +238,7 @@ struct ChangeNameConfirmStep: View {
         } else if state.message == .backoff {
             Text(NameStrings.backoff).vettIDFont(.bodyMedium)
         } else if case .failed(let kind)? = state.message {
-            NoticeCard(.urgent, title: NameStrings.title, message: kind.message(timeScale: timeScale))
+            NoticeCard(.urgent, title: kind.title(or: NameStrings.title), message: kind.message(timeScale: timeScale))
                 .accessibilityIdentifier("name_failed")
         }
     }

@@ -119,6 +119,14 @@ extension FakeVaultService {
         queue(try epoch.seal(inner))
     }
 
+    /// [m] refused with [error] (its code and message) and [body]. Callers hold ``cond``.
+    func replyError(_ m: Inner, _ error: InnerError, body: String) throws {
+        guard let epoch = keyring.current() else { return }
+        let inner = Inner(id: Ulid.new(), type: m.type, ts: stampNow, re: m.id, status: Inner.statusError, error: error, body: Array(body.utf8))
+        responses[m.id] = inner
+        queue(try epoch.seal(inner))
+    }
+
     /// The requests of enrollment (§3.5.7, §10.6, §10.8), and those of Settings (``settingsRequest(_:_:)``). Callers hold
     /// ``cond``.
     private func request(_ m: Inner) throws { // swiftlint:disable:this cyclomatic_complexity
@@ -132,6 +140,7 @@ extension FakeVaultService {
         // answer, never run again.
         guard try arrives(m) else { return }
         let body = try StrictJson.parseObject(m.body)
+        if let r = refuseNextAnswers.removeValue(forKey: m.type) { return try replyError(m, r.error, body: r.body) }
         if let refusal = refusal(m.type) { return try reply(m.type, "{}", re: m.id, error: refusal) }
         // §3.6.3: the owner check's clock before each batch, then its gate on the app.
         try ownerCheckTick()

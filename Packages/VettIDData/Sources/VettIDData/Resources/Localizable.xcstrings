@@ -810,6 +810,17 @@
         }
       }
     },
+    "data_feed_device_replaced": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault moved to a new phone"
+          }
+        }
+      }
+    },
     "data_limit_action_invocations": {
       "extractionState": "manual",
       "localizations": {
@@ -1444,6 +1455,50 @@
           "stringUnit": {
             "state": "translated",
             "value": "Staging: 1 day = 1 hour"
+          }
+        }
+      }
+    },
+    "error_vault_code": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Something went wrong (code: %@). Try again. If it keeps happening, contact VettID and give this code."
+          }
+        }
+      }
+    },
+    "vault_credential_required_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault does not count this phone as the one that holds its credential, so it refused the request. Nothing was disclosed, and your PIN and password were not checked. This usually means a recovery of your vault was started and has not finished. If you recovered your vault on another phone, open VettID on that phone and unlock it to finish. Otherwise, start a recovery on the account site: it takes one to three days, and you need your PIN and your password. If another phone of yours now opens your vault, use 'Move to a new phone' there instead."
+          }
+        }
+      }
+    },
+    "vault_credential_required_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This phone can't use your vault"
+          }
+        }
+      }
+    },
+    "vault_not_holder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Another phone now holds your vault's credential, so this phone can't do this. Nothing was disclosed. Use VettID on the phone that holds it now. If you no longer have that phone, start a recovery on the account site."
           }
         }
       }
