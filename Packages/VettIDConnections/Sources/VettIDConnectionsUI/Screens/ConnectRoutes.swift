@@ -180,9 +180,6 @@ public struct ConnectionsRoute: View {
         a.onDismissError = { m.dismissError() }
         a.onDismissPeerDecline = { m.dismissPeerDecline($0) }
         a.onQuery = { m.setQuery($0) }
-        a.onApprove = { m.approve($0) }
-        a.onDecline = { m.decline($0) }
-        a.onDismissEnded = { m.dismissEnded() }
         return a
     }
 }

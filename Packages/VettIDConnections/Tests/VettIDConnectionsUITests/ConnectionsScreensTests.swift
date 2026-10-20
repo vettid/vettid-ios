@@ -9,7 +9,7 @@ import VettIDData
 import VettIDUI
 
 /// The Connections list and a connection's detail: their texts (vettid-android's, word for word), every state rendered,
-/// the requests' safety codes kept out of captures, the detail's pill and its closing once the connection is gone.
+/// the detail's pill and its closing once the connection is gone.
 /// Mirrors vettid-android `ConnectionNamesScreenTest` and `ConnectionsSearchTest`.
 @MainActor
 @Suite struct ConnectionsScreensTests {
@@ -30,11 +30,6 @@ import VettIDUI
         #expect(ConnectStrings.asksPaused("Ada")
             == "Ada’s requests are paused after you declined several. They are refused without asking you until you resume them.")
         #expect(ConnectStrings.stateLabel(.active) == nil && ConnectStrings.stateLabel(.stale) == "Out of reach: needs a new invitation")
-        #expect(EndedRequestNotice.title(.gone) == "Already decided")
-        #expect(EndedRequestNotice.body(.gone) == "This request was decided on another device, or it expired.")
-        #expect(EndedRequestNotice.title(.expired) == "No connection was made")
-        #expect(EndedRequestNotice.body(.expired) == "The request expired before both of you approved.")
-        #expect(EndedRequestNotice.body(.declined) == "You declined the request.")
         #expect(AsksCard.label(.allowAgain) == "Allow declined requests again")
     }
 
@@ -46,21 +41,6 @@ import VettIDUI
         #expect(ConnectionItem.supporting(c) == "Countess")
         c.state = .pending
         #expect(ConnectionItem.supporting(c) == "Waiting for approval · Countess")
-    }
-
-    /// The requests as vettid-android's request screens word them, on either side.
-    @Test func aRequestSaysWhatToCompare() {
-        let incoming = PendingConnection.incoming(
-            ConnectionRequest(pendingID: "p", sas: "042817", remote: true, name: "Ada", receivedAt: Date(), exp: nil)
-        )
-        let outgoing = PendingConnection.outgoing(
-            OutgoingRequest(connectionID: "o", sas: "042817", remote: false, name: nil, state: .pending, receivedAt: Date(), exp: nil)
-        )
-        #expect(RequestCard.type(incoming) == "Connection request (link)" && RequestCard.type(outgoing) == "Your connection request")
-        #expect(RequestCard.body(incoming).hasPrefix("\u{2068}Ada\u{2069} used your invitation link."))
-        #expect(RequestCard.body(outgoing).hasPrefix("Compare it with Someone: it must match the code on their phone."))
-        #expect(RequestCard.approveLabel(incoming) == "The codes match: connect")
-        #expect(RequestCard.approveLabel(outgoing) == "The codes match: approve")
     }
 
     @Test func everyListStateRenders() {
@@ -106,19 +86,6 @@ import VettIDUI
         #expect(closed == 1)
     }
 
-    /// IOS-PLAN §6.4: a request's safety code on the secure layer, unless screenshots are allowed.
-    @Test func aRequestsCodeIsKeptOutOfCaptures() {
-        guard SecureLayer.isAvailable else { return }
-        var s = ConnectionsState()
-        s.loading = false
-        s.requests = [.incoming(ConnectionRequest(pendingID: "p", sas: "042817", remote: false, name: "Ada", receivedAt: Date(), exp: nil))]
-        let screen = ConnectionsScreen(state: s, chrome: chrome, actions: ConnectionsActions())
-        let protected = host(screen.environment(ScreenshotAllowance(onByDefault: false)))
-        #expect(views(in: protected).contains { String(describing: type(of: $0)).contains("Canvas") })
-        let allowed = host(screen.environment(ScreenshotAllowance(onByDefault: true)))
-        #expect(!views(in: allowed).contains { String(describing: type(of: $0)).contains("Canvas") })
-    }
-
     private var chrome: ShellChrome { ShellChrome(accountName: "Ada Lovelace", onMenu: {}, onAvatar: {}) }
 
     private func listStates() -> [ConnectionsState] {
@@ -133,17 +100,6 @@ import VettIDUI
                 OutstandingInvite(inviteID: "i2", exp: nil, remote: true),
             ]
             s.peerDeclines = [PeerDecline(requestID: "r", name: nil, outgoing: false, at: Date())]
-            s.requests = [
-                .incoming(ConnectionRequest(pendingID: "p", sas: "042817", remote: true, name: nil, receivedAt: Date(), exp: nil)),
-                .outgoing(OutgoingRequest(
-                    connectionID: "o1", sas: nil, remote: false, name: "Ada", state: .waiting, receivedAt: Date(), exp: nil
-                )),
-                .outgoing(OutgoingRequest(
-                    connectionID: "o2", sas: "042817", remote: true, name: "Ada", state: .approved, receivedAt: Date(), exp: nil
-                )),
-            ]
-            s.deciding = ["p"]
-            s.ended = EndedRequest(requestID: "x", end: .gone)
             s.error = .network
             s.cancelling = s.invites.first
             s.searchable = true
