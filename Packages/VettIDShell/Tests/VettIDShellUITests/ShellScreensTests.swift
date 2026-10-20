@@ -167,6 +167,28 @@ import VettIDUI
         }
     }
 
+    /// Messages: the list in the placeholder's place, the picker and a conversation over it.
+    @Test func theMessagesRender() {
+        let repo = FakeVaultRepository(.unlocked)
+        let gate = OwnerCheckGate(gated: false, warning: false, holdOff: false, notices: [], presenceUnrecorded: false)
+        let connections = FakeConnections()
+        var c = ConnectionInfo(id: "c1", name: "", state: .active)
+        c.firstName = "Ada"
+        connections.connections = [c]
+        let messages = FakeMessages()
+        messages.connections = connections.connections
+        let model = ShellModel(account: repo, vault: repo, ownerChecks: repo)
+        for path in [[], [ShellRoute.newMessage], [ShellRoute.conversation("c1")]] {
+            model.path = path
+            let withMessages = AppShell(
+                account: repo, vault: repo, ownerChecks: repo, credential: repo, profiles: repo, appLock: StillAppLock(),
+                model: model, gate: gate, now: now, version: AppVersion(name: "2.0.0", build: 1), installedFrom: .apple,
+                promptReason: "Unlock VettID", connections: connections, connectionRequests: connections, messages: messages
+            ) {}
+            #expect(height(withMessages) > 0)
+        }
+    }
+
     private func height(_ view: some View) -> CGFloat {
         UIHostingController(rootView: view.vettIDTheme(.dark)).sizeThatFits(in: CGSize(width: 390, height: 844)).height
     }

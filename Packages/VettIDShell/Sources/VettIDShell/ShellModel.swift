@@ -57,6 +57,13 @@ public final class ShellModel {
         path.append(r)
     }
 
+    /// A conversation over the current screen, unless it is the one on top already (vettid-android's `launchSingleTop`
+    /// for `ConversationRoute`).
+    public func openConversation(_ connectionID: String) {
+        let route = ShellRoute.conversation(connectionID)
+        if path.last != route { push(route) }
+    }
+
     /// An invitation link the app was opened with (VAULT-MESSAGING §6.4, IOS-PLAN §6.8): the accept screen over the
     /// current one, where the member confirms before anything is sent. The drawer and the sheet close. Mirrors
     /// vettid-android `AppShell`'s `inviteLink`.

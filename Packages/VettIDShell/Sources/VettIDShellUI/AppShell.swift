@@ -3,6 +3,8 @@ import SwiftUI
 import VettIDConnections
 import VettIDConnectionsUI
 import VettIDData
+import VettIDMessages
+import VettIDMessagesUI
 import VettIDOnboarding
 import VettIDOnboardingUI
 import VettIDSettings
@@ -37,6 +39,7 @@ public struct AppShell: View {
     private let connections: (any ConnectionsRepository)?
     private let connectionRequests: (any ConnectionRequestsRepository)?
     private let inviteInbox: InviteLinkInbox?
+    private let messages: (any MessagesRepository)?
     private let onOpenPortal: @MainActor () -> Void
 
     /// [model]: where the member is, owned above the owner check's gate. [gate]: the owner check at [now] (the root re-reads
@@ -44,7 +47,8 @@ public struct AppShell: View {
     /// [canary] and [canaryInbox]: the canary manifest on Settings → Attestation (VAULT-RELEASES §10.1 step 9).
     /// [releaseUpdates] and [releaseNotes]: Settings → Vault → "Update available" and its screen (RELEASE-UPDATES §2).
     /// [connections], [connectionRequests] and [inviteInbox]: the connect flow and an invitation link the app was opened
-    /// with (VAULT-MESSAGING §6.4).
+    /// with (VAULT-MESSAGING §6.4). [messages]: Messages, its conversations and the new-message picker (§10.5), with
+    /// [connections].
     public init(
         account: any AccountRepository,
         vault: any VaultRepository,
@@ -66,6 +70,7 @@ public struct AppShell: View {
         connections: (any ConnectionsRepository)? = nil,
         connectionRequests: (any ConnectionRequestsRepository)? = nil,
         inviteInbox: InviteLinkInbox? = nil,
+        messages: (any MessagesRepository)? = nil,
         onOpenPortal: @escaping @MainActor () -> Void
     ) {
         self.account = account
@@ -88,6 +93,7 @@ public struct AppShell: View {
         self.connections = connections
         self.connectionRequests = connectionRequests
         self.inviteInbox = inviteInbox
+        self.messages = messages
         self.onOpenPortal = onOpenPortal
     }
 
@@ -248,6 +254,12 @@ public struct AppShell: View {
         case .help:
             // A back arrow, as on Android, where it returns to the start destination.
             HelpScreen { model.back() }
+        case .messages:
+            if let messages, connections != nil {
+                MessagesRoute(messages: messages, ownerChecks: ownerChecks, chrome: chrome, host: messagesHost)
+            } else {
+                ComingLaterScreen(destination: model.destination, chrome: chrome)
+            }
         case .connections:
             if let connections, let connectionRequests {
                 ConnectionsRoute(
@@ -280,6 +292,8 @@ public struct AppShell: View {
             DeleteVaultRoute(vault: vault) { model.pop() }
         case .releaseUpdate, .connect, .connection:
             featureDetail(route)
+        case .conversation, .newMessage:
+            messagesDetail(route)
         }
     }
 
@@ -296,6 +310,18 @@ public struct AppShell: View {
             }
         case .connection(let id):
             if let connections { ConnectionDetailRoute(id, connections: connections, host: connectHost) }
+        default:
+            EmptyView()
+        }
+    }
+
+    /// A conversation and the new-message picker (vettid-android's `messagesDestination`).
+    @ViewBuilder private func messagesDetail(_ route: ShellRoute) -> some View {
+        switch route {
+        case .conversation(let id):
+            if let messages, let connections { ConversationRoute(id, messages: messages, connections: connections, host: messagesHost) }
+        case .newMessage:
+            if let connections { NewMessageRoute(connections: connections, host: messagesHost) }
         default:
             EmptyView()
         }
@@ -337,6 +363,20 @@ public struct AppShell: View {
         h.push = { model.push(.connect($0)) }
         h.onOpenConnection = { model.push(.connection($0)) }
         h.replaceWithConnection = { model.replace(.connection($0)) }
+        // "Send a message" on a connection's page and after connecting, once the messages are there (IOS-PLAN §8 I2.2).
+        if messages != nil { h.onOpenConversation = { model.openConversation($0) } }
+        return h
+    }
+
+    /// Where the Messages screens go (vettid-android `MessagesHost`).
+    private var messagesHost: MessagesHost {
+        let model = model
+        var h = MessagesHost()
+        h.onBack = { model.pop() }
+        h.onOpenConversation = { model.openConversation($0) }
+        h.onCompose = { model.push(.newMessage) }
+        h.onOpenConnection = { model.push(.connection($0)) }
+        h.onInvite = { model.push(.connect(.invite)) }
         return h
     }
 

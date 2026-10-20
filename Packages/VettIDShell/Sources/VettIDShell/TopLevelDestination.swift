@@ -41,7 +41,7 @@ public enum TopLevelDestination: String, CaseIterable, Sendable {
 }
 
 /// The screens pushed over a top-level screen so far (vettid-android's routes of `feature/settings`,
-/// `feature/credential` and the connect flow of `feature/connections`).
+/// `feature/credential`, `feature/connections` and `feature/messages`).
 public enum ShellRoute: Hashable, Sendable {
     case vaultStatus
     case attestation
@@ -66,8 +66,13 @@ public enum ShellRoute: Hashable, Sendable {
     /// Inviting, scanning an invitation or accepting one (VAULT-MESSAGING §6.4): from Connections' add button, or an
     /// invitation link the app was opened with.
     case connect(ConnectDestination)
-    /// A connection's detail (VAULT-MESSAGING §10.4), from the Connections list or the accept screen.
+    /// A connection's detail (VAULT-MESSAGING §10.4), from the Connections list, the accept screen or a conversation.
     case connection(String)
+    /// A conversation with a connection (VAULT-MESSAGING §10.5), from Messages, the new-message picker, a connection's
+    /// detail or the screens of connecting.
+    case conversation(String)
+    /// Messages' compose button: pick a connection to write to.
+    case newMessage
 }
 
 /// This build's version as the drawer's footer shows it ("VettID 2.0.0 (1)", vettid-android `drawer_version`).

@@ -94,6 +94,30 @@ import VettIDOnboarding
         #expect(m.path.isEmpty && m.destination == .connections)
     }
 
+    /// The messages (VAULT-MESSAGING §10.5): a conversation opens from Messages or the picker over the current screen,
+    /// once if it is on top already (vettid-android's `launchSingleTop`); the connection's page from the conversation,
+    /// and the conversation again from there; "Send a message" after connecting opens it over the accept screen.
+    @Test func theMessagesFlow() {
+        let m = model
+        #expect(m.destination == .messages)
+        m.push(.newMessage)
+        m.openConversation("c1")
+        m.openConversation("c1")
+        #expect(m.path == [.newMessage, .conversation("c1")])
+        m.push(.connection("c1"))
+        m.openConversation("c1")
+        #expect(m.path == [.newMessage, .conversation("c1"), .connection("c1"), .conversation("c1")])
+        m.pop()
+        m.pop()
+        #expect(m.path == [.newMessage, .conversation("c1")])
+        m.navigate(.connections)
+        m.push(.connect(.accept(AcceptInput())))
+        m.openConversation("c2")
+        #expect(m.path == [.connect(.accept(AcceptInput())), .conversation("c2")])
+        m.navigate(.messages)
+        #expect(m.path.isEmpty && m.destination == .messages)
+    }
+
     /// vettid-android `RootViewModel.lockVault`: the sheet closes and the vault locks; a lock that fails reads the phase
     /// again.
     @Test func lockVaultFromTheSheet() async {
