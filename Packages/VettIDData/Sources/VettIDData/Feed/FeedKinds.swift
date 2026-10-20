@@ -24,8 +24,9 @@ public enum FeedTarget: Equatable, Sendable {
     case sheet
 }
 
-/// How the app treats a feed kind (VAULT-MESSAGING §10.9 as of 0.42.0; ANDROID-PLAN §4 Notifications, 4). No kind is
-/// hidden from the list: one this app does not know (a newer vault's) is listed and opens the detail sheet.
+/// How the app treats a feed kind (VAULT-MESSAGING §10.9 as of 0.50.0; ANDROID-PLAN §4 Notifications, 4). Only the
+/// History-only kinds (``FeedKinds/historyOnly``) are left out of the list: one this app does not know (a newer vault's)
+/// is listed and opens the detail sheet.
 public enum FeedKindClass: Equatable, Sendable {
     /// A kind of §10.9 whose screen this app has.
     case shown
@@ -36,15 +37,11 @@ public enum FeedKindClass: Equatable, Sendable {
     case unknown
 }
 
-/// The feed kinds in the app: the classification, the target and the asks; the data the screens build a row from.
-///
-/// The titles are **not** here: the member-facing title of each kind (with its variants: a batch's `count`, the
-/// `owner_check.failed` and `owner_check.hold_changed` `ref`s, the names from the caches) comes with the Notifications
-/// screen, from the plain titles the owner approves (chosen; not in the spec: ANDROID-PLAN §4's table is being replaced).
-/// The screens look a title up from ``FeedItem/kind`` and the raw members; ``classify(_:)`` and ``target(_:)`` decide the
-/// rest. Mirrors the non-text part of vettid-android `FeedKinds`.
+/// The feed kinds in the app: the classification, the target and the asks; the titles are in ``FeedKinds`` `+Titles`
+/// (IOS-PLAN §4.1). The screens look a title up from ``FeedItem/kind`` and the raw members; ``classify(_:)`` and
+/// ``target(_:)`` decide the rest. Mirrors vettid-android `FeedKinds`.
 public enum FeedKinds {
-    /// Every kind §10.9 names (0.42.0), `leash.*` included.
+    /// Every kind §10.9 names (0.50.0), `leash.*` included.
     public static let known: Set<String> = [
         "connection.request", "connection.request.peer_declined", "connection.added", "connection.removed",
         "connection.stale", "connection.asks_paused", "connection.authenticate.requested",
@@ -59,7 +56,23 @@ public enum FeedKinds {
         "leash.rate_limited", "leash.item.read", "leash.item.run", "leash.item.proxy", "leash.agent.suspended",
         "leash.referrals_limited",
         "action.request", "intro.request", "location.shared", "location.request", "wallet.signed",
+        // Release R (VAULT-MESSAGING 0.49.1, as built), IOS-PLAN §4.1 "Event titles".
+        "vault.pin_changed", "device.secret_renewed", "credential.recovered", "recovery.device_paired",
+        "recovery.completed", "recovery.attempt", "recovery.change_required", "recovery.counter_unavailable",
+        "identity.rotation_failed", "identity.rotate_conflict",
+        // VAULT-MESSAGING 0.50.0 (owner decision of 2026-10-20): a `rollback` closure's urgent item.
+        "recovery.generation_closed",
     ]
+
+    /// Feed kinds the app neither lists nor notifies (IOS-PLAN §4.1, de-duplication): one recovery raises one
+    /// notification, `recovery.completed`, and a PIN change is History only. Their audit entries show in History; the feed
+    /// items stay as the vault keeps them (no `feed.update` is sent for them).
+    public static let historyOnly: Set<String> = ["vault.pin_changed", "credential.recovered", "recovery.device_paired"]
+
+    public static func isHistoryOnly(_ kind: String) -> Bool { historyOnly.contains(kind) }
+
+    /// A kind of §10.9 (`leash.*` included); one this app does not know shows its kind on the detail sheet.
+    public static func isKnown(_ kind: String) -> Bool { known.contains(kind) || kind.hasPrefix("leash.") }
 
     /// Kinds whose screens come later (ANDROID-PLAN §6).
     static let later: Set<String> = ["action.request", "intro.request", "location.shared", "location.request", "wallet.signed"]
