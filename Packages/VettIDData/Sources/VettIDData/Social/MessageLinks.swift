@@ -22,6 +22,8 @@ public struct MessageLink: Equatable, Sendable {
 ///   opening one in the link (a link written in parentheses);
 /// - a URL without a host, with a name and password before its host (`https://bank.example@other.example`: the
 ///   confirmation would name only the second), with an invalid host or a port outside 1–65535 is not a link.
+/// - a candidate that is not a link (inside a word, or not a valid URL) is passed over up to its end, so that the text is
+///   scanned once: an `https://` later in the same run (`xhttps://a.example/https://b.example`) is not linked either.
 public enum MessageLinks {
     static let scheme = "https://"
 

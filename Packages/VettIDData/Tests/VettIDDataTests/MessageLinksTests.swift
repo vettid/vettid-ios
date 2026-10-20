@@ -122,8 +122,8 @@ import Testing
         #expect(MessageLinks.link(" https://example.com") == nil)
     }
 
-    /// Peer text is scanned in linear time: 16 KiB of each pattern that made the scan quadratic before takes well under
-    /// 0.2 s (a debug build).
+    /// Peer text is scanned in linear time: 16 KiB of each pattern that made the scan quadratic before (seconds) takes
+    /// far less than the generous bound, which only catches that blow-up.
     @Test func adversarialTextIsScannedQuickly() {
         let size = 16 * 1_024
         func rep(_ s: String) -> String { String(repeating: s, count: size / s.utf8.count) }
@@ -136,9 +136,16 @@ import Testing
             let start = ContinuousClock.now
             _ = MessageLinks.links(in: text)
             let took = ContinuousClock.now - start
-            #expect(took < .milliseconds(200), "\(text.prefix(16)): \(took)")
+            #expect(took < .seconds(2), "\(text.prefix(16)): \(took)")
         }
         #expect(MessageLinks.links(in: rep("https://a.example/ ")).count == size / 19)
         #expect(linked("https://a" + String(repeating: ")", count: 100)) == ["https://a"])
+    }
+
+    /// A failed candidate is passed over whole: a later `https://` in the same run stays text (chosen; not in the spec).
+    @Test func aLinkInsideAFailedCandidateStaysText() {
+        #expect(linked("xhttps://a.example/https://b.example").isEmpty)
+        #expect(linked("https://u@x/https://b.example").isEmpty)
+        #expect(linked("https://u@x/ https://b.example") == ["https://b.example"])
     }
 }

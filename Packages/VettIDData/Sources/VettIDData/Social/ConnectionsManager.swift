@@ -137,14 +137,17 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
 
     func refresh(quietly: Bool) async throws {
         let g = generation
+        let asked = Set(connections.map(\.id))
         let o = quietly ? quietOps : ops
         let list = try await guarded { try await o().connectionList() }
         guard g == generation else { return }
         let next = list.filter { $0.kind == "connection" }.map(ConnectionParser.connection)
         let kept = Set(next.map(\.id))
-        let gone = connections.map(\.id).filter { !kept.contains($0) }
-        connections = next
-        // A connection the vault no longer lists (removed on another device) takes its conversation with it.
+        // A connection read while the list was on its way (``connection(_:)``) stays; one the vault no longer lists that
+        // was known when the list was asked for (removed on another device) goes, and takes its conversation with it.
+        let added = connections.filter { !asked.contains($0.id) && !kept.contains($0.id) }
+        let gone = connections.map(\.id).filter { asked.contains($0) && !kept.contains($0) }
+        connections = next + added
         for id in gone { onForget(id) }
     }
 
