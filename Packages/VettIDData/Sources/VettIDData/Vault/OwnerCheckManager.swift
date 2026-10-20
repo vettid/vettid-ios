@@ -37,7 +37,14 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     /// The margin under the 30 days a hold may stay off, for the clocks of the phone and the enclave.
     nonisolated static let holdOffMargin: TimeInterval = 600
 
-    public private(set) var ownerCheck: OwnerCheckView?
+    public private(set) var ownerCheck: OwnerCheckView? {
+        didSet {
+            let (was, now) = ((oldValue?.state ?? .ok) != .ok, (ownerCheck?.state ?? .ok) != .ok)
+            if was != now { onHeldChange(now) }
+        }
+    }
+    /// Told when the vault becomes held or due (true) and when it is no longer (false), as the state says (§3.6.3).
+    @ObservationIgnored public var onHeldChange: @MainActor (_ held: Bool) -> Void = { _ in }
     public private(set) var lockedByOwnerCheck = false
     public private(set) var unlockCheckOutcome: OwnerCheckOutcome?
     public private(set) var notices: [OwnerCheckNotice] = []
