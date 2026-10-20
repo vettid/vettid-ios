@@ -249,13 +249,11 @@ public struct AppShell: View {
             // A back arrow, as on Android, where it returns to the start destination.
             HelpScreen { model.back() }
         case .connections:
-            // Until the Connections list (IOS-PLAN §8 I2.1): the placeholder with the list's add button.
-            ComingLaterScreen(destination: model.destination, chrome: chrome)
-                .overlay(alignment: .bottom) {
-                    if connections != nil, connectionRequests != nil {
-                        AddConnectionControls { model.push(.connect($0)) }
-                    }
-                }
+            if let connections, let connectionRequests {
+                ConnectionsRoute(connections: connections, requests: connectionRequests, chrome: chrome, host: connectHost)
+            } else {
+                ComingLaterScreen(destination: model.destination, chrome: chrome)
+            }
         default:
             ComingLaterScreen(destination: model.destination, chrome: chrome)
         }
@@ -277,12 +275,12 @@ public struct AppShell: View {
             NewPhoneSecretRoute(vault: vault) { model.pop() }
         case .deleteVault:
             DeleteVaultRoute(vault: vault) { model.pop() }
-        case .releaseUpdate, .connect:
+        case .releaseUpdate, .connect, .connection:
             featureDetail(route)
         }
     }
 
-    /// The screens of the features over the vault: the release update, the connect flow.
+    /// The screens of the features over the vault: the release update, the connect flow, a connection's detail.
     @ViewBuilder private func featureDetail(_ route: ShellRoute) -> some View {
         switch route {
         case .releaseUpdate:
@@ -293,6 +291,8 @@ public struct AppShell: View {
             if let connections, let connectionRequests {
                 ConnectRoute(destination, connections: connections, requests: connectionRequests, host: connectHost)
             }
+        case .connection(let id):
+            if let connections { ConnectionDetailRoute(id, connections: connections, host: connectHost) }
         default:
             EmptyView()
         }
@@ -331,6 +331,9 @@ public struct AppShell: View {
         var h = ConnectHost()
         h.onBack = { model.pop() }
         h.replace = { model.replace(.connect($0)) }
+        h.push = { model.push(.connect($0)) }
+        h.onOpenConnection = { model.push(.connection($0)) }
+        h.replaceWithConnection = { model.replace(.connection($0)) }
         return h
     }
 
