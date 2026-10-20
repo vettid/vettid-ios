@@ -229,4 +229,18 @@ import VettIDVault
         let got = try await api.connectionGet(id)
         #expect(got.alias == "Mo" && got.tags == ["family"])
     }
+
+    /// A passed owner check reads the lists again (§3.6.3: nothing held back is replayed as events; as vettid-android's
+    /// `onPassed`); a failed one does not.
+    @Test func aPassedOwnerCheckReadsTheListsAgain() async throws {
+        defer { phone.close() }
+        try await setUp()
+        func reads() -> Int { service.requestsSeen.filter { $0 == "connection.list" || $0 == "connection.request.list" }.count }
+        #expect(await eventually { reads() == 2 }, "the reads at the opening")
+        _ = try? await m.ownerChecks.check(pin: "111111", password: "correct horse battery", holdOff: nil)
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(reads() == 2, "a failed check reads nothing")
+        #expect(try await m.ownerChecks.check(pin: pin, password: "correct horse battery", holdOff: nil) == .passed)
+        #expect(await eventually { reads() == 4 })
+    }
 }

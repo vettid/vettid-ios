@@ -215,6 +215,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
                 guard !rec.closed else { return }
                 if b.isEmpty { try checkFile.clear() } else { try checkFile.save(b) }
             },
+            // §3.6.3: nothing held back is replayed as events; the lists are read again (as vettid-android).
+            onPassed: { ref.manager?.connections.refreshAllQuietly() },
             onRecoveryStatus: { r, since in ref.manager?.noteRecoveryStatus(r, since: since) },
             now: config.now,
             mark: { rec.generation },
