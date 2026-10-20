@@ -47,6 +47,8 @@ packages:
     path: Packages/VettIDSettings
   VettIDShell:
     path: Packages/VettIDShell
+  VettIDConnections:
+    path: Packages/VettIDConnections
   # TEST ONLY: linked by test targets, never by the app (release check).
   VettIDTesting:
     path: Packages/VettIDTesting
@@ -110,6 +112,7 @@ targets:
       - package: VettIDOnboarding
       - package: VettIDSettings
       - package: VettIDShell
+      - package: VettIDConnections
 
   VettIDTests:
     type: bundle.unit-test
@@ -164,6 +167,8 @@ schemes:
         - package: VettIDSettings/VettIDSettingsUITests
         - package: VettIDShell/VettIDShellTests
         - package: VettIDShell/VettIDShellUITests
+        - package: VettIDConnections/VettIDConnectionsTests
+        - package: VettIDConnections/VettIDConnectionsUITests
         - package: VettIDTesting/VettIDTestingTests
     profile:
       config: Release
