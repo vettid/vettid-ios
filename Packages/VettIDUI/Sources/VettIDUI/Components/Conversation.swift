@@ -3,19 +3,43 @@ import SwiftUI
 /// One message in a conversation (ANDROID-PLAN §4): the member's own messages on the right in a gold fill, the
 /// connection's on the left in a card colour. [meta] is the time and, for own messages, the delivery state; the whole
 /// bubble reads as one item ([accessibilityLabel]). Mirrors vettid-android `MessageBubble`.
+///
+/// [text] may carry `.link` runs (the message's tappable links, VAULT-MESSAGING §10.5 "Links"): a tap on one is handed
+/// to [links] and never opened by the system here; VoiceOver offers each link as an action named by [links]' name for
+/// it. With [delete], the bubble's context menu (a long press) offers the delete.
 public struct MessageBubble: View {
     @Environment(\.vettIDColors) private var colors
-    let text: String
+    let text: AttributedString
     let outgoing: Bool
     let meta: String
     let accessibilityText: String
+    let links: BubbleLinks?
+    let deleteLabel: String?
+    let onDelete: (@MainActor () -> Void)?
 
     public init(_ text: String, outgoing: Bool, meta: String, accessibilityLabel: String) {
+        self.init(AttributedString(text), outgoing: outgoing, meta: meta, accessibilityLabel: accessibilityLabel)
+    }
+
+    public init(
+        _ text: AttributedString,
+        outgoing: Bool,
+        meta: String,
+        accessibilityLabel: String,
+        links: BubbleLinks? = nil,
+        delete: (label: String, action: @MainActor () -> Void)? = nil
+    ) {
         self.text = text
         self.outgoing = outgoing
         self.meta = meta
         self.accessibilityText = accessibilityLabel
+        self.links = links
+        self.deleteLabel = delete?.label
+        self.onDelete = delete?.action
     }
+
+    /// The link runs of [text], in order.
+    static func linkURLs(_ text: AttributedString) -> [URL] { text.runs.compactMap(\.link) }
 
     public var body: some View {
         let shape = UnevenRoundedRectangle(
@@ -32,13 +56,19 @@ public struct MessageBubble: View {
             HStack(spacing: 0) {
                 VStack(alignment: .trailing, spacing: Spacing.xxs) {
                     Text(text).vettIDFont(.bodyLarge).foregroundStyle(ink).multilineTextAlignment(.leading)
+                        .tint(ink)
                     Text(meta).vettIDFont(.labelSmall).foregroundStyle(metaInk)
                 }
                 .padding(.horizontal, Spacing.m + Spacing.xxs)
                 .padding(.vertical, Spacing.s)
                 .background(outgoing ? colors.primaryContainer : colors.surfaceContainerHigh, in: shape)
+                // A link is the caller's to open, after its question: never the system's from here.
+                .environment(\.openURL, BubbleLinks.intercepting(links))
+                .contentShape(.contextMenuPreview, shape)
+                .contextMenu { deleteMenu }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(accessibilityText)
+                .accessibilityActions { linkActions }
             }
             // The bubble hugs its text, up to 78 % of the row.
             .containerRelativeFrame(.horizontal, alignment: outgoing ? .trailing : .leading) { width, _ in
@@ -48,6 +78,42 @@ public struct MessageBubble: View {
         }
         .padding(.horizontal, Spacing.gutter)
         .padding(.vertical, Spacing.xxs)
+    }
+
+    @ViewBuilder private var deleteMenu: some View {
+        if let deleteLabel, let onDelete {
+            Button(role: .destructive, action: onDelete) { Label(deleteLabel, systemImage: VettIDSymbol.delete.rawValue) }
+        }
+    }
+
+    @ViewBuilder private var linkActions: some View {
+        if let deleteLabel, let onDelete { Button(deleteLabel, action: onDelete) }
+        if let links {
+            ForEach(Array(Self.linkURLs(text).enumerated()), id: \.offset) { _, url in
+                Button(links.name(url)) { links.open(url) }
+            }
+        }
+    }
+}
+
+/// What a bubble does with its links: [open] takes a tapped link (the caller asks before anything opens), [name] names a
+/// link for VoiceOver (the host the caller's question shows).
+public struct BubbleLinks: Sendable {
+    public let name: @MainActor @Sendable (URL) -> String
+    public let open: @MainActor @Sendable (URL) -> Void
+
+    public init(name: @escaping @MainActor @Sendable (URL) -> String, open: @escaping @MainActor @Sendable (URL) -> Void) {
+        self.name = name
+        self.open = open
+    }
+
+    /// The bubble's `openURL`: every link goes to [links] (or nowhere), never to the system.
+    @MainActor
+    public static func intercepting(_ links: BubbleLinks?) -> OpenURLAction {
+        OpenURLAction { url in
+            MainActor.assumeIsolated { links?.open(url) }
+            return .handled
+        }
     }
 }
 

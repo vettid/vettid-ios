@@ -255,7 +255,8 @@ struct AppRoot: View {
                     version: .of(Bundle.main.infoDictionary ?? [:]), installedFrom: InstalledFromBuild.current,
                     promptReason: AppLockTexts.reason, canary: vault.canary, canaryInbox: canaryInbox,
                     releaseUpdates: vault.releaseUpdate, releaseNotes: releaseNotes, releaseInbox: releaseInbox,
-                    connections: vault.connections, connectionRequests: vault.connections, inviteInbox: inviteInbox
+                    connections: vault.connections, connectionRequests: vault.connections, inviteInbox: inviteInbox,
+                    messages: vault.messages
                 ) { openPortal() }
             }
         }

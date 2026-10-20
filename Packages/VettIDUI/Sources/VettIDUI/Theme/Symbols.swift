@@ -26,6 +26,7 @@ public enum VettIDSymbol: String, CaseIterable, Sendable {
     case starOutline = "star" // StarOutline
     case edit = "square.and.pencil" // Edit
     case reply = "arrowshape.turn.up.left" // Reply
+    case send = "paperplane" // Send (a message)
     case qrCode = "qrcode" // QrCode2
     case qrCodeScanner = "qrcode.viewfinder" // QrCodeScanner
     case personAdd = "person.badge.plus" // PersonAdd

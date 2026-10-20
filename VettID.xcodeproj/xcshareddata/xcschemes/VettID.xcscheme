@@ -267,6 +267,28 @@
             parallelizable = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
+               BlueprintIdentifier = "VettIDMessagesTests"
+               BuildableName = "VettIDMessagesTests"
+               BlueprintName = "VettIDMessagesTests"
+               ReferencedContainer = "container:Packages/VettIDMessages">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "VettIDMessagesUITests"
+               BuildableName = "VettIDMessagesUITests"
+               BlueprintName = "VettIDMessagesUITests"
+               ReferencedContainer = "container:Packages/VettIDMessages">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
                BlueprintIdentifier = "VettIDTestingTests"
                BuildableName = "VettIDTestingTests"
                BlueprintName = "VettIDTestingTests"
