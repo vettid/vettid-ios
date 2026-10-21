@@ -108,6 +108,7 @@ extension FakeVaultService {
         switch m.type {
         case "account.get": try accountGet(m)
         case "account.name.set": try nameSet(m, body)
+        case "profile.get", "profile.set": try profileRequest(m, body)
         case "credential.version":
             let key = versionWithoutKeyValue ? "" : #","key":"\#(credentialKeyValue)""#
             try reply(m.type, #"{"exists":\#(hasCredential),"version":\#(credentialVersion)\#(key),"updated_at":"2026-10-04T12:00:00Z"\#(alarmMember)}"#, re: m.id)

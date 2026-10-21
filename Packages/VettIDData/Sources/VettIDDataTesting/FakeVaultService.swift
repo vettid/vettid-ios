@@ -223,6 +223,8 @@ public final class FakeVaultService: @unchecked Sendable {
     var photos = FakePhotos()
     /// The feed, the audit log and the asks (FakeVaultService+Activity.swift, FakeVaultService+Approvals.swift).
     var activity = FakeActivity()
+    /// The member's own profile object (FakeVaultService+Profile.swift).
+    var profile = FakeProfile()
 
     public init() throws {
         etk = try KemPrivateKey.generate()

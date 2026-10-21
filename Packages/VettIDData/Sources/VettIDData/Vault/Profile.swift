@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import VettIDCrypto
 import VettIDVault
 
 /// What `account.name.set` came to (VAULT-MESSAGING §10.8). Mirrors vettid-android `NameChangeOutcome`.
@@ -18,45 +19,174 @@ public enum NameChangeOutcome: Equatable, Sendable {
     case failed(FailureKind, code: String?)
 }
 
-/// The member's shared profile and the account's names (VAULT-MESSAGING §10.8). The iPhone app has the name change so
-/// far; the shared profile (`profile.get`, `profile.set`, the photo) comes with IOS-PLAN §8 I2.5. Failures other than a
+/// The member's own shared profile (VAULT-MESSAGING §10.8): the read-only core ([firstName], [lastName] from the account
+/// snapshot, the vault's identity key as [fingerprint]) and the editable display name ([displayName], "" for none) and
+/// [photo] (the standard base64 of a JPEG or PNG of at most 65,536 bytes; nil for none). In memory only, never printed
+/// with its photo. Mirrors vettid-android `OwnProfile`.
+public struct OwnProfile: Equatable, Sendable, CustomStringConvertible, CustomReflectable {
+    public var version: UInt64
+    public var displayName: String
+    public var firstName: String?
+    public var lastName: String?
+    public var fingerprint: String?
+    public var photo: String?
+
+    public init(
+        version: UInt64, displayName: String, firstName: String?, lastName: String?, fingerprint: String?, photo: String? = nil
+    ) {
+        self.version = version
+        self.displayName = displayName
+        self.firstName = firstName
+        self.lastName = lastName
+        self.fingerprint = fingerprint
+        self.photo = photo
+    }
+
+    public var fullName: String? { AccountNames.full(firstName, lastName) }
+
+    public var description: String { "OwnProfile(version: \(version), photo: \(photo == nil ? "none" : "set"))" }
+    public var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+
+/// The member's shared profile and the account's names (VAULT-MESSAGING §10.8). Failures other than a
 /// ``NameChangeOutcome`` are ``VaultFailure``s. Mirrors vettid-android `ProfileRepository`.
 @MainActor
-public protocol ProfileRepository: AnyObject, Sendable {
+public protocol ProfileRepository: AnyObject, Observable, Sendable {
+    /// Nil until read (``refreshProfile()``), and again once the vault is no longer open on this phone.
+    var profile: OwnProfile? { get }
+
+    /// Re-reads `profile.get`.
+    func refreshProfile() async throws
+
+    /// `profile.set{name}`: the display name, trimmed ("" removes it). Never the core, which is read-only.
+    func setDisplayName(_ name: String) async throws
+
+    /// `profile.set{photo}`: [photo] the base64 JPEG or PNG (at most 65,536 bytes of image); "" removes it.
+    func setPhoto(_ photo: String) async throws
+
     /// `account.name.set` with the PIN, the credential password and the two names, which the caller has checked with
     /// ``AccountNames/check(_:)`` (they are sent normalised). The account's names change only once VettID applied the
     /// request; the outcome arrives in the account (``AccountInfo/nameRequest``).
     func changeName(pin: String, password: String, firstName: String, lastName: String) async -> NameChangeOutcome
 }
 
-/// The vault calls behind ``ProfileManager``. Mirrors vettid-android `ProfileOps` (the name change so far).
+/// The vault calls behind ``ProfileManager``. Mirrors vettid-android `ProfileOps`.
 public protocol ProfileOps: Sendable {
+    func profileGet() async throws -> Profile
+    func profileSet(version: UInt64, name: String) async throws -> UInt64
+    func profileSetPhoto(version: UInt64, photo: String) async throws -> UInt64
     func accountNameSet(pin: String, password: String, firstName: String, lastName: String) async throws -> NameRequest
 }
 
 /// ``ProfileRepository`` over ``ProfileOps``. [onRequest] keeps a new name request with the account, with the [mark]
 /// read before the request was sent (the account record it belongs to); [checksLeft] re-reads the owner check's count
-/// after a failed PIN or password (§3.6.4: a name change counts as a check). Mirrors vettid-android `ProfileManager`.
+/// after a failed PIN or password (§3.6.4: a name change counts as a check). [profileOps] are the calls of the shared
+/// profile ([ops] when nil); [quietOps] those of a read nobody asked for (the vault opening, `profile.changed`), which
+/// never open a session ([profileOps] when nil). The profile read lives in memory only. Mirrors vettid-android
+/// `ProfileManager`.
 @MainActor
+@Observable
 public final class ProfileManager: ProfileRepository {
-    private let ops: @MainActor () async throws -> any ProfileOps
-    private let onRequest: @MainActor (NameRequestView, _ mark: Int) -> Void
-    private let checksLeft: @MainActor () async -> Int?
-    private let mark: @MainActor () -> Int
-    private let notes: FailureNotes
+    public private(set) var profile: OwnProfile?
+
+    @ObservationIgnored private let ops: @MainActor () async throws -> any ProfileOps
+    @ObservationIgnored private let profileOps: @MainActor () async throws -> any ProfileOps
+    @ObservationIgnored private let quietOps: @MainActor () async throws -> any ProfileOps
+    @ObservationIgnored private let onRequest: @MainActor (NameRequestView, _ mark: Int) -> Void
+    @ObservationIgnored private let checksLeft: @MainActor () async -> Int?
+    @ObservationIgnored private let mark: @MainActor () -> Int
+    @ObservationIgnored private let notes: FailureNotes
+    /// Bumped whenever the profile read is dropped: an answer to a read sent before is not kept (chosen; not in the spec).
+    @ObservationIgnored private var generation = 0
 
     public init(
         ops: @escaping @MainActor () async throws -> any ProfileOps,
+        profileOps: (@MainActor () async throws -> any ProfileOps)? = nil,
+        quietOps: (@MainActor () async throws -> any ProfileOps)? = nil,
         onRequest: @escaping @MainActor (NameRequestView, _ mark: Int) -> Void,
         checksLeft: @escaping @MainActor () async -> Int?,
         mark: @escaping @MainActor () -> Int = { 0 },
         notes: FailureNotes = .none
     ) {
         self.ops = ops
+        self.profileOps = profileOps ?? ops
+        self.quietOps = quietOps ?? profileOps ?? ops
         self.onRequest = onRequest
         self.checksLeft = checksLeft
         self.mark = mark
         self.notes = notes
+    }
+
+    /// Forgets the profile read: the vault is no longer open on this phone (chosen; not in the spec: vettid-android keeps
+    /// it until a wipe, the iPhone keeps nothing read from a vault that is not open), or a wipe.
+    public func clear() {
+        generation += 1
+        profile = nil
+    }
+
+    public func refreshProfile() async throws { try await refreshProfile(quietly: false) }
+
+    /// `profile.get`; [quietly]: a read nobody asked for, only over the session open now. The core is kept only when it
+    /// keeps the receiver's rules (§10.8), the fingerprint shown from `ik`.
+    public func refreshProfile(quietly: Bool) async throws {
+        let g = generation
+        let calls = quietly ? quietOps : profileOps
+        let p = try await notes.run { try await calls().profileGet() }
+        guard g == generation else { return }
+        profile = Self.own(p)
+    }
+
+    /// The vault opened, or its profile changed (`sync.event{profile.changed}`): read again; a failure keeps what was read.
+    public func refreshQuietly() {
+        Task { [weak self] in try? await self?.refreshProfile(quietly: true) }
+    }
+
+    public func setDisplayName(_ name: String) async throws {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let g = generation
+        let version = try await notes.run {
+            let o = try await profileOps()
+            let current = try await currentVersion(o)
+            return try await o.profileSet(version: current, name: trimmed)
+        }
+        if g == generation, var p = profile {
+            p.version = version
+            p.displayName = trimmed
+            profile = p
+        }
+        try? await refreshProfile()
+    }
+
+    public func setPhoto(_ photo: String) async throws {
+        let g = generation
+        let version = try await notes.run {
+            let o = try await profileOps()
+            let current = try await currentVersion(o)
+            return try await o.profileSetPhoto(version: current, photo: photo)
+        }
+        if g == generation, var p = profile {
+            p.version = version
+            p.photo = photo.isEmpty ? nil : photo
+            profile = p
+        }
+        try? await refreshProfile()
+    }
+
+    /// The version a change is sent against: the one read, else the vault's now.
+    private func currentVersion(_ o: any ProfileOps) async throws -> UInt64 {
+        if let v = profile?.version { return v }
+        return try await o.profileGet().version
+    }
+
+    static func own(_ p: Profile) -> OwnProfile {
+        OwnProfile(
+            version: p.version,
+            displayName: p.name,
+            firstName: AccountNames.isValidCore(p.firstName) ? p.firstName : nil,
+            lastName: AccountNames.isValidCore(p.lastName) ? p.lastName : nil,
+            fingerprint: p.ik.flatMap(IkFingerprint.formatB64),
+            photo: p.photo.flatMap { $0.isEmpty ? nil : $0 }
+        )
     }
 
     public func changeName(pin: String, password: String, firstName: String, lastName: String) async -> NameChangeOutcome {
@@ -95,12 +225,20 @@ public final class ProfileManager: ProfileRepository {
     static let codeBackoff = "backoff"
 }
 
-/// The vault calls of ``ProfileManager``.
+/// The vault calls of ``ProfileManager``. Mirrors vettid-android `VaultProfileOps`.
 struct VaultProfileOps: ProfileOps {
     let api: VaultApi
-    /// Runs before the change is sent: refuses it while a change of PIN or password is unresolved (VAULT-MESSAGING
+    /// Runs before a name change is sent: refuses it while a change of PIN or password is unresolved (VAULT-MESSAGING
     /// §11.14.9 "A lost answer").
     var gate: @Sendable () async throws -> Void = {}
+
+    func profileGet() async throws -> Profile { try await api.profileGet() }
+
+    func profileSet(version: UInt64, name: String) async throws -> UInt64 { try await api.profileSet(version: version, name: name) }
+
+    func profileSetPhoto(version: UInt64, photo: String) async throws -> UInt64 {
+        try await api.profileSet(version: version, photo: photo)
+    }
 
     func accountNameSet(pin: String, password: String, firstName: String, lastName: String) async throws -> NameRequest {
         try await gate()

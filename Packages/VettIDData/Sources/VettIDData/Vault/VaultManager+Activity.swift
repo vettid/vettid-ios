@@ -90,6 +90,7 @@ extension VaultManager {
 
     /// A wipe, or a deleted vault: every list, and what the phone keeps of them.
     func clearLists() {
+        profiles.clear()
         connections.clear()
         messages.clear()
         attachments.reset()
