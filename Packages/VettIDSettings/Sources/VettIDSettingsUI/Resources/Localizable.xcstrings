@@ -3677,6 +3677,72 @@
         }
       }
     },
+    "settings_profile_items": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every connection sees these items, with all of their fields, as part of your profile. Only standard items can be added."
+          }
+        }
+      }
+    },
+    "settings_profile_items_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Items in your profile"
+          }
+        }
+      }
+    },
+    "settings_profile_items_none": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No items yet"
+          }
+        }
+      }
+    },
+    "settings_profile_items_add": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add an item from your vault"
+          }
+        }
+      }
+    },
+    "settings_profile_items_remove": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove"
+          }
+        }
+      }
+    },
+    "settings_profile_items_pick": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add to your shared profile"
+          }
+        }
+      }
+    },
     "settings_profile_names": {
       "extractionState": "manual",
       "localizations": {

@@ -5,8 +5,7 @@ import VettIDData
 import VettIDSettings
 import VettIDUI
 
-/// What the shared-profile screen can ask for. Mirrors vettid-android `SharedProfileActions` (less the `@profile` items,
-/// which come with the items of IOS-PLAN §8 I3).
+/// What the shared-profile screen can ask for. Mirrors vettid-android `SharedProfileActions`.
 public struct SharedProfileActions {
     public var onBack: @MainActor () -> Void = {}
     public var onDisplayName: @MainActor (String) -> Void = { _ in }
@@ -18,6 +17,11 @@ public struct SharedProfileActions {
     public var onSavePhoto: @MainActor () -> Void = {}
     public var onDiscardPhoto: @MainActor () -> Void = {}
     public var onRemovePhoto: @MainActor () -> Void = {}
+    /// The `@profile` items (§10.8): add one from the Vault, take one out, open one. Nil [onOpenItem]: no Vault list.
+    public var onPickItem: @MainActor (Bool) -> Void = { _ in }
+    public var onAddItem: @MainActor (ItemSummary) -> Void = { _ in }
+    public var onRemoveItem: @MainActor (ItemSummary) -> Void = { _ in }
+    public var onOpenItem: (@MainActor (String) -> Void)?
 
     public init() {}
 }
@@ -57,6 +61,7 @@ public struct SharedProfileContent: View {
                 namesCard
                 displayNameField
                 SharedProfilePhotoCard(state: state, actions: actions, photo: photo)
+                if actions.onOpenItem != nil { ProfileItemsCard(state: state, actions: actions) }
                 if state.saved {
                     NoticeCard(.success, title: ProfileStrings.title, message: ProfileStrings.saved) {
                         ProfileTextButton(SettingsStrings.done, action: actions.onDismiss)
@@ -226,6 +231,8 @@ struct ProfileTextButton: View {
 public struct SharedProfileRoute: View {
     private let profiles: any ProfileRepository
     private let accounts: any AccountRepository
+    private let items: (any ItemsRepository)?
+    private let onOpenItem: (@MainActor (String) -> Void)?
     private let onChangeName: @MainActor () -> Void
     private let onClose: @MainActor () -> Void
     @State private var model: SharedProfileViewModel?
@@ -233,12 +240,16 @@ public struct SharedProfileRoute: View {
     @State private var capturing = false
     @State private var photo: UIImage?
 
+    /// [items] and [onOpenItem]: the `@profile` items, from the Vault list.
     public init(
-        profiles: any ProfileRepository, accounts: any AccountRepository, onChangeName: @escaping @MainActor () -> Void,
+        profiles: any ProfileRepository, accounts: any AccountRepository, items: (any ItemsRepository)? = nil,
+        onOpenItem: (@MainActor (String) -> Void)? = nil, onChangeName: @escaping @MainActor () -> Void,
         onClose: @escaping @MainActor () -> Void
     ) {
         self.profiles = profiles
         self.accounts = accounts
+        self.items = items
+        self.onOpenItem = items == nil ? nil : onOpenItem
         self.onChangeName = onChangeName
         self.onClose = onClose
     }
@@ -268,7 +279,7 @@ public struct SharedProfileRoute: View {
                 SharedProfileContent(state: state, actions: actions, photo: photo)
             }
         }
-        .onAppear { if model == nil { model = SharedProfileViewModel(profiles: profiles, accounts: accounts) } }
+        .onAppear { if model == nil { model = SharedProfileViewModel(profiles: profiles, accounts: accounts, items: items) } }
         .onDisappear { machine.reset() }
         .task(id: ShownPhoto(state)) {
             let decoded = await ShownPhoto.decoded(state)
@@ -294,6 +305,10 @@ public struct SharedProfileRoute: View {
         a.onSavePhoto = { m?.savePhoto() }
         a.onDiscardPhoto = { m?.discardPhoto() }
         a.onRemovePhoto = { m?.removePhoto() }
+        a.onPickItem = { m?.pickItem($0) }
+        a.onAddItem = { m?.addToProfile($0) }
+        a.onRemoveItem = { m?.removeFromProfile($0) }
+        a.onOpenItem = onOpenItem
         return a
     }
 }

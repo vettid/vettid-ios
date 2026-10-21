@@ -338,4 +338,33 @@ enum ProfileStrings {
             bundle: .module
         )
     }
+
+    // The `@profile` items (strings_profile.xml).
+
+    static var items: String {
+        String(
+            localized: "settings_profile_items",
+            defaultValue: """
+                Every connection sees these items, with all of their fields, as part of your profile. Only standard items \
+                can be added.
+                """,
+            bundle: .module
+        )
+    }
+
+    static var itemsTitle: String {
+        String(localized: "settings_profile_items_title", defaultValue: "Items in your profile", bundle: .module)
+    }
+
+    static var itemsNone: String { String(localized: "settings_profile_items_none", defaultValue: "No items yet", bundle: .module) }
+
+    static var itemsAdd: String {
+        String(localized: "settings_profile_items_add", defaultValue: "Add an item from your vault", bundle: .module)
+    }
+
+    static var itemsRemove: String { String(localized: "settings_profile_items_remove", defaultValue: "Remove", bundle: .module) }
+
+    static var itemsPick: String {
+        String(localized: "settings_profile_items_pick", defaultValue: "Add to your shared profile", bundle: .module)
+    }
 }
