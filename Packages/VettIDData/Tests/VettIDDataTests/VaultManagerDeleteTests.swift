@@ -187,6 +187,24 @@ import VettIDVault
         try expectWiped()
     }
 
+    /// A request still on its way on the session the deletion closed (the attachments probe, the lists and the account read
+    /// after the unlock) ends after the wipe: nothing of it is written, no file and no key come back. Its last step is
+    /// played here on the device it held, after the wipe.
+    @Test func aRequestOnItsWayWritesNothingAfterTheWipe() async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.lockByItself(reason: "test")
+        #expect(await delete()?.code == VaultManager.codeDeleteUnconfirmed)
+        _ = try await m.unlock(pin: pin)
+        let device = try #require(m.session?.device)
+        #expect(await eventually { m.phase == .deleting })
+        m.onForeground()
+        #expect(await eventually { m.phase == .signedOut })
+        try expectWiped()
+        _ = try? await device.send("message.attachment.get")
+        try expectWiped()
+    }
+
     /// The deletion's `device.unlinked{vault_deleted}` read while the unlock waits for its answer (its slot answers late):
     /// "being deleted" at once, and the unlock's end never puts the open app over it.
     @Test func anUnlinkDuringAnUnlockWins() async throws {

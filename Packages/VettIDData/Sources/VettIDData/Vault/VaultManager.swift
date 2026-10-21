@@ -164,6 +164,9 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored var wipeHooks: [@MainActor () async -> Void] = []
     /// The old vault's device, detached by a wipe and kept until it is forgotten (a retried wipe too).
     @ObservationIgnored var wipeDevice: VaultDevice?
+    /// Every device a session of this manager held, weakly: a session closed (a lock, a deletion) may leave a request on
+    /// its way whose end still saves the device state. A wipe or a forget forgets them all (``forgetEveryDevice()``).
+    @ObservationIgnored let devicesMade = MadeDevices()
     /// A wipe's marker left at the start was looked at (once, after the first-run cleanup).
     @ObservationIgnored private var wipeResumed = false
     /// The tasks that follow the open session's events and refusals.
@@ -349,6 +352,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         // Dropped while it was being opened: not kept (its state may be forgotten already).
         guard generation == sessionGeneration else { throw VaultFailure(.other, code: "session_dropped") }
         session = s
+        devicesMade.add(s.device)
         memberVault.set(device: s.device)
         // A phone registered for a recovery holds the key the vault bound at the register (IOS-PLAN §6.2).
         config.attestStartOver?.set(recovering: s.device.recovering)
@@ -439,6 +443,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             return
         }
         if let d = s?.device { try await d.forget() }
+        await forgetEveryDevice()
         try await Self.forgetKeys(config)
         try phoneSecrets.delete()
         usesPhoneSecret = false

@@ -70,6 +70,9 @@ extension VaultManager {
             try? await d.forget()
             wipeDevice = nil
         }
+        // The devices of sessions closed before (a deletion closes its session at once) may still have a request on its
+        // way: forgotten first, so that nothing of theirs is written after the erase.
+        await forgetEveryDevice()
         ownerChecks.clear()
         clearLists()
         releaseUpdate.clear()
@@ -92,6 +95,13 @@ extension VaultManager {
         if await cancelOpening() { done = wiper.erase() }
         if done { wiper.finish() }
         return done
+    }
+
+    /// Forgets every device a session of this manager held that is still alive: each waits for what it is sending, and
+    /// writes nothing to the store from then on.
+    func forgetEveryDevice() async {
+        for d in devicesMade.alive { try? await d.forget() }
+        devicesMade.removeAll()
     }
 
     private func wipeEnded(_ p: AppPhase) {
