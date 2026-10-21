@@ -24,9 +24,14 @@ import VettIDCrypto
         var photoSets: [(UInt64, String)] = []
         var gets = 0
         var profileError: String?
+        /// Runs while a `profile.get` is on its way (a lock landing then).
+        var onGet: @MainActor () -> Void = {}
+        /// Runs while a `profile.set{photo}` is on its way.
+        var onSetPhoto: @MainActor () -> Void = {}
 
         func profileGet() async throws -> Profile {
             gets += 1
+            await onGet()
             if let profileError { throw VaultOpError(type: "profile.get", code: profileError, detail: "", body: nil) }
             return profile
         }
@@ -41,6 +46,7 @@ import VettIDCrypto
 
         func profileSetPhoto(version: UInt64, photo: String) async throws -> UInt64 {
             photoSets.append((version, photo))
+            await onSetPhoto()
             if let profileError { throw VaultOpError(type: "profile.set", code: profileError, detail: "", body: nil) }
             profile.version = version + 1
             profile.photo = photo.isEmpty ? nil : photo
@@ -73,6 +79,56 @@ import VettIDCrypto
                 return 8
             }
         )
+    }
+
+    // MARK: - The own profile is memory only, forgotten whenever the vault is not open (IOS-PLAN §4.7)
+
+    @Test func clearForgetsTheNamesAndThePhoto() async throws {
+        ops.profile.photo = "/9j/photo"
+        let m = m
+        try await m.refreshProfile()
+        #expect(m.profile?.photo == "/9j/photo")
+        m.clear()
+        #expect(m.profile == nil)
+    }
+
+    @Test func aReadOnItsWayWhenTheVaultLocksIsNotKept() async throws {
+        ops.profile.photo = "/9j/photo"
+        let m = m
+        ops.onGet = { m.clear() }
+        try await m.refreshProfile()
+        #expect(m.profile == nil)
+        // After the unlock the next read brings the profile back.
+        ops.onGet = {}
+        try await m.refreshProfile()
+        #expect(m.profile?.fullName == "Ada Lovelace" && m.profile?.photo == "/9j/photo")
+    }
+
+    @Test func aReadWhileTheVaultIsNotOpenIsNotKept() async throws {
+        final class Gate { var open = false }
+        let gate = Gate()
+        let ops = ops
+        let gated = ProfileManager(ops: { ops }, onRequest: { _, _ in }, checksLeft: { nil }, open: { gate.open })
+        try await gated.refreshProfile()
+        #expect(gated.profile == nil)
+        gate.open = true
+        try await gated.refreshProfile()
+        #expect(gated.profile?.fullName == "Ada Lovelace")
+    }
+
+    @Test func aPhotoSetWhenTheVaultLocksDoesNotBringTheProfileBack() async throws {
+        final class Gate { var open = true }
+        let gate = Gate()
+        let ops = ops
+        let gated = ProfileManager(ops: { ops }, onRequest: { _, _ in }, checksLeft: { nil }, open: { gate.open })
+        try await gated.refreshProfile()
+        ops.onSetPhoto = {
+            gate.open = false
+            gated.clear()
+        }
+        try await gated.setPhoto("/9j/new")
+        #expect(ops.profile.photo == "/9j/new", "the vault took it")
+        #expect(gated.profile == nil, "the phone keeps nothing of it while the vault is not open")
     }
 
     // MARK: - The shared profile

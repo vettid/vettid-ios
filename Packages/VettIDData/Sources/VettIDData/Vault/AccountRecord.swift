@@ -4,7 +4,9 @@ import VettIDVault
 
 /// What this phone knows of its member without signing in (VAULT-MESSAGING §11.12.1): the `user_guid` and `vault_id`
 /// from the setup code's redeem, the masked email to show, and where setting the vault up stands. Kept in the encrypted
-/// file store; members this build does not know are ignored when read. Mirrors the fields of vettid-android
+/// file store; members this build does not know are ignored when read. The account snapshot and the name request,
+/// which an older build kept here, are ``OwnAccount``'s now, in memory only while the vault is open (IOS-PLAN §4.7); a
+/// record that still holds them is written again without them (``AccountRecord/load()``). Mirrors the fields of vettid-android
 /// `LocalAccount` that onboarding, the lock and Settings use; the later rows add theirs (the move, recovery).
 struct LocalAccount: Codable, Equatable, Sendable {
     /// Whether no vault made, being made or moved to this phone can hold one of its App Attest keys (``AttestStartOver``;
@@ -51,10 +53,6 @@ struct LocalAccount: Codable, Equatable, Sendable {
     var lastOpenedMs: Int64?
     /// The lock's own file (``LockRecordFile``) was written once: from then on a missing file says a lock is pending.
     var lockFileInUse = false
-    /// The last account snapshot (`account.get`, VAULT-MESSAGING §11.13), display only; nil before one arrived.
-    var snapshot: AccountSnapshot?
-    /// The latest name change (`account.get`'s `name_request`, §10.8), or the one this phone just asked for.
-    var nameRequest: NameRequest?
     /// (Release R, ANDROID-PLAN "Transfer") The offer to rotate the vault's keys after a PIN or password change, until a
     /// rotation or the member puts it away; kept so that a restart does not lose it.
     var rotateOffer = false
@@ -79,8 +77,6 @@ struct LocalAccount: Codable, Equatable, Sendable {
         case recoveryUnknownForMs = "recovery_unknown_for_ms"
         case lastOpenedMs = "last_opened_ms"
         case lockFileInUse = "lock_file_in_use"
-        case snapshot
-        case nameRequest = "name_request"
         case rotateOffer = "rotate_offer"
         case deleting
     }
@@ -113,15 +109,13 @@ struct LocalAccount: Codable, Equatable, Sendable {
         lastOpenedMs = try c.decodeIfPresent(Int64.self, forKey: .lastOpenedMs)
         lockFileInUse = try c.decodeIfPresent(Bool.self, forKey: .lockFileInUse) ?? false
         rotateOffer = try c.decodeIfPresent(Bool.self, forKey: .rotateOffer) ?? false
-        // Display only: a snapshot or request this build cannot read is no snapshot, never an unreadable record.
-        snapshot = try? c.decodeIfPresent(AccountSnapshot.self, forKey: .snapshot)
-        nameRequest = try? c.decodeIfPresent(NameRequest.self, forKey: .nameRequest)
         deleting = try c.decodeIfPresent(DeletingMarker.self, forKey: .deleting)
     }
 
-    /// The account as the screens see it: from the last snapshot, or, before one arrived, the masked email only; with
-    /// the latest name request. Mirrors vettid-android `LocalAccount.toInfo`.
-    var info: AccountInfo? {
+    /// What the app shows of the account: the open vault's [snapshot] and [nameRequest] (``OwnAccount``, nil while the
+    /// vault is not open), else only the masked email this record keeps (the unlock screen's). Mirrors vettid-android
+    /// `LocalAccount.toInfo`.
+    func info(snapshot: AccountSnapshot? = nil, nameRequest: NameRequest? = nil) -> AccountInfo? {
         var a: AccountInfo?
         if let snapshot {
             a = AccountSnapshots.info(snapshot, fallbackHint: emailHint)
@@ -168,6 +162,10 @@ final class AccountRecord {
             } catch {
                 throw KeysError.corrupt("account record")
             }
+            // An older build kept the account snapshot and the name request here until a wipe: written again without
+            // them, so that the own profile is on the phone only while the vault is open (IOS-PLAN §4.7). A write that
+            // fails is tried at the next start.
+            if holdsLegacyOwnAccount(b), !closed { try? save(value) }
         } else {
             value = LocalAccount()
         }
@@ -236,14 +234,13 @@ final class AccountRecord {
         try update(since: since) { $0.lastOpenedMs = atMs }
     }
 
-    /// What `account.get` brought (``AccountSnapshots/update(stored:storedRequest:view:)``), for the record of [since]:
-    /// the snapshot and its masked email, and the name request. False when dropped.
+    /// What the record keeps of `account.get` (``AccountSnapshots/update(stored:storedRequest:view:)``), for the record
+    /// of [since]: the masked email only. The snapshot and the name request stay in memory (``OwnAccount``, IOS-PLAN
+    /// §4.7). False when dropped.
     @discardableResult
     func refreshed(since: Int, _ u: AccountUpdate) throws -> Bool {
         try update(since: since) {
-            $0.snapshot = u.snapshot
-            $0.emailHint = u.snapshot?.emailHint ?? $0.emailHint
-            $0.nameRequest = u.nameRequest
+            if let hint = u.snapshot?.emailHint, !hint.isEmpty { $0.emailHint = hint }
         }
     }
 

@@ -10,8 +10,9 @@ import VettIDUI
 /// account (read-only, from the vault's account snapshot: every connection sees it); the address; the membership and
 /// subscription (read-only, VAULT-MESSAGING §11.13); vault status and the account portal, where the other changes are made. The app
 /// never signs in: no sign-out. "Change name", the only place the names change, with the state of a requested change
-/// (VAULT-MESSAGING §10.8), and "Shared profile"; the member's own profile photo in the header. Mirrors vettid-android
-/// `AccountSheet`.
+/// (VAULT-MESSAGING §10.8), and "Shared profile"; the member's own profile photo in the header. Only while the vault is
+/// open (IOS-PLAN §4.7): otherwise the initial tile, no name and no address (not even the masked hint). Mirrors
+/// vettid-android `AccountSheet`.
 public struct AccountSheet: View {
     let account: AccountInfo?
     let photo: UIImage?
@@ -30,7 +31,7 @@ public struct AccountSheet: View {
         onSharedProfile: @escaping @MainActor () -> Void = {},
         onOpenPortal: @escaping @MainActor () -> Void
     ) {
-        self.account = account
+        self.account = account.shownInShell
         self.photo = photo
         self.now = now
         self.onLockVault = onLockVault
@@ -102,7 +103,8 @@ struct AccountSheetOptions: View {
             .accessibilityIdentifier("account_shared_profile")
         }
         .accessibilityIdentifier("account_names")
-        if let email = account?.displayEmail {
+        // Only while the vault is open: never the masked hint of the account record (IOS-PLAN §4.7).
+        if let email = account.shownInShell?.displayEmail {
             SettingsGroup {
                 SettingsInfoRow(ShellStrings.accountEmail, value: email, icon: .email)
                 note(ShellStrings.accountEmailNote)

@@ -5,8 +5,8 @@ import VettIDDataTesting
 @testable import VettIDSettings
 
 /// The name change (VAULT-MESSAGING §10.8): the names checked before the PIN, both secrets sent once and forgotten, the
-/// request followed to its result, and every answer of the vault. Mirrors vettid-android `ProfileViewModelsTest`'s
-/// name-change part.
+/// request followed to its result, and every answer of the vault; nothing typed kept while the vault is not open, a sent
+/// request keeping its state (IOS-PLAN §4.7). Mirrors vettid-android `ProfileViewModelsTest`'s name-change part.
 @MainActor
 @Suite struct ChangeNameViewModelTests {
     let repo: FakeVaultRepository
@@ -47,6 +47,54 @@ import VettIDDataTesting
         m.next()
         #expect(m.state.step == .confirm && m.state.requestedName == "Ada King")
         #expect(!repo.calls.contains("changeName"))
+    }
+
+    // MARK: - Drafts dropped whenever the vault is not open (IOS-PLAN §4.7)
+
+    @Test func aLockDropsTheTypedNamesPinAndPassword() async {
+        let m = model()
+        await m.settle()
+        m.setFirst("Ada")
+        m.setLast("King")
+        m.next()
+        m.setPin("246810")
+        m.setPassword("pw")
+        #expect(m.state.step == .confirm)
+        // Locked, held or due: the account is no longer the open vault's.
+        repo.account = AccountInfo(emailHint: "a***@example.com")
+        #expect(await eventually { m.state.step == .names })
+        let s = m.state
+        #expect(s.first == "" && s.last == "" && s.pin == "" && s.password == "" && !s.checked)
+        // After the unlock the member types the names again.
+        repo.account = AccountInfo(emailHint: "a***@example.com", state: "member", firstName: "Ada", lastName: "Lovelace")
+        #expect(await eventually { m.state.account?.firstName == "Ada" })
+        #expect(m.state.first == "" && m.state.last == "")
+    }
+
+    @Test func theTypedNamesAreFilledOnlyFromTheOpenVault() async {
+        let m = model()
+        await m.settle()
+        #expect(m.state.first == "Ada")
+        repo.account = nil
+        #expect(await eventually { m.state.first == "" })
+    }
+
+    @Test func aSentRequestKeepsShowingItsStateAfterTheLock() async throws {
+        let m = model()
+        atConfirm(m)
+        m.submit()
+        await m.settle()
+        let seq = try #require(m.state.request?.seq)
+        #expect(m.state.step == .sent)
+        // The hold: the account is no longer the open vault's; the request sent stays, with its state.
+        repo.account = AccountInfo(emailHint: "a***@example.com")
+        #expect(await eventually { m.state.first == "" })
+        #expect(m.state.step == .sent && m.state.request?.seq == seq && m.state.request?.state == .pending)
+        // After the unlock the account reports its result.
+        var open = AccountInfo(emailHint: "a***@example.com", state: "member", firstName: "Ada", lastName: "King")
+        open.nameRequest = NameRequestView(seq: seq, firstName: "Ada", lastName: "King", requestedAt: nil, state: .applied)
+        repo.account = open
+        #expect(m.state.step == .sent && m.state.request?.state == .applied)
     }
 
     @Test func theSnapshotsAllowedAfterStopsTheFlowBeforeThePin() {
