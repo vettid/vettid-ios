@@ -51,8 +51,8 @@ public enum LinkTarget: Equatable, Sendable {
     }
 }
 
-/// A conversation's state. Names, drafts and message text are the members' own: never printed, dumped or mirrored.
-/// Mirrors vettid-android `ConversationUiState` without its photos (IOS-PLAN §8 I2.4).
+/// A conversation's state. Names, drafts, message text and photos are the members' own: never printed, dumped or
+/// mirrored. Mirrors vettid-android `ConversationUiState`.
 public struct ConversationState: Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     public let connectionID: String
     public var connection: ConnectionInfo?
@@ -73,6 +73,14 @@ public struct ConversationState: Equatable, Sendable, CustomStringConvertible, C
     public var loadingOlder = false
     /// A tapped link waiting for the member's answer.
     public var link: LinkPrompt?
+    /// The vault has photo attachments (VAULT-MESSAGING §10.5.1): the composer offers the photo button.
+    public var photosAvailable = false
+    /// The app's own camera screen is open (ANDROID-PLAN "Photo attachments", "Take a photo").
+    public var capturing = false
+    /// Photos picked or taken, prepared in memory, waiting for Send or Cancel.
+    public var photoDraft: PhotoDraft?
+    /// Changes at every clear of the attachment memory: the bubbles drop their decoded thumbnails.
+    public var photoGeneration = 0
 
     public init(connectionID: String) { self.connectionID = connectionID }
 
@@ -84,7 +92,7 @@ public struct ConversationState: Equatable, Sendable, CustomStringConvertible, C
 
     public var description: String {
         "ConversationState(loading: \(loading), messages: \(messages.count), sending: \(sending), tooLong: \(tooLong), "
-            + "olderAvailable: \(olderAvailable), error: \(error.map { "\($0)" } ?? "nil"))"
+            + "olderAvailable: \(olderAvailable), photos: \(photoDraft?.photos.count ?? 0), error: \(error.map { "\($0)" } ?? "nil"))"
     }
     public var debugDescription: String { description }
     public var customMirror: Mirror { Mirror(self, children: [:]) }
@@ -93,41 +101,60 @@ public struct ConversationState: Equatable, Sendable, CustomStringConvertible, C
 /// A conversation (ANDROID-PLAN §4): the messages with one connection, oldest first; incoming messages are marked read
 /// while it is open (the vault sends the read receipts, VAULT-MESSAGING §10.5); older pages on reaching the top
 /// (§10.5.2); send, and delete a message on this vault only; a tapped link opens only after the member confirms its host
-/// (§10.5 "Links"). Mirrors vettid-android `ConversationViewModel` without its photos (IOS-PLAN §8 I2.4).
+/// (§10.5 "Links"); photos picked or taken, prepared, sent one after another, retried or cancelled (§10.5.1,
+/// ``ConversationViewModel+Photos``). Mirrors vettid-android `ConversationViewModel`.
 @MainActor
 @Observable
 public final class ConversationViewModel {
     public let connectionID: String
     @ObservationIgnored private let messages: any MessagesRepository
     @ObservationIgnored private let connections: any ConnectionsRepository
-    @ObservationIgnored private let work = Work()
+    /// Photo attachments; nil: none on this screen (no photo button).
+    @ObservationIgnored let attachments: (any AttachmentsRepository)?
+    @ObservationIgnored let work = Work()
     @ObservationIgnored private let follows = TaskBag()
+    /// The photos this conversation holds, reachable from `deinit` (leaving the conversation is a Cancel).
+    @ObservationIgnored let photoHold = PhotoHold()
+    /// The pass that reads and prepares picked pictures, or the send loop.
+    @ObservationIgnored var photoTask: Task<Void, Never>?
+    @ObservationIgnored var photosCancelled = false
     /// The conversation is on screen (not covered by a screen pushed over it) and the app in the foreground.
     @ObservationIgnored private var shown = false
     @ObservationIgnored private var foreground = true
     /// A `markRead` is under way; [markAgain]: unread messages changed meanwhile.
     @ObservationIgnored private var marking = false
     @ObservationIgnored private var markAgain = false
-    private var local: ConversationState
+    var local: ConversationState
 
-    public init(connectionID: String, messages: any MessagesRepository, connections: any ConnectionsRepository) {
+    /// [attachments]: the photos of the conversation (VAULT-MESSAGING §10.5.1); nil offers none.
+    public init(
+        connectionID: String, messages: any MessagesRepository, connections: any ConnectionsRepository,
+        attachments: (any AttachmentsRepository)? = nil
+    ) {
         self.connectionID = connectionID
         self.messages = messages
         self.connections = connections
+        self.attachments = attachments
         local = ConversationState(connectionID: connectionID)
         load()
         // Read while shown: every new incoming message is marked read (best effort; a failure is left for the next arrival
         // or the next showing).
         follows.add(follow(self, read: { $0.unreadIDs }, apply: { $0.onUnread($1) }))
+        // A lock, the hold or due state, a wipe or an unlink (ANDROID-PLAN "Memory only, wiped at lock"): the draft, the
+        // pending upload and the thumbnails shown go, and the bubbles read their thumbnails again.
+        if attachments != nil { follows.add(follow(self, read: { $0.attachments?.cleared ?? 0 }, apply: { $0.onCleared($1) })) }
     }
 
     deinit {
         work.cancelAll()
         follows.cancelAll()
+        // Leaving the conversation is a Cancel: an upload not sent is discarded at the vault, the prepared photos wiped.
+        photoHold.release(attachments)
     }
 
     public var state: ConversationState {
         var s = local
+        s.photosAvailable = attachments?.available ?? false
         s.messages = messages.messages(connectionID)
         s.connection = connections.connections.first { $0.id == connectionID } ?? local.connection
         s.olderAvailable = messages.olderAvailable(connectionID)
