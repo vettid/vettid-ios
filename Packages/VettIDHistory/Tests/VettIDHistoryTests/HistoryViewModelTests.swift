@@ -135,6 +135,32 @@ import VettIDVault
         #expect(m.state.entries.map(\.seq) == [58, 57] + Array((7...56).reversed()) && !m.state.chainBroken)
     }
 
+    /// Two quick refreshes chain; the first one ending does not let a page load run beside the second on the same pager.
+    @Test func aPageIsNotLoadedWhileASecondRefreshRuns() async {
+        let log = FakeAuditLog(FakeAuditLog.chain(120, newest: Self.t0))
+        let m = await model(log, connectionID: nil)
+        #expect(m.state.entries.count == 50 && !m.state.end)
+        let first = TestDeferred<Void>()
+        log.listGate = first
+        let n = log.calls.count
+        m.refresh()
+        m.refresh()
+        #expect(await eventually { log.calls.count == n + 1 })
+        let second = TestDeferred<Void>()
+        log.listGate = second
+        first.complete()
+        // The second refresh's read is on its way: no page is loaded beside it.
+        #expect(await eventually { log.calls.count == n + 2 })
+        m.loadMore()
+        #expect(!m.state.loadingMore && log.calls.count == n + 2)
+        second.complete()
+        await m.settle()
+        log.listGate = nil
+        m.loadMore()
+        await m.settle()
+        #expect(log.calls.count == n + 3 && log.calls.last?.beforeSeq == 71)
+    }
+
     /// Refused because the daily check was due: History reads again once the check passes; another failure stays.
     @Test func aListRefusedForTheDailyCheckReloadsWhenTheCheckPasses() async {
         let owner = FakeVaultRepository(.unlocked)

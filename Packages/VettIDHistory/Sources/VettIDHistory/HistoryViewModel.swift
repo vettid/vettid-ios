@@ -73,6 +73,9 @@ public final class HistoryViewModel {
     @ObservationIgnored private var pager: HistoryPager!
     @ObservationIgnored private var job: Task<Void, Never>?
     @ObservationIgnored private var refreshing = false
+    /// Bumped by every refresh and reload: only the latest refresh, when it ends, says no refresh runs any more (two quick
+    /// refreshes chain; the first one's end must not let a page load run beside the second on the same pager).
+    @ObservationIgnored private var refreshGeneration = 0
     private var local: HistoryState
 
     /// [connectionID]: a connection's History (its page's "History"). [itemNames]: the Vault list's names by item id, once
@@ -195,6 +198,7 @@ public final class HistoryViewModel {
         local.error = nil
         if !debounced { local.entries = [] }
         refreshing = false
+        refreshGeneration += 1
         let p = newPager()
         pager = p
         let pause = debounce
@@ -224,10 +228,12 @@ public final class HistoryViewModel {
         let before = job
         let p: HistoryPager = pager
         refreshing = true
+        refreshGeneration += 1
+        let g = refreshGeneration
         job = work.launch { [weak self] in
             await before?.value
             await self?.load(p) { try await p.refresh() }
-            self?.refreshing = false
+            if self?.refreshGeneration == g { self?.refreshing = false }
         }
     }
 
