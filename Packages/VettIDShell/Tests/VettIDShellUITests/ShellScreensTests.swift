@@ -126,6 +126,19 @@ import VettIDVault
         #expect(AccountSheet.membershipLine(.unknown) == "VettID account")
     }
 
+    /// While the vault is not open (IOS-PLAN §4.7) the sheet shows no name and no address, not even the masked hint the
+    /// account record keeps for the unlock screen; the open vault's address is shown. Mirrors vettid-android
+    /// `AccountSheetTest.whileTheVaultIsNotOpenTheSheetShowsNoAddressAndNoName` and `theOpenVaultsAddressIsShown`.
+    @Test func whileTheVaultIsNotOpenTheSheetShowsNoAddressAndNoName() {
+        let locked = AccountInfo(emailHint: "s***@example.org")
+        #expect(AccountSheet(account: locked, now: now, onLockVault: {}, onOpenPortal: {}).account == nil)
+        #expect(height(AccountSheet(account: locked, now: now, onLockVault: {}, onOpenPortal: {})) > 0)
+        let open = AccountInfo(
+            emailHint: "s***@example.org", state: "member", firstName: "Sam", lastName: "Rivera", email: "sam@example.org"
+        )
+        #expect(AccountSheet(account: open, now: now, onLockVault: {}, onOpenPortal: {}).account == open)
+    }
+
     @Test func everyViewRenders() {
         let member = AccountInfo(
             emailHint: "a***@example.com", state: "member", termsNeedAcceptance: true,

@@ -88,7 +88,11 @@ public struct ChangeNameState: Equatable, Sendable, CustomStringConvertible, Cus
 /// the registration rule before the PIN and the password are asked for; then the PIN and the credential password on one
 /// screen, sent with the names in one `account.name.set` and dropped once the vault answered; then the request as the
 /// account reports it: pending, applied or refused. `too_soon` (from the snapshot, the vault or the member API) says when
-/// the next change may be made. Mirrors vettid-android `ChangeNameViewModel`.
+/// the next change may be made.
+///
+/// (IOS-PLAN §4.7) The names typed, the PIN and the password are dropped whenever the vault is not open (the account no
+/// longer from the open vault: a lock, the hold or the due state); the member types them again after the unlock. A
+/// request already sent stays, to show its state. Mirrors vettid-android `ChangeNameViewModel`.
 @MainActor
 @Observable
 public final class ChangeNameViewModel {
@@ -102,6 +106,7 @@ public final class ChangeNameViewModel {
     @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private let tick: @Sendable () async throws -> Void
     @ObservationIgnored private let work = Work()
+    @ObservationIgnored private let followers = TaskBag()
     @ObservationIgnored private var ticker: Task<Void, Never>?
 
     public init(
@@ -115,12 +120,29 @@ public final class ChangeNameViewModel {
         self.now = now
         self.tick = tick
         local = ChangeNameState(account: accounts.account)
+        followers.add(follow(self, read: { $0.accounts.account.shownInShell == nil }, apply: { m, closed in
+            if closed { m.dropDrafts() }
+        }))
         work.launch { await accounts.refreshAccount() }
     }
 
     deinit {
         work.cancelAll()
+        followers.cancelAll()
         ticker?.cancel()
+    }
+
+    /// The vault is not open: nothing typed is kept (the names, the PIN, the password); a request already sent stays.
+    private func dropDrafts() {
+        ticker?.cancel()
+        if local.step != .sent { local.step = .names }
+        local.first = ""
+        local.last = ""
+        local.checked = false
+        local.pin = ""
+        local.password = ""
+        local.message = nil
+        local.waitSeconds = 0
     }
 
     /// The state now: the account as the repository has it (observed through it), the request sent from here updated from

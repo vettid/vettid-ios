@@ -114,7 +114,8 @@ public struct SettingsContent: View {
                     SettingsGroup {
                         SettingsRow(
                             ProfileStrings.privacyProfile, icon: sharedProfileSymbol,
-                            supporting: state.account?.fullName ?? ProfileStrings.privacyProfileBody, action: actions.sharedProfile
+                            supporting: state.account.shownInShell?.fullName ?? ProfileStrings.privacyProfileBody,
+                            action: actions.sharedProfile
                         )
                         .accessibilityIdentifier("shared_profile_row")
                     }
@@ -234,12 +235,19 @@ public struct SettingsContent: View {
 }
 
 /// The account card (ANDROID-PLAN §4 "Screens", Settings): the first and last name, the full address (VAULT-MESSAGING §11.13 `email`,
-/// the masked hint from an older vault) and the membership state; it opens the avatar sheet. Mirrors vettid-android
-/// `AccountCard`.
+/// the masked hint from an older vault) and the membership state; it opens the avatar sheet. Only while the vault is open
+/// (IOS-PLAN §4.7): otherwise only the initial tile, without the masked hint (``Optional/shownInShell``). Mirrors
+/// vettid-android `AccountCard`.
 struct AccountCard: View {
     let account: AccountInfo?
     var photo: UIImage?
     let action: @MainActor () -> Void
+
+    init(account: AccountInfo?, photo: UIImage? = nil, action: @escaping @MainActor () -> Void) {
+        self.account = account.shownInShell
+        self.photo = photo
+        self.action = action
+    }
 
     var body: some View {
         SettingsAccountRow(
@@ -247,7 +255,8 @@ struct AccountCard: View {
         )
     }
 
-    static func detail(_ a: AccountInfo?) -> String {
+    static func detail(_ account: AccountInfo?) -> String {
+        let a = account.shownInShell
         var lines: [String] = []
         if let a, a.fullName != nil, let email = a.displayEmail { lines.append(email) }
         if let line = membership(a) { lines.append(line) }

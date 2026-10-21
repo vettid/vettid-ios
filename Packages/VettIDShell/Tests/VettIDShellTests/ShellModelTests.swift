@@ -30,9 +30,20 @@ import VettIDData
         )
         #expect(AccountHeader.name(named, placeholder: "P") == "Ada Lovelace")
         #expect(AccountHeader.detailEmail(named) == "ada@example.com")
-        let hint = AccountInfo(emailHint: "a***@example.com")
-        #expect(AccountHeader.name(hint, placeholder: "P") == "a***@example.com" && AccountHeader.detailEmail(hint) == nil)
         #expect(AccountHeader.name(nil, placeholder: "P") == "P")
+    }
+
+    /// While the vault is not open (IOS-PLAN §4.7) the top bar and the sheet's header show no name and no address, not
+    /// even the masked hint the account record keeps for the unlock screen: the placeholder and the initial tile. Mirrors
+    /// vettid-android `AccountSheetTest.whileTheVaultIsNotOpenTheSheetShowsNoAddressAndNoName`.
+    @Test func whileTheVaultIsNotOpenTheHeaderShowsNoAddressAndNoName() {
+        let hint = AccountInfo(emailHint: "a***@example.com")
+        #expect(AccountHeader.name(hint, placeholder: "P") == "P" && AccountHeader.detailEmail(hint) == nil)
+        // Locked with a name request still in the record of an older build: nothing of it either.
+        var held = hint
+        held.nameRequest = NameRequestView(seq: 1, firstName: "Ada", lastName: "King", requestedAt: nil, state: .pending)
+        #expect(AccountHeader.name(held, placeholder: "P") == "P")
+        #expect(MembershipLine.of(hint) == .unknown)
     }
 
     @Test func theMembership() {
