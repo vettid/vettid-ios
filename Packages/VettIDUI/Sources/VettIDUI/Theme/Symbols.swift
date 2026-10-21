@@ -58,6 +58,10 @@ public enum VettIDSymbol: String, CaseIterable, Sendable {
     case pauseCircle = "pause.circle" // PauseCircleOutline
     case openInNew = "arrow.up.forward.square" // OpenInNew
     case tag = "number" // Tag
+    case label = "tag" // Label (a tag of the Vault)
+    case palette = "paintpalette" // Palette (a tag's colour)
+    case add = "plus" // Add
+    case check = "checkmark" // Check
     case update = "arrow.triangle.2.circlepath" // Update
     case systemUpdate = "arrow.down.circle" // SystemUpdate (a vault release update)
     case restore = "arrow.counterclockwise" // Restore

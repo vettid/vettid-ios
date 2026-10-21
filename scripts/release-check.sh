@@ -147,7 +147,7 @@ check_archive_products() {
 # The package products the VettID app links: exactly these (one per shipping package of project.yml).
 APP_PRODUCTS="VettIDCrypto VettIDAttestation VettIDRelay VettIDAltChan VettIDVault VettIDKeys VettIDData VettIDMedia
 VettIDNotify VettIDUI VettIDOnboarding VettIDSettings VettIDShell VettIDConnections VettIDMessages VettIDApprovals
-VettIDNotifications VettIDHistory"
+VettIDNotifications VettIDHistory VettIDItems"
 
 # The VettID app target (whatever the scheme) links exactly APP_PRODUCTS (each product id resolved to its productName)
 # and compiles no file of AppDevStack/, read from the project file: its package products and its Sources phase.
