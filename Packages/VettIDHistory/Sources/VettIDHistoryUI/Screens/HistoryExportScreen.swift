@@ -15,7 +15,7 @@ public struct HistoryExportActions {
     public var onSubmitPin: @MainActor (String) -> Void = { _ in }
     /// "Save to Files" opened, or opened again.
     public var onSave: @MainActor () -> Void = {}
-    /// The picker's answer: saved, or dismissed.
+    /// The exporter's answer: saved, or cancelled or dismissed.
     public var onSaved: @MainActor (Bool) -> Void = { _ in }
     public var onSaveFailed: @MainActor () -> Void = {}
     public var onClose: @MainActor () -> Void = {}
@@ -35,11 +35,14 @@ public struct HistoryExportScreen: View {
     @Environment(\.vettIDTimeScale) private var timeScale
     let step: ExportStep
     let words: String
+    let file: ExportFile?
     let actions: HistoryExportActions
 
-    public init(step: ExportStep, words: String, actions: HistoryExportActions) {
+    /// [file]: the bytes "Save to Files" writes (``HistoryExportViewModel/exportFile``).
+    public init(step: ExportStep, words: String, file: ExportFile? = nil, actions: HistoryExportActions) {
         self.step = step
         self.words = words
+        self.file = file
         self.actions = actions
     }
 
@@ -66,10 +69,8 @@ public struct HistoryExportScreen: View {
                     label: HistoryStrings.exportReading(Int(total)), fraction: Double(done) / Double(max(total, 1)),
                     detail: HistoryStrings.exportReadingProgress(done, Int(total)), onCancel: actions.onClose
                 )
-            case .writing:
-                ExportProgress(label: HistoryStrings.exportWriting, fraction: nil, detail: nil, onCancel: nil)
             case .save(let s):
-                ExportSaveStep(save: s, actions: actions)
+                ExportSaveStep(save: s, file: file, actions: actions)
             case .done(let written, let authorised):
                 ExportDone(written: written, authorised: authorised, onClose: actions.onClose)
             case .failed(let kind, let saveFailed):
@@ -252,40 +253,60 @@ private struct ExportPinStep: View {
     }
 }
 
-/// The file is ready: "Save to Files" opens by itself once, and again from the button; the suggested name below.
+/// The file is ready: "Save to Files" opens by itself once, and again from the button; the suggested name below. The
+/// system's exporter (`fileExporter`, IOS-PLAN §4) writes the in-memory bytes only where the member chooses; cancelling
+/// or dismissing it drops the export.
 private struct ExportSaveStep: View {
-    @Environment(\.vettIDColors) private var colors
     let save: ExportSave
+    let file: ExportFile?
     let actions: HistoryExportActions
-    @State private var picking = false
+    @State private var exporting = false
 
     var body: some View {
         FormScaffold(
             title: HistoryStrings.exportSaveTitle, message: HistoryStrings.exportSaveBody, primaryLabel: HistoryStrings.exportSaveAgain,
-            secondaryLabel: HistoryStrings.cancel, onPrimary: { open() }, onSecondary: { actions.onSaved(false) },
+            primaryEnabled: file != nil, secondaryLabel: HistoryStrings.cancel, onPrimary: { open() },
+            onSecondary: { actions.onSaved(false) },
             onBack: { actions.onSaved(false) }, header: { ExportGlyph(symbol: "arrow.down.doc") }
         ) {
             Text(save.fileName).vettIDFont(.bodyMedium).accessibilityIdentifier("history_export_file_name")
         }
         .onAppear { if !save.requested { open() } }
-        .sheet(isPresented: $picking) {
-            ExportDocumentPicker(file: save.file) { result in
-                picking = false
+        .fileExporter(
+            isPresented: $exporting, document: file.map(ExportDocument.init), contentTypes: [ExportDocument.contentType(save.format)],
+            defaultFilename: save.fileName,
+            onCompletion: { result in
                 switch result {
-                case .saved: actions.onSaved(true)
-                // ANDROID-PLAN §4 History "Export": a dismissed dialog discards the data.
-                case .cancelled: actions.onSaved(false)
-                case .failed: actions.onSaveFailed()
+                case .success: actions.onSaved(true)
+                case .failure(let error as CocoaError) where error.code == .userCancelled: actions.onSaved(false)
+                case .failure: actions.onSaveFailed()
                 }
-            }
-            .ignoresSafeArea()
-        }
+            },
+            onCancellation: { actions.onSaved(false) }
+        )
     }
 
     private func open() {
+        guard file != nil else { return }
         actions.onSave()
-        picking = true
+        exporting = true
     }
+}
+
+/// The export's file for `fileExporter`: its bytes from memory, never read back.
+struct ExportDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.commaSeparatedText, .json] }
+
+    let bytes: Data
+
+    init(_ file: ExportFile) { bytes = file.bytes }
+
+    init(configuration: ReadConfiguration) throws { throw CocoaError(.fileReadUnsupportedScheme) }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: bytes) }
+
+    /// §10.9's content types: `text/csv` or `application/json`.
+    static func contentType(_ f: ExportFormat) -> UTType { f == .csv ? .commaSeparatedText : .json }
 }
 
 /// "History exported" with the count, or how many the retention removed meanwhile; the file is not encrypted.
@@ -303,41 +324,6 @@ private struct ExportDone: View {
             Text(HistoryStrings.exportDoneNote).vettIDFont(.bodySmall).foregroundStyle(colors.onSurfaceVariant)
         }
         .accessibilityIdentifier("history_export_done")
-    }
-}
-
-/// "Save to Files" (IOS-PLAN §4): the system's document picker exporting a copy of the staged file to the place the
-/// member chooses. Only the member chooses where it goes; nothing else is offered (no share sheet).
-struct ExportDocumentPicker: UIViewControllerRepresentable {
-    enum Result { case saved, cancelled, failed }
-
-    let file: URL
-    let onDone: @MainActor (Result) -> Void
-
-    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
-        let picker = UIDocumentPickerViewController(forExporting: [file], asCopy: true)
-        picker.delegate = context.coordinator
-        picker.shouldShowFileExtensions = true
-        return picker
-    }
-
-    func updateUIViewController(_ controller: UIDocumentPickerViewController, context: Context) {}
-
-    func makeCoordinator() -> Coordinator { Coordinator(onDone: onDone) }
-
-    final class Coordinator: NSObject, UIDocumentPickerDelegate {
-        let onDone: @MainActor (Result) -> Void
-
-        init(onDone: @escaping @MainActor (Result) -> Void) { self.onDone = onDone }
-
-        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-            let result: Result = urls.isEmpty ? .failed : .saved
-            MainActor.assumeIsolated { onDone(result) }
-        }
-
-        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-            MainActor.assumeIsolated { onDone(.cancelled) }
-        }
     }
 }
 #endif

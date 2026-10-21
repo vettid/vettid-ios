@@ -3,6 +3,7 @@ import Foundation
 import SwiftUI
 import Testing
 import UIKit
+import UniformTypeIdentifiers
 import VettIDData
 import VettIDDataTesting
 @testable import VettIDHistory
@@ -70,19 +71,19 @@ import VettIDVault
         var noMatch = loaded
         noMatch.filter = AuditFilter(category: .devices)
         for s in [HistoryState(), loaded, full, more, broken, local, failed, noMatch] {
-            _ = host(HistoryScreen(state: s, chrome: chrome, actions: HistoryActions()))
-            _ = host(HistoryScreen(state: s, chrome: nil, onBack: {}, actions: HistoryActions()))
+            #expect(height(HistoryScreen(state: s, chrome: chrome, actions: HistoryActions())) > 0, "\(s)")
+            #expect(height(HistoryScreen(state: s, chrome: nil, onBack: {}, actions: HistoryActions())) > 0, "\(s)")
         }
     }
 
     @Test func everyStateOfAnEntryRenders() {
         var s = HistoryEntryState()
-        _ = host(HistoryEntryScreen(state: s, actions: HistoryEntryActions()))
+        #expect(height(HistoryEntryScreen(state: s, actions: HistoryEntryActions())) > 0)
         s.loading = false
         s.missing = true
-        _ = host(HistoryEntryScreen(state: s, actions: HistoryEntryActions()))
+        #expect(height(HistoryEntryScreen(state: s, actions: HistoryEntryActions())) > 0)
         s.error = .network
-        _ = host(HistoryEntryScreen(state: s, actions: HistoryEntryActions()))
+        #expect(height(HistoryEntryScreen(state: s, actions: HistoryEntryActions())) > 0)
         s.error = nil
         s.missing = false
         s.entry = Self.rec(9, "recovery.attempt", conn: "c1", device: "d-self", ref: "2/3/not_success/counter")
@@ -92,7 +93,7 @@ import VettIDVault
         s.deviceUnnamed = true
         s.thisDevice = true
         s.outcome = .matched("wrong", phoneName: "Pixel 7")
-        _ = host(HistoryEntryScreen(state: s, actions: HistoryEntryActions()))
+        #expect(height(HistoryEntryScreen(state: s, actions: HistoryEntryActions())) > 0)
     }
 
     @Test func everyStepOfTheExportRenders() {
@@ -104,29 +105,31 @@ import VettIDVault
         pin.retryUntil = Date().addingTimeInterval(30)
         var wrong = ExportPin(preview: p, format: .json)
         wrong.error = .badPin
-        let save = ExportSave(fileName: "vettid-history-20261008-140312.csv", format: .csv, file: URL(fileURLWithPath: "/tmp/x.csv"), requested: true)
+        let save = ExportSave(fileName: "vettid-history-20261008-140312.csv", format: .csv, requested: true)
+        let file = ExportFile(bytes: Data("seq\r\n".utf8), name: save.fileName, format: .csv)
         let steps: [ExportStep] = [
             .closed, .previewing, .confirm(p, format: nil), .confirm(p, format: .json), .nothingToExport, .refused(.alarm), .refused(.oldVault),
-            .pin(pin), .pin(wrong), .reading(done: 10, total: 40), .writing, .save(save), .done(written: 38, authorised: 40),
+            .pin(pin), .pin(wrong), .reading(done: 10, total: 40), .save(save), .done(written: 38, authorised: 40),
             .failed(.ownerCheckRequired), .failed(nil, saveFailed: true), .failed(.network),
         ]
-        for step in steps { _ = host(HistoryExportScreen(step: step, words: "All of your history", actions: HistoryExportActions())) }
+        for step in steps where step != .closed {
+            #expect(height(HistoryExportScreen(step: step, words: "All of your history", file: file, actions: HistoryExportActions())) > 0, "\(step)")
+        }
+        #expect(ExportDocument.contentType(.csv) == .commaSeparatedText && ExportDocument.contentType(.json) == .json)
+        #expect(ExportDocument(file).bytes == file.bytes)
     }
 
     @Test func theRoutesRenderOverTheirRepositories() {
         let log = FakeAuditLog(FakeAuditLog.chain(3))
         let repo = HistoryManager { log }
-        _ = host(HistoryRoute(history: repo, export: HistoryExportManager { log }, chrome: chrome, host: HistoryHost()))
-        _ = host(HistoryRoute(history: repo, export: HistoryExportManager { log }, connectionID: "c1", chrome: nil, host: HistoryHost()))
-        _ = host(HistoryEntryRoute(2, history: repo, host: HistoryHost()))
+        #expect(height(HistoryRoute(history: repo, export: HistoryExportManager { log }, chrome: chrome, host: HistoryHost())) > 0)
+        #expect(height(HistoryRoute(history: repo, export: HistoryExportManager { log }, connectionID: "c1", chrome: nil, host: HistoryHost())) > 0)
+        #expect(height(HistoryEntryRoute(2, history: repo, host: HistoryHost())) > 0)
     }
 
-    private func host(_ view: some View) -> UIWindow {
-        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
-        window.rootViewController = UIHostingController(rootView: view.vettIDTheme())
-        window.isHidden = false
-        window.layoutIfNeeded()
-        return window
+    /// The view's height laid out on an iPhone's screen, as the shell's render tests measure it.
+    private func height(_ view: some View) -> CGFloat {
+        UIHostingController(rootView: view.vettIDTheme(.dark)).sizeThatFits(in: CGSize(width: 390, height: 844)).height
     }
 }
 

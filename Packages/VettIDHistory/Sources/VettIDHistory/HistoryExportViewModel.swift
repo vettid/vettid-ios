@@ -35,17 +35,31 @@ public struct ExportPin: Equatable, Sendable {
     }
 }
 
-/// The file waiting for "Save to Files": the suggested [fileName], the staged [file], [requested] once the picker opened.
+/// The file waiting for "Save to Files": the suggested [fileName], its [format], [requested] once the exporter opened.
 public struct ExportSave: Equatable, Sendable {
     public var fileName: String
     public var format: ExportFormat
-    public var file: URL
     public var requested = false
+
+    public init(fileName: String, format: ExportFormat, requested: Bool = false) {
+        self.fileName = fileName
+        self.format = format
+        self.requested = requested
+    }
 }
 
-/// The steps of a History export (ANDROID-PLAN §4 History "Export"): preview → confirm → PIN → reading → writing →
-/// "Save to Files" → done. Mirrors vettid-android `ExportStep`; on the iPhone the file is written before the picker opens
-/// (``ExportDocuments``).
+/// The export's file, in memory only (IOS-PLAN §4 "Save to Files"; ANDROID-PLAN §4 History "Export" step 4: no copy in
+/// the cache): its bytes, its suggested name and its format, handed to the system's exporter, which writes it where the
+/// member chooses.
+public struct ExportFile: Equatable, Sendable {
+    public var bytes: Data
+    public var name: String
+    public var format: ExportFormat
+}
+
+/// The steps of a History export (ANDROID-PLAN §4 History "Export"): preview → confirm → PIN → reading → "Save to Files"
+/// → done. Mirrors vettid-android `ExportStep`; on the iPhone the system's exporter writes the file itself, so there is no
+/// writing step of the app's.
 public enum ExportStep: Equatable, Sendable {
     /// No export under way.
     case closed
@@ -60,12 +74,10 @@ public enum ExportStep: Equatable, Sendable {
     case pin(ExportPin)
     /// The authorised entries are read (`audit.list` pages): [done] of [total].
     case reading(done: Int, total: Int64)
-    /// The file is written where the picker copies it from.
-    case writing
     case save(ExportSave)
     /// Saved: [written] entries of the [authorised] count (fewer when the retention dropped some meanwhile).
     case done(written: Int, authorised: Int64)
-    /// A failure: the vault's (the daily check due, the network…), or [saveFailed] writing the file.
+    /// A failure: the vault's (the daily check due, the network…), or [saveFailed] the exporter could not write the file.
     case failed(FailureKind?, saveFailed: Bool = false)
 }
 
@@ -82,25 +94,19 @@ public struct ExportContext: Equatable, Sendable {
         self.connectionNames = connectionNames
         self.itemNames = itemNames
     }
-
-    /// A connection as History names it: "First Last", "Name not shared yet", or "Removed connection".
-    func connectionLabel(_ id: String) -> String {
-        guard let name = connectionNames[id] else { return HistoryStrings.connectionRemoved }
-        return name.isEmpty ? HistoryStrings.connectionUnnamed : name
-    }
 }
 
 /// History export (VAULT-MESSAGING 0.22.0 §10.9, ANDROID-PLAN §4 History "Export"): exports what the list's filters show,
 /// never more. The preview counts; the vault PIN, sealed to a UTK, authorises the export (`audit.export`); the entries
-/// are then read with `audit.list` below the answer's `upto_seq` and held in memory only until the file is written for
-/// "Save to Files" (``ExportDocuments``), which is deleted once the picker answers. Nothing is written without a
-/// successful `audit.export` answer; cancelling or dismissing drops the entries and the file (the vault's
-/// `audit.exported` entry stays). Mirrors vettid-android `HistoryExportViewModel`.
+/// are then read with `audit.list` below the answer's `upto_seq` and held in memory only: the file's bytes
+/// (``exportFile``) exist only while the step is "Save to Files", and the system's exporter writes them only to the
+/// place the member chooses; the app writes no file of its own. Nothing is written without a successful `audit.export`
+/// answer; cancelling or dismissing drops the entries and the bytes (the vault's `audit.exported` entry stays). Mirrors
+/// vettid-android `HistoryExportViewModel`.
 @MainActor
 @Observable
 public final class HistoryExportViewModel {
     @ObservationIgnored private let repo: any HistoryExportRepository
-    @ObservationIgnored private let documents: any ExportDocuments
     @ObservationIgnored private let now: @MainActor () -> Date
     @ObservationIgnored private let work = Work()
     @ObservationIgnored private var context: ExportContext?
@@ -110,13 +116,15 @@ public final class HistoryExportViewModel {
     public private(set) var step = ExportStep.closed
 
     /// [now]: the clock (tests set it).
-    public init(
-        repo: any HistoryExportRepository, documents: any ExportDocuments = TemporaryExportDocuments(),
-        now: @escaping @MainActor () -> Date = { Date() }
-    ) {
+    public init(repo: any HistoryExportRepository, now: @escaping @MainActor () -> Date = { Date() }) {
         self.repo = repo
-        self.documents = documents
         self.now = now
+    }
+
+    /// The file "Save to Files" writes: only while the step is ``ExportStep/save(_:)``, else nil.
+    public var exportFile: ExportFile? {
+        if case .save = step { return pending?.file }
+        return nil
     }
 
     deinit { work.cancelAll() }
@@ -209,29 +217,24 @@ public final class HistoryExportViewModel {
             let rows = records.map { row($0, c, devices) }
             let at = answer.answeredAt ?? now()
             let header = ExportHeader(exportedAt: at, filters: exportFilters(c), answer: answer)
-            let bytes = HistoryFiles.bytes(format, header: header, rows: rows)
+            let bytes = Data(HistoryFiles.bytes(format, header: header, rows: rows))
             let file = ExportFile(bytes: bytes, name: HistoryFiles.fileName(at, format), format: format)
-            write(g, file, written: rows.count, authorised: answer.count)
+            pending = Pending(file: file, written: rows.count, authorised: answer.count)
+            step = .save(ExportSave(fileName: file.name, format: format))
         } catch {
             guard !(error is CancellationError) else { return }
             set(g, .failed(failureKind(error)))
         }
     }
 
-    /// The file for the picker; the entries and the bytes are not kept.
-    private func write(_ g: Int, _ f: ExportFile, written: Int, authorised: Int64) {
-        set(g, .writing)
-        do {
-            let file = try documents.stage(f.bytes, fileName: f.name)
-            guard g == generation else { return documents.discard(file) }
-            pendingCounts = (written, authorised)
-            step = .save(ExportSave(fileName: f.name, format: f.format, file: file))
-        } catch {
-            set(g, .failed(nil, saveFailed: true))
-        }
-    }
+    /// The file and its counts, from a successful read until the exporter answers or the export closes.
+    @ObservationIgnored private var pending: Pending?
 
-    @ObservationIgnored private var pendingCounts: (written: Int, authorised: Int64)?
+    private struct Pending {
+        var file: ExportFile
+        var written: Int
+        var authorised: Int64
+    }
 
     /// The screen opened "Save to Files" (so that a redraw does not open it again).
     public func saveRequested() {
@@ -241,25 +244,24 @@ public final class HistoryExportViewModel {
         }
     }
 
-    /// The picker's answer: [saved] true once the file was copied where the member chose, false when it was dismissed
-    /// (the export is dropped). The staged file is deleted either way.
+    /// The exporter's answer: [saved] true once the file was written where the member chose; false when it was cancelled
+    /// or dismissed: the export is dropped (ANDROID-PLAN §4 History "Export": a dismissed dialog discards the data). The
+    /// bytes are dropped either way.
     public func saved(_ saved: Bool) {
-        guard case .save(let s) = step else { return }
-        documents.discard(s.file)
-        guard saved, let counts = pendingCounts else { return close() }
-        pendingCounts = nil
-        step = .done(written: counts.written, authorised: counts.authorised)
+        guard case .save = step else { return }
+        guard saved, let p = pending else { return close() }
+        pending = nil
+        step = .done(written: p.written, authorised: p.authorised)
     }
 
-    /// The picker could not copy the file: "The file could not be saved".
+    /// The exporter could not write the file: "The file could not be saved. Nothing was kept"; the bytes are dropped.
     public func saveFailed() {
-        guard case .save(let s) = step else { return }
-        documents.discard(s.file)
-        pendingCounts = nil
+        guard case .save = step else { return }
+        pending = nil
         step = .failed(nil, saveFailed: true)
     }
 
-    /// Cancel, Back or Close at any step: the entries read so far and the file are dropped.
+    /// Cancel, Back or Close at any step: the entries read so far and the file's bytes are dropped.
     public func close() {
         drop()
         step = .closed
@@ -269,14 +271,12 @@ public final class HistoryExportViewModel {
         generation += 1
         job?.cancel()
         job = nil
-        pendingCounts = nil
-        if case .save(let s) = step { documents.discard(s.file) }
-        // Anything an export that never ended left behind.
-        documents.discardAll()
+        pending = nil
     }
 
     private func row(_ r: AuditRecord, _ c: ExportContext, _ devices: HistoryDevices?) -> ExportRow {
-        let connection = r.entry.connectionID.map { c.connectionLabel($0) }
+        // As vettid-android writes it: the connection's name as held ("" before it arrived), "Removed connection" once gone.
+        let connection = r.entry.connectionID.map { c.connectionNames[$0] ?? HistoryStrings.connectionRemoved }
         let itemID = AuditKinds.itemOf(r.kind, r.entry.ref)
         let item = itemID.flatMap { id in c.itemNames.map { $0[id] ?? HistoryStrings.itemDeleted } }
         let names = EntryNames(
@@ -291,7 +291,7 @@ public final class HistoryExportViewModel {
     }
 
     private func exportFilters(_ c: ExportContext) -> ExportFilters {
-        ExportFilters(c.filter, connectionName: c.filter.connectionID.map { c.connectionLabel($0) })
+        ExportFilters(c.filter, connectionName: c.filter.connectionID.map { c.connectionNames[$0] ?? HistoryStrings.connectionRemoved })
     }
 
     static func refusal(_ e: VaultFailure?) -> ExportRefusal? {
@@ -303,13 +303,6 @@ public final class HistoryExportViewModel {
 
     /// TEST ONLY: returns once the work started has run.
     func settle() async { await work.settle() }
-}
-
-/// A file's bytes, its name and its format, before it is staged.
-private struct ExportFile {
-    var bytes: [UInt8]
-    var name: String
-    var format: ExportFormat
 }
 
 private extension Character {

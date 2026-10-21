@@ -9,35 +9,6 @@ import VettIDVault
 // Fixtures stay on one line each.
 // swiftlint:disable line_length
 
-/// TEST ONLY. The files staged for "Save to Files": what was written to each, and what was deleted.
-final class FakeDocuments: ExportDocuments, @unchecked Sendable {
-    private let lock = NSLock()
-    private var filesValue: [URL: [UInt8]] = [:]
-    private var discardedValue: [URL] = []
-    private var sweepsValue = 0
-    var failing = false
-
-    var files: [URL: [UInt8]] { lock.withLock { filesValue } }
-    var discarded: [URL] { lock.withLock { discardedValue } }
-    var sweeps: Int { lock.withLock { sweepsValue } }
-
-    func stage(_ bytes: [UInt8], fileName: String) throws -> URL {
-        if failing { throw CocoaError(.fileWriteOutOfSpace) }
-        let url = URL(fileURLWithPath: "/staged/\(UUID().uuidString)/\(fileName)")
-        lock.withLock { filesValue[url] = bytes }
-        return url
-    }
-
-    func discard(_ url: URL) {
-        lock.withLock {
-            filesValue[url] = nil
-            discardedValue.append(url)
-        }
-    }
-
-    func discardAll() { lock.withLock { sweepsValue += 1 } }
-}
-
 /// The History export's steps (ANDROID-PLAN §4 History "Export"): preview → confirm → PIN → reading → writing → "Save to
 /// Files" → done, and every refusal, through the real ``HistoryExportManager``. Mirrors vettid-android
 /// `HistoryExportViewModelTest`.
@@ -70,7 +41,6 @@ final class FakeDocuments: ExportDocuments, @unchecked Sendable {
     }
 
     let log = FakeAuditLog()
-    let docs = FakeDocuments()
     let ctx = ExportContext(filter: AuditFilter(category: .messages, connectionID: "c1"), connectionNames: ["c1": "Alice Moreau"], itemNames: ["it1": "Passport"])
 
     init() {
@@ -79,7 +49,7 @@ final class FakeDocuments: ExportDocuments, @unchecked Sendable {
     }
 
     func model() -> HistoryExportViewModel {
-        HistoryExportViewModel(repo: HistoryExportManager(ops: { [log] in log }), documents: docs, now: { Self.t0 })
+        HistoryExportViewModel(repo: HistoryExportManager(ops: { [log] in log }), now: { Self.t0 })
     }
 
     /// Up to the PIN step with [format].
@@ -92,9 +62,10 @@ final class FakeDocuments: ExportDocuments, @unchecked Sendable {
         return m
     }
 
-    func json(_ url: URL?) throws -> [String: Any] {
-        let bytes = try #require(url.flatMap { docs.files[$0] })
-        return try #require(try JSONSerialization.jsonObject(with: Data(bytes)) as? [String: Any])
+    /// The JSON file "Save to Files" would write.
+    func json(_ m: HistoryExportViewModel) throws -> [String: Any] {
+        let file = try #require(m.exportFile)
+        return try #require(try JSONSerialization.jsonObject(with: file.bytes) as? [String: Any])
     }
 
     @Test func theWholeFlowWritesTheFileForTheChosenPlace() async throws {
@@ -125,7 +96,8 @@ final class FakeDocuments: ExportDocuments, @unchecked Sendable {
         m.saveRequested()
         guard case .save(let r) = m.step else { return }
         #expect(r.requested)
-        let o = try json(s.file)
+        #expect(m.exportFile?.name == s.fileName && m.exportFile?.format == .json)
+        let o = try json(m)
         #expect(o["exported_at"] as? String == "2026-10-08T14:03:12.511Z")
         let f = try #require(o["filters"] as? [String: Any])
         #expect(f["category"] as? String == "messages" && f["connection_name"] as? String == "Alice Moreau")
@@ -137,8 +109,8 @@ final class FakeDocuments: ExportDocuments, @unchecked Sendable {
         #expect(e[2]["item_name"] as? String == "Deleted item")
         m.saved(true)
         #expect(m.step == .done(written: 3, authorised: 3))
-        // The staged file is deleted once the picker answered.
-        #expect(docs.files.isEmpty && docs.discarded == [s.file])
+        // The bytes are dropped once the exporter answered.
+        #expect(m.exportFile == nil)
     }
 
     @Test func csvAndFewerEntriesThanAuthorised() async throws {
@@ -149,7 +121,7 @@ final class FakeDocuments: ExportDocuments, @unchecked Sendable {
         await m.settle()
         guard case .save(let s) = m.step else { Issue.record("not the save step"); return }
         #expect(s.fileName == "vettid-history-20261008-140312.csv")
-        let b = try #require(docs.files[s.file])
+        let b = Array(try #require(m.exportFile).bytes)
         #expect(b.prefix(3) == [0xEF, 0xBB, 0xBF])
         #expect((String(bytes: b.dropFirst(3), encoding: .utf8) ?? "").components(separatedBy: "\r\n").filter { !$0.isEmpty }.count == 3)
         m.saved(true)
@@ -181,7 +153,7 @@ final class FakeDocuments: ExportDocuments, @unchecked Sendable {
         let m = await toPin(.csv)
         m.submitPin("123456")
         await m.settle()
-        #expect(m.step == .refused(.alarm) && docs.files.isEmpty)
+        #expect(m.step == .refused(.alarm) && m.exportFile == nil)
     }
 
     @Test func anOlderVaultSaysSo() async {
@@ -211,7 +183,7 @@ final class FakeDocuments: ExportDocuments, @unchecked Sendable {
         await m.settle()
         #expect(log.exportCalls.count == 2)
         #expect(held.canSend(pinLength: 6, now: Self.t0.addingTimeInterval(60)))
-        #expect(docs.files.isEmpty && log.calls.isEmpty)
+        #expect(m.exportFile == nil && log.calls.isEmpty)
     }
 
     @Test func aUtkTheVaultNoLongerKnowsIsReplacedOnce() async {
@@ -253,25 +225,30 @@ final class FakeDocuments: ExportDocuments, @unchecked Sendable {
         log.script([{ AuditPage(entries: Self.entries(3), seq: 31) }])
         let m = await toPin(.json)
         m.submitPin("123456")
-        for _ in 0..<400 where m.step != .reading(done: 0, total: 3) { try? await Task.sleep(for: .milliseconds(5)) }
-        #expect(m.step == .reading(done: 0, total: 3))
+        #expect(await eventually { m.step == .reading(done: 0, total: 3) })
         m.close()
         gate.complete()
         await m.settle()
-        #expect(m.step == .closed && docs.files.isEmpty)
+        #expect(m.step == .closed && m.exportFile == nil)
         m.saved(true)
         #expect(m.step == .closed)
     }
 
-    @Test func aDismissedPickerDiscardsTheFile() async {
+    /// ANDROID-PLAN §4 History "Export": a dismissed dialog discards the data. The exporter cancelled (or swiped away)
+    /// closes the export and drops the bytes; a late "saved" changes nothing.
+    @Test func aCancelledExporterDiscardsTheFile() async {
         log.answerExports([{ Self.success() }])
         log.script([{ AuditPage(entries: Self.entries(3), seq: 31) }])
         let m = await toPin(.json)
         m.submitPin("123456")
         await m.settle()
-        guard case .save(let s) = m.step else { Issue.record("not the save step"); return }
+        guard case .save = m.step else { Issue.record("not the save step"); return }
+        #expect(m.exportFile != nil)
+        m.saveRequested()
         m.saved(false)
-        #expect(m.step == .closed && docs.files.isEmpty && docs.discarded.contains(s.file))
+        #expect(m.step == .closed && m.exportFile == nil)
+        m.saved(true)
+        #expect(m.step == .closed)
     }
 
     @Test func closingAtTheSaveStepDiscardsTheFile() async {
@@ -280,8 +257,9 @@ final class FakeDocuments: ExportDocuments, @unchecked Sendable {
         let m = await toPin(.json)
         m.submitPin("123456")
         await m.settle()
+        #expect(m.exportFile != nil)
         m.close()
-        #expect(m.step == .closed && docs.files.isEmpty && docs.sweeps >= 2)
+        #expect(m.step == .closed && m.exportFile == nil)
     }
 
     @Test func aFailedReadWritesNothing() async {
@@ -290,23 +268,18 @@ final class FakeDocuments: ExportDocuments, @unchecked Sendable {
         let m = await toPin(.csv)
         m.submitPin("123456")
         await m.settle()
-        #expect(m.step == .failed(.network) && docs.files.isEmpty)
+        #expect(m.step == .failed(.network) && m.exportFile == nil)
     }
 
-    @Test func aFailedWriteOrCopySaysSo() async {
-        docs.failing = true
-        log.answerExports([{ Self.success() }, { Self.success() }])
-        log.script([{ AuditPage(entries: Self.entries(3), seq: 31) }, { AuditPage(entries: Self.entries(3), seq: 31) }])
-        let m = await toPin(.csv)
-        m.submitPin("123456")
-        await m.settle()
-        #expect(m.step == .failed(nil, saveFailed: true))
-        docs.failing = false
+    /// The exporter could not write the file: said so, and nothing is kept.
+    @Test func aFailedWriteSaysSoAndKeepsNothing() async {
+        log.answerExports([{ Self.success() }])
+        log.script([{ AuditPage(entries: Self.entries(3), seq: 31) }])
         let p = await toPin(.csv)
         p.submitPin("123456")
         await p.settle()
         p.saveFailed()
-        #expect(p.step == .failed(nil, saveFailed: true) && docs.files.isEmpty)
+        #expect(p.step == .failed(nil, saveFailed: true) && p.exportFile == nil)
     }
 
     @Test func withoutDeviceNamesTheFileKeepsTheIds() async throws {
@@ -316,8 +289,8 @@ final class FakeDocuments: ExportDocuments, @unchecked Sendable {
         let m = await toPin(.json)
         m.submitPin("123456")
         await m.settle()
-        guard case .save(let s) = m.step else { Issue.record("not the save step"); return }
-        let e = try #require(try json(s.file)["entries"] as? [[String: Any]])
+        guard case .save = m.step else { Issue.record("not the save step"); return }
+        let e = try #require(try json(m)["entries"] as? [[String: Any]])
         #expect(e[0]["device_id"] as? String == "d1" && e[0]["device_name"] == nil && e[1]["device_name"] == nil)
     }
 
@@ -328,8 +301,8 @@ final class FakeDocuments: ExportDocuments, @unchecked Sendable {
         let m = await toPin(.json)
         m.submitPin("123456")
         await m.settle()
-        guard case .save(let s) = m.step else { Issue.record("not the save step"); return }
-        let e = try #require(try json(s.file)["entries"] as? [[String: Any]])
+        guard case .save = m.step else { Issue.record("not the save step"); return }
+        let e = try #require(try json(m)["entries"] as? [[String: Any]])
         #expect(e[0]["device_id"] as? String == "d1" && e[0]["device_name"] == nil)
         #expect(e[1]["device_name"] as? String == "Removed device")
     }
@@ -345,11 +318,29 @@ final class FakeDocuments: ExportDocuments, @unchecked Sendable {
         m.confirm()
         m.submitPin("123456")
         await m.settle()
-        guard case .save(let s) = m.step else { Issue.record("not the save step"); return }
-        let o = try json(s.file)
+        guard case .save = m.step else { Issue.record("not the save step"); return }
+        let o = try json(m)
         let e = try #require(o["entries"] as? [[String: Any]])
         #expect(e[1]["item_name"] == nil && e[0]["connection_name"] as? String == "Removed connection")
         #expect((o["filters"] as? [String: Any])?.isEmpty == true)
+    }
+
+    /// As vettid-android writes the file: a connection whose names have not arrived keeps its name as held (""), only a
+    /// gone one is "Removed connection"; the title drops the name.
+    @Test func theFileWritesTheConnectionsNameAsHeld() async throws {
+        log.answerExports([{ Self.success() }])
+        log.script([{ AuditPage(entries: Self.entries(1), seq: 31) }])
+        let m = model()
+        m.start(ExportContext(filter: AuditFilter(connectionID: "c1"), connectionNames: ["c1": ""]))
+        await m.settle()
+        m.chooseFormat(.json)
+        m.confirm()
+        m.submitPin("123456")
+        await m.settle()
+        let o = try json(m)
+        let e = try #require(o["entries"] as? [[String: Any]])
+        #expect(e[0]["connection_name"] as? String == "" && e[0]["label"] as? String == "Message sent")
+        #expect((o["filters"] as? [String: Any])?["connection_name"] as? String == "")
     }
 }
 

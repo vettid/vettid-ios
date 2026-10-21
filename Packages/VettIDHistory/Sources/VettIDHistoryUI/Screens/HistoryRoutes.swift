@@ -57,7 +57,9 @@ public struct HistoryRoute: View {
                 HistoryScreen(state: state, chrome: chrome, onBack: connectionID == nil ? nil : host.onBack, actions: actions)
                     .onAppear { model?.refresh() }
             } else {
-                HistoryExportScreen(step: step, words: state.filterWords(dates: dateWords(state)), actions: exportActions)
+                HistoryExportScreen(
+                    step: step, words: state.filterWords(dates: dateWords(state)), file: exportModel?.exportFile, actions: exportActions
+                )
             }
         }
         .onAppear {
