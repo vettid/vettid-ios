@@ -148,6 +148,18 @@ import VettIDDataTesting
         #expect(m.state.done && repo.lastPin == "59173048" && repo.calls.filter { $0 == "changePin" }.count == 2)
     }
 
+    /// VAULT-MESSAGING 0.51.1; IOS-PLAN 0.1.13: the vault's `forbidden` ended the change and its failure is `notHolder`:
+    /// "Your vault moved to a new phone" is shown once, as the change's notice (no failure card with the same title), the
+    /// notice is acknowledged so that the shell's does not show it too, and nothing is kept for a retry.
+    @Test func anotherHolderIsShownOnceAsTheNotice() async {
+        repo.fail["changePin"] = FakeVaultRepository.failure(.notHolder, code: VaultManager.codeNotHolder)
+        repo.changeCheck = ChangeCheck(.pin, .notHolder)
+        let m = ChangePinViewModel(vault: repo)
+        await send(m)
+        #expect(m.state.check == .notHolder && m.state.error == nil && repo.changeCheck == nil)
+        #expect(m.state.current.isEmpty && m.state.pin.isEmpty && m.state.confirm.isEmpty && m.state.password.isEmpty)
+    }
+
     /// The check ended without a decision (VAULT-MESSAGING 0.45.0 §11.14.9 step 3), later or at once: said so, and
     /// nothing is kept for a retry that would send the PIN again.
     @Test func anEndedCheckKeepsNothingForARetry() async {

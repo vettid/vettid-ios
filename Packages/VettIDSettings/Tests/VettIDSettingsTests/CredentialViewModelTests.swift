@@ -166,6 +166,18 @@ import VettIDDataTesting
         #expect(m.state.check == .notApplied && m.state.error == nil && m.state.password == "a much better passphrase here")
     }
 
+    /// VAULT-MESSAGING 0.51.1; IOS-PLAN 0.1.13: the vault's `forbidden` ended the change: "Your vault moved to a new
+    /// phone" once, as the change's notice (no failure card), acknowledged, nothing kept.
+    @Test func anotherHolderIsShownOnceAsTheNotice() async {
+        repo.phoneSecret = true
+        repo.fail["changePassword"] = FakeVaultRepository.failure(.notHolder, code: VaultManager.codeNotHolder)
+        repo.changeCheck = ChangeCheck(.password, .notHolder)
+        let m = ChangePasswordViewModel(repo: repo, vault: repo)
+        await sendPassword(m)
+        #expect(m.state.check == .notHolder && m.state.error == nil && repo.changeCheck == nil)
+        #expect(m.state.password.isEmpty && m.state.current.isEmpty && m.state.pin.isEmpty)
+    }
+
     /// A refusal decided while the screen waits shows as it is, the wrong entry cleared.
     @Test func aLaterRefusalIsShownAsItIs() async {
         repo.phoneSecret = true
