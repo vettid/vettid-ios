@@ -37,6 +37,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             // The account is read again whenever the vault opens (an unlock, the end of onboarding, a start while open).
             if phase == .unlocked, oldValue != .unlocked { onOpened() }
             if phase != .unlocked, oldValue == .unlocked { forgetOpenLists() } // not kept once it is locked
+            if phase != oldValue, OwnProfileStep.onPhase(phase) == .forget { forgetOwnProfile() } // IOS-PLAN §4.7
             // IOS-PLAN §4.4 (1): the root screen ends with the lock (``lock()``), "Try again", and when nothing is set up
             // any more (a sign-out, a wipe, a deletion); not in between, so that a refusal during an unlock that includes
             // the daily check still shows it.
@@ -47,6 +48,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         }
     }
     public internal(set) var account: AccountInfo?
+    @ObservationIgnored let ownAccount = OwnAccount() // memory only (IOS-PLAN §4.7)
     public internal(set) var servicePaused = false
     /// (IOS-PLAN §4.4 (1)) The vault answered `credential_required`: the root screen "This phone can't use your vault".
     public internal(set) var credentialRequired = false
@@ -137,9 +139,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// The `vault.secret.renew` the member started and whose answer has not confirmed it: a retry reuses its next-epoch
     /// record (IOS-PLAN §6.3 item 2). In memory only.
     @ObservationIgnored var renewOperation: String?
-    /// A `vault.delete` of this process that got no answer: the member API's explicit "no vault" then means that the
-    /// vault deleted itself, and a vault still listed after its deadline means it never will (``checkVaultDeleted()``). In
-    /// memory only.
+    /// A `vault.delete` of this process that got no answer, in memory only: the member API's explicit "no vault" then
+    /// means the vault deleted itself, and a vault listed after its deadline that it never will (``checkVaultDeleted()``).
     @ObservationIgnored var deleteUnanswered: UnansweredDelete?
     /// TEST ONLY: replaces making the record of a confirmed `pin.change` current (a write that fails).
     @ObservationIgnored var confirmPinChangeOverride: (@MainActor (String) throws -> Void)?
@@ -298,7 +299,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         connections.loadIfNeeded()
         approvals.loadIfNeeded()
         memberVault.set(recorded: record.value.vaultID)
-        if account == nil { account = record.value.info }
+        if account == nil { publishAccount() }
         if !lockResumed {
             lockResumed = true
             // A lock that was pending when the process ended: locked from the start, and tried again at once.
@@ -325,7 +326,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     func resetRecord(_ a: LocalAccount) throws {
         try record.reset(a)
         memberVault.set(recorded: a.vaultID)
-        account = a.info
+        forgetOwnProfile() // another record: nothing of the one before (IOS-PLAN §4.7)
         recoveryOffered = ReleasePath.recoveryOffered(a.capabilities)
     }
 
@@ -437,8 +438,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// (``mayHoldVault(_:)``) unless [vaultGone]: the member API, asked again, said explicitly that it has none.
     func dropSession(forget: Bool, vaultGone: Bool = false) async throws {
         if forget, !vaultGone, let refusal = startOverRefusal(session?.device) { throw refusal }
-        // A session still being opened is stopped and waited for, as at a wipe: none makes or writes a device after the
-        // forget.
+        // A session still being opened is stopped and waited for, as at a wipe: no device made or written after the forget.
         if forget { _ = await cancelOpening() }
         let s = session
         session = nil
@@ -459,6 +459,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         renewSecretSuggested = false
         forgetChangeCheck()
         releaseUpdate.clear()
+        forgetOwnProfile()
         unlockWindow = nil
         try record.update(since: record.generation) {
             $0.setupComplete = false

@@ -15,12 +15,14 @@ extension VaultManager {
             },
             profileOps: { VaultProfileOps(api: try await memberApi(ref)) },
             quietOps: { VaultProfileOps(api: try quietApi(ref)) },
+            // Memory only, like the snapshot (``OwnAccount``): dropped when the vault closed while the request was on its way.
             onRequest: { r, since in ref.manager?.keepNameRequest(r, since: since) },
             checksLeft: {
                 try? await checks.refreshOwnerCheck()
                 return checks.ownerCheck?.checksLeft
             },
-            mark: { rec.generation },
+            mark: { ref.manager?.ownAccount.mark() ?? 0 },
+            open: { ref.manager?.ownProfileOpen ?? false },
             notes: Self.failureNotes(ref)
         )
     }
@@ -91,7 +93,7 @@ extension VaultManager {
     /// The vault is no longer open on this phone: what was read from it is dropped (the connections, the requests, the
     /// messages and their photos, the items, the feed, the approvals' lists, History and the member's own profile).
     func forgetOpenLists() {
-        profiles.clear()
+        forgetOwnProfile()
         items.clear()
         connections.forgetOpenVault()
         messages.forgetOpenVault()

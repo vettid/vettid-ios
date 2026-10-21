@@ -250,7 +250,12 @@ public struct AppShell: View {
                 onOpenPortal: onOpenPortal
             )
         }
-        .task(id: profiles.profile?.photo) { ownPhoto = await ProfilePhotos.decoded(profiles.profile?.photo) }
+        .task(id: profiles.profile?.photo) {
+            let decoded = await ProfilePhotos.decoded(profiles.profile?.photo)
+            // A decode that began before the photo changed or was cleared does not show it after (IOS-PLAN §4.7).
+            guard !Task.isCancelled else { return }
+            ownPhoto = decoded
+        }
     }
 
     private func openRequestedUpdate() {

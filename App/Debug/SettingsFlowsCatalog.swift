@@ -76,7 +76,7 @@ extension ShellCatalog {
             fingerprint: "9a1f bb7d 873e eafb 494b ef94 f072 7b25"
         )
         var preview = SharedProfileState(account: member, profile: own)
-        preview.pendingPhoto = "/9j/preview"
+        preview.pendingPhoto = PendingPhoto.of("/9j/4AAQ")
         preview.error = .network
         var tooLong = SharedProfileState(account: member, profile: own)
         tooLong.displayName = String(repeating: "Countess ", count: 16)

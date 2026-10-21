@@ -99,7 +99,7 @@ import VettIDUI
         let withPhoto = SharedProfileState(account: account, profile: shared)
         #expect(SharedProfilePhotoCard.status(withPhoto) == "Every connection sees this photo.")
         var preview = withPhoto
-        preview.pendingPhoto = "/9j/new"
+        preview.pendingPhoto = PendingPhoto.of("/9j/4AAQ")
         #expect(SharedProfilePhotoCard.status(preview) == "Preview: save it to share it with every connection.")
         preview.photoBusy = true
         #expect(SharedProfilePhotoCard.status(preview) == "Working…")

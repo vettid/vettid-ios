@@ -67,8 +67,9 @@ extension VaultManager {
         items.clear()
     }
 
-    /// Held or due (§3.6.3), as the owner check's state says: no feed content is kept; after the check (here or on
-    /// another device) it is read again. As vettid-android `VaultManager`.
+    /// Held or due (§3.6.3), as the owner check's state says: no feed content is kept, nor the member's own names, full
+    /// email or photo (IOS-PLAN §4.7); after the check (here or on another device) they are read again. As vettid-android
+    /// `VaultManager`.
     static func followHold(_ checks: OwnerCheckManager, _ ref: ManagerRef, _ feed: FeedManager) {
         checks.onHeldChange = { [weak feed] held in
             if held {
@@ -86,6 +87,12 @@ extension VaultManager {
                     items.refreshQuietly()
                 }
             }
+            guard let m = ref.manager else { return }
+            switch OwnProfileStep.onCheck(wasHeld: !held, held: held, phase: m.phase) {
+            case .forget: m.forgetOwnProfile()
+            case .read: m.readOwnProfile()
+            case .none: break
+            }
         }
     }
 
@@ -99,7 +106,7 @@ extension VaultManager {
 
     /// A wipe, or a deleted vault: every list, and what the phone keeps of them.
     func clearLists() {
-        profiles.clear()
+        forgetOwnProfile()
         items.clear()
         connections.clear()
         messages.clear()
