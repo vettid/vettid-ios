@@ -68,7 +68,8 @@
 # testStagingConnectAccept also VETTID_STAGING_LINK; VETTID_STAGING_SAFETY_CODE is optional (testStagingConnectApprove);
 # testStagingMessageSend also VETTID_STAGING_PEER_NAME and VETTID_STAGING_MESSAGE, testStagingMessageReceive
 # VETTID_STAGING_PEER_NAME and VETTID_STAGING_EXPECT; testStagingPhotoSend and testStagingPhotoReceive also
-# VETTID_STAGING_PEER_NAME, with VETTID_STAGING_PHOTO_TIMEOUT optional (the seconds they wait for the delivery or the
+# VETTID_STAGING_PEER_NAME, with VETTID_STAGING_PHOTO_EXISTING=1 optional (testStagingPhotoReceive takes the newest photo
+# already in the conversation and checks its viewer) and VETTID_STAGING_PHOTO_TIMEOUT optional (the seconds they wait for the delivery or the
 # arrival; 180 without it).
 #
 # A test without its inputs is skipped. The inputs reach only the test step, as TEST_RUNNER_<NAME> (xcodebuild passes
@@ -97,7 +98,7 @@ REPO=$(pwd -P)
 NAMES=(VETTID_STAGING_EMAIL VETTID_STAGING_CODE VETTID_STAGING_PIN VETTID_STAGING_PASSWORD)
 # The connect, message and photo tests' inputs: optional, never counted as missing for the others.
 OPTIONAL=(VETTID_STAGING_LINK VETTID_STAGING_SAFETY_CODE VETTID_STAGING_PEER_NAME VETTID_STAGING_MESSAGE VETTID_STAGING_EXPECT
-  VETTID_STAGING_PHOTO_TIMEOUT)
+  VETTID_STAGING_PHOTO_TIMEOUT VETTID_STAGING_PHOTO_EXISTING)
 ALL=("${NAMES[@]}" "${OPTIONAL[@]}")
 BUNDLE_ID=com.vettid.app.staging
 

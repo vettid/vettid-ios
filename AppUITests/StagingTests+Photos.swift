@@ -81,7 +81,10 @@ extension StagingTests {
         let app = launch()
         guard openAtStart(app, pin: pin, password: password), openConversation(app, peer: peer) else { return }
         // The photos already there (shown or not) never count: only one sent after this.
-        let before = settledIncomingPhotos(app, peer: peer)
+        // `VETTID_STAGING_PHOTO_EXISTING=1`: the newest photo already in the conversation counts (its viewer checked again
+        // without waiting for another send); otherwise only a photo that arrives after the history settled.
+        let existing = ProcessInfo.processInfo.environment["VETTID_STAGING_PHOTO_EXISTING"] == "1"
+        let before = existing ? [] : settledIncomingPhotos(app, peer: peer)
         guard let found = waitForIncomingPhoto(app, peer: peer, excluding: before, timeout: timeout) else { return }
         print("PHOTO_RECEIVED: \(found != nil ? "yes" : "no")")
         guard let photo = found else {
@@ -148,7 +151,10 @@ extension StagingTests {
             return false
         }
         bubble.tap()
-        if waitForAny(app, ["photo_viewer", "photo_image", "photo_error", "photo_undecodable"], timeout: 30) == nil {
+        // The viewer's Save and Share sit outside the capture-protected layer and show only once the photo is held, so
+        // they are read where the protected content and the scaffold's own identifier may not be.
+        let viewerMarks = ["photo_viewer", "photo_image", "photo_error", "photo_undecodable", "photo_save", "photo_share", "photo_notice"]
+        if waitForAny(app, viewerMarks, timeout: 30) == nil {
             fail(app, "The photo viewer did not open.")
             return false
         }
@@ -388,7 +394,9 @@ extension StagingTests {
                 || Self.viewerFailures.contains(where: { e.label.contains($0) }) {
                 return "failed"
             }
-            if e.identifier == "photo_image" || (e.elementType == .image && e.label == "Photo") { outcome = "shown" }
+            if ["photo_image", "photo_save", "photo_share"].contains(e.identifier) || (e.elementType == .image && e.label == "Photo") {
+                outcome = "shown"
+            }
         }
         return outcome
     }
