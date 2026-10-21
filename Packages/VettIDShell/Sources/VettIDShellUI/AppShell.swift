@@ -7,6 +7,8 @@ import VettIDConnectionsUI
 import VettIDData
 import VettIDHistory
 import VettIDHistoryUI
+import VettIDItems
+import VettIDItemsUI
 import VettIDMessages
 import VettIDMessagesUI
 import VettIDNotifications
@@ -51,10 +53,15 @@ public struct AppShell: View {
     let approvals: (any ApprovalsRepository)?
     let history: (any HistoryRepository)?
     let historyExport: (any HistoryExportRepository)?
+    let items: (any ItemsRepository)?
+    let sharing: (any SharingRepository)?
     private let onOpenPortal: @MainActor () -> Void
     /// The member's own profile photo (VAULT-MESSAGING §10.8), decoded once per photo, for the top bar's avatar, the avatar
     /// sheet and the account card (vettid-android `rememberProfilePhoto(ownPhoto)`).
     @State private var ownPhoto: UIImage?
+    /// The tags' colours while the vault is open (owner decision 2026-10-09): made with the shell, so nothing runs while
+    /// the vault is locked.
+    @State var tagColors: TagColorsKeeper?
 
     /// [model]: where the member is, owned above the owner check's gate. [gate]: the owner check at [now] (the root re-reads
     /// it as time passes). [promptReason]: what the Face ID, Touch ID or passcode prompt says when the app lock is turned on.
@@ -64,7 +71,7 @@ public struct AppShell: View {
     /// with (VAULT-MESSAGING §6.4). [messages]: Messages, its conversations and the new-message picker (§10.5), with
     /// [connections]; [attachments]: their photos and the viewer (§10.5.1). [feed]: the bell and the Notifications screen (§10.9); [approvals]: Approvals and its decisions
     /// (§10.4, §10.12, §10.13), with [connections]. [history] and [historyExport]: History, its entries and its export
-    /// (§10.9).
+    /// (§10.9). [items] and [sharing]: the Vault, its items and their tags (§10.7, §10.8).
     public init(
         account: any AccountRepository,
         vault: any VaultRepository,
@@ -92,6 +99,8 @@ public struct AppShell: View {
         approvals: (any ApprovalsRepository)? = nil,
         history: (any HistoryRepository)? = nil,
         historyExport: (any HistoryExportRepository)? = nil,
+        items: (any ItemsRepository)? = nil,
+        sharing: (any SharingRepository)? = nil,
         onOpenPortal: @escaping @MainActor () -> Void
     ) {
         self.account = account
@@ -120,6 +129,8 @@ public struct AppShell: View {
         self.approvals = approvals
         self.history = history
         self.historyExport = historyExport
+        self.items = items
+        self.sharing = sharing
         self.onOpenPortal = onOpenPortal
     }
 
@@ -250,6 +261,8 @@ public struct AppShell: View {
                 onOpenPortal: onOpenPortal
             )
         }
+        .environment(\.vettIDTagColors, tagColors?.colors ?? [:])
+        .onAppear { startTagColors() }
         .task(id: profiles.profile?.photo) {
             let decoded = await ProfilePhotos.decoded(profiles.profile?.photo)
             // A decode that began before the photo changed or was cleared does not show it after (IOS-PLAN §4.7).
@@ -318,9 +331,15 @@ public struct AppShell: View {
         case .history:
             if let history, let historyExport {
                 HistoryRoute(
-                    history: history, export: historyExport, connections: connections, ownerChecks: ownerChecks, chrome: chrome,
-                    host: historyHost
+                    history: history, export: historyExport, connections: connections, ownerChecks: ownerChecks, items: items,
+                    chrome: chrome, host: historyHost
                 )
+            } else {
+                ComingLaterScreen(destination: model.destination, chrome: chrome)
+            }
+        case .items:
+            if let items {
+                ItemsRoute(items: items, ownerChecks: ownerChecks, chrome: chrome, host: itemsHost)
             } else {
                 ComingLaterScreen(destination: model.destination, chrome: chrome)
             }
@@ -333,8 +352,6 @@ public struct AppShell: View {
             } else {
                 ComingLaterScreen(destination: model.destination, chrome: chrome)
             }
-        default:
-            ComingLaterScreen(destination: model.destination, chrome: chrome)
         }
     }
 
@@ -346,27 +363,40 @@ public struct AppShell: View {
             AttestationRoute(vault: vault, canary: canary, canaryInbox: canaryInbox) { model.pop() }
         case .changeName, .sharedProfile:
             profileDetail(route)
-        case .changePin(let fromAttempts):
-            ChangePinRoute(vault: vault, fromAttempts: fromAttempts) { model.pop() }
+        case .changePin, .newPhoneSecret, .deleteVault:
+            securityDetail(route)
         case .credential, .changePassword, .rotate, .alarm, .newCredential:
             credentialDetail(route)
-        case .newPhoneSecret:
-            NewPhoneSecretRoute(vault: vault) { model.pop() }
-        case .deleteVault:
-            DeleteVaultRoute(vault: vault) { model.pop() }
         case .releaseUpdate, .connect, .connection:
             featureDetail(route)
         case .conversation, .newMessage, .photo:
             messagesDetail(route)
         case .notifications, .approval, .historyEntry, .connectionHistory:
             activityDetail(route)
+        case .item, .newItem, .itemEdit, .tags:
+            itemsDetail(route)
+        }
+    }
+
+    /// The PIN change, a new phone secret and the vault's deletion, from Settings.
+    @ViewBuilder private func securityDetail(_ route: ShellRoute) -> some View {
+        switch route {
+        case .changePin(let fromAttempts):
+            ChangePinRoute(vault: vault, fromAttempts: fromAttempts) { model.pop() }
+        case .newPhoneSecret:
+            NewPhoneSecretRoute(vault: vault) { model.pop() }
+        default:
+            DeleteVaultRoute(vault: vault) { model.pop() }
         }
     }
 
     /// The account's names and the shared profile (VAULT-MESSAGING §10.8).
     @ViewBuilder private func profileDetail(_ route: ShellRoute) -> some View {
         if route == .sharedProfile {
-            SharedProfileRoute(profiles: profiles, accounts: account, onChangeName: { model.push(.changeName) }) { model.pop() }
+            SharedProfileRoute(
+                profiles: profiles, accounts: account, items: items, onOpenItem: { model.openItem($0) },
+                onChangeName: { model.push(.changeName) }
+            ) { model.pop() }
         } else {
             ChangeNameRoute(accounts: account, profiles: profiles) { model.pop() }
         }

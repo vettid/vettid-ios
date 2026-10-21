@@ -61,13 +61,19 @@ public struct ApprovalDetailRoute: View {
     private let key: String
     private let approvals: any ApprovalsRepository
     private let connections: (any ConnectionsRepository)?
+    private let items: (any ItemsRepository)?
     private let host: ApprovalsHost
     @State private var model: ApprovalDetailViewModel?
 
-    public init(_ key: String, approvals: any ApprovalsRepository, connections: (any ConnectionsRepository)? = nil, host: ApprovalsHost) {
+    /// [items]: the Vault list, whose items a category entry can be answered with.
+    public init(
+        _ key: String, approvals: any ApprovalsRepository, connections: (any ConnectionsRepository)? = nil,
+        items: (any ItemsRepository)? = nil, host: ApprovalsHost
+    ) {
         self.key = key
         self.approvals = approvals
         self.connections = connections
+        self.items = items
         self.host = host
     }
 
@@ -75,7 +81,10 @@ public struct ApprovalDetailRoute: View {
         ApprovalDetailScreen(state: model?.state ?? ApprovalDetailState(key: key), actions: actions)
             .onAppear {
                 guard model == nil else { return }
-                model = ApprovalDetailViewModel(key: key, approvals: approvals, connections: connections)
+                let answers = (items?.items ?? []).map {
+                    AnswerItem(id: $0.itemID, name: $0.name, category: $0.category, critical: $0.sensitivity == .critical)
+                }
+                model = ApprovalDetailViewModel(key: key, approvals: approvals, connections: connections, items: answers)
             }
     }
 

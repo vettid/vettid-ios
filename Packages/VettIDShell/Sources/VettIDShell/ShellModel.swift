@@ -79,22 +79,34 @@ public final class ShellModel {
     /// The screen a feed item opens (ANDROID-PLAN §4 Notifications, 4), as vettid-android's `openFeedTarget`: Connections,
     /// History and Settings (the daily check) as drawer destinations, the others over the current screen. A target whose
     /// screen the iPhone app does not have yet goes to the nearest one (chosen; not in the spec): Shared with you and a
-    /// share rule to the connection's page (IOS-PLAN §8 I3.2). An item (Vault, I3.1) and ``FeedTarget/sheet`` stay with
-    /// the Notifications screen's sheet.
+    /// share rule to the connection's page (IOS-PLAN §8 I3.2). An item opens over the current screen; ``FeedTarget/sheet``
+    /// stays with the Notifications screen's sheet.
     public func openFeedTarget(_ t: FeedTarget) {
         switch t {
         case .connections: navigate(.connections)
         case .history: navigate(.history)
         case .security: navigate(.settings)
-        case .devices: pushOnce(.vaultStatus)
-        case .approval(let key): pushOnce(.approval(key))
-        case .connection(let id), .sharedWithYou(let id), .shareRule(let id, _): pushOnce(.connection(id))
         case .conversation(let id): openConversation(id)
-        case .alarm: pushOnce(.alarm)
-        case .credential: pushOnce(.credential)
-        case .item, .sheet: break
+        case .sheet: break
+        default: if let r = Self.screen(t) { pushOnce(r) }
         }
     }
+
+    /// The screen a feed target opens over the current one.
+    static func screen(_ t: FeedTarget) -> ShellRoute? {
+        switch t {
+        case .devices: .vaultStatus
+        case .approval(let key): .approval(key)
+        case .connection(let id), .sharedWithYou(let id), .shareRule(let id, _): .connection(id)
+        case .alarm: .alarm
+        case .credential: .credential
+        case .item(let id): .item(id)
+        default: nil
+        }
+    }
+
+    /// An item of the Vault over the current screen, once (a History entry's "Open the item").
+    public func openItem(_ itemID: String) { pushOnce(.item(itemID)) }
 
     /// A History entry over History, once.
     public func openHistoryEntry(_ seq: Int64) { pushOnce(.historyEntry(seq)) }
