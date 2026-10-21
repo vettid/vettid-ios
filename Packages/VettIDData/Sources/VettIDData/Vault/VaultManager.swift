@@ -388,7 +388,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         let cfg = DeviceConfig(
             name: c.deviceName, relayURL: c.relayURL, transport: c.transport,
             store: FileDeviceStateStore(file: c.file(VaultFiles.device)), enrolledAttestation: c.enrolledAttestation, now: c.now,
-            collectMode: c.collectMode, pollWait: c.pollWait, requestTimeout: c.requestTimeout, uptime: c.uptime
+            collectMode: c.collectMode, pollWait: c.pollWait, requestTimeout: c.requestTimeout,
+            requestTimeoutOf: c.requestTimeoutOf, uptime: c.uptime
         )
         let restored = try VaultDevice.load(cfg, secrets: secrets)
         try Task.checkCancellation()

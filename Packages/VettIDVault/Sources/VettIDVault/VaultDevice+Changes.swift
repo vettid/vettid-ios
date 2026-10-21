@@ -66,7 +66,7 @@ extension VaultDevice {
             } catch let e as VaultStateError where e == Self.haltedError {
                 throw e
             } catch {}
-            if let inner = await d.wait(timeout: timeout ?? cfg.requestTimeout) { return VaultMessage(inner: inner) }
+            if let inner = await d.wait(timeout: timeout ?? cfg.requestTimeout(for: held.type)) { return VaultMessage(inner: inner) }
             try Task.checkCancellation()
             // No answer: the collection may have ended (the answer would then wait in the mailbox unread).
             ensureCollecting()
