@@ -37,7 +37,12 @@ import Testing
             ItemSpec.kindDate: ["2031-04-30", "2031-04", "2024-02-29", "2000-02-29"],
             ItemSpec.kindEmail: ["a@b.c", "first.last+tag@example.org", "a@b"],
             ItemSpec.kindPhone: ["+1 (555) 010-0100", "112"],
-            ItemSpec.kindURL: ["https://example.org/x?y=1", "mailto:a@b.c", "https://x.org/a", "https://[::1]:8443/p", "http://h:80"],
+            // As Go's url.Parse: the query and an opaque part are not unescaped; a host may hold < > " and non-ASCII escapes.
+            ItemSpec.kindURL: [
+                "https://example.org/x?y=1", "mailto:a@b.c", "https://x.org/a", "https://[::1]:8443/p", "http://h:80", "https://x.org/?q=100%",
+                "mailto:a%zz", "https://x.org/a#b%20c", "https://user:p%40ss@x.org/", "https://[fe80::1%25en0]:8080/", "https://ex%C3%A4mple.org/",
+                "https://a<b>.org/", "https://x.org:/", "urn:isbn:0451450523",
+            ],
             ItemSpec.kindOTP: ["JBSWY3DPEHPK3PXP", "jbswy3dpehpk3pxp", "JBSWY3DPEHPK3PXP====", "otpauth://totp/x?secret=JBSWY3DPEHPK3PXP"],
         ]
         for (kind, values) in good {
@@ -49,7 +54,11 @@ import Testing
             ItemSpec.kindDate: ["2031-13-01", "2023-02-29", "31-04-2031", "2031-4-30", "2031-02-30", "1900-02-29", "2031-00"],
             ItemSpec.kindEmail: ["no-at", "a@", "@b", "a b@c", "a@b@c", "a@@b"],
             ItemSpec.kindPhone: ["call me", "+-()", "()", String(repeating: "1", count: 33)],
-            ItemSpec.kindURL: ["/relative", "https://a b", "example.org", "x.org", ":x", "https://h:port/", "http://a/%zz"],
+            ItemSpec.kindURL: [
+                "/relative", "https://a b", "example.org", "x.org", ":x", "https://h:port/", "http://a/%zz", "https://x.org/a#%zz",
+                "https://a{b}.org/", "https://x%41.org/", "https://us{er@x.org/", "https://us%zz@x.org/", "https://[::1/", "https://[::1]x/",
+                "https://x.org/%4", "1http://x.org/",
+            ],
             ItemSpec.kindOTP: ["SHORT", "JBSWY3DPEHPK3PX1", "otpauth://x y", "JBSWY3DPEHPK3PXP======="],
             ItemSpec.kindFile: ["blob", "x"],
             "nonsense": ["x"],

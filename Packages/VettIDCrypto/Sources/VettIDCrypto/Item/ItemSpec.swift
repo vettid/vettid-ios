@@ -152,36 +152,95 @@ public enum ItemSpec {
         return b.count <= maxPhone && b.allSatisfy { isDigit($0) || " +-().".utf8.contains($0) } && b.contains(where: isDigit)
     }
 
-    /// An absolute URI with a scheme, at most 2,048 bytes, no white space. The checks of Go's `url.Parse` that the app
-    /// can meet: a scheme `[A-Za-z][A-Za-z0-9+.-]*` before the first `:`, no control character, `%` only before two hex
-    /// digits, and a port of digits after an authority's last `:` (chosen; not in the spec: the vault's parser decides).
+    /// An absolute URI with a scheme, at most 2,048 bytes, no white space: what Go's `url.Parse` accepts with a scheme
+    /// (`u.Scheme != "" && u.IsAbs()`). As Go: no control character; a scheme `[A-Za-z][A-Za-z0-9+.-]*` before the first
+    /// `:`; after it, an opaque part (not starting with `/`) and the query are not checked; the path and the fragment take
+    /// `%` only before two hex digits; an authority's userinfo is of Go's `validUserinfo` characters, its host of the
+    /// characters Go allows in a host (`<`, `>` and `"` among them) with `%` escapes only of non-ASCII bytes or `%25`,
+    /// a bracketed host's zone after `%25`, and a port of digits. (Chosen; not in the spec: still different from the
+    /// vault's Go are the checks a later Go release may add, such as of the IP literal inside brackets.)
     static func isValidURL(_ s: String) -> Bool {
         guard len(s) <= maxURL, noSpace(s), isCleanText(s, multi: false) else { return false }
-        let b = Array(s.utf8)
+        let all = Array(s.utf8)
+        let hash = all.firstIndex(of: UInt8(ascii: "#")) ?? all.count
+        guard hash == all.count || escapesValid(all[(hash + 1)...]) else { return false }
+        let b = all[..<hash]
         guard let colon = b.firstIndex(of: UInt8(ascii: ":")), colon > 0, isLower(b[0]) || isUpper(b[0]) else { return false }
         guard b[1..<colon].allSatisfy({ isLower($0) || isUpper($0) || isDigit($0) || "+.-".utf8.contains($0) }) else { return false }
-        guard escapesValid(b) else { return false }
-        let rest = b[(colon + 1)...]
-        guard rest.starts(with: "//".utf8) else { return true }
-        let authority = rest.dropFirst(2).prefix { !"/?#".utf8.contains($0) }
-        let host = authority.split(separator: UInt8(ascii: "@"), omittingEmptySubsequences: false).last ?? []
-        if host.first == UInt8(ascii: "[") {
-            guard let close = host.firstIndex(of: UInt8(ascii: "]")) else { return false }
-            let after = host[(close + 1)...]
-            return after.isEmpty || (after.first == UInt8(ascii: ":") && after.dropFirst().allSatisfy(isDigit))
-        }
-        guard let portColon = host.lastIndex(of: UInt8(ascii: ":")) else { return true }
-        return host[(portColon + 1)...].allSatisfy(isDigit)
+        var rest = b[(colon + 1)...]
+        if let q = rest.firstIndex(of: UInt8(ascii: "?")) { rest = rest[..<q] }
+        guard rest.first == UInt8(ascii: "/") else { return true }
+        guard rest.starts(with: "//".utf8) else { return escapesValid(rest) }
+        let authority = rest.dropFirst(2)
+        let slash = authority.firstIndex(of: UInt8(ascii: "/")) ?? authority.endIndex
+        return authorityValid(authority[..<slash]) && escapesValid(authority[slash...])
     }
 
-    private static func escapesValid(_ b: [UInt8]) -> Bool {
-        let hex = { (c: UInt8) in
-            isDigit(c) || (UInt8(ascii: "a")...UInt8(ascii: "f")).contains(c) || (UInt8(ascii: "A")...UInt8(ascii: "F")).contains(c)
+    /// Go's `parseAuthority`: the host after the last `@`, the userinfo before it.
+    private static func authorityValid(_ a: ArraySlice<UInt8>) -> Bool {
+        guard let at = a.lastIndex(of: UInt8(ascii: "@")) else { return hostValid(a) }
+        let userinfo = a[..<at]
+        let allowed = { (c: UInt8) in isLower(c) || isUpper(c) || isDigit(c) || "-._:~!$&'()*+,;=%@".utf8.contains(c) }
+        return hostValid(a[(at + 1)...]) && userinfo.allSatisfy(allowed) && escapesValid(userinfo)
+    }
+
+    /// Go's `parseHost`: a bracketed host with an optional zone and port, or a name with an optional port.
+    private static func hostValid(_ h: ArraySlice<UInt8>) -> Bool {
+        let port = { (p: ArraySlice<UInt8>) in p.isEmpty || (p.first == UInt8(ascii: ":") && p.dropFirst().allSatisfy(isDigit)) }
+        guard h.first == UInt8(ascii: "[") else {
+            if let c = h.lastIndex(of: UInt8(ascii: ":")), !port(h[c...]) { return false }
+            return hostEscapes(h, zone: false)
         }
-        var i = 0
-        while i < b.count {
+        guard let close = h.lastIndex(of: UInt8(ascii: "]")), port(h[(close + 1)...]) else { return false }
+        let inner = h[..<close]
+        guard let z = (inner.startIndex..<inner.endIndex).first(where: { inner[$0...].starts(with: "%25".utf8) }) else {
+            return hostEscapes(h, zone: false)
+        }
+        return hostEscapes(h[..<z], zone: false) && hostEscapes(h[z..<close], zone: true) && hostEscapes(h[close...], zone: false)
+    }
+
+    /// Whether Go's `shouldEscape(c, encodeHost)` is false: the characters a host may hold as they are.
+    private static func hostChar(_ c: UInt8) -> Bool {
+        isLower(c) || isUpper(c) || isDigit(c) || "!$&'()*+,;=:[]<>\"-_.~".utf8.contains(c)
+    }
+
+    /// Go's `unescape` in the host and zone modes: ASCII only of the host's characters; `%` before two hex digits, in a
+    /// host only `%25` or a non-ASCII byte, in a zone any but an ASCII character a host does not take (a space excepted).
+    private static func hostEscapes(_ h: ArraySlice<UInt8>, zone: Bool) -> Bool {
+        var i = h.startIndex
+        while i < h.endIndex {
+            let c = h[i]
+            guard c == UInt8(ascii: "%") else {
+                guard c >= 0x80 || hostChar(c) else { return false }
+                i += 1
+                continue
+            }
+            guard i + 2 < h.endIndex, let hi = hexValue(h[i + 1]), let lo = hexValue(h[i + 2]) else { return false }
+            let v = hi << 4 | lo
+            let escapedPercent = v == 0x25
+            if zone {
+                guard escapedPercent || v == 0x20 || v >= 0x80 || hostChar(v) else { return false }
+            } else {
+                guard escapedPercent || hi >= 8 else { return false }
+            }
+            i += 3
+        }
+        return true
+    }
+
+    private static func hexValue(_ c: UInt8) -> UInt8? {
+        if isDigit(c) { return c - UInt8(ascii: "0") }
+        if (UInt8(ascii: "a")...UInt8(ascii: "f")).contains(c) { return c - UInt8(ascii: "a") + 10 }
+        if (UInt8(ascii: "A")...UInt8(ascii: "F")).contains(c) { return c - UInt8(ascii: "A") + 10 }
+        return nil
+    }
+
+    /// `%` only before two hex digits (Go's `unescape` of a path, a fragment or a userinfo).
+    private static func escapesValid(_ b: ArraySlice<UInt8>) -> Bool {
+        var i = b.startIndex
+        while i < b.endIndex {
             if b[i] == UInt8(ascii: "%") {
-                guard i + 2 < b.count, hex(b[i + 1]), hex(b[i + 2]) else { return false }
+                guard i + 2 < b.endIndex, hexValue(b[i + 1]) != nil, hexValue(b[i + 2]) != nil else { return false }
                 i += 3
             } else {
                 i += 1
