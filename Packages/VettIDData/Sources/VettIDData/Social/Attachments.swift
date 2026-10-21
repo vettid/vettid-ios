@@ -86,7 +86,9 @@ public final class AttachmentManager: AttachmentsRepository {
     }
 
     public func prepare(_ source: PhotoBytes) async throws -> PreparedPhoto {
-        try await Task.detached(priority: .userInitiated) { try source.withBytes { try Photos.prepare($0) } }.value
+        try await Task.detached(priority: .userInitiated) {
+            try source.withBytes { try Photos.prepare($0, mirrored: source.mirrored) }
+        }.value
     }
 
     public func begin(_ connectionID: String, caption: String, photo: PreparedPhoto) -> PendingPhoto {

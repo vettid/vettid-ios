@@ -158,4 +158,27 @@ import Testing
         #expect(throws: PhotoError.self) { try ShotImage.decode([UInt8](repeating: 7, count: 300), mirrored: false) }
         #expect(throws: PhotoError(.tooLarge)) { try ShotImage.decode(TestImages.minimalJpegHeader(20_000, 100), mirrored: false) }
     }
+
+    // MARK: - The camera's bytes
+
+    /// A holder that takes the camera's bytes owns its own storage: the source is zeroed at once, and ``PhotoBytes/wipe()``
+    /// zeroes what it kept.
+    @Test func takenBytesAreOwnedAndZeroed() {
+        var source: [UInt8] = [1, 2, 3, 4]
+        let held = PhotoBytes(taking: &source, mirrored: true)
+        #expect(source == [0, 0, 0, 0] && held.copy() == [1, 2, 3, 4] && held.mirrored)
+        held.wipe()
+        #expect(held.isWiped)
+        #expect(!PhotoBytes([1]).mirrored)
+    }
+
+    /// A front shot prepared for a message is mirrored as previewed, through the same clean re-encode.
+    @Test func aMirroredShotIsPreparedMirrored() throws {
+        let source = try Photos.jpeg(TestImages.halves(400, 200), quality: 95)
+        let plain = try Photos.decodeReceived(try Photos.prepare(source).jpeg.copy(), targetLongEdge: 400)
+        let prepared = try Photos.prepare(source, mirrored: true)
+        let mirrored = try Photos.decodeReceived(prepared.jpeg.copy(), targetLongEdge: 400)
+        #expect(TestImages.isRed(TestImages.pixel(plain, 20, 100)) && TestImages.isBlue(TestImages.pixel(mirrored, 20, 100)))
+        Self.expectNoMetadata(prepared.jpeg.copy())
+    }
 }

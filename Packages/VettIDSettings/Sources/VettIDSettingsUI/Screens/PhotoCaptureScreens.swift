@@ -320,8 +320,8 @@ public struct FakeCameraPreview: View {
 /// The capture screen with the real camera: asks for the camera when it first opens, explains a refusal (and offers the
 /// app's page in Settings, the only place the camera can be allowed again), reports a phone without a camera, and hands
 /// the accepted shot and the square under the round frame to [onUse] (which owns the shot from then on). The shot is
-/// decoded in memory (``ShotImage/decode(_:mirrored:shortSide:)``: the front camera's mirrored as previewed), the camera's
-/// encoded bytes zeroed once decoded. Back from the review retakes; back from the camera closes. Capture hiding (IOS-PLAN
+/// decoded in memory (``ShotImage/decode(_:mirrored:shortSide:)``: the front camera's mirrored as previewed), the app's
+/// holder of the camera's encoded bytes zeroed once decoded. Back from the review retakes; back from the camera closes. Capture hiding (IOS-PLAN
 /// §6.4 protection 2) and the app-switcher cover stay on, as everywhere. Mirrors vettid-android `PhotoCaptureScreen`.
 public struct PhotoCaptureScreen: View {
     @Environment(\.openURL) private var openURL
@@ -393,15 +393,13 @@ public struct PhotoCaptureScreen: View {
         a.onSwitchLens = { machine.switchLens() }
         a.onShutter = {
             guard machine.shutter() else { return }
-            let mirrored = machine.state.lens == .front
             guard let take = handle.take else { return machine.shot(nil) }
-            take { bytes in
-                guard let bytes else { return machine.shot(nil) }
-                let held = PhotoBytes(bytes)
+            take { held in
+                guard let held else { return machine.shot(nil) }
                 Task {
                     let shot = await Task.detached {
                         defer { held.wipe() }
-                        return held.withBytes { try? ShotImage.decode($0, mirrored: mirrored) }
+                        return held.withBytes { try? ShotImage.decode($0, mirrored: held.mirrored) }
                     }.value
                     machine.shot(shot)
                 }

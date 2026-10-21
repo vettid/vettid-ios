@@ -192,7 +192,8 @@ public final class PhotoCaptureMachine {
 
 /// The selected square of the shot as `profile.set{photo}` takes it (VAULT-MESSAGING §10.8): exactly the square under the
 /// round frame, which ``ProfilePhotoEncoder/encode(_:crop:maxBytes:)`` scales down and re-encodes as a JPEG of at most
-/// 65,536 bytes without metadata, in standard base64. Zeroes the shot and the encoded bytes once the text is made. Nil
+/// 65,536 bytes without metadata, in standard base64. Zeroes the shot's pixel buffer and the app's copy of the JPEG once
+/// the text is made (the text itself cannot be zeroed; ``ProfilePhotoEncoder`` says what the system keeps). Nil
 /// when it cannot be encoded. Blocking: call off the main actor. Mirrors vettid-android `encodeShot`.
 public func encodeShot(_ selection: PhotoSelection) -> String? {
     defer { selection.shot.wipe() }

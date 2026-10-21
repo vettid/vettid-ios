@@ -37,9 +37,10 @@ final class PixelBuffer: @unchecked Sendable {
 }
 
 /// A camera shot for the profile photo (vettid-android `PhotoCaptureUiState.shot`), decoded upright into pixels in
-/// memory: never a file, never printed. ``wipe()`` zeroes its pixels in place when it is retaken, dropped or encoded
-/// (vettid-android recycles the bitmap). The picture (``image``) reads those pixels without a copy; what CoreGraphics
-/// caches of it while it is drawn is its own and goes with the picture (released, not zeroed).
+/// memory: never a file, never printed. ``wipe()`` zeroes the app's own pixel buffer in place when the shot is retaken,
+/// dropped or encoded (vettid-android recycles the bitmap). The picture (``image``) reads that buffer without a copy.
+/// What the system allocates on the way is released, not zeroed: the `CFData` copies ImageIO is given, ImageIO's
+/// decoded picture before it is drawn into the buffer, and what CoreGraphics caches of ``image`` while it is shown.
 public final class ShotImage: @unchecked Sendable, CustomStringConvertible, CustomReflectable {
     /// vettid-android `SHOT_SIDE`: the shot is scaled so that its shorter side is at most this.
     public static let shortSide = 1_536
@@ -67,7 +68,7 @@ public final class ShotImage: @unchecked Sendable, CustomStringConvertible, Cust
     /// The camera's shot (its encoded bytes, in memory) for review: the bounds read first (16,384 a side, 100 MP), decoded
     /// with its orientation applied, scaled so that its shorter side is at most [shortSide], and, for the front camera,
     /// [mirrored] as the preview showed it (vettid-android `uprightShot`). The camera's metadata is not carried: only
-    /// pixels are kept.
+    /// pixels are kept. [bytes] stay the caller's to zero.
     public static func decode(_ bytes: [UInt8], mirrored: Bool, shortSide: Int = shortSide) throws -> ShotImage {
         guard let declared = ImageHeader.dimensions(bytes) ?? sourceDimensions(bytes) else { throw PhotoError(.unsupported) }
         guard declared.within(maxSide: PhotoLimits.sourceMaxSide, maxPixels: PhotoLimits.sourceMaxPixels) else {
@@ -140,8 +141,9 @@ public final class ShotImage: @unchecked Sendable, CustomStringConvertible, Cust
 /// The member's profile photo (VAULT-MESSAGING §10.8): `photo` is the standard base64 of a JPEG or PNG of at most 65,536
 /// bytes. ``encode(_:crop:maxBytes:)`` makes it from the square the member kept: scaled down and re-encoded as JPEG, the
 /// quality (then the side) lowered until it fits the limit. Re-encoding from pixels writes no metadata, and the encoder's
-/// own segments are removed (``JpegSegments/stripped(_:)``), so no EXIF, location or camera data leaves the phone.
-/// Decoding a photo for display is VettIDUI's `ProfilePhotos.decode`. Mirrors vettid-android `ProfilePhotos.encode`.
+/// own segments are removed (``JpegSegments/stripped(_:)``), so no EXIF, location or camera data leaves the phone. Each
+/// rejected attempt's bytes are zeroed; the scaled bitmaps and ImageIO's output buffer are the system's, released, not
+/// zeroed. Decoding a photo for display is VettIDUI's `ProfilePhotos.decode`. Mirrors vettid-android `ProfilePhotos.encode`.
 public enum ProfilePhotoEncoder {
     /// §10.8: at most 65,536 bytes of image.
     public static let maxBytes = 65_536
@@ -161,8 +163,9 @@ public enum ProfilePhotoEncoder {
         for side in sides {
             let scaled = try opaque(square, side: min(side, max(square.width, square.height)))
             for q in qualities {
-                let out = try Photos.jpeg(scaled, quality: q)
+                var out = try Photos.jpeg(scaled, quality: q)
                 if out.count <= maxBytes, !JpegSegments.hasMetadata(out), ImageType.sniff(out) == .jpeg { return out }
+                Photos.zero(&out)
             }
         }
         throw PhotoError(.cannotFit)
