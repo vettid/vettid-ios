@@ -180,12 +180,16 @@ import VettIDVault
         let messages = FakeMessages()
         messages.connections = connections.connections
         let model = ShellModel(account: repo, vault: repo, ownerChecks: repo)
-        for path in [[], [ShellRoute.newMessage], [ShellRoute.conversation("c1")]] {
+        let attachments = FakeAttachments()
+        let photo = ShellRoute.photo(connectionID: "c1", messageID: "m1")
+        let routes = [[], [ShellRoute.newMessage], [ShellRoute.conversation("c1")], [.conversation("c1"), photo]]
+        for path in routes {
             model.path = path
             let withMessages = AppShell(
                 account: repo, vault: repo, ownerChecks: repo, credential: repo, profiles: repo, appLock: StillAppLock(),
                 model: model, gate: gate, now: now, version: AppVersion(name: "2.0.0", build: 1), installedFrom: .apple,
-                promptReason: "Unlock VettID", connections: connections, connectionRequests: connections, messages: messages
+                promptReason: "Unlock VettID", connections: connections, connectionRequests: connections, messages: messages,
+                attachments: attachments
             ) {}
             #expect(height(withMessages) > 0)
         }

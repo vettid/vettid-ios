@@ -46,6 +46,7 @@ public struct AppShell: View {
     private let connectionRequests: (any ConnectionRequestsRepository)?
     private let inviteInbox: InviteLinkInbox?
     private let messages: (any MessagesRepository)?
+    private let attachments: (any AttachmentsRepository)?
     let feed: (any FeedRepository)?
     let approvals: (any ApprovalsRepository)?
     let history: (any HistoryRepository)?
@@ -58,7 +59,7 @@ public struct AppShell: View {
     /// [releaseUpdates] and [releaseNotes]: Settings → Vault → "Update available" and its screen (RELEASE-UPDATES §2).
     /// [connections], [connectionRequests] and [inviteInbox]: the connect flow and an invitation link the app was opened
     /// with (VAULT-MESSAGING §6.4). [messages]: Messages, its conversations and the new-message picker (§10.5), with
-    /// [connections]. [feed]: the bell and the Notifications screen (§10.9); [approvals]: Approvals and its decisions
+    /// [connections]; [attachments]: their photos and the viewer (§10.5.1). [feed]: the bell and the Notifications screen (§10.9); [approvals]: Approvals and its decisions
     /// (§10.4, §10.12, §10.13), with [connections]. [history] and [historyExport]: History, its entries and its export
     /// (§10.9).
     public init(
@@ -83,6 +84,7 @@ public struct AppShell: View {
         connectionRequests: (any ConnectionRequestsRepository)? = nil,
         inviteInbox: InviteLinkInbox? = nil,
         messages: (any MessagesRepository)? = nil,
+        attachments: (any AttachmentsRepository)? = nil,
         feed: (any FeedRepository)? = nil,
         approvals: (any ApprovalsRepository)? = nil,
         history: (any HistoryRepository)? = nil,
@@ -110,6 +112,7 @@ public struct AppShell: View {
         self.connectionRequests = connectionRequests
         self.inviteInbox = inviteInbox
         self.messages = messages
+        self.attachments = attachments
         self.feed = feed
         self.approvals = approvals
         self.history = history
@@ -341,7 +344,7 @@ public struct AppShell: View {
             DeleteVaultRoute(vault: vault) { model.pop() }
         case .releaseUpdate, .connect, .connection:
             featureDetail(route)
-        case .conversation, .newMessage:
+        case .conversation, .newMessage, .photo:
             messagesDetail(route)
         case .notifications, .approval, .historyEntry, .connectionHistory:
             activityDetail(route)
@@ -366,13 +369,21 @@ public struct AppShell: View {
         }
     }
 
-    /// A conversation and the new-message picker (vettid-android's `messagesDestination`).
+    /// A conversation, the new-message picker and the photo viewer (vettid-android's `messagesDestination`).
     @ViewBuilder private func messagesDetail(_ route: ShellRoute) -> some View {
         switch route {
         case .conversation(let id):
-            if let messages, let connections { ConversationRoute(id, messages: messages, connections: connections, host: messagesHost) }
+            if let messages, let connections {
+                ConversationRoute(id, messages: messages, connections: connections, attachments: attachments, host: messagesHost)
+            }
         case .newMessage:
             if let connections { NewMessageRoute(connections: connections, host: messagesHost) }
+        case .photo(let connectionID, let messageID):
+            if let attachments, let messages {
+                PhotoViewerRoute(
+                    connectionID: connectionID, messageID: messageID, attachments: attachments, messages: messages, host: messagesHost
+                )
+            }
         default:
             EmptyView()
         }
@@ -431,6 +442,7 @@ public struct AppShell: View {
         h.onOpenConnection = { model.push(.connection($0)) }
         h.onInvite = { model.push(.connect(.invite)) }
         h.onInviteLink = { model.openInvite($0) }
+        h.onOpenPhoto = { model.push(.photo(connectionID: $0, messageID: $1)) }
         return h
     }
 

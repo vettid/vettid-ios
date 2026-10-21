@@ -74,6 +74,8 @@ public enum ShellRoute: Hashable, Sendable {
     case conversation(String)
     /// Messages' compose button: pick a connection to write to.
     case newMessage
+    /// The viewer of a message's photo (VAULT-MESSAGING §10.5.1), from its bubble: only the ids travel.
+    case photo(connectionID: String, messageID: String)
     /// The Notifications screen from the bell, or [archived] its Archived view (ANDROID-PLAN §4 Notifications).
     case notifications(archived: Bool)
     /// One approval by its key (VAULT-MESSAGING §10.4, §10.12, §10.13, §6.8), from Approvals or a feed item.

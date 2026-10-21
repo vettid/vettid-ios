@@ -115,8 +115,11 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
-        # The camera for QR codes: the setup code, an invitation (chosen; not in the spec: vettid-android has no such text).
-        INFOPLIST_KEY_NSCameraUsageDescription: "VettID uses the camera only to scan QR codes, such as your setup code or an invitation. Nothing is recorded."
+        # The camera for QR codes (the setup code, an invitation) and message photos (IOS-PLAN §8 I2.4); adding a saved photo
+        # to the library, the add-only permission, asked only after the warning (IOS-PLAN §4). Choosing photos needs no
+        # permission (the system's picker). (chosen; not in the spec: vettid-android has no such texts.)
+        INFOPLIST_KEY_NSCameraUsageDescription: "VettID uses the camera to scan QR codes, such as your setup code or an invitation, and to take photos you send. Nothing is recorded, and a photo stays in memory until you send it."
+        INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "VettID adds a photo to your library only when you choose Save to phone."
         # Face ID for the app lock (IOS-PLAN ID17; chosen; not in the spec: vettid-android has no such text).
         INFOPLIST_KEY_NSFaceIDUsageDescription: "VettID uses Face ID only to open the app when you turn on the app lock."
         MARKETING_VERSION: 2.0.0
@@ -185,7 +188,8 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
-        INFOPLIST_KEY_NSCameraUsageDescription: "VettID uses the camera only to scan QR codes, such as your setup code or an invitation. Nothing is recorded."
+        INFOPLIST_KEY_NSCameraUsageDescription: "VettID uses the camera to scan QR codes, such as your setup code or an invitation, and to take photos you send. Nothing is recorded, and a photo stays in memory until you send it."
+        INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "VettID adds a photo to your library only when you choose Save to phone."
         MARKETING_VERSION: 2.0.0
         CURRENT_PROJECT_VERSION: 1
         SKIP_INSTALL: YES
