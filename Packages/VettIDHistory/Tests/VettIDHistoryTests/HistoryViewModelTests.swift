@@ -44,7 +44,7 @@ import VettIDVault
         let m = await model(log)
         #expect(log.calls.count == 1 && log.calls[0].connectionID == "c1" && log.calls[0].q == nil)
         #expect(m.state.entries.map(\.seq) == [900, 700, 650] && m.state.end && !m.state.loading && m.state.error == nil)
-        #expect(m.state.connectionNames == ["c1": "Name not shared yet"] && m.state.filter.connectionID == "c1")
+        #expect(m.state.connectionNames == ["c1": ""] && m.state.connections == [ConnectionOption(id: "c1", name: "Name not shared yet")] && m.state.filter.connectionID == "c1")
         #expect(connections.calls.contains("refresh"))
     }
 

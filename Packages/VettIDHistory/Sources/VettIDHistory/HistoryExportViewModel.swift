@@ -69,8 +69,9 @@ public enum ExportStep: Equatable, Sendable {
     case failed(FailureKind?, saveFailed: Bool = false)
 }
 
-/// What History knows when the member asks for an export: the list's filter and the names it shows (nil item names: the
-/// app holds no item list yet). Mirrors vettid-android `ExportContext`.
+/// What History knows when the member asks for an export: the list's filter and the names it shows (connections by id,
+/// "" before their names arrived; nil item names: the app holds no item list yet). Mirrors vettid-android
+/// `ExportContext`.
 public struct ExportContext: Equatable, Sendable {
     public var filter: AuditFilter
     public var connectionNames: [String: String]
@@ -80,6 +81,12 @@ public struct ExportContext: Equatable, Sendable {
         self.filter = filter
         self.connectionNames = connectionNames
         self.itemNames = itemNames
+    }
+
+    /// A connection as History names it: "First Last", "Name not shared yet", or "Removed connection".
+    func connectionLabel(_ id: String) -> String {
+        guard let name = connectionNames[id] else { return HistoryStrings.connectionRemoved }
+        return name.isEmpty ? HistoryStrings.connectionUnnamed : name
     }
 }
 
@@ -269,11 +276,12 @@ public final class HistoryExportViewModel {
     }
 
     private func row(_ r: AuditRecord, _ c: ExportContext, _ devices: HistoryDevices?) -> ExportRow {
-        let connection = r.entry.connectionID.map { c.connectionNames[$0] ?? HistoryStrings.connectionRemoved }
+        let connection = r.entry.connectionID.map { c.connectionLabel($0) }
         let itemID = AuditKinds.itemOf(r.kind, r.entry.ref)
         let item = itemID.flatMap { id in c.itemNames.map { $0[id] ?? HistoryStrings.itemDeleted } }
         let names = EntryNames(
-            connection: r.entry.connectionID.flatMap { c.connectionNames[$0] }, device: devices?.device(r.entry.deviceID)?.rowName,
+            connection: r.entry.connectionID.flatMap { c.connectionNames[$0] }.flatMap { $0.isEmpty ? nil : $0 },
+            device: devices?.device(r.entry.deviceID)?.rowName,
             item: itemID.flatMap { c.itemNames?[$0] }
         )
         return ExportRow(
@@ -283,7 +291,7 @@ public final class HistoryExportViewModel {
     }
 
     private func exportFilters(_ c: ExportContext) -> ExportFilters {
-        ExportFilters(c.filter, connectionName: c.filter.connectionID.map { c.connectionNames[$0] ?? HistoryStrings.connectionRemoved })
+        ExportFilters(c.filter, connectionName: c.filter.connectionID.map { c.connectionLabel($0) })
     }
 
     static func refusal(_ e: VaultFailure?) -> ExportRefusal? {

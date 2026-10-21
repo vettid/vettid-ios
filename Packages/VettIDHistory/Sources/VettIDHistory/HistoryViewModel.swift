@@ -8,8 +8,8 @@ public struct HistoryState: Equatable, Sendable, CustomStringConvertible, Custom
     public var entries: [AuditRecord] = []
     public var filter = AuditFilter()
     public var datePreset = DatePreset.any
-    /// id → title of the member's connections ("Name not shared yet" before the names arrived), for the rows and the
-    /// connection filter.
+    /// id → "First Last" of the member's connections ("" before the names arrived: ``connectionLabel(_:)`` says "Name not
+    /// shared yet"), for the rows and the connection filter.
     public var connectionNames: [String: String] = [:]
     /// id → name of the member's items (the Vault list), for the rows of item entries (§10.9); nil while the app holds no
     /// list (the Vault screens come with IOS-PLAN §8 I3.1): no item is then named, rather than every one called deleted.
@@ -30,7 +30,7 @@ public struct HistoryState: Equatable, Sendable, CustomStringConvertible, Custom
 
     /// The connections the filter offers, by name.
     public var connections: [ConnectionOption] {
-        connectionNames.map { ConnectionOption(id: $0.key, name: $0.value) }
+        connectionNames.keys.map { ConnectionOption(id: $0, name: connectionLabel($0)) }
             .sorted { $0.name.lowercased() == $1.name.lowercased() ? $0.id < $1.id : $0.name.lowercased() < $1.name.lowercased() }
     }
 
@@ -117,10 +117,7 @@ public final class HistoryViewModel {
 
     private func onConnections(_ list: [ConnectionInfo]) {
         known = Dictionary(list.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        local.connectionNames = Dictionary(
-            list.map { ($0.id, $0.displayName.isEmpty ? HistoryStrings.connectionUnnamed : $0.displayName) },
-            uniquingKeysWith: { a, _ in a }
-        )
+        local.connectionNames = Dictionary(list.map { ($0.id, $0.displayName) }, uniquingKeysWith: { a, _ in a })
     }
 
     /// The daily check passed (or the hold ended): a list refused because it was due reads again by itself.
