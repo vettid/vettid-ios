@@ -61,6 +61,17 @@ extension FakeVaultService {
     /// The requests of these types never reach the vault (nothing is done or answered).
     public func loseRequests(_ types: Set<String>) { locked { lostRequestTypes = types } }
 
+    /// Whether a request of [type] may go unanswered now: the test loses the answers or the requests of its type
+    /// (``loseAnswers(_:from:)``, ``loseRequests(_:)``, ``answerPinChange``, ``answerPasswordChange``), the vault will
+    /// lock when it arrives (``lockByItself(on:)``) or is locked (the request waits in its mailbox), or the relay holds
+    /// what the vault sends (``holdMessages``). A ``TestVaultPhone`` waits its short request timeout for those, and a
+    /// roomy one for every other request.
+    public func unanswered(_ type: String) -> Bool {
+        locked {
+            lostAnswerTypes.contains(type) || lostRequestTypes.contains(type) || lockOn == type || !vaultOpen || holdMessagesValue
+        }
+    }
+
     /// The type of every request that reached the vault in the session, in order (lost ones excepted; repeats included).
     public var requestsSeen: [String] { locked { requestsSeenValue } }
 
