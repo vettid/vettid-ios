@@ -836,6 +836,28 @@
           }
         }
       }
+    },
+    "account_shared_profile": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shared profile"
+          }
+        }
+      }
+    },
+    "account_shared_profile_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Display name and what your connections see"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

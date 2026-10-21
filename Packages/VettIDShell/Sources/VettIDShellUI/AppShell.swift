@@ -52,6 +52,9 @@ public struct AppShell: View {
     let history: (any HistoryRepository)?
     let historyExport: (any HistoryExportRepository)?
     private let onOpenPortal: @MainActor () -> Void
+    /// The member's own profile photo (VAULT-MESSAGING §10.8), decoded once per photo, for the top bar's avatar, the avatar
+    /// sheet and the account card (vettid-android `rememberProfilePhoto(ownPhoto)`).
+    @State private var ownPhoto: UIImage?
 
     /// [model]: where the member is, owned above the owner check's gate. [gate]: the owner check at [now] (the root re-reads
     /// it as time passes). [promptReason]: what the Face ID, Touch ID or passcode prompt says when the app lock is turned on.
@@ -240,11 +243,14 @@ public struct AppShell: View {
         .avatarSheet(isPresented: $model.showAccount) {
             AccountSheet(
                 account: account.account,
+                photo: ownPhoto,
                 onLockVault: { Task { await model.lockVault() } },
                 onChangeName: { model.changeName() },
+                onSharedProfile: { model.sharedProfile() },
                 onOpenPortal: onOpenPortal
             )
         }
+        .task(id: profiles.profile?.photo) { ownPhoto = await ProfilePhotos.decoded(profiles.profile?.photo) }
     }
 
     private func openRequestedUpdate() {
@@ -272,6 +278,7 @@ public struct AppShell: View {
         let model = model
         return ShellChrome(
             accountName: AccountHeader.name(account.account, placeholder: ShellStrings.accountPlaceholderName),
+            accountPhoto: ownPhoto,
             // The bell on every drawer screen; none while the vault is held or the daily check is due (§3.6.3).
             bell: NotificationsBell.of(feed, held: gate.gated) { model.openNotifications() },
             onMenu: { model.drawerOpen = true },
@@ -284,7 +291,7 @@ public struct AppShell: View {
         case .settings:
             SettingsRoute(
                 account: account, vault: vault, ownerChecks: ownerChecks, appLock: appLock, updates: releaseUpdates,
-                promptReason: promptReason, host: settingsHost
+                promptReason: promptReason, host: settingsHost, accountPhoto: ownPhoto
             )
         case .help:
             // A back arrow, as on Android, where it returns to the start destination.
@@ -332,8 +339,8 @@ public struct AppShell: View {
             VaultStatusRoute(vault: vault, installedFrom: installedFrom) { model.pop() }
         case .attestation:
             AttestationRoute(vault: vault, canary: canary, canaryInbox: canaryInbox) { model.pop() }
-        case .changeName:
-            ChangeNameRoute(accounts: account, profiles: profiles) { model.pop() }
+        case .changeName, .sharedProfile:
+            profileDetail(route)
         case .changePin(let fromAttempts):
             ChangePinRoute(vault: vault, fromAttempts: fromAttempts) { model.pop() }
         case .credential, .changePassword, .rotate, .alarm, .newCredential:
@@ -348,6 +355,15 @@ public struct AppShell: View {
             messagesDetail(route)
         case .notifications, .approval, .historyEntry, .connectionHistory:
             activityDetail(route)
+        }
+    }
+
+    /// The account's names and the shared profile (VAULT-MESSAGING §10.8).
+    @ViewBuilder private func profileDetail(_ route: ShellRoute) -> some View {
+        if route == .sharedProfile {
+            SharedProfileRoute(profiles: profiles, accounts: account, onChangeName: { model.push(.changeName) }) { model.pop() }
+        } else {
+            ChangeNameRoute(accounts: account, profiles: profiles) { model.pop() }
         }
     }
 
@@ -460,6 +476,7 @@ public struct AppShell: View {
         h.onCredential = { model.push(.credential) }
         h.onNewPhoneSecret = { model.push(.newPhoneSecret) }
         h.onDeleteVault = { model.push(.deleteVault) }
+        h.onSharedProfile = { model.push(.sharedProfile) }
         h.onOwnerCheck = { holdOff in model.ownerCheck(holdOff: holdOff) }
         return h
     }

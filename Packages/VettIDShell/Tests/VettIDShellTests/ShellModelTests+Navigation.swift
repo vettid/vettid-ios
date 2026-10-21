@@ -33,6 +33,23 @@ import VettIDOnboarding
         #expect(m.path.isEmpty)
     }
 
+    /// "Change name" and "Shared profile" from the avatar sheet close it and open over the current screen (VAULT-MESSAGING
+    /// §10.8); the shared profile's "Change name" opens over it.
+    @Test func theAvatarSheetOpensTheNamesAndTheSharedProfile() {
+        let m = model
+        m.navigate(.settings)
+        m.showAccount = true
+        m.sharedProfile()
+        #expect(!m.showAccount && m.path == [.sharedProfile])
+        m.push(.changeName)
+        #expect(m.path == [.sharedProfile, .changeName])
+        m.pop()
+        m.pop()
+        m.showAccount = true
+        m.changeName()
+        #expect(!m.showAccount && m.path == [.changeName])
+    }
+
     /// "Check now" asks the voluntary check; the hold switch turned off asks the hold-off check (VAULT-MESSAGING §3.6.7);
     /// either closes the sheet and the drawer.
     @Test func theHoldSwitchAsksTheHoldOffCheck() {

@@ -10,7 +10,7 @@ import VettIDShellUI
 import VettIDUI
 
 /// Debug only: the app's shell (the drawer, the owner check's banners, the avatar sheet, a destination still to come) and
-/// Settings with Vault status, Attestation, the name change, the PIN change and the Credential screen, in each of their
+/// Settings with Vault status, Attestation, the name change, the shared profile, the PIN change and the Credential screen, in each of their
 /// states with sample data, for the screen catalog and the previews. Fixed states with actions that do nothing. The release check refuses its strings.
 enum ShellCatalog {
     struct Entry: Identifiable, Sendable {
@@ -43,6 +43,9 @@ enum ShellCatalog {
         case newCredential(NewCredentialState)
         /// Settings with Allow screenshots' confirmation shown.
         case settingsAskScreenshots(SettingsState)
+        /// The shared profile and the profile photo's camera (VAULT-MESSAGING §10.8).
+        case sharedProfile(SharedProfileState)
+        case photoCapture(PhotoCaptureState)
     }
 
     static let now = Date(timeIntervalSince1970: 1_791_384_000)
@@ -180,7 +183,7 @@ enum ShellCatalog {
         case .canaryDialog(let prompt):
             ComingLaterScreen(destination: .messages, chrome: chrome).canaryManifestDialog(prompt, onConfirm: {}, onDismiss: {})
         case .changeName, .changePin, .credential, .changePassword, .newPhoneSecret, .deleteVault, .settingsAskScreenshots, .rotate,
-             .alarm, .newCredential, .help:
+             .alarm, .newCredential, .help, .sharedProfile, .photoCapture:
             flowScreen(entry.screen)
         }
     }

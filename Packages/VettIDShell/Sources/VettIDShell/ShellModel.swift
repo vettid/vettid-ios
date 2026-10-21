@@ -46,6 +46,12 @@ public final class ShellModel {
         push(.changeName)
     }
 
+    /// "Shared profile" from the avatar sheet: the sheet closes and the shared profile opens over the current screen.
+    public func sharedProfile() {
+        showAccount = false
+        push(.sharedProfile)
+    }
+
     public func pop() {
         if !path.isEmpty { path.removeLast() }
     }
