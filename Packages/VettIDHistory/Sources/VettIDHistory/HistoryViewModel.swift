@@ -12,7 +12,8 @@ public struct HistoryState: Equatable, Sendable, CustomStringConvertible, Custom
     /// shared yet"), for the rows and the connection filter.
     public var connectionNames: [String: String] = [:]
     /// id → name of the member's items (the Vault list), for the rows of item entries (§10.9); nil while the app holds no
-    /// list (the Vault screens come with IOS-PLAN §8 I3.1): no item is then named, rather than every one called deleted.
+    /// list (the Vault screens come with IOS-PLAN §8 I3.1): no item is then named, rather than every one called deleted
+    /// (chosen; not in the spec).
     public var itemNames: [String: String]?
     /// The vault's devices (`device.list`), for entries with a device; nil while not known.
     public var devices: HistoryDevices?

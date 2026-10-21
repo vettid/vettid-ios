@@ -130,7 +130,9 @@ private struct CategoryChip: View {
     }
 }
 
-/// "Choose dates…": the first and the last day, whole local days (``HistoryFilters/days(_:_:calendar:)``).
+/// "Choose dates…": the first and the last day, whole local days (``HistoryFilters/days(_:_:calendar:)``): a calendar
+/// for the first day and a date field for the last, in place of Android's range picker, which iOS does not have (chosen;
+/// not in the spec).
 struct HistoryRangeSheet: View {
     let onCancel: @MainActor () -> Void
     let onPick: @MainActor (Date, Date) -> Void

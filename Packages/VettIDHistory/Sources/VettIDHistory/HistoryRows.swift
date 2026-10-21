@@ -16,7 +16,8 @@ public extension HistoryState {
         return name.isEmpty ? HistoryStrings.connectionUnnamed : name
     }
 
-    /// A connection's "First Last" for a title; nil before the names arrived or once it is gone (the title drops it).
+    /// A connection's "First Last" for a title; nil before the names arrived or once it is gone: the title drops it (IOS-PLAN
+    /// §4.1: "never reads 'Connection with Removed connection paused'"; vettid-android names a removed device in a title).
     func connectionTitleName(_ id: String?) -> String? { id.flatMap { connectionNames[$0] }.flatMap { $0.isEmpty ? nil : $0 } }
 
     /// [r] as its row shows it (ANDROID-PLAN §4 History): the title, with the connection's, device's or item's name where

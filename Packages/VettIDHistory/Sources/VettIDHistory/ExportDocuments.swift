@@ -5,7 +5,8 @@ import Foundation
 /// of their own in the app's temporary directory (never backed up), with complete file protection, handed to the picker
 /// as a copy, and deleted as soon as the picker answers or the export closes; a folder left by an export that never
 /// ended (the app was stopped) is deleted at the next export. Never a copy in Documents, the photo library or the
-/// clipboard, never a share sheet. Mirrors vettid-android `ExportDocuments`, which writes to the chosen document directly.
+/// clipboard, never a share sheet. (Chosen; not in the spec: ANDROID-PLAN §4 History writes straight to the chosen
+/// document, which the iPhone's picker does not offer.) Mirrors vettid-android `ExportDocuments`.
 public protocol ExportDocuments: Sendable {
     /// Writes [bytes] to a new file named [fileName]; its URL.
     func stage(_ bytes: [UInt8], fileName: String) throws -> URL
