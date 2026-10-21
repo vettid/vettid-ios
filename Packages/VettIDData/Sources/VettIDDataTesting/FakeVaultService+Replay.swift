@@ -61,6 +61,26 @@ extension FakeVaultService {
     /// The requests of these types never reach the vault (nothing is done or answered).
     public func loseRequests(_ types: Set<String>) { locked { lostRequestTypes = types } }
 
+    /// Whether a request of [type] may go unanswered now: the test loses the answers or the requests of its type
+    /// (``loseAnswers(_:from:)``, ``loseRequests(_:)``, ``answerPinChange``, ``answerPasswordChange``), the vault will
+    /// lock when it arrives (``lockByItself(on:)``) or is locked (the request waits in its mailbox), the relay holds
+    /// what the vault sends (``holdMessages``), or the last request of its type has an `exp` the vault's clock passed
+    /// (with ``stampsOnVaultClock``: a copy sent again is dropped). A ``TestVaultPhone`` waits its short request timeout
+    /// for those, and a roomy one for every other request.
+    public func unanswered(_ type: String) -> Bool {
+        locked {
+            lostAnswerTypes.contains(type) || lostRequestTypes.contains(type) || lockOn == type || !vaultOpen || holdMessagesValue
+                || expired(type)
+        }
+    }
+
+    /// Whether the last request of [type] sent to the vault has an `exp` its clock passed, with ``stampsOnVaultClock``.
+    /// Callers hold ``cond``.
+    private func expired(_ type: String) -> Bool {
+        guard stampsOnVaultClockValue, let exp = sentExpValue[type] else { return false }
+        return vaultNow > exp
+    }
+
     /// The type of every request that reached the vault in the session, in order (lost ones excepted; repeats included).
     public var requestsSeen: [String] { locked { requestsSeenValue } }
 
@@ -77,6 +97,7 @@ extension FakeVaultService {
     /// Whether [m] is handled: not lost on its way, not expired, and not seen before (whose cached answer goes again).
     /// Callers hold ``cond``.
     func arrives(_ m: Inner) throws -> Bool {
+        if let exp = m.exp { sentExpValue[m.type] = exp }
         if lostRequestTypes.contains(m.type) { return false }
         requestsSeenValue.append(m.type)
         if let exp = m.exp { lastExpValue[m.type] = exp }

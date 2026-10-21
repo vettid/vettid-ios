@@ -47,6 +47,10 @@ public struct DeviceConfig: Sendable {
     public let collectMode: MailboxCollector.Mode
     public let pollWait: TimeInterval
     public let requestTimeout: TimeInterval
+    /// TEST ONLY. The request timeout for a request of the given type instead of [requestTimeout] (nil: none): a test
+    /// that makes the answers to one type go missing waits briefly for those alone, and keeps room for every other answer
+    /// on a loaded machine.
+    public let requestTimeoutOf: (@Sendable (String) -> TimeInterval)?
     /// The phone's monotonic clock in seconds, counting the time the phone sleeps (the vault's clock as last seen is the
     /// newest answer's `ts` plus the time elapsed on it since, VAULT-MESSAGING §11.14.9 "A lost answer").
     public let uptime: @Sendable () -> TimeInterval
@@ -65,6 +69,7 @@ public struct DeviceConfig: Sendable {
         collectMode: MailboxCollector.Mode = .longPoll,
         pollWait: TimeInterval = RelayClient.defaultWait,
         requestTimeout: TimeInterval = defaultTimeout,
+        requestTimeoutOf: (@Sendable (String) -> TimeInterval)? = nil,
         uptime: @escaping @Sendable () -> TimeInterval = DeviceConfig.monotonicNow
     ) {
         self.role = role
@@ -77,8 +82,12 @@ public struct DeviceConfig: Sendable {
         self.collectMode = collectMode
         self.pollWait = pollWait
         self.requestTimeout = requestTimeout
+        self.requestTimeoutOf = requestTimeoutOf
         self.uptime = uptime
     }
+
+    /// How long a request of [type] waits for its answer before it is sent again (VAULT-MESSAGING §8.6).
+    func requestTimeout(for type: String) -> TimeInterval { requestTimeoutOf?(type) ?? requestTimeout }
 }
 
 /// One owner device of a vault (VAULT-MESSAGING §6.7, §9.1, §11.3), the counterpart of vettid-vault's reference

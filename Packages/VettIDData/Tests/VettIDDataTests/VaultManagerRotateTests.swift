@@ -19,9 +19,7 @@ import VettIDVault
     init() throws {
         service = try FakeVaultService()
         service.stampsOnVaultClock = true
-        // A rotation is followed by the vault's identity rotation and its rekey (§3.4, §6.5), whose key work runs on the
-        // phone's receiving side while the next answers wait behind it: a wait long enough for a loaded test run.
-        phone = try TestVaultPhone(service: service, requestTimeout: 2)
+        phone = try TestVaultPhone(service: service, requestTimeout: TestVaultPhone.shortRequestTimeout)
     }
 
     var m: VaultManager { phone.manager }

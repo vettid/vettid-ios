@@ -95,13 +95,18 @@ public final class TestVaultPhone {
     /// Whether this build can wipe (false: a manager without ``LocalWipe``).
     private let wipes: Bool
 
-    /// The request timeout of the tests that make answers go missing: short, so that a lost answer is seen quickly, but
-    /// long enough for the reads every opening of the vault makes (the connections and their requests, as
-    /// vettid-android's) to be answered on a loaded machine before the test's own requests time out (0.4 s was not).
+    /// The request timeout of the tests that make answers go missing: short, so that a lost answer is seen quickly. It
+    /// applies to the requests whose answers the test makes go missing alone (``FakeVaultService/unanswered(_:)``).
     public static let shortRequestTimeout: TimeInterval = 1.0
 
-    /// [requestTimeout]: how long a request waits for its answer before it is sent again (§8.6). [wipes]: false for a
-    /// build that cannot wipe.
+    /// The request timeout of every request whose answer the test does not make go missing: roomy, so that the reads
+    /// every opening of the vault makes and the test's own requests queued behind them are answered within their three
+    /// tries on a loaded machine (1 s a try was not).
+    public static let roomyRequestTimeout: TimeInterval = 5
+
+    /// [requestTimeout]: how long a request waits for its answer before it is sent again (§8.6), for a request of a type
+    /// whose answers the test makes go missing (``FakeVaultService/unanswered(_:)``); any other waits at least
+    /// ``roomyRequestTimeout``. [wipes]: false for a build that cannot wipe.
     public init(service: FakeVaultService, requestTimeout: TimeInterval = 5, wipes: Bool = true) throws {
         self.service = service
         self.requestTimeout = requestTimeout
@@ -157,6 +162,9 @@ public final class TestVaultPhone {
         c.attester = attester
         c.attestStartOver = startOver
         c.requestTimeout = waits.requestTimeout
+        let short = waits.requestTimeout, roomy = max(waits.requestTimeout, roomyRequestTimeout)
+        // Weak: the device outlives the test (its collection and requests end later), and must not keep the fake running.
+        c.requestTimeoutOf = { [weak service] in service?.unanswered($0) ?? true ? short : roomy }
         let pauses = waits.pauses
         c.changeCheckSleep = { try await pauses.sleep($0) }
         let changeWaits = waits.changeWaits

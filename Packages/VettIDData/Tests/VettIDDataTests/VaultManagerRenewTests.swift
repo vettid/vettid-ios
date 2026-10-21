@@ -20,7 +20,7 @@ import VettIDVault
     init() throws {
         service = try FakeVaultService()
         service.stampsOnVaultClock = true
-        phone = try TestVaultPhone(service: service, requestTimeout: 1)
+        phone = try TestVaultPhone(service: service, requestTimeout: TestVaultPhone.shortRequestTimeout)
     }
 
     var m: VaultManager { phone.manager }
@@ -305,9 +305,9 @@ import VettIDVault
     /// A renew on its way: a PIN change and a password change are each refused at once (busy), nothing of theirs sent,
     /// so that neither reads a blob the renew is about to move.
     @Test func aRenewInFlightRefusesAPinChangeAndAPasswordChange() async throws {
-        // Long waits for the answers, so that the renew is still on its way while the changes are tried: it waits,
-        // unanswered, in the mailbox of a vault that locked just before it arrived.
-        let slow = try TestVaultPhone(service: service, requestTimeout: 1)
+        // A long wait for the renew's answer (5 s a try), so that the renew is still on its way while the changes are
+        // tried: it waits, unanswered, in the mailbox of a vault that locked just before it arrived.
+        let slow = try TestVaultPhone(service: service, requestTimeout: 5)
         defer { slow.close() }
         let m = slow.manager
         _ = try await m.redeemSetupCode(.secret(service.secret))

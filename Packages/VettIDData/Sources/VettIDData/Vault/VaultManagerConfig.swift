@@ -120,6 +120,8 @@ public struct VaultManagerConfig: Sendable {
     public var collectMode: MailboxCollector.Mode
     public var pollWait: TimeInterval
     public var requestTimeout: TimeInterval
+    /// TEST ONLY. ``DeviceConfig/requestTimeoutOf``: a request timeout by request type instead of [requestTimeout].
+    public var requestTimeoutOf: (@Sendable (String) -> TimeInterval)?
     /// How long an enrollment waits for a `vault.enrolled` that a request whose answer was lost may have caused, before
     /// it sends another or reports `vault_exists` as another phone's vault (chosen; not in the spec: 15 s, a relay
     /// round trip with margin).

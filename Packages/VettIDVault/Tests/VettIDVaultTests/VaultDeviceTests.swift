@@ -48,6 +48,18 @@ import VettIDTesting
         try JSONDecoder().decode(DeviceState.self, from: Data(try #require(store.load())))
     }
 
+    /// A request waits [requestTimeout] for its answer, unless a test gives a timeout by request type.
+    @Test func theRequestTimeoutByType() {
+        let plain = config(InMemoryDeviceStateStore(), timeout: 4)
+        #expect(plain.requestTimeout(for: "vault.status") == 4)
+        let byType = DeviceConfig(
+            name: "phone", relayURL: relay.baseURL, transport: HTTPTransport(session: relay.server.session, sleep: { _ in }),
+            store: InMemoryDeviceStateStore(), enrolledAttestation: .skipForTests, requestTimeout: 4,
+            requestTimeoutOf: { $0 == "pin.change" ? 0.5 : 6 }
+        )
+        #expect(byType.requestTimeout(for: "pin.change") == 0.5 && byType.requestTimeout(for: "vault.status") == 6)
+    }
+
     @Test func enrollPairRequestAndEvents() async throws {
         let (d, v) = try await pairedDevice()
         let api = VaultApi(device: d)
