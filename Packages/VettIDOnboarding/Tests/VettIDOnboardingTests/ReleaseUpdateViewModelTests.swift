@@ -70,9 +70,7 @@ import VettIDDataTesting
         await vm.settle()
         notes.answer = .unavailable
         updates.offer = ReleaseUpdateOffer(current: rel(4), target: rel(6))
-        await vm.settle()
-        #expect(notes.asked == [5, 6])
-        #expect(vm.state.notes == .unavailable)
+        #expect(await eventually { notes.asked == [5, 6] && vm.state.notes == .unavailable }, "\(notes.asked) \(vm.state.notes)")
     }
 
     @Test func theOwnerCheckComesFirst() async {

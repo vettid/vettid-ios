@@ -66,6 +66,22 @@ import VettIDCrypto
         expectAttestation(.pcr) { _ = try ev.verifyEnclave(descriptor: desc, attestation: try attest(other, desc), manifest: m7, enroll: true, now: t0) }
     }
 
+    /// VAULT-MESSAGING 0.53.0 §11.2 "Lifetime and clock allowance": not_after (whole seconds) at most 24 h + 5 min after the
+    /// attestation document's timestamp (milliseconds). 24 h + 1.178 s (the case staging hit), 24 h + 60 s and exactly
+    /// 24 h + 5 min verify; 24 h + 5 min + 1 ms is refused.
+    @Test func aDescriptorLivesAtMost24HoursAndFiveMinutesAfterTheAttestation() throws {
+        let day: TimeInterval = 24 * 3600
+        let desc = descriptor("i-test-1", hexRep("cd"), life: day)
+        for lead in [1.178, 60, 300] {
+            let at = t0.addingTimeInterval(-lead)
+            let att = try nsm.attest(at: at, userData: AltChannel.etkUserData(desc))
+            #expect(try ev.verifyEnclave(descriptor: desc, attestation: att, manifest: m7, enroll: true, now: at).release.number == 4)
+        }
+        let at = t0.addingTimeInterval(-300.001)
+        let att = try nsm.attest(at: at, userData: AltChannel.etkUserData(desc))
+        expectAttestation(.stale) { _ = try ev.verifyEnclave(descriptor: desc, attestation: att, manifest: m7, enroll: true, now: at) }
+    }
+
     @Test func deprecatedIsForUnlockOnlyAndAnUnlistedReleaseIsUnknown() throws {
         var n3 = nsm
         n3.pcr0 = hexRep("ab")
