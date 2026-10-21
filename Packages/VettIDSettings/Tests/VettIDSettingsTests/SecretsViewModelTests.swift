@@ -115,6 +115,18 @@ import VettIDDataTesting
         #expect(m.state.phrase == "delete my vault" && repo.phase == .unlocked)
     }
 
+    /// VAULT-MESSAGING 0.54.0 §10.2: `credential_required{no_holder}` (a vault with no holder) is a refusal like the others
+    /// here: the PIN and the password go, nothing is deleted; the root screen "This phone can't use your vault" is the
+    /// vault manager's (IOS-PLAN §4.4 (1)).
+    @Test func noHolderClearsTheSecrets() async {
+        repo.fail["deleteVault"] = VaultFailure(.credentialRequired, code: "credential_required")
+        let m = filled()
+        m.confirm()
+        await m.settle()
+        #expect(m.state.error == .credentialRequired && !m.state.busy && m.state.pin.isEmpty && m.state.password.isEmpty)
+        #expect(!m.state.unconfirmed && !m.state.notDeleted && repo.phase == .unlocked)
+    }
+
     /// The final confirmation cancelled: nothing is sent, and the PIN goes with it (the keypad shows none).
     @Test func cancellingTheConfirmationSendsNothing() {
         let m = filled()

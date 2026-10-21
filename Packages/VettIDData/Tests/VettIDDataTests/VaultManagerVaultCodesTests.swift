@@ -76,6 +76,32 @@ import VettIDDataTesting
         #expect(m.credentialRequired && m.phase == .unlocked)
     }
 
+    /// VAULT-MESSAGING 0.54.0 §3.5.9, §10.2: a vault with a credential but no holder answers `vault.delete`
+    /// `credential_required{reason: "no_holder"}`, before the PIN or the password is tested. The root screen, as
+    /// vettid-android's `vaultGuard` raises it; the vault is not deleted, nothing on this phone is erased, and no "being
+    /// deleted" opens. "Try again" leaves the screen with nothing kept to resend (the request carries the PIN); once the
+    /// vault has a holder again, the member's new try deletes it.
+    @Test func credentialRequiredToADeletion() async throws {
+        defer { phone.close() }
+        try await setUp()
+        let keys = phone.phoneKeys.count
+        let vaultID = m.record.value.vaultID
+        let pinFailures = service.pinFailureCount
+        service.noHolder = true
+        let f = await vaultFailure { try await m.deleteVault(pin: pin, password: password) }
+        #expect(f?.kind == .credentialRequired && f?.code == "credential_required", "\(String(describing: f))")
+        #expect(m.credentialRequired && m.credentialRequiredResend == nil)
+        #expect(!service.vaultDeleted && service.deletes.isEmpty && service.pinFailureCount == pinFailures)
+        #expect(m.phase == .unlocked && m.usesPhoneSecret)
+        #expect(phone.phoneKeys.count == keys && m.record.value.vaultID == vaultID)
+        m.credentialRequiredTryAgain()
+        #expect(!m.credentialRequired && m.phase == .unlocked)
+
+        service.noHolder = false
+        #expect(await vaultFailure { try await m.deleteVault(pin: pin, password: password) } == nil)
+        #expect(service.vaultDeleted && m.phase == .signedOut)
+    }
+
     /// A request without a secret that sets the same value again (`settings.set`) is sent again by "Try again"; it is the
     /// only kind of request ever kept (``Resend``).
     @Test func tryAgainResendsASettingsChange() async throws {
