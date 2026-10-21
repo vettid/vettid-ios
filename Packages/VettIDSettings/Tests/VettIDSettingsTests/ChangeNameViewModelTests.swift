@@ -79,22 +79,104 @@ import VettIDDataTesting
         #expect(await eventually { m.state.first == "" })
     }
 
-    @Test func aSentRequestKeepsShowingItsStateAfterTheLock() async throws {
+    // MARK: - The names of a request already sent go too (IOS-PLAN 0.1.21 §4.7)
+
+    @Test func aLockDropsTheNamesOfASentRequestAndTheUnlockBringsThemBackFromTheVault() async throws {
+        let m = model()
+        atConfirm(m)
+        m.submit()
+        await m.settle()
+        let sent = try #require(m.state.request)
+        #expect(sent.lastName == "King")
+        // Locked: nothing about the request is kept, not even in the state's text.
+        repo.account = nil
+        #expect(await eventually { m.state.first == "" })
+        var s = m.state
+        #expect(s.step == .sent && s.request == nil && !"\(s)".contains("King"))
+        // After the unlock, account.get's name_request brings the request back, with its state.
+        var open = AccountInfo(emailHint: "a***@example.com", state: "member", firstName: "Ada", lastName: "King")
+        open.nameRequest = NameRequestView(seq: sent.seq, firstName: "Ada", lastName: "King", requestedAt: nil, state: .applied)
+        repo.account = open
+        s = m.state
+        #expect(s.step == .sent && s.request?.seq == sent.seq && s.request?.lastName == "King" && s.request?.state == .applied)
+    }
+
+    @Test func theHoldOrTheDueStateDropsTheNamesOfASentRequestToo() async throws {
         let m = model()
         atConfirm(m)
         m.submit()
         await m.settle()
         let seq = try #require(m.state.request?.seq)
-        #expect(m.state.step == .sent)
-        // The hold: the account is no longer the open vault's; the request sent stays, with its state.
+        // Held or due: only the masked hint is left, and an account without the snapshot brings nothing back.
         repo.account = AccountInfo(emailHint: "a***@example.com")
         #expect(await eventually { m.state.first == "" })
-        #expect(m.state.step == .sent && m.state.request?.seq == seq && m.state.request?.state == .pending)
-        // After the unlock the account reports its result.
-        var open = AccountInfo(emailHint: "a***@example.com", state: "member", firstName: "Ada", lastName: "King")
-        open.nameRequest = NameRequestView(seq: seq, firstName: "Ada", lastName: "King", requestedAt: nil, state: .applied)
+        #expect(m.state.request == nil)
+        var held = AccountInfo(emailHint: "a***@example.com")
+        held.nameRequest = NameRequestView(seq: seq, firstName: "Ada", lastName: "King", requestedAt: nil, state: .pending)
+        repo.account = held
+        #expect(m.state.request == nil)
+        #expect(m.state.account?.nameRequest == nil, "no name request reaches the state while held")
+        #expect(!"\(m.state)".contains("King"))
+        // The passed check opens the vault: the request is read again.
+        var open = AccountInfo(emailHint: "a***@example.com", state: "member", firstName: "Ada", lastName: "Lovelace")
+        open.nameRequest = held.nameRequest
         repo.account = open
-        #expect(m.state.step == .sent && m.state.request?.state == .applied)
+        #expect(m.state.request?.state == .pending)
+    }
+
+    @Test func aRequestWithAnotherSeqIsNotShownAfterTheUnlock() async throws {
+        let m = model()
+        atConfirm(m)
+        m.submit()
+        await m.settle()
+        let seq = try #require(m.state.request?.seq)
+        repo.account = nil
+        #expect(await eventually { m.state.first == "" })
+        // The vault's latest request is another one (made elsewhere): not this screen's.
+        var open = AccountInfo(emailHint: "a***@example.com", state: "member", firstName: "Ada", lastName: "Lovelace")
+        open.nameRequest = NameRequestView(seq: seq + 1, firstName: "Ada", lastName: "Byron", requestedAt: nil, state: .pending)
+        repo.account = open
+        #expect(m.state.step == .sent && m.state.request == nil && m.state.sentSeq == seq)
+    }
+
+    @Test func aRequestAnsweredAfterTheLockIsNotKept() async {
+        let gate = TestDeferred<Void>()
+        repo.changeNameGate = gate
+        let m = model()
+        atConfirm(m)
+        m.submit()
+        #expect(await eventually { repo.calls.contains("changeName") })
+        #expect(m.state.busy)
+        // The vault locks while account.name.set is on its way.
+        repo.account = nil
+        #expect(await eventually { !m.state.busy })
+        gate.complete(())
+        await m.settle()
+        var s = m.state
+        #expect(!s.busy && s.step == .names && s.request == nil && s.sentSeq == nil && s.first == "" && s.last == "")
+        // Nor after the unlock: the answer was not this screen's to keep.
+        var open = AccountInfo(emailHint: "a***@example.com", state: "member", firstName: "Ada", lastName: "Lovelace")
+        open.nameRequest = NameRequestView(seq: 1, firstName: "Ada", lastName: "King", requestedAt: nil, state: .pending)
+        repo.account = open
+        s = m.state
+        #expect(s.step == .names && s.request == nil)
+    }
+
+    @Test func aRequestAnsweredAfterALockAndAnUnlockIsNotKept() async {
+        let gate = TestDeferred<Void>()
+        repo.changeNameGate = gate
+        let m = model()
+        atConfirm(m)
+        m.submit()
+        #expect(await eventually { repo.calls.contains("changeName") })
+        // Locked and opened again before the answer came: the drop counter still turns it away.
+        repo.account = nil
+        #expect(await eventually { !m.state.busy })
+        repo.account = AccountInfo(emailHint: "a***@example.com", state: "member", firstName: "Ada", lastName: "Lovelace")
+        gate.complete(())
+        await m.settle()
+        let s = m.state
+        #expect(s.step == .names && s.request == nil && s.sentSeq == nil)
     }
 
     @Test func theSnapshotsAllowedAfterStopsTheFlowBeforeThePin() {

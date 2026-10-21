@@ -20,7 +20,9 @@ extension VaultManager {
     /// `vault.delete` (§12.5) with the PIN and the credential password: irreversible; the screen confirms first. After the
     /// vault's answer VettID's data on this phone is erased (the welcome screen follows, as a new vault needs a new setup code). Refused
     /// while a change of PIN or password is unresolved (§11.14.9 step 2: a credential operation). Runs to its end even if
-    /// the caller is cancelled: a deletion that applied always erases VettID's data here.
+    /// the caller is cancelled: a deletion that applied always erases VettID's data here. A vault with a credential but no
+    /// holder refuses it `credential_required{reason: "no_holder"}` (VAULT-MESSAGING 0.54.0 §3.5.9, §10.2): the root screen
+    /// "This phone can't use your vault" (``noted(_:since:resend:)``), nothing erased.
     public func deleteVault(pin: String, password: String) async throws {
         let task = Task { @MainActor [weak self] () throws -> Bool in
             guard let self else { throw CancellationError() }

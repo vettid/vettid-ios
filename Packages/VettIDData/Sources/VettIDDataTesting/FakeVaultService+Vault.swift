@@ -175,6 +175,9 @@ extension FakeVaultService {
         // §3.5.9: the holder's types to another app, then a clone alarm holding the credential operations (the UTK
         // already spent, 0.52.0).
         if notHolderValue, Self.holderTypes.contains(m.type) { return try reply(m.type, "{}", re: m.id, error: "forbidden") }
+        if noHolderValue, Self.holderTypes.contains(m.type) {
+            return try replyError(m, InnerError("credential_required", "no holder"), body: #"{"reason":"no_holder"}"#)
+        }
         if let freeze = alarmRefusal(m.type) { return try reply(m.type, "{}", re: m.id, error: freeze) }
         switch m.type {
         case "credential.utk.get": try utkGet(m, body)

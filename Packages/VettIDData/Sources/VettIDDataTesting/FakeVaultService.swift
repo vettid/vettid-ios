@@ -104,6 +104,8 @@ public final class FakeVaultService: @unchecked Sendable {
     var hasCredential = false
     /// This phone is no longer the credential's holder (``notHolder``).
     var notHolderValue = false
+    /// The vault has a credential and no holder (``noHolder``).
+    var noHolderValue = false
     var vaultMade = false
     var failNextTypes: Set<String> = []
     /// The next request of a type is refused with this error (``refuseNext(_:code:message:body:)``).
@@ -320,6 +322,14 @@ public final class FakeVaultService: @unchecked Sendable {
     public var notHolder: Bool {
         get { locked { notHolderValue } }
         set { locked { notHolderValue = newValue } }
+    }
+
+    /// The vault has a credential but no holder (VAULT-MESSAGING §3.5.9: a holder that named no live app was cleared): the
+    /// holder's types, `vault.delete` among them (0.54.0), are refused `credential_required` with body
+    /// `{"reason": "no_holder"}` after the UTK is spent and before anything is checked, as vettid-vault's `gate` does.
+    public var noHolder: Bool {
+        get { locked { noHolderValue } }
+        set { locked { noHolderValue = newValue } }
     }
 
     /// The vault already holds this phone's credential (a `credential.create` whose answer was lost): the next create is
