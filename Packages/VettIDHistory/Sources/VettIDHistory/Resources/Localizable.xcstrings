@@ -1907,6 +1907,17 @@
         }
       }
     },
+    "history_kind_credential_utk_resync": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One-time keys renewed"
+          }
+        }
+      }
+    },
     "history_kind_audit_exported": {
       "extractionState": "manual",
       "localizations": {
@@ -3784,6 +3795,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "The secret went to your VettID connector, which added it to the agent's requests to a site you allowed. The agent was not given it."
+          }
+        }
+      }
+    },
+    "history_detail_credential_utk_resync": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This phone's one-time keys were replaced with a fresh set."
           }
         }
       }
