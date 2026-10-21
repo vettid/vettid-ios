@@ -38,17 +38,24 @@ public struct TagRegistry: Equatable, Sendable {
     }
 }
 
-/// An item a tag change would share, and how (§10.8 `tag.merge`'s `shares`). Mirrors vettid-android `SharePreview`.
+/// An item a tag change would share, and how (§10.8 `tag.merge`'s `shares`): [askRuleID] (0.23.1) an `ask` rule of the
+/// same subject holds the item, so an `auto` entry stays pending (the member is asked). Mirrors vettid-android
+/// `SharePreview`, which does not read `ask_rule_id`.
 public struct SharePreview: Equatable, Sendable {
     public var ruleID: String
     public var itemID: String
     public var mode: ShareMode
+    public var askRuleID: String?
 
-    public init(ruleID: String, itemID: String, mode: ShareMode) {
+    public init(ruleID: String, itemID: String, mode: ShareMode, askRuleID: String? = nil) {
         self.ruleID = ruleID
         self.itemID = itemID
         self.mode = mode
+        self.askRuleID = askRuleID
     }
+
+    /// Whether the item is shared at once (an `auto` rule no `ask` rule holds it from); otherwise the member is asked.
+    public var automatic: Bool { mode == .auto && askRuleID == nil }
 }
 
 /// What a tag delete or merge does, or would do with `dry_run` (§10.8): [items] changed, [rules] changed, and the items
@@ -73,7 +80,8 @@ public struct TagChange: Equatable, Sendable {
         let n = { (k: String) in VaultJSON.int(o, k).map { Int(clamping: $0) } ?? 0 }
         let shares = VaultJSON.objects(o, "shares").compactMap { s -> SharePreview? in
             guard let r = VaultJSON.string(s, "rule_id"), let i = VaultJSON.string(s, "item_id") else { return nil }
-            return SharePreview(ruleID: r, itemID: i, mode: ShareMode.of(VaultJSON.string(s, "mode")))
+            let mode = ShareMode.of(VaultJSON.string(s, "mode"))
+            return SharePreview(ruleID: r, itemID: i, mode: mode, askRuleID: VaultJSON.string(s, "ask_rule_id"))
         }
         return TagChange(
             version: VaultJSON.int(o, "version") ?? 0, items: n("items"), rules: n("rules"), shares: shares, sharesTotal: n("shares_total")

@@ -95,6 +95,12 @@ final class FakeSharingOps: SharingOps, @unchecked Sendable {
         #expect(itemsRefreshed.n == 1)
     }
 
+    /// A share an `ask` rule holds back names it (§10.8, 0.23.1 `ask_rule_id`) and is not automatic.
+    @Test func aPreviewNamesTheAskRuleThatHoldsAShare() throws {
+        let c = TagChange.of(try StrictJson.parseObject(#"{"version":4,"items":1,"shares_total":2,"shares":[{"rule_id":"r1","item_id":"i1","mode":"auto","ask_rule_id":"r9"},{"rule_id":"r2","item_id":"i2","mode":"auto"}]}"#))
+        #expect(c.shares.map(\.askRuleID) == ["r9", nil] && c.shares.map(\.automatic) == [false, true] && c.sharesTotal == 2)
+    }
+
     @Test func reservedTagsAreNeitherRenamedNorDeleted() async {
         #expect(await failure { try await m.renameTag("@profile", into: "x", dryRun: false) }?.code == "bad_request")
         #expect(await failure { try await m.deleteTag("@profile", dryRun: false) }?.code == "bad_request")

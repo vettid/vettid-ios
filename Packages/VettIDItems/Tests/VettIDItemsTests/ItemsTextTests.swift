@@ -40,6 +40,9 @@ import VettIDData
         #expect(ItemsText.change(c, renaming: true) == "This changes 2 items. 1 item is then shared automatically. You will be asked about sharing 2 items.")
         #expect(ItemsText.change(c, renaming: false) == "This changes 2 items.")
         #expect(ItemsText.change(TagChange(version: 1, items: 1), renaming: true) == "This changes 1 item.")
+        // An `auto` share an `ask` rule holds back (§10.8, 0.23.1 `ask_rule_id`) is asked about, not automatic.
+        let held = TagChange(version: 4, items: 1, shares: [SharePreview(ruleID: "r1", itemID: "i1", mode: .auto, askRuleID: "r9"), SharePreview(ruleID: "r2", itemID: "i2", mode: .auto)], sharesTotal: 2)
+        #expect(ItemsText.change(held, renaming: true) == "This changes 1 item. 1 item is then shared automatically. You will be asked about sharing 1 item.")
     }
 
     @Test func failuresInTheVaultsWords() {

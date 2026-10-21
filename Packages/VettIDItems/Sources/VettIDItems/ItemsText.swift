@@ -54,7 +54,8 @@ public enum ItemsText {
     public static func change(_ c: TagChange, renaming: Bool) -> String {
         let items = ItemsStrings.tagsChangeItems(c.items)
         guard renaming, c.sharesTotal > 0 else { return items }
-        let auto = c.shares.count { $0.mode == .auto }
+        // An `auto` entry an `ask` rule holds is asked (0.23.1 `ask_rule_id`); the entries past what fits count as asked.
+        let auto = c.shares.count(where: \.automatic)
         let asked = c.sharesTotal - auto
         var out = [items]
         if auto > 0 { out.append(ItemsStrings.tagsChangeShared(auto)) }
