@@ -211,7 +211,8 @@ extension VaultDevice {
         }
     }
 
-    /// Puts back a UTK the vault did not spend, first in the pool, so that the retry is sealed to the same one.
+    /// Puts back a UTK that was taken but never sent (nothing reached the vault), first in the pool. A UTK that was sent is
+    /// never put back: the vault spends it whatever it answers (VAULT-MESSAGING 0.52.0 §3.5.4).
     func returnUTK(_ u: UtkRecord) async throws {
         try await lock.withLock {
             mem.withLock { if !st.utks.contains(where: { $0.id == u.id }) { st.utks.insert(u, at: 0) } }
