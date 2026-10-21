@@ -119,13 +119,15 @@ extension FakeVaultService {
         }
     }
 
+    /// The body checked first (vettid-vault's order: the tag, `#rrggbb` in lower case, the icon, the description), then
+    /// the version.
     private func tagSet(_ body: JsonObject) throws -> String {
-        try checkVersion(body)
         let tag = try ItemSpec.normalizeTag(try body.string("tag"))
         let color = try body.optString("color"), icon = try body.optString("icon"), text = try body.optString("description")
-        let hex = Set("0123456789abcdefABCDEF")
+        let hex = Set("0123456789abcdef")
         guard color.map({ $0.count == 7 && $0.first == "#" && $0.dropFirst().allSatisfy(hex.contains) }) ?? true,
               icon.map(ItemSpec.isValidTemplate) ?? true, (text?.utf8.count ?? 0) <= 256 else { throw ItemRefusal(code: "bad_request") }
+        try checkVersion(body)
         guard tagStore.entries[tag] != nil || tagStore.entries.count < 512 else { throw ItemRefusal(code: "limit", body: #"{"limit":"tag_registry","max":512}"#) }
         tagStore.entries[tag] = .init(color: color, icon: icon, description: text)
         tagStore.version += 1
@@ -134,8 +136,8 @@ extension FakeVaultService {
 
     private func tagDelete(_ body: JsonObject) throws -> String {
         try checkVersion(body)
-        let tag = try body.string("tag")
-        guard !tag.hasPrefix("@") else { throw ItemRefusal(code: "bad_request") }
+        // Normalised as every tag the vault takes; `@profile` is reserved (bad_request).
+        let tag = try ItemSpec.normalizeTag(try body.string("tag"))
         guard !tagStore.rules.contains(where: { $0.tags.contains(tag) }) else { throw ItemRefusal(code: "in_use") }
         let carrying = items.items.values.filter { $0.tags.contains(tag) }.map(\.id)
         if (try? body.bool("dry_run")) == true { return #"{"version":\#(tagStore.version),"items":\#(carrying.count)}"# }
@@ -152,9 +154,11 @@ extension FakeVaultService {
     /// rule are its `shares`.
     private func tagMerge(_ body: JsonObject) throws -> String {
         try checkVersion(body)
-        let from = try body.array("from").map { try $0.asString() }
+        let given = try body.array("from").map { try ItemSpec.normalizeTag(try $0.asString()) }
         let into = try ItemSpec.normalizeTag(try body.string("into"))
-        guard (1...16).contains(from.count), !from.contains(where: { $0.hasPrefix("@") }) else { throw ItemRefusal(code: "bad_request") }
+        guard (1...16).contains(given.count) else { throw ItemRefusal(code: "bad_request") }
+        // `into` among `from` is no merge of its own.
+        let from = given.filter { $0 != into }
         let merged = { (tags: [String]) in Array(Set(tags.map { from.contains($0) ? into : $0 })).sorted() }
         var rules = tagStore.rules
         for i in rules.indices { rules[i].tags = merged(rules[i].tags) }

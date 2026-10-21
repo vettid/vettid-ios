@@ -114,6 +114,6 @@ public final class FakeSharing: SharingRepository {
 
     public func rules(connectionID: String?) async throws -> [ShareRule] {
         try call("rules")
-        return rulesStored.filter { connectionID == nil || $0.connectionID == connectionID }
+        return rulesStored.filter { connectionID == nil || $0.connectionID == connectionID }.sorted { $0.ruleID < $1.ruleID }
     }
 }
