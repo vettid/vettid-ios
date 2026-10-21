@@ -96,7 +96,7 @@ extension FakeVaultService {
     /// `critical-secret-use.approve`, a credential operation: the UTK, the blob, the password, then the payload's hash
     /// and the request bound in the sealed payload (`bad_request` otherwise); the CEK rotates.
     private func criticalApprove(_ m: Inner, _ body: JsonObject) throws {
-        // An unknown request is refused before the UTK is spent or the password tried.
+        // An unknown request is refused before the password is tried (its UTK is already spent).
         guard let outer = try? body.string("request_id"), activity.asks.critical[outer] != nil else { return try reply(m.type, "{}", re: m.id, error: "not_found") }
         guard let p = try opened(m, body) else { return }
         guard try checkBlob(m, try body.optString("credential")) else { return }

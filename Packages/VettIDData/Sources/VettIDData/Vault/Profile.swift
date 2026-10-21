@@ -76,6 +76,10 @@ public final class ProfileManager: ProfileRepository {
     }
 
     private func failed(_ e: VaultFailure) async -> NameChangeOutcome {
+        // A refusal of `credential.utk.get` before the request (its resync's `too_soon` is the resync's 10 minutes, not the
+        // name's; VAULT-MESSAGING 0.52.0 §3.5.4) is the vault's code, never the name change's own texts, as vettid-android
+        // `fromUtkGet` does.
+        if (e.cause as? VaultOpError)?.type == "credential.utk.get" { return .failed(e.kind, code: e.code) }
         switch e.code {
         case Self.codeTooSoon:
             let after = ((e.cause as? VaultOpError)?.body).flatMap { VaultJSON.string(VaultJSON.object($0), "allowed_after") }
