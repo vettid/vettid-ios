@@ -5,11 +5,13 @@ import VettIDData
 import VettIDUI
 
 /// What the connection detail screen can ask for. Mirrors vettid-android `DetailActions` for what the iPhone has so far:
-/// [onMessage] stays nil (the action hidden) until the messages are in the iPhone app (IOS-PLAN §8 I2.2), and History,
-/// member authentication and sharing come with their rows.
+/// [onMessage] and [onHistory] stay nil (the action hidden) while the app has no messages or History; member
+/// authentication and sharing come with their rows.
 public struct DetailActions {
     public var onBack: @MainActor () -> Void = {}
     public var onMessage: (@MainActor () -> Void)?
+    /// The connection's History (ANDROID-PLAN §4 History).
+    public var onHistory: (@MainActor () -> Void)?
     public var onFavorite: @MainActor () -> Void = {}
     public var onAsk: @MainActor (DetailConfirm?) -> Void = { _ in }
     public var onConfirm: @MainActor () -> Void = {}
@@ -78,7 +80,7 @@ public struct ConnectionDetailScreen: View {
         .accessibilityIdentifier("connection_detail")
     }
 
-    /// Message (once the messages are there), favourite, remove.
+    /// Message (once the messages are there), favourite, History, remove.
     func pill(_ c: ConnectionInfo) -> [PillAction] {
         // The connection's own name, as vettid-android's pill (its name from the shown connection).
         let named = AccountNames.isolate(c.displayName.isEmpty ? ConnectStrings.nameNotShared : c.displayName)
@@ -88,6 +90,7 @@ public struct ConnectionDetailScreen: View {
         }
         list.append(PillAction(c.favorite ? .star : .starOutline, label: ConnectionRow.favoriteLabel(named, favorite: c.favorite),
                                action: actions.onFavorite))
+        if let onHistory = actions.onHistory { list.append(PillAction(.history, label: ConnectStrings.detailHistory, action: onHistory)) }
         list.append(PillAction(.personRemove, label: ConnectStrings.remove, destructive: true) { actions.onAsk(.remove) })
         return list
     }

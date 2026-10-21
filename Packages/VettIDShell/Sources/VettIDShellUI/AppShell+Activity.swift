@@ -2,12 +2,15 @@
 import SwiftUI
 import VettIDApprovals
 import VettIDApprovalsUI
+import VettIDData
+import VettIDHistory
+import VettIDHistoryUI
 import VettIDNotifications
 import VettIDNotificationsUI
 import VettIDShell
 
-/// The Notifications screens (from the bell) and one approval's decision (from Approvals or a feed item): vettid-android's
-/// `notificationsDestination` and `approvalsDestination`.
+/// The Notifications screens (from the bell), one approval's decision (from Approvals or a feed item), a History entry and
+/// a connection's History: vettid-android's `notificationsDestination`, `approvalsDestination` and `historyDestination`.
 extension AppShell {
     @ViewBuilder func activityDetail(_ route: ShellRoute) -> some View {
         switch route {
@@ -17,6 +20,15 @@ extension AppShell {
             }
         case .approval(let key):
             if let approvals { ApprovalDetailRoute(key, approvals: approvals, connections: connections, host: approvalsHost) }
+        case .historyEntry(let seq):
+            if let history { HistoryEntryRoute(seq, history: history, connections: connections, host: historyHost) }
+        case .connectionHistory(let id):
+            if let history, let historyExport {
+                HistoryRoute(
+                    history: history, export: historyExport, connections: connections, ownerChecks: ownerChecks, connectionID: id,
+                    chrome: nil, host: historyHost
+                )
+            }
         default:
             EmptyView()
         }
@@ -29,6 +41,19 @@ extension AppShell {
         h.onBack = { model.pop() }
         h.onOpenArchived = { model.openNotifications(archived: true) }
         h.onOpen = { model.openFeedTarget($0) }
+        return h
+    }
+
+    /// Where the History screens go (vettid-android `HistoryHost`): an entry over the list, back, the entry's connection,
+    /// the credential alarm and the daily check (the export's refusals). An item opens with the Vault screens (I3.1).
+    var historyHost: HistoryHost {
+        let model = model
+        var h = HistoryHost()
+        h.onOpenEntry = { model.openHistoryEntry($0) }
+        h.onBack = { model.pop() }
+        h.onOpenConnection = { model.push(.connection($0)) }
+        h.onOpenAlarm = { model.push(.alarm) }
+        h.onOwnerCheck = { model.ownerCheck(holdOff: false) }
         return h
     }
 

@@ -8,6 +8,8 @@ extension ConnectStrings {
         String(localized: "connections_detail_message", defaultValue: "Message \(name)", bundle: .module)
     }
 
+    static var detailHistory: String { String(localized: "connections_detail_history", defaultValue: "History", bundle: .module) }
+
     static var detailProfile: String {
         String(localized: "connections_detail_profile", defaultValue: "Profile shared with you", bundle: .module)
     }

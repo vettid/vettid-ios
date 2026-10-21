@@ -90,6 +90,12 @@ public final class ShellModel {
         }
     }
 
+    /// A History entry over History, once.
+    public func openHistoryEntry(_ seq: Int64) { pushOnce(.historyEntry(seq)) }
+
+    /// A connection's History over its page, once.
+    public func openConnectionHistory(_ connectionID: String) { pushOnce(.connectionHistory(connectionID)) }
+
     private func pushOnce(_ r: ShellRoute) {
         if path.last != r { push(r) }
     }

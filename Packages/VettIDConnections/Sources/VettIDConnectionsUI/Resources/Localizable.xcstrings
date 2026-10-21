@@ -1651,6 +1651,17 @@
           }
         }
       }
+    },
+    "connections_detail_history": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "History"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
