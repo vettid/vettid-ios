@@ -20,6 +20,7 @@ extension VaultDevice {
 
     func sendOnceLocked(id: String, type: String, body: [UInt8], exp: Date?) async throws -> String {
         let (v, env): (VaultRecord, [UInt8]) = try mem.withLock {
+            if halted { throw Self.haltedError }
             let v = try requireVault()
             guard let ep = keyring.current() else { throw VaultStateError(message: "no session with the vault") }
             guard !v.token.isEmpty else { throw VaultStateError(message: "no token for the vault") }
@@ -58,6 +59,7 @@ extension VaultDevice {
         id: String?, type: String, body: [UInt8], re: String?, status: String?, exp: Date?
     ) async throws -> String {
         let entry: OutboxEntry = try mem.withLock {
+            if halted { throw Self.haltedError }
             let v = try requireVault()
             guard let ep = keyring.current() else { throw VaultStateError(message: "no session with the vault") }
             guard !v.token.isEmpty else { throw VaultStateError(message: "no token for the vault") }
@@ -78,6 +80,7 @@ extension VaultDevice {
     /// Deposits an outbox entry; removes it once the relay accepted it, or on a terminal relay error (rethrown). A
     /// transport failure, `429 rate_limited`, 5xx and a stale or replayed signature keep it for the next flush.
     func deliver(_ e: OutboxEntry) async throws {
+        try refuseHalted()
         do {
             _ = try await relayFor(e.relayURL).deposit(mailboxID: e.mailbox, token: e.token, payload: try Base64s.decodeStd(e.envelope))
             mem.withLock { st.outbox.removeAll { $0.id == e.id && $0.envelope == e.envelope } }
@@ -112,6 +115,7 @@ extension VaultDevice {
 
     /// A deposit straight to the vault (handshake messages, outside the outbox), its refusal counted as deliver's.
     func depositToVault(_ v: VaultRecord, _ payload: [UInt8]) async throws {
+        try refuseHalted()
         do {
             _ = try await relayFor(v.relayURL).deposit(mailboxID: v.mailbox, token: v.token, payload: payload)
         } catch let x as RelayError {
@@ -211,7 +215,8 @@ extension VaultDevice {
     ) async throws -> VaultMessage {
         let deadline = Date().addingTimeInterval(timeout)
         while true {
-            let (found, waiter): (VaultMessage?, OneShot<Bool>?) = mem.withLock {
+            let (found, waiter): (VaultMessage?, OneShot<Bool>?) = try mem.withLock {
+                if halted { throw Self.haltedError }
                 if let i = inbox.firstIndex(where: { types.contains($0.type) && match($0) }) { return (inbox.remove(at: i), nil) }
                 let w = OneShot<Bool>()
                 inboxWaiters.append(w)

@@ -121,21 +121,21 @@ import VettIDDataTesting
     @Test func aRestartReopensBeingDeleted() async throws {
         defer { phone.close() }
         try await deleting()
-        try phone.restart()
+        try await phone.restart()
         try await m.refresh()
         #expect(m.phase == .deleting && m.session == nil)
         #expect(m.deletion?.slow == false)
         // Past the bound: "still finishing" at the start.
         phone.clockAhead = VaultManager.deletingBound + 1
-        try phone.restart()
+        try await phone.restart()
         try await m.refresh()
         #expect(await eventually { m.deletion?.slow == true })
         service.status("locked", noVault: true)
-        try phone.restart()
+        try await phone.restart()
         try await m.refresh()
         #expect(await eventually { m.phase == .signedOut })
         try expectGone()
-        try phone.restart()
+        try await phone.restart()
         try await m.refresh()
         #expect(m.phase == .signedOut && !m.vaultDeletedNotice, "the notice is shown once")
     }
@@ -209,7 +209,7 @@ import VettIDDataTesting
         try await m.eraseThisPhone()
         #expect(m.record.value.deleting == nil && m.deletion == nil && m.phase == .signedOut)
         #expect(files.isEmpty && m.vaultDeletedNotice)
-        try phone.restart()
+        try await phone.restart()
         try await m.refresh()
         #expect(m.phase == .signedOut && m.deletion == nil && !m.vaultDeletedNotice)
     }

@@ -194,7 +194,7 @@ import VettIDVault
         #expect(c.connections.isEmpty && c.requests.isEmpty)
         #expect(try await m.unlock(pin: pin) == .success)
         #expect(await eventually { c.connections.map(\.id) == [id] })
-        try phone.restart()
+        try await phone.restart()
         try await m.refresh()
         #expect(c.peerDeclines.map(\.name) == ["Sam"])
     }

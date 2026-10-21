@@ -150,7 +150,7 @@ import VettIDKeysTesting
         _ = await vaultFailure { try await m.enroll(pin: "402817") { _ in } }
         #expect(await vaultFailure { try await m.forgetSetupCode() }?.code == VaultManager.codeEnrollmentStarted)
         phone.clockAhead = VaultManager.unknownEnrollmentKept - 60
-        try phone.restart()
+        try await phone.restart()
         #expect(await vaultFailure { try await m.forgetSetupCode() }?.code == VaultManager.codeEnrollmentStarted)
         phone.clockAhead = VaultManager.unknownEnrollmentKept + 60
         try await m.forgetSetupCode()
@@ -166,7 +166,7 @@ import VettIDKeysTesting
         _ = await vaultFailure { try await m.enroll(pin: "402817") { _ in } }
         try await awaitPinned()
         _ = try m.phoneSecrets.create(keyVault: service.vaultID)
-        try phone.restart()
+        try await phone.restart()
         try await m.refresh()
         #expect(m.phase == .setup(.needsCredential) && m.usesPhoneSecret)
         #expect(try m.phoneSecrets.records().pendings.count == 2)
@@ -180,7 +180,7 @@ import VettIDKeysTesting
         service.failNext("vault.enroll.confirm")
         _ = await vaultFailure { try await m.createCredential(password: "correct horse battery", backup: true, pin: "402817") { _ in } }
         try m.record.update(since: m.record.generation) { $0.enrolledHere = false }
-        try phone.restart()
+        try await phone.restart()
         try await m.refresh()
         #expect(m.phase == .setup(.finishing) && !service.confirmed)
     }
@@ -287,7 +287,7 @@ import VettIDKeysTesting
         service.enrollAnswers(.answerLost)
         #expect(await vaultFailure { try await m.enroll(pin: "402817") { _ in } }?.kind == .network)
         try await awaitPinned()
-        try phone.restart()
+        try await phone.restart()
         try await m.refresh()
         #expect(m.phase == .setup(.needsCredential) && m.usesPhoneSecret)
         #expect(service.enrolls.first?.unlockSecret == (try m.phoneSecrets.currentSecret()))
@@ -312,7 +312,7 @@ import VettIDKeysTesting
         #expect(try phone.phoneKeys.count == 1 && phone.appKeys.getOrCreate().spki() == appKey)
         #expect(m.phase == .setup(.newVault))
         // After a restart too: the stored device is looked at.
-        try phone.restart()
+        try await phone.restart()
         #expect(await vaultFailure { try await m.forgetSetupCode() }?.kind == .enrollmentStarted)
         #expect(phone.phoneKeys.count == 1)
     }
@@ -324,7 +324,7 @@ import VettIDKeysTesting
         try await redeemed()
         service.enrollAnswers(.answerLostEnrolledLate)
         #expect(await vaultFailure { try await m.enroll(pin: "402817") { _ in } }?.kind == .network)
-        try phone.restart()
+        try await phone.restart()
         try await m.refresh()
         #expect(m.phase == .setup(.newVault))
         try await m.enroll(pin: "402817") { _ in }
@@ -353,7 +353,7 @@ import VettIDKeysTesting
             try await m.createCredential(password: "correct horse battery", backup: false, pin: "402817") { _ in }
         } != nil)
         #expect(!service.confirmed && service.credentialCreates.count == 1)
-        try phone.restart()
+        try await phone.restart()
         try await m.refresh()
         #expect(m.phase == .setup(.finishing))
         #expect(service.confirmed && !service.backupSetting)

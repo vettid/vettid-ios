@@ -192,7 +192,7 @@ import VettIDDataTesting
         try await setUp()
         _ = await passwordChangeUndecided(losingTheRequest: false)
         service.moveCredentialWithoutTheApp()
-        try phone.restart()
+        try await phone.restart()
         let taken = m.phoneSecrets.pinGeneration
         await m.checkUnresolvedChange(evenLocked: true)
         #expect(m.changeCheck == ChangeCheck(.password, .ended))

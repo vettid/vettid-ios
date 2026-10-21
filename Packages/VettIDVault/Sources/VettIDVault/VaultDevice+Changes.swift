@@ -55,11 +55,17 @@ extension VaultDevice {
     /// relay and never through the outbox, so that the request is never written to the phone's storage (§11.14.9 step 1:
     /// kept in memory only); a deposit that fails is a send without an answer. Its answer, or ``VaultStateError``.
     func requestKept(_ held: HeldRequest, sends: Int, timeout: TimeInterval? = nil) async throws -> VaultMessage {
+        try refuseHalted()
         let d = OneShot<Inner>()
         mem.withLock { pending[held.id] = d }
         defer { mem.withLock { _ = pending.removeValue(forKey: held.id) } }
         for _ in 0..<sends where vaultNow() < held.exp {
-            _ = try? await lock.withLock { try await sendOnceLocked(id: held.id, type: held.type, body: held.body, exp: held.exp) }
+            // A failed deposit is a send without an answer; a halted device refuses at once.
+            do {
+                _ = try await lock.withLock { try await sendOnceLocked(id: held.id, type: held.type, body: held.body, exp: held.exp) }
+            } catch let e as VaultStateError where e == Self.haltedError {
+                throw e
+            } catch {}
             if let inner = await d.wait(timeout: timeout ?? cfg.requestTimeout) { return VaultMessage(inner: inner) }
             try Task.checkCancellation()
             // No answer: the collection may have ended (the answer would then wait in the mailbox unread).

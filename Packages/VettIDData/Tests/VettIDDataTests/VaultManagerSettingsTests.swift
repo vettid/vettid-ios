@@ -46,7 +46,7 @@ import VettIDDataTesting
         #expect(m.account?.email == "member@example.com" && m.account?.state == "member")
         service.accountSnapshot(Self.snapshot.replacingOccurrences(of: "10:00:00Z", with: "11:00:00Z").replacingOccurrences(of: "Lovelace", with: "King"))
         #expect(await eventually { m.account?.lastName == "King" })
-        try phone.restart()
+        try await phone.restart()
         try await m.refresh()
         #expect(m.account?.fullName == "Ada King")
     }

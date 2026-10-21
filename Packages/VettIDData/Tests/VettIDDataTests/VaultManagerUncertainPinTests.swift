@@ -43,7 +43,7 @@ import VettIDVault
         }
         _ = await vaultFailure { try await m.changePin(pin: pin, newPin: newPin, password: password) }
         for _ in 0..<moves { service.moveCredentialWithoutTheApp() }
-        try phone.restart()
+        try await phone.restart()
         service.loseAnswers([])
         service.loseRequests([])
         await m.checkUnresolvedChange(evenLocked: true)
@@ -120,7 +120,7 @@ import VettIDVault
         defer { phone.close() }
         try await setUp()
         try await endedPinChange(applied: true, moves: 1)
-        try phone.restart()
+        try await phone.restart()
         expectRefused(await vaultFailure { try await m.renewPhoneSecret(pin: newPin, password: password) }, "renew")
         m.refreshPinStep()
         #expect(m.unlockPinStep == .previous)

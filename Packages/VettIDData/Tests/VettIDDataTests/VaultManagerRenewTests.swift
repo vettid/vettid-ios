@@ -334,7 +334,7 @@ import VettIDVault
         let exp = try #require(m.session?.device.vaultNow()).addingTimeInterval(ChangeRequest.validFor)
         _ = try m.phoneSecrets.beginChange(operation: "vault.secret.renew-crash", exp: exp)
         m.phoneSecrets.endChange(operation: "vault.secret.renew-crash")
-        try phone.restart()
+        try await phone.restart()
         try await m.refresh()
         try await m.lock()
         #expect(try await m.unlock(pin: pin) == .success)
@@ -354,7 +354,7 @@ import VettIDVault
         #expect(await renew()?.kind == .noResponse)
         let first = try #require(try m.phoneSecrets.records().candidates.first)
         service.loseAnswers([])
-        try phone.restart()
+        try await phone.restart()
         try await m.refresh()
         pastExp()
         #expect(await renew() == nil)
@@ -391,7 +391,7 @@ import VettIDVault
         service.loseRequests([VaultApi.typeSecretRenew])
         for _ in 0..<4 {
             #expect(await renew()?.kind == .noResponse)
-            try phone.restart()
+            try await phone.restart()
             try await m.refresh()
             pastExp()
         }
