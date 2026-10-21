@@ -193,13 +193,20 @@ import VettIDVault
     /// A request still on its way on the session the deletion closed (the attachments probe, the lists and the account read
     /// after the unlock) ends after the wipe: nothing of it is written, no file and no key come back. Its last step is
     /// played here on the device it held, after the wipe.
+    ///
+    /// The waiting `vault.delete` runs as the vault opens (inside the unlock), so its `device.unlinked{vault_deleted}`
+    /// could reach the new session, and close it, before the unlock returned to the test: it is held back until the test
+    /// has taken the session's device, then delivered.
     @Test func aRequestOnItsWayWritesNothingAfterTheWipe() async throws {
         defer { phone.close() }
         try await setUp()
         service.lockByItself(reason: "test")
         #expect(await delete()?.code == VaultManager.codeDeleteUnconfirmed)
+        service.holdsDeletionUnlink = true
         _ = try await m.unlock(pin: pin)
         let device = try #require(m.session?.device)
+        #expect(service.vaultDeleted)
+        service.deliverDeletionUnlink()
         #expect(await eventually { m.phase == .deleting })
         m.onForeground()
         #expect(await eventually { m.phase == .signedOut })
