@@ -150,7 +150,8 @@ struct TagDialogs: ViewModifier {
         Binding(get: { state.dialog == .profileColour }, set: { if !$0 { actions.onDismiss() } })
     }
 
-    // A cover (the app switcher, the app lock) closes the sheet and the alert at once (IOS-PLAN §4.4 (1)).
+    // A cover ("This phone can't use your vault", `vettIDCovered`) closes the sheet and the alert at once (IOS-PLAN
+    // §4.4 (1)); the app-switcher cover hides them without closing them.
     func body(content: Content) -> some View {
         content
             .sheet(isPresented: uncovered(sheetShown, covered: covered)) { TagSheet(state: state, actions: actions) }
