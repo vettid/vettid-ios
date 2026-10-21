@@ -73,6 +73,41 @@ import VettIDDataTesting
         #expect(service.profilePhoto.count == 65_536)
     }
 
+    /// The display name is text without control characters (vettid-vault `itemspec.ValidText`): refused, nothing changes.
+    @Test func aDisplayNameWithAControlCharacterIsRefused() async throws {
+        defer { phone.close() }
+        try await setUp()
+        #expect(await eventually { m.profiles.profile != nil })
+        let f = await failure { try await m.profiles.setDisplayName("Ada\u{7}") }
+        #expect(f?.code == "bad_request", "\(String(describing: f))")
+        #expect(service.profileName.isEmpty && m.profiles.profile?.displayName == "")
+    }
+
+    /// `checkProfile` (§10.8): a change that would bring the `profile.update` body, with maximum-length names, over 196,608
+    /// bytes is refused with `limit` `profile_size`, its bound and size named; nothing changes.
+    @Test func aPhotoThatMakesTheSharedProfileTooLargeIsRefused() async throws {
+        defer { phone.close() }
+        try await setUp()
+        #expect(await eventually { m.profiles.profile != nil })
+        service.profileItems(bytes: 120_000)
+        let f = await failure { try await m.profiles.setPhoto(Base64s.encodeStd(Self.jpeg(60_000))) }
+        #expect(f?.kind == .limit && f?.limit?.name == "profile_size" && f?.limit?.max == 196_608, "\(String(describing: f))")
+        #expect((f?.limit?.size ?? 0) > 196_608)
+        #expect(service.profilePhoto.isEmpty && m.profiles.profile?.photo == nil)
+        // A smaller photo fits.
+        try await m.profiles.setPhoto(Base64s.encodeStd(Self.jpeg(10_000)))
+        #expect(service.profilePhoto.count == 10_000)
+    }
+
+    func failure(_ body: () async throws -> Void) async -> VaultFailure? {
+        do {
+            try await body()
+            return nil
+        } catch {
+            return error as? VaultFailure
+        }
+    }
+
     /// A change made on another of the member's devices arrives with `profile.changed`.
     @Test func aChangeElsewhereIsReadAgain() async throws {
         defer { phone.close() }

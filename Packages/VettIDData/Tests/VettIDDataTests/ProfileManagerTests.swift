@@ -258,3 +258,13 @@ enum FakeDates {
 }
 
 // swiftlint:enable line_length
+
+/// The vault's `profile.get` answer is printed and reflected without its names or photo.
+@Suite struct ProfileModelPrintingTests {
+    @Test func theProfileIsNotPrintedWithItsContent() {
+        let p = Profile(version: 1, name: "Countess", photo: "/9j/secret", firstName: "Ada", lastName: "Lovelace", ik: "AAAA")
+        for text in [String(describing: p), String(reflecting: p), "\(Mirror(reflecting: p).children.map(\.value))"] {
+            #expect(!text.contains("/9j") && !text.contains("Ada") && !text.contains("Countess"), "\(text)")
+        }
+    }
+}

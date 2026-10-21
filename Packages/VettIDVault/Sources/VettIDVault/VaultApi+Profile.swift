@@ -3,9 +3,9 @@ import VettIDCrypto
 
 /// `profile.get` (VAULT-MESSAGING §10.8): the profile object (the display [name], absent as "", and the [photo], the
 /// standard base64 of a JPEG or PNG) and the shared profile's read-only core: the account's [firstName] and [lastName]
-/// from the vault's snapshot and the vault's [ik]. The core is nil from a vault before 0.18.0. Never printed with its
-/// photo. Mirrors vettid-android `Profile`.
-public struct Profile: Equatable, Sendable, CustomStringConvertible {
+/// from the vault's snapshot and the vault's [ik]. The core is nil from a vault before 0.18.0. Never printed or reflected
+/// with its names or photo. Mirrors vettid-android `Profile`.
+public struct Profile: Equatable, Sendable, CustomStringConvertible, CustomReflectable {
     public var version: UInt64
     public var name: String
     public var photo: String?
@@ -26,6 +26,7 @@ public struct Profile: Equatable, Sendable, CustomStringConvertible {
     }
 
     public var description: String { "Profile(version: \(version), photo: \(photo == nil ? "none" : "set"))" }
+    public var customMirror: Mirror { Mirror(self, children: [:]) }
 }
 
 // The member's own shared profile (VAULT-MESSAGING §10.8): the profile object and the read-only core.
