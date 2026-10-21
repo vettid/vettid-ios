@@ -51,6 +51,17 @@ public final class FakeSharing: SharingRepository {
         return registry
     }
 
+    /// Whether the vault is held or due: no quiet read then.
+    public var gated = false
+
+    @discardableResult
+    public func refreshTagsQuietly() async throws -> TagRegistry? {
+        try call("refreshTagsQuietly")
+        guard !gated else { return nil }
+        publish()
+        return registry
+    }
+
     public func setTag(_ tag: String, description: String?, color: String?) async throws {
         try call("setTag:\(tag)")
         let icon = registry.tags.first { $0.tag == tag }?.icon

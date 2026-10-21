@@ -21,6 +21,11 @@ public protocol SharingRepository: AnyObject, Observable, Sendable {
     @discardableResult
     func refreshTags() async throws -> TagRegistry
 
+    /// The same as a read nobody asked for (the colour keeper's): only over the session open now, and not while the vault
+    /// is held or due (nil then).
+    @discardableResult
+    func refreshTagsQuietly() async throws -> TagRegistry?
+
     /// Creates or replaces a registry entry (`tag.set`); [description] at most 256 bytes. `tag.set` clears what it is not
     /// sent, so the entry's stored icon goes with it unchanged.
     func setTag(_ tag: String, description: String?, color: String?) async throws
