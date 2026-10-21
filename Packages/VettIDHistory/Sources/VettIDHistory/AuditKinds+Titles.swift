@@ -59,6 +59,8 @@ extension AuditKinds {
         "credential.reset": "history_kind_credential_reset",
         // IOS-PLAN 0.1.18 (VAULT-MESSAGING 0.52.0 §3.5.4): History only, no feed item.
         "credential.utk_resync": "history_kind_credential_utk_resync",
+        // IOS-PLAN 0.1.22 (VAULT-MESSAGING 0.54.0 §3.5.9): History only, no feed item.
+        "credential.holder_cleared": "history_kind_credential_holder_cleared",
         "audit.exported": "history_kind_audit_exported",
         "recovery.requested": "history_kind_recovery_requested",
         "recovery.replaced": "history_kind_recovery_replaced",

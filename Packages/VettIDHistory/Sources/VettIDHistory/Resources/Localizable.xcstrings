@@ -1918,6 +1918,17 @@
         }
       }
     },
+    "history_kind_credential_holder_cleared": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credential holder cleared"
+          }
+        }
+      }
+    },
     "history_kind_audit_exported": {
       "extractionState": "manual",
       "localizations": {
@@ -3784,6 +3795,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "The secret went to your VettID connector for one command on your computer. The agent was not given it."
+          }
+        }
+      }
+    },
+    "history_detail_credential_holder_cleared": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault found its credential holder missing and cleared it. If you didn't remove a phone, contact VettID."
           }
         }
       }

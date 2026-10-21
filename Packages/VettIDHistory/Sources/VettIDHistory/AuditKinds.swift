@@ -182,6 +182,7 @@ public enum AuditKinds {
         case "leash.item.run": return [.line("history_detail_leash_item_run")]
         case "leash.item.proxy": return [.line("history_detail_leash_item_proxy")]
         case "credential.utk_resync": return [.line("history_detail_credential_utk_resync")]
+        case "credential.holder_cleared": return [.line("history_detail_credential_holder_cleared")]
         default: return []
         }
     }

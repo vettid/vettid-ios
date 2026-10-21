@@ -46,6 +46,8 @@ import VettIDVault
         "identity.rotation_failed", "connection.request.approved", "connection.request.declined",
         // IOS-PLAN 0.1.18.
         "credential.utk_resync",
+        // IOS-PLAN 0.1.22.
+        "credential.holder_cleared",
     ]
 
     static func knownKey(_ kind: String) -> String? {
@@ -57,6 +59,12 @@ import VettIDVault
     @Test func aUtkResyncIsUnderSecurity() {
         #expect(AuditCategory.of("credential.utk_resync") == .security)
         #expect(Self.knownKey("credential.utk_resync") == "history_kind_credential_utk_resync")
+    }
+
+    /// IOS-PLAN 0.1.22: the cleared credential holder is a Security entry with its own title.
+    @Test func aHolderClearedIsUnderSecurity() {
+        #expect(AuditCategory.of("credential.holder_cleared") == .security)
+        #expect(Self.knownKey("credential.holder_cleared") == "history_kind_credential_holder_cleared")
     }
 
     @Test func everySpecKindHasATitleAndAGroup() {
@@ -156,14 +164,14 @@ import VettIDVault
     }
 
     /// Every key of the package's table resolves, in the built bundle, to its own non-empty text: vettid-android's
-    /// `strings.xml` (113) and `strings_kinds.xml` (230). Every key the code names is in it.
+    /// `strings.xml` (113) and `strings_kinds.xml` (232). Every key the code names is in it.
     @Test func everyStringResolves() throws {
         let url = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("Sources/VettIDHistory/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 343)
+        #expect(keys.count == 345)
         let missing = "\u{0}missing"
         for key in keys {
             let text = HistoryKindTexts.bundle.localizedString(forKey: key, value: missing, table: nil)
@@ -171,7 +179,7 @@ import VettIDVault
             #expect(key.hasPrefix("history_"), "\(key)")
         }
         // The kinds' table in the code is the same as the bundle's.
-        #expect(Set(HistoryKindTexts.english.keys).isSubset(of: Set(keys)) && HistoryKindTexts.english.count == 230)
+        #expect(Set(HistoryKindTexts.english.keys).isSubset(of: Set(keys)) && HistoryKindTexts.english.count == 232)
         let named = AuditKinds.named.values.flatMap { t -> [String] in if case .named(let a, let b, _) = t { [a, b] } else { [] } }
         for key in Array(AuditKinds.titles.values) + named {
             #expect(HistoryKindTexts.english[key] != nil, "\(key)")
