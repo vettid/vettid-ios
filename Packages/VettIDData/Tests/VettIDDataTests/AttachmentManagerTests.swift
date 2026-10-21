@@ -28,6 +28,8 @@ final class FakeAttachmentOps: AttachmentOps {
     var gate: TestDeferred<Void>?
     /// Runs when an upload arrives (a clear while it is on its way).
     var uploadHook: (@MainActor () -> Void)?
+    /// When set, the upload waits for it before answering.
+    var uploadGate: TestDeferred<Void>?
 
     func attachmentsSupported() async throws -> Bool? { supported }
 
@@ -39,6 +41,7 @@ final class FakeAttachmentOps: AttachmentOps {
         }
         uploads.append(blob)
         uploadHook?()
+        if let uploadGate { try await uploadGate.value() }
         return "blob\(uploads.count)"
     }
 
@@ -280,6 +283,20 @@ final class FakeAttachmentOps: AttachmentOps {
         _ = try await sending.value
         #expect(m.photos.count == 0 && m.thumbs.count == 0)
         #expect(sent.messages.isEmpty && m.cachedThumbnail("c1", messageID: "M1") == nil)
+    }
+
+    /// Leaving the conversation while its photo uploads (abandon, then the upload's answer): the vault, still open, is
+    /// asked to discard the upload at once, and nothing is sent with it.
+    @Test func anUploadAbandonedOnItsWayIsDiscarded() async {
+        let gate = TestDeferred<Void>()
+        ops.uploadGate = gate
+        let p = m.begin("c1", caption: "", photo: photo())
+        let sending = Task { try await m.send(p) }
+        #expect(await eventually { ops.calls == ["upload"] })
+        await m.cancel(p) // the screen went: nothing uploaded yet to discard
+        gate.complete()
+        #expect(await failure { try await sending.value }?.code == AttachmentManager.codeUnavailable)
+        #expect(ops.calls == ["upload", "discard:blob1"] && p.isWiped)
     }
 
     /// At most two content fetches of this device at once (`attachment_fetches`): a third waits for one to end.

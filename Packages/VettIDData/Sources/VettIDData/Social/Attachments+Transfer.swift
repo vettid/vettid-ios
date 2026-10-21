@@ -14,11 +14,15 @@ extension AttachmentManager {
         try live(p, since: mark)
         if p.blobID == nil { try await upload(p, since: mark) }
         try live(p, since: mark)
-        guard let blobID = p.blobID, let sealed = p.sealed else { throw VaultFailure(.other, code: Self.codeNoUpload) }
+        guard let blobID = p.blobID, p.sealed != nil else { throw VaultFailure(.other, code: Self.codeNoUpload) }
+        // The reference is read field by field and its key copied straight into the send view, never into a local: a
+        // local would share the key's storage, and a wipe would then zero a fresh copy and leave it.
         var att = AttachmentSend(
-            blobID: blobID, key: sealed.key.withUnsafeBufferPointer { Array($0) }, sha256: sealed.sha256, size: sealed.size,
-            mime: ImageType.jpeg.mime, width: p.photo.width, height: p.photo.height, thumb: p.photo.thumb.copy()
+            blobID: blobID, key: p.sealed?.key.withUnsafeBufferPointer { Array($0) } ?? [], sha256: p.sealed?.sha256 ?? [],
+            size: p.sealed?.size ?? 0, mime: ImageType.jpeg.mime, width: p.photo.width, height: p.photo.height,
+            thumb: p.photo.thumb.copy()
         )
+        let size = att.size
         defer { att.wipe() }
         let answer: SentAttachment
         do {
@@ -34,7 +38,7 @@ extension AttachmentManager {
             connectionID: p.connectionID, messageID: answer.messageID, outgoing: true, text: p.caption,
             sentAt: ConnectionParser.instant(answer.sentAt) ?? now(),
             attachment: AttachmentInfo(
-                attID: answer.attID, state: .preparing, size: Int64(sealed.size), width: p.photo.width, height: p.photo.height
+                attID: answer.attID, state: .preparing, size: Int64(size), width: p.photo.width, height: p.photo.height
             )
         )
         p.sent = true
@@ -63,11 +67,20 @@ extension AttachmentManager {
                 throw VaultFailure(.limit, code: Self.codeQuota, cause: r)
             }
         }
-        // Cleared while uploading: the upload is left to expire (the vault is not open to discard it).
-        try live(p, since: mark)
+        do {
+            try live(p, since: mark)
+        } catch {
+            // Let go while uploading (the conversation left, Cancel) with the vault still open: the vault deletes the
+            // upload at once rather than keep it in its mailbox's shared storage for the blob TTL (ANDROID-PLAN
+            // "Sending"). Cleared (a lock, the hold): the vault is not open to ask, and the upload expires.
+            if mark == cleared { try? await guarded { try await ops().messageAttachmentDiscard(id) } }
+            throw error
+        }
         p.blobID = id
-        let key = sealed.key.withUnsafeBufferPointer { Array($0) } // storage of its own: the sealed copy is zeroed
-        p.sealed = PendingPhoto.SealedRef(key: key, sha256: sealed.sha256, size: sealed.size)
+        // The key in storage of its own (the sealed copy is zeroed on return), straight into the reference: no local shares it.
+        p.sealed = PendingPhoto.SealedRef(
+            key: sealed.key.withUnsafeBufferPointer { Array($0) }, sha256: sealed.sha256, size: sealed.size
+        )
     }
 
     /// Throws `unavailable` when a clear came since [mark], or [p] was wiped or let go.
