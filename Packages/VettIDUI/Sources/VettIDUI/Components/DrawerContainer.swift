@@ -80,6 +80,39 @@ public extension View {
     func systemBackGesture() -> some View {
         background(BackGestureEnabler().frame(width: 0, height: 0).accessibilityHidden(true))
     }
+
+    /// Turns the system back gesture off while [blocked] (a pushed screen with unsaved changes, whose back arrow asks
+    /// first), and on again when it is not or the screen goes.
+    func blocksBackGesture(_ blocked: Bool) -> some View {
+        background(BackGestureBlocker(blocked: blocked).frame(width: 0, height: 0).accessibilityHidden(true))
+    }
+}
+
+/// ``View/blocksBackGesture(_:)``.
+private struct BackGestureBlocker: UIViewControllerRepresentable {
+    let blocked: Bool
+
+    func makeUIViewController(context: Context) -> Probe { Probe() }
+    func updateUIViewController(_ controller: Probe, context: Context) { controller.apply(blocked) }
+
+    final class Probe: UIViewController {
+        private var blocked = false
+
+        func apply(_ b: Bool) {
+            blocked = b
+            navigationController?.interactivePopGestureRecognizer?.isEnabled = !b
+        }
+
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            apply(blocked)
+        }
+
+        override func viewWillDisappear(_ animated: Bool) {
+            super.viewWillDisappear(animated)
+            navigationController?.interactivePopGestureRecognizer?.isEnabled = true
+        }
+    }
 }
 
 /// Finds the navigation controller of the stack it is placed in and lets its pop gesture begin whenever a screen is

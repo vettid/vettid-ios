@@ -85,6 +85,17 @@ public enum VettIDSymbol: String, CaseIterable, Sendable {
     case privacyTip = "hand.raised" // PrivacyTip
     case keyboard = "keyboard" // Keyboard
 
+    // The Vault (the categories' icons of vettid-vault `docs/item-templates.json`, the sensitivities)
+    case accountBalance = "banknote" // AccountBalance (a bank account)
+    case medicalServices = "cross.case" // MedicalServices
+    case healthAndSafety = "heart.text.square" // HealthAndSafety (insurance)
+    case directionsCar = "car" // DirectionsCar (a vehicle)
+    case document = "doc.text" // Description (a note; a standard item)
+    case accountBalanceWallet = "wallet.pass" // AccountBalanceWallet (a crypto wallet)
+    case folder = "folder" // Folder (other)
+    case dragUp = "arrow.up" // ArrowUpward (a field moved up)
+    case dragDown = "arrow.down" // ArrowDownward (a field moved down)
+
     // The Notifications screen (feed kinds' icons and the rows' actions)
     case archive = "tray.and.arrow.down" // Archive
     case unarchive = "tray.and.arrow.up" // Unarchive
