@@ -1,0 +1,158 @@
+import Foundation
+import Testing
+import VettIDData
+import VettIDDataTesting
+@testable import VettIDSettings
+
+/// The shared profile (VAULT-MESSAGING §10.8, ANDROID-PLAN 0.1.10): the display name edited and saved within its limit,
+/// the taken photo sent with `profile.set` (kept as a preview when refused), removed with `""`. Mirrors vettid-android
+/// `ProfileViewModelsTest`'s shared-profile part.
+@MainActor
+@Suite struct SharedProfileViewModelTests {
+    let repo: FakeVaultRepository
+
+    init() {
+        repo = FakeVaultRepository(.unlocked)
+        repo.account = AccountInfo(emailHint: "a***@example.com", state: "member", firstName: "Ada", lastName: "Lovelace")
+        repo.profile = OwnProfile(
+            version: 2, displayName: "", firstName: "Ada", lastName: "Lovelace", fingerprint: "9a1f bb7d 873e eafb 494b ef94 f072 7b25"
+        )
+    }
+
+    func model() -> SharedProfileViewModel { SharedProfileViewModel(profiles: repo, accounts: repo) }
+
+    @Test func theProfileAndTheAccountAreReadAgainWhenTheScreenOpens() async {
+        let m = model()
+        await m.settle()
+        #expect(repo.calls.contains("refreshProfile") && repo.calls.contains("refreshAccount"))
+        #expect(m.state.fullName == "Ada Lovelace" && m.state.profile?.fingerprint != nil)
+    }
+
+    @Test func aTakenPhotoIsSentWithProfileSet() async {
+        let m = model()
+        await m.settle()
+        #expect(m.state.shownPhoto == nil)
+        m.photoEncoding()
+        #expect(m.state.photoBusy)
+        m.photoTaken("/9j/4AAQ")
+        await m.settle()
+        #expect(repo.lastPhoto == "/9j/4AAQ" && repo.profile?.photo == "/9j/4AAQ")
+        #expect(m.state.photoSaved && m.state.pendingPhoto == nil && m.state.shownPhoto == "/9j/4AAQ")
+    }
+
+    @Test func aRefusedPhotoStaysAsAPreviewToSaveAgain() async {
+        let m = model()
+        await m.settle()
+        repo.fail["setPhoto"] = VaultFailure(.network)
+        m.photoTaken("/9j/4AAQ")
+        await m.settle()
+        #expect(repo.lastPhoto == nil)
+        #expect(m.state.pendingPhoto == "/9j/4AAQ" && m.state.shownPhoto == "/9j/4AAQ" && m.state.error == .network)
+        m.savePhoto()
+        await m.settle()
+        #expect(repo.lastPhoto == "/9j/4AAQ" && m.state.pendingPhoto == nil)
+    }
+
+    @Test func aPhotoThatCouldNotBeEncodedIsSaidAndNothingSent() async {
+        let m = model()
+        await m.settle()
+        m.photoEncoding()
+        m.photoTaken(nil)
+        #expect(m.state.photoUnreadable && !m.state.photoBusy)
+        m.savePhoto()
+        await m.settle()
+        #expect(repo.lastPhoto == nil && !repo.calls.contains("setPhoto"))
+    }
+
+    @Test func aPreviewCanBeDiscarded() async {
+        let m = model()
+        await m.settle()
+        repo.fail["setPhoto"] = VaultFailure(.network)
+        m.photoTaken("/9j/4AAQ")
+        await m.settle()
+        m.discardPhoto()
+        #expect(m.state.pendingPhoto == nil && m.state.shownPhoto == nil)
+    }
+
+    @Test func removingThePhotoSendsEmpty() async {
+        repo.profile?.photo = "/9j/old"
+        let m = model()
+        await m.settle()
+        #expect(m.state.shownPhoto == "/9j/old")
+        m.removePhoto()
+        await m.settle()
+        #expect(repo.lastPhoto == "" && repo.profile?.photo == nil)
+    }
+
+    @Test func theDisplayNameIsEditedAndSaved() async {
+        let m = model()
+        await m.settle()
+        #expect(m.state.fullName == "Ada Lovelace")
+        #expect(!m.state.saveAllowed, "nothing changed yet")
+        m.setDisplayName("  Countess ")
+        #expect(m.state.saveAllowed)
+        m.save()
+        await m.settle()
+        #expect(repo.profile?.displayName == "Countess")
+        #expect(m.state.saved && !m.state.edited && m.state.displayName == "Countess")
+    }
+
+    @Test func theDisplayNameFollowsTheVaultUntilTheMemberTypes() async {
+        let m = model()
+        await m.settle()
+        repo.profile?.displayName = "Ada"
+        #expect(m.state.displayName == "Ada")
+        m.setDisplayName("Countess")
+        repo.profile?.displayName = "Other"
+        #expect(m.state.displayName == "Countess")
+    }
+
+    @Test func aDisplayNameOverTheLimitIsNotSent() async {
+        let m = model()
+        await m.settle()
+        m.setDisplayName(String(repeating: "é", count: 65)) // 130 bytes
+        #expect(m.state.tooLong && !m.state.saveAllowed)
+        m.save()
+        await m.settle()
+        #expect(!repo.calls.contains("setDisplayName"))
+        m.setDisplayName(String(repeating: "é", count: 64)) // 128 bytes
+        #expect(!m.state.tooLong && m.state.saveAllowed)
+    }
+
+    @Test func aRefusedSaveShowsWhy() async {
+        repo.fail["setDisplayName"] = VaultFailure(.conflict, code: "conflict")
+        let m = model()
+        await m.settle()
+        m.setDisplayName("Countess")
+        m.save()
+        await m.settle()
+        #expect(m.state.error == .conflict && !m.state.busy)
+        m.dismiss()
+        #expect(m.state.error == nil)
+    }
+
+    @Test func aLimitIsKeptWithTheError() async {
+        repo.fail["setPhoto"] = VaultFailure(.limit, code: "limit", limit: VaultLimit("profile_size", max: 196_608, size: 200_000))
+        let m = model()
+        await m.settle()
+        m.photoTaken("/9j/4AAQ")
+        await m.settle()
+        #expect(m.state.error == .limit && m.state.limit?.name == "profile_size")
+    }
+
+    @Test func aFailedReadShowsWhy() async {
+        repo.fail["refreshProfile"] = VaultFailure(.network)
+        let m = model()
+        await m.settle()
+        #expect(m.state.error == .network)
+    }
+
+    /// The state names no photo when printed.
+    @Test func theStateIsNotPrintedWithItsPhotos() {
+        let own = OwnProfile(version: 1, displayName: "", firstName: nil, lastName: nil, fingerprint: nil, photo: "/9j/secret")
+        var s = SharedProfileState(profile: own)
+        s.pendingPhoto = "/9j/other"
+        #expect(!String(describing: s).contains("/9j") && !String(reflecting: s).contains("/9j"))
+        #expect(!String(describing: s.profile!).contains("/9j"))
+    }
+}
