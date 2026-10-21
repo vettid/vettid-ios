@@ -66,6 +66,20 @@ import VettIDCrypto
         expectAttestation(.pcr) { _ = try ev.verifyEnclave(descriptor: desc, attestation: try attest(other, desc), manifest: m7, enroll: true, now: t0) }
     }
 
+    @Test func aDescriptorLivesAtMost24HoursAndFiveMinutesAfterTheAttestation() throws {
+        // A vault that wrote not_after a little more than 24 h after its attestation (seen on staging), the limit itself,
+        // and one second past it.
+        let day: TimeInterval = 24 * 3600
+        for life in [day + 2, day + 300] {
+            let desc = descriptor("i-test-1", hexRep("cd"), life: life)
+            let e = try ev.verifyEnclave(descriptor: desc, attestation: try attest(nsm, desc), manifest: m7, enroll: true, now: t0)
+            #expect(e.release.number == 4)
+        }
+        let past = descriptor("i-test-1", hexRep("cd"), life: day + 301)
+        let pastAtt = try attest(nsm, past)
+        expectAttestation(.stale) { _ = try ev.verifyEnclave(descriptor: past, attestation: pastAtt, manifest: m7, enroll: true, now: t0) }
+    }
+
     @Test func deprecatedIsForUnlockOnlyAndAnUnlistedReleaseIsUnknown() throws {
         var n3 = nsm
         n3.pcr0 = hexRep("ab")
