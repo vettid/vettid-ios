@@ -21,6 +21,7 @@ import VettIDVault
             ("identity.rotated", nil, "Your vault's keys were renewed"),
             ("credential.rotated", nil, "Your credential was renewed"),
             ("credential.utk_resync", nil, "One-time keys renewed"),
+            ("credential.holder_cleared", nil, "Credential holder cleared"),
             ("owner_check.passed", nil, "Daily check passed"),
             ("owner_check.held", nil, "Vault held for the daily check"),
             ("owner_check.failed", "pin", "Daily check failed"),
@@ -131,6 +132,9 @@ import VettIDVault
         #expect(lines("leash.item.run", "01ITEM") == ["The secret went to your VettID connector for one command on your computer. The agent was not given it."])
         #expect(lines("leash.item.proxy", "01ITEM") == ["The secret went to your VettID connector, which added it to the agent's requests to a site you allowed. The agent was not given it."])
         #expect(lines("credential.utk_resync", nil) == ["This phone's one-time keys were replaced with a fresh set."])
+        #expect(lines("credential.holder_cleared", nil) == [
+            "Your vault found its credential holder missing and cleared it. If you didn't remove a phone, contact VettID.",
+        ])
         #expect(lines("vault.unlocked", nil).isEmpty)
     }
 

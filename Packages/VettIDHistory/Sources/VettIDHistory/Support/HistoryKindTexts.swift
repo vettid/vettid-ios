@@ -81,6 +81,7 @@ public enum HistoryKindTexts {
         "history_kind_credential_alarm_resolved": "Credential alarm resolved",
         "history_kind_credential_reset": "Credential reset",
         "history_kind_credential_utk_resync": "One-time keys renewed",
+        "history_kind_credential_holder_cleared": "Credential holder cleared",
         "history_kind_audit_exported": "History exported",
         "history_kind_recovery_requested": "Recovery requested",
         "history_kind_recovery_replaced": "Recovery request replaced",
@@ -253,6 +254,7 @@ public enum HistoryKindTexts {
         "history_detail_leash_item_run": "The secret went to your VettID connector for one command on your computer. The agent was not given it.",
         "history_detail_leash_item_proxy": "The secret went to your VettID connector, which added it to the agent's requests to a site you allowed. The agent was not given it.",
         "history_detail_credential_utk_resync": "This phone's one-time keys were replaced with a fresh set.",
+        "history_detail_credential_holder_cleared": "Your vault found its credential holder missing and cleared it. If you didn't remove a phone, contact VettID.",
     ]
 }
 
