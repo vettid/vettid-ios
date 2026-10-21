@@ -1,5 +1,6 @@
 #if os(iOS)
 import SwiftUI
+import UIKit
 import VettIDData
 import VettIDKeys
 import VettIDSettings
@@ -28,17 +29,19 @@ public struct SettingsActions {
     public var acknowledgeInvalidated: @MainActor () -> Void = {}
     public var dismissAppLockUnavailable: @MainActor () -> Void = {}
     public var accountSite: @MainActor () -> Void = {}
+    /// Settings → Privacy → Shared profile.
+    public var sharedProfile: @MainActor () -> Void = {}
     public var dismissError: @MainActor () -> Void = {}
 
     public init() {}
 }
 
-/// Settings (ANDROID-PLAN §4 "Screens", Settings): the account card, then Vault, Security, App and Account, in
+/// Settings (ANDROID-PLAN §4 "Screens", Settings): the account card, then Vault, Security, Privacy, App and Account, in
 /// vettid-android's order; grouped cards (Proton); the vault's lock and Allow screenshots confirm first. A row is shown
 /// only once its feature works; "Update available" while the vault has a release update to approve (RELEASE-UPDATES §2);
 /// the rest come with the rows of IOS-PLAN §8 that bring them: Notifications (phase P, IOS-PLAN §6.7), Move to a new
-/// phone and Recovery (I3, VAULT-MESSAGING §6.7.1, §11.11), the Privacy section (shared profile, sharing rules: I2 and I3,
-/// VAULT-MESSAGING §10.8), and Allow screenshots (IOS-PLAN §4), which waits for the first screen that holds the secure
+/// phone and Recovery (I3, VAULT-MESSAGING §6.7.1, §11.11), Privacy's "Sharing rules" (I3, VAULT-MESSAGING §10.12), and
+/// Allow screenshots (IOS-PLAN §4), which waits for the first screen that holds the secure
 /// layer (`SecureContainer`: received photos, I2; the typed recovery code and the recovery open, I3): until then it would
 /// turn off nothing (``screenshotsRowShown``). Mirrors vettid-android `SettingsContent`.
 public struct SettingsContent: View {
@@ -52,6 +55,8 @@ public struct SettingsContent: View {
     let actions: SettingsActions
     let ownerCheckActions: OwnerCheckSettingsActions
     let now: Date
+    /// The member's own profile photo (VAULT-MESSAGING §10.8) on the account card, decoded by the caller.
+    let accountPhoto: UIImage?
     @State private var confirmLock = false
     @State private var confirmScreenshots: Bool
     @State private var picker: SettingsPicker?
@@ -63,8 +68,10 @@ public struct SettingsContent: View {
         actions: SettingsActions = SettingsActions(),
         ownerCheckActions: OwnerCheckSettingsActions = OwnerCheckSettingsActions(),
         now: Date = Date(),
-        askScreenshots: Bool = false
+        askScreenshots: Bool = false,
+        accountPhoto: UIImage? = nil
     ) {
+        self.accountPhoto = accountPhoto
         self.state = state
         self.ownerCheck = ownerCheck
         self.actions = actions
@@ -78,7 +85,7 @@ public struct SettingsContent: View {
             ScrollView {
                 VStack(spacing: 0) {
                     LargeTitle(SettingsStrings.title)
-                    SettingsGroup { AccountCard(account: state.account, action: actions.account) }
+                    SettingsGroup { AccountCard(account: state.account, photo: accountPhoto, action: actions.account) }
                         .accessibilityIdentifier("account_card")
                     notices
                     vaultSection
@@ -102,6 +109,14 @@ public struct SettingsContent: View {
                             .accessibilityIdentifier("attestation")
                         OwnerCheckSettingsRows(state: ownerCheck, actions: ownerCheckActions, now: now)
                         AppLockRows(state: state, actions: actions, picker: $picker)
+                    }
+                    SettingsSectionHeader(ProfileStrings.sectionPrivacy)
+                    SettingsGroup {
+                        SettingsRow(
+                            ProfileStrings.privacyProfile, icon: sharedProfileSymbol,
+                            supporting: state.account?.fullName ?? ProfileStrings.privacyProfileBody, action: actions.sharedProfile
+                        )
+                        .accessibilityIdentifier("shared_profile_row")
                     }
                     appSection
                     SettingsSectionHeader(SettingsStrings.sectionAccount)
@@ -223,10 +238,13 @@ public struct SettingsContent: View {
 /// `AccountCard`.
 struct AccountCard: View {
     let account: AccountInfo?
+    var photo: UIImage?
     let action: @MainActor () -> Void
 
     var body: some View {
-        SettingsAccountRow(name: account?.fullName ?? account?.displayEmail ?? "", detail: Self.detail(account), action: action)
+        SettingsAccountRow(
+            name: account?.fullName ?? account?.displayEmail ?? "", detail: Self.detail(account), photo: photo, action: action
+        )
     }
 
     static func detail(_ a: AccountInfo?) -> String {

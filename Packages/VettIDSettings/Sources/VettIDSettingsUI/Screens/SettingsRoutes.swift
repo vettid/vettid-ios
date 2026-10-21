@@ -1,5 +1,6 @@
 #if os(iOS)
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 import VettIDData
 import VettIDSettings
@@ -22,6 +23,8 @@ public struct SettingsHost {
     public var onNewPhoneSecret: @MainActor () -> Void = {}
     /// Settings → Account → Delete vault.
     public var onDeleteVault: @MainActor () -> Void = {}
+    /// Settings → Privacy → Shared profile.
+    public var onSharedProfile: @MainActor () -> Void = {}
     /// Opens the owner check (VAULT-MESSAGING §3.6.5): [holdOff] true turns the hold off with it (VAULT-MESSAGING §3.6.7).
     public var onOwnerCheck: @MainActor (_ holdOff: Bool) -> Void = { _ in }
 
@@ -38,6 +41,8 @@ public struct SettingsRoute: View {
     private let updates: (any ReleaseUpdateRepository)?
     private let promptReason: String
     private let host: SettingsHost
+    /// The member's own profile photo on the account card (decoded by the shell, which shows it in the top bar too).
+    private let accountPhoto: UIImage?
     /// The app's "Allow screenshots" (IOS-PLAN §4), from the environment; absent in a preview or a test.
     @Environment(ScreenshotAllowance.self) private var screenshots: ScreenshotAllowance?
     /// The app's theme choice (Settings → App → Theme), from the environment; absent in a preview or a test.
@@ -54,8 +59,10 @@ public struct SettingsRoute: View {
         appLock: any AppLockSettings,
         updates: (any ReleaseUpdateRepository)? = nil,
         promptReason: String,
-        host: SettingsHost
+        host: SettingsHost,
+        accountPhoto: UIImage? = nil
     ) {
+        self.accountPhoto = accountPhoto
         self.account = account
         self.vault = vault
         self.ownerChecks = ownerChecks
@@ -70,7 +77,7 @@ public struct SettingsRoute: View {
             if let model, let ownerCheck {
                 SettingsContent(
                     state: model.state, ownerCheck: ownerCheck.state, actions: actions(model),
-                    ownerCheckActions: ownerCheckActions(ownerCheck)
+                    ownerCheckActions: ownerCheckActions(ownerCheck), accountPhoto: accountPhoto
                 )
             } else {
                 // Until the view models are made (the first appearance): the same screen from the repositories, no blank frame.
@@ -81,7 +88,7 @@ public struct SettingsRoute: View {
                         screenshotsStayOn: screenshots?.staysOn ?? false, phoneSecret: vault.usesPhoneSecret, update: updates?.offer,
                         theme: theme?.theme ?? .system
                     ),
-                    ownerCheck: OwnerCheckSettingsState(view: ownerChecks.ownerCheck)
+                    ownerCheck: OwnerCheckSettingsState(view: ownerChecks.ownerCheck), accountPhoto: accountPhoto
                 )
             }
         }
@@ -107,6 +114,7 @@ public struct SettingsRoute: View {
         a.credential = host.onCredential
         a.newPhoneSecret = host.onNewPhoneSecret
         a.deleteVault = host.onDeleteVault
+        a.sharedProfile = host.onSharedProfile
         a.setScreenshotsAllowed = { m.setScreenshotsAllowed($0) }
         a.accountSite = host.onOpenAccountSite
         a.lockVault = { m.lockVault() }

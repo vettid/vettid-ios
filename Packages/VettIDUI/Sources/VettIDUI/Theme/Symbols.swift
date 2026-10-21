@@ -38,6 +38,9 @@ public enum VettIDSymbol: String, CaseIterable, Sendable {
     case image = "photo" // Image (a photo, the composer's photo button)
     case photoCamera = "camera" // PhotoCamera
     case cameraSwitch = "arrow.triangle.2.circlepath.camera" // Cameraswitch
+    case zoomIn = "plus.magnifyingglass" // ZoomIn (the profile photo's round frame)
+    case zoomOut = "minus.magnifyingglass" // ZoomOut
+    case face = "face.smiling" // Face (the stand-in for the live camera)
     case delete = "trash" // Delete
     case show = "eye" // Visibility
     case hide = "eye.slash" // VisibilityOff
@@ -61,6 +64,7 @@ public enum VettIDSymbol: String, CaseIterable, Sendable {
     case restartAlt = "arrow.counterclockwise.circle" // RestartAlt (a new credential)
     case devices = "laptopcomputer.and.iphone" // Devices
     case person = "person" // Person
+    case badge = "person.text.rectangle" // Badge (the shared profile: an ID card)
     case email = "envelope" // Email
     case groups = "person.3" // Groups
     case cardMembership = "creditcard" // CardMembership

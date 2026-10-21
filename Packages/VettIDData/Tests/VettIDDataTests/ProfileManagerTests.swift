@@ -1,20 +1,51 @@
 import Foundation
 import Testing
+import VettIDCrypto
 @testable import VettIDData
 @testable import VettIDVault
 
 // Fixtures stay on one line each.
 // swiftlint:disable line_length
 
-/// The name change (VAULT-MESSAGING §10.8) over its vault call: the names normalised and checked before anything is
-/// sent, the request kept with the account, and every refusal as the screen shows it. Mirrors vettid-android
-/// `ProfileManagerTest`'s name-change part and `AccountUpdateTest`.
+/// The member's own profile and the name change (VAULT-MESSAGING §10.8) over their vault calls: the core read-only and
+/// the fingerprint; the display name and the photo set against the version read; the names normalised and checked before
+/// anything is sent, the request kept with the account, and every refusal as the screen shows it. Mirrors vettid-android
+/// `ProfileManagerTest` and `AccountUpdateTest`.
 @MainActor
 @Suite struct ProfileManagerTests {
+    nonisolated static let ik = [UInt8](repeating: 0x04, count: 32)
+
     final class Ops: ProfileOps, @unchecked Sendable {
         var nameSets: [[String]] = []
         var error: String?
         var errorBody: String?
+        var profile = Profile(version: 4, name: "", photo: nil, firstName: "Ada", lastName: "Lovelace", ik: Base64s.encodeStd(ProfileManagerTests.ik))
+        var sets: [(UInt64, String)] = []
+        var photoSets: [(UInt64, String)] = []
+        var gets = 0
+        var profileError: String?
+
+        func profileGet() async throws -> Profile {
+            gets += 1
+            if let profileError { throw VaultOpError(type: "profile.get", code: profileError, detail: "", body: nil) }
+            return profile
+        }
+
+        func profileSet(version: UInt64, name: String) async throws -> UInt64 {
+            sets.append((version, name))
+            if let profileError { throw VaultOpError(type: "profile.set", code: profileError, detail: "", body: nil) }
+            profile.version = version + 1
+            profile.name = name
+            return version + 1
+        }
+
+        func profileSetPhoto(version: UInt64, photo: String) async throws -> UInt64 {
+            photoSets.append((version, photo))
+            if let profileError { throw VaultOpError(type: "profile.set", code: profileError, detail: "", body: nil) }
+            profile.version = version + 1
+            profile.photo = photo.isEmpty ? nil : photo
+            return version + 1
+        }
 
         func accountNameSet(pin: String, password: String, firstName: String, lastName: String) async throws -> NameRequest {
             nameSets.append([pin, password, firstName, lastName])
@@ -43,6 +74,76 @@ import Testing
             }
         )
     }
+
+    // MARK: - The shared profile
+
+    @Test func readsTheCoreReadOnlyAndTheFingerprint() async throws {
+        let m = m
+        #expect(m.profile == nil)
+        try await m.refreshProfile()
+        let p = try #require(m.profile)
+        #expect(p.fullName == "Ada Lovelace" && p.displayName == "" && p.photo == nil)
+        #expect(p.fingerprint == (try IkFingerprint.format(Self.ik)))
+    }
+
+    @Test func aVaultWithoutTheCoreGivesNoNames() async throws {
+        ops.profile = Profile(version: 1, name: "Ada")
+        let m = m
+        try await m.refreshProfile()
+        #expect(m.profile?.fullName == nil && m.profile?.fingerprint == nil)
+        // Names that break the receiver's rules are not shown (§10.8: no control characters).
+        ops.profile = Profile(version: 2, firstName: "Ada\u{7}", lastName: "Lovelace", ik: "not base64")
+        try await m.refreshProfile()
+        #expect(m.profile?.firstName == nil && m.profile?.lastName == "Lovelace" && m.profile?.fingerprint == nil)
+    }
+
+    @Test func theDisplayNameIsSetWithTheVersionAndOnlyIt() async throws {
+        let m = m
+        try await m.refreshProfile()
+        try await m.setDisplayName("  Countess ")
+        #expect(ops.sets.map(\.0) == [4] && ops.sets.map(\.1) == ["Countess"])
+        #expect(m.profile?.displayName == "Countess")
+        try await m.setDisplayName("")
+        #expect(ops.sets.last?.0 == 5 && ops.sets.last?.1 == "")
+        #expect(ops.photoSets.isEmpty)
+    }
+
+    @Test func aPhotoIsSetWithTheVersionAndRemovedWithEmpty() async throws {
+        let m = m
+        try await m.refreshProfile()
+        try await m.setPhoto("/9j/AAAA")
+        #expect(ops.photoSets.count == 1 && ops.photoSets[0].0 == 4 && ops.photoSets[0].1 == "/9j/AAAA")
+        #expect(m.profile?.photo == "/9j/AAAA")
+        try await m.setPhoto("")
+        #expect(ops.photoSets.last?.0 == 5 && ops.photoSets.last?.1 == "")
+        #expect(m.profile?.photo == nil)
+    }
+
+    /// Without a profile read, a change is sent against the vault's version now.
+    @Test func aChangeBeforeAnyReadUsesTheVaultsVersion() async throws {
+        let m = m
+        try await m.setPhoto("/9j/AAAA")
+        #expect(ops.photoSets.first?.0 == 4)
+        #expect(m.profile?.photo == "/9j/AAAA", "read again after the change")
+    }
+
+    @Test func aRefusedChangeIsAVaultFailureAndChangesNothing() async throws {
+        let m = m
+        try await m.refreshProfile()
+        ops.profileError = "conflict"
+        await #expect(throws: VaultFailure.self) { try await m.setPhoto("/9j/AAAA") }
+        #expect(m.profile?.photo == nil && m.profile?.version == 4)
+    }
+
+    /// Cleared (the vault locked, or a wipe): nothing read before is kept, and an answer to a read sent before is dropped.
+    @Test func clearForgetsTheProfile() async throws {
+        let m = m
+        try await m.refreshProfile()
+        m.clear()
+        #expect(m.profile == nil)
+    }
+
+    // MARK: - The name change
 
     @Test func aNameChangeSendsTheNormalisedNamesAndKeepsTheRequest() async throws {
         let r = await m.changeName(pin: "246810", password: "pw", firstName: " Ada ", lastName: "King")
@@ -157,3 +258,13 @@ enum FakeDates {
 }
 
 // swiftlint:enable line_length
+
+/// The vault's `profile.get` answer is printed and reflected without its names or photo.
+@Suite struct ProfileModelPrintingTests {
+    @Test func theProfileIsNotPrintedWithItsContent() {
+        let p = Profile(version: 1, name: "Countess", photo: "/9j/secret", firstName: "Ada", lastName: "Lovelace", ik: "AAAA")
+        for text in [String(describing: p), String(reflecting: p), "\(Mirror(reflecting: p).children.map(\.value))"] {
+            #expect(!text.contains("/9j") && !text.contains("Ada") && !text.contains("Countess"), "\(text)")
+        }
+    }
+}

@@ -66,6 +66,7 @@ enum AccountSnapshots {
 // The account as the vault reports it (VAULT-MESSAGING §10.2 `account.get`, §11.13) and the account's names (§10.8).
 extension VaultManager {
     static let syncAccountChanged = "account.changed"
+    static let syncProfileChanged = "profile.changed"
 
     /// Re-reads the account snapshot (`account.get`, §11.13); kept only when newer (`as_of`), the name request whenever it
     /// changed. Quiet on failure: display only, the last snapshot stays. Mirrors vettid-android `refreshAccount`.
@@ -76,6 +77,10 @@ extension VaultManager {
         let local = record.value
         guard let u = AccountSnapshots.update(stored: local.snapshot, storedRequest: local.nameRequest, view: v) else { return }
         if (try? record.refreshed(since: rec, u)) == true { account = record.value.info }
+        // An applied name change brings new names to the shared profile's core too.
+        if u.snapshot?.firstName != local.snapshot?.firstName || u.snapshot?.lastName != local.snapshot?.lastName {
+            profiles.refreshQuietly()
+        }
     }
 
     /// A name request this phone just sent (``ProfileManager``), kept with the account record it was sent for.
@@ -86,8 +91,12 @@ extension VaultManager {
 
     /// `sync.event{kind: "account.changed"}` (§10.1): a newer snapshot or a changed name request (0.19.0: never skipped).
     func syncAccount(_ m: VaultMessage) {
-        guard VaultJSON.string(m.object, "kind") == Self.syncAccountChanged else { return }
-        Task { [weak self] in await self?.refreshAccount() }
+        switch VaultJSON.string(m.object, "kind") {
+        case Self.syncAccountChanged: Task { [weak self] in await self?.refreshAccount() }
+        // §10.8: the profile object changed (on another of the member's devices, or here).
+        case Self.syncProfileChanged: profiles.refreshQuietly()
+        default: break
+        }
     }
 
     /// The vault opened (an unlock, the end of onboarding, a start while open): the account is read again.

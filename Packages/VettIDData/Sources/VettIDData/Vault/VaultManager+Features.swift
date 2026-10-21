@@ -1,17 +1,20 @@
 import Foundation
 import VettIDVault
 
-// The managers of the features over this manager's session: the name change (VAULT-MESSAGING §10.8), the connections
-// (§6.4, §10.4) and the messages (§10.5).
+// The managers of the features over this manager's session: the shared profile and the name change (VAULT-MESSAGING
+// §10.8), the connections (§6.4, §10.4) and the messages (§10.5).
 extension VaultManager {
-    /// The name change over this manager's session: the request kept with the account record it was sent for, the checks
-    /// left read again after a wrong PIN or password.
+    /// The shared profile and the name change over this manager's session: the request kept with the account record it
+    /// was sent for, the checks left read again after a wrong PIN or password. The profile's calls have the connections'
+    /// session rules: nothing goes to a vault whose lock is pending, and a read nobody asked for never opens a session.
     static func profiles(_ ref: ManagerRef, checks: OwnerCheckManager, record rec: AccountRecord) -> ProfileManager {
         ProfileManager(
             ops: {
                 guard let m = ref.manager else { throw VaultFailure(.other, code: "session_dropped") }
                 return VaultProfileOps(api: try m.openApi(try await m.openSession()), gate: Self.pinGate(ref))
             },
+            profileOps: { VaultProfileOps(api: try await memberApi(ref)) },
+            quietOps: { VaultProfileOps(api: try quietApi(ref)) },
             onRequest: { r, since in ref.manager?.keepNameRequest(r, since: since) },
             checksLeft: {
                 try? await checks.refreshOwnerCheck()
@@ -86,21 +89,23 @@ extension VaultManager {
     }
 
     /// The vault is no longer open on this phone: what was read from it is dropped (the connections, the requests, the
-    /// messages and their photos, the feed, the approvals' lists and History).
+    /// messages and their photos, the feed, the approvals' lists, History and the member's own profile).
     func forgetOpenLists() {
+        profiles.clear()
         connections.forgetOpenVault()
         messages.forgetOpenVault()
         attachments.clear()
         forgetActivity()
     }
 
-    /// The vault opened, or an owner check passed (§3.6.3: nothing held back is replayed as events): the connections and
-    /// the requests, the approvals' lists, the feed, then the conversations (one request per connection, last, so that asks
+    /// The vault opened, or an owner check passed (§3.6.3: nothing held back is replayed as events): the member's own
+    /// profile, the connections and the requests, the approvals' lists, the feed, then the conversations (one request per connection, last, so that asks
     /// that expire are not kept waiting behind them) are read again, one after the other; failures are left for the
     /// screens.
     func refreshListsQuietly() {
         Task { [weak self] in
             guard let self else { return }
+            profiles.refreshQuietly()
             try? await connections.refresh(quietly: true)
             try? await connections.refreshRequests(quietly: true)
             try? await approvals.refreshApprovals(quietly: true, requests: false)

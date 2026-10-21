@@ -46,8 +46,10 @@ public enum TopLevelDestination: String, CaseIterable, Sendable {
 public enum ShellRoute: Hashable, Sendable {
     case vaultStatus
     case attestation
-    /// The account's name change (VAULT-MESSAGING §10.8), from the avatar sheet.
+    /// The account's name change (VAULT-MESSAGING §10.8), from the avatar sheet or the shared profile.
     case changeName
+    /// The shared profile and the profile photo (VAULT-MESSAGING §10.8), from Settings → Privacy or the avatar sheet.
+    case sharedProfile
     /// [fromAttempts]: from a notice about recovery attempts.
     case changePin(fromAttempts: Bool)
     case credential

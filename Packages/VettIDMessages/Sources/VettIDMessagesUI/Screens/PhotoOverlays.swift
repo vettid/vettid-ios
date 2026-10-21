@@ -92,11 +92,10 @@ struct PhotoCaptureOverlay: View {
     }
 
     private func take() {
-        handle.take? { bytes in
-            guard let bytes else { return }
-            let held = PhotoBytes(bytes)
+        handle.take? { held in
+            guard let held else { return }
             shot = held
-            Task { review = await PhotoImages.shot(held.copy(), edge: 1_440) }
+            Task { review = await PhotoImages.shot(held, edge: 1_440) }
         }
     }
 
