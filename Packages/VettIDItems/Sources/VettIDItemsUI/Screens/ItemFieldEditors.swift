@@ -30,7 +30,7 @@ struct FieldEditor: View {
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 Text(caption).vettIDFont(.labelMedium).foregroundStyle(error == nil ? colors.onSurfaceVariant : colors.error)
                 if field.kind == FieldKinds.address {
-                    AddressEditor(address: field.address, secret: secret) { actions.onFieldAddress(index, $0) }
+                    AddressEditor(address: field.address, secret: secret, focus: focus) { actions.onFieldAddress(index, $0) }
                 } else {
                     ValueEditor(
                         index: index, field: field, caption: caption, isError: error != nil, focus: focus, secret: secret, actions: actions
@@ -45,6 +45,17 @@ struct FieldEditor: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("item_edit_field_\(index)")
+        // The input took the focus asked for (each input takes it when it appears or when asked): asked once.
+        .onAppear { focusTaken() }
+        .onChange(of: focus) { _, _ in focusTaken() }
+    }
+
+    private func focusTaken() {
+        guard focus else { return }
+        Task { @MainActor in
+            await Task.yield()
+            actions.onFieldFocused()
+        }
     }
 
     /// A label's problem first, then the value's; a value that is not (yet) one of its kind says its rule while typing.
@@ -97,9 +108,11 @@ struct FieldMenu: View {
 }
 
 /// One value's input, with the keyboard of its kind and its format enforced while typing and on paste (§10.7,
-/// ``FieldInput``): characters the kind cannot hold never get in. A password is a ``SecretField``; a one-time code seed,
-/// and every value of a secret or critical item that a text keyboard would take, is typed visibly on a keyboard that does
-/// not learn and offers no AutoFill (``VisibleSecretField``, ``SecretTextEditor``). Mirrors vettid-android `ValueEditor`.
+/// ``FieldInput``): characters the kind cannot hold never get in. A password is a ``SecretField``. A one-time code seed,
+/// and every value of a secret or critical item, is typed visibly on a keyboard that does not learn and offers no AutoFill
+/// (``VisibleSecretField`` with the digit pad of a number, a phone number or a date; ``SecretTextEditor``); a standard
+/// item's other values on the system's keyboards, with no AutoFill either (``PlainField``). Each takes the focus when asked
+/// ([focus]). Mirrors vettid-android `ValueEditor`.
 struct ValueEditor: View {
     @Environment(\.vettIDColors) private var colors
     let index: Int
@@ -132,29 +145,25 @@ struct ValueEditor: View {
     var body: some View {
         input
             .accessibilityIdentifier("item_edit_field_value_\(index)")
-            .onAppear { takeFocus() }
-            .onChange(of: focus) { _, _ in takeFocus() }
-    }
-
-    private func takeFocus() {
-        guard focus else { return }
-        focused = true
-        actions.onFieldFocused()
+            .onAppear { if focus { focused = true } }
+            .onChange(of: focus) { _, now in if now { focused = true } }
     }
 
     @ViewBuilder private var input: some View {
-        let free = kind == FieldKinds.text || kind == FieldKinds.multiline
-        let guarded = kind == FieldKinds.otp || (secret && (free || kind == FieldKinds.email || kind == FieldKinds.url))
+        let guarded = secret || kind == FieldKinds.otp
         if kind == FieldKinds.password {
-            SecretField(caption, text: binding)
+            SecretField(caption, text: binding, focus: focus)
         } else if kind == FieldKinds.date {
-            DateEditor(index: index, field: field, caption: caption, isError: isError) { actions.onFieldText(index, $0) }
+            DateEditor(index: index, field: field, caption: caption, isError: isError, secret: guarded, focus: focus) {
+                actions.onFieldText(index, $0)
+            }
         } else if guarded && kind == FieldKinds.multiline {
-            SecretTextEditor(caption, text: binding, placeholder: placeholder, isError: isError)
+            SecretTextEditor(caption, text: binding, placeholder: placeholder, isError: isError, focus: focus)
         } else if guarded {
             VisibleSecretField(
                 caption, text: binding, placeholder: placeholder ?? caption,
-                capitalization: kind == FieldKinds.otp ? .allCharacters : .none, monospaced: kind == FieldKinds.otp, isError: isError
+                capitalization: kind == FieldKinds.otp ? .allCharacters : .none, monospaced: kind == FieldKinds.otp,
+                keyboard: Self.secretKeyboard(kind), isError: isError, focus: focus
             )
         } else if kind == FieldKinds.multiline {
             TextField(placeholder ?? caption, text: binding, axis: .vertical)
@@ -162,18 +171,19 @@ struct ValueEditor: View {
                 .vettIDFont(.bodyLarge)
                 .padding(Spacing.l)
                 .overlay(RoundedRectangle(cornerRadius: VettIDShape.small).stroke(isError ? colors.error : colors.outline))
+                .textContentType(PlainField.noAutofill)
                 .focused($focused)
                 .accessibilityLabel(caption)
         } else {
+            let free = kind == FieldKinds.text
             PlainField(placeholder: placeholder ?? caption, text: field.text, isError: isError) {
                 actions.onFieldText(index, FieldInput.accept(kind, $0))
             }
-                .keyboardType(Self.keyboard(kind))
-                .textInputAutocapitalization(free ? .sentences : .never)
-                .autocorrectionDisabled(!free)
-                .textContentType(nil)
-                .focused($focused)
-                .accessibilityLabel(caption)
+            .keyboardType(Self.keyboard(kind))
+            .textInputAutocapitalization(free ? .sentences : .never)
+            .autocorrectionDisabled(!free)
+            .focused($focused)
+            .accessibilityLabel(caption)
         }
     }
 
@@ -186,34 +196,57 @@ struct ValueEditor: View {
         default: .default
         }
     }
+
+    /// A secret value's keyboard: the digit pads (no suggestions to begin with), else ASCII-capable.
+    static func secretKeyboard(_ kind: String) -> UIKeyboardType {
+        switch kind {
+        case FieldKinds.number: .decimalPad
+        case FieldKinds.phone: .phonePad
+        case FieldKinds.date: .numberPad
+        default: .asciiCapable
+        }
+    }
 }
 
 /// A `date` (§10.7): digits on a number pad with the dashes put in (`YYYY-MM-DD`, or `YYYY-MM` for a month-and-year
 /// field), a digit no date can continue with refused, and a calendar button (a month picker for month and year). What is
-/// stored is always the spec's format. Mirrors vettid-android `DateEditor`.
+/// stored is always the spec's format. A secret item's date is a ``VisibleSecretField``. Mirrors vettid-android
+/// `DateEditor`.
 struct DateEditor: View {
     @Environment(\.vettIDColors) private var colors
+    @Environment(\.vettIDCovered) private var covered
     let index: Int
     let field: DraftField
     let caption: String
     let isError: Bool
+    let secret: Bool
+    let focus: Bool
     let onValue: @MainActor (String) -> Void
     @State private var picking = false
+    @FocusState private var focused: Bool
 
     var body: some View {
         let month = field.monthYear
         let empty = month ? ItemsStrings.placeholderMonth : ItemsStrings.placeholderDate
         let placeholder = field.kept ? ItemsStrings.fieldKeptPlaceholder : empty
+        let typed = Binding(get: { field.text }, set: { t in
+            if let v = DateInput.accept(old: field.text, typed: t, monthOnly: month) { onValue(v) }
+        })
         HStack(spacing: Spacing.xs) {
-            PlainField(placeholder: placeholder, text: field.text, isError: isError) { typed in
-                if let v = DateInput.accept(old: field.text, typed: typed, monthOnly: month) { onValue(v) }
+            if secret {
+                VisibleSecretField(caption, text: typed, placeholder: placeholder, keyboard: .numberPad, isError: isError, focus: focus)
+            } else {
+                PlainField(placeholder: placeholder, text: field.text, isError: isError) { typed.wrappedValue = $0 }
+                    .keyboardType(.numberPad)
+                    .focused($focused)
+                    .accessibilityLabel(caption)
+                    .onAppear { if focus { focused = true } }
+                    .onChange(of: focus) { _, now in if now { focused = true } }
             }
-            .keyboardType(.numberPad)
-            .accessibilityLabel(caption)
             IconButton(.schedule, label: month ? ItemsStrings.cdPickMonth(caption) : ItemsStrings.cdPickDate(caption)) { picking = true }
                 .accessibilityIdentifier("item_edit_field_pick_\(index)")
         }
-        .sheet(isPresented: $picking) {
+        .sheet(isPresented: uncovered($picking, covered: covered)) {
             Group {
                 if month {
                     MonthPicker(stored: field.text) { v in
@@ -233,22 +266,27 @@ struct DateEditor: View {
     }
 }
 
-/// The calendar; the day picked is stored as `YYYY-MM-DD` (§10.7).
+/// The calendar; the day picked is stored as `YYYY-MM-DD` (§10.7). The picker, the day it opens on and the day stored all
+/// go through one calendar (the iPhone's), so that the day picked is the day stored in every time zone.
 struct DayPicker: View {
     @Environment(\.vettIDColors) private var colors
     let onDone: @MainActor (String?) -> Void
+    private let calendar: Calendar
     @State private var day: Date
 
-    init(stored: String, onDone: @escaping @MainActor (String?) -> Void) {
+    init(stored: String, calendar: Calendar = .current, onDone: @escaping @MainActor (String?) -> Void) {
         self.onDone = onDone
-        _day = State(initialValue: DateInput.toPicker(stored) ?? Date())
+        self.calendar = calendar
+        _day = State(initialValue: DateInput.toPicker(stored, calendar: calendar) ?? Date())
     }
 
     var body: some View {
         VStack(spacing: Spacing.m) {
             DatePicker("", selection: $day, displayedComponents: .date).datePickerStyle(.graphical).labelsHidden()
+                .environment(\.calendar, calendar)
+                .environment(\.timeZone, calendar.timeZone)
                 .accessibilityIdentifier("item_date_picker")
-            PickerButtons(onCancel: { onDone(nil) }, onOK: { onDone(DateInput.fromPicker(day)) })
+            PickerButtons(onCancel: { onDone(nil) }, onOK: { onDone(DateInput.fromPicker(day, calendar: calendar)) })
         }
         .padding(Spacing.xl)
     }
@@ -310,11 +348,14 @@ struct PickerButtons: View {
 struct AddressEditor: View {
     let address: AddressValue
     let secret: Bool
+    /// The street takes the focus (the field was just added).
+    let focus: Bool
     let onValue: @MainActor (AddressValue) -> Void
+    @FocusState private var focused: Bool
 
     var body: some View {
         VStack(spacing: Spacing.xs) {
-            part(ItemsStrings.addressStreet, address.street) { a, v in a.street = v }
+            part(ItemsStrings.addressStreet, address.street, first: true) { a, v in a.street = v }
             part(ItemsStrings.addressStreet2, address.street2) { a, v in a.street2 = v }
             part(ItemsStrings.addressPostalCode, address.postalCode) { a, v in a.postalCode = v }
             part(ItemsStrings.addressCity, address.city) { a, v in a.city = v }
@@ -326,7 +367,7 @@ struct AddressEditor: View {
 
     @ViewBuilder
     private func part(
-        _ label: String, _ value: String, caps: Bool = false, _ set: @escaping (inout AddressValue, String) -> Void
+        _ label: String, _ value: String, caps: Bool = false, first: Bool = false, _ set: @escaping (inout AddressValue, String) -> Void
     ) -> some View {
         let binding = Binding(get: { value }, set: { v in
             var a = address
@@ -334,11 +375,19 @@ struct AddressEditor: View {
             onValue(a)
         })
         if secret {
-            VisibleSecretField(label, text: binding, capitalization: caps ? .allCharacters : .words)
+            VisibleSecretField(label, text: binding, capitalization: caps ? .allCharacters : .words, focus: first && focus)
         } else {
-            PlainField(placeholder: label, text: value) { binding.wrappedValue = $0 }
+            let input = PlainField(placeholder: label, text: value) { binding.wrappedValue = $0 }
                 .textInputAutocapitalization(caps ? .characters : .words)
                 .accessibilityLabel(label)
+            if first {
+                input
+                    .focused($focused)
+                    .onAppear { if focus { focused = true } }
+                    .onChange(of: focus) { _, now in if now { focused = true } }
+            } else {
+                input
+            }
         }
     }
 }

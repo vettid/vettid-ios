@@ -94,6 +94,27 @@ import VettIDDataTesting
         #expect(!vm.state.revealed && vm.state.item?.fields.map(\.value) == [nil] && vm.state.shown.isEmpty)
     }
 
+    /// "Reveal" asks the iPhone's owner first, with the item's name; nothing is asked of the vault unless confirmed.
+    @Test func aSecretItemIsRevealedOnlyOnceTheOwnerIsConfirmed() async {
+        let vm = await detail("01L")
+        let asked = Box<[String]>([])
+        vm.askReveal { reason in
+            asked.value.append(reason)
+            return false
+        }
+        await vm.settle()
+        #expect(asked.value == [ItemsStrings.revealPromptTitle + "\nBank login"])
+        #expect(!items.calls.contains("reveal") && !vm.state.revealed)
+        vm.askReveal { _ in true }
+        await vm.settle()
+        #expect(items.calls.contains("reveal") && vm.state.revealed)
+        // A critical item is never revealed so: its password is asked for.
+        let critical = await detail("01C")
+        critical.askReveal { _ in true }
+        await critical.settle()
+        #expect(critical.state.prompt?.purpose == .open && !items.calls.contains("revealCritical"))
+    }
+
     @Test func aCriticalItemOpensOnlyWithTheRightPassword() async throws {
         let vm = await detail("01C")
         vm.reveal() // a critical item is never revealed without the password
@@ -200,6 +221,13 @@ import VettIDDataTesting
         let printed = "\(vm.state) \(String(reflecting: vm.state)) \(vm.state.prompt.map { "\($0)" } ?? "")"
         #expect(!printed.contains("hunter2") && !printed.contains("correct horse"))
     }
+}
+
+/// TEST ONLY. A value a closure fills in.
+@MainActor
+final class Box<T> {
+    var value: T
+    init(_ value: T) { self.value = value }
 }
 
 // swiftlint:enable line_length

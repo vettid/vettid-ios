@@ -37,32 +37,44 @@ public struct ItemDetailActions {
 public struct ItemDetailRoute: View {
     @Environment(\.vettIDUserPresence) private var presence
     @Environment(\.scenePhase) private var phase
-    @State private var model: ItemDetailViewModel
+    private let itemID: String
+    private let items: any ItemsRepository
     let host: ItemsHost
+    /// Made when the screen first appears (never in `init`, which SwiftUI runs again whenever the shell is redrawn).
+    @State private var model: ItemDetailViewModel?
 
     public init(_ itemID: String, items: any ItemsRepository, host: ItemsHost) {
-        _model = State(initialValue: ItemDetailViewModel(itemID: itemID, items: items))
+        self.itemID = itemID
+        self.items = items
         self.host = host
     }
 
     public var body: some View {
-        ItemDetailScreen(state: model.state, actions: actions)
-            .onChange(of: phase) { _, now in if now == .background { model.hide() } }
-            .onChange(of: model.state.deleted) { _, gone in if gone { host.onBack() } }
-            .onDisappear { model.hide() }
-            // Back from the editor: the item as saved.
-            .onAppear { if model.state.item != nil { model.load() } }
+        let state = model?.state ?? ItemDetailState(itemID: itemID)
+        ItemDetailScreen(state: state, actions: Self.actions(model, presence: presence, host: host))
+            .onChange(of: phase) { _, now in Self.phaseChanged(now, model) }
+            .onChange(of: model?.state.deleted) { _, gone in if gone == true { host.onBack() } }
+            .onDisappear { Self.left(model) }
+            .onAppear {
+                // Back from the editor: the item as saved.
+                if let model { model.load() } else { model = ItemDetailViewModel(itemID: itemID, items: items) }
+            }
     }
 
-    private var actions: ItemDetailActions {
-        let model = model, presence = presence, host = host
+    /// The screen went (back, or another screen over it): the revealed values go.
+    static func left(_ model: ItemDetailViewModel?) { model?.hide() }
+
+    /// The app left the foreground: the revealed values go (§10.7: revealed on purpose).
+    static func phaseChanged(_ phase: ScenePhase, _ model: ItemDetailViewModel?) {
+        if phase == .background { model?.hide() }
+    }
+
+    static func actions(_ model: ItemDetailViewModel?, presence: UserPresence, host: ItemsHost) -> ItemDetailActions {
         var a = ItemDetailActions()
         a.onBack = host.onBack
+        guard let model else { return a }
         a.onRetry = { model.load() }
-        a.onReveal = {
-            let reason = ItemsStrings.revealPromptTitle
-            Task { @MainActor in if await presence(reason) { model.reveal() } }
-        }
+        a.onReveal = { model.askReveal { await presence($0) } }
         a.onOpen = { model.open() }
         a.onHide = { model.hide() }
         a.onToggleShown = { model.toggleShown($0) }

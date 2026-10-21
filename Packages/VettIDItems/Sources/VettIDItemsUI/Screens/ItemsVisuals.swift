@@ -12,8 +12,8 @@ public struct ItemsHost {
     public var onAdd: @MainActor () -> Void = {}
     /// The add/edit screen over the picker or the item: [itemID] to edit, else a new item from [template] (nil: blank).
     public var onEdit: @MainActor (_ itemID: String?, _ template: String?) -> Void = { _, _ in }
-    /// The tags screen ("Manage tags").
-    public var onTags: @MainActor () -> Void = {}
+    /// The tags screen ("Manage tags"); nil without the tags.
+    public var onTags: (@MainActor () -> Void)?
     public var onBack: @MainActor () -> Void = {}
     /// Leaves the current screen for an item's (the editor, once saved, for the item it saved).
     public var replaceWithItem: @MainActor (String) -> Void = { _ in }

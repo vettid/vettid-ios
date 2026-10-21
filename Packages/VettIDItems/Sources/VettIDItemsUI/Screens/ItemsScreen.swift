@@ -14,37 +14,42 @@ public struct ItemsActions {
     public var onSensitivity: @MainActor (Sensitivity?) -> Void = { _ in }
     public var onClearFilters: @MainActor () -> Void = {}
     public var onRetry: @MainActor () -> Void = {}
-    /// The tags screen (create, rename, delete).
-    public var onTags: @MainActor () -> Void = {}
+    /// The tags screen (create, rename, delete); nil hides "Manage tags".
+    public var onTags: (@MainActor () -> Void)?
 
     public init() {}
 }
 
-/// The Vault list over its view model, made when the screen first appears. Mirrors vettid-android `itemsDestination`'s
-/// list.
+/// The Vault list over its view model, made when the screen first appears (never in `init`, which SwiftUI runs again
+/// whenever the shell is redrawn). Mirrors vettid-android `itemsDestination`'s list.
 public struct ItemsRoute: View {
-    @State private var model: ItemsViewModel
+    private let items: any ItemsRepository
+    private let ownerChecks: (any OwnerCheckRepository)?
     let chrome: ShellChrome
     let host: ItemsHost
+    @State private var model: ItemsViewModel?
 
     public init(items: any ItemsRepository, ownerChecks: (any OwnerCheckRepository)?, chrome: ShellChrome, host: ItemsHost) {
-        _model = State(initialValue: ItemsViewModel(items: items, ownerChecks: ownerChecks))
+        self.items = items
+        self.ownerChecks = ownerChecks
         self.chrome = chrome
         self.host = host
     }
 
     public var body: some View {
+        let m = model
         var a = ItemsActions()
         a.onOpen = host.onOpenItem
         a.onAdd = host.onAdd
-        a.onQuery = { model.setQuery($0) }
-        a.onTag = { model.setTag($0) }
-        a.onCategory = { model.setCategory($0) }
-        a.onSensitivity = { model.setSensitivity($0) }
-        a.onClearFilters = { model.clearFilters() }
-        a.onRetry = { model.refresh() }
+        a.onQuery = { m?.setQuery($0) }
+        a.onTag = { m?.setTag($0) }
+        a.onCategory = { m?.setCategory($0) }
+        a.onSensitivity = { m?.setSensitivity($0) }
+        a.onClearFilters = { m?.clearFilters() }
+        a.onRetry = { m?.refresh() }
         a.onTags = host.onTags
-        return ItemsScreen(state: model.state, chrome: chrome, actions: a)
+        return ItemsScreen(state: m?.state ?? ItemsState(items: items.items, load: items.load), chrome: chrome, actions: a)
+            .onAppear { if model == nil { model = ItemsViewModel(items: items, ownerChecks: ownerChecks) } }
     }
 }
 
@@ -173,11 +178,13 @@ struct ItemsFilterRow: View {
                 }
                 .accessibilityIdentifier("items_filter_tag")
             }
-            Button(ItemsStrings.tagsManage) { actions.onTags() }
-                .vettIDFont(.labelLarge)
-                .foregroundStyle(colors.primary)
-                .frame(minHeight: Spacing.touchTarget)
-                .accessibilityIdentifier("items_manage_tags")
+            if let onTags = actions.onTags {
+                Button(ItemsStrings.tagsManage) { onTags() }
+                    .vettIDFont(.labelLarge)
+                    .foregroundStyle(colors.primary)
+                    .frame(minHeight: Spacing.touchTarget)
+                    .accessibilityIdentifier("items_manage_tags")
+            }
         }
         .padding(.vertical, Spacing.xs)
     }
