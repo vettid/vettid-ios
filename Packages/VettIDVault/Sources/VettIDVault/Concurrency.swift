@@ -138,12 +138,13 @@ final class AsyncLock: @unchecked Sendable {
 final class OneShot<T: Sendable>: @unchecked Sendable {
     private let lock = NSLock()
     private var value: T?
+    private var aborted = false
     private var waiters: [UUID: CheckedContinuation<T?, Never>] = [:]
 
     /// Completes with [v]; later completions are ignored.
     func complete(_ v: T) {
         let ws: [CheckedContinuation<T?, Never>] = lock.withLock {
-            guard value == nil else { return [] }
+            guard value == nil, !aborted else { return [] }
             value = v
             defer { waiters.removeAll() }
             return Array(waiters.values)
@@ -151,17 +152,30 @@ final class OneShot<T: Sendable>: @unchecked Sendable {
         for w in ws { w.resume(returning: v) }
     }
 
-    /// The value, or nil after [timeout] seconds, or at once when the waiting task is cancelled.
+    /// Ends every wait without a value, now and from then on (a completion that comes later is ignored), unless it was
+    /// completed already.
+    func abort() {
+        let ws: [CheckedContinuation<T?, Never>] = lock.withLock {
+            guard value == nil else { return [] }
+            aborted = true
+            defer { waiters.removeAll() }
+            return Array(waiters.values)
+        }
+        for w in ws { w.resume(returning: nil) }
+    }
+
+    /// The value, or nil after [timeout] seconds, at once when the waiting task is cancelled, or once aborted.
     func wait(timeout: TimeInterval) async -> T? {
         let token = UUID()
         return await withTaskCancellationHandler {
             await withCheckedContinuation { (c: CheckedContinuation<T?, Never>) in
-                let ready: T? = lock.withLock {
-                    if let v = value { return v }
+                let (ready, ended): (T?, Bool) = lock.withLock {
+                    if let v = value { return (v, false) }
+                    if aborted { return (nil, true) }
                     waiters[token] = c
-                    return nil
+                    return (nil, false)
                 }
-                if let ready {
+                if ready != nil || ended {
                     c.resume(returning: ready)
                     return
                 }

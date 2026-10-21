@@ -436,6 +436,27 @@ import VettIDTesting
         #expect(store.load() == nil)
     }
 
+    /// A halted device (an app process going away) keeps its stored state as it was: a request awaiting its answer ends
+    /// at once, the late answer writes nothing, and nothing more is sent or written.
+    @Test func haltKeepsTheStateAndWritesNothing() async throws {
+        let store = InMemoryDeviceStateStore()
+        let (d, v) = try await pairedDevice(store: store)
+        let started = Date()
+        let status = Task { try await d.op("vault.status", timeout: 60) }
+        let req = try v.open(try await relay.nextDeposit().payload)
+        let saved = store.load()
+        await d.halt()
+        await #expect(throws: (any Error).self) { _ = try await status.value }
+        #expect(Date().timeIntervalSince(started) < 30, "ended by the halt, not by its timeout")
+        await #expect(throws: VaultStateError.self) {
+            try await d.handle(try v.seal("vault.status", "{}", re: req.id, status: Inner.statusOK))
+        }
+        await #expect(throws: VaultStateError.self) { try await d.send("message.send") }
+        await #expect(throws: VaultStateError.self) { try await d.awaitEvent("message.new", timeout: 60) }
+        #expect(await relay.noDeposit(within: 0.3))
+        #expect(saved != nil && store.load() == saved && d.hasVault)
+    }
+
     @Test func deviceStateJSONRoundTrips() throws {
         let s = DeviceState(role: "app", name: "phone", relayURL: "https://relay.example.org")
         s.vaultID = "v"
