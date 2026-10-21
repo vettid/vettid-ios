@@ -78,6 +78,7 @@ public struct PhotoViewerScreen: View {
         } else if undecodable {
             Text(MessagesStrings.photoInType).vettIDFont(.bodyLarge).multilineTextAlignment(.center).padding(Spacing.xl)
                 .frame(maxHeight: .infinity)
+                .accessibilityIdentifier("photo_undecodable")
         } else {
             ProgressView().tint(colors.primary.color).frame(maxHeight: .infinity)
         }
@@ -145,6 +146,7 @@ private struct ZoomableImage: View {
                 .clipped()
                 .gesture(zoom.simultaneously(with: pan))
                 .accessibilityLabel(MessagesStrings.photoViewerCd)
+                .accessibilityIdentifier("photo_image")
             if let name { Text(name).vettIDFont(.bodySmall).padding(Spacing.m) }
         }
     }

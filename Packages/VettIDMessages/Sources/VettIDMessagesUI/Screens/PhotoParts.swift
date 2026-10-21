@@ -42,6 +42,7 @@ struct PhotoButton: View {
         Menu {
             Button(action: actions.onTakePhoto) { Label(MessagesStrings.photoTake, systemImage: VettIDSymbol.photoCamera.rawValue) }
             Button { picking = true } label: { Label(MessagesStrings.photoChoose, systemImage: VettIDSymbol.image.rawValue) }
+                .accessibilityIdentifier("photo_choose")
         } label: {
             VettIDSymbol.image.image.font(.system(size: 20)).foregroundStyle(colors.onSurfaceVariant)
                 .frame(width: Spacing.touchTarget, height: Spacing.touchTarget)

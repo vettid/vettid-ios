@@ -12,7 +12,8 @@ import XCTest
 /// - `VETTID_STAGING_SAFETY_CODE`: optional, the safety code ``testStagingConnectApprove`` must find.
 /// - `VETTID_STAGING_PEER_NAME`: a connection's shown name, for the message tests;
 /// - `VETTID_STAGING_MESSAGE`: the text ``testStagingMessageSend`` sends;
-/// - `VETTID_STAGING_EXPECT`: the text ``testStagingMessageReceive`` waits for from the connection.
+/// - `VETTID_STAGING_EXPECT`: the text ``testStagingMessageReceive`` waits for from the connection;
+/// - `VETTID_STAGING_PHOTO_TIMEOUT`: optional, the seconds the photo tests wait for the delivery or the arrival (180).
 ///
 /// A test whose inputs are missing is skipped, so CI and every other run never execute it. The inputs are never printed
 /// and no failure message carries them (XCTest's own activity log names what is typed and tapped: the script redacts its
@@ -252,6 +253,23 @@ final class StagingTests: VaultUITestCase {
         try messageReceive()
     }
 
+    /// I2.4 on staging (VAULT-MESSAGING §10.5.1): the conversation with `VETTID_STAGING_PEER_NAME`, the photo button's
+    /// "Choose photos", the first photo of the system's picker, Send on the prepared photo, and its bubble followed to
+    /// "Delivered"; the last state is reported on a `PHOTO_STATE:` line. The phone's library must hold a photo (the test
+    /// never adds one). Then the vault is locked.
+    @MainActor
+    func testStagingPhotoSend() throws {
+        try photoSend()
+    }
+
+    /// The other side of ``testStagingPhotoSend``: the conversation with the connection, until a photo from it shows its
+    /// thumbnail (within `VETTID_STAGING_PHOTO_TIMEOUT`), then that photo in the viewer, shown (not a failure); reported
+    /// on `PHOTO_RECEIVED:` and `PHOTO_VIEWER:` lines. Then the viewer is closed and the vault locked.
+    @MainActor
+    func testStagingPhotoReceive() throws {
+        try photoReceive()
+    }
+
     // MARK: - Steps
 
     /// The open app, from whatever it shows at the start (unlocked with the PIN, and the password when the owner check is
@@ -430,9 +448,22 @@ final class StagingTests: VaultUITestCase {
         return pin
     }
 
+    /// An optional number of seconds; [fallback] without it.
+    static func seconds(_ name: String, fallback: TimeInterval) throws -> TimeInterval {
+        guard let value = ProcessInfo.processInfo.environment[name], !value.isEmpty else { return fallback }
+        guard let seconds = TimeInterval(value), seconds > 0, seconds.isFinite else { throw InputError.notSeconds(name) }
+        return seconds
+    }
+
     enum InputError: Error, CustomStringConvertible {
         case pinNotDigits
+        case notSeconds(String)
 
-        var description: String { "VETTID_STAGING_PIN is not all digits" }
+        var description: String {
+            switch self {
+            case .pinNotDigits: "VETTID_STAGING_PIN is not all digits"
+            case let .notSeconds(name): "\(name) is not a positive number of seconds"
+            }
+        }
     }
 }
