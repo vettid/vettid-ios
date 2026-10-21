@@ -8,7 +8,7 @@ import VettIDTesting
 
 // TEST ONLY. What Settings sends, as vettid-vault answers it: the account snapshot and the name change (VAULT-MESSAGING
 // §10.2 `account.get`, §10.8 `account.name.set`, §11.13), the credential screen (§10.6 `credential.version`,
-// `credential.unlock`, `credential.lock`, `credential.password.change`; §10.7 `item.list` of the critical items) and the
+// `credential.unlock`, `credential.lock`, `credential.password.change`; §10.7 the items, FakeVaultService+Items.swift) and the
 // PIN change of release R (§11.14.9 `pin.change`). The holder operations check the blob, the PIN and the password as an
 // owner check does (``checkSecrets(_:pin:password:blob:)``) and rotate the CEK.
 extension FakeVaultService {
@@ -118,9 +118,8 @@ extension FakeVaultService {
             try reply(m.type, "{}", re: m.id)
         case "credential.password.change": try passwordChange(m, body)
         case "pin.change": try pinChange(m, body)
-        case "item.list":
-            let items = (0..<criticalItemsValue).map { #"{"item_id":"item-\#($0)","sensitivity":"critical"}"# }
-            try reply(m.type, #"{"items":[\#(items.joined(separator: ","))],"next":null}"#, re: m.id)
+        case "item.list", "item.get", "item.reveal", "item.put", "item.tag", "item.sensitivity", "item.delete":
+            try itemRequest(m, body)
         default: try secretsRequest(m, body)
         }
     }
