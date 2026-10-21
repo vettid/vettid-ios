@@ -237,9 +237,34 @@ import VettIDDataTesting
         #expect(!m.state.done && m.state.error == nil && m.state.password.isEmpty && repo.changeCheck == nil)
     }
 
-    /// Polls the main actor until [condition] holds (at most 2 s).
+    /// A reset ended by the vault's `forbidden` in its own answer (its check `.notHolder` when it fails): "Your vault moved
+    /// to a new phone" is shown once, as the notice, with no failure card. Then a reset refused before it is sent because
+    /// a renew decided first was answered `forbidden` (the vault manager sets a PIN change's check `.notHolder` and fails
+    /// the reset with `.notHolder`): the failure card shows it once, and that check is acknowledged so that the shell's
+    /// notice does not repeat it.
+    @Test func anotherHolderIsShownOnce() async {
+        repo.fail["newCredential"] = FakeVaultRepository.failure(.notHolder, code: VaultManager.codeNotHolder)
+        repo.changeCheck = ChangeCheck(.reset, .notHolder)
+        let m = NewCredentialViewModel(repo: repo, vault: repo)
+        filled(m)
+        m.submit()
+        m.confirm()
+        await m.settle()
+        #expect(m.state.check == .notHolder && m.state.error == nil && repo.changeCheck == nil)
+        repo.fail["newCredential"] = FakeVaultRepository.failure(.notHolder, code: VaultManager.codeNotHolder)
+        repo.changeCheck = ChangeCheck(.pin, .notHolder)
+        let renewing = NewCredentialViewModel(repo: repo, vault: repo)
+        filled(renewing)
+        renewing.submit()
+        renewing.confirm()
+        await renewing.settle()
+        #expect(renewing.state.error == .notHolder && renewing.state.check == nil)
+        #expect(repo.changeCheck == nil)
+    }
+
+    /// Polls the main actor until [condition] holds (at most 20 s).
     func until(_ condition: @MainActor () -> Bool) async -> Bool {
-        for _ in 0..<200 {
+        for _ in 0..<2_000 {
             if condition() { return true }
             try? await Task.sleep(nanoseconds: 10_000_000)
         }

@@ -301,6 +301,46 @@ import VettIDVault
         #expect(m.phase == .unlocked && m.account != nil && !m.refusedByVault)
     }
 
+    /// `forbidden` to the decision's `credential.version` (past `exp`: a copy sent again is dropped unanswered, so the
+    /// version decides): the PIN change ends as above; the current phone key, which its candidate shares, stays.
+    @Test func forbiddenToTheVersionEndsThePinChange() async throws {
+        defer { phone.close() }
+        try await setUp()
+        let keys = phone.phoneKeys.count
+        service.loseAnswers(["pin.change", "credential.version"], from: "pin.change")
+        #expect(await pinChangeUndecided()?.kind == .changeUnresolved)
+        service.loseAnswers([])
+        pastTheChangesExp()
+        // Every `credential.version` is refused, as a vault whose holder is another phone refuses them (a recheck running
+        // by itself may ask first).
+        service.refuse("credential.version", with: VaultManager.codeNotHolder)
+        await m.checkUnresolvedChange()
+        #expect(await eventually { m.changeCheck == ChangeCheck(.pin, .notHolder) }, "\(String(describing: m.changeCheck))")
+        #expect(try m.phoneSecrets.unresolvedChange() == nil && m.phoneSecrets.records().candidates.isEmpty)
+        #expect(try m.phoneSecrets.uncertainPin() == nil && m.unlockPinStep == .pin)
+        #expect(phone.phoneKeys.count == keys && m.phase == .unlocked && !m.refusedByVault)
+    }
+
+    /// `forbidden` to the resend of the same `pin.change` (within `exp`; the first never reached the vault): the change
+    /// ends as above; nothing is erased, and the vault opens with the same PIN.
+    @Test func forbiddenToTheResendEndsThePinChange() async throws {
+        defer { phone.close() }
+        try await setUp()
+        let keys = phone.phoneKeys.count
+        service.loseRequests(["pin.change"])
+        #expect(await pinChangeUndecided()?.kind == .changeUnresolved)
+        service.loseRequests([])
+        service.refuseNext("pin.change", code: VaultManager.codeNotHolder)
+        await m.checkUnresolvedChange()
+        #expect(await eventually { m.changeCheck == ChangeCheck(.pin, .notHolder) }, "\(String(describing: m.changeCheck))")
+        #expect(count("pin.change") == 1, "only the copy refused reached the vault")
+        #expect(try m.phoneSecrets.unresolvedChange() == nil && m.phoneSecrets.records().candidates.isEmpty)
+        #expect(try m.phoneSecrets.uncertainPin() == nil && m.heldChange == nil)
+        #expect(phone.phoneKeys.count == keys && service.pinChanges.isEmpty)
+        try await m.lock()
+        #expect(try await m.unlock(pin: pin) == .success)
+    }
+
     /// A restart while undecided: the marker survives (the request does not: it is kept in memory only); the start
     /// decides by the version alone, with no second `pin.change`.
     @Test func aRestartWhileUndecided() async throws {

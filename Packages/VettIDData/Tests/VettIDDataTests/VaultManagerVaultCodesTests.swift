@@ -91,6 +91,32 @@ import VettIDDataTesting
         #expect(await eventually { !service.backupSetting })
     }
 
+    /// `forbidden` to the resend of a setting (``Resend/setting(key:json:)``, the request "Try again" sends again by
+    /// itself, as ``tryAgainResendsASettingsChange()`` shows): `settings.set` is not holder-only, so it is the code
+    /// (IOS-PLAN §4.4 (2), (3)), not "Your vault moved to a new phone"; the root screen is not raised, nothing is kept for
+    /// another "Try again", the setting is unchanged, no change ends and nothing is erased.
+    @Test func forbiddenToTheResentSettingIsTheCode() async throws {
+        defer { phone.close() }
+        try await setUp()
+        let keys = phone.phoneKeys.count
+        service.refuseNext("settings.set", code: "forbidden")
+        let resend = Resend.setting(key: VaultManager.keyBackup, json: "false")
+        #expect(await vaultFailure { try await m.resend(resend) }?.kind == .vaultCode("forbidden"))
+        #expect(!m.credentialRequired && m.credentialRequiredResend == nil && m.changeCheck == nil)
+        #expect(service.backupSetting && phone.phoneKeys.count == keys && m.phase == .unlocked && m.usesPhoneSecret)
+    }
+
+    /// `forbidden` to the credential screen's `credential.version` outside a change: not a holder-only type (VAULT-MESSAGING
+    /// §3.5.9), so the code (IOS-PLAN §4.4 (2)); no root screen, no change, nothing erased.
+    @Test func forbiddenToTheCredentialVersionIsTheCode() async throws {
+        defer { phone.close() }
+        try await setUp()
+        let keys = phone.phoneKeys.count
+        service.refuseNext("credential.version", code: "forbidden")
+        #expect(await vaultFailure { _ = try await m.status() }?.kind == .vaultCode("forbidden"))
+        #expect(!m.credentialRequired && m.changeCheck == nil && phone.phoneKeys.count == keys && m.phase == .unlocked)
+    }
+
     /// A refusal of the daily check that an unlock includes (the vault past its deadline) shows the screen, the phase still
     /// locked; it ends with "Lock vault", not with the phase.
     @Test func aRefusalDuringAnUnlockWithTheCheckShowsTheScreen() async throws {
