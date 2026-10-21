@@ -20,7 +20,8 @@ public struct EnclaveVerifier: Sendable {
     /// §11.2 step 3.
     public static let maxAttestationAge: TimeInterval = 26 * 3600
     public static let attestationSkew: TimeInterval = 5 * 60
-    /// §11.2 step 3: not_after at most 24 h + 5 min after the attestation's timestamp.
+    /// §11.2 "Lifetime and clock allowance" (VAULT-MESSAGING 0.53.0): not_after at most 24 h + 5 min after the attestation's
+    /// timestamp.
     static let maxDescriptorLife: TimeInterval = 24 * 3600 + 5 * 60
 
     private let nitro: NitroVerifier
