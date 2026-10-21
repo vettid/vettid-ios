@@ -159,20 +159,16 @@ public enum DateInput {
         stored.utf8.count == 7 && ItemChecks.valueProblems(FieldKinds.date, .text(stored)).isEmpty
     }
 
-    private static var utc: Calendar {
-        var c = Calendar(identifier: .gregorian)
-        c.timeZone = TimeZone(identifier: "UTC") ?? .current
-        return c
-    }
-
-    /// The stored day (or a month's first day) for the calendar to open on, at noon UTC; nil for none.
-    public static func toPicker(_ stored: String) -> Date? {
+    /// The stored day (or a month's first day) for the calendar to open on, at noon in [calendar]'s zone (the calendar the
+    /// picker shows, so that the day it returns is the same day); nil for none.
+    public static func toPicker(_ stored: String, calendar: Calendar = .current) -> Date? {
         let p = stored.split(separator: "-").compactMap { Int($0) }
         guard (2...3).contains(p.count), isDay(stored) || isMonth(stored) else { return nil }
-        return utc.date(from: DateComponents(year: p[0], month: p[1], day: p.count == 3 ? p[2] : 1, hour: 12))
+        return calendar.date(from: DateComponents(year: p[0], month: p[1], day: p.count == 3 ? p[2] : 1, hour: 12))
     }
 
-    /// A day the calendar returned as the spec's `YYYY-MM-DD` (the day as the member saw it, in this phone's zone).
+    /// A day the calendar returned as the spec's `YYYY-MM-DD`: the day as the member saw it, in [calendar] (the one
+    /// ``toPicker(_:calendar:)`` used).
     public static func fromPicker(_ date: Date, calendar: Calendar = .current) -> String {
         let c = calendar.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 1, c.day ?? 1)

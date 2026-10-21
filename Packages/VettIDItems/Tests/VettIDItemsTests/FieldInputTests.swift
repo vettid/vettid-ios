@@ -107,13 +107,18 @@ import VettIDData
     }
 
     @Test func thePickersResultIsTheSpecFormat() throws {
-        var utc = Calendar(identifier: .gregorian)
-        utc.timeZone = try #require(TimeZone(identifier: "UTC"))
-        let day = try #require(DateInput.toPicker("2031-04-30"))
-        #expect(DateInput.fromPicker(day, calendar: utc) == "2031-04-30")
-        #expect(DateInput.toPicker("2031-04").map { DateInput.fromPicker($0, calendar: utc) } == "2031-04-01")
+        // The picker and the stored value go through the same calendar: in the zones furthest from UTC (UTC+14 and
+        // UTC-11) the day picked is the day stored.
+        for zone in ["UTC", "Pacific/Kiritimati", "Pacific/Pago_Pago", "Asia/Kolkata"] {
+            var c = Calendar(identifier: .gregorian)
+            c.timeZone = try #require(TimeZone(identifier: zone))
+            let day = try #require(DateInput.toPicker("2031-04-30", calendar: c))
+            #expect(DateInput.fromPicker(day, calendar: c) == "2031-04-30", "\(zone)")
+            #expect(c.dateComponents([.year, .month, .day], from: day) == DateComponents(year: 2031, month: 4, day: 30), "\(zone)")
+            #expect(DateInput.toPicker("2031-04", calendar: c).map { DateInput.fromPicker($0, calendar: c) } == "2031-04-01", "\(zone)")
+            let early = try #require(c.date(from: DateComponents(year: 5, month: 1, day: 9, hour: 12)))
+            #expect(DateInput.fromPicker(early, calendar: c) == "0005-01-09", "\(zone)")
+        }
         #expect(DateInput.toPicker("soon") == nil)
-        let early = try #require(utc.date(from: DateComponents(year: 5, month: 1, day: 9, hour: 12)))
-        #expect(DateInput.fromPicker(early, calendar: utc) == "0005-01-09")
     }
 }
