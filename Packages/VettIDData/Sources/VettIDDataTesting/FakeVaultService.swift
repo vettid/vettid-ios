@@ -240,6 +240,8 @@ public final class FakeVaultService: @unchecked Sendable {
     var profile = FakeProfile()
     /// The member's items (FakeVaultService+Items.swift), under ``cond``.
     var items = FakeItemStore()
+    /// The tag registry and the share rules (FakeVaultService+Tags.swift), under ``cond``.
+    var tagStore = FakeTagStore()
 
     public init() throws {
         etk = try KemPrivateKey.generate()

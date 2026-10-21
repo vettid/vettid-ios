@@ -112,17 +112,17 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored private(set) var refusals: RefusalWatch?
     /// The daily owner check (VAULT-MESSAGING §3.6): its state, the check, the interval and the hold.
     @ObservationIgnored public let ownerChecks: OwnerCheckManager
-    /// The account's names (VAULT-MESSAGING §10.8): the name change, which counts as an owner check for its PIN and
-    /// password (§3.6.4).
+    /// The account's names (VAULT-MESSAGING §10.8): the name change counts as an owner check (§3.6.4).
     @ObservationIgnored public let profiles: ProfileManager
     /// Connections, invitations and connection requests (VAULT-MESSAGING §6.4, §10.4), kept in their encrypted file.
     @ObservationIgnored public let connections: ConnectionsManager
     /// Messages with connections (VAULT-MESSAGING §10.5, §10.5.2), in memory only.
     @ObservationIgnored public let messages: MessagesManager
-    /// Photo attachments (VAULT-MESSAGING §10.5.1) and the member's items (§10.7, ``VaultManager+Items``): in memory only,
+    /// Photo attachments (§10.5.1), the member's items and tags (§10.7, §10.8, ``VaultManager+Items``): in memory only,
     /// cleared whenever the vault is not open, held or due, and at a wipe.
     @ObservationIgnored public let attachments: AttachmentManager
     @ObservationIgnored public private(set) lazy var items: ItemsManager = Self.itemsManager(self)
+    @ObservationIgnored public private(set) lazy var sharing: SharingManager = Self.sharingManager(self)
     /// The feed, the approvals, History and its export (VAULT-MESSAGING §10.9, §10.12, §10.13; ``VaultManager+Activity``).
     @ObservationIgnored public let feed: FeedManager
     @ObservationIgnored public let approvals: ApprovalsManager

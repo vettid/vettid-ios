@@ -104,8 +104,8 @@ extension VaultFailures {
         "vault.owner-check", "pin.change", "vault.secret.renew", "account.name.set", "vault.delete", "settings.set",
         "credential.unlock", "credential.rotate", "credential.password.change", "credential.reset", "credential.get",
         "credential.ack", "credential.utk.get",
-        // The member's own item writes and reveals (§10.7; a critical item's are credential operations), as vettid-android.
-        "item.put", "item.reveal", "item.tag", "item.sensitivity", "item.delete",
+        // The member's own item and tag writes and reveals (§10.7, §10.8; a critical item's are credential operations).
+        "item.put", "item.reveal", "item.tag", "item.sensitivity", "item.delete", "tag.set", "tag.delete", "tag.merge",
     ]
 
     /// Whether [f] is the vault's answer to a request of ``memberTypes``.

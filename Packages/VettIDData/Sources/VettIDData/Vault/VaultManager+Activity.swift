@@ -65,6 +65,7 @@ extension VaultManager {
         feed.clear()
         attachments.clear()
         items.clear()
+        sharing.clear()
     }
 
     /// Held or due (§3.6.3), as the owner check's state says: no feed content is kept, nor the member's own names, full
@@ -78,6 +79,7 @@ extension VaultManager {
                 // (chosen; not in the spec: vettid-android keeps the item list while held).
                 ref.manager?.attachments.clear()
                 ref.manager?.items.clear()
+                ref.manager?.sharing.clear()
             } else if ref.manager?.phase == .unlocked {
                 feed?.catchUp()
                 // Another device's check: the items, dropped at the hold, are read again. This phone's own check reads
@@ -86,6 +88,8 @@ extension VaultManager {
                     guard let items = ref.manager?.items, !items.listsReadPending else { return }
                     items.refreshQuietly()
                 }
+                // The tags and their colours, dropped at the hold, are read again (the colour keeper follows them).
+                Task { @MainActor in _ = try? await ref.manager?.sharing.refreshTagsQuietly() }
             }
             guard let m = ref.manager else { return }
             switch OwnProfileStep.onCheck(wasHeld: !held, held: held, phase: m.phase) {
@@ -108,6 +112,7 @@ extension VaultManager {
     func clearLists() {
         forgetOwnProfile()
         items.clear()
+        sharing.clear()
         connections.clear()
         messages.clear()
         attachments.reset()
