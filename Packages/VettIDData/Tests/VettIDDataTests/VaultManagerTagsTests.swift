@@ -107,6 +107,22 @@ import VettIDDataTesting
         try await m.lock()
         #expect(await eventually { sharing.tags == nil && sharing.colors.isEmpty })
     }
+
+    /// Held or due, the registry and its colours go; once the check passed they are read again (quietly); a wipe drops
+    /// them too.
+    @Test func theHoldAndAWipeDropTheTagsAndTheCheckReadsThemAgain() async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.storeTag("travel", color: "#000001")
+        try await sharing.refreshTags()
+        service.advanceVaultClock(86_401)
+        try await m.ownerChecks.refreshOwnerCheck()
+        #expect(sharing.tags == nil && sharing.colors.isEmpty)
+        #expect(try await m.ownerChecks.check(pin: pin, password: password) == .passed)
+        #expect(await eventually { sharing.colors == ["travel": "#000001"] }, "read again after the check")
+        try await m.eraseThisPhone()
+        #expect(sharing.tags == nil && sharing.colors.isEmpty)
+    }
 }
 
 // swiftlint:enable line_length

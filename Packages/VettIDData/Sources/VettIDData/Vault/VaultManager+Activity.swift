@@ -88,6 +88,8 @@ extension VaultManager {
                     guard let items = ref.manager?.items, !items.listsReadPending else { return }
                     items.refreshQuietly()
                 }
+                // The tags and their colours, dropped at the hold, are read again (the colour keeper follows them).
+                Task { @MainActor in _ = try? await ref.manager?.sharing.refreshTagsQuietly() }
             }
             guard let m = ref.manager else { return }
             switch OwnProfileStep.onCheck(wasHeld: !held, held: held, phase: m.phase) {
