@@ -153,6 +153,9 @@ public final class FakeVaultRepository: CustomStringConvertible {
     // ProfileRepository.
     /// Scripted answers to ``changeName(pin:password:firstName:lastName:)`` (default: a pending request with the next seq).
     public var nameResults: [NameChangeOutcome] = []
+    /// Set: ``changeName(pin:password:firstName:lastName:)`` waits for it after it is called (an `account.name.set` still
+    /// on its way).
+    public var changeNameGate: TestDeferred<Void>?
     public var lastNames: (first: String, last: String)?
     var nameSeq: Int64 = 0
     /// The member's own profile (`profile.get`); nil until set.

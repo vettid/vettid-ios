@@ -262,13 +262,15 @@ struct ChangeNameSentStep: View {
         let tag: String
     }
 
-    static func says(_ state: ChangeNameState) -> Says {
-        let r = state.request
-        let name = AccountNames.isolate(r.map { "\($0.firstName) \($0.lastName)" } ?? state.requestedName)
-        if let r, r.state == .applied {
+    /// Nil while the vault is not open (IOS-PLAN 0.1.21 §4.7): nothing about the request, which comes back after the
+    /// unlock.
+    static func says(_ state: ChangeNameState) -> Says? {
+        guard let r = state.request else { return nil }
+        let name = AccountNames.isolate("\(r.firstName) \(r.lastName)")
+        if r.state == .applied {
             return Says(title: NameStrings.appliedTitle, body: NameStrings.appliedBody(name), symbol: .checkCircle, tag: "applied")
         }
-        if let r, r.state == .refused {
+        if r.state == .refused {
             let why = NameStatus.refusal(r, allowedAfter: state.account?.nameAllowedAfter)
             return Says(title: NameStrings.refusedTitle, body: why, symbol: .errorOutline, tag: "refused")
         }
@@ -276,14 +278,20 @@ struct ChangeNameSentStep: View {
     }
 
     var body: some View {
-        let s = Self.says(state)
-        FormScaffold(
-            title: s.title, message: s.body, primaryLabel: NameStrings.done, onPrimary: actions.onClose,
-            header: { HeaderGlyph(symbol: s.symbol) }
-        ) {
-            EmptyView()
+        if let s = Self.says(state) {
+            FormScaffold(
+                title: s.title, message: s.body, primaryLabel: NameStrings.done, onPrimary: actions.onClose,
+                header: { HeaderGlyph(symbol: s.symbol) }
+            ) {
+                EmptyView()
+            }
+            .accessibilityIdentifier("change_name_sent_\(s.tag)")
+        } else {
+            FormScaffold(title: NameStrings.title, primaryLabel: NameStrings.done, onPrimary: actions.onClose) {
+                EmptyView()
+            }
+            .accessibilityIdentifier("change_name_sent_hidden")
         }
-        .accessibilityIdentifier("change_name_sent_\(s.tag)")
     }
 }
 #endif

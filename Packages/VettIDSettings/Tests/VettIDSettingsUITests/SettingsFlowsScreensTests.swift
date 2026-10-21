@@ -80,15 +80,25 @@ import VettIDUI
         var s = ChangeNameState(account: account)
         s.step = .sent
         s.request = pending
-        #expect(ChangeNameSentStep.says(s).tag == "pending" && ChangeNameSentStep.says(s).title == "Name change requested")
+        #expect(ChangeNameSentStep.says(s)?.tag == "pending" && ChangeNameSentStep.says(s)?.title == "Name change requested")
         s.request?.state = .refused
         s.request?.reason = NameRequestView.reasonAccount
-        #expect(ChangeNameSentStep.says(s).tag == "refused")
-        #expect(ChangeNameSentStep.says(s).body == "Your account cannot change its name right now.")
+        #expect(ChangeNameSentStep.says(s)?.tag == "refused")
+        #expect(ChangeNameSentStep.says(s)?.body == "Your account cannot change its name right now.")
         s.request?.state = .applied
-        #expect(ChangeNameSentStep.says(s).body
+        #expect(ChangeNameSentStep.says(s)?.body
             == "Your account name is now \u{2068}Ada King\u{2069}. Your connections get the new name from your vault.")
         #expect(ChangeNameNamesStep.error(.empty) == "Enter a name." && ChangeNameNamesStep.error(.ok) == nil)
+    }
+
+    /// While the vault is not open (IOS-PLAN 0.1.21 §4.7) the sent step says nothing about the request: no title of its
+    /// state, no names. Mirrors vettid-android `ChangeNameScreenTest.aSentRequestShowsNothingWhileTheVaultIsNotOpen`.
+    @Test func aSentRequestShowsNothingWhileTheVaultIsNotOpen() {
+        var s = ChangeNameState()
+        s.step = .sent
+        s.sentSeq = 3
+        #expect(ChangeNameSentStep.says(s) == nil)
+        #expect(height(ChangeNameContent(state: s)) > 0)
     }
 
     /// vettid-android's `<b>` emphasis of the backup warning, as bold runs with the same words.
