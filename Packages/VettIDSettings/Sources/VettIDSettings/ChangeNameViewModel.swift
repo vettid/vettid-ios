@@ -43,8 +43,11 @@ public struct ChangeNameState: Equatable, Sendable, CustomStringConvertible, Cus
     /// `too_soon` from the vault: [allowedAfter] is when the next change may be applied (nil: not said).
     public var tooSoon = false
     public var allowedAfter: Date?
-    /// The request sent from this screen, updated from the account (`name_request`).
+    /// The request sent from this screen, updated from the account (`name_request`); nil whenever the vault is not open
+    /// (its names are not kept, IOS-PLAN §4.7), and back from `account.get` after the unlock.
     public var request: NameRequestView?
+    /// The `seq` of the request sent from this screen (no names): finds it again in `account.get` after the unlock.
+    public var sentSeq: Int64?
 
     public init(account: AccountInfo? = nil) {
         self.account = account
@@ -73,7 +76,7 @@ public struct ChangeNameState: Equatable, Sendable, CustomStringConvertible, Cus
 
     public var description: String {
         "ChangeNameState(step: \(step), busy: \(busy), message: \(message.map { "\($0)" } ?? "nil"), wait: \(waitSeconds), "
-            + "request: \(request.map { "\($0.seq) \($0.state)" } ?? "nil"))"
+            + "request: \(request.map { "\($0.state)" } ?? "nil"))"
     }
     public var debugDescription: String { description }
     public var customMirror: Mirror { Mirror(self, children: [:]) }
@@ -91,8 +94,12 @@ public struct ChangeNameState: Equatable, Sendable, CustomStringConvertible, Cus
 /// the next change may be made.
 ///
 /// (IOS-PLAN §4.7) The names typed, the PIN and the password are dropped whenever the vault is not open (the account no
-/// longer from the open vault: a lock, the hold or the due state); the member types them again after the unlock. A
-/// request already sent stays, to show its state. Mirrors vettid-android `ChangeNameViewModel`.
+/// longer from the open vault: a lock, the hold or the due state); the member types them again after the unlock.
+///
+/// (IOS-PLAN 0.1.21 §4.7) The names of a request already sent are dropped too: while the vault is not open nothing about
+/// the request is shown. Only its `seq` stays, and after the unlock the request (its names and state) comes back from
+/// `account.get`'s `name_request`. An `account.name.set` answered after a drop is not kept. Mirrors vettid-android
+/// `ChangeNameViewModel`.
 @MainActor
 @Observable
 public final class ChangeNameViewModel {
@@ -108,6 +115,8 @@ public final class ChangeNameViewModel {
     @ObservationIgnored private let work = Work()
     @ObservationIgnored private let followers = TaskBag()
     @ObservationIgnored private var ticker: Task<Void, Never>?
+    /// Counts the drops: an answer to a request sent before the latest drop is not kept.
+    @ObservationIgnored private var drops = 0
 
     public init(
         accounts: any AccountRepository,
@@ -132,8 +141,10 @@ public final class ChangeNameViewModel {
         ticker?.cancel()
     }
 
-    /// The vault is not open: nothing typed is kept (the names, the PIN, the password); a request already sent stays.
+    /// The vault is not open: nothing typed is kept (the names, the PIN, the password), nor the names of a request already
+    /// sent; an answer still on its way is not kept either.
     private func dropDrafts() {
+        drops += 1
         ticker?.cancel()
         if local.step != .sent { local.step = .names }
         local.first = ""
@@ -143,6 +154,8 @@ public final class ChangeNameViewModel {
         local.password = ""
         local.message = nil
         local.waitSeconds = 0
+        local.busy = false
+        local.request = nil
     }
 
     /// The state now: the account as the repository has it (observed through it), the request sent from here updated from
@@ -151,7 +164,13 @@ public final class ChangeNameViewModel {
         var s = local
         let a = accounts.account
         s.account = a
-        if let ours = s.request, let latest = a?.nameRequest, latest.seq == ours.seq { s.request = latest }
+        if let open = a.shownInShell {
+            if let seq = s.sentSeq, let latest = open.nameRequest, latest.seq == seq { s.request = latest }
+        } else {
+            // Not the open vault's: no request, nor any name of one, reaches the screen (IOS-PLAN 0.1.21 §4.7).
+            s.request = nil
+            s.account?.nameRequest = nil
+        }
         return s
     }
 
@@ -210,9 +229,13 @@ public final class ChangeNameViewModel {
         local.busy = true
         local.message = nil
         let profiles = profiles
+        let sentAt = drops
         work.launch { [weak self] in
             let r = await profiles.changeName(pin: s.pin, password: s.password, firstName: s.first, lastName: s.last)
             guard let self else { return }
+            // A lock, the hold or the due state came while the request was on its way: the answer (and the names it
+            // carries) is not kept; after the unlock the request comes back from `account.get` (IOS-PLAN 0.1.21 §4.7).
+            guard sentAt == drops, accounts.account.shownInShell != nil else { return }
             // Neither secret is kept beyond the answer (as for the owner check, §3.6.5).
             local.busy = false
             local.pin = ""
@@ -226,6 +249,7 @@ public final class ChangeNameViewModel {
         case .requested(let request):
             local.step = .sent
             local.request = request
+            local.sentSeq = request.seq
         case .tooSoon(let after):
             local.step = .names
             local.tooSoon = true

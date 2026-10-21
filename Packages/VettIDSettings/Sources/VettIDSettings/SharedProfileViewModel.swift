@@ -142,6 +142,8 @@ public final class SharedProfileViewModel {
     public var state: SharedProfileState {
         var s = local
         s.account = accounts.account
+        // Not the open vault's: nothing of a name request reaches the screen (IOS-PLAN 0.1.21 §4.7).
+        if s.account.shownInShell == nil { s.account?.nameRequest = nil }
         s.profile = profiles.profile
         if !s.edited { s.displayName = s.profile?.displayName ?? "" }
         return s

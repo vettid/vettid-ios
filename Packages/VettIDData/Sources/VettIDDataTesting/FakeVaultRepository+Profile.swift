@@ -32,6 +32,7 @@ extension FakeVaultRepository: ProfileRepository {
         lastPin = pin
         lastPassword = password
         lastNames = (firstName, lastName)
+        if let changeNameGate { try? await changeNameGate.value() }
         let r: NameChangeOutcome
         if nameResults.isEmpty {
             nameSeq += 1
