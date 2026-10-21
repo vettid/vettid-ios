@@ -413,9 +413,11 @@ public final class VaultDevice: @unchecked Sendable {
     public func newRequestID() -> String { Ulid.new(now()) }
 
     /// Forgets the vault and every key's state on this device (sign-out, transfer away). The device is unusable after:
-    /// nothing is written to the store again, and it holds no vault.
+    /// nothing is written to the store again, and it holds no vault. Refused on a halted device (``halt()``), whose store
+    /// the next process uses.
     public func forget() async throws {
         try await lock.withLock {
+            try refuseHalted()
             stop()
             mem.withLock {
                 forgotten = true
@@ -434,14 +436,19 @@ public final class VaultDevice: @unchecked Sendable {
     }
 
     /// Halts the device of an app process that is going away: it waits for what it is sending, stops collecting, ends the
-    /// requests and event waits that await an answer, and from then on sends nothing and writes nothing to the store.
-    /// Unlike ``forget()``, the stored state stays as it was: the next process restores the device from it. The device is
-    /// unusable after (a process that goes on loads a new one).
+    /// requests and event waits that await an answer, aborts its handshake in flight and the rekeys awaiting their
+    /// `hs.fin` (in memory), and from then on sends nothing, uploads nothing, writes nothing to the store and never clears
+    /// it (``forget()`` and ``deleteMailbox()`` are refused). Unlike ``forget()``, the stored state stays as it was: the
+    /// next process restores the device from it. The device is unusable after (a process that goes on loads a new one).
     public func halt() async {
         await lock.withLock {
             stop()
             let (shots, waiters): ([OneShot<Inner>], [OneShot<Bool>]) = mem.withLock {
                 halted = true
+                ini?.abort()
+                ini = nil
+                for a in awaiting { a.resp.abort() }
+                awaiting.removeAll()
                 defer { inboxWaiters.removeAll() }
                 return (Array(pending.values), inboxWaiters)
             }
@@ -460,6 +467,7 @@ public final class VaultDevice: @unchecked Sendable {
     /// Stops collecting and deletes the device's own mailbox at its relay with everything in it (RELAY-PROTOCOL
     /// §6.10; idempotent): a replaced app erasing itself.
     public func deleteMailbox() async throws {
+        try refuseHalted()
         stop()
         try await own.deleteMailbox()
     }

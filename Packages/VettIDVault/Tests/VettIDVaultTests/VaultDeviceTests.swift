@@ -437,7 +437,8 @@ import VettIDTesting
     }
 
     /// A halted device (an app process going away) keeps its stored state as it was: a request awaiting its answer ends
-    /// at once, the late answer writes nothing, and nothing more is sent or written.
+    /// at once, the late answer writes nothing, nothing more is sent, uploaded or written, and neither a forget nor a
+    /// mailbox deletion clears anything.
     @Test func haltKeepsTheStateAndWritesNothing() async throws {
         let store = InMemoryDeviceStateStore()
         let (d, v) = try await pairedDevice(store: store)
@@ -453,6 +454,13 @@ import VettIDTesting
         }
         await #expect(throws: VaultStateError.self) { try await d.send("message.send") }
         await #expect(throws: VaultStateError.self) { try await d.awaitEvent("message.new", timeout: 60) }
+        let resent = Date()
+        let held = HeldRequest(type: "pin.change", id: Ulid.new(), exp: Date().addingTimeInterval(600), body: VaultJSON.empty)
+        await #expect(throws: VaultStateError.self) { _ = try await d.resend(held, timeout: 60) }
+        #expect(Date().timeIntervalSince(resent) < 30, "refused at once, not after its timeout")
+        await #expect(throws: VaultStateError.self) { _ = try await d.uploadBlobToVault([1, 2, 3]) }
+        await #expect(throws: VaultStateError.self) { try await d.forget() }
+        await #expect(throws: VaultStateError.self) { try await d.deleteMailbox() }
         #expect(await relay.noDeposit(within: 0.3))
         #expect(saved != nil && store.load() == saved && d.hasVault)
     }
