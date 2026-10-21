@@ -36,6 +36,8 @@ public final class AttachmentManager: AttachmentsRepository {
     public static let codeBad = "bad"
     /// Not JPEG, PNG or WebP by its bytes.
     public static let codeType = "type"
+    /// Not available any more: a clear (a lock, the hold) came while it was on its way, or the vault's `unavailable`.
+    public static let codeUnavailable = "unavailable"
     static let codeAlreadySent = "already_sent"
     static let codeNoUpload = "no_upload"
     static let maxFetches = 2
@@ -83,8 +85,8 @@ public final class AttachmentManager: AttachmentsRepository {
         available = supported == true
     }
 
-    public func prepare(_ source: [UInt8]) async throws -> PreparedPhoto {
-        try await Task.detached(priority: .userInitiated) { try Photos.prepare(source) }.value
+    public func prepare(_ source: PhotoBytes) async throws -> PreparedPhoto {
+        try await Task.detached(priority: .userInitiated) { try source.withBytes { try Photos.prepare($0) } }.value
     }
 
     public func begin(_ connectionID: String, caption: String, photo: PreparedPhoto) -> PendingPhoto {
@@ -124,9 +126,14 @@ public final class AttachmentManager: AttachmentsRepository {
     public func thumbnail(_ connectionID: String, messageID: String) async throws -> [UInt8] {
         if let t = thumbs.get(key(connectionID, messageID)) { return t.copy() }
         let mark = cleared
-        let t = try await guarded { try await ops().attachmentThumb(connectionID, messageID: messageID) }
+        var t = try await guarded { try await ops().attachmentThumb(connectionID, messageID: messageID) }
+        // Fetched across a clear (a lock or the hold meanwhile): nothing of it is kept or shown.
+        guard mark == cleared else {
+            Bytes.wipe(&t)
+            throw VaultFailure(.other, code: Self.codeUnavailable)
+        }
         guard Self.acceptableThumb(t) else { throw VaultFailure(.other, code: Self.codeType) }
-        if mark == cleared { thumbs.put(key(connectionID, messageID), PhotoBytes(t)) }
+        thumbs.put(key(connectionID, messageID), PhotoBytes(t))
         return t
     }
 
@@ -137,10 +144,13 @@ public final class AttachmentManager: AttachmentsRepository {
         await fetches.acquire()
         defer { fetches.release() }
         let got = try await fetch(connectionID, messageID)
-        let copy = FetchedPhoto(bytes: got.bytes.copy(), type: got.type)
-        // Fetched after a clear (a lock meanwhile): handed to the screen that asked, which the clear told; not kept.
-        if mark == cleared { photos.put(k, got) } else { got.wipe() }
-        return copy
+        // Fetched across a clear (a lock or the hold meanwhile): nothing of it is kept or shown.
+        guard mark == cleared else {
+            got.wipe()
+            throw VaultFailure(.other, code: Self.codeUnavailable)
+        }
+        photos.put(k, got)
+        return FetchedPhoto(bytes: got.bytes.copy(), type: got.type)
     }
 
     public func clear() {

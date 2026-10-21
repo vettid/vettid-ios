@@ -24,8 +24,10 @@ final class FakeAttachmentOps: AttachmentOps {
     var supported: Bool? = true
     var served: [UInt8] = []
     var servedRef: BlobRef?
-    /// When set, `message.send` and the blob fetch wait for it (a request on its way).
+    /// When set, `message.send`, the thumb and the blob fetch wait for it (a request on its way).
     var gate: TestDeferred<Void>?
+    /// Runs when an upload arrives (a clear while it is on its way).
+    var uploadHook: (@MainActor () -> Void)?
 
     func attachmentsSupported() async throws -> Bool? { supported }
 
@@ -36,6 +38,7 @@ final class FakeAttachmentOps: AttachmentOps {
             throw f
         }
         uploads.append(blob)
+        uploadHook?()
         return "blob\(uploads.count)"
     }
 
@@ -53,6 +56,7 @@ final class FakeAttachmentOps: AttachmentOps {
 
     func attachmentThumb(_ connectionID: String, messageID: String) async throws -> [UInt8] {
         calls.append("thumb:\(messageID)")
+        if let gate { try await gate.value() }
         return [0xFF, 0xD8, 0xFF, 1]
     }
 
@@ -265,31 +269,44 @@ final class FakeAttachmentOps: AttachmentOps {
         ops.gate = gate
         try ops.serve(Self.png)
         let fetching = Task { try await m.photo("c1", messageID: "M6") }
+        let thumbing = Task { try await m.thumbnail("c1", messageID: "M7") }
         let sending = Task { try await m.send(m.begin("c1", caption: "", photo: photo())) }
-        #expect(await eventually { ops.calls.contains("fetch:B9") && ops.calls.contains("send:REQ1") })
+        #expect(await eventually { ops.calls.contains("fetch:B9") && ops.calls.contains("send:REQ1") && ops.calls.contains("thumb:M7") })
         m.clear()
         gate.complete()
-        _ = try await fetching.value
+        // A photo or a thumbnail that arrives across the clear is not shown either.
+        #expect(await failure { try await fetching.value }?.code == AttachmentManager.codeUnavailable)
+        #expect(await failure { try await thumbing.value }?.code == AttachmentManager.codeUnavailable)
         _ = try await sending.value
         #expect(m.photos.count == 0 && m.thumbs.count == 0)
         #expect(sent.messages.isEmpty && m.cachedThumbnail("c1", messageID: "M1") == nil)
     }
 
-    /// At most two content fetches at once (`attachment_fetches`).
-    @Test func atMostTwoFetchesAtOnce() async {
-        let gate = Gate(permits: AttachmentManager.maxFetches)
-        await gate.acquire()
-        await gate.acquire()
-        var third = false
-        let t = Task { @MainActor in
-            await gate.acquire()
-            third = true
-        }
-        await Task.yield()
-        #expect(!third)
-        gate.release()
-        await t.value
-        #expect(third)
+    /// At most two content fetches of this device at once (`attachment_fetches`): a third waits for one to end.
+    @Test func atMostTwoFetchesAtOnce() async throws {
+        let gate = TestDeferred<Void>()
+        ops.gate = gate
+        try ops.serve(Self.png)
+        let fetches = ["M1", "M2", "M3"].map { id in Task { try await m.photo("c1", messageID: id) } }
+        #expect(await eventually { ops.calls.count { $0.hasPrefix("fetch:") } == 2 })
+        for _ in 0..<50 { await Task.yield() }
+        #expect(ops.calls.count { $0.hasPrefix("content:") } == 2, "the third has not started")
+        gate.complete()
+        for f in fetches { _ = try await f.value }
+        #expect(ops.calls.count { $0.hasPrefix("content:") } == 3)
+    }
+
+    /// A photo a clear wiped is never sealed or uploaded: its bytes are zeros.
+    @Test func aPhotoWipedByAClearIsNeverUploaded() async {
+        let p = m.begin("c1", caption: "", photo: photo())
+        m.clear()
+        #expect(await failure { try await m.send(p) }?.code == AttachmentManager.codeUnavailable)
+        #expect(ops.calls.isEmpty)
+        // Cleared while the upload was on its way: nothing is sent with it.
+        let q = m.begin("c1", caption: "", photo: photo())
+        ops.uploadHook = { [m] in m.clear() }
+        #expect(await failure { try await m.send(q) }?.code == AttachmentManager.codeUnavailable)
+        #expect(ops.calls == ["upload"] && q.isWiped)
     }
 }
 

@@ -26,7 +26,7 @@ public final class PendingPhoto {
         let sha256: [UInt8]
         let size: Int
 
-        mutating func wipe() { key = [UInt8](repeating: 0, count: key.count) }
+        mutating func wipe() { Bytes.wipe(&key) }
     }
 
     init(connectionID: String, caption: String, photo: PreparedPhoto, requestID: String) {
@@ -95,8 +95,8 @@ public protocol AttachmentsRepository: AnyObject, Observable, Sendable {
     func probe() async
 
     /// Prepares a picked picture's or a camera shot's bytes for sending, off the main actor: bounds first, orientation,
-    /// long edge 2,560, JPEG without metadata, the thumbnail. Throws ``PhotoError``.
-    func prepare(_ source: [UInt8]) async throws -> PreparedPhoto
+    /// long edge 2,560, JPEG without metadata, the thumbnail. Throws ``PhotoError``. The caller wipes [source] after.
+    func prepare(_ source: PhotoBytes) async throws -> PreparedPhoto
 
     /// Starts sending [photo] to [connectionID] with [caption] (it goes with the first photo only).
     func begin(_ connectionID: String, caption: String, photo: PreparedPhoto) -> PendingPhoto
@@ -125,6 +125,15 @@ public protocol AttachmentsRepository: AnyObject, Observable, Sendable {
 
     /// Drops every thumbnail, photo, share offer and pending upload (zeroed).
     func clear()
+}
+
+extension AttachmentsRepository {
+    /// ``prepare(_:)`` of bytes already in hand (tests, a picture made in memory), zeroed after.
+    public func prepare(_ bytes: [UInt8]) async throws -> PreparedPhoto {
+        let source = PhotoBytes(bytes)
+        defer { source.wipe() }
+        return try await prepare(source)
+    }
 }
 
 /// The vault calls behind ``AttachmentManager`` (§10.5.1), one per step, as ``VaultApi`` has them; a test passes its own.

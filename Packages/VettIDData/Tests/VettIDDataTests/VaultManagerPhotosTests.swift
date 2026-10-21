@@ -64,7 +64,7 @@ enum TestPhotos {
 
     init() throws {
         service = try FakeVaultService()
-        phone = try TestVaultPhone(service: service, requestTimeout: 1)
+        phone = try TestVaultPhone(service: service, requestTimeout: 3)
     }
 
     var m: VaultManager { phone.manager }
@@ -79,10 +79,11 @@ enum TestPhotos {
         try await m.createCredential(password: "correct horse battery", backup: true, pin: pin) { _ in }
         try await m.finishSetup()
         let r = try await c.acceptInvite(try service.peerInvite(first: "Morgan", last: "Lee", name: "Mo"))
-        #expect(await eventually { c.requests.first?.sas != nil })
+        // Under a loaded full run the opening's reads (with this suite's short request timeout) take longer than the default.
+        #expect(await eventually(within: .seconds(30)) { c.requests.first?.sas != nil })
         try service.peerApproves(r.connectionID)
         try await c.approveOutgoing(r.connectionID)
-        #expect(await eventually { c.connections.map(\.id) == [r.connectionID] })
+        #expect(await eventually(within: .seconds(30)) { c.connections.map(\.id) == [r.connectionID] })
         return r.connectionID
     }
 

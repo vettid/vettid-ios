@@ -18,6 +18,8 @@ public final class FakeAttachments: AttachmentsRepository {
     public var prepared: [PreparedPhoto] = []
     /// When set, ``send(_:)`` waits for it (a request on its way).
     public var sendGate: TestDeferred<Void>?
+    /// When set, ``thumbnail(_:messageID:)`` and ``photo(_:messageID:)`` wait for it (a fetch on its way).
+    public var fetchGate: TestDeferred<Void>?
     /// When set, ``prepare(_:)`` waits for it before preparing a source of that first byte.
     public var prepareGates: [UInt8: TestDeferred<Void>] = [:]
     /// The thumbnail and the photo this fake serves (a JPEG's first bytes).
@@ -32,11 +34,16 @@ public final class FakeAttachments: AttachmentsRepository {
 
     public func probe() async { calls.append("probe") }
 
-    public func prepare(_ source: [UInt8]) async throws -> PreparedPhoto {
-        if let first = source.first, let gate = prepareGates[first] { try await gate.value() }
+    /// Every source ``prepare(_:)`` was given, to check that the caller wiped it after.
+    public var sources: [PhotoBytes] = []
+
+    public func prepare(_ source: PhotoBytes) async throws -> PreparedPhoto {
+        sources.append(source)
+        let bytes = source.copy()
+        if let first = bytes.first, let gate = prepareGates[first] { try await gate.value() }
         try call("prepare")
-        if source.isEmpty { throw PhotoError(.unreadable) }
-        let p = PreparedPhoto(jpeg: source, thumb: [1, 2, 3], width: 2_560, height: 1_920)
+        if bytes.isEmpty { throw PhotoError(.unreadable) }
+        let p = PreparedPhoto(jpeg: bytes, thumb: [1, 2, 3], width: 2_560, height: 1_920)
         prepared.append(p)
         return p
     }
@@ -61,11 +68,13 @@ public final class FakeAttachments: AttachmentsRepository {
 
     public func thumbnail(_ connectionID: String, messageID: String) async throws -> [UInt8] {
         try call("thumbnail")
+        if let gate = fetchGate { try await gate.value() }
         return served
     }
 
     public func photo(_ connectionID: String, messageID: String) async throws -> FetchedPhoto {
         try call("photo")
+        if let gate = fetchGate { try await gate.value() }
         return FetchedPhoto(bytes: served, type: .jpeg)
     }
 

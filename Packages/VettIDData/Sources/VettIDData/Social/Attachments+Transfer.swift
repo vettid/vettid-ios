@@ -10,12 +10,16 @@ extension AttachmentManager {
     func sendNow(_ p: PendingPhoto) async throws -> MessageInfo {
         if p.sent { throw VaultFailure(.conflict, code: Self.codeAlreadySent) }
         let mark = cleared
-        if p.blobID == nil { try await upload(p) }
+        // A photo a clear wiped (a lock, the hold) is never sealed, uploaded or sent: its bytes are zeros.
+        try live(p, since: mark)
+        if p.blobID == nil { try await upload(p, since: mark) }
+        try live(p, since: mark)
         guard let blobID = p.blobID, let sealed = p.sealed else { throw VaultFailure(.other, code: Self.codeNoUpload) }
-        let att = AttachmentSend(
-            blobID: blobID, key: sealed.key, sha256: sealed.sha256, size: sealed.size, mime: ImageType.jpeg.mime,
-            width: p.photo.width, height: p.photo.height, thumb: p.photo.thumb.copy()
+        var att = AttachmentSend(
+            blobID: blobID, key: sealed.key.withUnsafeBufferPointer { Array($0) }, sha256: sealed.sha256, size: sealed.size,
+            mime: ImageType.jpeg.mime, width: p.photo.width, height: p.photo.height, thumb: p.photo.thumb.copy()
         )
+        defer { att.wipe() }
         let answer: SentAttachment
         do {
             let (caption, id) = (p.caption.isEmpty ? nil : p.caption, p.requestID)
@@ -47,10 +51,11 @@ extension AttachmentManager {
 
     /// Seals the photo under a fresh key (§5.5) and uploads it to the vault's mailbox; only the key and the hash are kept
     /// once the relay took it.
-    func upload(_ p: PendingPhoto) async throws {
+    func upload(_ p: PendingPhoto, since mark: Int) async throws {
         p.sealed?.wipe()
         p.sealed = nil
-        let sealed = try p.photo.jpeg.withBytes { try ClaimBlob.seal($0) }
+        var sealed = try p.photo.jpeg.withBytes { try ClaimBlob.seal($0) }
+        defer { sealed.wipe() }
         let id = try await guarded {
             do {
                 return try await ops().uploadBlob(sealed.blob)
@@ -58,8 +63,19 @@ extension AttachmentManager {
                 throw VaultFailure(.limit, code: Self.codeQuota, cause: r)
             }
         }
+        // Cleared while uploading: the upload is left to expire (the vault is not open to discard it).
+        try live(p, since: mark)
         p.blobID = id
-        p.sealed = PendingPhoto.SealedRef(key: sealed.key, sha256: sealed.sha256, size: sealed.size)
+        let key = sealed.key.withUnsafeBufferPointer { Array($0) } // storage of its own: the sealed copy is zeroed
+        p.sealed = PendingPhoto.SealedRef(key: key, sha256: sealed.sha256, size: sealed.size)
+    }
+
+    /// Throws `unavailable` when a clear came since [mark], or [p] was wiped or let go.
+    func live(_ p: PendingPhoto, since mark: Int) throws {
+        guard mark == cleared, !p.photo.isWiped, pending[ObjectIdentifier(p)] != nil else {
+            if pending[ObjectIdentifier(p)] != nil { finish(p) }
+            throw VaultFailure(.other, code: Self.codeUnavailable)
+        }
     }
 
     /// The content's blob from this phone's mailbox, deleted there whatever its checks say (§5.5: the mailbox's blob

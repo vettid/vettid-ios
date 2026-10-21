@@ -71,7 +71,7 @@ public struct BlobRef: Equatable, Sendable, CustomStringConvertible, CustomRefle
 /// send no `name` for a photo.
 public struct AttachmentSend: Sendable, CustomStringConvertible, CustomReflectable {
     public let blobID: String
-    public let key: [UInt8]
+    public private(set) var key: [UInt8]
     public let sha256: [UInt8]
     public let size: Int
     public let mime: String
@@ -89,6 +89,9 @@ public struct AttachmentSend: Sendable, CustomStringConvertible, CustomReflectab
         self.height = height
         self.thumb = thumb
     }
+
+    /// Zeroes the key in place once the request is answered or abandoned.
+    public mutating func wipe() { Bytes.wipe(&key) }
 
     /// `{blob: {id, key, sha256, size, mime}, kind: "photo", width, height, thumb}`.
     public var json: String {
