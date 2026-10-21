@@ -141,7 +141,7 @@ import VettIDVault
         #expect(!m.rotateOffered)
         try await m.changePassword(password, newPassword: newPassword, pin: pin)
         #expect(m.rotateOffered && m.record.value.rotateOffer)
-        try phone.restart()
+        try await phone.restart()
         try await m.refresh()
         #expect(m.rotateOffered, "a restart keeps the offer")
         try await m.rotate(password: newPassword)

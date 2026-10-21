@@ -79,22 +79,22 @@ func vaultFailure(_ body: @MainActor () async throws -> Void) async -> VaultFail
     @Test func theStartReadsWhereSetupStands() async throws {
         defer { phone.close() }
         _ = try await m.redeemSetupCode(.secret(service.secret))
-        try phone.restart()
+        try await phone.restart()
         try await m.refresh()
         #expect(m.phase == .setup(.newVault) && m.account?.emailHint == service.emailHint)
 
         try await m.enroll(pin: "402817") { _ in }
-        try phone.restart()
+        try await phone.restart()
         try await m.refresh()
         #expect(m.phase == .setup(.needsCredential) && m.usesPhoneSecret)
 
         try await m.createCredential(password: "correct horse battery", backup: true, pin: "402817") { _ in }
-        try phone.restart()
+        try await phone.restart()
         try await m.refresh()
         #expect(m.phase == .setup(.finishing))
 
         try await m.finishSetup()
-        try phone.restart()
+        try await phone.restart()
         try await m.refresh()
         #expect(m.phase == .unlocked)
 
@@ -114,7 +114,7 @@ func vaultFailure(_ body: @MainActor () async throws -> Void) async -> VaultFail
         let key = try phone.appKeys.getOrCreate().spki()
         try await m.forgetSetupCode()
         #expect(m.phase == .signedOut && m.account == nil)
-        try phone.restart()
+        try await phone.restart()
         try await m.refresh()
         #expect(m.phase == .signedOut)
         _ = try await m.redeemSetupCode(.secret(service.secret))

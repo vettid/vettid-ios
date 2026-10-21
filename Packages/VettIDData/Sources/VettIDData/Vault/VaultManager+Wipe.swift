@@ -107,6 +107,19 @@ extension VaultManager {
         }
     }
 
+    /// The app process going away, as the tests simulate a restart: a session still being opened is stopped and waited
+    /// for, the collection stops, and every device a session of this manager held is halted (``VaultDevice/halt()``): what
+    /// it was sending finishes, and nothing it still had on the way sends or writes anything from then on, while the
+    /// stored state stays for the next manager. A real process death needs none of this. The manager is unusable after.
+    package func halt() async {
+        _ = await cancelOpening()
+        stopCollecting()
+        for d in devicesMade.alive {
+            await d.halt()
+            devicesMade.remove(d)
+        }
+    }
+
     private func wipeEnded(_ p: AppPhase) {
         if p == .signedOut { account = nil }
         phase = p

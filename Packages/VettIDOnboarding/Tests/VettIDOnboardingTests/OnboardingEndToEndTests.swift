@@ -64,7 +64,7 @@ import VettIDDataTesting
         defer { phone.close() }
         _ = try await phone.manager.redeemSetupCode(.secret(service.secret))
         try await phone.manager.enroll(pin: pin) { _ in }
-        try phone.restart()
+        try await phone.restart()
         let vm = model()
         try await phone.manager.refresh()
         await vm.settle()

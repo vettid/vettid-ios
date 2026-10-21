@@ -122,7 +122,7 @@ import VettIDDataTesting
     @Test func aSessionOpeningDuringTheWipeLeavesNothing() async throws {
         defer { phone.close() }
         try await setUp()
-        try phone.restart()
+        try await phone.restart()
         let opening = Task { try? await m.refresh() }
         await Task.yield()
         try await m.eraseThisPhone()
@@ -137,11 +137,31 @@ import VettIDDataTesting
         try await m.ownerChecks.refreshOwnerCheck()
         #expect(m.ownerChecks.ownerCheck != nil)
         try LocalWipe(targets: phone.wipeTargets).begin()
-        try phone.restart()
+        try await phone.restart()
         m.resumePendingWipe()
         m.reloadLocalState()
         #expect(m.ownerChecks.ownerCheck == nil)
         try await m.refresh()
+        try expectFresh()
+    }
+
+    /// A request the old manager still awaited at a restart (a process death ends it) writes nothing once the new
+    /// manager's wipe erased the files, even when its answer arrives afterwards.
+    @Test func aRequestOfTheOldManagerWritesNothingAfterTheRestart() async throws {
+        defer { phone.close() }
+        try await setUp()
+        let old = m
+        let statuses = service.requestsSeen.filter { $0 == "vault.status" }.count
+        service.holdMessages = true
+        let request = Task { try? await old.ownerChecks.refreshOwnerCheck() }
+        #expect(await eventually { service.requestsSeen.filter { $0 == "vault.status" }.count > statuses })
+        try LocalWipe(targets: phone.wipeTargets).begin()
+        try await phone.restart()
+        m.resumePendingWipe()
+        m.reloadLocalState()
+        try await m.refresh()
+        service.holdMessages = false
+        await request.value
         try expectFresh()
     }
 
@@ -179,7 +199,7 @@ import VettIDDataTesting
         defer { phone.close() }
         try await setUp()
         try LocalWipe(targets: phone.wipeTargets).begin()
-        try phone.restart()
+        try await phone.restart()
         try await m.refresh()
         try expectFresh()
     }

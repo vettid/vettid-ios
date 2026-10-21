@@ -211,7 +211,7 @@ import VettIDVault
         let marker = try #require(try m.phoneSecrets.unresolvedChange())
         #expect(marker.version == service.vaultCredentialVersion, "stored on the confirmed version")
         _ = await change.value
-        try phone.restart()
+        try await phone.restart()
         service.loseRequests([])
         pastExp()
         await m.checkUnresolvedChange(evenLocked: true)
@@ -230,7 +230,7 @@ import VettIDVault
         #expect(await vaultFailure { try await m.renewPhoneSecret(pin: pin, password: password) }?.kind == .noResponse)
         let candidate = try #require(try m.phoneSecrets.records().candidates.first)
         #expect(candidate.sent?.version == service.vaultCredentialVersion)
-        try phone.restart()
+        try await phone.restart()
         try await m.refresh()
         service.loseRequests([])
         pastExp()

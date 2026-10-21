@@ -349,7 +349,7 @@ import VettIDVault
         service.loseAnswers(["pin.change", "credential.version"], from: "pin.change")
         _ = await pinChangeUndecided()
         let sent = count("pin.change")
-        try phone.restart()
+        try await phone.restart()
         #expect(try m.phoneSecrets.unresolvedChange() != nil && m.heldChange == nil)
         #expect(m.unlockPinStep == .pin)
         m.refreshPinStep()
@@ -414,7 +414,7 @@ import VettIDVault
         service.loseAnswers(["pin.change", "credential.version"], from: "pin.change")
         _ = await pinChangeUndecided()
         service.moveCredentialWithoutTheApp()
-        try phone.restart()
+        try await phone.restart()
         service.loseAnswers([])
         await m.checkUnresolvedChange(evenLocked: true)
         let marker = try m.phoneSecrets.unresolvedChange()
@@ -472,7 +472,7 @@ import VettIDVault
     @Test func expIsOnTheVaultsClockInAFreshProcess() async throws {
         defer { phone.close() }
         try await setUp()
-        try phone.restart()
+        try await phone.restart()
         service.advanceVaultClock(200)
         try await m.changePin(pin: pin, newPin: newPin, password: password)
         let seen = service.requestsSeen
