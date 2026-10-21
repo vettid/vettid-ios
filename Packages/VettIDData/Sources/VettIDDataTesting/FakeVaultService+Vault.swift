@@ -44,12 +44,30 @@ extension FakeVaultService {
 
     func answerRelay(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer {
         if r.path == "/v1/register" {
-            return .json(201, #"{"mailbox_id":"x","limits":{"max_payload_bytes":262144,"message_ttl_seconds":1,"visibility_timeout_seconds":60,"max_token_lifetime_seconds":1,"open_token_max_lifetime_seconds":\#(Self.relayInviteLimit),"max_claim_bytes":65536,"claim_ttl_seconds":\#(Self.relayInviteLimit)}}"#)
+            if let gate = locked({ registerGateValue }) { return .held(gate, registerAnswer) }
+            return registerAnswer
         }
         if r.path == "/v1/mailbox", r.method == "GET" { return collect() }
         if r.path.hasPrefix("/v1/blob/") { return deviceBlob(r) }
         if r.path.hasPrefix("/v1/mailbox/"), r.method == "DELETE" { return .empty(204) }
         return .json(404, #"{"code":"not_found","message":""}"#)
+    }
+
+    /// Holds the device relay's `register` (a new device being made while a session opens) until ``releaseRegisters()``.
+    public func holdRegisters() { locked { registerGateValue = FakeHTTPServer.Gate() } }
+
+    /// The `register` requests held now.
+    public var heldRegisters: Int { locked { registerGateValue?.waiting ?? 0 } }
+
+    public func releaseRegisters() {
+        locked {
+            registerGateValue?.open()
+            registerGateValue = nil
+        }
+    }
+
+    private var registerAnswer: FakeHTTPServer.Answer {
+        .json(201, #"{"mailbox_id":"x","limits":{"max_payload_bytes":262144,"message_ttl_seconds":1,"visibility_timeout_seconds":60,"max_token_lifetime_seconds":1,"open_token_max_lifetime_seconds":\#(Self.relayInviteLimit),"max_claim_bytes":65536,"claim_ttl_seconds":\#(Self.relayInviteLimit)}}"#)
     }
 
     /// One collect: the queued messages, waiting briefly while there are none.

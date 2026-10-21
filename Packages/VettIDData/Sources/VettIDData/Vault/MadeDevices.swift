@@ -18,5 +18,5 @@ final class MadeDevices {
 
     var alive: [VaultDevice] { refs.compactMap(\.device) }
 
-    func removeAll() { refs = [] }
+    func remove(_ d: VaultDevice) { refs.removeAll { $0.device == nil || $0.device === d } }
 }

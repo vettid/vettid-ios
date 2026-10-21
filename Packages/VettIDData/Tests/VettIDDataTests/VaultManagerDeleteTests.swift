@@ -205,6 +205,21 @@ import VettIDVault
         try expectWiped()
     }
 
+    /// A forget while a session is still being opened (its new device waiting for the relay's `register`): the opening is
+    /// stopped and waited for first, so that no device state is written after the forget.
+    @Test func aForgetStopsASessionBeingOpened() async throws {
+        defer { phone.close() }
+        service.holdRegisters()
+        let opening = Task { try await m.openSession() }
+        #expect(await eventually { service.heldRegisters == 1 })
+        let forget = Task { try await m.dropSession(forget: true, vaultGone: true) }
+        service.releaseRegisters()
+        try await forget.value
+        _ = try? await opening.value
+        #expect(m.session == nil)
+        #expect(!files.contains(VaultFiles.device), "files left: \(files)")
+    }
+
     /// The deletion's `device.unlinked{vault_deleted}` read while the unlock waits for its answer (its slot answers late):
     /// "being deleted" at once, and the unlock's end never puts the open app over it.
     @Test func anUnlinkDuringAnUnlockWins() async throws {

@@ -198,6 +198,8 @@ public final class FakeVaultService: @unchecked Sendable {
     var holdsDeletionUnlinkValue = false
     var slotQueuedAfterDeletionValue = 0
     var statusGateValue: FakeHTTPServer.Gate?
+    /// Holds the device relay's `register` answers (a session being opened) until released.
+    var registerGateValue: FakeHTTPServer.Gate?
     // The rotation, a new credential and the clone alarm (FakeVaultService+Credential.swift), under ``cond``.
     var alarmValue: FakeAlarm?
     var credentialKeyValue = FakeVaultService.credentialKeyID

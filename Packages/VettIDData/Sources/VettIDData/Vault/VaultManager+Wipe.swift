@@ -100,8 +100,11 @@ extension VaultManager {
     /// Forgets every device a session of this manager held that is still alive: each waits for what it is sending, and
     /// writes nothing to the store from then on.
     func forgetEveryDevice() async {
-        for d in devicesMade.alive { try? await d.forget() }
-        devicesMade.removeAll()
+        // One registered while another is being forgotten is forgotten too: until none is left.
+        while let d = devicesMade.alive.first {
+            try? await d.forget()
+            devicesMade.remove(d)
+        }
     }
 
     private func wipeEnded(_ p: AppPhase) {
