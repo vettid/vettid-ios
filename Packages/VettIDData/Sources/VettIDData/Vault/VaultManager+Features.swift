@@ -89,9 +89,10 @@ extension VaultManager {
     }
 
     /// The vault is no longer open on this phone: what was read from it is dropped (the connections, the requests, the
-    /// messages and their photos, the feed, the approvals' lists, History and the member's own profile).
+    /// messages and their photos, the items, the feed, the approvals' lists, History and the member's own profile).
     func forgetOpenLists() {
         profiles.clear()
+        items.clear()
         connections.forgetOpenVault()
         messages.forgetOpenVault()
         attachments.clear()
@@ -99,13 +100,14 @@ extension VaultManager {
     }
 
     /// The vault opened, or an owner check passed (§3.6.3: nothing held back is replayed as events): the member's own
-    /// profile, the connections and the requests, the approvals' lists, the feed, then the conversations (one request per connection, last, so that asks
+    /// profile, the items, the connections and the requests, the approvals' lists, the feed, then the conversations (one request per connection, last, so that asks
     /// that expire are not kept waiting behind them) are read again, one after the other; failures are left for the
     /// screens.
     func refreshListsQuietly() {
         Task { [weak self] in
             guard let self else { return }
             profiles.refreshQuietly()
+            items.refreshQuietly()
             try? await connections.refresh(quietly: true)
             try? await connections.refreshRequests(quietly: true)
             try? await approvals.refreshApprovals(quietly: true, requests: false)
