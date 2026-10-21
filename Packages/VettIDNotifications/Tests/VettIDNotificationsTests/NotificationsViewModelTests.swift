@@ -129,14 +129,24 @@ import VettIDVault
         #expect(m.state.open == .devices)
     }
 
-    /// An `item.revealed` names its item and opens it from the Vault list; an item the list does not hold is gone.
+    /// An `item.revealed` names its item and opens it from the Vault list, which is read quietly when it has not been read
+    /// and followed as it changes; an item the list does not hold is gone.
     @Test func anItemOpensFromTheVaultList() async throws {
         let items = FakeItems()
         items.add(FakeItems.item("01ITEM", "Bank login", sensitivity: .secret))
-        try await items.refresh()
+        #expect(items.load == .notLoaded)
         let m = NotificationsViewModel(feed: feed, connections: connections, approvals: approvals, items: items)
         await m.settle()
+        #expect(items.calls == ["refreshQuietly"])
         #expect(m.state.names.items == ["01ITEM": "Bank login"])
+        // Renamed meanwhile: the new name.
+        var renamed = FakeItems.item("01ITEM", "Main bank", sensitivity: .secret)
+        renamed.version = 2
+        items.add(renamed)
+        #expect(m.state.names.items == ["01ITEM": "Main bank"])
+        // A list already read is not read again.
+        _ = NotificationsViewModel(feed: feed, items: items)
+        #expect(items.calls == ["refreshQuietly"])
         m.open(Self.item("i", "item.revealed", ref: "01ITEM"))
         #expect(m.state.open == .item("01ITEM") && m.state.sheet == nil)
         m.targetTaken()

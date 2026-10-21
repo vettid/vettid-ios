@@ -70,6 +70,13 @@ public final class FakeItems: ItemsRepository {
         publish()
     }
 
+    /// At once (a failure set in [fail] leaves the list unread).
+    public func refreshQuietly() {
+        guard (try? call("refreshQuietly")) != nil else { return }
+        load = .loaded
+        publish()
+    }
+
     public func get(_ itemID: String) async throws -> ItemDetail {
         try call("get")
         let d = try find(itemID)

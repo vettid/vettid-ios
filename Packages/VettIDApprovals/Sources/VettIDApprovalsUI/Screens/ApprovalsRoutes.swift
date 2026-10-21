@@ -81,10 +81,7 @@ public struct ApprovalDetailRoute: View {
         ApprovalDetailScreen(state: model?.state ?? ApprovalDetailState(key: key), actions: actions)
             .onAppear {
                 guard model == nil else { return }
-                let answers = (items?.items ?? []).map {
-                    AnswerItem(id: $0.itemID, name: $0.name, category: $0.category, critical: $0.sensitivity == .critical)
-                }
-                model = ApprovalDetailViewModel(key: key, approvals: approvals, connections: connections, items: answers)
+                model = ApprovalDetailViewModel(key: key, approvals: approvals, connections: connections, vault: items)
             }
     }
 

@@ -295,6 +295,20 @@ import VettIDDataTesting
         let other = await model("auth:a2")
         #expect(!other.state.expired(at: .distantFuture))
     }
+
+    /// The items a category entry can be answered with come from the Vault list: read quietly when it has not been read,
+    /// followed as it changes, by name; a critical item is not offered.
+    @Test func theAnswersFollowTheVaultList() async throws {
+        let items = FakeItems()
+        items.add(FakeItems.item("i9", "Travel insurance", category: "insurance"))
+        items.add(FakeItems.item("i8", "Seed", sensitivity: .critical, category: "crypto_wallet"))
+        let m = ApprovalDetailViewModel(key: "grant:g1", approvals: fake, connections: connections, vault: items)
+        await m.settle()
+        #expect(items.calls == ["refreshQuietly"])
+        #expect(m.state.items.map(\.id) == ["i8", "i9"] && m.state.answerable.map(\.id) == ["i9"])
+        items.add(FakeItems.item("i7", "Home insurance", category: "insurance"))
+        #expect(m.state.answerable.map(\.id) == ["i7", "i9"])
+    }
 }
 
 // swiftlint:enable line_length

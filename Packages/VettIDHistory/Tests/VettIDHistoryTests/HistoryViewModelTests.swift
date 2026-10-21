@@ -245,6 +245,25 @@ import VettIDVault
         let m = await model(log)
         #expect(!"\(m.state)".contains("Name not shared") && !String(reflecting: m.state).contains("message.sent"))
     }
+
+    /// The Vault list is read quietly when it has not been read, and its names followed: an item named once the list
+    /// arrives, renamed, then gone.
+    @Test func itemNamesFollowTheVaultList() async {
+        let log = FakeAuditLog()
+        log.script([{ AuditPage(entries: [Self.entry(5, "item.revealed", conn: nil)], seq: 5) }])
+        let items = FakeItems()
+        items.fail["refreshQuietly"] = VaultFailure(.network)
+        items.add(FakeItems.item("it1", "Passport"))
+        let m = HistoryViewModel(history: HistoryManager { log }, connections: connections, items: items, debounce: .zero)
+        await m.settle()
+        #expect(items.calls == ["refreshQuietly"] && m.state.itemNames == nil)
+        try? await items.refresh()
+        #expect(await eventually { m.state.itemNames == ["it1": "Passport"] })
+        items.add(FakeItems.item("it1", "Old passport"))
+        #expect(await eventually { m.state.itemNames == ["it1": "Old passport"] })
+        items.clear()
+        #expect(await eventually { m.state.itemNames == nil })
+    }
 }
 
 // swiftlint:enable line_length

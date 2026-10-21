@@ -70,7 +70,7 @@ public struct HistoryRoute: View {
             if model == nil {
                 model = HistoryViewModel(
                     history: history, connections: connections, ownerChecks: ownerChecks, connectionID: connectionID,
-                    itemNames: itemNames(items)
+                    items: items
                 )
             }
             if exportModel == nil { exportModel = HistoryExportViewModel(repo: export) }
@@ -148,7 +148,7 @@ public struct HistoryEntryRoute: View {
         HistoryEntryScreen(state: model?.state ?? HistoryEntryState(), actions: actions)
             .onAppear {
                 if model == nil {
-                    model = HistoryEntryViewModel(seq: seq, history: history, connections: connections, itemNames: itemNames(items))
+                    model = HistoryEntryViewModel(seq: seq, history: history, connections: connections, items: items)
                 }
             }
     }
@@ -161,11 +161,5 @@ public struct HistoryEntryRoute: View {
         if let m = model { a.onRetry = { m.load() } }
         return a
     }
-}
-/// The Vault list's names by item id, read when asked (nil before the list is read); nil without the list.
-@MainActor
-private func itemNames(_ items: (any ItemsRepository)?) -> (@MainActor () -> [String: String]?)? {
-    guard let items else { return nil }
-    return { items.names }
 }
 #endif
