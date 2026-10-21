@@ -194,7 +194,7 @@ final class FakeFeedOps: FeedOps, @unchecked Sendable {
         let gate = TestDeferred<Void>()
         ops.listGate = gate
         let read = Task { try await f.refresh() }
-        try await Task.sleep(for: .milliseconds(50))
+        #expect(await eventually { ops.calls.count == 2 }, "the read is under way")
         f.clear()
         gate.complete(())
         try await read.value
