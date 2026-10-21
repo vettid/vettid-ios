@@ -82,7 +82,8 @@ public final class NotificationsViewModel {
     @ObservationIgnored private var handled = Set<String>()
     private var local: NotificationsState
 
-    /// [archived]: the Archived view. [connections], [approvals] and [items]: the names (an item's from the Vault list).
+    /// [archived]: the Archived view. [connections], [approvals] and [items]: the names, followed as they change; the Vault
+    /// list is read quietly when it has not been read (an `item.revealed` opens its item).
     public init(
         feed: any FeedRepository, connections: (any ConnectionsRepository)? = nil, approvals: (any ApprovalsRepository)? = nil,
         items: (any ItemsRepository)? = nil, archived: Bool = false
@@ -93,6 +94,7 @@ public final class NotificationsViewModel {
         self.items = items
         local = NotificationsState(archived: archived)
         if feed.load == .notLoaded { refresh() }
+        items?.readIfNotLoaded()
         follows.add(follow(self, read: { $0.feed.items }, apply: { m, _ in m.onItems() }))
     }
 

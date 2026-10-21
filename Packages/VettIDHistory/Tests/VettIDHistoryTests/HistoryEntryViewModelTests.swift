@@ -143,6 +143,23 @@ import VettIDVault
         m = await model(log)
         #expect(m.state.itemName == nil && !m.state.itemsKnown)
     }
+
+    /// The Vault list is read quietly when it has not been read; the entry's item follows it (named once the list is
+    /// read, then deleted).
+    @Test func theItemFollowsTheVaultList() async {
+        let log = FakeAuditLog()
+        log.script([{ AuditPage(entries: [Self.entry(20, "item.revealed", "it1")], seq: 30) }])
+        let items = FakeItems()
+        items.fail["refreshQuietly"] = VaultFailure(.network)
+        items.add(FakeItems.item("it1", "Passport"))
+        let m = HistoryEntryViewModel(seq: 20, history: HistoryManager(selfID: { "d-self" }) { log }, connections: connections, items: items)
+        await m.settle()
+        #expect(items.calls == ["refreshQuietly"] && !m.state.itemsKnown && m.state.itemName == nil)
+        try? await items.refresh()
+        #expect(m.state.itemName == "Passport" && m.state.itemExists && m.state.itemsKnown)
+        try? await items.delete("it1", sensitivity: .data, password: nil)
+        #expect(m.state.itemName == nil && !m.state.itemExists && m.state.itemsKnown)
+    }
 }
 
 // swiftlint:enable line_length

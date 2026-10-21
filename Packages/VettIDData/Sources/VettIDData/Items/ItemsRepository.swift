@@ -24,6 +24,10 @@ public protocol ItemsRepository: AnyObject, Observable, Sendable {
     /// Reads the whole list (`item.list`, pages of 500).
     func refresh() async throws
 
+    /// Reads the list in the background, only over the session open now; a failure is not shown (the screens that only
+    /// name items: History, Notifications, Approvals).
+    func refreshQuietly()
+
     /// `item.get`: a `data` item with its values; a `secret` or `critical` one without.
     func get(_ itemID: String) async throws -> ItemDetail
 
@@ -71,6 +75,11 @@ public extension ItemsRepository {
     var names: [String: String]? {
         guard load == .loaded else { return nil }
         return Dictionary(items.map { ($0.itemID, $0.name) }, uniquingKeysWith: { a, _ in a })
+    }
+
+    /// Reads the list quietly when it has not been read (vettid-android reads it when `NOT_LOADED`).
+    func readIfNotLoaded() {
+        if load == .notLoaded { refreshQuietly() }
     }
 
     /// The item of [itemID] in the list, if it holds it.
