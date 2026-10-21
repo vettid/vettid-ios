@@ -114,6 +114,53 @@ import VettIDUI
         #expect(height(MonthPicker(stored: "2031-04") { _ in }) > 0 && height(DayPicker(stored: "2031-04-30") { _ in }) > 0)
     }
 
+    /// A route's view model is made when the screen appears, never in `init`, which SwiftUI runs on every redraw of the
+    /// shell: making the routes again and again sends nothing.
+    @Test func makingARouteSendsNothing() {
+        let items = FakeItems()
+        let sharing = FakeSharing()
+        for _ in 0..<3 {
+            _ = ItemsRoute(items: items, ownerChecks: nil, chrome: chrome, host: ItemsHost())
+            _ = ItemDetailRoute("01L", items: items, host: ItemsHost())
+            _ = ItemEditRoute(itemID: "01L", template: nil, items: items, sharing: sharing, connections: nil, host: ItemsHost())
+            _ = TagsRoute(sharing: sharing) {}
+        }
+        #expect(items.calls.isEmpty && sharing.calls.isEmpty)
+    }
+
+    /// Revealed values go when the app leaves the foreground (not when it is only inactive, as under the Face ID prompt)
+    /// and when the screen goes.
+    @Test func revealedValuesGoInTheBackgroundAndWhenTheScreenGoes() async {
+        let items = FakeItems()
+        items.add(FakeItems.item("01L", "Bank login", sensitivity: .secret, fields: [("Password", "hunter2")]))
+        let vm = ItemDetailViewModel(itemID: "01L", items: items)
+        await vm.settle()
+        vm.reveal()
+        await vm.settle()
+        #expect(vm.state.revealed)
+        ItemDetailRoute.phaseChanged(.inactive, vm)
+        #expect(vm.state.revealed)
+        ItemDetailRoute.phaseChanged(.background, vm)
+        #expect(!vm.state.revealed && vm.state.item?.fields.map(\.value) == [nil])
+        vm.reveal()
+        await vm.settle()
+        ItemDetailRoute.left(vm)
+        #expect(!vm.state.revealed)
+    }
+
+    /// The values are drawn on the layer screenshots and recordings leave out (when this iOS has it).
+    @Test func theValuesAreInTheSecureContainer() throws {
+        try #require(SecureLayer.isAvailable, "no secure layer on this iOS: the cover and capture hiding protect the values")
+        let host = UIHostingController(rootView: ItemDetailScreen(state: ItemDetailState(itemID: "01L", item: item(.secret, revealed: true)), actions: ItemDetailActions()).vettIDTheme(.dark))
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        host.view.layoutIfNeeded()
+        func all(_ v: UIView) -> [UIView] { [v] + v.subviews.flatMap(all) }
+        #expect(all(host.view).contains { String(describing: type(of: $0)).contains("Canvas") })
+        window.isHidden = true
+    }
+
     @Test func everyCategoryHasItsGlyph() {
         #expect(ItemTemplates.categories.allSatisfy { ItemSymbols.category($0.id) != .folder || $0.id == "other" })
         #expect(ItemSymbols.category("loyalty_cards") == .folder)

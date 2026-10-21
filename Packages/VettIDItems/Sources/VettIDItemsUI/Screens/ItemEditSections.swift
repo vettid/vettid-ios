@@ -31,8 +31,13 @@ struct PlainField: View {
     var isError = false
     let onChange: @MainActor (String) -> Void
 
+    /// No AutoFill and no "Save Password?" (IOS-PLAN §6.5): the empty content type the secret fields use, so that iOS
+    /// guesses none (a field next to a password is taken for a username otherwise).
+    static let noAutofill = UITextContentType(rawValue: "")
+
     var body: some View {
         TextField(placeholder ?? "", text: Binding(get: { text }, set: { onChange($0) }))
+            .textContentType(Self.noAutofill)
             .vettIDFont(.bodyLarge)
             .frame(minHeight: Spacing.touchTarget)
             .padding(.horizontal, Spacing.l)
@@ -261,6 +266,7 @@ struct NotesInput: View {
                     SecretTextEditor(ItemsStrings.notes, text: binding, placeholder: placeholder, isError: tooLong)
                 } else {
                     TextField(placeholder ?? "", text: binding, axis: .vertical)
+                        .textContentType(PlainField.noAutofill)
                         .lineLimit(3...)
                         .vettIDFont(.bodyLarge)
                         .padding(Spacing.l)

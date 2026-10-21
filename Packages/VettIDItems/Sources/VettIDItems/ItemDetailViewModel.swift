@@ -105,6 +105,18 @@ public final class ItemDetailViewModel {
         }
     }
 
+    /// "Reveal": the iPhone's owner is confirmed first ([confirm], with the prompt's reason: the title and the item's name,
+    /// as vettid-android's prompt shows them); nothing is asked of the vault unless confirmed. A critical item asks the
+    /// password instead.
+    public func askReveal(_ confirm: @escaping @MainActor (String) async -> Bool) {
+        guard let item = state.item else { return }
+        if item.sensitivity == .critical { return open() }
+        let reason = [ItemsStrings.revealPromptTitle, item.name].joined(separator: "\n")
+        work.launch { [weak self] in
+            if await confirm(reason) { self?.reveal() }
+        }
+    }
+
     /// A critical item's values: the credential password first.
     public func open() {
         state.prompt = PasswordPrompt(.open)

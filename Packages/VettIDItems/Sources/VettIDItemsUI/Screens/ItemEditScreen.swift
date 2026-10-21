@@ -50,27 +50,52 @@ public struct ItemEditActions {
 /// item's screen; when the vault's items are cleared (a lock, the hold, a wipe) what was typed is dropped and it leaves.
 /// Mirrors vettid-android `ItemEditRouteContent`.
 public struct ItemEditRoute: View {
-    @State private var model: ItemEditViewModel
+    private let itemID: String?
+    private let template: String?
+    private let items: any ItemsRepository
+    private let sharing: (any SharingRepository)?
+    private let connections: (any ConnectionsRepository)?
     let host: ItemsHost
+    /// Made when the screen first appears (never in `init`, which SwiftUI runs again whenever the shell is redrawn).
+    @State private var model: ItemEditViewModel?
 
     public init(
         itemID: String?, template: String?, items: any ItemsRepository, sharing: (any SharingRepository)?,
         connections: (any ConnectionsRepository)?, host: ItemsHost
     ) {
-        _model = State(
-            initialValue: ItemEditViewModel(itemID: itemID, template: template, items: items, sharing: sharing, connections: connections)
-        )
+        self.itemID = itemID
+        self.template = template
+        self.items = items
+        self.sharing = sharing
+        self.connections = connections
         self.host = host
     }
 
     public var body: some View {
-        ItemEditScreen(state: model.state, actions: actions)
-            .onChange(of: model.state.savedID) { _, id in if let id { host.replaceWithItem(id) } }
-            .onChange(of: model.closed) { _, closed in if closed { host.onBack() } }
+        Group {
+            if let model {
+                ItemEditScreen(state: model.state, actions: actions(model))
+            } else {
+                ItemEditScreen(state: loadingState, actions: ItemEditActions())
+            }
+        }
+        .onAppear {
+            if model == nil {
+                model = ItemEditViewModel(itemID: itemID, template: template, items: items, sharing: sharing, connections: connections)
+            }
+        }
+        .onChange(of: model?.state.savedID) { _, id in if let id = id ?? nil { host.replaceWithItem(id) } }
+        .onChange(of: model?.closed) { _, closed in if closed == true { host.onBack() } }
     }
 
-    private var actions: ItemEditActions {
-        let m = model, host = host
+    private var loadingState: ItemEditState {
+        var s = ItemEditState(itemID: itemID)
+        s.loading = true
+        return s
+    }
+
+    private func actions(_ m: ItemEditViewModel) -> ItemEditActions {
+        let host = host
         var a = ItemEditActions()
         a.onBack = host.onBack
         a.onAskDiscard = { m.askDiscard(true) }
@@ -130,16 +155,21 @@ public struct ItemEditScreen: View {
     }
 
     public var body: some View {
-        if let prompt = state.prompt {
-            CredentialPasswordScreen(
-                prompt: prompt, itemName: state.shownName, onPassword: actions.onPassword, onSubmit: actions.onSubmitPassword,
-                onCancel: actions.onCancelPassword
-            )
-        } else if state.loading {
-            ProgressView().tint(colors.primary.color).frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            form
+        Group {
+            if let prompt = state.prompt {
+                CredentialPasswordScreen(
+                    prompt: prompt, itemName: state.shownName, onPassword: actions.onPassword, onSubmit: actions.onSubmitPassword,
+                    onCancel: actions.onCancelPassword
+                )
+            } else if state.loading {
+                ProgressView().tint(colors.primary.color).frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                form
+            }
         }
+        // The system back gestures would leave without asking: with unsaved changes (the password step included), back is
+        // the arrow, which asks.
+        .blocksBackGesture(state.dirty)
     }
 
     private var form: some View {
@@ -159,8 +189,6 @@ public struct ItemEditScreen: View {
             ItemEditForm(state: state, actions: actions)
         }
         .accessibilityIdentifier("item_edit")
-        // The system back gesture would leave without asking: with unsaved changes, back is the arrow (which asks).
-        .blocksBackGesture(state.dirty)
         .modifier(ItemEditDialogs(state: state, actions: actions))
     }
 }
@@ -176,8 +204,8 @@ struct ItemEditForm: View {
         let d = state.draft
         let show = state.showErrors
         let problems = state.check.problems
-        // A secret or critical item's values and notes are typed on a keyboard that does not learn.
-        let secret = d.sensitivity != .data
+        // A secret or critical item's values and notes (or one becoming so) are typed on a keyboard that does not learn.
+        let secret = d.sensitivity != .data || state.protection != .data
         VStack(alignment: .leading, spacing: Spacing.m) {
             notices
             NameInput(state: state, actions: actions)

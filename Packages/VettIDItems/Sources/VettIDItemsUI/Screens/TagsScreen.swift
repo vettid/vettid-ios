@@ -25,33 +25,37 @@ public struct TagsActions {
     public init() {}
 }
 
-/// The tags (VAULT-MESSAGING §10.8) over their view model. Mirrors vettid-android `TagsRouteContent`.
+/// The tags (VAULT-MESSAGING §10.8) over their view model, made when the screen first appears (never in `init`, which
+/// SwiftUI runs again whenever the shell is redrawn). Mirrors vettid-android `TagsRouteContent`.
 public struct TagsRoute: View {
-    @State private var model: TagsViewModel
+    private let sharing: any SharingRepository
     let onBack: @MainActor () -> Void
+    @State private var model: TagsViewModel?
 
     public init(sharing: any SharingRepository, onBack: @escaping @MainActor () -> Void) {
-        _model = State(initialValue: TagsViewModel(sharing: sharing))
+        self.sharing = sharing
         self.onBack = onBack
     }
 
     public var body: some View {
+        let m = model
         var a = TagsActions()
         a.onBack = onBack
-        a.onRetry = { model.refresh() }
-        a.onCreate = { model.askCreate() }
-        a.onEdit = { model.edit($0) }
-        a.onName = { model.setName($0) }
-        a.onDescription = { model.setDescription($0) }
-        a.onSave = { model.save() }
-        a.onDelete = { model.askDelete() }
-        a.onConfirmRename = { model.confirmRename() }
-        a.onConfirmDelete = { model.confirmDelete() }
-        a.onDismiss = { model.dismiss() }
-        a.onDismissError = { model.dismissError() }
-        a.onColour = { model.askColour($0) }
-        a.onPickColour = { model.pickColour($0, shown: $1) }
-        return TagsScreen(state: model.state, actions: a)
+        a.onRetry = { m?.refresh() }
+        a.onCreate = { m?.askCreate() }
+        a.onEdit = { m?.edit($0) }
+        a.onName = { m?.setName($0) }
+        a.onDescription = { m?.setDescription($0) }
+        a.onSave = { m?.save() }
+        a.onDelete = { m?.askDelete() }
+        a.onConfirmRename = { m?.confirmRename() }
+        a.onConfirmDelete = { m?.confirmDelete() }
+        a.onDismiss = { m?.dismiss() }
+        a.onDismissError = { m?.dismissError() }
+        a.onColour = { m?.askColour($0) }
+        a.onPickColour = { m?.pickColour($0, shown: $1) }
+        return TagsScreen(state: m?.state ?? TagsState(registry: sharing.tags), actions: a)
+            .onAppear { if model == nil { model = TagsViewModel(sharing: sharing) } }
     }
 }
 
