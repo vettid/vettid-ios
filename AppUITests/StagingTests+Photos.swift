@@ -20,7 +20,9 @@ extension StagingTests {
     /// The picker opening and showing its grid.
     static let pickerWait: TimeInterval = 30
     /// The conversation's history settling before the photos already there are noted.
-    static let historySettle: TimeInterval = 15
+    static let historySettle: TimeInterval = 20
+    /// The least time the history is watched before two equal snapshots count as settled.
+    static let historyObserve: TimeInterval = 3
     /// An outgoing photo's line as the label ends with it, and as it is reported (anything else is a failure).
     static let photoStates: [String: String] = ["Sending": "sending", "Delivered": "delivered"]
     /// The heads of a photo bubble's label.
@@ -323,12 +325,13 @@ extension StagingTests {
         }
     }
 
-    /// The photo bubbles from [peer], top to bottom, with whether their thumbnail is drawn; nil when the snapshot failed.
+    /// The photo bubbles from [peer], top to bottom, with whether their thumbnail is drawn; empty when the snapshot failed.
     @MainActor
     func incomingPhotos(_ app: XCUIApplication, peer: String) -> [(id: String, shown: Bool)] {
         incomingPhotoSnapshot(app, peer: peer) ?? []
     }
 
+    /// The same, nil when the snapshot failed (so that a failed read never counts as an empty list).
     @MainActor
     func incomingPhotoSnapshot(_ app: XCUIApplication, peer: String) -> [(id: String, shown: Bool)]? {
         guard let root = try? app.snapshot() else { return nil }
@@ -341,19 +344,38 @@ extension StagingTests {
         }
     }
 
-    /// The ids of the photo bubbles from [peer] once the conversation's history has settled: two snapshots a second
-    /// apart that list the same bubbles (for at most ``historySettle`` seconds, then the last list).
+    /// The ids of the photo bubbles from [peer] once the conversation's history has settled: first a sign that it has
+    /// loaded (a bubble, or its empty-conversation marker), then two snapshots a second apart that list the same bubbles
+    /// after at least ``historyObserve`` seconds of watching (for at most ``historySettle`` seconds in all, then the last
+    /// list).
     @MainActor
     func settledIncomingPhotos(_ app: XCUIApplication, peer: String) -> Set<String> {
         let deadline = Date().addingTimeInterval(Self.historySettle)
+        _ = waitUntil(timeout: Self.historySettle) { conversationLoaded(app, peer: peer) }
+        let earliest = Date().addingTimeInterval(Self.historyObserve)
         var last = incomingPhotoSnapshot(app, peer: peer)?.map(\.id)
         while Date() < deadline {
             Thread.sleep(forTimeInterval: 1)
             let now = incomingPhotoSnapshot(app, peer: peer)?.map(\.id)
-            if let now, now == last { break }
+            if let now, now == last, Date() >= earliest { break }
             last = now ?? last
         }
         return Set(last ?? [])
+    }
+
+    /// The conversation shows its history: its empty-conversation marker, or a bubble (a message's "You: …" or
+    /// "<peer>: …", or a photo's).
+    @MainActor
+    func conversationLoaded(_ app: XCUIApplication, peer: String) -> Bool {
+        guard let root = try? app.snapshot() else { return false }
+        return ordered(under: root).contains { e in
+            if e.identifier == "conversation_empty" { return true }
+            let label = Self.plain(e.label)
+            if e.identifier.hasPrefix("photo_") && (label.hasPrefix(Self.photoOut) || label.hasPrefix(Self.photoIn(peer))) {
+                return true
+            }
+            return label.hasPrefix("You: ") || label.hasPrefix(peer + ": ")
+        }
     }
 
     /// What the viewer shows: `shown` (the photo), `failed` (its failure notice, or a type it cannot show) or `loading`.
