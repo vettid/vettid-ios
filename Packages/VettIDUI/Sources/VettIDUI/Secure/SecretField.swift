@@ -89,11 +89,13 @@ public struct VisibleSecretField: View {
     private let style: SecretTextInput.Style
     private let isError: Bool
     private let focus: Bool
+    private let accept: SecretTextInput.Accept?
     private let onSubmit: () -> Void
     @Environment(\.vettIDColors) private var colors
 
     /// [keyboard]: an ASCII-capable keyboard unless a digit pad suits the value (a number, a phone number, a date), which
-    /// has no suggestions either. [focus]: the field takes the keyboard (once, each time it turns true).
+    /// has no suggestions either. [focus]: the field takes the keyboard (once, each time it turns true). [accept]: what the
+    /// field keeps of an edit (the value's format, from the text before and the text typed), shown in the field at once.
     public init(
         _ label: String,
         text: Binding<String>,
@@ -103,6 +105,7 @@ public struct VisibleSecretField: View {
         keyboard: UIKeyboardType = .asciiCapable,
         isError: Bool = false,
         focus: Bool = false,
+        accept: SecretTextInput.Accept? = nil,
         onSubmit: @escaping () -> Void = {}
     ) {
         self.label = label
@@ -112,11 +115,14 @@ public struct VisibleSecretField: View {
         )
         self.isError = isError
         self.focus = focus
+        self.accept = accept
         self.onSubmit = onSubmit
     }
 
     public var body: some View {
-        SecretTextInput(text: $text, placeholder: style.placeholder, visible: true, style: style, focus: focus, onSubmit: onSubmit)
+        SecretTextInput(
+            text: $text, placeholder: style.placeholder, visible: true, style: style, focus: focus, accept: accept, onSubmit: onSubmit
+        )
             .frame(minHeight: Spacing.touchTarget)
             .padding(.horizontal, Spacing.l)
             .overlay(RoundedRectangle(cornerRadius: VettIDShape.small).stroke(isError ? colors.error : colors.outline))
@@ -125,7 +131,11 @@ public struct VisibleSecretField: View {
 }
 
 /// The `UITextField` behind the secret fields.
-struct SecretTextInput: UIViewRepresentable {
+public struct SecretTextInput: UIViewRepresentable {
+    /// What a field keeps of an edit: from the text before and the text typed, the value (its format applied, or the
+    /// text before when the edit is refused).
+    public typealias Accept = (_ old: String, _ typed: String) -> String
+
     /// How a visible code field looks: what the empty field shows, its capitalization, a monospaced font.
     struct Style {
         var placeholder: String
@@ -139,26 +149,43 @@ struct SecretTextInput: UIViewRepresentable {
     let visible: Bool
     var style: Style?
     var focus = false
+    var accept: Accept?
     let onSubmit: () -> Void
 
-    final class Coordinator: NSObject, UITextFieldDelegate {
+    public final class Coordinator: NSObject, UITextFieldDelegate {
         var parent: SecretTextInput
         /// The focus asked for was given (asked again only after it turned false).
         var focused = false
 
         init(_ parent: SecretTextInput) { self.parent = parent }
 
-        @objc func changed(_ field: UITextField) { parent.text = field.text ?? "" }
+        /// An edit: what the field keeps of it ([accept]) is the value, and the field shows it at once (a refused or
+        /// filtered edit leaves the model as it was, so nothing else would put the field right).
+        @objc func changed(_ field: UITextField) {
+            let typed = field.text ?? ""
+            let kept = parent.accept?(parent.text, typed) ?? typed
+            if kept != typed { SecretTextInput.show(kept, in: field) }
+            parent.text = kept
+        }
 
-        func textFieldShouldReturn(_ field: UITextField) -> Bool {
+        public func textFieldShouldReturn(_ field: UITextField) -> Bool {
             parent.onSubmit()
             return true
         }
     }
 
-    func makeCoordinator() -> Coordinator { Coordinator(self) }
+    /// Shows [kept] in [field], the cursor as far from the end as it was.
+    static func show(_ kept: String, in field: UITextField) {
+        let fromEnd = field.selectedTextRange.map { field.offset(from: $0.end, to: field.endOfDocument) } ?? 0
+        field.text = kept
+        if let p = field.position(from: field.endOfDocument, offset: -min(fromEnd, kept.utf16.count)) {
+            field.selectedTextRange = field.textRange(from: p, to: p)
+        }
+    }
 
-    func makeUIView(context: Context) -> UITextField {
+    public func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    public func makeUIView(context: Context) -> UITextField {
         let f = UITextField()
         SecretInput.configure(f, visible: visible)
         f.placeholder = placeholder
@@ -177,7 +204,7 @@ struct SecretTextInput: UIViewRepresentable {
         return f
     }
 
-    func updateUIView(_ f: UITextField, context: Context) {
+    public func updateUIView(_ f: UITextField, context: Context) {
         context.coordinator.parent = self
         SecretFocus.request(focus, f, &context.coordinator.focused)
         if f.isSecureTextEntry == visible {
@@ -189,7 +216,7 @@ struct SecretTextInput: UIViewRepresentable {
     }
 
     /// Leaves no text behind in a secure field that goes (the save prompt's trigger).
-    static func dismantleUIView(_ f: UITextField, coordinator: Coordinator) { f.text = "" }
+    public static func dismantleUIView(_ f: UITextField, coordinator: Coordinator) { f.text = "" }
 }
 
 /// Gives a UIKit text input the keyboard once when [focus] turns true (as SwiftUI's `focused` does for its own fields).
