@@ -117,6 +117,9 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored public let connections: ConnectionsManager
     /// Messages with connections (VAULT-MESSAGING §10.5, §10.5.2), in memory only.
     @ObservationIgnored public let messages: MessagesManager
+    /// Photo attachments (VAULT-MESSAGING §10.5.1): thumbnails, photos and pending uploads in memory only, cleared
+    /// whenever the vault is not open, held or due, and at a wipe.
+    @ObservationIgnored public let attachments: AttachmentManager
     /// The feed, the approvals, History and its export (VAULT-MESSAGING §10.9, §10.12, §10.13; ``VaultManager+Activity``).
     @ObservationIgnored public let feed: FeedManager
     @ObservationIgnored public let approvals: ApprovalsManager
@@ -216,7 +219,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         ownerChecks = Self.ownerCheckManager(config, ref, rec, scale)
         profiles = Self.profiles(ref, checks: ownerChecks, record: rec)
         connections = Self.connectionsManager(config, ref, rec)
-        messages = Self.messagesManager(ref, connections)
+        (messages, attachments) = Self.messageManagers(ref, connections)
         (feed, approvals, history, historyExport) = Self.activityManagers(config, ref, rec, connections, ownerChecks)
         wiper = config.wipeTargets.map { LocalWipe(targets: $0, hooks: [{ await ref.manager?.runWipeHooks() }]) }
         ref.manager = self

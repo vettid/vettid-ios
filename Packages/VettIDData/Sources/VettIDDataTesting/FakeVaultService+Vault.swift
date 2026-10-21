@@ -47,6 +47,7 @@ extension FakeVaultService {
             return .json(201, #"{"mailbox_id":"x","limits":{"max_payload_bytes":262144,"message_ttl_seconds":1,"visibility_timeout_seconds":60,"max_token_lifetime_seconds":1,"open_token_max_lifetime_seconds":\#(Self.relayInviteLimit),"max_claim_bytes":65536,"claim_ttl_seconds":\#(Self.relayInviteLimit)}}"#)
         }
         if r.path == "/v1/mailbox", r.method == "GET" { return collect() }
+        if r.path.hasPrefix("/v1/blob/") { return deviceBlob(r) }
         if r.path.hasPrefix("/v1/mailbox/"), r.method == "DELETE" { return .empty(204) }
         return .json(404, #"{"code":"not_found","message":""}"#)
     }
@@ -66,6 +67,7 @@ extension FakeVaultService {
     // MARK: - The vault's relay: the vault itself
 
     func answerVaultRelay(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer {
+        if r.method == "PUT", r.path == "/v1/blob/\(vaultMailbox)" { return vaultBlobPut(r) }
         guard r.method == "POST", r.path == "/v1/mailbox/\(vaultMailbox)" else { return .json(404, #"{"code":"not_found","message":""}"#) }
         // §12.5 step 2: a deleted vault's mailbox is gone, and every deposit is refused.
         if locked({ vaultDeletedValue }) { return .json(404, #"{"code":"mailbox_unknown","message":""}"#) }

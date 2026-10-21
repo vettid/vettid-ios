@@ -73,11 +73,24 @@ extension VaultManager {
         return messages
     }
 
+    /// The messages and their photos: photo attachments over this manager's session with the messages' session rules, the
+    /// probe (once after each unlock) only over the session already open; a sent photo's message joins its conversation.
+    static func messageManagers(_ ref: ManagerRef, _ connections: ConnectionsManager) -> (MessagesManager, AttachmentManager) {
+        let messages = messagesManager(ref, connections)
+        let attachments = AttachmentManager(
+            ops: { try await memberApi(ref) },
+            quietOps: { try quietApi(ref) },
+            onSent: { [weak messages] m in messages?.addSent(m) }
+        )
+        return (messages, attachments)
+    }
+
     /// The vault is no longer open on this phone: what was read from it is dropped (the connections, the requests, the
-    /// messages, the feed, the approvals' lists and History).
+    /// messages and their photos, the feed, the approvals' lists and History).
     func forgetOpenLists() {
         connections.forgetOpenVault()
         messages.forgetOpenVault()
+        attachments.clear()
         forgetActivity()
     }
 

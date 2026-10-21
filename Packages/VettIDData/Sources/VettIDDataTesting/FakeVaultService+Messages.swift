@@ -24,6 +24,8 @@ struct FakeMessaging {
         var sentAt: Date
         var delivered = false
         var read = false
+        /// The device view of its photo without `thumb` (§10.5.1), as `message.list` and `message.get` give it.
+        var attachment: String?
     }
 
     /// The conversations by connection, in arrival order (vettid-vault's `convs`).
@@ -51,6 +53,8 @@ extension FakeVaultService {
     /// The message requests (§10.5), then the feed, History and the approvals (``activityRequest(_:_:)``). Callers hold ``cond``.
     func messagesRequest(_ m: Inner, _ body: JsonObject) throws {
         switch m.type {
+        case "message.send" where body.has("attachment"): try photoSend(m, body)
+        case "message.attachment.get", "message.attachment.discard": try attachmentRequest(m, body)
         case "message.send": try messageSend(m, body)
         case "message.list": try messageList(m, body)
         case "message.get", "message.read", "message.delete":
@@ -81,7 +85,9 @@ extension FakeVaultService {
     }
 
     static func messageJSON(_ conn: String, _ m: FakeMessaging.Message) -> String {
-        JsonBuilder().string("connection_id", conn).string("message_id", m.id).string("direction", m.outgoing ? "out" : "in").string("text", m.text).string("sent_at", Timestamps.formatMillis(m.sentAt)).bool("delivered", m.delivered).bool("read", m.read).build()
+        let b = JsonBuilder().string("connection_id", conn).string("message_id", m.id).string("direction", m.outgoing ? "out" : "in").string("text", m.text).string("sent_at", Timestamps.formatMillis(m.sentAt)).bool("delivered", m.delivered).bool("read", m.read)
+        if let a = m.attachment { b.raw("attachment", a) }
+        return b.build()
     }
 
     /// `message.send` (vettid-vault `send`): `not_found` for an unknown connection, `bad_request` for an empty text or one

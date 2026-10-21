@@ -60,8 +60,11 @@ extension VaultManager {
         approvals.onEvent(m)
     }
 
-    /// Entering the hold (§3.6.3): the feed is not shown.
-    func activityHeld() { feed.clear() }
+    /// Entering the hold (§3.6.3): the feed is not shown, and no photo is kept.
+    func activityHeld() {
+        feed.clear()
+        attachments.clear()
+    }
 
     /// Held or due (§3.6.3), as the owner check's state says: no feed content is kept; after the check (here or on
     /// another device) it is read again. As vettid-android `VaultManager`.
@@ -69,6 +72,8 @@ extension VaultManager {
         checks.onHeldChange = { [weak feed] held in
             if held {
                 feed?.clear()
+                // Held or due: no photo or thumbnail kept (ANDROID-PLAN "Photo attachments").
+                ref.manager?.attachments.clear()
             } else if ref.manager?.phase == .unlocked {
                 feed?.catchUp()
             }
@@ -87,6 +92,7 @@ extension VaultManager {
     func clearLists() {
         connections.clear()
         messages.clear()
+        attachments.reset()
         feed.clear()
         approvals.clear()
         history.clear()

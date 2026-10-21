@@ -217,6 +217,8 @@ public final class FakeVaultService: @unchecked Sendable {
     var identityRotationsValue = 0
     /// Connections, invitations, requests and blocks, and the emulated peer (FakeVaultService+Connections.swift).
     var social = FakeSocial()
+    /// Photo attachments and the blobs of both mailboxes (FakeVaultService+Attachments.swift).
+    var photos = FakePhotos()
     /// The feed, the audit log and the asks (FakeVaultService+Activity.swift, FakeVaultService+Approvals.swift).
     var activity = FakeActivity()
 
