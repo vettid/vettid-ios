@@ -28,22 +28,34 @@ public struct PhotoCameraView: UIViewRepresentable {
     let handle: PhotoCameraHandle
     let onLenses: @MainActor (Bool) -> Void
     let onUnavailable: @MainActor () -> Void
+    let fill: Bool
 
+    /// [fill]: the preview fills its frame, cropped (the profile photo's square frame, as vettid-android's `FILL_CENTER`);
+    /// otherwise the whole picture is shown.
     public init(
         lens: CameraLens, handle: PhotoCameraHandle, onLenses: @escaping @MainActor (Bool) -> Void = { _ in },
-        onUnavailable: @escaping @MainActor () -> Void = {}
+        onUnavailable: @escaping @MainActor () -> Void = {}, fill: Bool = false
     ) {
+        self.fill = fill
         self.lens = lens
         self.handle = handle
         self.onLenses = onLenses
         self.onUnavailable = onUnavailable
     }
 
+    /// The cameras this phone has: its front and its back wide-angle camera.
+    public static func lenses() -> (front: Bool, back: Bool) {
+        (
+            AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front) != nil,
+            AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) != nil
+        )
+    }
+
     public func makeCoordinator() -> Coordinator { Coordinator(onUnavailable: onUnavailable) }
 
     public func makeUIView(context: Context) -> QrScannerView.PreviewView {
         let view = QrScannerView.PreviewView()
-        view.previewLayer.videoGravity = .resizeAspect
+        view.previewLayer.videoGravity = fill ? .resizeAspectFill : .resizeAspect
         view.previewLayer.session = context.coordinator.capture.session
         let both = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) != nil
             && AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front) != nil
@@ -142,7 +154,15 @@ public struct PhotoCameraView: UIViewRepresentable {
                 guard session.canAddOutput(output) else { return false }
                 session.addOutput(output)
             }
-            if let c = output.connection(with: .video), c.isVideoRotationAngleSupported(90) { c.videoRotationAngle = 90 }
+            if let c = output.connection(with: .video) {
+                if c.isVideoRotationAngleSupported(90) { c.videoRotationAngle = 90 }
+                // The shot as the lens saw it, never mirrored by the output: a screen that shows the front camera's shot
+                // as previewed mirrors it itself (the profile photo, vettid-android `uprightShot`; chosen; not in the spec).
+                if c.isVideoMirroringSupported {
+                    c.automaticallyAdjustsVideoMirroring = false
+                    c.isVideoMirrored = false
+                }
+            }
             return true
         }
     }
