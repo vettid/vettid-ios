@@ -1,0 +1,3793 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "history_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "History"
+          }
+        }
+      }
+    },
+    "history_search": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search by name or event"
+          }
+        }
+      }
+    },
+    "history_search_clear": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear search"
+          }
+        }
+      }
+    },
+    "history_search_local": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault does not search its history yet: this phone searches the entries it loads, by event and connection name."
+          }
+        }
+      }
+    },
+    "history_searching_older": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Searching older entries…"
+          }
+        }
+      }
+    },
+    "history_chain_broken": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault's history does not match what this phone saw before"
+          }
+        }
+      }
+    },
+    "history_empty_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No history yet"
+          }
+        }
+      }
+    },
+    "history_empty_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What happens in your vault is recorded here: unlocks, connections, messages, items and more"
+          }
+        }
+      }
+    },
+    "history_no_match_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No activity matches these filters"
+          }
+        }
+      }
+    },
+    "history_no_match_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change the search, or tap “✕ Clear” above to show all activity"
+          }
+        }
+      }
+    },
+    "history_error_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "History could not be loaded"
+          }
+        }
+      }
+    },
+    "history_retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try again"
+          }
+        }
+      }
+    },
+    "history_loading_more": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading older entries"
+          }
+        }
+      }
+    },
+    "history_end": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start of your history"
+          }
+        }
+      }
+    },
+    "history_category_all": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All"
+          }
+        }
+      }
+    },
+    "history_category_vault_access": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlocks and daily checks"
+          }
+        }
+      }
+    },
+    "history_category_security": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Security"
+          }
+        }
+      }
+    },
+    "history_category_devices": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Devices"
+          }
+        }
+      }
+    },
+    "history_category_connections": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connections"
+          }
+        }
+      }
+    },
+    "history_category_messages": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Messages and calls"
+          }
+        }
+      }
+    },
+    "history_category_items": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault (items, sharing, wallet)"
+          }
+        }
+      }
+    },
+    "history_category_agents": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agents"
+          }
+        }
+      }
+    },
+    "history_category_location": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Location"
+          }
+        }
+      }
+    },
+    "history_category_account": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account and settings"
+          }
+        }
+      }
+    },
+    "history_category_dropped": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blocked and dropped"
+          }
+        }
+      }
+    },
+    "history_category_other": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Other"
+          }
+        }
+      }
+    },
+    "history_connection_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All connections"
+          }
+        }
+      }
+    },
+    "history_connection_pick": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection"
+          }
+        }
+      }
+    },
+    "history_connection_removed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Removed connection"
+          }
+        }
+      }
+    },
+    "history_connection_unnamed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name not shared yet"
+          }
+        }
+      }
+    },
+    "history_date_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Any time"
+          }
+        }
+      }
+    },
+    "history_date_day": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Today"
+          }
+        }
+      }
+    },
+    "history_date_week": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last 7 days"
+          }
+        }
+      }
+    },
+    "history_date_month": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last 30 days"
+          }
+        }
+      }
+    },
+    "history_date_custom": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose dates…"
+          }
+        }
+      }
+    },
+    "history_date_range": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ – %@"
+          }
+        }
+      }
+    },
+    "history_date_pick": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dates"
+          }
+        }
+      }
+    },
+    "history_ok": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
+          }
+        }
+      }
+    },
+    "history_cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        }
+      }
+    },
+    "history_kind_summary": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (hourly summary)"
+          }
+        }
+      }
+    },
+    "history_kind_dropped": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Message blocked: %@"
+          }
+        }
+      }
+    },
+    "history_kind_unknown": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault event: %@"
+          }
+        }
+      }
+    },
+    "history_detail_when": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When"
+          }
+        }
+      }
+    },
+    "history_detail_category": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Category"
+          }
+        }
+      }
+    },
+    "history_detail_kind": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Event type"
+          }
+        }
+      }
+    },
+    "history_detail_connection": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection"
+          }
+        }
+      }
+    },
+    "history_detail_device": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Device"
+          }
+        }
+      }
+    },
+    "history_detail_device_id": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Device ID"
+          }
+        }
+      }
+    },
+    "history_device_this_phone": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (this phone)"
+          }
+        }
+      }
+    },
+    "history_device_this_phone_alone": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This phone"
+          }
+        }
+      }
+    },
+    "history_detail_ref": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reference"
+          }
+        }
+      }
+    },
+    "history_detail_direction": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Direction"
+          }
+        }
+      }
+    },
+    "history_detail_direction_in": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incoming"
+          }
+        }
+      }
+    },
+    "history_detail_direction_out": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Outgoing"
+          }
+        }
+      }
+    },
+    "history_detail_seq": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entry number"
+          }
+        }
+      }
+    },
+    "history_detail_id": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entry ID"
+          }
+        }
+      }
+    },
+    "history_detail_hash": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entry hash"
+          }
+        }
+      }
+    },
+    "history_detail_copy": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy %@"
+          }
+        }
+      }
+    },
+    "history_detail_open_connection": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open connection"
+          }
+        }
+      }
+    },
+    "history_detail_unknown_time": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown time"
+          }
+        }
+      }
+    },
+    "history_detail_note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault keeps this log append-only and hash-chained: no one can change or delete an entry. It holds no message text, item values or keys."
+          }
+        }
+      }
+    },
+    "history_detail_missing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This entry is no longer in your history."
+          }
+        }
+      }
+    },
+    "history_item_deleted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deleted item"
+          }
+        }
+      }
+    },
+    "history_detail_item": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Item"
+          }
+        }
+      }
+    },
+    "history_detail_open_item": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open the item"
+          }
+        }
+      }
+    },
+    "history_more_actions": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More options"
+          }
+        }
+      }
+    },
+    "history_export_menu": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export…"
+          }
+        }
+      }
+    },
+    "history_export_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export history"
+          }
+        }
+      }
+    },
+    "history_export_preparing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Counting the entries…"
+          }
+        }
+      }
+    },
+    "history_export_count": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld entry"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld entries"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "history_export_count_range": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, %@"
+          }
+        }
+      }
+    },
+    "history_export_filters": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What the list shows: %@"
+          }
+        }
+      }
+    },
+    "history_export_filters_none": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All of your history"
+          }
+        }
+      }
+    },
+    "history_export_search": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@”"
+          }
+        }
+      }
+    },
+    "history_export_more": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only the newest 10,000 of the matching entries can be exported. Narrow the dates to export older ones."
+          }
+        }
+      }
+    },
+    "history_export_format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Format"
+          }
+        }
+      }
+    },
+    "history_export_csv": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CSV"
+          }
+        }
+      }
+    },
+    "history_export_csv_note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For a spreadsheet"
+          }
+        }
+      }
+    },
+    "history_export_json": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "JSON"
+          }
+        }
+      }
+    },
+    "history_export_json_note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For checking against your vault"
+          }
+        }
+      }
+    },
+    "history_export_unencrypted_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file is not encrypted"
+          }
+        }
+      }
+    },
+    "history_export_unencrypted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file is not encrypted. Anyone who gets it can see who you connected with, your devices and item names, and when. It holds no item values, passwords or messages."
+          }
+        }
+      }
+    },
+    "history_export_continue": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue"
+          }
+        }
+      }
+    },
+    "history_export_close": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close"
+          }
+        }
+      }
+    },
+    "history_export_nothing_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing to export"
+          }
+        }
+      }
+    },
+    "history_export_nothing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No entries match what the list shows. Change the filters and try again."
+          }
+        }
+      }
+    },
+    "history_export_alarm_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export is not available"
+          }
+        }
+      }
+    },
+    "history_export_alarm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export is not available while a credential alarm is open."
+          }
+        }
+      }
+    },
+    "history_export_alarm_open": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open the alarm"
+          }
+        }
+      }
+    },
+    "history_export_old_vault_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export is not available yet"
+          }
+        }
+      }
+    },
+    "history_export_old_vault": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export needs a newer vault release. It will be offered once your vault is updated."
+          }
+        }
+      }
+    },
+    "history_export_pin_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter your vault PIN"
+          }
+        }
+      }
+    },
+    "history_export_pin_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault PIN confirms the export. Your vault records it in your history."
+          }
+        }
+      }
+    },
+    "history_export_pin_label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault PIN"
+          }
+        }
+      }
+    },
+    "history_export_pin_wrong": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wrong PIN"
+          }
+        }
+      }
+    },
+    "history_export_pin_backoff": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too many wrong PINs. Try again in %lld s."
+          }
+        }
+      }
+    },
+    "history_export_pin_backoff_undated": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too many wrong PINs. Try again later."
+          }
+        }
+      }
+    },
+    "history_export_export": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export"
+          }
+        }
+      }
+    },
+    "history_export_reading": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Preparing %lld entry…"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Preparing %lld entries…"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "history_export_reading_progress": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld of %lld read"
+          }
+        }
+      }
+    },
+    "history_export_save_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose where to save"
+          }
+        }
+      }
+    },
+    "history_export_save_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pick a place for the file in the dialog. Only you choose where it goes."
+          }
+        }
+      }
+    },
+    "history_export_save_again": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose where to save"
+          }
+        }
+      }
+    },
+    "history_export_writing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saving the file…"
+          }
+        }
+      }
+    },
+    "history_export_done_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "History exported"
+          }
+        }
+      }
+    },
+    "history_export_done": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld entry exported."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld entries exported."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "history_export_done_partial": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld of %lld entries exported; %lld older entries were removed by your vault's history limit meanwhile."
+          }
+        }
+      }
+    },
+    "history_export_done_note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file is not encrypted: keep it somewhere safe, and delete it when you no longer need it."
+          }
+        }
+      }
+    },
+    "history_export_failed_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export did not finish"
+          }
+        }
+      }
+    },
+    "history_export_save_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file could not be saved. Nothing was kept; try again."
+          }
+        }
+      }
+    },
+    "history_export_owner_check": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check now"
+          }
+        }
+      }
+    },
+    "history_device_removed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Removed device"
+          }
+        }
+      }
+    },
+    "history_export_summary": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@"
+          }
+        }
+      }
+    },
+    "history_kind_vault_unlocked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault unlocked"
+          }
+        }
+      }
+    },
+    "history_kind_vault_locked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault locked"
+          }
+        }
+      }
+    },
+    "history_kind_vault_pin_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wrong PIN entered"
+          }
+        }
+      }
+    },
+    "history_kind_owner_check_passed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Daily check passed"
+          }
+        }
+      }
+    },
+    "history_kind_owner_check_held": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault held for the daily check"
+          }
+        }
+      }
+    },
+    "history_kind_owner_check_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Daily check failed"
+          }
+        }
+      }
+    },
+    "history_kind_owner_check_locked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault locked after failed daily checks"
+          }
+        }
+      }
+    },
+    "history_kind_owner_check_hold_changed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Daily check hold changed"
+          }
+        }
+      }
+    },
+    "history_kind_device_paired": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Device paired"
+          }
+        }
+      }
+    },
+    "history_kind_device_unlinked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Device unlinked"
+          }
+        }
+      }
+    },
+    "history_kind_device_transfer_started": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move to a new phone started"
+          }
+        }
+      }
+    },
+    "history_kind_device_transfer_approved": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move to a new phone approved"
+          }
+        }
+      }
+    },
+    "history_kind_device_transferred": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault moved to a new phone"
+          }
+        }
+      }
+    },
+    "history_kind_device_transfer_aborted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move to a new phone stopped"
+          }
+        }
+      }
+    },
+    "history_kind_device_transfer_attestation_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move refused: the new phone was not verified"
+          }
+        }
+      }
+    },
+    "history_kind_device_replaced": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Old phone replaced"
+          }
+        }
+      }
+    },
+    "history_kind_device_signer_bound": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version of VettID recorded for this vault"
+          }
+        }
+      }
+    },
+    "history_kind_device_signer_changed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault moved to another version of VettID"
+          }
+        }
+      }
+    },
+    "history_kind_device_signer_refused": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An installation of VettID was refused"
+          }
+        }
+      }
+    },
+    "history_signer_refused_unpinned": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This vault release does not accept its signer"
+          }
+        }
+      }
+    },
+    "history_signer_refused_unbound": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No signer was recorded for it"
+          }
+        }
+      }
+    },
+    "history_detail_signer": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version of VettID"
+          }
+        }
+      }
+    },
+    "history_kind_device_session_granted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desktop session granted"
+          }
+        }
+      }
+    },
+    "history_kind_device_session_ended": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desktop session ended"
+          }
+        }
+      }
+    },
+    "history_kind_approval_granted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Request approved"
+          }
+        }
+      }
+    },
+    "history_kind_approval_denied": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Request denied"
+          }
+        }
+      }
+    },
+    "history_kind_connection_added": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection added"
+          }
+        }
+      }
+    },
+    "history_kind_connection_removed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection removed"
+          }
+        }
+      }
+    },
+    "history_kind_connection_stale": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection went quiet"
+          }
+        }
+      }
+    },
+    "history_kind_connection_reconnected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection reconnected"
+          }
+        }
+      }
+    },
+    "history_kind_connection_blocked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection blocked"
+          }
+        }
+      }
+    },
+    "history_kind_connection_unblocked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection unblocked"
+          }
+        }
+      }
+    },
+    "history_kind_connection_request_peer_declined": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "They declined the connection"
+          }
+        }
+      }
+    },
+    "history_kind_connection_authenticate_requested": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Authentication requested"
+          }
+        }
+      }
+    },
+    "history_kind_connection_authenticate_signed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Authentication signed"
+          }
+        }
+      }
+    },
+    "history_kind_connection_authenticate_denied": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Authentication denied"
+          }
+        }
+      }
+    },
+    "history_kind_connection_authenticated": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection authenticated"
+          }
+        }
+      }
+    },
+    "history_kind_connection_authenticate_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Authentication failed"
+          }
+        }
+      }
+    },
+    "history_kind_connection_authenticate_key_rotated": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Authentication key rotated"
+          }
+        }
+      }
+    },
+    "history_kind_connection_authenticate_rotation_rejected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Authentication key rotation rejected"
+          }
+        }
+      }
+    },
+    "history_kind_identity_rotated": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault's keys were renewed"
+          }
+        }
+      }
+    },
+    "history_kind_intro_created": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Introduction created"
+          }
+        }
+      }
+    },
+    "history_kind_intro_offered": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Introduction offered"
+          }
+        }
+      }
+    },
+    "history_kind_intro_accepted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Introduction accepted"
+          }
+        }
+      }
+    },
+    "history_kind_intro_declined": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Introduction declined"
+          }
+        }
+      }
+    },
+    "history_kind_intro_connecting": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Introduction connecting"
+          }
+        }
+      }
+    },
+    "history_kind_intro_closed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Introduction closed"
+          }
+        }
+      }
+    },
+    "history_kind_credential_created": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credential created"
+          }
+        }
+      }
+    },
+    "history_kind_credential_rotated": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your credential was renewed"
+          }
+        }
+      }
+    },
+    "history_kind_credential_password_changed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credential password changed"
+          }
+        }
+      }
+    },
+    "history_kind_credential_password_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wrong credential password"
+          }
+        }
+      }
+    },
+    "history_kind_credential_unlocked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credential unlocked"
+          }
+        }
+      }
+    },
+    "history_kind_credential_recovered": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credential recovered"
+          }
+        }
+      }
+    },
+    "history_kind_credential_clone_detected": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A copy of your credential was presented"
+          }
+        }
+      }
+    },
+    "history_kind_credential_alarm_confirmed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credential alarm answered"
+          }
+        }
+      }
+    },
+    "history_kind_credential_alarm_resolved": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credential alarm resolved"
+          }
+        }
+      }
+    },
+    "history_kind_credential_reset": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credential reset"
+          }
+        }
+      }
+    },
+    "history_kind_audit_exported": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "History exported"
+          }
+        }
+      }
+    },
+    "history_kind_recovery_requested": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovery requested"
+          }
+        }
+      }
+    },
+    "history_kind_recovery_replaced": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovery request replaced"
+          }
+        }
+      }
+    },
+    "history_kind_recovery_bad_code": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wrong recovery code"
+          }
+        }
+      }
+    },
+    "history_kind_recovery_attestation_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovery refused: the phone was not verified"
+          }
+        }
+      }
+    },
+    "history_kind_recovery_registered": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovery phone registered"
+          }
+        }
+      }
+    },
+    "history_kind_recovery_device_paired": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovery phone paired"
+          }
+        }
+      }
+    },
+    "history_kind_recovery_completed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovery completed"
+          }
+        }
+      }
+    },
+    "history_kind_recovery_cancelled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovery cancelled"
+          }
+        }
+      }
+    },
+    "history_kind_recovery_expired": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovery expired"
+          }
+        }
+      }
+    },
+    "history_kind_recovery_voided": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovery voided"
+          }
+        }
+      }
+    },
+    "history_kind_item_added": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Item added"
+          }
+        }
+      }
+    },
+    "history_kind_item_updated": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Item changed"
+          }
+        }
+      }
+    },
+    "history_kind_item_deleted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Item deleted"
+          }
+        }
+      }
+    },
+    "history_kind_item_sensitivity_changed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Item sensitivity changed"
+          }
+        }
+      }
+    },
+    "history_kind_item_revealed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Critical item revealed"
+          }
+        }
+      }
+    },
+    "history_kind_tag_changed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tags changed"
+          }
+        }
+      }
+    },
+    "history_kind_share_rule_created": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share rule created"
+          }
+        }
+      }
+    },
+    "history_kind_share_rule_updated": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share rule changed"
+          }
+        }
+      }
+    },
+    "history_kind_share_rule_deleted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share rule deleted"
+          }
+        }
+      }
+    },
+    "history_kind_share_included": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Item shared"
+          }
+        }
+      }
+    },
+    "history_kind_share_declined": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Item not shared"
+          }
+        }
+      }
+    },
+    "history_kind_share_withdrawn": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Item share withdrawn"
+          }
+        }
+      }
+    },
+    "history_kind_grant_requested": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Access to items requested"
+          }
+        }
+      }
+    },
+    "history_kind_grant_denied": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Access to items denied"
+          }
+        }
+      }
+    },
+    "history_kind_grant_issued": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Access to items granted"
+          }
+        }
+      }
+    },
+    "history_kind_grant_received": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Access to their items received"
+          }
+        }
+      }
+    },
+    "history_kind_grant_fetched": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shared items fetched"
+          }
+        }
+      }
+    },
+    "history_kind_grant_revoked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Access to items revoked"
+          }
+        }
+      }
+    },
+    "history_kind_critical_secret_use_requested": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use of a critical item requested"
+          }
+        }
+      }
+    },
+    "history_kind_critical_secret_used": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Critical item used"
+          }
+        }
+      }
+    },
+    "history_kind_critical_secret_use_denied": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use of a critical item denied"
+          }
+        }
+      }
+    },
+    "history_kind_critical_secret_use_result": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Critical item use answered"
+          }
+        }
+      }
+    },
+    "history_kind_wallet_created": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wallet created"
+          }
+        }
+      }
+    },
+    "history_kind_wallet_deleted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wallet deleted"
+          }
+        }
+      }
+    },
+    "history_kind_wallet_address_issued": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wallet address issued"
+          }
+        }
+      }
+    },
+    "history_kind_wallet_signed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transaction signed"
+          }
+        }
+      }
+    },
+    "history_kind_message_sent": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Message sent"
+          }
+        }
+      }
+    },
+    "history_kind_message_received": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Message received"
+          }
+        }
+      }
+    },
+    "history_kind_photo_sent": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photo sent"
+          }
+        }
+      }
+    },
+    "history_kind_photo_received": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photo received"
+          }
+        }
+      }
+    },
+    "history_kind_photo_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photo not delivered or not received"
+          }
+        }
+      }
+    },
+    "history_kind_photo_refused": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photo refused (vault full)"
+          }
+        }
+      }
+    },
+    "history_kind_drop_attachment_rate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photos refused (too many today)"
+          }
+        }
+      }
+    },
+    "history_kind_drop_attachment_malformed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photo refused: it was malformed"
+          }
+        }
+      }
+    },
+    "history_kind_call_outgoing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Outgoing call"
+          }
+        }
+      }
+    },
+    "history_kind_call_incoming": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Incoming call"
+          }
+        }
+      }
+    },
+    "history_kind_call_answered": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Call answered"
+          }
+        }
+      }
+    },
+    "history_kind_call_ended": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Call ended"
+          }
+        }
+      }
+    },
+    "history_kind_location_share_started": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Location sharing started"
+          }
+        }
+      }
+    },
+    "history_kind_location_share_stopped": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Location sharing stopped"
+          }
+        }
+      }
+    },
+    "history_kind_location_share_received": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shared location received"
+          }
+        }
+      }
+    },
+    "history_kind_location_share_ended": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Their location sharing ended"
+          }
+        }
+      }
+    },
+    "history_kind_location_requested": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Location requested"
+          }
+        }
+      }
+    },
+    "history_kind_location_history_deleted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Location history deleted"
+          }
+        }
+      }
+    },
+    "history_kind_location_history_shared": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Location history shared"
+          }
+        }
+      }
+    },
+    "history_kind_location_history_received": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Location history received"
+          }
+        }
+      }
+    },
+    "history_kind_leash_grant_issued": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent access granted"
+          }
+        }
+      }
+    },
+    "history_kind_leash_grant_updated": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent access changed"
+          }
+        }
+      }
+    },
+    "history_kind_leash_grant_revoked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent access revoked"
+          }
+        }
+      }
+    },
+    "history_kind_leash_rate_limited": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent slowed down"
+          }
+        }
+      }
+    },
+    "history_kind_leash_agent_suspended": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent suspended"
+          }
+        }
+      }
+    },
+    "history_kind_leash_agent_resumed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent resumed"
+          }
+        }
+      }
+    },
+    "history_kind_leash_referrals_limited": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent referrals limited"
+          }
+        }
+      }
+    },
+    "history_kind_leash_allowed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent request allowed"
+          }
+        }
+      }
+    },
+    "history_kind_leash_refused": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent request refused"
+          }
+        }
+      }
+    },
+    "history_kind_leash_item_read": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent read an item"
+          }
+        }
+      }
+    },
+    "history_kind_leash_item_used": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent used an item"
+          }
+        }
+      }
+    },
+    "history_kind_leash_throttled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent throttled"
+          }
+        }
+      }
+    },
+    "history_kind_action_configured": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Action set up"
+          }
+        }
+      }
+    },
+    "history_kind_action_invoked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Action requested"
+          }
+        }
+      }
+    },
+    "history_kind_action_approved": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Action approved"
+          }
+        }
+      }
+    },
+    "history_kind_action_denied": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Action denied"
+          }
+        }
+      }
+    },
+    "history_kind_action_completed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Action completed"
+          }
+        }
+      }
+    },
+    "history_kind_account_name_requested": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name change requested"
+          }
+        }
+      }
+    },
+    "history_kind_account_name_applied": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name change applied"
+          }
+        }
+      }
+    },
+    "history_kind_account_name_refused": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name change refused"
+          }
+        }
+      }
+    },
+    "history_kind_profile_core_missing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profile not sent: your names were missing"
+          }
+        }
+      }
+    },
+    "history_kind_settings_changed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Settings changed"
+          }
+        }
+      }
+    },
+    "history_kind_drop_suppressed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "More blocked messages not logged"
+          }
+        }
+      }
+    },
+    "history_kind_connection_asks_paused": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requests paused after several declines"
+          }
+        }
+      }
+    },
+    "history_kind_connection_asks_resumed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requests resumed"
+          }
+        }
+      }
+    },
+    "history_kind_connection_asks_muted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requests muted"
+          }
+        }
+      }
+    },
+    "history_kind_connection_asks_unmuted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requests unmuted"
+          }
+        }
+      }
+    },
+    "history_kind_drop_ask_muted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Request refused: muted"
+          }
+        }
+      }
+    },
+    "history_kind_drop_ask_paused": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Request refused: requests paused"
+          }
+        }
+      }
+    },
+    "history_kind_drop_ask_cooldown": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Request refused: you declined it in the last 7 days"
+          }
+        }
+      }
+    },
+    "history_kind_drop_ask_pending": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Request refused: too many waiting"
+          }
+        }
+      }
+    },
+    "history_kind_drop_ask_rate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Request refused: too many in 24 hours"
+          }
+        }
+      }
+    },
+    "history_kind_drop_grant_rate_limited": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fetch refused: a rule's rate limit"
+          }
+        }
+      }
+    },
+    "history_kind_vault_pin_changed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PIN changed"
+          }
+        }
+      }
+    },
+    "history_kind_device_secret_renewed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New phone secret set"
+          }
+        }
+      }
+    },
+    "history_kind_recovery_attempt": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovery attempt %lld of %lld"
+          }
+        }
+      }
+    },
+    "history_kind_recovery_attempt_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovery attempt"
+          }
+        }
+      }
+    },
+    "history_kind_recovery_attempts_used": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovery attempts used: %lld of %lld"
+          }
+        }
+      }
+    },
+    "history_kind_recovery_attempts_used_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovery attempts used"
+          }
+        }
+      }
+    },
+    "history_kind_recovery_armed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovery is set up"
+          }
+        }
+      }
+    },
+    "history_kind_recovery_closed_pin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovery attempts reset after a PIN change"
+          }
+        }
+      }
+    },
+    "history_kind_recovery_closed_password": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovery attempts reset after a password change"
+          }
+        }
+      }
+    },
+    "history_kind_recovery_closed_reset": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovery attempts reset after a credential reset"
+          }
+        }
+      }
+    },
+    "history_kind_recovery_closed_backup_off": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovery turned off"
+          }
+        }
+      }
+    },
+    "history_kind_recovery_closed_exhausted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovery turned off: all 10 attempts used"
+          }
+        }
+      }
+    },
+    "history_kind_recovery_closed_delete": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovery ended"
+          }
+        }
+      }
+    },
+    "history_kind_recovery_closed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovery attempts reset"
+          }
+        }
+      }
+    },
+    "history_kind_recovery_closed_rollback": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault was given an older recovery record"
+          }
+        }
+      }
+    },
+    "history_kind_recovery_presence_unrecorded": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault could not record that you were here"
+          }
+        }
+      }
+    },
+    "history_kind_identity_rotation_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Key update failed"
+          }
+        }
+      }
+    },
+    "history_kind_rotate_conflict": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection with %@ paused"
+          }
+        }
+      }
+    },
+    "history_kind_rotate_resolved": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection with %@ checked and resumed"
+          }
+        }
+      }
+    },
+    "history_kind_rotate_conflict_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection paused"
+          }
+        }
+      }
+    },
+    "history_kind_rotate_resolved_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection checked and resumed"
+          }
+        }
+      }
+    },
+    "history_kind_connection_request_approved": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You accepted a connection request"
+          }
+        }
+      }
+    },
+    "history_kind_connection_request_declined": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You declined a connection request"
+          }
+        }
+      }
+    },
+    "history_kind_push_registered": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notifications turned on for %@"
+          }
+        }
+      }
+    },
+    "history_kind_push_registered_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notifications turned on"
+          }
+        }
+      }
+    },
+    "history_kind_push_unregistered": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notifications turned off for %@"
+          }
+        }
+      }
+    },
+    "history_kind_push_unregistered_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notifications turned off"
+          }
+        }
+      }
+    },
+    "history_kind_push_token_gone": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notifications stopped reaching %@"
+          }
+        }
+      }
+    },
+    "history_kind_push_token_gone_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notifications stopped"
+          }
+        }
+      }
+    },
+    "history_kind_call_permission_off": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calls from %@ turned off"
+          }
+        }
+      }
+    },
+    "history_kind_call_permission_on": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calls from %@ turned on"
+          }
+        }
+      }
+    },
+    "history_kind_call_permission_off_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calls turned off"
+          }
+        }
+      }
+    },
+    "history_kind_call_permission_on_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calls turned on"
+          }
+        }
+      }
+    },
+    "history_kind_leash_item_secret_used": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An agent used %@"
+          }
+        }
+      }
+    },
+    "history_kind_leash_item_secret_used_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An agent used an item"
+          }
+        }
+      }
+    },
+    "history_kind_leash_item_changed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You changed how an agent may use %@"
+          }
+        }
+      }
+    },
+    "history_kind_leash_item_changed_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You changed how an agent may use an item"
+          }
+        }
+      }
+    },
+    "history_kind_drop_call_off": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Call refused: calls are off"
+          }
+        }
+      }
+    },
+    "history_kind_drop_call_rate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Call refused: too many calls"
+          }
+        }
+      }
+    },
+    "history_kind_drop_call_share": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Call refused: it could not be verified"
+          }
+        }
+      }
+    },
+    "history_kind_drop_one_app": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refused: a second phone tried to connect"
+          }
+        }
+      }
+    },
+    "history_kind_drop_owner_check": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refused: your daily check is due"
+          }
+        }
+      }
+    },
+    "history_kind_drop_profile_ik_mismatch": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profile refused: it did not match the connection"
+          }
+        }
+      }
+    },
+    "history_kind_drop_malformed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Message refused: it was malformed"
+          }
+        }
+      }
+    },
+    "history_kind_drop_grant_duplicate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Request refused: already asked"
+          }
+        }
+      }
+    },
+    "history_kind_drop_grant_limit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Request refused: too many waiting"
+          }
+        }
+      }
+    },
+    "history_kind_drop_critical_signature": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Request refused: it could not be verified"
+          }
+        }
+      }
+    },
+    "history_kind_drop_rate_limited": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Message refused: too many messages"
+          }
+        }
+      }
+    },
+    "history_detail_details": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Details"
+          }
+        }
+      }
+    },
+    "history_detail_attempt_success": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Successful."
+          }
+        }
+      }
+    },
+    "history_detail_attempt_not_success": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not successful. If this was not you, change your PIN or your password now."
+          }
+        }
+      }
+    },
+    "history_detail_attempt_no_details": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Details not available."
+          }
+        }
+      }
+    },
+    "history_detail_attempt_later_success": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Later successful."
+          }
+        }
+      }
+    },
+    "history_detail_outcome_wrong": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wrong PIN or password."
+          }
+        }
+      }
+    },
+    "history_detail_outcome_attempt_lost": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Counted as an attempt, but it did not finish."
+          }
+        }
+      }
+    },
+    "history_detail_outcome_quiet": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refused: you used your vault in the last 3 days."
+          }
+        }
+      }
+    },
+    "history_detail_outcome_quiet_scaled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refused: you used your vault in the last %@."
+          }
+        }
+      }
+    },
+    "history_detail_outcome_wait": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refused: too soon after the last try."
+          }
+        }
+      }
+    },
+    "history_detail_outcome_exhausted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refused: all 10 attempts used."
+          }
+        }
+      }
+    },
+    "history_detail_outcome_closed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refused: recovery was reset."
+          }
+        }
+      }
+    },
+    "history_detail_recovery_attempts_used": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If that was not you, change your password now, and your PIN as well."
+          }
+        }
+      }
+    },
+    "history_detail_recovery_armed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "It works with your current PIN and password, with 10 attempts."
+          }
+        }
+      }
+    },
+    "history_detail_recovery_closed_reset": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Earlier attempts no longer count."
+          }
+        }
+      }
+    },
+    "history_detail_recovery_closed_backup_off": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You turned off the credential backup."
+          }
+        }
+      }
+    },
+    "history_detail_recovery_closed_exhausted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change your PIN or your password to turn it back on."
+          }
+        }
+      }
+    },
+    "history_detail_recovery_closed_delete": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault is being deleted."
+          }
+        }
+      }
+    },
+    "history_detail_recovery_closed_rollback": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A host may have served an older copy of your vault's recovery record, one on which recovery attempts had already been used. Your vault moved past it. If you did not try to recover your vault, change your PIN and your password now, and contact VettID."
+          }
+        }
+      }
+    },
+    "history_detail_attempt_phone": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From a phone that calls itself “%@”."
+          }
+        }
+      }
+    },
+    "history_detail_recovery_closed_unconfirmed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The service could not confirm this step."
+          }
+        }
+      }
+    },
+    "history_detail_presence_unrecorded": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If this lasts three days, your vault is no longer protected against a recovery started by someone else."
+          }
+        }
+      }
+    },
+    "history_detail_presence_unrecorded_scaled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If this lasts %@, your vault is no longer protected against a recovery started by someone else."
+          }
+        }
+      }
+    },
+    "history_detail_rotation_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your connections still know your old keys. VettID will offer the update again."
+          }
+        }
+      }
+    },
+    "history_detail_rotate_conflict": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This connection's vault announced two different new keys. That can mean someone holds an old copy of their vault. Nothing is sent or received until you check."
+          }
+        }
+      }
+    },
+    "history_detail_push_google": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Through Google."
+          }
+        }
+      }
+    },
+    "history_detail_push_apple": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Through Apple."
+          }
+        }
+      }
+    },
+    "history_detail_push_off_app": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turned off on that phone."
+          }
+        }
+      }
+    },
+    "history_detail_push_off_transferred": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault moved to a new phone."
+          }
+        }
+      }
+    },
+    "history_detail_push_off_replaced": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That phone was replaced after a recovery."
+          }
+        }
+      }
+    },
+    "history_detail_push_token_gone": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open VettID on that phone to turn them back on."
+          }
+        }
+      }
+    },
+    "history_detail_leash_item_run": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The secret went to your VettID connector for one command on your computer. The agent was not given it."
+          }
+        }
+      }
+    },
+    "history_detail_leash_item_proxy": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The secret went to your VettID connector, which added it to the agent's requests to a site you allowed. The agent was not given it."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}
