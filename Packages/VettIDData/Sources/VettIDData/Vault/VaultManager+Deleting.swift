@@ -133,7 +133,7 @@ extension VaultManager {
         unlockWindow = nil
         alarm = nil
         ownerChecks.clear()
-        profiles.clear()
+        forgetOwnProfile()
         connections.clear()
         messages.clear()
         attachments.reset()

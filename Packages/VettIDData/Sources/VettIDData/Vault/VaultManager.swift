@@ -37,6 +37,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             // The account is read again whenever the vault opens (an unlock, the end of onboarding, a start while open).
             if phase == .unlocked, oldValue != .unlocked { onOpened() }
             if phase != .unlocked, oldValue == .unlocked { forgetOpenLists() } // not kept once it is locked
+            if phase != oldValue, OwnProfileStep.onPhase(phase) == .forget { forgetOwnProfile() } // IOS-PLAN §4.7
             // IOS-PLAN §4.4 (1): the root screen ends with the lock (``lock()``), "Try again", and when nothing is set up
             // any more (a sign-out, a wipe, a deletion); not in between, so that a refusal during an unlock that includes
             // the daily check still shows it.
@@ -47,6 +48,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         }
     }
     public internal(set) var account: AccountInfo?
+    @ObservationIgnored let ownAccount = OwnAccount() // memory only (IOS-PLAN §4.7)
     public internal(set) var servicePaused = false
     /// (IOS-PLAN §4.4 (1)) The vault answered `credential_required`: the root screen "This phone can't use your vault".
     public internal(set) var credentialRequired = false
@@ -297,7 +299,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         connections.loadIfNeeded()
         approvals.loadIfNeeded()
         memberVault.set(recorded: record.value.vaultID)
-        if account == nil { account = record.value.info }
+        if account == nil { publishAccount() }
         if !lockResumed {
             lockResumed = true
             // A lock that was pending when the process ended: locked from the start, and tried again at once.
@@ -324,7 +326,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     func resetRecord(_ a: LocalAccount) throws {
         try record.reset(a)
         memberVault.set(recorded: a.vaultID)
-        account = a.info
+        forgetOwnProfile() // another record: nothing of the one before (IOS-PLAN §4.7)
         recoveryOffered = ReleasePath.recoveryOffered(a.capabilities)
     }
 

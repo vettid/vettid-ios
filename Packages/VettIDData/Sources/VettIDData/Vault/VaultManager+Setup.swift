@@ -31,7 +31,7 @@ extension VaultManager {
                     $0.userGuid = r.userGuid
                     $0.emailHint = r.emailHint
                 }
-                account = record.value.info
+                publishAccount()
             } else {
                 try resetRecord(LocalAccount(userGuid: r.userGuid, vaultID: r.vaultID, emailHint: r.emailHint))
             }

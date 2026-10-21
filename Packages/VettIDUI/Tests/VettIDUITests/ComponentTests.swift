@@ -110,6 +110,13 @@ struct ProfilePhotosTests {
         let big = Data([0xFF, 0xD8, 0xFF]) + Data(count: ProfilePhotos.maxBytes)
         #expect(ProfilePhotos.decode(big.base64EncodedString()) == nil)
     }
+
+    /// A taken photo's bytes (IOS-PLAN §4.7) decode for the preview, read in place; anything else is refused.
+    @Test func aTakenPhotosBytesDecodeForThePreview() {
+        #expect(ProfilePhotos.decodeImage([UInt8](png(64))) != nil)
+        #expect(ProfilePhotos.decodeImage([UInt8](repeating: 1, count: 100)) == nil)
+        #expect(ProfilePhotos.decodeImage([0xFF, 0xD8, 0xFF] + [UInt8](repeating: 0, count: ProfilePhotos.maxBytes)) == nil)
+    }
 }
 
 /// A bubble's links (VAULT-MESSAGING §10.5 "Links"): a tapped link goes to the caller, never to the system; the link runs

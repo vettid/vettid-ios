@@ -19,10 +19,31 @@ public enum ProfilePhotos {
     /// Base64 of 65,536 bytes is 87,384 characters: anything longer is over the limit, unread.
     static let maxBase64Chars = (maxBytes + 2) / 3 * 4
 
-    /// A photo from the vault for display, or nil (absent, too large, not a JPEG or PNG, undecodable).
+    /// A photo from the vault for display, or nil (absent, too large, not a JPEG or PNG, undecodable). The decoded image
+    /// bytes are zeroed once the image is made (or refused): no copy of the photo's file stays in memory after it
+    /// (IOS-PLAN §4.7).
     public static func decode(_ base64: String?) -> UIImage? {
-        guard let bytes = imageBytes(base64),
-              let source = CGImageSourceCreateWithData(bytes as CFData, nil),
+        guard let base64, !base64.isEmpty, base64.utf8.count <= maxBase64Chars, var bytes = Data(base64Encoded: base64) else {
+            return nil
+        }
+        defer { bytes.resetBytes(in: 0..<bytes.count) }
+        guard bytes.count <= maxBytes, isJPEG(bytes) || isPNG(bytes) else { return nil }
+        return bytes.withUnsafeBytes { image(of: $0) }
+    }
+
+    /// [bytes] of a JPEG or PNG of at most ``maxBytes`` for display (a taken photo before it is saved), or nil; the caller
+    /// keeps (and zeroes) the bytes.
+    public static func decodeImage(_ bytes: [UInt8]) -> UIImage? {
+        let known = (bytes.count > jpeg.count && bytes.starts(with: jpeg)) || (bytes.count > png.count && bytes.starts(with: png))
+        guard known, bytes.count <= maxBytes else { return nil }
+        return bytes.withUnsafeBytes { image(of: $0) }
+    }
+
+    /// The image of [raw], read in place (no copy the zeroing would miss), decoded down to the display size.
+    private static func image(of raw: UnsafeRawBufferPointer) -> UIImage? {
+        guard let base = raw.baseAddress?.assumingMemoryBound(to: UInt8.self),
+              let data = CFDataCreateWithBytesNoCopy(kCFAllocatorDefault, base, raw.count, kCFAllocatorNull),
+              let source = CGImageSourceCreateWithData(data, nil),
               let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
               let width = props[kCGImagePropertyPixelWidth] as? Int,
               let height = props[kCGImagePropertyPixelHeight] as? Int,
@@ -45,16 +66,6 @@ public enum ProfilePhotos {
     }
 
     static func sane(_ side: Int) -> Bool { (1...maxDecodeSide).contains(side) }
-
-    /// The decoded bytes of a JPEG or PNG of at most ``maxBytes``, else nil.
-    static func imageBytes(_ base64: String?) -> Data? {
-        guard let base64, !base64.isEmpty, base64.utf8.count <= maxBase64Chars,
-              let bytes = Data(base64Encoded: base64),
-              bytes.count <= maxBytes,
-              isJPEG(bytes) || isPNG(bytes)
-        else { return nil }
-        return bytes
-    }
 
     public static func isJPEG(_ b: Data) -> Bool { b.count > jpeg.count && b.prefix(jpeg.count).elementsEqual(jpeg) }
     public static func isPNG(_ b: Data) -> Bool { b.count > png.count && b.prefix(png.count).elementsEqual(png) }

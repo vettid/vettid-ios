@@ -129,4 +129,40 @@ import VettIDDataTesting
         _ = try await m.unlock(pin: pin)
         #expect(await eventually { m.profiles.profile?.photo == Base64s.encodeStd(Self.jpeg(800)) })
     }
+
+    // MARK: - The own account and profile while the vault is not open (IOS-PLAN §4.7)
+
+    /// The names, the full address and the photo leave memory at the lock, and only the masked hint stays on the phone;
+    /// the unlock reads them again. Mirrors vettid-android `VaultManager`'s own-profile wiring (`OwnProfileStep.onPhase`).
+    @Test func theOwnAccountIsForgottenAtTheLockAndReadAgainAfterTheUnlock() async throws {
+        defer { phone.close() }
+        try await setUp()
+        try await m.profiles.setPhoto(Base64s.encodeStd(Self.jpeg(800)))
+        #expect(await eventually { m.account?.fullName == "Ada Lovelace" && m.account.shownInShell != nil })
+        try await m.lock()
+        #expect(m.account?.fullName == nil && m.account?.email == nil && m.account.shownInShell == nil)
+        #expect(m.account?.emailHint == "m***@example.com", "the unlock screen's hint stays")
+        #expect(m.profiles.profile == nil && m.ownAccount.snapshot == nil)
+        _ = try await m.unlock(pin: pin)
+        #expect(await eventually { m.account?.fullName == "Ada Lovelace" && m.profiles.profile?.photo != nil })
+        #expect(m.account?.email == "member@example.com")
+    }
+
+    /// Held or due (VAULT-MESSAGING §3.6.3): the names, the full address and the photo leave memory; the passed check
+    /// reads them again. Mirrors vettid-android `OwnProfileStep.onCheck`.
+    @Test func theHoldForgetsTheOwnAccountAndThePassedCheckReadsItAgain() async throws {
+        defer { phone.close() }
+        try await setUp()
+        #expect(await eventually { m.account.shownInShell != nil && m.profiles.profile != nil })
+        service.advanceVaultClock(86_401)
+        try await m.ownerChecks.refreshOwnerCheck()
+        #expect(m.ownerChecks.ownerCheck?.state != .ok)
+        #expect(m.account.shownInShell == nil && m.profiles.profile == nil)
+        #expect(m.account?.emailHint == "m***@example.com")
+        // While held nothing read comes back.
+        await m.refreshAccount()
+        #expect(m.account.shownInShell == nil)
+        #expect(try await m.ownerChecks.check(pin: pin, password: password) == .passed)
+        #expect(await eventually { m.account?.fullName == "Ada Lovelace" && m.profiles.profile != nil }, "read again after the check")
+    }
 }

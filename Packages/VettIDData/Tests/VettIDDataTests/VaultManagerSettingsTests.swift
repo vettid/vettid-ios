@@ -36,8 +36,8 @@ import VettIDDataTesting
 
     // MARK: - The account and its names
 
-    /// The vault opening reads the account; `account.changed` reads it again; the snapshot is kept on the phone and
-    /// shown after a restart.
+    /// The vault opening reads the account; `account.changed` reads it again; the snapshot is kept in memory only
+    /// (IOS-PLAN §4.7), and read again after a restart.
     @Test func theAccountIsReadWhenTheVaultOpensAndWhenItChanges() async throws {
         defer { phone.close() }
         service.accountSnapshot(Self.snapshot)
@@ -48,7 +48,9 @@ import VettIDDataTesting
         #expect(await eventually { m.account?.lastName == "King" })
         try await phone.restart()
         try await m.refresh()
-        #expect(m.account?.fullName == "Ada King")
+        #expect(m.account?.fullName == nil && m.account?.emailHint == "m***@example.com", "only the hint on the phone")
+        if m.phase == .locked { #expect(try await m.unlock(pin: pin) == .success) }
+        #expect(await eventually { m.account?.fullName == "Ada King" })
     }
 
     /// The name change: the PIN, the password and the normalised names, checked as an owner check; the pending request is
@@ -222,7 +224,7 @@ import VettIDDataTesting
         #expect(await vaultFailure { try await m.changePassword(password, newPassword: "x y z w") }?.kind == .notSupported)
     }
 
-    /// A wipe erases the stored snapshot and name request with the rest.
+    /// A wipe forgets the snapshot and the name request with the rest.
     @Test func aWipeErasesTheAccount() async throws {
         defer { phone.close() }
         service.accountSnapshot(Self.snapshot)
@@ -233,7 +235,7 @@ import VettIDDataTesting
         service.unlockAnswers(.sealed("unknown_device"))
         _ = try await m.unlock(pin: pin)
         #expect(await eventually { m.phase == .signedOut })
-        #expect(m.account == nil && m.record.value.snapshot == nil && m.record.value.nameRequest == nil)
+        #expect(m.account == nil && m.ownAccount.snapshot == nil && m.ownAccount.nameRequest == nil)
     }
 
     /// The PIN change before release R is not the iPhone app's (IOS-PLAN ID8).
