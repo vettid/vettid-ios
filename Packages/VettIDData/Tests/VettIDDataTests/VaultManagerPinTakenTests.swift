@@ -32,8 +32,7 @@ import VettIDDataTesting
         try await m.createCredential(password: password, backup: true, pin: pin) { _ in }
         try await m.finishSetup()
         #expect(m.phase == .unlocked)
-        // The opening's reads done (the items are read last): with 1 s a try, a request queued behind them on a loaded
-        // machine runs out of tries.
+        // The opening's reads done (the items are read last), so that the test's requests do not go out among them.
         #expect(await eventually { m.items.load == .loaded })
         service.listsRelease4 = true
         await m.releaseUpdate.refreshOffer()
