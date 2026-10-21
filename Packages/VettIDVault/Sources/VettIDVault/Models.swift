@@ -174,7 +174,7 @@ public struct CredentialAlarmInfo: Decodable, Equatable, Sendable {
 }
 
 /// One page of `item.list` (§10.7) as the credential screen counts it: how many items the page holds and the cursor of
-/// the next page. The items themselves come with the Vault screens (IOS-PLAN §8 I3.1).
+/// the next page. The items themselves: ``ItemPage``.
 public struct ItemCountPage: Equatable, Sendable {
     public let count: Int
     public let next: String?
