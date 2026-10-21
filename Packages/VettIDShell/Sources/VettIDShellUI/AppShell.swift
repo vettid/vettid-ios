@@ -5,6 +5,8 @@ import VettIDApprovalsUI
 import VettIDConnections
 import VettIDConnectionsUI
 import VettIDData
+import VettIDHistory
+import VettIDHistoryUI
 import VettIDMessages
 import VettIDMessagesUI
 import VettIDNotifications
@@ -25,7 +27,7 @@ import VettIDUI
 public struct AppShell: View {
     private let account: any AccountRepository
     private let vault: any VaultRepository
-    private let ownerChecks: any OwnerCheckRepository
+    let ownerChecks: any OwnerCheckRepository
     private let credential: any CredentialRepository
     private let profiles: any ProfileRepository
     private let appLock: any AppLockSettings
@@ -46,6 +48,8 @@ public struct AppShell: View {
     private let messages: (any MessagesRepository)?
     let feed: (any FeedRepository)?
     let approvals: (any ApprovalsRepository)?
+    let history: (any HistoryRepository)?
+    let historyExport: (any HistoryExportRepository)?
     private let onOpenPortal: @MainActor () -> Void
 
     /// [model]: where the member is, owned above the owner check's gate. [gate]: the owner check at [now] (the root re-reads
@@ -55,7 +59,8 @@ public struct AppShell: View {
     /// [connections], [connectionRequests] and [inviteInbox]: the connect flow and an invitation link the app was opened
     /// with (VAULT-MESSAGING §6.4). [messages]: Messages, its conversations and the new-message picker (§10.5), with
     /// [connections]. [feed]: the bell and the Notifications screen (§10.9); [approvals]: Approvals and its decisions
-    /// (§10.4, §10.12, §10.13), with [connections].
+    /// (§10.4, §10.12, §10.13), with [connections]. [history] and [historyExport]: History, its entries and its export
+    /// (§10.9).
     public init(
         account: any AccountRepository,
         vault: any VaultRepository,
@@ -80,6 +85,8 @@ public struct AppShell: View {
         messages: (any MessagesRepository)? = nil,
         feed: (any FeedRepository)? = nil,
         approvals: (any ApprovalsRepository)? = nil,
+        history: (any HistoryRepository)? = nil,
+        historyExport: (any HistoryExportRepository)? = nil,
         onOpenPortal: @escaping @MainActor () -> Void
     ) {
         self.account = account
@@ -105,6 +112,8 @@ public struct AppShell: View {
         self.messages = messages
         self.feed = feed
         self.approvals = approvals
+        self.history = history
+        self.historyExport = historyExport
         self.onOpenPortal = onOpenPortal
     }
 
@@ -291,6 +300,15 @@ public struct AppShell: View {
             } else {
                 ComingLaterScreen(destination: model.destination, chrome: chrome)
             }
+        case .history:
+            if let history, let historyExport {
+                HistoryRoute(
+                    history: history, export: historyExport, connections: connections, ownerChecks: ownerChecks, chrome: chrome,
+                    host: historyHost
+                )
+            } else {
+                ComingLaterScreen(destination: model.destination, chrome: chrome)
+            }
         case .connections:
             if let connections, let connectionRequests {
                 ConnectionsRoute(
@@ -325,7 +343,7 @@ public struct AppShell: View {
             featureDetail(route)
         case .conversation, .newMessage:
             messagesDetail(route)
-        case .notifications, .approval:
+        case .notifications, .approval, .historyEntry, .connectionHistory:
             activityDetail(route)
         }
     }
@@ -396,6 +414,8 @@ public struct AppShell: View {
         h.push = { model.push(.connect($0)) }
         h.onOpenConnection = { model.push(.connection($0)) }
         h.replaceWithConnection = { model.replace(.connection($0)) }
+        // A connection's History, once History is there (IOS-PLAN §8 I2.3).
+        if history != nil, historyExport != nil { h.onOpenHistory = { model.openConnectionHistory($0) } }
         // "Send a message" on a connection's page and after connecting, once the messages are there (IOS-PLAN §8 I2.2).
         if messages != nil { h.onOpenConversation = { model.openConversation($0) } }
         return h

@@ -6,6 +6,7 @@ import Testing
 import UIKit
 import VettIDData
 import VettIDDataTesting
+import VettIDHistory
 import VettIDKeys
 import VettIDOnboarding
 import VettIDSettings
@@ -219,6 +220,29 @@ import VettIDVault
         }
         let items = TopLevelDestination.drawerSections(badges: [.approvals: 1]).flatMap { $0 }
         #expect(items.first { $0.key == "approvals" }?.badge == 1 && items.first { $0.key == "messages" }?.badge == 0)
+    }
+
+    /// History in the placeholder's place, an entry and a connection's History over it; a connection's page offers it.
+    @Test func theHistoryRenders() {
+        let repo = FakeVaultRepository(.unlocked)
+        let gate = OwnerCheckGate(gated: false, warning: false, holdOff: false, notices: [], presenceUnrecorded: false)
+        let connections = FakeConnections()
+        connections.connections = [ConnectionInfo(id: "c1", name: "", state: .active)]
+        let log = FakeAuditLog(FakeAuditLog.chain(5, connection: "c1"))
+        let history = HistoryManager { log }
+        let export = HistoryExportManager { log }
+        let model = ShellModel(account: repo, vault: repo, ownerChecks: repo)
+        model.navigate(.history)
+        for path: [ShellRoute] in [[], [.historyEntry(3)], [.connection("c1")], [.connection("c1"), .connectionHistory("c1")]] {
+            model.path = path
+            let shell = AppShell(
+                account: repo, vault: repo, ownerChecks: repo, credential: repo, profiles: repo, appLock: StillAppLock(),
+                model: model, gate: gate, now: now, version: AppVersion(name: "2.0.0", build: 1), installedFrom: .apple,
+                promptReason: "Unlock VettID", connections: connections, connectionRequests: connections, history: history,
+                historyExport: export
+            ) {}
+            #expect(height(shell) > 0)
+        }
     }
 
     private func height(_ view: some View) -> CGFloat {

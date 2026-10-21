@@ -18,6 +18,9 @@ public struct ConnectHost {
     public var replaceWithConnection: (@MainActor (String) -> Void)?
     /// Opens a screen of the connect flow (the list's add button).
     public var push: @MainActor (ConnectDestination) -> Void = { _ in }
+    /// A connection's History (ANDROID-PLAN §4 History: the connection preset), from its page; nil while the app has no
+    /// History.
+    public var onOpenHistory: (@MainActor (String) -> Void)?
 
     public init() {}
 }
@@ -206,6 +209,7 @@ public struct ConnectionDetailRoute: View {
         var a = DetailActions()
         a.onBack = host.onBack
         a.onMessage = opening(host.onOpenConversation, connectionID)
+        a.onHistory = opening(host.onOpenHistory, connectionID)
         guard let m = model else { return a }
         a.onFavorite = { m.toggleFavorite() }
         a.onAsk = { m.ask($0) }

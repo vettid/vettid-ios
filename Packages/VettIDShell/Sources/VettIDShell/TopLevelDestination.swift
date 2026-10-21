@@ -41,7 +41,8 @@ public enum TopLevelDestination: String, CaseIterable, Sendable {
 }
 
 /// The screens pushed over a top-level screen so far (vettid-android's routes of `feature/settings`,
-/// `feature/credential`, `feature/connections`, `feature/messages`, `feature/notifications` and `feature/approvals`).
+/// `feature/credential`, `feature/connections`, `feature/messages`, `feature/notifications`, `feature/approvals` and
+/// `feature/history`).
 public enum ShellRoute: Hashable, Sendable {
     case vaultStatus
     case attestation
@@ -77,6 +78,10 @@ public enum ShellRoute: Hashable, Sendable {
     case notifications(archived: Bool)
     /// One approval by its key (VAULT-MESSAGING §10.4, §10.12, §10.13, §6.8), from Approvals or a feed item.
     case approval(String)
+    /// One History entry by its `seq` (VAULT-MESSAGING §10.9), from History or a connection's History.
+    case historyEntry(Int64)
+    /// A connection's History (ANDROID-PLAN §4 History: the connection preset), from its page.
+    case connectionHistory(String)
 }
 
 /// This build's version as the drawer's footer shows it ("VettID 2.0.0 (1)", vettid-android `drawer_version`).

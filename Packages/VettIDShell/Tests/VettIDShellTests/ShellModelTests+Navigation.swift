@@ -171,4 +171,19 @@ import VettIDOnboarding
         m.openFeedTarget(.security)
         #expect(m.destination == .settings && m.path.isEmpty)
     }
+
+    /// History's entry over the list, and a connection's History over its page, each once.
+    @Test func historyEntriesAndAConnectionsHistoryOpenOnce() {
+        let m = model
+        m.navigate(.history)
+        m.openHistoryEntry(12)
+        m.openHistoryEntry(12)
+        #expect(m.destination == .history && m.path == [.historyEntry(12)])
+        m.navigate(.connections)
+        m.push(.connection("c1"))
+        m.openConnectionHistory("c1")
+        m.openConnectionHistory("c1")
+        m.openHistoryEntry(3)
+        #expect(m.path == [.connection("c1"), .connectionHistory("c1"), .historyEntry(3)])
+    }
 }

@@ -150,18 +150,24 @@ public struct AuditFilter: Equatable, Sendable {
     }
 }
 
-/// One `audit.list` request (§10.9, newest first). ANDROID-PLAN §4 History: pages of 50.
+/// One `audit.list` request (§10.9, newest first). ANDROID-PLAN §4 History: pages of 50. [kinds], when set, is sent in
+/// place of the category's prefixes (an entry's detail reads `recovery.open` and `recovery.attempt` around an attempt,
+/// IOS-PLAN §4.1).
 public struct AuditRequest: Equatable, Sendable {
     public static let defaultLimit = 50
 
     public var filter: AuditFilter
     public var beforeSeq: Int64?
     public var limit: Int
+    public var kinds: [String]?
 
-    public init(filter: AuditFilter = AuditFilter(), beforeSeq: Int64? = nil, limit: Int = AuditRequest.defaultLimit) {
+    public init(
+        filter: AuditFilter = AuditFilter(), beforeSeq: Int64? = nil, limit: Int = AuditRequest.defaultLimit, kinds: [String]? = nil
+    ) {
         self.filter = filter
         self.beforeSeq = beforeSeq
         self.limit = limit
+        self.kinds = kinds
     }
 
     public var hasSearch: Bool { filter.q != nil || filter.since != nil || filter.until != nil }
@@ -322,7 +328,7 @@ public final class HistoryManager: HistoryRepository {
         do {
             let f = r.filter.exportFilters
             return try await ops().auditPage(
-                connectionID: f.connectionID, kinds: f.kinds, beforeSeq: r.beforeSeq, limit: r.limit,
+                connectionID: f.connectionID, kinds: r.kinds ?? f.kinds, beforeSeq: r.beforeSeq, limit: r.limit,
                 search: search ? AuditSearch(q: f.q, since: f.since, until: f.until) : AuditSearch()
             )
         } catch {
