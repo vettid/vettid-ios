@@ -94,7 +94,16 @@ public final class FakeVaultService: @unchecked Sendable {
     var device: (kem: KemPublicKey, relay: RelayAddr)?
     var responder: Responder?
     var utks: [String: KemPrivateKey] = [:]
+    /// The UTK the request being handled presented, spent before any check (``spend(_:)``).
+    var presented: (id: String, ltk: KemPrivateKey)?
+    /// A plain `credential.utk.get` answers no UTKs (``vaultPoolFull``).
+    var vaultPoolFullValue = false
+    /// The vault clock of the last UTK resync, and the resyncs asked for (``utkResyncs``).
+    var lastResync: Date?
+    var resyncsValue: [Bool] = []
     var hasCredential = false
+    /// This phone is no longer the credential's holder (``notHolder``).
+    var notHolderValue = false
     var vaultMade = false
     var failNextTypes: Set<String> = []
     /// The next request of a type is refused with this error (``refuseNext(_:code:message:body:)``).
@@ -282,9 +291,31 @@ public final class FakeVaultService: @unchecked Sendable {
     public func failNext(_ type: String) { locked { _ = failNextTypes.insert(type) } }
 
     /// The next request of [type] is refused with [code], its [message] and [body] (IOS-PLAN §4.4: a code the app does not
-    /// map, `credential_required{no_holder}`, `forbidden`), before anything is done or any UTK spent.
+    /// map, `credential_required{no_holder}`, `forbidden`), before anything is done; a readable `utk_id` is spent first
+    /// (VAULT-MESSAGING 0.52.0 §3.5.4 "Using a UTK").
     public func refuseNext(_ type: String, code: String, message: String = "", body: String = "{}") {
         locked { refuseNextAnswers[type] = (InnerError(code, message), body) }
+    }
+
+    /// The UTKs issued and not spent yet (the vault's pool for this phone, §3.5.4).
+    public var outstandingUTKs: Int { locked { utks.count } }
+
+    /// The vault's pool for this phone is full of UTKs the phone no longer holds: a plain `credential.utk.get` answers
+    /// no UTKs until a resync (VAULT-MESSAGING 0.52.0 §3.5.4 "Resync").
+    public var vaultPoolFull: Bool {
+        get { locked { vaultPoolFullValue } }
+        set { locked { vaultPoolFullValue = newValue } }
+    }
+
+    /// Each `credential.utk.get{"resync": true}` the vault received: true when it was carried out, false when refused
+    /// `too_soon`.
+    public var utkResyncs: [Bool] { locked { resyncsValue } }
+
+    /// This phone is no longer the credential's holder (another app holds it): the holder's types are refused
+    /// `forbidden` after the UTK is spent, as vettid-vault's `gate` does (§3.5.4, §3.5.9).
+    public var notHolder: Bool {
+        get { locked { notHolderValue } }
+        set { locked { notHolderValue = newValue } }
     }
 
     /// The vault already holds this phone's credential (a `credential.create` whose answer was lost): the next create is
