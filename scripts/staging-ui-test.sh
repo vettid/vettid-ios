@@ -58,9 +58,10 @@
 #                                        (delivered when it passes; sending, failed or none when it fails). The
 #                                        iPhone's photo library must hold at least one photo (the test fails without
 #                                        one and never adds any).
-#   testStagingPhotoReceive              the conversation with VETTID_STAGING_PEER_NAME, until a photo from it shows its
-#                                        thumbnail (an earlier one counts; the lowest is taken), then that photo in the
-#                                        viewer, shown and not a failure; prints "PHOTO_RECEIVED: yes|no" and
+#   testStagingPhotoReceive              the conversation with VETTID_STAGING_PEER_NAME, until a new photo from it
+#                                        shows its thumbnail (one already in the conversation when it opened never
+#                                        counts: start this test first and send once it is waiting), then that photo
+#                                        in the viewer, shown and not a failure; prints "PHOTO_RECEIVED: yes|no" and
 #                                        "PHOTO_VIEWER: shown|failed|loading".
 #
 # Inputs per test: testStagingEnroll needs all four of EMAIL, CODE, PIN and PASSWORD; every other test PIN and PASSWORD;
@@ -85,9 +86,9 @@
 # Example (messages: one phone sends, the other, whose file has the same text as VETTID_STAGING_EXPECT, receives):
 #   scripts/staging-ui-test.sh --device <id> --test testStagingMessageSend --inputs <private file>
 #   scripts/staging-ui-test.sh --device <id> --test testStagingMessageReceive --inputs <private file>
-# Example (photos: one phone sends, the other receives and opens it):
-#   scripts/staging-ui-test.sh --device <id> --test testStagingPhotoSend --inputs <private file>
+# Example (photos: the receiving phone starts waiting first, then the other phone sends):
 #   scripts/staging-ui-test.sh --device <id> --test testStagingPhotoReceive --inputs <private file>
+#   scripts/staging-ui-test.sh --device <id> --test testStagingPhotoSend --inputs <private file>
 set -euo pipefail
 
 cd "$(dirname "$0")/.."

@@ -262,9 +262,11 @@ final class StagingTests: VaultUITestCase {
         try photoSend()
     }
 
-    /// The other side of ``testStagingPhotoSend``: the conversation with the connection, until a photo from it shows its
-    /// thumbnail (within `VETTID_STAGING_PHOTO_TIMEOUT`), then that photo in the viewer, shown (not a failure); reported
-    /// on `PHOTO_RECEIVED:` and `PHOTO_VIEWER:` lines. Then the viewer is closed and the vault locked.
+    /// The other side of ``testStagingPhotoSend``: the conversation with the connection, the photos already in it noted
+    /// once its history has settled, then until a new photo from the connection shows its thumbnail (within
+    /// `VETTID_STAGING_PHOTO_TIMEOUT`; an earlier photo never counts, so the other phone sends once this test is
+    /// waiting), then that photo in the viewer, shown (not a failure); reported on `PHOTO_RECEIVED:` and `PHOTO_VIEWER:`
+    /// lines. Then the viewer is closed and the vault locked.
     @MainActor
     func testStagingPhotoReceive() throws {
         try photoReceive()

@@ -2,7 +2,8 @@ import XCTest
 
 /// Photos on staging (VAULT-MESSAGING §10.5.1; ANDROID-PLAN "Photo attachments"): ``StagingTests/testStagingPhotoSend``
 /// sends the first photo of the system's picker to a connection and follows its bubble to "Delivered",
-/// ``StagingTests/testStagingPhotoReceive`` waits for a photo from the connection and opens it in the viewer. The
+/// ``StagingTests/testStagingPhotoReceive`` waits for a new photo from the connection (one that was not in the
+/// conversation when it opened) and opens it in the viewer. The
 /// connection is found by its shown name (`VETTID_STAGING_PEER_NAME`). The outcome is reported on `PHOTO_STATE:`,
 /// `PHOTO_RECEIVED:` and `PHOTO_VIEWER:` lines; the name is never printed and no failure message carries it.
 ///
@@ -11,12 +12,15 @@ import XCTest
 /// (the name bidi-isolated), in English, the only localization; its value is "shown" once the thumbnail is drawn.
 ///
 /// The system's Photos picker runs outside the app (IOS-PLAN §4): its grid is reached through the app's element tree,
-/// where XCUITest shows the picker's remote view, or else through SpringBoard's.
+/// where XCUITest shows the picker's remote view, or else through SpringBoard's, and only once the picker's own controls
+/// are up.
 extension StagingTests {
     /// How long the photo tests wait for the delivery or the arrival, unless `VETTID_STAGING_PHOTO_TIMEOUT` says.
     static let photoWait: TimeInterval = 180
     /// The picker opening and showing its grid.
     static let pickerWait: TimeInterval = 30
+    /// The conversation's history settling before the photos already there are noted.
+    static let historySettle: TimeInterval = 15
     /// An outgoing photo's line as the label ends with it, and as it is reported (anything else is a failure).
     static let photoStates: [String: String] = ["Sending": "sending", "Delivered": "delivered"]
     /// The heads of a photo bubble's label.
@@ -47,11 +51,13 @@ extension StagingTests {
         let before = Set(outgoingPhotos(app).map(\.id))
         guard openPicker(app, button: button), pickFirstPhoto(app), let send = draftSend(app) else { return }
         send.tap()
+        // One timeout from Send to "Delivered", the upload included.
+        let deadline = Date().addingTimeInterval(timeout)
         guard draftClosed(app, send: send, timeout: timeout) else { return }
 
         // The new bubble (the lowest one that was not there before), then its line until "Delivered".
         var state: String?
-        let done = waitUntil(timeout: timeout) {
+        let done = waitUntil(timeout: max(deadline.timeIntervalSinceNow, 0)) {
             if let mine = outgoingPhotos(app).last(where: { !before.contains($0.id) }) { state = mine.state }
             return state == "delivered" || state == "failed" || shown(app)["conversation_error"] != nil
         }
@@ -72,10 +78,12 @@ extension StagingTests {
 
         let app = launch()
         guard openAtStart(app, pin: pin, password: password), openConversation(app, peer: peer) else { return }
-        guard let found = waitForIncomingPhoto(app, peer: peer, timeout: timeout) else { return }
+        // The photos already there (shown or not) never count: only one sent after this.
+        let before = settledIncomingPhotos(app, peer: peer)
+        guard let found = waitForIncomingPhoto(app, peer: peer, excluding: before, timeout: timeout) else { return }
         print("PHOTO_RECEIVED: \(found != nil ? "yes" : "no")")
         guard let photo = found else {
-            return fail(app, "No photo from the connection showed its thumbnail within \(Int(timeout)) s.")
+            return fail(app, "No new photo from the connection showed its thumbnail within \(Int(timeout)) s.")
         }
         guard viewPhoto(app, photo) else { return }
         lock(app)
@@ -100,16 +108,17 @@ extension StagingTests {
         return true
     }
 
-    /// The lowest photo from [peer] whose thumbnail is drawn, the conversation closed and opened again meanwhile (the
-    /// screen has no pull to refresh): `.some(id)`, `.some(nil)` when none came within [timeout], nil after a failure.
+    /// The lowest photo from [peer] not in [excluding] whose thumbnail is drawn, the conversation closed and opened again
+    /// meanwhile (the screen has no pull to refresh): `.some(id)`, `.some(nil)` when none came within [timeout], nil after
+    /// a failure.
     @MainActor
-    func waitForIncomingPhoto(_ app: XCUIApplication, peer: String, timeout: TimeInterval) -> String?? {
+    func waitForIncomingPhoto(_ app: XCUIApplication, peer: String, excluding: Set<String>, timeout: TimeInterval) -> String?? {
         var photo: String?
         let deadline = Date().addingTimeInterval(timeout)
         while photo == nil, Date() < deadline {
             let round = min(Self.reopenEvery, deadline.timeIntervalSinceNow)
             _ = waitUntil(timeout: max(round, 0)) {
-                photo = incomingPhoto(app, peer: peer)
+                photo = incomingPhotos(app, peer: peer).last { !excluding.contains($0.id) && $0.shown }?.id
                 return photo != nil
             }
             if photo == nil, Date() < deadline {
@@ -166,8 +175,13 @@ extension StagingTests {
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         var picked: XCUIElement?
         var empty = false
+        // Nothing is looked for in the grid before the picker is up, so that nothing of the conversation is tapped.
+        guard waitUntil(timeout: Self.pickerWait, { pickerUp(app) || pickerUp(springboard) }) else {
+            fail(app, "The Photos picker did not open.")
+            return false
+        }
         _ = waitUntil(timeout: Self.pickerWait) {
-            picked = pickerPhoto(in: app) ?? pickerPhoto(in: springboard)
+            picked = pickerPhoto(inApp: app) ?? pickerPhoto(inSpringboard: springboard)
             empty = libraryEmpty(in: app) || libraryEmpty(in: springboard)
             return picked != nil || empty
         }
@@ -233,13 +247,37 @@ extension StagingTests {
 
     // MARK: - Reading the screen
 
-    /// A photo of the picker's grid that can be tapped: an image whose label reads like the picker's ("Photo, <date>",
-    /// "Live Photo, …", "Screenshot, …"), or else the first image of its scrolling grid.
+    /// The picker's own controls are on screen (its Cancel or Close, never the draft's `photo_cancel`), or its word
+    /// that the library is empty.
     @MainActor
-    func pickerPhoto(in root: XCUIApplication) -> XCUIElement? {
-        let labelled = root.images.matching(NSPredicate(format: "label CONTAINS ', '")).firstMatch
-        let grid = root.scrollViews.otherElements.images.firstMatch
-        return [labelled, grid].first { $0.exists && $0.isHittable }
+    func pickerUp(_ root: XCUIApplication) -> Bool {
+        let close = root.buttons.matching(Self.pickerClose).firstMatch
+        return close.exists || libraryEmpty(in: root)
+    }
+
+    static var pickerClose: NSPredicate {
+        NSPredicate(format: "label IN {'Cancel', 'Close'} AND NOT (identifier BEGINSWITH 'photo_')")
+    }
+    /// A picker cell: an image labelled as the picker labels them ("Photo, <date>", "Live Photo, …", "Screenshot, …"),
+    /// never one of the app's own (`photo_…`).
+    static var pickerCell: NSPredicate {
+        NSPredicate(format: "label CONTAINS ', ' AND NOT (identifier BEGINSWITH 'photo_')")
+    }
+
+    /// A photo of the picker's grid in the app's tree, where XCUITest shows the picker's remote view.
+    @MainActor
+    func pickerPhoto(inApp app: XCUIApplication) -> XCUIElement? {
+        let cell = app.images.matching(Self.pickerCell).firstMatch
+        return cell.exists && cell.isHittable ? cell : nil
+    }
+
+    /// A photo of the picker's grid in SpringBoard's tree: a labelled cell, or else the first image of a scrolling grid
+    /// (SpringBoard holds nothing of the app's).
+    @MainActor
+    func pickerPhoto(inSpringboard springboard: XCUIApplication) -> XCUIElement? {
+        let cell = springboard.images.matching(Self.pickerCell).firstMatch
+        let grid = springboard.scrollViews.otherElements.images.firstMatch
+        return [cell, grid].first { $0.exists && $0.isHittable }
     }
 
     /// The picker says the library has nothing to pick.
@@ -285,16 +323,37 @@ extension StagingTests {
         }
     }
 
-    /// The identifier of the lowest photo bubble from [peer] whose thumbnail is drawn; nil if none.
+    /// The photo bubbles from [peer], top to bottom, with whether their thumbnail is drawn; nil when the snapshot failed.
     @MainActor
-    func incomingPhoto(_ app: XCUIApplication, peer: String) -> String? {
+    func incomingPhotos(_ app: XCUIApplication, peer: String) -> [(id: String, shown: Bool)] {
+        incomingPhotoSnapshot(app, peer: peer) ?? []
+    }
+
+    @MainActor
+    func incomingPhotoSnapshot(_ app: XCUIApplication, peer: String) -> [(id: String, shown: Bool)]? {
         guard let root = try? app.snapshot() else { return nil }
         let head = Self.photoIn(peer)
-        return ordered(under: root).last { e in
-            guard e.identifier.hasPrefix("photo_"), (e.value as? String) == "shown" else { return false }
+        return ordered(under: root).compactMap { e in
+            guard e.identifier.hasPrefix("photo_") else { return nil }
             let label = Self.plain(e.label)
-            return label == head || label.hasPrefix(head + ". ")
-        }?.identifier
+            guard label == head || label.hasPrefix(head + ". ") else { return nil }
+            return (e.identifier, (e.value as? String) == "shown")
+        }
+    }
+
+    /// The ids of the photo bubbles from [peer] once the conversation's history has settled: two snapshots a second
+    /// apart that list the same bubbles (for at most ``historySettle`` seconds, then the last list).
+    @MainActor
+    func settledIncomingPhotos(_ app: XCUIApplication, peer: String) -> Set<String> {
+        let deadline = Date().addingTimeInterval(Self.historySettle)
+        var last = incomingPhotoSnapshot(app, peer: peer)?.map(\.id)
+        while Date() < deadline {
+            Thread.sleep(forTimeInterval: 1)
+            let now = incomingPhotoSnapshot(app, peer: peer)?.map(\.id)
+            if let now, now == last { break }
+            last = now ?? last
+        }
+        return Set(last ?? [])
     }
 
     /// What the viewer shows: `shown` (the photo), `failed` (its failure notice, or a type it cannot show) or `loading`.
