@@ -76,7 +76,7 @@ public struct ChangeNameState: Equatable, Sendable, CustomStringConvertible, Cus
 
     public var description: String {
         "ChangeNameState(step: \(step), busy: \(busy), message: \(message.map { "\($0)" } ?? "nil"), wait: \(waitSeconds), "
-            + "request: \(request.map { "\($0.seq) \($0.state)" } ?? "nil"))"
+            + "request: \(request.map { "\($0.state)" } ?? "nil"))"
     }
     public var debugDescription: String { description }
     public var customMirror: Mirror { Mirror(self, children: [:]) }
@@ -167,7 +167,9 @@ public final class ChangeNameViewModel {
         if let open = a.shownInShell {
             if let seq = s.sentSeq, let latest = open.nameRequest, latest.seq == seq { s.request = latest }
         } else {
+            // Not the open vault's: no request, nor any name of one, reaches the screen (IOS-PLAN 0.1.21 §4.7).
             s.request = nil
+            s.account?.nameRequest = nil
         }
         return s
     }

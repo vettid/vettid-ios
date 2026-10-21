@@ -115,11 +115,28 @@ import VettIDDataTesting
         held.nameRequest = NameRequestView(seq: seq, firstName: "Ada", lastName: "King", requestedAt: nil, state: .pending)
         repo.account = held
         #expect(m.state.request == nil)
+        #expect(m.state.account?.nameRequest == nil, "no name request reaches the state while held")
+        #expect(!"\(m.state)".contains("King"))
         // The passed check opens the vault: the request is read again.
         var open = AccountInfo(emailHint: "a***@example.com", state: "member", firstName: "Ada", lastName: "Lovelace")
         open.nameRequest = held.nameRequest
         repo.account = open
         #expect(m.state.request?.state == .pending)
+    }
+
+    @Test func aRequestWithAnotherSeqIsNotShownAfterTheUnlock() async throws {
+        let m = model()
+        atConfirm(m)
+        m.submit()
+        await m.settle()
+        let seq = try #require(m.state.request?.seq)
+        repo.account = nil
+        #expect(await eventually { m.state.first == "" })
+        // The vault's latest request is another one (made elsewhere): not this screen's.
+        var open = AccountInfo(emailHint: "a***@example.com", state: "member", firstName: "Ada", lastName: "Lovelace")
+        open.nameRequest = NameRequestView(seq: seq + 1, firstName: "Ada", lastName: "Byron", requestedAt: nil, state: .pending)
+        repo.account = open
+        #expect(m.state.step == .sent && m.state.request == nil && m.state.sentSeq == seq)
     }
 
     @Test func aRequestAnsweredAfterTheLockIsNotKept() async {

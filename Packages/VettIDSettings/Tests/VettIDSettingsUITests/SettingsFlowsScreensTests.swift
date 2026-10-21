@@ -98,7 +98,14 @@ import VettIDUI
         s.step = .sent
         s.sentSeq = 3
         #expect(ChangeNameSentStep.says(s) == nil)
+        #expect(ChangeNameSentStep.tag(s) == "hidden", "the change_name_sent_hidden view renders")
         #expect(height(ChangeNameContent(state: s)) > 0)
+        // A hint-only account carrying a request says nothing of it either.
+        var held = AccountInfo(emailHint: "a***@example.org")
+        held.nameRequest = pending
+        #expect(NameStatus.text(held, now: now) == nil)
+        s.request = pending
+        #expect(ChangeNameSentStep.tag(s) == "pending")
     }
 
     /// vettid-android's `<b>` emphasis of the backup warning, as bold runs with the same words.

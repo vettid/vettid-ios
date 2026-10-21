@@ -26,9 +26,11 @@ public struct ChangeNameActions {
 
 /// What to say about the account's names (VAULT-MESSAGING §10.8 "What the app shows"): a pending request, a refusal (with
 /// its reason), or that the next change must wait (the snapshot's `name_change.allowed_after`); nil when there is nothing
-/// to say. The avatar sheet shows it under the names. Mirrors vettid-android `nameStatusText`.
+/// to say. The avatar sheet shows it under the names. Only from the open vault's account (IOS-PLAN 0.1.21 §4.7: nothing
+/// about a request while the vault is not open). Mirrors vettid-android `nameStatusText`.
 public enum NameStatus {
-    public static func text(_ account: AccountInfo?, now: Date = Date()) -> String? {
+    public static func text(_ raw: AccountInfo?, now: Date = Date()) -> String? {
+        let account = raw.shownInShell
         let r = account?.nameRequest
         if let r, r.state == .pending { return NameStrings.statusPending(AccountNames.isolate("\(r.firstName) \(r.lastName)")) }
         if let r, r.state == .refused { return refusal(r, allowedAfter: account?.nameAllowedAfter) }
@@ -111,7 +113,7 @@ struct ChangeNameNamesStep: View {
                     NoticeCard(.info, title: NameStrings.title, message: NameStatus.tooSoon(allowedAfter))
                         .accessibilityIdentifier("name_too_soon")
                 }
-                if let r = state.account?.nameRequest, r.state == .pending {
+                if let r = state.account.shownInShell?.nameRequest, r.state == .pending {
                     Text(NameStrings.statusPending(AccountNames.isolate("\(r.firstName) \(r.lastName)")))
                         .vettIDFont(.bodyMedium)
                         .accessibilityIdentifier("name_pending")
@@ -277,6 +279,9 @@ struct ChangeNameSentStep: View {
         return Says(title: NameStrings.requestedTitle, body: NameStrings.requestedBody(name), symbol: .schedule, tag: "pending")
     }
 
+    /// The tag of the view the step shows: the request's state, or `hidden` while the vault is not open.
+    static func tag(_ state: ChangeNameState) -> String { says(state)?.tag ?? "hidden" }
+
     var body: some View {
         if let s = Self.says(state) {
             FormScaffold(
@@ -285,12 +290,12 @@ struct ChangeNameSentStep: View {
             ) {
                 EmptyView()
             }
-            .accessibilityIdentifier("change_name_sent_\(s.tag)")
+            .accessibilityIdentifier("change_name_sent_\(Self.tag(state))")
         } else {
             FormScaffold(title: NameStrings.title, primaryLabel: NameStrings.done, onPrimary: actions.onClose) {
                 EmptyView()
             }
-            .accessibilityIdentifier("change_name_sent_hidden")
+            .accessibilityIdentifier("change_name_sent_\(Self.tag(state))")
         }
     }
 }
