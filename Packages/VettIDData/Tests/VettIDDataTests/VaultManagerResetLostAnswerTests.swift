@@ -33,6 +33,9 @@ import VettIDVault
         try await m.createCredential(password: password, backup: true, pin: pin) { _ in }
         try await m.finishSetup()
         #expect(m.phase == .unlocked)
+        // The opening's reads done (the items are read last): with 1 s a try, a request queued behind them on a loaded
+        // machine runs out of tries.
+        #expect(await eventually { m.items.load == .loaded })
     }
 
     func reset() async -> VaultFailure? {
@@ -142,9 +145,23 @@ import VettIDVault
 
     /// The version pre-check: an earlier operation moved the vault's blob without its answer. The latest blob is fetched
     /// and the reset goes with it, so the vault applies it (no `stale_credential`, no alarm).
+    ///
+    /// No answer is lost here, so the phone waits as long as the photo suite's (3 s a try, not the suite's 1 s): the
+    /// pre-check's fetch (`credential.get`, `credential.ack`) went out behind the opening's reads, and on a loaded machine
+    /// three tries of 1 s ran out, which the pre-check reports as an unsettled earlier request. It also starts once the
+    /// opening's reads are done (the items are read last).
     @Test func thePreCheckSendsWithTheVaultsBlob() async throws {
-        defer { phone.close() }
-        try await setUp()
+        // The suite's phone stays idle (it never registered or collected, and keeps its own files and keys), closed first;
+        // the service then serves one phone, as in VaultManagerVersionGapTests.aChangeWaitsAtMostThirtySeconds.
+        phone.close()
+        let roomy = try TestVaultPhone(service: service, requestTimeout: 3)
+        defer { roomy.close() }
+        let m = roomy.manager
+        _ = try await m.redeemSetupCode(.secret(service.secret))
+        try await m.enroll(pin: pin) { _ in }
+        try await m.createCredential(password: password, backup: true, pin: pin) { _ in }
+        try await m.finishSetup()
+        #expect(await eventually { m.items.load == .loaded }, "the opening's reads done")
         service.moveCredentialWithoutTheApp()
         try await m.newCredential(pin: pin, password: password, newPassword: newPassword)
         #expect(service.resets.count == 1 && service.currentPassword == newPassword && service.alarmState == nil)

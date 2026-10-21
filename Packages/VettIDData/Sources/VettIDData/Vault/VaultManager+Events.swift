@@ -109,6 +109,7 @@ extension VaultManager {
             connections.onEvent(m)
             messages.onEvent(m)
             attachments.onEvent(m)
+            items.onEvent(m)
             activityEvent(m)
         }
         switch m.type {
