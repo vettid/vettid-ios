@@ -104,6 +104,7 @@ extension VaultManager {
     /// that expire are not kept waiting behind them) and the items are read again, one after the other; failures are left
     /// for the screens.
     func refreshListsQuietly() {
+        items.listsReadPending = true
         Task { [weak self] in
             guard let self else { return }
             profiles.refreshQuietly()
@@ -114,6 +115,7 @@ extension VaultManager {
             await messages.refreshConversationsQuietly()
             // The items last (chosen; not in the spec: vettid-android reads them beside the others): nothing that expires
             // waits behind them, and no screen needs them before the member opens the Vault.
+            items.listsReadPending = false
             try? await items.refresh(quietly: true)
         }
     }

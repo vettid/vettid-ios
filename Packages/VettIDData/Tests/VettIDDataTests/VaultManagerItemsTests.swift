@@ -182,6 +182,22 @@ import VettIDDataTesting
         try await m.lock()
         #expect(await eventually { items.items.isEmpty && items.load == .notLoaded && items.cleared > cleared })
     }
+
+    /// Due (§3.6.3): the list is dropped and another device's change does not refill it; this phone's passed check reads
+    /// it again once, with the other lists.
+    @Test func whileDueNothingRefillsTheListAndAPassedCheckReadsItOnce() async throws {
+        defer { phone.close() }
+        try await setUp()
+        let id = try await items.create(ItemDraft(name: "Note", fields: [DraftField(label: "Text", kind: "text", text: "x")]))
+        #expect(items.items.map(\.itemID) == [id])
+        service.advanceVaultClock(86_401)
+        try await m.ownerChecks.refreshOwnerCheck()
+        #expect(m.ownerChecks.ownerCheck?.state != .ok && items.items.isEmpty && items.load == .notLoaded)
+        let listsBefore = service.requestsSeen.filter { $0 == "item.list" }.count
+        #expect(try await m.ownerChecks.check(pin: pin, password: password) == .passed)
+        #expect(await eventually { items.load == .loaded && items.items.map(\.itemID) == [id] }, "read again after the check")
+        #expect(service.requestsSeen.filter { $0 == "item.list" }.count == listsBefore + 1, "once")
+    }
 }
 
 // swiftlint:enable line_length

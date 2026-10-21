@@ -8,24 +8,50 @@ import VettIDDataTesting
 // Fixtures stay on one line each; the recorded calls are tuples.
 // swiftlint:disable line_length large_tuple
 
-/// TEST ONLY. The vault calls of ``ItemsManager``: every call recorded, answers set by the test. Mirrors the `Ops` of
-/// vettid-android's `ItemsManagerTest`.
+/// TEST ONLY. A value behind a lock: the fake's calls run off the main actor while the test reads them on it.
+@propertyWrapper
+final class TestLocked<Value>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Value
+
+    init(wrappedValue: Value) { value = wrappedValue }
+
+    var wrappedValue: Value {
+        get { lock.withLock { value } }
+        set { lock.withLock { value = newValue } }
+        _modify {
+            lock.lock()
+            defer { lock.unlock() }
+            yield &value
+        }
+    }
+}
+
+/// TEST ONLY. The vault calls of ``ItemsManager``: every call recorded, answers set by the test; every member behind a
+/// lock. Mirrors the `Ops` of vettid-android's `ItemsManagerTest`.
 final class FakeItemOps: ItemOps, @unchecked Sendable {
-    var calls: [String] = []
-    var pages: [ItemPage] = []
-    var items: [String: Item] = [:]
-    var revealed: [String: Item] = [:]
-    var plaintext: [UInt8] = []
-    var error: VaultOpError?
+    @TestLocked var calls: [String] = []
+    @TestLocked var pages: [ItemPage] = []
+    @TestLocked var items: [String: Item] = [:]
+    @TestLocked var revealed: [String: Item] = [:]
+    @TestLocked var plaintext: [UInt8] = []
+    /// The opened values the last critical reveal handed out, to check that the manager wiped them.
+    @TestLocked var handedOut: SecretBytes?
+    /// `item.put` and its dry run fail with this.
+    @TestLocked var error: VaultOpError?
+    /// A critical reveal fails with this (after the gate and the metadata).
+    @TestLocked var revealError: VaultOpError?
     /// The next critical `item.put` fails with this code (an older vault refusing kept values: `bad_request`).
-    var criticalError: String?
-    var effect = "{}"
-    var dryRuns: [(String?, Int64?, String?, [String]?)] = []
-    var puts: [(content: ItemContent, sensitivity: String?, tags: [String]?, itemID: String?, version: Int64?)] = []
-    var deletes: [(String, String?)] = []
-    var sensitivities: [(String, Int64, String, String?)] = []
+    @TestLocked var criticalError: String?
+    @TestLocked var effect = "{}"
+    @TestLocked var dryRuns: [(String?, Int64?, String?, [String]?)] = []
+    @TestLocked var puts: [(content: ItemContent, sensitivity: String?, tags: [String]?, itemID: String?, version: Int64?)] = []
+    @TestLocked var deletes: [(String, String?)] = []
+    @TestLocked var sensitivities: [(String, Int64, String, String?)] = []
     /// Set: `item.reveal` (both forms) waits for it.
-    var revealGate: TestDeferred<Void>?
+    @TestLocked var revealGate: TestDeferred<Void>?
+    /// Set: `item.put` waits for it.
+    @TestLocked var putGate: TestDeferred<Void>?
 
     private func err() throws { if let error { throw error } }
 
@@ -36,7 +62,6 @@ final class FakeItemOps: ItemOps, @unchecked Sendable {
 
     func get(_ itemID: String) async throws -> Item {
         calls.append("get")
-        try err()
         guard let i = items[itemID] else { throw VaultOpError(type: "item.get", code: "not_found", detail: "", body: nil) }
         return i
     }
@@ -48,15 +73,18 @@ final class FakeItemOps: ItemOps, @unchecked Sendable {
         return i
     }
 
-    func revealCritical(password: String, itemID: String) async throws -> [UInt8] {
+    func revealCritical(password: String, itemID: String) async throws -> SecretBytes {
         calls.append("revealCritical:\(password)")
         if let revealGate { try await revealGate.value() }
-        try err()
-        return plaintext
+        if let revealError { throw revealError }
+        let box = SecretBytes(plaintext)
+        handedOut = box
+        return box
     }
 
     func put(_ content: ItemContent, sensitivity: String?, tags: [String]?, itemID: String?, version: Int64?) async throws -> ItemRef {
         calls.append("put")
+        if let putGate { try await putGate.value() }
         try err()
         puts.append((content, sensitivity, tags, itemID, version))
         return ItemRef(itemID: itemID ?? "01NEW", version: (version ?? 0) + 1)
@@ -151,16 +179,19 @@ final class FakeItemOps: ItemOps, @unchecked Sendable {
         ops.plaintext = Array(#"{"fields":[{"field_id":"f1","value":"abandon ability"},{"field_id":"f2","value":""}],"notes":"cold"}"#.utf8)
         let d = try await m.revealCritical("01C", password: "pw")
         #expect(ops.calls.contains("revealCritical:pw"))
+        let handed = try #require(ops.handedOut)
+        #expect(handed.isWiped && handed.withBytes { $0.count } == ops.plaintext.count, "the opened values are zeroed once read")
         #expect(d.fields[0].value == .text("abandon ability") && d.fields[1].value == .text("") && d.notes == "cold" && d.revealed)
     }
 
     @Test func aBackoffCarriesItsWait() async {
         ops.items["01C"] = FakeItemOps.item("01C", "Phrase", "critical")
-        ops.error = VaultOpError(type: "item.reveal", code: "backoff", detail: "", body: Array(#"{"retry_after":30}"#.utf8))
+        ops.revealError = VaultOpError(type: "item.reveal", code: "backoff", detail: "", body: Array(#"{"retry_after":30}"#.utf8))
         let f = await failure { try await m.revealCritical("01C", password: "x") }
         #expect(f?.kind == .backoff && f?.retryAfterSeconds == 30)
-        ops.error = VaultOpError(type: "item.reveal", code: "bad_password", detail: "", body: nil)
+        ops.revealError = VaultOpError(type: "item.reveal", code: "bad_password", detail: "", body: nil)
         #expect(await failure { try await m.revealCritical("01C", password: "x") }?.kind == .badPassword)
+        #expect(ops.calls.filter { $0 == "get" }.count == 2 && ops.calls.filter { $0 == "revealCritical:x" }.count == 2, "the reveal itself refused")
     }
 
     @Test func createSendsTheCheckedContent() async throws {
@@ -369,6 +400,71 @@ final class FakeItemOps: ItemOps, @unchecked Sendable {
         try await task.value
         #expect(m2.items.isEmpty && m2.load == .notLoaded)
     }
+
+    // MARK: - The gate, the hold, and writes across a clear
+
+    /// The credential operations' gate runs before anything is opened or sent; a refusal sends nothing.
+    @Test func theGateComesFirst() async throws {
+        let opened = Counter()
+        let ops = ops
+        let m2 = ItemsManager(ops: { opened.n += 1; return ops }, gate: { throw VaultFailure(.changeChecking, code: "change_unresolved") })
+        ops.items["01C"] = FakeItemOps.item("01C", "Phrase", "critical")
+        let critical = ItemDraft(name: "Phrase", sensitivity: .critical, fields: [DraftField(label: "W", kind: "multiline", text: "a")])
+        #expect(await failure { try await m2.revealCritical("01C", password: "pw") }?.kind == .changeChecking)
+        #expect(await failure { try await m2.createCritical(critical, password: "pw") }?.kind == .changeChecking)
+        #expect(await failure { try await m2.updateCritical("01C", version: 2, draft: critical, password: "pw") }?.kind == .changeChecking)
+        #expect(await failure { try await m2.delete("01C", sensitivity: .critical, password: "pw") }?.kind == .changeChecking)
+        #expect(await failure { try await m2.setSensitivity("01C", version: 2, from: .critical, to: .data, password: "pw") }?.kind == .changeChecking)
+        #expect(opened.n == 0 && ops.calls.isEmpty, "nothing opened or sent")
+        // Operations without the password do not pass it.
+        _ = try await m2.create(ItemDraft(name: "Note"))
+        #expect(ops.calls.first == "put")
+    }
+
+    /// Held or due (§3.6.3): another device's change does not refill the list, and no read nobody asked for goes out.
+    @Test func nothingRefillsTheListWhileDue() async throws {
+        let due = Counter()
+        due.n = 1
+        let ops = ops
+        let m2 = ItemsManager(ops: { ops }, gated: { due.n == 1 }, debounce: .milliseconds(10))
+        let sync = VaultMessage(inner: Inner(id: Ulid.new(), type: "sync.event", ts: Date(), body: Array(#"{"kind":"item.changed","item_id":"01A","version":3}"#.utf8)))
+        m2.onEvent(sync)
+        #expect(m2.pending == nil, "no reread scheduled")
+        try await m2.refresh(quietly: true)
+        #expect(ops.calls.isEmpty && m2.items.isEmpty && m2.load == .notLoaded)
+        // Once the check passed, another device's change reads the list again.
+        due.n = 0
+        m2.onEvent(sync)
+        #expect(await eventually { ops.calls.contains("list:nil:500") })
+    }
+
+    /// A write answered after a clear (a lock, the hold) refills nothing and opens no session; the quiet read after a
+    /// write never opens one either.
+    @Test func aWriteAnsweredAfterAClearRefillsNothing() async throws {
+        let opened = Counter(), quiet = Counter()
+        let ops = ops
+        let m2 = ItemsManager(ops: { opened.n += 1; return ops }, quietOps: { quiet.n += 1; return ops })
+        ops.pages = [ItemPage(items: [FakeItemOps.item("01NEW", "Note")])]
+        let gate = TestDeferred<Void>()
+        ops.putGate = gate
+        let write = Task { try await m2.create(ItemDraft(name: "Note")) }
+        #expect(await eventually { ops.calls.contains("put") })
+        m2.clear()
+        gate.complete()
+        #expect(try await write.value == "01NEW")
+        #expect(opened.n == 1 && quiet.n == 0 && !ops.calls.contains { $0.hasPrefix("list") })
+        #expect(m2.items.isEmpty && m2.load == .notLoaded)
+        // Without a clear, the list is read again over the session already open.
+        ops.putGate = nil
+        _ = try await m2.create(ItemDraft(name: "Note"))
+        #expect(opened.n == 2 && quiet.n == 1 && m2.items.map(\.itemID) == ["01NEW"])
+    }
+}
+
+/// A count the closures of a test change on the main actor.
+@MainActor
+final class Counter {
+    var n = 0
 }
 
 /// ``FakeItemOps`` whose `item.list` waits for [gate].
@@ -383,7 +479,7 @@ private struct SlowListOps: ItemOps, @unchecked Sendable {
 
     func get(_ itemID: String) async throws -> Item { try await inner.get(itemID) }
     func reveal(_ itemID: String) async throws -> Item { try await inner.reveal(itemID) }
-    func revealCritical(password: String, itemID: String) async throws -> [UInt8] { try await inner.revealCritical(password: password, itemID: itemID) }
+    func revealCritical(password: String, itemID: String) async throws -> SecretBytes { try await inner.revealCritical(password: password, itemID: itemID) }
     func put(_ content: ItemContent, sensitivity: String?, tags: [String]?, itemID: String?, version: Int64?) async throws -> ItemRef {
         try await inner.put(content, sensitivity: sensitivity, tags: tags, itemID: itemID, version: version)
     }

@@ -84,7 +84,7 @@ public protocol ItemOps: Sendable {
     func get(_ itemID: String) async throws -> Item
     func reveal(_ itemID: String) async throws -> Item
     /// The opened `values_sealed` plaintext, `{"fields": [{field_id, value}], "notes"?}`; the caller wipes it.
-    func revealCritical(password: String, itemID: String) async throws -> [UInt8]
+    func revealCritical(password: String, itemID: String) async throws -> SecretBytes
     func put(_ content: ItemContent, sensitivity: String?, tags: [String]?, itemID: String?, version: Int64?) async throws -> ItemRef
     func putCritical(password: String, content: ItemContent, tags: [String]?, itemID: String?, version: Int64?) async throws -> ItemRef
     func tag(_ itemID: String, version: Int64, tags: [String]) async throws -> Int64
@@ -94,12 +94,10 @@ public protocol ItemOps: Sendable {
     func delete(_ itemID: String, password: String?) async throws
 }
 
-/// ``ItemOps`` over the vault client. [gate] runs before every credential operation (one that carries the password):
-/// refused at once while a change of PIN or password is unresolved (VAULT-MESSAGING §11.14.9 "A lost answer"), as the
-/// rotation is. Mirrors vettid-android `VaultItemsOps`.
+/// ``ItemOps`` over the vault client. The gate of the credential operations runs in ``ItemsManager``, before the session
+/// is opened. Mirrors vettid-android `VaultItemsOps`.
 struct VaultItemOps: ItemOps {
     let api: VaultApi
-    var gate: @Sendable () async throws -> Void = {}
 
     func list(after: String?, limit: Int) async throws -> ItemPage { try await api.itemList(after: after, limit: limit) }
 
@@ -107,9 +105,12 @@ struct VaultItemOps: ItemOps {
 
     func reveal(_ itemID: String) async throws -> Item { try await api.itemReveal(itemID) }
 
-    func revealCritical(password: String, itemID: String) async throws -> [UInt8] {
-        try await gate()
-        return try await api.itemRevealCritical(password: password, itemID: itemID)
+    func revealCritical(password: String, itemID: String) async throws -> SecretBytes {
+        var opened = try await api.itemRevealCritical(password: password, itemID: itemID)
+        // The box holds the only copy once this one is zeroed.
+        let box = SecretBytes(opened)
+        Bytes.wipe(&opened)
+        return box
     }
 
     func put(_ content: ItemContent, sensitivity: String?, tags: [String]?, itemID: String?, version: Int64?) async throws -> ItemRef {
@@ -117,8 +118,7 @@ struct VaultItemOps: ItemOps {
     }
 
     func putCritical(password: String, content: ItemContent, tags: [String]?, itemID: String?, version: Int64?) async throws -> ItemRef {
-        try await gate()
-        return try await api.itemPutCritical(password: password, content: content, tags: tags, itemID: itemID, version: version)
+        try await api.itemPutCritical(password: password, content: content, tags: tags, itemID: itemID, version: version)
     }
 
     func tag(_ itemID: String, version: Int64, tags: [String]) async throws -> Int64 {
@@ -130,12 +130,8 @@ struct VaultItemOps: ItemOps {
     }
 
     func sensitivity(_ itemID: String, version: Int64, sensitivity: String, password: String?) async throws -> Int64 {
-        if password != nil { try await gate() }
-        return try await api.itemSensitivity(itemID, version: version, sensitivity: sensitivity, password: password)
+        try await api.itemSensitivity(itemID, version: version, sensitivity: sensitivity, password: password)
     }
 
-    func delete(_ itemID: String, password: String?) async throws {
-        if password != nil { try await gate() }
-        try await api.itemDelete(itemID, password: password)
-    }
+    func delete(_ itemID: String, password: String?) async throws { try await api.itemDelete(itemID, password: password) }
 }

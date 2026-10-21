@@ -79,7 +79,12 @@ extension VaultManager {
                 ref.manager?.items.clear()
             } else if ref.manager?.phase == .unlocked {
                 feed?.catchUp()
-                ref.manager?.items.refreshQuietly()
+                // Another device's check: the items, dropped at the hold, are read again. This phone's own check reads
+                // them with the other lists, last (`onPassed`, which follows at once), so not here as well.
+                Task { @MainActor in
+                    guard let items = ref.manager?.items, !items.listsReadPending else { return }
+                    items.refreshQuietly()
+                }
             }
         }
     }
