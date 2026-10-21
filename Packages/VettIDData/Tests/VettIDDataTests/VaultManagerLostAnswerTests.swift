@@ -301,8 +301,8 @@ import VettIDVault
         #expect(m.phase == .unlocked && m.account != nil && !m.refusedByVault)
     }
 
-    /// `forbidden` to the decision's `credential.version` (past `exp`, so the request is not sent again): the PIN change
-    /// ends as above; the current phone key, which its candidate shares, stays.
+    /// `forbidden` to the decision's `credential.version` (past `exp`: a copy sent again is dropped unanswered, so the
+    /// version decides): the PIN change ends as above; the current phone key, which its candidate shares, stays.
     @Test func forbiddenToTheVersionEndsThePinChange() async throws {
         defer { phone.close() }
         try await setUp()
@@ -311,17 +311,18 @@ import VettIDVault
         #expect(await pinChangeUndecided()?.kind == .changeUnresolved)
         service.loseAnswers([])
         pastTheChangesExp()
-        service.refuse("credential.version", with: VaultManager.codeNotHolder, times: 1)
-        let sent = count("pin.change")
+        // Every `credential.version` is refused, as a vault whose holder is another phone refuses them (a recheck running
+        // by itself may ask first).
+        service.refuse("credential.version", with: VaultManager.codeNotHolder)
         await m.checkUnresolvedChange()
-        #expect(m.changeCheck == ChangeCheck(.pin, .notHolder) && count("pin.change") == sent)
+        #expect(await eventually { m.changeCheck == ChangeCheck(.pin, .notHolder) }, "\(String(describing: m.changeCheck))")
         #expect(try m.phoneSecrets.unresolvedChange() == nil && m.phoneSecrets.records().candidates.isEmpty)
         #expect(try m.phoneSecrets.uncertainPin() == nil && m.unlockPinStep == .pin)
         #expect(phone.phoneKeys.count == keys && m.phase == .unlocked && !m.refusedByVault)
     }
 
     /// `forbidden` to the resend of the same `pin.change` (within `exp`; the first never reached the vault): the change
-    /// ends as above, without asking `credential.version`; nothing is erased, and the vault opens with the same PIN.
+    /// ends as above; nothing is erased, and the vault opens with the same PIN.
     @Test func forbiddenToTheResendEndsThePinChange() async throws {
         defer { phone.close() }
         try await setUp()
@@ -330,10 +331,9 @@ import VettIDVault
         #expect(await pinChangeUndecided()?.kind == .changeUnresolved)
         service.loseRequests([])
         service.refuseNext("pin.change", code: VaultManager.codeNotHolder)
-        let versions = count("credential.version")
         await m.checkUnresolvedChange()
-        #expect(m.changeCheck == ChangeCheck(.pin, .notHolder) && count("pin.change") == 1)
-        #expect(count("credential.version") == versions)
+        #expect(await eventually { m.changeCheck == ChangeCheck(.pin, .notHolder) }, "\(String(describing: m.changeCheck))")
+        #expect(count("pin.change") == 1, "only the copy refused reached the vault")
         #expect(try m.phoneSecrets.unresolvedChange() == nil && m.phoneSecrets.records().candidates.isEmpty)
         #expect(try m.phoneSecrets.uncertainPin() == nil && m.heldChange == nil)
         #expect(phone.phoneKeys.count == keys && service.pinChanges.isEmpty)
