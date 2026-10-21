@@ -197,16 +197,25 @@ extension FakeVaultService {
         try reply(m.type, answer + "}", re: m.id)
     }
 
-    /// `audit.export` (§10.9 History export), in the order of checks of 0.23.0: the preview counts; the export spends the
-    /// UTK, checks the request and the PIN, appends `audit.exported` and answers with its `entry_seq`.
-    private func auditExport(_ m: Inner, _ body: JsonObject) throws {
+    /// `audit.export` (§10.9 History export), in the order of checks of 0.23.0 and 0.52.0: the preview counts (refused
+    /// with the freeze code while a clone alarm is open); the export spends the UTK, is refused while an alarm is open,
+    /// opens `sealed`, checks the request, answers `not_found` when nothing matches, `backoff` while the §11.8 PIN backoff
+    /// runs, checks the PIN (a wrong one counted in that backoff and audited `vault.pin_failed`, not a failed owner check),
+    /// appends `audit.exported` and answers with its `entry_seq`.
+    private func auditExport(_ m: Inner, _ body: JsonObject) throws { // swiftlint:disable:this cyclomatic_complexity
         let dry = (try? body.bool("dry_run")) ?? false
         if dry {
             guard !body.has("utk_id"), !body.has("sealed"), !body.has("upto_seq"), let q = auditQuery(body) else { return try reply(m.type, "{}", re: m.id, error: "bad_request") }
+            if let a = alarmValue { return try reply(m.type, "{}", re: m.id, error: Self.freezeCode(a)) }
             let newest = activity.entries.last
             return try reply(m.type, exportAnswer(q, upto: newest?.seq ?? 0, entrySeq: nil), re: m.id)
         }
         guard body.has("utk_id"), body.has("sealed") else { return try reply(m.type, "{}", re: m.id, error: "bad_request") }
+        if let a = alarmValue {
+            // 0.52.0: the UTK presented is spent first.
+            if let utk = try? body.string("utk_id") { utks[utk] = nil }
+            return try reply(m.type, "{}", re: m.id, error: Self.freezeCode(a))
+        }
         guard let p = try opened(m, body) else { return }
         let pin = (try? p.string("pin")) ?? ""
         let format = (try? body.string("format")) ?? ""
@@ -214,14 +223,29 @@ extension FakeVaultService {
         activity.exports.append(ExportSeen(format: format, pin: pin, uptoSeq: upto))
         guard let q = auditQuery(body), ["csv", "json"].contains(format), (1...(activity.entries.last?.seq ?? 0)).contains(upto) else { return try reply(m.type, "{}", re: m.id, error: "bad_request") }
         guard activity.entries.contains(where: { $0.seq <= upto && matches($0, q) }) else { return try reply(m.type, "{}", re: m.id, error: "not_found") }
+        let now = vaultNow
+        if let b = backoffUntil, now < b {
+            return try reply(m.type, #"{"retry_after":\#(max(Int(b.timeIntervalSince(now).rounded(.up)), 1))}"#, re: m.id, error: "backoff")
+        }
         guard pin == vaultPin else {
+            pinFailures += 1
+            headerSeq += 1
+            let wait = pinFailures < 3 ? 0 : Self.backoffDelays[min(pinFailures - 3, Self.backoffDelays.count - 1)]
+            backoffUntil = wait > 0 ? now.addingTimeInterval(wait) : nil
             record("vault.pin_failed")
             return try reply(m.type, "{}", re: m.id, error: "bad_pin")
         }
+        pinFailures = 0
+        backoffUntil = nil
         let summary = exportAnswer(q, upto: upto, entrySeq: nil)
         record("audit.exported", ref: exportSummary(q, format: format, upto: upto))
         try reply(m.type, String(summary.dropLast()) + #","entry_seq":\#(activity.entries.last?.seq ?? 0)}"#, re: m.id)
     }
+
+    private static func freezeCode(_ a: FakeAlarm) -> String { a.state == "rotation_required" ? "rotation_required" : "credential_frozen" }
+
+    /// §10.9: an export covers at most 10,000 entries, the newest.
+    static let exportCap = 10_000
 
     /// `audit.exported`'s `ref` (§10.9): `format=…;count=…;seqs=…;filters=…` then `;since=…` and `;until=…`.
     private func exportSummary(_ q: AuditQuery, format: String, upto: Int64) -> String {
@@ -238,9 +262,11 @@ extension FakeVaultService {
     }
 
     private func exportAnswer(_ q: AuditQuery, upto: Int64, entrySeq: Int64?) -> String {
-        let sel = activity.entries.filter { $0.seq <= upto && matches($0, q) }
+        let all = activity.entries.filter { $0.seq <= upto && matches($0, q) }
+        // The newest 10,000, `more` when more match (§10.9 the export cap).
+        let sel = Array(all.suffix(Self.exportCap))
         let head = activity.entries.first { $0.seq == upto }?.hash ?? [UInt8](repeating: 0, count: 32)
-        var a = #"{"count":\#(sel.count),"more":false,"upto_seq":\#(upto),"upto_hash":"\#(Base64s.encodeStd(head))""#
+        var a = #"{"count":\#(sel.count),"more":\#(all.count > sel.count),"upto_seq":\#(upto),"upto_hash":"\#(Base64s.encodeStd(head))""#
         if let o = sel.first, let n = sel.last {
             a += #","oldest_seq":\#(o.seq),"newest_seq":\#(n.seq),"oldest_at":"\#(Timestamps.formatMillis(o.at))","newest_at":"\#(Timestamps.formatMillis(n.at))""#
         }
@@ -277,6 +303,13 @@ extension FakeVaultService {
                 record(kind, connectionID: kind.hasPrefix("message") ? connectionID : nil, ref: kind.hasPrefix("message") ? Ulid.new() : nil, direction: kind.hasPrefix("message") ? "in" : nil)
             }
         }
+    }
+
+    /// Writes one entry to the audit log (as the vault records an event this fake does not emulate), [at] its time.
+    public func storeAuditEntry(
+        _ kind: String, connectionID: String? = nil, deviceID: String? = nil, ref: String? = nil, direction: String? = nil, at: Date = Date()
+    ) {
+        locked { record(kind, connectionID: connectionID, deviceID: deviceID, ref: ref, direction: direction, at: at) }
     }
 
     /// The exports the vault was asked for (not the previews): their format, the PIN and `upto_seq`.
