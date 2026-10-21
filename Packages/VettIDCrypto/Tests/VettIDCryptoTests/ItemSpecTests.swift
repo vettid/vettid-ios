@@ -37,11 +37,13 @@ import Testing
             ItemSpec.kindDate: ["2031-04-30", "2031-04", "2024-02-29", "2000-02-29"],
             ItemSpec.kindEmail: ["a@b.c", "first.last+tag@example.org", "a@b"],
             ItemSpec.kindPhone: ["+1 (555) 010-0100", "112"],
-            // As Go's url.Parse: the query and an opaque part are not unescaped; a host may hold < > " and non-ASCII escapes.
+            // As Go 1.26's url.Parse (each case checked with it): the query and an opaque part are not unescaped; a host
+            // may hold < > " ] and non-ASCII escapes; a port follows the first colon only for http and https.
             ItemSpec.kindURL: [
                 "https://example.org/x?y=1", "mailto:a@b.c", "https://x.org/a", "https://[::1]:8443/p", "http://h:80", "https://x.org/?q=100%",
                 "mailto:a%zz", "https://x.org/a#b%20c", "https://user:p%40ss@x.org/", "https://[fe80::1%25en0]:8080/", "https://ex%C3%A4mple.org/",
-                "https://a<b>.org/", "https://x.org:/", "urn:isbn:0451450523",
+                "https://a<b>.org/", "https://x.org:/", "urn:isbn:0451450523", "ftp://a:1:2/", "https://[::ffff:1.2.3.4]/",
+                "https://a]b.org/", "http://[fe80::1%25en%200]/",
             ],
             ItemSpec.kindOTP: ["JBSWY3DPEHPK3PXP", "jbswy3dpehpk3pxp", "JBSWY3DPEHPK3PXP====", "otpauth://totp/x?secret=JBSWY3DPEHPK3PXP"],
         ]
@@ -57,7 +59,8 @@ import Testing
             ItemSpec.kindURL: [
                 "/relative", "https://a b", "example.org", "x.org", ":x", "https://h:port/", "http://a/%zz", "https://x.org/a#%zz",
                 "https://a{b}.org/", "https://x%41.org/", "https://us{er@x.org/", "https://us%zz@x.org/", "https://[::1/", "https://[::1]x/",
-                "https://x.org/%4", "1http://x.org/",
+                "https://x.org/%4", "1http://x.org/", "https://a[b].org/", "https://[x]/", "https://[1.2.3.4]/", "http://a:1:2/",
+                "https://a:1:2/", "https://[fe80::1%25%C3%A4]/", "https://[fe80::1%25]/", "https://[fe80::1%41]/",
             ],
             ItemSpec.kindOTP: ["SHORT", "JBSWY3DPEHPK3PX1", "otpauth://x y", "JBSWY3DPEHPK3PXP======="],
             ItemSpec.kindFile: ["blob", "x"],

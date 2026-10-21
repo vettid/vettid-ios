@@ -151,11 +151,11 @@ import VettIDVault
     /// three tries of 1 s ran out, which the pre-check reports as an unsettled earlier request. It also starts once the
     /// opening's reads are done (the items are read last).
     @Test func thePreCheckSendsWithTheVaultsBlob() async throws {
+        // The suite's phone stays idle (it never registered or collected, and keeps its own files and keys), closed first;
+        // the service then serves one phone, as in VaultManagerVersionGapTests.aChangeWaitsAtMostThirtySeconds.
+        phone.close()
         let roomy = try TestVaultPhone(service: service, requestTimeout: 3)
-        defer {
-            roomy.close()
-            phone.close()
-        }
+        defer { roomy.close() }
         let m = roomy.manager
         _ = try await m.redeemSetupCode(.secret(service.secret))
         try await m.enroll(pin: pin) { _ in }

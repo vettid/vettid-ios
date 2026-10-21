@@ -106,11 +106,8 @@ struct VaultItemOps: ItemOps {
     func reveal(_ itemID: String) async throws -> Item { try await api.itemReveal(itemID) }
 
     func revealCritical(password: String, itemID: String) async throws -> SecretBytes {
-        var opened = try await api.itemRevealCritical(password: password, itemID: itemID)
-        // The box holds the only copy once this one is zeroed.
-        let box = SecretBytes(opened)
-        Bytes.wipe(&opened)
-        return box
+        // No local is kept: the box holds the only reference to the opened bytes, so its wipe zeroes them in place.
+        SecretBytes(try await api.itemRevealCritical(password: password, itemID: itemID))
     }
 
     func put(_ content: ItemContent, sensitivity: String?, tags: [String]?, itemID: String?, version: Int64?) async throws -> ItemRef {

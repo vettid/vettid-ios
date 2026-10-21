@@ -194,9 +194,14 @@ import VettIDDataTesting
         try await m.ownerChecks.refreshOwnerCheck()
         #expect(m.ownerChecks.ownerCheck?.state != .ok && items.items.isEmpty && items.load == .notLoaded)
         let listsBefore = service.requestsSeen.filter { $0 == "item.list" }.count
+        // Another device's change while due: queued to this phone before the check below is sent, so handled before its
+        // answer; it schedules no read (a scheduled one would be pending, or would show in the count below).
+        service.itemChangedElsewhere(id, name: "Note 2")
         #expect(try await m.ownerChecks.check(pin: pin, password: password) == .passed)
-        #expect(await eventually { items.load == .loaded && items.items.map(\.itemID) == [id] }, "read again after the check")
-        #expect(service.requestsSeen.filter { $0 == "item.list" }.count == listsBefore + 1, "once")
+        #expect(items.pending == nil, "no read scheduled by the change while due")
+        // Settled: the items are read last of the lists, so every read of the opening went out before they were loaded.
+        #expect(await eventually { items.load == .loaded && items.items.map(\.name) == ["Note 2"] }, "read again after the check")
+        #expect(service.requestsSeen.filter { $0 == "item.list" }.count == listsBefore + 1, "once, and none for the change while due")
     }
 }
 
