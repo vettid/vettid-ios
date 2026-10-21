@@ -107,17 +107,27 @@ extension VaultManager {
         }
     }
 
-    /// The app process going away, as the tests simulate a restart: a session still being opened is stopped and waited
-    /// for, the collection stops, and every device a session of this manager held is halted (``VaultDevice/halt()``): what
-    /// it was sending finishes, and nothing it still had on the way sends or writes anything from then on, while the
-    /// stored state stays for the next manager. A real process death needs none of this. The manager is unusable after.
+    /// The app process going away, as the tests simulate a restart: the manager starts nothing more (no session is
+    /// opened, no change decided), the decision of a lost change and its next check are cancelled, a session still being
+    /// opened is stopped and waited for, the collection stops, and every device a session of this manager held is halted
+    /// (``VaultDevice/halt()``): what it was sending finishes, and nothing it still had on the way sends or writes anything
+    /// from then on, while the stored state stays for the next manager. The cancelled decision is waited for last. A real
+    /// process death needs none of this. The manager is unusable after.
     package func halt() async {
+        halted = true
+        changeGeneration += 1
+        let tasks = [deciding, recheck].compactMap { $0 }
+        deciding = nil
+        recheck = nil
+        for t in tasks { t.cancel() }
         _ = await cancelOpening()
         stopCollecting()
-        for d in devicesMade.alive {
+        // One registered while another is being halted is halted too: until none is left.
+        while let d = devicesMade.alive.first {
             await d.halt()
             devicesMade.remove(d)
         }
+        for t in tasks { await t.value }
     }
 
     private func wipeEnded(_ p: AppPhase) {

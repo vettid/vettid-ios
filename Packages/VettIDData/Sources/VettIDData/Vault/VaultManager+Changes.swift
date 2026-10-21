@@ -215,7 +215,7 @@ extension VaultManager {
 
     /// A check at a start, a reconnection or the vault opening, in the background.
     func kickChangeCheck() {
-        guard deciding == nil, unresolved() != nil else { return }
+        guard !halted, deciding == nil, unresolved() != nil else { return }
         Task { [weak self] in await self?.checkUnresolvedChange() }
     }
 
@@ -256,6 +256,7 @@ extension VaultManager {
     }
 
     private func runDecision(evenLocked: Bool) async {
+        guard !halted else { return }
         if let running = deciding {
             await running.value
             return
@@ -270,7 +271,7 @@ extension VaultManager {
     }
 
     private func scheduleRecheck() {
-        guard changeCheck?.undecided == true, unresolved() != nil else {
+        guard !halted, changeCheck?.undecided == true, unresolved() != nil else {
             recheck?.cancel()
             recheck = nil
             return

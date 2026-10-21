@@ -146,7 +146,7 @@ import VettIDDataTesting
     }
 
     /// A request the old manager still awaited at a restart (a process death ends it) writes nothing once the new
-    /// manager's wipe erased the files, even when its answer arrives afterwards.
+    /// manager's wipe erased the files, even when its answer arrives afterwards; the old manager starts nothing more.
     @Test func aRequestOfTheOldManagerWritesNothingAfterTheRestart() async throws {
         defer { phone.close() }
         try await setUp()
@@ -162,6 +162,8 @@ import VettIDDataTesting
         try await m.refresh()
         service.holdMessages = false
         await request.value
+        // The halted manager opens no session again.
+        await #expect(throws: VaultFailure.self) { _ = try await old.openSession() }
         try expectFresh()
     }
 
