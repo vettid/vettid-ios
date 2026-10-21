@@ -155,7 +155,8 @@ public struct ItemEditScreen: View {
     }
 
     public var body: some View {
-        Group {
+        // A ZStack keeps its identity whichever step it shows, so that the gesture block below stays on one probe.
+        ZStack {
             if let prompt = state.prompt {
                 CredentialPasswordScreen(
                     prompt: prompt, itemName: state.shownName, onPassword: actions.onPassword, onSubmit: actions.onSubmitPassword,

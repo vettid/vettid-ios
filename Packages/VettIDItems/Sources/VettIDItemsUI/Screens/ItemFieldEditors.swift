@@ -163,7 +163,7 @@ struct ValueEditor: View {
             VisibleSecretField(
                 caption, text: binding, placeholder: placeholder ?? caption,
                 capitalization: kind == FieldKinds.otp ? .allCharacters : .none, monospaced: kind == FieldKinds.otp,
-                keyboard: Self.secretKeyboard(kind), isError: isError, focus: focus
+                keyboard: Self.secretKeyboard(kind), isError: isError, focus: focus, accept: Self.accept(kind)
             )
         } else if kind == FieldKinds.multiline {
             TextField(placeholder ?? caption, text: binding, axis: .vertical)
@@ -195,6 +195,14 @@ struct ValueEditor: View {
         case FieldKinds.url: .URL
         default: .default
         }
+    }
+
+    /// What a value's input keeps of an edit (§10.7, ``FieldInput``).
+    static func accept(_ kind: String) -> SecretTextInput.Accept { { _, typed in FieldInput.accept(kind, typed) } }
+
+    /// What a date's input keeps of an edit (``DateInput``): the date so far, or the text before when no date can begin so.
+    static func acceptDate(monthOnly: Bool) -> SecretTextInput.Accept {
+        { old, typed in DateInput.accept(old: old, typed: typed, monthOnly: monthOnly) ?? old }
     }
 
     /// A secret value's keyboard: the digit pads (no suggestions to begin with), else ASCII-capable.
@@ -234,7 +242,10 @@ struct DateEditor: View {
         })
         HStack(spacing: Spacing.xs) {
             if secret {
-                VisibleSecretField(caption, text: typed, placeholder: placeholder, keyboard: .numberPad, isError: isError, focus: focus)
+                VisibleSecretField(
+                    caption, text: typed, placeholder: placeholder, keyboard: .numberPad, isError: isError, focus: focus,
+                    accept: ValueEditor.acceptDate(monthOnly: month)
+                )
             } else {
                 PlainField(placeholder: placeholder, text: field.text, isError: isError) { typed.wrappedValue = $0 }
                     .keyboardType(.numberPad)
@@ -375,7 +386,10 @@ struct AddressEditor: View {
             onValue(a)
         })
         if secret {
-            VisibleSecretField(label, text: binding, capitalization: caps ? .allCharacters : .words, focus: first && focus)
+            VisibleSecretField(
+                label, text: binding, capitalization: caps ? .allCharacters : .words, focus: first && focus,
+                accept: { _, typed in caps ? FieldInput.country(typed) : typed.replacingOccurrences(of: "\n", with: "") }
+            )
         } else {
             let input = PlainField(placeholder: label, text: value) { binding.wrappedValue = $0 }
                 .textInputAutocapitalization(caps ? .characters : .words)
