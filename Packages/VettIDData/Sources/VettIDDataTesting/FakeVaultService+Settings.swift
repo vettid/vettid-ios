@@ -104,7 +104,7 @@ extension FakeVaultService {
     // MARK: - The requests
 
     /// The requests of Settings; `unsupported_type` for any other. Callers hold ``cond``.
-    func settingsRequest(_ m: Inner, _ body: JsonObject) throws {
+    func settingsRequest(_ m: Inner, _ body: JsonObject) throws { // swiftlint:disable:this cyclomatic_complexity
         switch m.type {
         case "account.get": try accountGet(m)
         case "account.name.set": try nameSet(m, body)
@@ -120,6 +120,8 @@ extension FakeVaultService {
         case "pin.change": try pinChange(m, body)
         case "item.list", "item.get", "item.reveal", "item.put", "item.tag", "item.sensitivity", "item.delete":
             try itemRequest(m, body)
+        case "tag.list", "tag.set", "tag.delete", "tag.merge", "share.rule.list":
+            try tagRequest(m, body)
         default: try secretsRequest(m, body)
         }
     }
