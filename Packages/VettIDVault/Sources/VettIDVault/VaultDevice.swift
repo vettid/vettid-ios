@@ -86,7 +86,7 @@ public struct DeviceConfig: Sendable {
         self.uptime = uptime
     }
 
-    /// How long a request of [type] waits for its answer before it is sent again (§8.6).
+    /// How long a request of [type] waits for its answer before it is sent again (VAULT-MESSAGING §8.6).
     func requestTimeout(for type: String) -> TimeInterval { requestTimeoutOf?(type) ?? requestTimeout }
 }
 

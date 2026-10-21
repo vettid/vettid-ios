@@ -196,6 +196,8 @@ public final class FakeVaultService: @unchecked Sendable {
     /// Requests that reached the vault's mailbox while it was locked, handled after the next unlock (subject to `exp`).
     var lockedRequests: [Inner] = []
     var lastExpValue: [String: Date] = [:]
+    /// The `exp` of the last request of each type sent to the vault, lost on its way or not (``unanswered(_:)``).
+    var sentExpValue: [String: Date] = [:]
     // New phone secret and Delete vault (FakeVaultService+Secrets.swift), under ``cond``.
     var renewsValue: [RenewSeen] = []
     var deletesValue: [DeleteSeen] = []
