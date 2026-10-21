@@ -136,7 +136,7 @@ func eventually(within: Duration = eventuallyDefault, _ condition: @MainActor ()
         service.memberLockAnswer = .queued
         try await m.lock()
         #expect(m.lockPending)
-        try phone.restart()
+        try await phone.restart()
         try await m.refresh()
         #expect(m.phase == .locked && m.lockPending && m.lockNotice.inDoubt)
         service.memberLockAnswer = .lock

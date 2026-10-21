@@ -167,6 +167,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// Every device a session of this manager held, weakly: a session closed (a lock, a deletion) may leave a request on
     /// its way whose end still saves the device state. A wipe or a forget forgets them all (``forgetEveryDevice()``).
     @ObservationIgnored let devicesMade = MadeDevices()
+    /// Set by ``halt()``: the process is going away, and nothing more is started.
+    @ObservationIgnored var halted = false
     /// A wipe's marker left at the start was looked at (once, after the first-run cleanup).
     @ObservationIgnored private var wipeResumed = false
     /// The tasks that follow the open session's events and refusals.
@@ -333,6 +335,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     func openSession() async throws -> VaultSession {
         if let session { return session }
         if let opening { return try await opening.value }
+        guard !halted else { throw VaultFailure(.other, code: "halted") }
         try prepared()
         try refuseWhileDeleting()
         let c = config

@@ -193,7 +193,7 @@ import VettIDKeys
             url: self.file, purpose: VaultFiles.canary, keys: phone.fileKeys, protectedData: phone.protectedData
         )
         try file.save(other)
-        try phone.restart()
+        try await phone.restart()
         try await m.refresh()
         #expect(canary.canaryManifest == nil)
         #expect(!fileExists)
@@ -252,7 +252,7 @@ import VettIDKeys
     @Test func aRestartReadsItAgain() async throws {
         defer { phone.close() }
         let v = try await canary.installCanaryManifest(try service.canaryDocument(serial: 8))
-        try phone.restart()
+        try await phone.restart()
         #expect(canary.canaryManifest == nil)
         try await m.refresh()
         #expect(canary.canaryManifest == v)

@@ -184,7 +184,7 @@ import VettIDVault
         service.loseAnswers(["credential.reset", "credential.version"], from: "credential.reset")
         _ = await reset()
         let sent = count("credential.reset")
-        try phone.restart()
+        try await phone.restart()
         #expect(try m.phoneSecrets.unresolvedChange()?.type == .reset && m.heldChange == nil)
         service.loseAnswers([])
         try await m.refresh()

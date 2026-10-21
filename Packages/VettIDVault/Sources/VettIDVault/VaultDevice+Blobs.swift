@@ -10,6 +10,7 @@ extension VaultDevice {
     /// uploads the same photo again after a lost answer (every abandoned upload fills the mailbox's shared storage).
     /// A `token_revoked` refusal counts as a deposit's (§7.4). Returns the relay's `blob_id`.
     public func uploadBlobToVault(_ blob: [UInt8]) async throws -> String {
+        try refuseHalted()
         let v = try mem.withLock { try requireVault() }
         guard !v.token.isEmpty else { throw VaultStateError(message: "no token for the vault") }
         do {

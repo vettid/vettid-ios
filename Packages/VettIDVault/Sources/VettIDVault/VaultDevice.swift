@@ -167,6 +167,8 @@ public final class VaultDevice: @unchecked Sendable {
     var stopped = true
     /// Set by ``forget()``: nothing is written to the store any more.
     var forgotten = false
+    /// Set by ``halt()``: nothing is sent or written to the store any more, and the stored state stays as it was.
+    var halted = false
     /// The newest `ts` of a message from the vault and the monotonic time it arrived (in memory only).
     var vaultClock: (ts: Date, at: TimeInterval)?
     /// The newest `ts` the vault stamped on an **answer** (in memory only): only answers settle a request (VAULT-MESSAGING
@@ -312,6 +314,7 @@ public final class VaultDevice: @unchecked Sendable {
     func save() throws {
         let data: Data? = try mem.withLock {
             if forgotten { return nil }
+            if halted { throw Self.haltedError }
             if st.vault != nil {
                 st.vault?.sessions = Base64s.encodeStd(try keyring.export())
                 st.vault?.awaiting = awaiting.compactMap { a in
@@ -419,9 +422,11 @@ public final class VaultDevice: @unchecked Sendable {
     public func newRequestID() -> String { Ulid.new(now()) }
 
     /// Forgets the vault and every key's state on this device (sign-out, transfer away). The device is unusable after:
-    /// nothing is written to the store again, and it holds no vault.
+    /// nothing is written to the store again, and it holds no vault. Refused on a halted device (``halt()``), whose store
+    /// the next process uses.
     public func forget() async throws {
         try await lock.withLock {
+            try refuseHalted()
             stop()
             mem.withLock {
                 forgotten = true
@@ -439,9 +444,39 @@ public final class VaultDevice: @unchecked Sendable {
         }
     }
 
+    /// Halts the device of an app process that is going away: it waits for what it is sending, stops collecting, ends the
+    /// requests and event waits that await an answer, aborts its handshake in flight and the rekeys awaiting their
+    /// `hs.fin` (in memory), and from then on sends nothing, uploads nothing, writes nothing to the store and never clears
+    /// it (``forget()`` and ``deleteMailbox()`` are refused). Unlike ``forget()``, the stored state stays as it was: the
+    /// next process restores the device from it. The device is unusable after (a process that goes on loads a new one).
+    public func halt() async {
+        await lock.withLock {
+            stop()
+            let (shots, waiters): ([OneShot<Inner>], [OneShot<Bool>]) = mem.withLock {
+                halted = true
+                ini?.abort()
+                ini = nil
+                for a in awaiting { a.resp.abort() }
+                awaiting.removeAll()
+                defer { inboxWaiters.removeAll() }
+                return (Array(pending.values), inboxWaiters)
+            }
+            for s in shots { s.abort() }
+            for w in waiters { w.abort() }
+        }
+    }
+
+    static let haltedError = VaultStateError(message: "device halted")
+
+    /// Throws once the device is halted (``halt()``): nothing is sent from then on.
+    func refuseHalted() throws {
+        if mem.withLock({ halted }) { throw Self.haltedError }
+    }
+
     /// Stops collecting and deletes the device's own mailbox at its relay with everything in it (RELAY-PROTOCOL
     /// §6.10; idempotent): a replaced app erasing itself.
     public func deleteMailbox() async throws {
+        try refuseHalted()
         stop()
         try await own.deleteMailbox()
     }

@@ -173,7 +173,7 @@ import VettIDDataTesting
     @Test func theGateSurvivesARestart() async throws {
         defer { phone.close() }
         try await pastTheDeadline()
-        try phone.restart()
+        try await phone.restart()
         // Read only after the first-run cleanup and a pending wipe, before anything else of the vault.
         #expect(m.ownerChecks.ownerCheck == nil)
         m.reloadLocalState()

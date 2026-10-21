@@ -175,6 +175,7 @@ extension VaultDevice {
             responderEk: try KemPublicKey.parse(try Base64s.decodeStd(v.kem)), responderRelayKey: try Base64s.decodeStd(v.relayPk),
             policy: .vaultToDevice, now: at ?? now()
         ))
+        try refuseHalted()
         _ = try await relayFor(v.relayURL).deposit(mailboxID: v.mailbox, token: depositToken, payload: i.envelope)
         mem.withLock {
             ini?.abort()

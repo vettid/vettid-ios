@@ -41,7 +41,7 @@ import VettIDDataTesting
 
     /// The app killed and started again: the unlock screen, with the marker read from the device's records.
     func restart() async throws {
-        try phone.restart()
+        try await phone.restart()
         try await m.refresh()
         #expect(m.phase == .locked)
     }

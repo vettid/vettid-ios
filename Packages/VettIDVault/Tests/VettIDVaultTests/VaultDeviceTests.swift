@@ -436,6 +436,36 @@ import VettIDTesting
         #expect(store.load() == nil)
     }
 
+    /// A halted device (an app process going away) keeps its stored state as it was: a request awaiting its answer ends
+    /// at once, the late answer writes nothing, nothing more is sent, uploaded or written, and neither a forget nor a
+    /// mailbox deletion clears anything.
+    @Test func haltKeepsTheStateAndWritesNothing() async throws {
+        let store = InMemoryDeviceStateStore()
+        let (d, v) = try await pairedDevice(store: store)
+        let started = Date()
+        let status = Task { try await d.op("vault.status", timeout: 60) }
+        let req = try v.open(try await relay.nextDeposit().payload)
+        await d.halt()
+        // Taken once the halt has waited for the send holding the lock (its own save after the deposit is before it).
+        let saved = store.load()
+        await #expect(throws: (any Error).self) { _ = try await status.value }
+        #expect(Date().timeIntervalSince(started) < 30, "ended by the halt, not by its timeout")
+        await #expect(throws: VaultStateError.self) {
+            try await d.handle(try v.seal("vault.status", "{}", re: req.id, status: Inner.statusOK))
+        }
+        await #expect(throws: VaultStateError.self) { try await d.send("message.send") }
+        await #expect(throws: VaultStateError.self) { try await d.awaitEvent("message.new", timeout: 60) }
+        let resent = Date()
+        let held = HeldRequest(type: "pin.change", id: Ulid.new(), exp: Date().addingTimeInterval(600), body: VaultJSON.empty)
+        await #expect(throws: VaultStateError.self) { _ = try await d.resend(held, timeout: 60) }
+        #expect(Date().timeIntervalSince(resent) < 30, "refused at once, not after its timeout")
+        await #expect(throws: VaultStateError.self) { _ = try await d.uploadBlobToVault([1, 2, 3]) }
+        await #expect(throws: VaultStateError.self) { try await d.forget() }
+        await #expect(throws: VaultStateError.self) { try await d.deleteMailbox() }
+        #expect(await relay.noDeposit(within: 0.3))
+        #expect(saved != nil && store.load() == saved && d.hasVault)
+    }
+
     @Test func deviceStateJSONRoundTrips() throws {
         let s = DeviceState(role: "app", name: "phone", relayURL: "https://relay.example.org")
         s.vaultID = "v"
