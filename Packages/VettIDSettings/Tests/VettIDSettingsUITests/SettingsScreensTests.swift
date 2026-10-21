@@ -184,6 +184,20 @@ import VettIDUI
         #expect(AccountCard.detail(nil) == "Membership and subscription")
     }
 
+    /// The Settings account card (IOS-PLAN §4.7): the name and the address only while the vault is open; otherwise only
+    /// the initial tile, without the masked hint. Mirrors vettid-android `AccountCardTest`.
+    @Test func whileTheVaultIsNotOpenTheCardShowsNoNameAndNoHint() {
+        let locked = AccountInfo(emailHint: "a***@example.org")
+        #expect(AccountCard(account: locked) {}.account == nil)
+        #expect(!AccountCard.detail(locked).contains("a***@example.org"))
+        #expect(height(SettingsContent(state: SettingsState(account: locked), now: now)) > 0)
+        let open = AccountInfo(
+            emailHint: "a***@example.org", state: "member", firstName: "Ada", lastName: "Lovelace", email: "ada@example.org"
+        )
+        #expect(AccountCard(account: open) {}.account?.fullName == "Ada Lovelace")
+        #expect(AccountCard.detail(open).contains("ada@example.org"))
+    }
+
     var overview: VaultOverview {
         VaultOverview(
             vaultID: "0123456789abcdef0123456789abcdef", state: "unlocked",

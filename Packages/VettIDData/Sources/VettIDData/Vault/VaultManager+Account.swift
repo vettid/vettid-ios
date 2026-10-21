@@ -69,24 +69,51 @@ extension VaultManager {
     static let syncProfileChanged = "profile.changed"
 
     /// Re-reads the account snapshot (`account.get`, §11.13); kept only when newer (`as_of`), the name request whenever it
-    /// changed. Quiet on failure: display only, the last snapshot stays. Mirrors vettid-android `refreshAccount`.
+    /// changed, in memory only and only while the vault is open (``OwnAccount``, IOS-PLAN §4.7). Quiet on failure:
+    /// display only, the last snapshot stays. Mirrors vettid-android `refreshAccount`.
     public func refreshAccount() async {
         // The record this answer is for: after a wipe or a reset meanwhile, nothing of it is kept.
         let rec = record.generation
+        // And the own account's: an answer on its way when the vault closes is not kept.
+        let mark = ownAccount.mark()
         guard let v = try? await guarded({ try await openApi(try await openSession()).accountGet() }) else { return }
-        let local = record.value
-        guard let u = AccountSnapshots.update(stored: local.snapshot, storedRequest: local.nameRequest, view: v) else { return }
-        if (try? record.refreshed(since: rec, u)) == true { account = record.value.info }
+        guard rec == record.generation, let kept = ownAccount.keep(mark: mark, view: v, open: { ownProfileOpen }) else { return }
+        let u = kept.update
+        try? record.refreshed(since: rec, u)
+        publishAccount()
         // An applied name change brings new names to the shared profile's core too.
-        if u.snapshot?.firstName != local.snapshot?.firstName || u.snapshot?.lastName != local.snapshot?.lastName {
+        if u.snapshot?.firstName != kept.before?.firstName || u.snapshot?.lastName != kept.before?.lastName {
             profiles.refreshQuietly()
         }
     }
 
-    /// A name request this phone just sent (``ProfileManager``), kept with the account record it was sent for.
+    /// A name request this phone just sent (``ProfileManager``), kept in memory with the own account it was sent for
+    /// ([since], ``OwnAccount/mark()``), while the vault is open.
     func keepNameRequest(_ r: NameRequestView, since: Int) {
-        let kept = try? record.update(since: since) { $0.nameRequest = AccountSnapshots.latest(r.wire, $0.nameRequest) }
-        if kept == true { account = record.value.info }
+        if ownAccount.request(mark: since, r.wire, open: { ownProfileOpen }) { publishAccount() }
+    }
+
+    /// What the app shows of the account now: the record's masked email and, while the vault is open, ``ownAccount``.
+    func publishAccount() {
+        account = record.value.info(snapshot: ownAccount.snapshot, nameRequest: ownAccount.nameRequest)
+    }
+
+    /// The vault is open for the own profile: unlocked, and neither held nor due (§3.6.3). Otherwise the member's names,
+    /// full email and photo are not kept (IOS-PLAN §4.7).
+    var ownProfileOpen: Bool { isOwnProfileOpen(phase, ownerChecks.ownerCheck) }
+
+    /// The vault is not open (a lock, the hold or the due state, a sign-out, a reset, a wipe, a deletion): the own account
+    /// and the own profile (the names, the full email, the photo) leave memory, and the shell shows the initial tile.
+    func forgetOwnProfile() {
+        ownAccount.forget()
+        profiles.clear()
+        publishAccount()
+    }
+
+    /// The vault opened again (a passed check): the own account and profile are read from it.
+    func readOwnProfile() {
+        Task { [weak self] in await self?.refreshAccount() }
+        profiles.refreshQuietly()
     }
 
     /// `sync.event{kind: "account.changed"}` (§10.1): a newer snapshot or a changed name request (0.19.0: never skipped).

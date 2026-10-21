@@ -44,16 +44,19 @@ public enum SubscriptionLine: Equatable, Sendable {
     }
 }
 
-/// The avatar sheet's header (vettid-android `AccountSheet`): the first and last name, else the address, else
-/// [placeholder]; under it the address when the names show, else the membership.
+/// The avatar sheet's header and the top bar (vettid-android `AccountSheet`, `VettIdApp`): the first and last name, else
+/// the address, else [placeholder]; under it the address when the names show, else the membership. Only while the vault
+/// is open (IOS-PLAN §4.7, ``Optional/shownInShell``): otherwise [placeholder] and the initial tile, never the masked
+/// hint (which only the unlock screen shows).
 public enum AccountHeader {
-    public static func name(_ a: AccountInfo?, placeholder: String) -> String {
-        a?.fullName ?? a?.displayEmail ?? placeholder
+    public static func name(_ account: AccountInfo?, placeholder: String) -> String {
+        let a = account.shownInShell
+        return a?.fullName ?? a?.displayEmail ?? placeholder
     }
 
     /// The address under the names; nil: the membership line goes there.
-    public static func detailEmail(_ a: AccountInfo?) -> String? {
-        guard let a, a.fullName != nil else { return nil }
+    public static func detailEmail(_ account: AccountInfo?) -> String? {
+        guard let a = account.shownInShell, a.fullName != nil else { return nil }
         return a.displayEmail
     }
 }

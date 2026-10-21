@@ -34,7 +34,7 @@ public struct SharedProfileContent: View {
     @Environment(\.vettIDTimeScale) private var timeScale
     let state: SharedProfileState
     let actions: SharedProfileActions
-    /// The decoded photo to show (``SharedProfileState/shownPhoto``), decoded by the caller.
+    /// The decoded photo to show (the taken one being previewed, else the vault's), decoded by the caller.
     let photo: UIImage?
     let now: Date
 
@@ -270,7 +270,12 @@ public struct SharedProfileRoute: View {
         }
         .onAppear { if model == nil { model = SharedProfileViewModel(profiles: profiles, accounts: accounts) } }
         .onDisappear { machine.reset() }
-        .task(id: state.shownPhoto) { photo = await ProfilePhotos.decoded(state.shownPhoto) }
+        .task(id: ShownPhoto(state)) {
+            let decoded = await ShownPhoto.decoded(state)
+            // A decode that began before the photo changed or was cleared does not show it after.
+            guard !Task.isCancelled else { return }
+            photo = decoded
+        }
     }
 
     private var actions: SharedProfileActions {
@@ -290,6 +295,25 @@ public struct SharedProfileRoute: View {
         a.onDiscardPhoto = { m?.discardPhoto() }
         a.onRemovePhoto = { m?.removePhoto() }
         return a
+    }
+}
+/// Which photo the screen shows: the taken one being previewed (its bytes, zeroed when it is saved or dropped), else the
+/// vault's. Mirrors vettid-android `rememberShownPhoto`.
+struct ShownPhoto: Hashable {
+    let pending: ObjectIdentifier?
+    let shared: String?
+
+    init(_ s: SharedProfileState) {
+        pending = s.pendingPhoto.map { ObjectIdentifier($0) }
+        shared = s.pendingPhoto == nil ? s.profile?.photo : nil
+    }
+
+    /// The image of the photo [s] shows, decoded off the main actor.
+    static func decoded(_ s: SharedProfileState) async -> UIImage? {
+        if let pending = s.pendingPhoto {
+            return await Task.detached { pending.bytes.withBytes { ProfilePhotos.decodeImage($0) } }.value
+        }
+        return await ProfilePhotos.decoded(s.profile?.photo)
     }
 }
 #endif

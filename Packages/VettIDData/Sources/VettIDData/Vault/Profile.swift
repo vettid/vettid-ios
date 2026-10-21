@@ -82,8 +82,12 @@ public protocol ProfileOps: Sendable {
 /// read before the request was sent (the account record it belongs to); [checksLeft] re-reads the owner check's count
 /// after a failed PIN or password (§3.6.4: a name change counts as a check). [profileOps] are the calls of the shared
 /// profile ([ops] when nil); [quietOps] those of a read nobody asked for (the vault opening, `profile.changed`), which
-/// never open a session ([profileOps] when nil). The profile read lives in memory only. Mirrors vettid-android
-/// `ProfileManager`.
+/// never open a session ([profileOps] when nil).
+///
+/// The profile read is the member's own (the names and the photo): **memory only**, forgotten by ``clear()`` whenever
+/// the vault is not open (IOS-PLAN §4.7). An answer is kept only while [open] says the vault is open and no ``clear()``
+/// came since its request was sent, so a read on its way when the vault locks never brings the profile back. Mirrors
+/// vettid-android `ProfileManager`.
 @MainActor
 @Observable
 public final class ProfileManager: ProfileRepository {
@@ -95,8 +99,9 @@ public final class ProfileManager: ProfileRepository {
     @ObservationIgnored private let onRequest: @MainActor (NameRequestView, _ mark: Int) -> Void
     @ObservationIgnored private let checksLeft: @MainActor () async -> Int?
     @ObservationIgnored private let mark: @MainActor () -> Int
+    @ObservationIgnored private let open: @MainActor () -> Bool
     @ObservationIgnored private let notes: FailureNotes
-    /// Bumped whenever the profile read is dropped: an answer to a read sent before is not kept (chosen; not in the spec).
+    /// Bumped by every ``clear()``: an answer to a request sent before it is dropped.
     @ObservationIgnored private var generation = 0
 
     public init(
@@ -106,6 +111,7 @@ public final class ProfileManager: ProfileRepository {
         onRequest: @escaping @MainActor (NameRequestView, _ mark: Int) -> Void,
         checksLeft: @escaping @MainActor () async -> Int?,
         mark: @escaping @MainActor () -> Int = { 0 },
+        open: @escaping @MainActor () -> Bool = { true },
         notes: FailureNotes = .none
     ) {
         self.ops = ops
@@ -114,14 +120,20 @@ public final class ProfileManager: ProfileRepository {
         self.onRequest = onRequest
         self.checksLeft = checksLeft
         self.mark = mark
+        self.open = open
         self.notes = notes
     }
 
-    /// Forgets the profile read: the vault is no longer open on this phone (chosen; not in the spec: vettid-android keeps
-    /// it until a wipe, the iPhone keeps nothing read from a vault that is not open), or a wipe.
+    /// Forgets the profile read (the vault is not open: a lock, the hold or the due state, a sign-out, a wipe; IOS-PLAN
+    /// §4.7).
     public func clear() {
         generation += 1
         profile = nil
+    }
+
+    /// [f] of the profile now, kept while the vault is open and no ``clear()`` came since [g] was read.
+    private func keep(_ g: Int, _ f: (OwnProfile?) -> OwnProfile?) {
+        if g == generation, open() { profile = f(profile) }
     }
 
     public func refreshProfile() async throws { try await refreshProfile(quietly: false) }
@@ -132,8 +144,7 @@ public final class ProfileManager: ProfileRepository {
         let g = generation
         let calls = quietly ? quietOps : profileOps
         let p = try await notes.run { try await calls().profileGet() }
-        guard g == generation else { return }
-        profile = Self.own(p)
+        keep(g) { _ in Self.own(p) }
     }
 
     /// The vault opened, or its profile changed (`sync.event{profile.changed}`): read again; a failure keeps what was read.
@@ -149,10 +160,11 @@ public final class ProfileManager: ProfileRepository {
             let current = try await currentVersion(o)
             return try await o.profileSet(version: current, name: trimmed)
         }
-        if g == generation, var p = profile {
+        keep(g) { current in
+            guard var p = current else { return nil }
             p.version = version
             p.displayName = trimmed
-            profile = p
+            return p
         }
         try? await refreshProfile()
     }
@@ -164,10 +176,11 @@ public final class ProfileManager: ProfileRepository {
             let current = try await currentVersion(o)
             return try await o.profileSetPhoto(version: current, photo: photo)
         }
-        if g == generation, var p = profile {
+        keep(g) { current in
+            guard var p = current else { return nil }
             p.version = version
             p.photo = photo.isEmpty ? nil : photo
-            profile = p
+            return p
         }
         try? await refreshProfile()
     }

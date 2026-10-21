@@ -1,6 +1,8 @@
 import Foundation
 import Observation
+import os
 import VettIDData
+import VettIDMedia
 
 /// The shared-profile screen's state (VAULT-MESSAGING §10.8). Never printed with its photos. Mirrors vettid-android
 /// `SharedProfileUiState` (less the `@profile` items, which come with the items of IOS-PLAN §8 I3).
@@ -18,8 +20,9 @@ public struct SharedProfileState: Equatable, Sendable, CustomStringConvertible, 
     public var error: FailureKind?
     /// The limit a `limit` error named (VAULT-MESSAGING §10.1: `profile_size`).
     public var limit: VaultLimit?
-    /// A photo taken and encoded (base64 JPEG, at most 65,536 bytes), shown as a preview until saved or dropped.
-    public var pendingPhoto: String?
+    /// A photo taken and encoded (a JPEG of at most 65,536 bytes), shown as a preview until saved or dropped; its bytes
+    /// are zeroed then, and whenever the vault is not open (``PendingPhoto/wipe()``).
+    public var pendingPhoto: PendingPhoto?
     /// The taken photo is being encoded, or the photo is being saved.
     public var photoBusy = false
     /// The taken photo could not be encoded.
@@ -31,9 +34,6 @@ public struct SharedProfileState: Equatable, Sendable, CustomStringConvertible, 
         self.profile = profile
         displayName = profile?.displayName ?? ""
     }
-
-    /// The photo to show: the one being previewed, else the vault's.
-    public var shownPhoto: String? { pendingPhoto ?? profile?.photo }
 
     /// The display name's limit (§10.8: at most 128 bytes).
     public var tooLong: Bool { Self.trimmed(displayName).utf8.count > Self.maxDisplayNameBytes }
@@ -55,10 +55,50 @@ public struct SharedProfileState: Equatable, Sendable, CustomStringConvertible, 
     public var customMirror: Mirror { Mirror(self, children: [:]) }
 }
 
+/// A taken photo before it is saved (VAULT-MESSAGING §10.8): the JPEG bytes, in memory only. ``wipe()`` zeroes them in
+/// place once the photo is saved or dropped, or the vault is no longer open (IOS-PLAN §4.7). Equal only to itself.
+/// Never printed. Mirrors vettid-android `PendingPhoto`.
+public final class PendingPhoto: Equatable, Sendable, CustomStringConvertible, CustomReflectable {
+    /// The bytes for the preview (zeroed by ``wipe()``).
+    public let bytes: PhotoBytes
+
+    public init(_ bytes: PhotoBytes) { self.bytes = bytes }
+
+    /// [base64] (``encodeShot(_:)``'s) as bytes, or nil when it is not base64.
+    public static func of(_ base64: String) -> PendingPhoto? {
+        guard var data = Data(base64Encoded: base64) else { return nil }
+        var raw = [UInt8](data)
+        data.resetBytes(in: 0..<data.count)
+        return PendingPhoto(PhotoBytes(taking: &raw))
+    }
+
+    /// The standard base64 `profile.set{photo}` takes, read in place (no copy of the bytes that the zeroing would miss).
+    public func base64() -> String {
+        bytes.withBytes { b in
+            b.withUnsafeBufferPointer { p in
+                guard let base = p.baseAddress else { return "" }
+                return Data(bytesNoCopy: UnsafeMutableRawPointer(mutating: base), count: p.count, deallocator: .none)
+                    .base64EncodedString()
+            }
+        }
+    }
+
+    public func wipe() { bytes.wipe() }
+
+    public static func == (a: PendingPhoto, b: PendingPhoto) -> Bool { a === b }
+
+    public var description: String { "PendingPhoto(\(bytes.count))" }
+    public var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+
 /// Settings → Shared profile (ANDROID-PLAN 0.1.10, VAULT-MESSAGING §10.8): the account's names read-only (changed only
 /// through ``ChangeNameViewModel``), the display name edited with `profile.set`, which never names the core, and the
 /// profile photo, taken with the app's camera (``PhotoCaptureMachine``), encoded (``encodeShot(_:)``) and sent with
-/// `profile.set{photo}`. Mirrors vettid-android `SharedProfileViewModel`.
+/// `profile.set{photo}`.
+///
+/// (IOS-PLAN §4.7) The drafts (an edited display name, a taken photo not yet saved, its bytes zeroed) are dropped
+/// whenever the vault is not open (the profile forgotten, or the account no longer from the open vault: a lock, the hold
+/// or the due state); the member types them again after the unlock. Mirrors vettid-android `SharedProfileViewModel`.
 @MainActor
 @Observable
 public final class SharedProfileViewModel {
@@ -67,11 +107,20 @@ public final class SharedProfileViewModel {
     @ObservationIgnored private let profiles: any ProfileRepository
     @ObservationIgnored private let accounts: any AccountRepository
     @ObservationIgnored private let work = Work()
+    @ObservationIgnored private let followers = TaskBag()
+    /// The taken photo held now, for the zeroing when the screen goes (`deinit`, vettid-android `onCleared`).
+    @ObservationIgnored private let held = OSAllocatedUnfairLock<PendingPhoto?>(initialState: nil)
 
     public init(profiles: any ProfileRepository, accounts: any AccountRepository) {
         self.profiles = profiles
         self.accounts = accounts
         local = SharedProfileState(account: accounts.account, profile: profiles.profile)
+        followers.add(follow(self, read: { $0.accounts.account.shownInShell == nil }, apply: { m, closed in
+            if closed { m.dropDrafts() }
+        }))
+        followers.add(follow(self, read: { $0.profiles.profile == nil }, apply: { m, gone in
+            if gone { m.dropDrafts() }
+        }))
         work.launch { [weak self] in
             do {
                 try await profiles.refreshProfile()
@@ -82,7 +131,11 @@ public final class SharedProfileViewModel {
         work.launch { await accounts.refreshAccount() }
     }
 
-    deinit { work.cancelAll() }
+    deinit {
+        work.cancelAll()
+        followers.cancelAll()
+        held.withLock { $0?.wipe() }
+    }
 
     /// The state now: the account and the profile as the repositories have them (observed through them), with this
     /// screen's own; the display name follows the vault's until the member types.
@@ -142,21 +195,46 @@ public final class SharedProfileViewModel {
     /// The photo the member took and accepted ("Use photo"), encoded (``encodeShot(_:)``), sent with
     /// `profile.set{photo}`; it stays as a preview (with "Save photo") if the vault refuses. Nil: it could not be encoded.
     public func photoTaken(_ base64: String?) {
-        local.pendingPhoto = base64
+        let photo = base64.flatMap(PendingPhoto.of)
+        // Encoded while the vault closed (a lock, the hold or the due state, IOS-PLAN §4.7): zeroed, never kept or sent.
+        guard accounts.account.shownInShell != nil, profiles.profile != nil else {
+            photo?.wipe()
+            local.photoBusy = false
+            return
+        }
+        setPending(photo)
         local.photoBusy = false
-        local.photoUnreadable = base64 == nil
-        if let base64 { sendPhoto(base64) }
+        local.photoUnreadable = photo == nil
+        if let photo { sendPhoto(photo.base64()) }
     }
 
     public func discardPhoto() {
-        local.pendingPhoto = nil
+        setPending(nil)
         local.photoUnreadable = false
     }
 
     /// `profile.set{photo}` with the previewed photo.
     public func savePhoto() {
         guard let photo = local.pendingPhoto else { return }
-        sendPhoto(photo)
+        sendPhoto(photo.base64())
+    }
+
+    /// The vault is not open: the edited display name and the taken photo go (its bytes zeroed), and nothing typed is
+    /// kept for after the unlock.
+    private func dropDrafts() {
+        setPending(nil)
+        local.displayName = ""
+        local.edited = false
+        local.photoUnreadable = false
+        local.saved = false
+    }
+
+    /// [photo] in place of the one held, whose bytes are zeroed.
+    private func setPending(_ photo: PendingPhoto?) {
+        let old = local.pendingPhoto
+        local.pendingPhoto = photo
+        held.withLock { $0 = photo }
+        if let old, old !== photo { old.wipe() }
     }
 
     /// `profile.set{photo: ""}`: no photo.
@@ -173,7 +251,7 @@ public final class SharedProfileViewModel {
                 try await profiles.setPhoto(photo)
                 guard let self else { return }
                 local.photoBusy = false
-                local.pendingPhoto = nil
+                setPending(nil)
                 local.photoSaved = true
             } catch {
                 self?.local.photoBusy = false
