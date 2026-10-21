@@ -91,9 +91,10 @@ extension VaultManager {
     }
 
     /// The vault is no longer open on this phone: what was read from it is dropped (the connections, the requests, the
-    /// messages and their photos, the feed, the approvals' lists, History and the member's own profile).
+    /// messages and their photos, the items, the feed, the approvals' lists, History and the member's own profile).
     func forgetOpenLists() {
         forgetOwnProfile()
+        items.clear()
         connections.forgetOpenVault()
         messages.forgetOpenVault()
         attachments.clear()
@@ -102,9 +103,10 @@ extension VaultManager {
 
     /// The vault opened, or an owner check passed (§3.6.3: nothing held back is replayed as events): the member's own
     /// profile, the connections and the requests, the approvals' lists, the feed, then the conversations (one request per connection, last, so that asks
-    /// that expire are not kept waiting behind them) are read again, one after the other; failures are left for the
-    /// screens.
+    /// that expire are not kept waiting behind them) and the items are read again, one after the other; failures are left
+    /// for the screens.
     func refreshListsQuietly() {
+        items.listsReadPending = true
         Task { [weak self] in
             guard let self else { return }
             profiles.refreshQuietly()
@@ -113,6 +115,10 @@ extension VaultManager {
             try? await approvals.refreshApprovals(quietly: true, requests: false)
             await feed.openNow()
             await messages.refreshConversationsQuietly()
+            // The items last (chosen; not in the spec: vettid-android reads them beside the others): nothing that expires
+            // waits behind them, and no screen needs them before the member opens the Vault.
+            items.listsReadPending = false
+            try? await items.refresh(quietly: true)
         }
     }
 }
