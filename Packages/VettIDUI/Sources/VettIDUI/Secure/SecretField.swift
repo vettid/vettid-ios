@@ -40,23 +40,27 @@ public struct SecretField: View {
     private let error: String?
     private let supporting: String?
     private let onSubmit: () -> Void
+    private let focus: Bool
     @State private var shown = false
     @Environment(\.vettIDColors) private var colors
 
+    /// [focus]: the field takes the keyboard (once, each time it turns true).
     public init(
-        _ label: String, text: Binding<String>, error: String? = nil, supporting: String? = nil, onSubmit: @escaping () -> Void = {}
+        _ label: String, text: Binding<String>, error: String? = nil, supporting: String? = nil, focus: Bool = false,
+        onSubmit: @escaping () -> Void = {}
     ) {
         self.label = label
         _text = text
         self.error = error
         self.supporting = supporting
+        self.focus = focus
         self.onSubmit = onSubmit
     }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
             HStack(spacing: Spacing.s) {
-                SecretTextInput(text: $text, placeholder: label, visible: shown, onSubmit: onSubmit)
+                SecretTextInput(text: $text, placeholder: label, visible: shown, focus: focus, onSubmit: onSubmit)
                     .frame(minHeight: Spacing.touchTarget)
                     .accessibilityLabel(label)
                 Button { shown.toggle() } label: {
@@ -84,27 +88,35 @@ public struct VisibleSecretField: View {
     private let label: String
     private let style: SecretTextInput.Style
     private let isError: Bool
+    private let focus: Bool
     private let onSubmit: () -> Void
     @Environment(\.vettIDColors) private var colors
 
+    /// [keyboard]: an ASCII-capable keyboard unless a digit pad suits the value (a number, a phone number, a date), which
+    /// has no suggestions either. [focus]: the field takes the keyboard (once, each time it turns true).
     public init(
         _ label: String,
         text: Binding<String>,
         placeholder: String? = nil,
         capitalization: UITextAutocapitalizationType = .none,
         monospaced: Bool = false,
+        keyboard: UIKeyboardType = .asciiCapable,
         isError: Bool = false,
+        focus: Bool = false,
         onSubmit: @escaping () -> Void = {}
     ) {
         self.label = label
         _text = text
-        style = SecretTextInput.Style(placeholder: placeholder ?? label, capitalization: capitalization, monospaced: monospaced)
+        style = SecretTextInput.Style(
+            placeholder: placeholder ?? label, capitalization: capitalization, monospaced: monospaced, keyboard: keyboard
+        )
         self.isError = isError
+        self.focus = focus
         self.onSubmit = onSubmit
     }
 
     public var body: some View {
-        SecretTextInput(text: $text, placeholder: style.placeholder, visible: true, style: style, onSubmit: onSubmit)
+        SecretTextInput(text: $text, placeholder: style.placeholder, visible: true, style: style, focus: focus, onSubmit: onSubmit)
             .frame(minHeight: Spacing.touchTarget)
             .padding(.horizontal, Spacing.l)
             .overlay(RoundedRectangle(cornerRadius: VettIDShape.small).stroke(isError ? colors.error : colors.outline))
@@ -119,16 +131,20 @@ struct SecretTextInput: UIViewRepresentable {
         var placeholder: String
         var capitalization: UITextAutocapitalizationType = .none
         var monospaced = false
+        var keyboard: UIKeyboardType = .asciiCapable
     }
 
     @Binding var text: String
     let placeholder: String
     let visible: Bool
     var style: Style?
+    var focus = false
     let onSubmit: () -> Void
 
     final class Coordinator: NSObject, UITextFieldDelegate {
         var parent: SecretTextInput
+        /// The focus asked for was given (asked again only after it turned false).
+        var focused = false
 
         init(_ parent: SecretTextInput) { self.parent = parent }
 
@@ -148,6 +164,7 @@ struct SecretTextInput: UIViewRepresentable {
         f.placeholder = placeholder
         if let style {
             f.autocapitalizationType = style.capitalization
+            f.keyboardType = style.keyboard
             if style.monospaced {
                 // Title 3 at the default text size, scaled with the member's text size.
                 f.font = UIFontMetrics(forTextStyle: .title3).scaledFont(for: .monospacedSystemFont(ofSize: 20, weight: .regular))
@@ -162,6 +179,7 @@ struct SecretTextInput: UIViewRepresentable {
 
     func updateUIView(_ f: UITextField, context: Context) {
         context.coordinator.parent = self
+        SecretFocus.request(focus, f, &context.coordinator.focused)
         if f.isSecureTextEntry == visible {
             // Switching secure entry makes iOS clear the field on the next keystroke; setting the text again keeps it.
             f.isSecureTextEntry = !visible
@@ -172,4 +190,15 @@ struct SecretTextInput: UIViewRepresentable {
 
     /// Leaves no text behind in a secure field that goes (the save prompt's trigger).
     static func dismantleUIView(_ f: UITextField, coordinator: Coordinator) { f.text = "" }
+}
+
+/// Gives a UIKit text input the keyboard once when [focus] turns true (as SwiftUI's `focused` does for its own fields).
+@MainActor
+enum SecretFocus {
+    static func request(_ focus: Bool, _ view: UIView, _ given: inout Bool) {
+        guard focus else { return given = false }
+        guard !given else { return }
+        given = true
+        DispatchQueue.main.async { [weak view] in view?.becomeFirstResponder() }
+    }
 }
