@@ -144,15 +144,74 @@ final class FakeSharingOps: SharingOps, @unchecked Sendable {
         #expect(m.colors == ["a": "#abcdef", "b": "#000001"])
     }
 
-    @Test func anyOtherFailureStopsQuietlyAndConflictsAreBounded() async throws {
+    @Test func anyOtherFailureStopsQuietly() async throws {
         ops.tagPages = [page(4, TagEntry(tag: "a"), TagEntry(tag: "b"))]
         ops.setErrors = ["owner_check_required"]
         #expect(try await m.assignColors(next) == 0)
         #expect(ops.calls.count { $0.hasPrefix("tagSet") } == 1 && m.colors.isEmpty)
-        // Conflicts forever: bounded.
+    }
+
+    /// Conflicts forever, each re-read still uncoloured: one write, then one per conflict up to 8, the 9th conflict ends it.
+    @Test func conflictsAreBoundedAtEight() async throws {
+        ops.tagPages = Array(repeating: page(4, TagEntry(tag: "a"), TagEntry(tag: "b")), count: 12)
         ops.setErrors = Array(repeating: "conflict", count: 100)
         #expect(try await m.assignColors(next) == 0)
-        #expect(ops.calls.count { $0.hasPrefix("tagSet") } < 12)
+        #expect(ops.calls.count { $0.hasPrefix("tagSet") } == SharingManager.maxConflicts + 1)
+        #expect(ops.calls.count { $0.hasPrefix("tagList") } == SharingManager.maxConflicts + 1, "the first read and one per conflict")
+    }
+
+    @Test func atMost512ColoursInOneGo() async throws {
+        ops.tagPages = [TagPage(version: 1, tags: (0..<600).map { TagEntry(tag: String(format: "t%03d", $0)) })]
+        let palette: ([TagView]) -> (tag: String, color: String)? = { tags in tags.first { $0.color == nil }.map { ($0.tag, "#000000") } }
+        #expect(try await m.assignColors(palette) == SharingManager.maxAssigned)
+        #expect(ops.calls.count { $0.hasPrefix("tagSet") } == 512)
+    }
+
+    /// The keeper's work stops at a clear or when the vault becomes held or due, and publishes nothing after it; its reads
+    /// and writes go over the quiet calls, never noted as the member's requests.
+    @Test func theKeepersWorkIsQuietAndStopsAtAClearOrTheHold() async throws {
+        let loud = FakeSharingOps(), noted = Counter(), due = Counter()
+        let quiet = ops
+        let notes = FailureNotes(mark: { 0 }, note: { e, _, _ in noted.n += 1; return e })
+        let m2 = SharingManager(ops: { loud }, quietOps: { quiet }, notes: notes, gated: { due.n == 1 })
+        ops.tagPages = [page(4, TagEntry(tag: "a"), TagEntry(tag: "b"), TagEntry(tag: "c"))]
+        ops.setErrors = ["credential_required"]
+        #expect(try await m2.assignColors(next) == 0)
+        #expect(loud.calls.isEmpty && noted.n == 0, "quiet calls only, nothing noted")
+        // A clear while a write is on its way: nothing published, no further write.
+        ops.calls = []
+        let gate = TestDeferred<Void>()
+        let slow = GatedSetOps(inner: ops, gate: gate)
+        let m3 = SharingManager(ops: { slow }, quietOps: { slow })
+        ops.tagPages = [page(4, TagEntry(tag: "a"), TagEntry(tag: "b"))]
+        let task = Task { try await m3.assignColors(next) }
+        #expect(await eventually { slow.waiting })
+        m3.clear()
+        gate.complete()
+        #expect(try await task.value == 1)
+        #expect(m3.tags == nil && m3.colors.isEmpty && ops.calls.count { $0.hasPrefix("tagSet") } == 1)
+        // Held or due: nothing at all.
+        due.n = 1
+        #expect(try await m2.assignColors(next) == 0)
+    }
+
+    /// The re-read after the member's write is quiet, and none follows a clear.
+    @Test func theReadAfterAWriteIsQuietAndNoneAfterAClear() async throws {
+        let loud = ops, quiet = FakeSharingOps()
+        let m2 = SharingManager(ops: { loud }, quietOps: { quiet })
+        ops.tagPages = [page(4, TagEntry(tag: "travel"))]
+        try await m2.setTag("travel", description: "Trips", color: nil)
+        #expect(loud.calls == ["tagList:nil", "tagSet:4:travel:nil:nil:Trips"] && quiet.calls == ["tagList:nil"])
+        let gate = TestDeferred<Void>()
+        let slow = GatedSetOps(inner: loud, gate: gate)
+        let m3 = SharingManager(ops: { slow }, quietOps: { quiet })
+        ops.tagPages = [page(5, TagEntry(tag: "travel"))]
+        let task = Task { try await m3.setTag("travel", description: "x", color: nil) }
+        #expect(await eventually { slow.waiting })
+        m3.clear()
+        gate.complete()
+        try await task.value
+        #expect(quiet.calls == ["tagList:nil"] && m3.tags == nil, "no read after the clear")
     }
 
     @Test func theMembersColourKeepsTheEntryAndIsSentAgainAfterAConflict() async throws {
@@ -207,6 +266,38 @@ final class FakeSharingOps: SharingOps, @unchecked Sendable {
         gate.complete()
         _ = try await task.value
         #expect(m3.tags == nil && m3.colors.isEmpty)
+    }
+}
+
+/// ``FakeSharingOps`` whose `tag.set` waits for [gate].
+private final class GatedSetOps: SharingOps, @unchecked Sendable {
+    let inner: FakeSharingOps
+    let gate: TestDeferred<Void>
+    @TestLocked var waiting = false
+
+    init(inner: FakeSharingOps, gate: TestDeferred<Void>) {
+        self.inner = inner
+        self.gate = gate
+    }
+
+    func tagList(after: String?) async throws -> TagPage { try await inner.tagList(after: after) }
+
+    func tagSet(version: Int64, tag: String, color: String?, icon: String?, description: String?) async throws -> Int64 {
+        waiting = true
+        try await gate.value()
+        return try await inner.tagSet(version: version, tag: tag, color: color, icon: icon, description: description)
+    }
+
+    func tagMerge(version: Int64, from: [String], into: String, dryRun: Bool) async throws -> JsonObject {
+        try await inner.tagMerge(version: version, from: from, into: into, dryRun: dryRun)
+    }
+
+    func tagDelete(version: Int64, tag: String, dryRun: Bool) async throws -> JsonObject {
+        try await inner.tagDelete(version: version, tag: tag, dryRun: dryRun)
+    }
+
+    func ruleList(connectionID: String?, after: String?) async throws -> JsonObject {
+        try await inner.ruleList(connectionID: connectionID, after: after)
     }
 }
 
