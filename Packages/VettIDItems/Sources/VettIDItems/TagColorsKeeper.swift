@@ -20,8 +20,8 @@ public final class TagColorsKeeper {
     @ObservationIgnored private var rereading: Task<Void, Never>?
     @ObservationIgnored private var again = false
 
-    /// vettid-android's: a burst of `tag.changed` is one read.
-    public static let defaultRereadDelay: Duration = .milliseconds(400)
+    /// vettid-android's `REREAD_DELAY_MS`: a burst of `tag.changed` is one read.
+    public static let defaultRereadDelay: Duration = .milliseconds(500)
 
     public init(
         sharing: any SharingRepository, gated: @escaping @MainActor () -> Bool,

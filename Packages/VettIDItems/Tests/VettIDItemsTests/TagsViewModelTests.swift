@@ -167,6 +167,40 @@ func eventually(within: Duration = .seconds(20), _ condition: @MainActor () -> B
         await vm.settle()
         #expect(vm.state.error == .limit && vm.state.limit?.name == "tag_registry" && vm.state.dialog != nil)
     }
+
+    /// A dry run answered after the member closed its form opens nothing.
+    @Test func aLatePreviewOpensNothing() async throws {
+        let vm = await loaded()
+        let gate = TestDeferred<Void>()
+        sharing.dryRunGate = gate
+        vm.edit(try #require(vm.state.tags.first { $0.tag == "travel" }))
+        vm.setName("trips")
+        vm.save()
+        vm.dismiss()
+        gate.complete(())
+        await vm.settle()
+        #expect(vm.state.dialog == nil, "closed stays closed")
+        vm.edit(try #require(vm.state.tags.first { $0.tag == "travel" }))
+        let gate2 = TestDeferred<Void>()
+        sharing.dryRunGate = gate2
+        vm.askDelete()
+        vm.askCreate()
+        gate2.complete(())
+        await vm.settle()
+        #expect(vm.state.dialog == .create(), "another dialog is not replaced")
+    }
+
+    /// A description saved after the keeper stored a colour keeps that colour, not the one the form opened with.
+    @Test func aDescriptionKeepsTheColourStoredMeanwhile() async throws {
+        let vm = await loaded()
+        let travel = try #require(vm.state.tags.first { $0.tag == "travel" })
+        vm.edit(travel)
+        _ = try await sharing.assignColors { tags in tags.first { $0.tag == "travel" && $0.color == nil }.map { ($0.tag, "#59bbfb") } }
+        vm.setDescription("Trips")
+        vm.save()
+        await vm.settle()
+        #expect(sharing.registry.tags.first { $0.tag == "travel" }?.color == "#59bbfb")
+    }
 }
 
 // swiftlint:enable line_length

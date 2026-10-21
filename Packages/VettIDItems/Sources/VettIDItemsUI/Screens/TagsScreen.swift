@@ -135,6 +135,7 @@ struct TagRow: View {
 /// (Chosen; not in the spec: Android shows each as a dialog of its own, one after the other; an iPhone presents one sheet
 /// at a time.)
 struct TagDialogs: ViewModifier {
+    @Environment(\.vettIDCovered) private var covered
     let state: TagsState
     let actions: TagsActions
 
@@ -149,14 +150,16 @@ struct TagDialogs: ViewModifier {
         Binding(get: { state.dialog == .profileColour }, set: { if !$0 { actions.onDismiss() } })
     }
 
+    // A cover (the app switcher, the app lock) closes the sheet and the alert at once (IOS-PLAN §4.4 (1)).
     func body(content: Content) -> some View {
         content
-            .sheet(isPresented: sheetShown) { TagSheet(state: state, actions: actions) }
-            .alert(ItemsStrings.tagsColourProfileTitle, isPresented: profileShown) {
+            .sheet(isPresented: uncovered(sheetShown, covered: covered)) { TagSheet(state: state, actions: actions) }
+            .alert(ItemsStrings.tagsColourProfileTitle, isPresented: uncovered(profileShown, covered: covered)) {
                 Button(ItemsStrings.ok) { actions.onDismiss() }
             } message: {
                 Text(ItemsStrings.tagsColourProfile)
             }
+            .closesWhenCovered { if state.dialog != nil { actions.onDismiss() } }
     }
 }
 #endif

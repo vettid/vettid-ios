@@ -126,13 +126,18 @@ public final class TagsViewModel {
         case .edit(let t, let name, let description):
             guard let n = ItemChecks.normalizeTag(name, reserved: false) else { return }
             if n != t.tag {
+                let from = state.dialog
                 run { [sharing] in
                     let change = try await sharing.renameTag(t.tag, into: n, dryRun: true)
-                    return { $0.dialog = .confirmRename(tag: t.tag, into: n, change: change) }
+                    // Applied only over the form it came from (a late answer opens nothing the member closed).
+                    return { s in if s.dialog == from { s.dialog = .confirmRename(tag: t.tag, into: n, change: change) } }
                 }
             } else if description != (t.description ?? "") {
+                // The colour as the registry has it now (the keeper may have stored one since the form opened); Android
+                // sends the form's.
+                let color = sharing.tags?.tags.first { $0.tag == t.tag }?.color ?? t.color
                 run { [sharing] in
-                    try await sharing.setTag(n, description: description, color: t.color)
+                    try await sharing.setTag(n, description: description, color: color)
                     return Self.done(sharing)
                 }
             } else {
@@ -152,9 +157,10 @@ public final class TagsViewModel {
 
     public func askDelete() {
         guard case .edit(let t, _, _) = state.dialog else { return }
+        let from = state.dialog
         run { [sharing] in
             let change = try await sharing.deleteTag(t.tag, dryRun: true)
-            return { $0.dialog = .confirmDelete(tag: t.tag, change: change) }
+            return { s in if s.dialog == from { s.dialog = .confirmDelete(tag: t.tag, change: change) } }
         }
     }
 

@@ -4,20 +4,26 @@ import VettIDData
 import VettIDItems
 import VettIDUI
 
-/// The tags screen's sheet: the colour picker, or the form with the rename and delete previews over it. The form keeps the
-/// values it last showed, so that it stays under a preview (which replaces the dialog in the state).
+/// The tags screen's sheet: the colour picker, or the form with the rename and delete previews over it (the form under a
+/// preview shows the tag it is about, ``TagFormValues``).
 struct TagSheet: View {
     @Environment(\.vettIDColors) private var colors
     let state: TagsState
     let actions: TagsActions
-    @State private var shown = TagFormValues()
 
     var body: some View {
-        Group {
+        VStack(alignment: .leading, spacing: 0) {
+            if let error = errorText {
+                Text(error)
+                    .vettIDFont(.bodyMedium)
+                    .foregroundStyle(colors.error)
+                    .padding([.horizontal, .top], Spacing.xl)
+                    .accessibilityIdentifier("tag_sheet_error")
+            }
             if case .colour(let t) = state.dialog {
                 TagColourPicker(tag: t, busy: state.busy, actions: actions)
             } else {
-                TagForm(values: values, busy: state.busy, actions: actions)
+                TagForm(values: TagFormValues(state.dialog, registry: state.registry), busy: state.busy, actions: actions)
                     .confirmDialog(
                         isPresented: preview(rename: true), title: renameTitle, message: changeText,
                         confirmLabel: ItemsStrings.tagsRename, onConfirm: actions.onConfirmRename
@@ -31,10 +37,13 @@ struct TagSheet: View {
         .presentationDetents([.medium, .large])
         .presentationBackground(colors.surfaceContainerLow.color)
         .environment(\.vettIDColors, colors)
-        .onChange(of: state.dialog, initial: true) { _, _ in if let v = TagFormValues(state.dialog) { shown = v } }
+        // An action's failure is said inside the sheet while it is up (VoiceOver announces it), as well as under it.
+        .onChange(of: errorText) { _, text in if let text { AccessibilityNotification.Announcement(text).post() } }
     }
 
-    private var values: TagFormValues { TagFormValues(state.dialog) ?? shown }
+    private var errorText: String? {
+        state.error.map { ItemsText.failure($0, limit: state.limit, shownCode: state.errorCode) }
+    }
 
     private func preview(rename: Bool) -> Binding<Bool> {
         Binding(
@@ -68,7 +77,9 @@ struct TagSheet: View {
     }
 }
 
-/// What the form shows: its title, the name and description typed, and the tag edited (nil for a new one).
+/// What the form shows: its title, the name and description typed, and the tag edited (nil for a new one). Under a
+/// preview (which replaces the form's dialog in the state) it shows the tag the preview is about, as the registry has it,
+/// with the new name of a rename: never a blank "New tag" form.
 struct TagFormValues: Equatable {
     var title = ItemsStrings.tagsNew
     var name = ""
@@ -77,20 +88,31 @@ struct TagFormValues: Equatable {
 
     init() {}
 
-    /// The values of a form dialog; nil for any other.
-    init?(_ d: TagDialog?) {
+    init(_ d: TagDialog?, registry: TagRegistry?) {
+        let entry = { (tag: String) in registry?.tags.first { $0.tag == tag } ?? TagView(tag: tag) }
         switch d {
         case .create(let n, let desc):
+            self.init()
             name = n
             description = desc
         case .edit(let t, let n, let desc):
-            title = ItemsStrings.tagsEdit
-            name = n
-            description = desc
-            tag = t
+            self.init(tag: t, name: n, description: desc)
+        case .confirmRename(let tag, let into, _):
+            let t = entry(tag)
+            self.init(tag: t, name: into, description: t.description ?? "")
+        case .confirmDelete(let tag, _):
+            let t = entry(tag)
+            self.init(tag: t, name: tag, description: t.description ?? "")
         default:
-            return nil
+            self.init()
         }
+    }
+
+    private init(tag: TagView, name: String, description: String) {
+        title = ItemsStrings.tagsEdit
+        self.name = name
+        self.description = description
+        self.tag = tag
     }
 }
 

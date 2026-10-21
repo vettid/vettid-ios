@@ -49,17 +49,20 @@ import VettIDUI
             #expect(height(TagsScreen(state: s, actions: TagsActions())) > 0, "\(d)")
             #expect(height(TagSheet(state: s, actions: TagsActions())) > 0, "\(d)")
         }
-        #expect(height(TagForm(values: TagFormValues(.edit(tag: medical, name: "medical", description: "x")) ?? TagFormValues(), busy: false, actions: TagsActions())) > 0)
+        #expect(height(TagForm(values: TagFormValues(.edit(tag: medical, name: "medical", description: "x"), registry: registry), busy: false, actions: TagsActions())) > 0)
         #expect(height(TagColourPicker(tag: travel, busy: true, actions: TagsActions())) > 0)
     }
 
-    @Test func theFormShowsWhatItEditsAndAPreviewIsNotAForm() {
-        let medical = registry.tags[1]
-        let edit = TagFormValues(.edit(tag: medical, name: "health", description: "Doctors"))
-        #expect(edit?.title == "Edit tag" && edit?.name == "health" && edit?.description == "Doctors" && edit?.tag == medical)
-        #expect(TagFormValues(.create())?.title == "New tag" && TagFormValues(.create())?.tag == nil)
-        #expect(TagFormValues(.confirmDelete(tag: "travel", change: TagChange(version: 1, items: 0))) == nil)
-        #expect(TagFormValues(.colour(medical)) == nil && TagFormValues(nil) == nil)
+    @Test func theFormShowsWhatItEditsAndAPreviewNeverABlankForm() {
+        let medical = registry.tags[1], travel = registry.tags[2]
+        let edit = TagFormValues(.edit(tag: medical, name: "health", description: "Doctors"), registry: registry)
+        #expect(edit.title == "Edit tag" && edit.name == "health" && edit.description == "Doctors" && edit.tag == medical)
+        #expect(TagFormValues(.create(), registry: registry).title == "New tag" && TagFormValues(.create(), registry: registry).tag == nil)
+        // Under a preview: the tag it is about, as the registry has it (a rename's new name), never "New tag".
+        let delete = TagFormValues(.confirmDelete(tag: "travel", change: TagChange(version: 1, items: 0)), registry: registry)
+        #expect(delete.title == "Edit tag" && delete.name == "travel" && delete.description == "Trips" && delete.tag == travel)
+        let rename = TagFormValues(.confirmRename(tag: "travel", into: "trips", change: TagChange(version: 1, items: 1)), registry: registry)
+        #expect(rename.title == "Edit tag" && rename.name == "trips" && rename.tag == travel)
     }
 
     @Test func thePickerChecksTheShownSlot() {
