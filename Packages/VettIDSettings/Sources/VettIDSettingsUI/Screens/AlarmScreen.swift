@@ -24,6 +24,7 @@ public struct AlarmActions {
 /// `AlarmContent`.
 public struct AlarmContent: View {
     @Environment(\.vettIDTimeScale) private var timeScale
+    @Environment(\.vettIDCovered) private var covered
     @Environment(\.scenePhase) private var scenePhase
     let state: AlarmState
     let actions: AlarmActions
@@ -64,7 +65,7 @@ public struct AlarmContent: View {
             VStack(alignment: .leading, spacing: Spacing.l) {
                 NoticeCard(.info, title: CredentialStrings.alarmMine, message: CredentialStrings.alarmMineBody)
                 if let error = state.error {
-                    NoticeCard(.urgent, title: CredentialStrings.title, message: error.message(timeScale: timeScale))
+                    NoticeCard(.urgent, title: error.title(or: CredentialStrings.title), message: error.message(timeScale: timeScale))
                         .accessibilityIdentifier("error")
                 }
             }
@@ -72,7 +73,7 @@ public struct AlarmContent: View {
         .accessibilityIdentifier("alarm_ask")
         // The confirmation (vettid-android `ConfirmDialog`). Each button tells the view model; the alert's own dismissal
         // changes nothing, whichever comes first.
-        .alert(confirmTitle, isPresented: Binding(get: { state.step != .ask && !state.busy }, set: { _ in })) {
+        .alert(confirmTitle, isPresented: Binding(get: { !covered && state.step != .ask && !state.busy }, set: { _ in })) {
             Button(CredentialStrings.alarmConfirm, action: actions.confirm).accessibilityIdentifier("alarm_confirm")
             Button(CredentialStrings.cancel, role: .cancel, action: actions.cancelAnswer)
         } message: {
@@ -98,7 +99,7 @@ public struct AlarmContent: View {
                 )
                 .accessibilityIdentifier("alarm_password")
                 if let error = state.error {
-                    NoticeCard(.urgent, title: CredentialStrings.title, message: error.message(timeScale: timeScale))
+                    NoticeCard(.urgent, title: error.title(or: CredentialStrings.title), message: error.message(timeScale: timeScale))
                         .accessibilityIdentifier("error")
                 }
             }

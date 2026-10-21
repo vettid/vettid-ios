@@ -37,10 +37,21 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             // The account is read again whenever the vault opens (an unlock, the end of onboarding, a start while open).
             if phase == .unlocked, oldValue != .unlocked { onOpened() }
             if phase != .unlocked, oldValue == .unlocked { forgetOpenLists() } // not kept once it is locked
+            // IOS-PLAN §4.4 (1): the root screen ends with the lock (``lock()``), "Try again", and when nothing is set up
+            // any more (a sign-out, a wipe, a deletion); not in between, so that a refusal during an unlock that includes
+            // the daily check still shows it.
+            if phase == .signedOut {
+                credentialRequired = false
+                credentialRequiredResend = nil
+            }
         }
     }
     public internal(set) var account: AccountInfo?
     public internal(set) var servicePaused = false
+    /// (IOS-PLAN §4.4 (1)) The vault answered `credential_required`: the root screen "This phone can't use your vault".
+    public internal(set) var credentialRequired = false
+    /// What "Try again" sends again (``credentialRequiredTryAgain()``): the ``Resend`` of the request that raised it.
+    @ObservationIgnored var credentialRequiredResend: Resend?
     public let apiOrigin: String
     /// DevStack hints come with the dev stack's helpers (I1.3).
     public var devHint: String? { nil }
@@ -240,7 +251,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             onRecoveryStatus: { r, since in ref.manager?.noteRecoveryStatus(r, since: since) },
             now: config.now,
             mark: { rec.generation },
-            sleep: config.lockTiming.sleep, timeScale: { scale.value }
+            sleep: config.lockTiming.sleep, timeScale: { scale.value },
+            notes: Self.failureNotes(ref)
         )
     }
 
@@ -262,34 +274,6 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// The gate of an operation that carries the PIN (VAULT-MESSAGING §11.14.9 steps 2 and 3).
     static func pinGate(_ ref: ManagerRef) -> @Sendable () async throws -> Void {
         { try await ref.manager?.decideFirst(carriesPin: true) }
-    }
-
-    // MARK: - Failures
-
-    /// Runs [body] and turns every failure into a ``VaultFailure`` (a cancellation stays one). Mirrors vettid-android
-    /// `VaultManager.guard`.
-    @discardableResult
-    func guarded<T>(_ body: () async throws -> T) async throws -> T {
-        do {
-            return try await body()
-        } catch {
-            throw noted(VaultFailures.map(error))
-        }
-    }
-
-    @discardableResult
-    func guardedSync<T>(_ body: () throws -> T) throws -> T {
-        do {
-            return try body()
-        } catch {
-            throw noted(VaultFailures.map(error))
-        }
-    }
-
-    /// MEMBER-API 1.2.0: a refusal while paused also shows the banner (the status may not have been read yet).
-    private func noted(_ e: any Error) -> any Error {
-        if let f = e as? VaultFailure, f.kind == .servicePaused { servicePaused = true }
-        return e
     }
 
     // MARK: - Local state

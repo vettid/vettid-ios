@@ -40,6 +40,7 @@ enum CredentialSheet: String, Identifiable {
 public struct CredentialContent: View {
     @Environment(\.vettIDTimeScale) private var timeScale
     @Environment(\.vettIDColors) private var colors
+    @Environment(\.vettIDCovered) private var covered
     let state: CredentialState
     let actions: CredentialActions
     let now: Date
@@ -76,12 +77,15 @@ public struct CredentialContent: View {
                 }, onDismiss: { sheet = nil })
             }
         }
-        .sheet(isPresented: Binding(get: { state.windowDialog }, set: { if !$0 { actions.showWindowDialog(false) } })) {
+        // IOS-PLAN §4.4 (1): a cover ("This phone can't use your vault") closes the password sheet, which a failed
+        // `credential.unlock` leaves open.
+        .sheet(isPresented: Binding(get: { state.windowDialog && !covered }, set: { if !$0 { actions.showWindowDialog(false) } })) {
             WindowPasswordSheet(state: state, actions: actions)
                 .presentationDetents([.medium, .large])
                 .presentationBackground(colors.surfaceContainerLow.color)
                 .environment(\.vettIDColors, colors)
         }
+        .closesWhenCovered { if state.windowDialog { actions.showWindowDialog(false) } }
     }
 
     @ViewBuilder private var content: some View {
@@ -99,7 +103,7 @@ public struct CredentialContent: View {
         } else if state.status == nil, let error = state.error {
             VStack(spacing: Spacing.l) {
                 LargeTitle(CredentialStrings.title)
-                NoticeCard(.warning, title: CredentialStrings.title, message: error.message(timeScale: timeScale))
+                NoticeCard(.warning, title: error.title(or: CredentialStrings.title), message: error.message(timeScale: timeScale))
                 SecondaryButton(CredentialStrings.retry, action: actions.retry)
                 Spacer()
             }

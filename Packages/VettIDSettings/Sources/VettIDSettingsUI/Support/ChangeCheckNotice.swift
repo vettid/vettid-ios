@@ -50,10 +50,8 @@ public enum ChangeCheckNotice {
 /// The one-time notice's texts (ANDROID-PLAN 0.1.46 and 0.1.47 "Telling the member", shared with the Android app, under
 /// its keys).
 enum ChangeNoticeTexts {
-    /// Android's `data_feed_device_replaced`, under a key of this module (chosen; not in the spec).
-    static var holderMoved: String {
-        String(localized: "root_change_holder_moved", defaultValue: "Your vault moved to a new phone", bundle: .module)
-    }
+    /// Android's `data_feed_device_replaced`: the one string of the data module (``FailureKind/notHolderTitle``).
+    static var holderMoved: String { FailureKind.notHolderTitle }
 
     static var lockUnlock: String {
         String(localized: "root_change_lock_unlock", defaultValue: "Lock and unlock now", bundle: .module)

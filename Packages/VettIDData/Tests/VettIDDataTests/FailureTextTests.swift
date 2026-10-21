@@ -10,7 +10,9 @@ import Testing
         let all = FailureKind.allCases
         #expect(Set(all.map(\.message)).count == all.count)
         #expect(Set(all.map(\.messageKey)).count == all.count)
-        #expect(all.allSatisfy { $0.messageKey.hasPrefix("data_failure_") })
+        // IOS-PLAN §4.4: the texts of the codes the app did not map keep vettid-android's names.
+        let vaultCodes: Set = ["vault_credential_required_body", "vault_not_holder", "error_vault_code"]
+        #expect(all.allSatisfy { $0.messageKey.hasPrefix("data_failure_") || vaultCodes.contains($0.messageKey) })
         #expect(FailureKind.badPin.message == "That PIN is not correct.")
         #expect(FailureKind.badPin.messageKey == "data_failure_bad_pin")
         #expect(FailureKind.credentialFrozen.messageKey == "data_failure_frozen")
@@ -60,7 +62,7 @@ import Testing
             .appendingPathComponent("Sources/VettIDData/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 216)
+        #expect(keys.count == 221)
         let missing = "\u{0}missing"
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)

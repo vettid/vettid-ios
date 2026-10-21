@@ -92,7 +92,7 @@ import VettIDVault
         let r = try await c.acceptInvite("vettid://connect#\(link)")
         #expect(c.requests.first?.state == .waiting && c.requests.first?.name == "Mo")
         // No code yet: an approval is refused (0.10.3), and the request stays.
-        #expect(await kind { try await c.approveOutgoing(r.connectionID) } == .other)
+        #expect(await kind { try await c.approveOutgoing(r.connectionID) } == .vaultCode("bad_request"))
         #expect(c.requests.count == 1)
         try service.runHandshake(r.connectionID)
         #expect(await eventually { c.requests.first?.state == .pending })

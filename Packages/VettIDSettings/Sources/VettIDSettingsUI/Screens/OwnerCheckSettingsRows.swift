@@ -24,6 +24,7 @@ struct OwnerCheckSettingsRows: View {
     let actions: OwnerCheckSettingsActions
     let now: Date
     @State private var picker: IntervalPicker?
+    @Environment(\.vettIDCovered) private var covered
 
     var body: some View {
         if let v = state.view {
@@ -51,7 +52,7 @@ struct OwnerCheckSettingsRows: View {
                 }
                 .alert(
                     SettingsStrings.ownerCheck,
-                    isPresented: Binding(get: { state.error != nil }, set: { if !$0 { actions.dismissError() } })
+                    isPresented: Binding(get: { state.error != nil && !covered }, set: { if !$0 { actions.dismissError() } })
                 ) {
                     Button(SettingsStrings.done, action: actions.dismissError)
                 } message: {

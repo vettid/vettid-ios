@@ -189,7 +189,7 @@ extension VaultDevice {
     static func okBody(_ type: String, _ r: VaultMessage) throws -> [UInt8] {
         guard r.inner.status == Inner.statusOK else {
             throw VaultOpError(
-                type: type, code: r.inner.error?.code ?? "error", detail: r.inner.error?.message ?? "",
+                type: type, code: r.inner.error?.code ?? "", detail: r.inner.error?.message ?? "",
                 body: r.inner.body.isEmpty ? nil : r.inner.body
             )
         }

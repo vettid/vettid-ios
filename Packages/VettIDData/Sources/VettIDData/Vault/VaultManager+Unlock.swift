@@ -354,7 +354,8 @@ extension VaultManager {
         case UnlockEpoch.deviceSecret: .failed(.deviceSecret, code: r.code)
         case UnlockEpoch.transferIncomplete: .failed(.transferIncomplete, code: r.code)
         case "retry": .failed(.retry, code: r.code)
-        default: .failed(.other, code: r.code)
+        // IOS-PLAN §4.4 (2): a code this app does not know names itself.
+        default: .failed(.vaultCode(VaultFailures.shownCode(r.code ?? "")), code: r.code)
         }
     }
 

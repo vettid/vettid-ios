@@ -192,7 +192,7 @@ struct CredentialOps: Sendable {
             if let utk, r.inner.error?.code == Self.codeSignerUnconfirmed { try await device.returnUTK(utk) }
             // The error's body: `weak_password` carries `reason` (§11.14.7), `backoff` its `retry_after` (§10.1).
             throw VaultOpError(
-                type: type, code: r.inner.error?.code ?? "error", detail: r.inner.error?.message ?? "",
+                type: type, code: r.inner.error?.code ?? "", detail: r.inner.error?.message ?? "",
                 body: r.inner.body.isEmpty ? nil : r.inner.body
             )
         }

@@ -92,6 +92,9 @@ private let openingReads: Duration = .seconds(30)
         #expect(await kind { try await msgs.send("01JNOCONNECTION00000000000", text: "x") } == .notFound)
         service.peerUnreachable = true
         #expect(await kind { try await msgs.send(id, text: "x") } == .connectionUnavailable)
+        // IOS-PLAN §4.4 (2): a code this app does not map names itself.
+        service.refuseNext("message.send", code: "internal", message: "detail")
+        #expect(await kind { try await msgs.send(id, text: "x") } == .vaultCode("internal"))
         #expect(msgs.messages(id).isEmpty && service.peerInbox(id).isEmpty)
         service.peerUnreachable = false
         let api = try m.openApi(try await m.openSession())

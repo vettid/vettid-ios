@@ -90,7 +90,7 @@ import VettIDRelay
         #expect((VaultFailures.map(op("backoff")) as? VaultFailure)?.retryAfterSeconds == 0)
         let limit = (VaultFailures.map(op("limit", #"{"limit":"items","max":500}"#)) as? VaultFailure)?.limit
         #expect(limit == VaultLimit("items", max: 500))
-        #expect(kind(op("exists")) == .other && kind(op("device_secret")) == .deviceSecret)
+        #expect(kind(op("exists")) == .vaultCode("exists") && kind(op("device_secret")) == .deviceSecret)
     }
 
     /// IOS-PLAN ID8: only release R; recovery offered as §11.10.9 says.

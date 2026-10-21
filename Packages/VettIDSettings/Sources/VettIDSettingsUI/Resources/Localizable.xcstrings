@@ -1112,17 +1112,6 @@
         }
       }
     },
-    "root_change_holder_moved": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Your vault moved to a new phone"
-          }
-        }
-      }
-    },
     "root_change_password_not_changed": {
       "extractionState": "manual",
       "localizations": {

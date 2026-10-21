@@ -159,6 +159,14 @@ import VettIDUI
         }
     }
 
+    /// IOS-PLAN §4.4 (1): "This phone can't use your vault", with "Try again" and "Lock vault".
+    @Test func theCredentialRequiredScreen() {
+        #expect(height(CredentialRequiredScreen(onRetry: {}, onLock: {})) > 0)
+        #expect(FailureKind.credentialRequiredTitle == "This phone can't use your vault")
+        #expect(OnboardingStrings.rootRetry == "Try again")
+        #expect(OnboardingStrings.ownerCheckLock == "Lock vault")
+    }
+
     private func height(_ view: some View) -> CGFloat {
         UIHostingController(rootView: view.vettIDTheme()).sizeThatFits(in: CGSize(width: 390, height: 844)).height
     }

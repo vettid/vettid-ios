@@ -90,6 +90,9 @@ extension VaultManager {
         // The record's writes still on their way for an operation that began before the lock are dropped.
         record.bumpGeneration()
         unlockWindow = nil
+        // IOS-PLAN §4.4 (1): "Lock vault" on "This phone can't use your vault" returns to the unlock screen.
+        credentialRequired = false
+        credentialRequiredResend = nil
         phase = .locked
         // Pending, durably, before anything else is done for the lock: a process that dies from here on starts locked.
         let keeper: LockKeeper = lockGuard.keeper

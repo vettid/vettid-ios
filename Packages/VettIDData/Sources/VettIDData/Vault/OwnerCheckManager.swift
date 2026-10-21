@@ -65,6 +65,9 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     @ObservationIgnored private let sleep: LockSleep
     /// The vault's time scale now (STAGING-TIME-SCALE §5.2; ``LocalAccount/timeScale``).
     @ObservationIgnored private let scaleNow: @MainActor () -> UInt64
+    /// What a failure shows beyond the check's screen (``VaultManager/noted(_:since:resend:)``: `credential_required`'s root
+    /// screen).
+    @ObservationIgnored private let notes: FailureNotes
     /// (Release R) When the check whose presence was not recorded passed, on the vault's clock (its answer's deadline less
     /// its interval), so that only a presence recorded since then ends the notice; nil when the answer did not say.
     @ObservationIgnored private var presenceCheckAt: Date?
@@ -83,7 +86,8 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         now: @escaping @Sendable () -> Date = { Date() },
         mark: @escaping @MainActor () -> Int = { 0 },
         sleep: @escaping LockSleep = realLockSleep,
-        timeScale: @escaping @MainActor () -> UInt64 = { 1 }
+        timeScale: @escaping @MainActor () -> UInt64 = { 1 },
+        notes: FailureNotes = .none
     ) {
         self.ops = ops
         self.load = load
@@ -94,6 +98,7 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         self.mark = mark
         self.sleep = sleep
         scaleNow = timeScale
+        self.notes = notes
     }
 
     /// The vault's time scale as this phone last learnt it (STAGING-TIME-SCALE §5.2), for the screens.
@@ -321,7 +326,8 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     }
 
     private func setSetting(_ key: String, _ json: String) async throws {
-        try await vault {
+        // `settings.set` carries no secret and sets the same value again: "Try again" on the root screen resends it.
+        try await vault(resend: .setting(key: key, json: json)) {
             let o = try await self.ops()
             let current = try await o.settingsGet()
             if current.values[key] != json { try await o.settingsSet(version: current.version, set: [(key, json)]) }
@@ -399,12 +405,8 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     }
 
     /// Runs [body] and turns every failure into a ``VaultFailure``.
-    private func vault<T>(_ body: () async throws -> T) async throws -> T {
-        do {
-            return try await body()
-        } catch {
-            throw VaultFailures.map(error)
-        }
+    private func vault<T>(resend: Resend? = nil, _ body: () async throws -> T) async throws -> T {
+        try await notes.run(resend: resend, body)
     }
 
     private static func counts(_ h: HeldCounts?) -> WaitingCounts? {

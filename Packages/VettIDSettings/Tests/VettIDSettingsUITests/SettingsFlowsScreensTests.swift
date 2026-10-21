@@ -149,6 +149,33 @@ import VettIDUI
         }
     }
 
+    /// IOS-PLAN §4.4 (3): `forbidden` to `pin.change` shows "Your vault moved to a new phone" and `vault_not_holder`.
+    @Test func aPinChangeRefusedAsNotTheHolder() {
+        #expect(ChangePinContent.failureTitle(.notHolder) == "Your vault moved to a new phone")
+        #expect(ChangePinContent.failureTitle(.badPin) == ChangePinContent.failureTitle(.vaultCode("internal")))
+        #expect(FailureKind.notHolder.message.hasPrefix("Another phone now holds your vault's credential"))
+        var s = ChangePinState(withPassword: true)
+        s.error = .notHolder
+        #expect(height(ChangePinContent(state: s)) > 0)
+    }
+
+    /// IOS-PLAN §4.4 (1): the cover "This phone can't use your vault" closes the unlock window's password sheet, which a
+    /// failed `credential.unlock` leaves open.
+    @Test func theCoverClosesThePasswordSheet() {
+        var closed: [Bool] = []
+        var actions = CredentialActions()
+        actions.showWindowDialog = { closed.append($0) }
+        var s = CredentialState(loading: false)
+        s.windowDialog = true
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        let view = CredentialContent(state: s, actions: actions, now: now).environment(\.vettIDCovered, true)
+        window.rootViewController = UIHostingController(rootView: view.vettIDTheme(.light))
+        window.isHidden = false
+        window.layoutIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        #expect(closed == [false])
+    }
+
     @Test func everyCredentialStateRenders() {
         let status = CredentialStatus(
             exists: true, version: 3, keyFingerprint: "k1-012345678", updatedAt: "2026-10-04T12:00:00Z", alarm: nil, backup: false,

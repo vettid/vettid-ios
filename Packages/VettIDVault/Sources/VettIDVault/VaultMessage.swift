@@ -57,6 +57,7 @@ public enum VaultJSON {
 /// when the code carries one.
 public struct VaultOpError: Error, Sendable, CustomStringConvertible {
     public let type: String
+    /// The error's `code`; "" for an error response without one (the app shows `unknown`, IOS-PLAN §4.4 (2)).
     public let code: String
     /// The error's `message` ("" without one).
     public let detail: String

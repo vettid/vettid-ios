@@ -192,8 +192,17 @@ extension PhoneSecrets {
                 if recs.uncertainPinOperation == op { recs.uncertainPinOperation = nil }
             }
             try write(recs)
-            for e in dropped { try? keys.delete(keyVault: e.record.keyVault, keyID: e.keyID) }
+            deleteUnnamedKeys(of: dropped, kept: recs)
             pinMoved()
+        }
+    }
+
+    /// The phone keys of [dropped] that no record of [kept] names any more. A PIN change's candidate shares the current
+    /// record's phone key (only its epoch is new), so that key stays: dropping the candidate never erases the current key.
+    private func deleteUnnamedKeys(of dropped: [PhoneRecords.Entry], kept: PhoneRecords) {
+        let named = Set(kept.all.map { PhoneKeyName(keyVault: $0.record.keyVault, keyID: $0.keyID) })
+        for e in dropped where !named.contains(PhoneKeyName(keyVault: e.record.keyVault, keyID: e.keyID)) {
+            try? keys.delete(keyVault: e.record.keyVault, keyID: e.keyID)
         }
     }
 
@@ -207,7 +216,7 @@ extension PhoneSecrets {
             recs.candidates.removeAll { operations.contains($0.operation) }
             if let op = recs.uncertainPinOperation, operations.contains(op) { recs.uncertainPinOperation = nil }
             try write(recs)
-            for e in dropped { try? keys.delete(keyVault: e.record.keyVault, keyID: e.keyID) }
+            deleteUnnamedKeys(of: dropped, kept: recs)
             pinMoved()
         }
     }

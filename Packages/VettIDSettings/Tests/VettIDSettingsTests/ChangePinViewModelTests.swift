@@ -82,6 +82,17 @@ import VettIDDataTesting
         #expect(!"\(m.state)".contains("59173048"))
     }
 
+    /// IOS-PLAN §4.4: after `credential_required` or `forbidden` every entry is typed again, the new PIN and its
+    /// confirmation too.
+    @Test(arguments: [FailureKind.credentialRequired, .notHolder, .vaultCode("internal")])
+    func aRefusalOfTheVaultClearsEveryEntry(_ kind: FailureKind) async {
+        repo.fail["changePin"] = FakeVaultRepository.failure(kind, code: "credential_required")
+        let m = ChangePinViewModel(vault: repo)
+        await send(m)
+        #expect(m.state.error == kind && m.state.step == .current)
+        #expect(m.state.current.isEmpty && m.state.pin.isEmpty && m.state.confirm.isEmpty && m.state.password.isEmpty)
+    }
+
     /// VAULT-MESSAGING §11.14.9 step 4: a wrong PIN is shown as it is, with the current PIN cleared and the new one kept
     /// (only confirmed again); a wrong password clears the password (and the keypad's confirmation, typed with it).
     @Test func aRefusalClearsTheEntryThatWasWrong() async {

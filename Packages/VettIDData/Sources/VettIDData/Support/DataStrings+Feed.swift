@@ -242,6 +242,8 @@ extension DataStrings {
         )
     }
 
+    /// "Your vault moved to a new phone": the feed's `device.replaced`, and the one title of every text that another phone
+    /// holds the vault's credential (``FailureKind/notHolderTitle``: `vault_not_holder`, the change's one-time notice).
     static var feedDeviceReplaced: String {
         String(
             localized: "data_feed_device_replaced",

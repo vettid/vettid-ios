@@ -28,6 +28,7 @@ public struct NewCredentialActions {
 /// and again, the acknowledgement, then a final confirmation. Mirrors vettid-android `NewCredentialContent`.
 public struct NewCredentialContent: View {
     @Environment(\.vettIDTimeScale) private var timeScale
+    @Environment(\.vettIDCovered) private var covered
     @Environment(\.vettIDColors) private var colors
     @Environment(\.scenePhase) private var scenePhase
     let state: NewCredentialState
@@ -86,7 +87,7 @@ public struct NewCredentialContent: View {
                     NoticeCard(.info, title: CredentialStrings.newTitle, message: text).accessibilityIdentifier("change_check")
                 }
                 if let error = state.error {
-                    NoticeCard(.urgent, title: CredentialStrings.newTitle, message: error.message(timeScale: timeScale))
+                    NoticeCard(.urgent, title: error.title(or: CredentialStrings.newTitle), message: error.message(timeScale: timeScale))
                         .accessibilityIdentifier("error")
                 }
             }
@@ -95,7 +96,7 @@ public struct NewCredentialContent: View {
         .accessibilityIdentifier("new_credential")
         // The final confirmation (vettid-android `ConfirmDialog`, destructive). Each button tells the view model, which
         // ends the confirmation; the alert's own dismissal changes nothing, whichever comes first.
-        .alert(CredentialStrings.newConfirmTitle, isPresented: Binding(get: { state.confirming }, set: { _ in })) {
+        .alert(CredentialStrings.newConfirmTitle, isPresented: Binding(get: { !covered && state.confirming }, set: { _ in })) {
             Button(CredentialStrings.newSubmit, role: .destructive, action: actions.confirm).accessibilityIdentifier("confirm_button")
             Button(CredentialStrings.cancel, role: .cancel, action: actions.cancelConfirm)
         } message: {
