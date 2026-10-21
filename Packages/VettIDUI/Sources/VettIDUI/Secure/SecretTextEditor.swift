@@ -10,17 +10,20 @@ public struct SecretTextEditor: View {
     private let label: String
     private let placeholder: String?
     private let isError: Bool
+    private let focus: Bool
     @Environment(\.vettIDColors) private var colors
 
-    public init(_ label: String, text: Binding<String>, placeholder: String? = nil, isError: Bool = false) {
+    /// [focus]: the editor takes the keyboard (once, each time it turns true).
+    public init(_ label: String, text: Binding<String>, placeholder: String? = nil, isError: Bool = false, focus: Bool = false) {
         self.label = label
         _text = text
         self.placeholder = placeholder
         self.isError = isError
+        self.focus = focus
     }
 
     public var body: some View {
-        SecretTextView(text: $text)
+        SecretTextView(text: $text, focus: focus)
             .frame(minHeight: Spacing.touchTarget * 2)
             .overlay(alignment: .topLeading) {
                 if text.isEmpty, let placeholder {
@@ -43,9 +46,11 @@ public struct SecretTextEditor: View {
 /// The `UITextView` behind ``SecretTextEditor``.
 struct SecretTextView: UIViewRepresentable {
     @Binding var text: String
+    var focus = false
 
     final class Coordinator: NSObject, UITextViewDelegate {
         var parent: SecretTextView
+        var focused = false
 
         init(_ parent: SecretTextView) { self.parent = parent }
 
@@ -78,6 +83,7 @@ struct SecretTextView: UIViewRepresentable {
     func updateUIView(_ v: UITextView, context: Context) {
         context.coordinator.parent = self
         if v.text != text { v.text = text }
+        SecretFocus.request(focus, v, &context.coordinator.focused)
     }
 
     /// As wide as offered, as tall as its text.
