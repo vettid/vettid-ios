@@ -1,6 +1,7 @@
 @preconcurrency import AVFoundation
 import SwiftUI
 import UIKit
+import VettIDMedia
 
 /// Which camera takes the photo.
 public enum CameraLens: Sendable {
@@ -12,8 +13,10 @@ public enum CameraLens: Sendable {
 /// What the camera screen asks the preview for: a shot. The preview sets ``take``; the screen calls it.
 @MainActor
 public final class PhotoCameraHandle {
-    /// Takes a shot and hands its encoded bytes (or nil when it failed) to the closure, on the main actor.
-    public internal(set) var take: ((@escaping @MainActor ([UInt8]?) -> Void) -> Void)?
+    /// Takes a shot and hands its encoded bytes (or nil when it failed) to the closure, on the main actor: a holder of its
+    /// own, zeroable, marked ``PhotoBytes/mirrored`` for the front camera (shots are mirrored as previewed wherever they
+    /// are decoded, as vettid-android's `PhotoCamera.take`).
+    public internal(set) var take: ((@escaping @MainActor (PhotoBytes?) -> Void) -> Void)?
 
     public init() {}
 }
@@ -21,29 +24,42 @@ public final class PhotoCameraHandle {
 /// The app's own camera for a photo (ANDROID-PLAN "Photo attachments", "Take a photo"; IOS-PLAN §4: AVFoundation camera
 /// to memory): the preview of [lens] and an `AVCapturePhotoOutput` whose shot is handed over as the bytes of
 /// `fileDataRepresentation()`, in memory only: nothing is written to a file, not even briefly, and no location is asked
-/// for or added. [onLenses] says whether both cameras exist (the switch is offered then); [onUnavailable]: the camera
+/// for or added. The app's copies of those bytes are moved into one ``PhotoBytes`` and zeroed; the `Data` AVFoundation
+/// returns is zeroed too where the app holds it alone (its own buffers are the system's). [onLenses] says whether both cameras exist (the switch is offered then); [onUnavailable]: the camera
 /// could not be started. Mirrors vettid-android core/ui `PhotoCamera`.
 public struct PhotoCameraView: UIViewRepresentable {
     let lens: CameraLens
     let handle: PhotoCameraHandle
     let onLenses: @MainActor (Bool) -> Void
     let onUnavailable: @MainActor () -> Void
+    let fill: Bool
 
+    /// [fill]: the preview fills its frame, cropped (the profile photo's square frame, as vettid-android's `FILL_CENTER`);
+    /// otherwise the whole picture is shown.
     public init(
         lens: CameraLens, handle: PhotoCameraHandle, onLenses: @escaping @MainActor (Bool) -> Void = { _ in },
-        onUnavailable: @escaping @MainActor () -> Void = {}
+        onUnavailable: @escaping @MainActor () -> Void = {}, fill: Bool = false
     ) {
+        self.fill = fill
         self.lens = lens
         self.handle = handle
         self.onLenses = onLenses
         self.onUnavailable = onUnavailable
     }
 
+    /// The cameras this phone has: its front and its back wide-angle camera.
+    public static func lenses() -> (front: Bool, back: Bool) {
+        (
+            AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front) != nil,
+            AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) != nil
+        )
+    }
+
     public func makeCoordinator() -> Coordinator { Coordinator(onUnavailable: onUnavailable) }
 
     public func makeUIView(context: Context) -> QrScannerView.PreviewView {
         let view = QrScannerView.PreviewView()
-        view.previewLayer.videoGravity = .resizeAspect
+        view.previewLayer.videoGravity = fill ? .resizeAspectFill : .resizeAspect
         view.previewLayer.session = context.coordinator.capture.session
         let both = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) != nil
             && AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front) != nil
@@ -77,10 +93,10 @@ public struct PhotoCameraView: UIViewRepresentable {
             capture.start(lens) { [weak self] in Task { @MainActor in self?.onUnavailable() } }
         }
 
-        func shoot(_ done: @escaping @MainActor ([UInt8]?) -> Void) {
+        func shoot(_ done: @escaping @MainActor (PhotoBytes?) -> Void) {
             let settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.jpeg])
             let id = settings.uniqueID
-            let delegate = ShotDelegate { [weak self] bytes in
+            let delegate = ShotDelegate(mirrored: lens == .front) { [weak self] bytes in
                 Task { @MainActor in
                     self?.shots[id] = nil
                     done(bytes)
@@ -93,15 +109,27 @@ public struct PhotoCameraView: UIViewRepresentable {
 
     /// Hands the shot's bytes over once (nil when it failed); never a file.
     final class ShotDelegate: NSObject, AVCapturePhotoCaptureDelegate, @unchecked Sendable {
-        private let done: @Sendable ([UInt8]?) -> Void
+        private let done: @Sendable (PhotoBytes?) -> Void
+        private let mirrored: Bool
 
-        init(done: @escaping @Sendable ([UInt8]?) -> Void) { self.done = done }
-
-        func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: (any Error)?) {
-            finish(error == nil ? photo.fileDataRepresentation().map { [UInt8]($0) } : nil)
+        init(mirrored: Bool, done: @escaping @Sendable (PhotoBytes?) -> Void) {
+            self.mirrored = mirrored
+            self.done = done
         }
 
-        func finish(_ bytes: [UInt8]?) { done(bytes) }
+        func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: (any Error)?) {
+            guard error == nil, var data = photo.fileDataRepresentation() else { return finish(nil) }
+            finish(Self.held(&data, mirrored: mirrored))
+        }
+
+        /// [data] moved into a holder of its own: the app's `[UInt8]` copy and [data] zeroed in place.
+        static func held(_ data: inout Data, mirrored: Bool) -> PhotoBytes {
+            var bytes = [UInt8](data)
+            data.resetBytes(in: 0..<data.count)
+            return PhotoBytes(taking: &bytes, mirrored: mirrored)
+        }
+
+        func finish(_ bytes: PhotoBytes?) { done(bytes) }
     }
 
     /// The session and its photo output, configured, started and stopped off the main thread on their own queue.
@@ -142,7 +170,16 @@ public struct PhotoCameraView: UIViewRepresentable {
                 guard session.canAddOutput(output) else { return false }
                 session.addOutput(output)
             }
-            if let c = output.connection(with: .video), c.isVideoRotationAngleSupported(90) { c.videoRotationAngle = 90 }
+            if let c = output.connection(with: .video) {
+                if c.isVideoRotationAngleSupported(90) { c.videoRotationAngle = 90 }
+                // The shot as the lens saw it, never mirrored by the output: a front shot carries `PhotoBytes.mirrored`
+                // and every decode of it (the review, the prepared message photo, the profile photo) mirrors it as
+                // previewed, as vettid-android's `uprightShot` does.
+                if c.isVideoMirroringSupported {
+                    c.automaticallyAdjustsVideoMirroring = false
+                    c.isVideoMirrored = false
+                }
+            }
             return true
         }
     }

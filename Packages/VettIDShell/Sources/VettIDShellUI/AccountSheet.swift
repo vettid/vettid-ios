@@ -1,5 +1,6 @@
 #if os(iOS)
 import SwiftUI
+import UIKit
 import VettIDData
 import VettIDSettingsUI
 import VettIDShell
@@ -9,25 +10,32 @@ import VettIDUI
 /// account (read-only, from the vault's account snapshot: every connection sees it); the address; the membership and
 /// subscription (read-only, VAULT-MESSAGING §11.13); vault status and the account portal, where the other changes are made. The app
 /// never signs in: no sign-out. "Change name", the only place the names change, with the state of a requested change
-/// (VAULT-MESSAGING §10.8); the shared profile comes with I2.5. Mirrors vettid-android `AccountSheet`.
+/// (VAULT-MESSAGING §10.8), and "Shared profile"; the member's own profile photo in the header. Mirrors vettid-android
+/// `AccountSheet`.
 public struct AccountSheet: View {
     let account: AccountInfo?
+    let photo: UIImage?
     let now: Date
     let onLockVault: @MainActor () -> Void
     let onChangeName: @MainActor () -> Void
+    let onSharedProfile: @MainActor () -> Void
     let onOpenPortal: @MainActor () -> Void
 
     public init(
         account: AccountInfo?,
+        photo: UIImage? = nil,
         now: Date = Date(),
         onLockVault: @escaping @MainActor () -> Void,
         onChangeName: @escaping @MainActor () -> Void = {},
+        onSharedProfile: @escaping @MainActor () -> Void = {},
         onOpenPortal: @escaping @MainActor () -> Void
     ) {
         self.account = account
+        self.photo = photo
         self.now = now
         self.onLockVault = onLockVault
         self.onChangeName = onChangeName
+        self.onSharedProfile = onSharedProfile
         self.onOpenPortal = onOpenPortal
     }
 
@@ -37,10 +45,12 @@ public struct AccountSheet: View {
             // older vault).
             name: AccountHeader.name(account, placeholder: ShellStrings.accountPlaceholderName),
             detail: AccountHeader.detailEmail(account) ?? Self.membershipLine(MembershipLine.of(account)),
-            optionsHeader: ShellStrings.accountOptions
+            optionsHeader: ShellStrings.accountOptions,
+            photo: photo
         ) {
             AccountSheetOptions(
-                account: account, now: now, onLockVault: onLockVault, onChangeName: onChangeName, onOpenPortal: onOpenPortal
+                account: account, now: now, onLockVault: onLockVault, onChangeName: onChangeName, onSharedProfile: onSharedProfile,
+                onOpenPortal: onOpenPortal
             )
         }
     }
@@ -64,6 +74,7 @@ struct AccountSheetOptions: View {
     let now: Date
     let onLockVault: @MainActor () -> Void
     let onChangeName: @MainActor () -> Void
+    let onSharedProfile: @MainActor () -> Void
     let onOpenPortal: @MainActor () -> Void
 
     var body: some View {
@@ -83,6 +94,12 @@ struct AccountSheetOptions: View {
             SettingsDivider()
             SettingsRow(ShellStrings.accountChangeName, icon: .edit, supporting: ShellStrings.accountChangeNameBody, action: onChangeName)
                 .accessibilityIdentifier("account_change_name")
+            SettingsDivider()
+            SettingsRow(
+                ShellStrings.accountSharedProfile, icon: sharedProfileSymbol, supporting: ShellStrings.accountSharedProfileBody,
+                action: onSharedProfile
+            )
+            .accessibilityIdentifier("account_shared_profile")
         }
         .accessibilityIdentifier("account_names")
         if let email = account?.displayEmail {

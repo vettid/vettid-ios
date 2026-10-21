@@ -233,3 +233,54 @@ enum TestPhotos {
         #expect(att.cleared == before + 1 && att.cachedThumbnail(id, messageID: inID) == nil)
     }
 }
+
+/// A front-camera shot (``PhotoBytes/mirrored``) is prepared mirrored, as it was previewed (vettid-android
+/// `PhotoCamera.take`), through the same re-encode: no metadata, the source zeroed.
+@MainActor
+@Suite struct MirroredShotTests {
+    /// Left half red, right half blue, as a camera JPEG with metadata.
+    static func halves() -> [UInt8] {
+        let ctx = CGContext(
+            data: nil, width: 400, height: 300, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+        )!
+        ctx.setFillColor(CGColor(srgbRed: 0, green: 0, blue: 1, alpha: 1))
+        ctx.fill(CGRect(x: 0, y: 0, width: 400, height: 300))
+        ctx.setFillColor(CGColor(srgbRed: 1, green: 0, blue: 0, alpha: 1))
+        ctx.fill(CGRect(x: 0, y: 0, width: 200, height: 300))
+        let out = CFDataCreateMutable(nil, 0)!
+        let dest = CGImageDestinationCreateWithData(out, "public.jpeg" as CFString, 1, nil)!
+        let props: [CFString: Any] = [kCGImagePropertyTIFFDictionary: [kCGImagePropertyTIFFMake: "TestCam"]]
+        CGImageDestinationAddImage(dest, ctx.makeImage()!, props as CFDictionary)
+        CGImageDestinationFinalize(dest)
+        return [UInt8](out as Data)
+    }
+
+    /// The red share of the left tenth of [jpeg]'s middle row.
+    static func leftIsRed(_ jpeg: [UInt8]) throws -> Bool {
+        let image = try Photos.decodeReceived(jpeg, targetLongEdge: 400)
+        var buf = [UInt8](repeating: 0, count: image.width * image.height * 4)
+        buf.withUnsafeMutableBytes { p in
+            let ctx = CGContext(
+                data: p.baseAddress, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: image.width * 4,
+                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )!
+            ctx.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        }
+        let i = ((image.height / 2) * image.width + image.width / 10) * 4
+        return buf[i] > 200 && buf[i + 2] < 60
+    }
+
+    @Test func aFrontShotIsPreparedMirroredAndClean() async throws {
+        let att = AttachmentManager(ops: { throw VaultFailure(.other) })
+        let plain = try await att.prepare(PhotoBytes(Self.halves()))
+        #expect(try Self.leftIsRed(plain.jpeg.copy()))
+        var raw = Self.halves()
+        let front = PhotoBytes(taking: &raw, mirrored: true)
+        #expect(raw.allSatisfy { $0 == 0 }, "the app's source copy zeroed once taken")
+        let mirrored = try await att.prepare(front)
+        let jpeg = mirrored.jpeg.copy()
+        #expect(try !Self.leftIsRed(jpeg), "mirrored: blue on the left")
+        #expect(!JpegSegments.hasMetadata(jpeg) && !TestPhotos.contains(jpeg, Array("TestCam".utf8)))
+    }
+}

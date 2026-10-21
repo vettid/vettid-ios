@@ -109,6 +109,14 @@ enum ShellStrings {
         String(localized: "account_change_name_body", defaultValue: "Only here, in the app, with your PIN and password", bundle: .module)
     }
 
+    static var accountSharedProfile: String {
+        String(localized: "account_shared_profile", defaultValue: "Shared profile", bundle: .module)
+    }
+
+    static var accountSharedProfileBody: String {
+        String(localized: "account_shared_profile_body", defaultValue: "Display name and what your connections see", bundle: .module)
+    }
+
     static var accountVaultStatus: String {
         String(localized: "account_vault_status", defaultValue: "Vault status", bundle: .module)
     }

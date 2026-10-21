@@ -1,13 +1,15 @@
 #if DEBUG
+import CoreGraphics
 import SwiftUI
 import VettIDData
+import VettIDMedia
 import VettIDSettings
 import VettIDSettingsUI
 
-/// Debug only: the name change, the PIN change, the Credential screen, the password change, New phone secret and Delete
-/// vault in each of their states (``ShellCatalog``).
+/// Debug only: the name change, the shared profile and its camera, the PIN change, the Credential screen, the password
+/// change, New phone secret and Delete vault in each of their states (``ShellCatalog``).
 extension ShellCatalog {
-    static var flowEntries: [Entry] { nameEntries + pinEntries + credentialEntries + rotateEntries + secretEntries }
+    static var flowEntries: [Entry] { nameEntries + profileEntries + pinEntries + credentialEntries + rotateEntries + secretEntries }
 
     /// The screen of a flow's entry, with actions that do nothing.
     @MainActor @ViewBuilder
@@ -20,6 +22,8 @@ extension ShellCatalog {
         case .newPhoneSecret(let state): NewPhoneSecretContent(state: state)
         case .deleteVault(let state): DeleteVaultContent(state: state)
         case .settingsAskScreenshots(let state): SettingsContent(state: state, now: now, askScreenshots: true)
+        case .sharedProfile(let state): SharedProfileContent(state: state, now: now)
+        case .photoCapture(let state): PhotoCaptureContent(state: state) { FakeCameraPreview() }
         default: rotateScreen(screen)
         }
     }
@@ -64,6 +68,48 @@ extension ShellCatalog {
             Entry(id: "name_applied", title: "Change name: applied", screen: .changeName(sent(.applied))),
             Entry(id: "name_refused", title: "Change name: refused", screen: .changeName(sent(.refused, reason: "invalid"))),
         ]
+    }
+
+    private static var profileEntries: [Entry] {
+        let own = OwnProfile(
+            version: 3, displayName: "Countess", firstName: "Ada", lastName: "Lovelace",
+            fingerprint: "9a1f bb7d 873e eafb 494b ef94 f072 7b25"
+        )
+        var preview = SharedProfileState(account: member, profile: own)
+        preview.pendingPhoto = "/9j/preview"
+        preview.error = .network
+        var tooLong = SharedProfileState(account: member, profile: own)
+        tooLong.displayName = String(repeating: "Countess ", count: 16)
+        tooLong.edited = true
+        var shot = PhotoCaptureState(access: .granted)
+        shot.step = .review
+        shot.shot = reviewShot
+        return [
+            Entry(id: "profile", title: "Shared profile", screen: .sharedProfile(SharedProfileState(account: member, profile: own))),
+            Entry(id: "profile_preview", title: "Shared profile: photo refused, preview", screen: .sharedProfile(preview)),
+            Entry(id: "profile_too_long", title: "Shared profile: display name too long", screen: .sharedProfile(tooLong)),
+            Entry(id: "photo_live", title: "Profile photo: camera", screen: .photoCapture(PhotoCaptureState(access: .granted))),
+            Entry(id: "photo_review", title: "Profile photo: round frame", screen: .photoCapture(shot)),
+            Entry(id: "photo_ask", title: "Profile photo: camera not allowed yet", screen: .photoCapture(PhotoCaptureState(access: .ask))),
+            Entry(
+                id: "photo_blocked", title: "Profile photo: camera turned off", screen: .photoCapture(PhotoCaptureState(access: .blocked))
+            ),
+            Entry(
+                id: "photo_no_camera", title: "Profile photo: no camera",
+                screen: .photoCapture(PhotoCaptureState(access: .granted, noCamera: true))
+            ),
+        ]
+    }
+
+    /// A grey shot of 2,048 × 1,536 for the round frame.
+    private static var reviewShot: ShotImage? {
+        guard let ctx = CGContext(
+            data: nil, width: 2_048, height: 1_536, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+        ) else { return nil }
+        ctx.setFillColor(CGColor(srgbRed: 0.45, green: 0.5, blue: 0.55, alpha: 1))
+        ctx.fill(CGRect(x: 0, y: 0, width: 2_048, height: 1_536))
+        return ctx.makeImage().flatMap { try? ShotImage.of($0) }
     }
 
     private static func sent(_ state: NameRequestState, reason: String? = nil) -> ChangeNameState {

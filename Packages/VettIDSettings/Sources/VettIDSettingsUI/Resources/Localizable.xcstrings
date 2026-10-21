@@ -3654,6 +3654,666 @@
           }
         }
       }
+    },
+    "settings_profile_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shared profile"
+          }
+        }
+      }
+    },
+    "settings_profile_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What every connection sees of you: the name on your VettID account and your vault key, always; a display name and the items you tag @profile, if you add them."
+          }
+        }
+      }
+    },
+    "settings_profile_names": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID account name"
+          }
+        }
+      }
+    },
+    "settings_profile_names_none": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not received from your vault yet"
+          }
+        }
+      }
+    },
+    "settings_profile_names_note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every connection sees this name. VettID does not check it against any ID."
+          }
+        }
+      }
+    },
+    "settings_profile_change_name": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change name"
+          }
+        }
+      }
+    },
+    "settings_profile_display_name": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Display name (optional)"
+          }
+        }
+      }
+    },
+    "settings_profile_display_name_hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shown to your connections next to your name, for example a nickname. Leave it empty for none."
+          }
+        }
+      }
+    },
+    "settings_profile_display_name_too_long": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "At most 128 bytes."
+          }
+        }
+      }
+    },
+    "settings_profile_save": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save display name"
+          }
+        }
+      }
+    },
+    "settings_profile_saved": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Display name saved. Your connections get it with your profile."
+          }
+        }
+      }
+    },
+    "settings_profile_key": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault key fingerprint"
+          }
+        }
+      }
+    },
+    "settings_profile_key_note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your connections see this fingerprint for your vault. It changes only when your vault rotates its key."
+          }
+        }
+      }
+    },
+    "settings_profile_error": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not save"
+          }
+        }
+      }
+    },
+    "settings_profile_photo": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profile photo"
+          }
+        }
+      }
+    },
+    "settings_profile_photo_none": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No photo. Connections see your initial."
+          }
+        }
+      }
+    },
+    "settings_profile_photo_shared": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every connection sees this photo."
+          }
+        }
+      }
+    },
+    "settings_profile_photo_preview": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preview: save it to share it with every connection."
+          }
+        }
+      }
+    },
+    "settings_profile_photo_working": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Working…"
+          }
+        }
+      }
+    },
+    "settings_profile_photo_take": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Take a photo"
+          }
+        }
+      }
+    },
+    "settings_profile_photo_retake": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retake photo"
+          }
+        }
+      }
+    },
+    "settings_profile_photo_save": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save photo"
+          }
+        }
+      }
+    },
+    "settings_profile_photo_discard": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        }
+      }
+    },
+    "settings_profile_photo_remove": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove photo"
+          }
+        }
+      }
+    },
+    "settings_profile_photo_remove_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove your photo?"
+          }
+        }
+      }
+    },
+    "settings_profile_photo_remove_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your connections see your initial instead."
+          }
+        }
+      }
+    },
+    "settings_profile_photo_unreadable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That photo could not be used. Take another one."
+          }
+        }
+      }
+    },
+    "settings_profile_photo_saved": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photo saved. Your connections receive it."
+          }
+        }
+      }
+    },
+    "settings_profile_photo_note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Taken with this app's camera, cropped to the circle you chose and made smaller on this phone. It is not saved to your gallery, and no location or camera details are sent."
+          }
+        }
+      }
+    },
+    "settings_photo_capture_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Take your photo"
+          }
+        }
+      }
+    },
+    "settings_photo_capture_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Centre your face in the square. Every connection sees this photo."
+          }
+        }
+      }
+    },
+    "settings_photo_capture_shutter": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Take photo"
+          }
+        }
+      }
+    },
+    "settings_photo_capture_to_back": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use the rear camera"
+          }
+        }
+      }
+    },
+    "settings_photo_capture_to_front": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use the front camera"
+          }
+        }
+      }
+    },
+    "settings_photo_capture_review_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use this photo?"
+          }
+        }
+      }
+    },
+    "settings_photo_capture_review_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pinch or use the zoom controls, and drag, until your face fills the circle. Your connections see what is inside it."
+          }
+        }
+      }
+    },
+    "settings_photo_capture_use": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use photo"
+          }
+        }
+      }
+    },
+    "settings_photo_capture_retake": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retake"
+          }
+        }
+      }
+    },
+    "settings_photo_capture_allow": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow camera"
+          }
+        }
+      }
+    },
+    "settings_photo_capture_open_settings": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open settings"
+          }
+        }
+      }
+    },
+    "settings_photo_capture_permission_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Camera needed"
+          }
+        }
+      }
+    },
+    "settings_photo_capture_permission_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your profile photo is taken with the camera, in this app. Allow the camera to take it."
+          }
+        }
+      }
+    },
+    "ios_settings_photo_capture_permission_blocked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The camera is turned off for VettID. To take your profile photo, open the app's settings and turn on Camera."
+          }
+        }
+      }
+    },
+    "settings_photo_capture_no_camera_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No camera"
+          }
+        }
+      }
+    },
+    "settings_photo_capture_no_camera_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This phone has no camera VettID can use, so a profile photo cannot be taken. Connections see your initial."
+          }
+        }
+      }
+    },
+    "settings_photo_capture_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The photo could not be taken. Try again."
+          }
+        }
+      }
+    },
+    "settings_photo_crop_frame": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your photo in the round frame"
+          }
+        }
+      }
+    },
+    "settings_photo_crop_zoom_state": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zoomed %@ times"
+          }
+        }
+      }
+    },
+    "settings_photo_crop_zoom": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zoom"
+          }
+        }
+      }
+    },
+    "settings_photo_crop_zoom_in": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zoom in"
+          }
+        }
+      }
+    },
+    "settings_photo_crop_zoom_out": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zoom out"
+          }
+        }
+      }
+    },
+    "settings_photo_crop_reset": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset"
+          }
+        }
+      }
+    },
+    "settings_photo_crop_show_left": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show more to the left"
+          }
+        }
+      }
+    },
+    "settings_photo_crop_show_right": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show more to the right"
+          }
+        }
+      }
+    },
+    "settings_photo_crop_show_up": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show more above"
+          }
+        }
+      }
+    },
+    "settings_photo_crop_show_down": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show more below"
+          }
+        }
+      }
+    },
+    "settings_photo_capture_note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The photo stays in this app until you use it: it is never saved to your gallery."
+          }
+        }
+      }
+    },
+    "settings_section_privacy": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privacy"
+          }
+        }
+      }
+    },
+    "settings_privacy_profile": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shared profile"
+          }
+        }
+      }
+    },
+    "settings_privacy_profile_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your account name, display name and the items you tag @profile"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

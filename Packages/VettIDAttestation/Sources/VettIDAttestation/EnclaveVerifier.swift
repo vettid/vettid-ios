@@ -20,7 +20,9 @@ public struct EnclaveVerifier: Sendable {
     /// §11.2 step 3.
     public static let maxAttestationAge: TimeInterval = 26 * 3600
     public static let attestationSkew: TimeInterval = 5 * 60
-    static let maxDescriptorLife: TimeInterval = 24 * 3600 + 1
+    /// §11.2 "Lifetime and clock allowance" (VAULT-MESSAGING 0.53.0): not_after at most 24 h + 5 min after the attestation's
+    /// timestamp.
+    static let maxDescriptorLife: TimeInterval = 24 * 3600 + 5 * 60
 
     private let nitro: NitroVerifier
 
@@ -28,7 +30,7 @@ public struct EnclaveVerifier: Sendable {
 
     /// Checks an ETK descriptor and its attestation document: the chain to the pinned Nitro root,
     /// user_data = SHA-256("vettid/vms/2/etk" || descriptor), an attestation less than 26 h old, no debug PCRs,
-    /// release = PCR0, not_after in the future and at most 24 h after the attestation, and PCR0–2 equal to a manifest
+    /// release = PCR0, not_after in the future and at most 24 h + 5 min after the attestation, and PCR0–2 equal to a manifest
     /// entry (an `active` one to enroll).
     public func verifyEnclave(
         descriptor: [UInt8],

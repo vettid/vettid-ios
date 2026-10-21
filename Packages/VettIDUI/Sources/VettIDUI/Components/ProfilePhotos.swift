@@ -5,7 +5,7 @@ import UIKit
 ///
 /// ``decode(_:)`` reads a photo for display (the member's own, or a peer's self-asserted one) defensively: over the
 /// size limit, not a JPEG or PNG, undecodable, or with absurd dimensions, it is nil and the initial tile is shown.
-/// Encoding the member's own photo comes with the profile photo screens.
+/// Encoding the member's own photo is VettIDMedia's `ProfilePhotoEncoder`.
 ///
 /// Mirrors vettid-android `core/ui/…/components/ProfilePhotos.kt` (decoding).
 public enum ProfilePhotos {
@@ -36,6 +36,12 @@ public enum ProfilePhotos {
         ]
         guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
         return UIImage(cgImage: image)
+    }
+
+    /// ``decode(_:)`` off the main actor (vettid-android `rememberProfilePhoto` decodes once per distinct photo).
+    public static func decoded(_ base64: String?) async -> UIImage? {
+        guard let base64 else { return nil }
+        return await Task.detached { decode(base64) }.value
     }
 
     static func sane(_ side: Int) -> Bool { (1...maxDecodeSide).contains(side) }

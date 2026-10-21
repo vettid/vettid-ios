@@ -28,7 +28,7 @@ import VettIDVault
             .appendingPathComponent("Sources/VettIDShellUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 76)
+        #expect(keys.count == 78)
         let missing = "\u{0}missing"
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)
@@ -51,6 +51,8 @@ import VettIDVault
         #expect(ShellStrings.accountEmailNote == "Only you see this address.")
         #expect(ShellStrings.renewPromptAction == "New phone secret")
         #expect(ShellStrings.accountChangeNameBody == "Only here, in the app, with your PIN and password")
+        #expect(ShellStrings.accountSharedProfile == "Shared profile")
+        #expect(ShellStrings.accountSharedProfileBody == "Display name and what your connections see")
         #expect(ShellStrings.alarmBanner == "Your credential was presented by another device")
         #expect(ShellStrings.rotateOffer == "You can now rotate your vault's keys: every older copy of your credential stops working.")
         #expect(ShellStrings.rotateOfferAction == "Rotate now")

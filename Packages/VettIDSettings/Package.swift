@@ -2,7 +2,8 @@
 import PackageDescription
 
 // Settings (vettid-android `feature/settings` and `feature/credential`): the Settings screen, Vault status, Attestation,
-// the name change, the PIN change, the Credential screen and Help (IOS-PLAN §8 I1.8).
+// the name change, the PIN change, the Credential screen and Help (IOS-PLAN §8 I1.8); the shared profile and the
+// camera-only profile photo (I2.5).
 let package = Package(
     name: "VettIDSettings",
     defaultLocalization: "en",
@@ -14,6 +15,8 @@ let package = Package(
         .package(path: "../VettIDData"),
         .package(path: "../VettIDKeys"),
         .package(path: "../VettIDUI"),
+        // The profile photo (VAULT-MESSAGING §10.8): the shot's pixels and the JPEG of at most 65,536 bytes.
+        .package(path: "../VettIDMedia"),
         // The PIN keypad's entry of onboarding (IOS-PLAN §6.5) and its password rule line.
         .package(path: "../VettIDOnboarding"),
         // TEST ONLY: VaultOpError for the vault's weak_password reason in the tests.
@@ -26,6 +29,7 @@ let package = Package(
             dependencies: [
                 .product(name: "VettIDData", package: "VettIDData"),
                 .product(name: "VettIDKeys", package: "VettIDKeys"),
+                .product(name: "VettIDMedia", package: "VettIDMedia"),
             ]
         ),
         // The screens (iOS only: VettIDUI is UIKit-based; on macOS this target compiles empty).
@@ -35,6 +39,7 @@ let package = Package(
                 "VettIDSettings",
                 .product(name: "VettIDData", package: "VettIDData"),
                 .product(name: "VettIDKeys", package: "VettIDKeys"),
+                .product(name: "VettIDMedia", package: "VettIDMedia"),
                 .product(name: "VettIDOnboarding", package: "VettIDOnboarding"),
                 .product(name: "VettIDUI", package: "VettIDUI", condition: .when(platforms: [.iOS])),
             ],
@@ -47,6 +52,7 @@ let package = Package(
                 .product(name: "VettIDData", package: "VettIDData"),
                 .product(name: "VettIDDataTesting", package: "VettIDData"),
                 .product(name: "VettIDKeys", package: "VettIDKeys"),
+                .product(name: "VettIDMedia", package: "VettIDMedia"),
                 .product(name: "VettIDVault", package: "VettIDVault"),
             ]
         ),
@@ -56,6 +62,7 @@ let package = Package(
                 "VettIDSettings",
                 "VettIDSettingsUI",
                 .product(name: "VettIDData", package: "VettIDData"),
+                .product(name: "VettIDMedia", package: "VettIDMedia"),
                 .product(name: "VettIDUI", package: "VettIDUI", condition: .when(platforms: [.iOS])),
             ]
         ),

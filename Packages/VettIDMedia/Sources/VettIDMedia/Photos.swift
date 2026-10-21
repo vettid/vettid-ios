@@ -24,12 +24,27 @@ public struct PhotoError: Error, Equatable, Sendable, CustomStringConvertible {
 }
 
 /// Encoded bytes of a photo in memory that can be zeroed: ``wipe()`` zeroes them in place. What is handed out is a copy
-/// (``copy()``), which a wipe cannot reach. Never printed or mirrored.
+/// (``copy()``), which a wipe cannot reach. Never printed or reflected. [mirrored]: a front-camera shot, to be mirrored
+/// left to right as it was previewed wherever it is decoded (vettid-android `PhotoCamera.take`: "front shots mirrored,
+/// as previewed").
 public final class PhotoBytes: @unchecked Sendable, CustomStringConvertible, CustomReflectable {
     private let lock = NSLock()
     private var storage: [UInt8]
+    public let mirrored: Bool
 
-    public init(_ bytes: [UInt8]) { storage = bytes }
+    public init(_ bytes: [UInt8], mirrored: Bool = false) {
+        storage = bytes
+        self.mirrored = mirrored
+    }
+
+    /// A holder with storage of its own, then [source] zeroed in place: a ``wipe()`` reaches every byte the app kept.
+    public init(taking source: inout [UInt8], mirrored: Bool = false) {
+        storage = source.withUnsafeBufferPointer { Array($0) }
+        self.mirrored = mirrored
+        source.withUnsafeMutableBufferPointer { p in
+            for i in p.indices { p[i] = 0 }
+        }
+    }
 
     public var count: Int { lock.withLock { storage.count } }
 
@@ -95,14 +110,15 @@ public enum Photos {
     /// 85, lowered in steps to fit `attachment_max_bytes`), and a thumbnail of long edge 320 under 32 KiB. No EXIF, XMP,
     /// GPS or camera data survives: the pixels are drawn into a plain sRGB bitmap (no gain map, no other profile) and the
     /// encoder's own segments are removed (``JpegSegments/stripped(_:)``).
-    public static func prepare(_ source: [UInt8]) throws -> PreparedPhoto {
+    /// [mirrored]: a front-camera shot, mirrored left to right (as previewed) before it is re-encoded.
+    public static func prepare(_ source: [UInt8], mirrored: Bool = false) throws -> PreparedPhoto {
         if let declared = ImageHeader.dimensions(source),
            !declared.within(maxSide: PhotoLimits.sourceMaxSide, maxPixels: PhotoLimits.sourceMaxPixels) {
             throw PhotoError(.tooLarge)
         }
         let bounds = Bounds(maxSide: PhotoLimits.sourceMaxSide, maxPixels: PhotoLimits.sourceMaxPixels)
         let image = try decode(source, bounds, targetLongEdge: PhotoLimits.sendLongEdge, expected: nil, failure: .unsupported)
-        return try prepare(image)
+        return try prepare(mirrored ? try mirror(image) : image)
     }
 
     /// Prepares a picture already decoded (upright).
@@ -143,7 +159,22 @@ public enum Photos {
         )
     }
 
-    /// [image] as JPEG at [quality] (1–100), pixels only: the encoder's metadata segments are removed.
+    /// [image] mirrored left to right, in a plain 8-bit sRGB bitmap with no alpha.
+    public static func mirror(_ image: CGImage) throws -> CGImage {
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let ctx = CGContext(
+                  data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: 0, space: space,
+                  bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+              ) else { throw PhotoError(.unreadable) }
+        ctx.translateBy(x: CGFloat(image.width), y: 0)
+        ctx.scaleBy(x: -1, y: 1)
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        guard let out = ctx.makeImage() else { throw PhotoError(.unreadable) }
+        return out
+    }
+
+    /// [image] as JPEG at [quality] (1–100), pixels only: the encoder's metadata segments are removed. The encoder's own
+    /// output buffer is released, not zeroed; the bytes returned are the caller's.
     public static func jpeg(_ image: CGImage, quality: Int) throws -> [UInt8] {
         let out = CFDataCreateMutable(nil, 0)!
         guard let dest = CGImageDestinationCreateWithData(out, ImageType.jpeg.uti as CFString, 1, nil) else {
@@ -157,6 +188,13 @@ public enum Photos {
     }
 
     // MARK: - Internals
+
+    /// Zeroes [b] in place.
+    static func zero(_ b: inout [UInt8]) {
+        b.withUnsafeMutableBufferPointer { p in
+            for i in p.indices { p[i] = 0 }
+        }
+    }
 
     struct Bounds {
         let maxSide: Int
@@ -215,8 +253,9 @@ public enum Photos {
         for _ in 0..<shrinks {
             var q = start
             while q >= floor {
-                let out = try jpeg(current, quality: q)
+                var out = try jpeg(current, quality: q)
                 if out.count <= limit { return (out, current) }
+                zero(&out) // a rejected attempt: the app's own copy zeroed
                 q -= PhotoLimits.qualityStep
             }
             let edge = max(current.width, current.height)

@@ -130,16 +130,20 @@ enum PhotoImages {
         await Task.detached { (try? Photos.decodeReceived(bytes, targetLongEdge: edge)).map { UIImage(cgImage: $0) } }.value
     }
 
-    /// The member's own shot, for "Retake" or "Use photo": decoded with its orientation, to the screen's size.
-    static func shot(_ bytes: [UInt8], edge: Int) async -> UIImage? {
+    /// The member's own shot, for "Retake" or "Use photo": decoded with its orientation, to the screen's size, and a front
+    /// shot mirrored as it was previewed (``PhotoBytes/mirrored``), as it is then prepared and sent.
+    static func shot(_ held: PhotoBytes, edge: Int) async -> UIImage? {
         await Task.detached {
             let options = [kCGImageSourceShouldCache: false] as CFDictionary
-            guard let src = CGImageSourceCreateWithData(Data(bytes) as CFData, options) else { return nil }
             let thumb = [
                 kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
                 kCGImageSourceThumbnailMaxPixelSize: edge,
             ] as CFDictionary
-            return CGImageSourceCreateThumbnailAtIndex(src, 0, thumb).map { UIImage(cgImage: $0) }
+            let image = held.withBytes { bytes in
+                CGImageSourceCreateWithData(Data(bytes) as CFData, options).flatMap { CGImageSourceCreateThumbnailAtIndex($0, 0, thumb) }
+            }
+            guard let image else { return nil }
+            return UIImage(cgImage: held.mirrored ? ((try? Photos.mirror(image)) ?? image) : image)
         }.value
     }
 }
