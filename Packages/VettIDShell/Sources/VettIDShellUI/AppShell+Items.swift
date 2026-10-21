@@ -43,13 +43,13 @@ extension AppShell {
     }
 
     /// The tags' colours (owner decision 2026-10-09): stored for every tag that has none, never while the daily check is
-    /// due or the vault held (§3.6).
+    /// due, the vault held, or locked after ten failed checks (§3.6, as vettid-android's keeper and the release update).
     func startTagColors() {
         guard tagColors == nil, let sharing else { return }
         let checks = ownerChecks
         tagColors = TagColorsKeeper(
             sharing: sharing,
-            gated: { checks.ownerCheck?.gated(Date()) ?? false },
+            gated: { checks.lockedByOwnerCheck || checks.ownerCheck?.gated(Date()) == true },
             next: { tags in TagColors.next(tags.map { ($0.tag, $0.color) }).map { (tag: $0.0, color: $0.1) } }
         )
     }
