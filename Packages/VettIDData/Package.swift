@@ -20,6 +20,7 @@ let package = Package(
         .package(path: "../VettIDAltChan"),
         .package(path: "../VettIDVault"),
         .package(path: "../VettIDKeys"),
+        .package(path: "../VettIDMedia"),
         // TEST ONLY: the fake HTTP server of VettIDDataTesting's fake vault service.
         .package(path: "../VettIDTesting"),
     ],
@@ -27,7 +28,7 @@ let package = Package(
         .target(
             name: "VettIDData",
             dependencies: [
-                "VettIDCrypto", "VettIDAttestation", "VettIDRelay", "VettIDAltChan", "VettIDVault",
+                "VettIDCrypto", "VettIDAttestation", "VettIDRelay", "VettIDAltChan", "VettIDVault", "VettIDMedia",
                 .product(name: "VettIDKeys", package: "VettIDKeys"),
             ],
             resources: [.process("Resources/Localizable.xcstrings")]
@@ -36,6 +37,7 @@ let package = Package(
             name: "VettIDDataTesting",
             dependencies: [
                 "VettIDData", "VettIDCrypto", "VettIDAttestation", "VettIDRelay", "VettIDAltChan", "VettIDVault", "VettIDTesting",
+                "VettIDMedia",
                 .product(name: "VettIDKeys", package: "VettIDKeys"),
                 .product(name: "VettIDKeysTesting", package: "VettIDKeys"),
             ]
@@ -44,7 +46,7 @@ let package = Package(
             name: "VettIDDataTests",
             dependencies: [
                 "VettIDData", "VettIDDataTesting", "VettIDCrypto", "VettIDAttestation", "VettIDRelay", "VettIDAltChan",
-                "VettIDVault", "VettIDTesting",
+                "VettIDVault", "VettIDTesting", "VettIDMedia",
                 .product(name: "VettIDKeys", package: "VettIDKeys"),
                 // TEST ONLY: the software phone key.
                 .product(name: "VettIDKeysTesting", package: "VettIDKeys"),

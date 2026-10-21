@@ -10,14 +10,17 @@ final class Work: @unchecked Sendable {
 
     init() {}
 
+    /// Starts [body]; returns its task, for work the model cancels by itself (a photo pass the member cancelled).
     @MainActor
-    func launch(_ body: @escaping @MainActor () async -> Void) {
+    @discardableResult
+    func launch(_ body: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
         let id = reserve()
         let task = Task { @MainActor [weak self] in
             await body()
             self?.remove(id)
         }
         store(id, task)
+        return task
     }
 
     /// Cancels everything still running.

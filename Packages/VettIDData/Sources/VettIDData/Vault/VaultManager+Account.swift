@@ -94,6 +94,8 @@ extension VaultManager {
     func onOpened() {
         Task { [weak self] in await self?.refreshAccount() }
         refreshListsQuietly()
+        // §10.5.1 "Compatibility": once after each unlock.
+        Task { [weak self] in await self?.attachments.probe() }
         // A change whose answer was lost is decided as soon as the vault runs (§11.14.9 step 2).
         kickChangeCheck()
         // The proactive release notice (ANDROID-PLAN "Vault update"): the manifest, read after every unlock.

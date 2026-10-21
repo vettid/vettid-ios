@@ -135,5 +135,6 @@ extension VaultManager {
         ownerChecks.clear()
         connections.clear()
         messages.clear()
+        attachments.reset()
     }
 }

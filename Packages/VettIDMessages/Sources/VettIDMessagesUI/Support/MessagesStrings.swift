@@ -1,7 +1,7 @@
 import Foundation
 
 /// The Messages screens' texts: vettid-android `feature/messages` `strings.xml`, word for word, under its string names
-/// (the photo texts come with the photos, IOS-PLAN §8 I2.4). The link question is ANDROID-PLAN §4's "Open link to
+/// (the photo texts in `MessagesStrings+Photos.swift`). The link question is ANDROID-PLAN §4's "Open link to
 /// <host>?"; vettid-android has no string for it yet, so its key and the "Open" button are chosen (not in the spec).
 enum MessagesStrings {
     static var title: String { String(localized: "messages_title", defaultValue: "Messages", bundle: .module) }

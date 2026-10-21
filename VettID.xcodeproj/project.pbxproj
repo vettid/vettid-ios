@@ -75,6 +75,7 @@
 		A8DF3EAE2376C25D4EA3B564 /* VettIDHistory in Frameworks */ = {isa = PBXBuildFile; productRef = 357729FB7655C77D062C45E6 /* VettIDHistory */; };
 		AA35614CE1F4D97BC627B12F /* VettIDApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5C81B56C71C53452A052D2A /* VettIDApp.swift */; };
 		AA5AD3F7057CFA0BB16F4515 /* ShellCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2C4EF17933B13C37D62C1ED /* ShellCatalog.swift */; };
+		ADA6D6AB984FC3CF825EA65B /* PhotoPermissionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DCA5F5A4698204295F4776B /* PhotoPermissionsTests.swift */; };
 		ADB09CCE535DE329A04819EC /* CanaryManifestFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F2EA67554B107444FF813EF /* CanaryManifestFiles.swift */; };
 		AE2A786C5512D1AB236F0388 /* VettIDKeys in Frameworks */ = {isa = PBXBuildFile; productRef = 00B2C3E2552616DC4B11AB58 /* VettIDKeys */; };
 		AE4084C7B01741C3B0050BA5 /* AppWipeTargets.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDBF1FF3D70DF0D8E826048E /* AppWipeTargets.swift */; };
@@ -170,6 +171,7 @@
 		7E77B96EF99D2D40E1073B67 /* VettIDKeys */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDKeys; path = Packages/VettIDKeys; sourceTree = SOURCE_ROOT; };
 		7F2EA67554B107444FF813EF /* CanaryManifestFiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanaryManifestFiles.swift; sourceTree = "<group>"; };
 		8B98D2160C0CA834233FD82C /* OpenedLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenedLinkTests.swift; sourceTree = "<group>"; };
+		8DCA5F5A4698204295F4776B /* PhotoPermissionsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoPermissionsTests.swift; sourceTree = "<group>"; };
 		8EA490A99EEA3D46D0CCDA5B /* VettIDOnboarding */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDOnboarding; path = Packages/VettIDOnboarding; sourceTree = SOURCE_ROOT; };
 		93AFC9E49CAEEB5D0ABC86DF /* SettingsFlowsCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsFlowsCatalog.swift; sourceTree = "<group>"; };
 		99011BCFDF16002458067C88 /* ShellCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellCatalogTests.swift; sourceTree = "<group>"; };
@@ -312,6 +314,7 @@
 				E07961C2D265B2A813664FD6 /* LockedPhoneDeviceTests.swift */,
 				ABC062C8E50CF3A935F64F87 /* OnboardingCatalogTests.swift */,
 				8B98D2160C0CA834233FD82C /* OpenedLinkTests.swift */,
+				8DCA5F5A4698204295F4776B /* PhotoPermissionsTests.swift */,
 				B0D14B2DBE5EF0620ED73CEC /* SecureEnclaveDeviceTests.swift */,
 				27784FA957AF2CC5794ED472 /* SecureInputTests.swift */,
 				99011BCFDF16002458067C88 /* ShellCatalogTests.swift */,
@@ -666,6 +669,7 @@
 				87ED7C9081CC9E7EE5314F6F /* LockedPhoneDeviceTests.swift in Sources */,
 				A360D45B8318FDF8128CA89C /* OnboardingCatalogTests.swift in Sources */,
 				E31752E547A8824927CA5268 /* OpenedLinkTests.swift in Sources */,
+				ADA6D6AB984FC3CF825EA65B /* PhotoPermissionsTests.swift in Sources */,
 				B80076DE16F2BEDB9AC3AE54 /* SecureEnclaveDeviceTests.swift in Sources */,
 				6C78BEF34322DEFA23FAF443 /* SecureInputTests.swift in Sources */,
 				DBACC8BECCC6A93B92DD9D69 /* ShellCatalogTests.swift in Sources */,
@@ -778,7 +782,8 @@
 				INFOPLIST_FILE = AppDevStack/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "$(VETTID_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera only to scan QR codes, such as your setup code or an invitation. Nothing is recorded.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera to scan QR codes, such as your setup code or an invitation, and to take photos you send. Nothing is recorded, and a photo stays in memory until you send it.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "VettID adds a photo to your library only when you choose Save to phone.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -808,8 +813,9 @@
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "$(VETTID_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera only to scan QR codes, such as your setup code or an invitation. Nothing is recorded.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera to scan QR codes, such as your setup code or an invitation, and to take photos you send. Nothing is recorded, and a photo stays in memory until you send it.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "VettID uses Face ID only to open the app when you turn on the app lock.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "VettID adds a photo to your library only when you choose Save to phone.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -833,7 +839,8 @@
 				INFOPLIST_FILE = AppDevStack/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "$(VETTID_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera only to scan QR codes, such as your setup code or an invitation. Nothing is recorded.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera to scan QR codes, such as your setup code or an invitation, and to take photos you send. Nothing is recorded, and a photo stays in memory until you send it.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "VettID adds a photo to your library only when you choose Save to phone.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -923,7 +930,8 @@
 				INFOPLIST_FILE = AppDevStack/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "$(VETTID_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera only to scan QR codes, such as your setup code or an invitation. Nothing is recorded.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera to scan QR codes, such as your setup code or an invitation, and to take photos you send. Nothing is recorded, and a photo stays in memory until you send it.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "VettID adds a photo to your library only when you choose Save to phone.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1093,7 +1101,8 @@
 				INFOPLIST_FILE = AppDevStack/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "$(VETTID_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera only to scan QR codes, such as your setup code or an invitation. Nothing is recorded.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera to scan QR codes, such as your setup code or an invitation, and to take photos you send. Nothing is recorded, and a photo stays in memory until you send it.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "VettID adds a photo to your library only when you choose Save to phone.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1171,8 +1180,9 @@
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "$(VETTID_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera only to scan QR codes, such as your setup code or an invitation. Nothing is recorded.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera to scan QR codes, such as your setup code or an invitation, and to take photos you send. Nothing is recorded, and a photo stays in memory until you send it.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "VettID uses Face ID only to open the app when you turn on the app lock.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "VettID adds a photo to your library only when you choose Save to phone.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1197,8 +1207,9 @@
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "$(VETTID_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera only to scan QR codes, such as your setup code or an invitation. Nothing is recorded.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera to scan QR codes, such as your setup code or an invitation, and to take photos you send. Nothing is recorded, and a photo stays in memory until you send it.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "VettID uses Face ID only to open the app when you turn on the app lock.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "VettID adds a photo to your library only when you choose Save to phone.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1354,8 +1365,9 @@
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "$(VETTID_DISPLAY_NAME)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera only to scan QR codes, such as your setup code or an invitation. Nothing is recorded.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera to scan QR codes, such as your setup code or an invitation, and to take photos you send. Nothing is recorded, and a photo stays in memory until you send it.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "VettID uses Face ID only to open the app when you turn on the app lock.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "VettID adds a photo to your library only when you choose Save to phone.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (

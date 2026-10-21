@@ -108,6 +108,7 @@ extension VaultManager {
         if lockGuard.takesEvents() {
             connections.onEvent(m)
             messages.onEvent(m)
+            attachments.onEvent(m)
             activityEvent(m)
         }
         switch m.type {

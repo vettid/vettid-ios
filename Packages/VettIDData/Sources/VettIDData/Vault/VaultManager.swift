@@ -117,6 +117,9 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored public let connections: ConnectionsManager
     /// Messages with connections (VAULT-MESSAGING §10.5, §10.5.2), in memory only.
     @ObservationIgnored public let messages: MessagesManager
+    /// Photo attachments (VAULT-MESSAGING §10.5.1): thumbnails, photos and pending uploads in memory only, cleared
+    /// whenever the vault is not open, held or due, and at a wipe.
+    @ObservationIgnored public let attachments: AttachmentManager
     /// The feed, the approvals, History and its export (VAULT-MESSAGING §10.9, §10.12, §10.13; ``VaultManager+Activity``).
     @ObservationIgnored public let feed: FeedManager
     @ObservationIgnored public let approvals: ApprovalsManager
@@ -161,6 +164,9 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored var wipeHooks: [@MainActor () async -> Void] = []
     /// The old vault's device, detached by a wipe and kept until it is forgotten (a retried wipe too).
     @ObservationIgnored var wipeDevice: VaultDevice?
+    /// Every device a session of this manager held, weakly: a session closed (a lock, a deletion) may leave a request on
+    /// its way whose end still saves the device state. A wipe or a forget forgets them all (``forgetEveryDevice()``).
+    @ObservationIgnored let devicesMade = MadeDevices()
     /// A wipe's marker left at the start was looked at (once, after the first-run cleanup).
     @ObservationIgnored private var wipeResumed = false
     /// The tasks that follow the open session's events and refusals.
@@ -216,7 +222,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         ownerChecks = Self.ownerCheckManager(config, ref, rec, scale)
         profiles = Self.profiles(ref, checks: ownerChecks, record: rec)
         connections = Self.connectionsManager(config, ref, rec)
-        messages = Self.messagesManager(ref, connections)
+        (messages, attachments) = Self.messageManagers(ref, connections)
         (feed, approvals, history, historyExport) = Self.activityManagers(config, ref, rec, connections, ownerChecks)
         wiper = config.wipeTargets.map { LocalWipe(targets: $0, hooks: [{ await ref.manager?.runWipeHooks() }]) }
         ref.manager = self
@@ -346,6 +352,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         // Dropped while it was being opened: not kept (its state may be forgotten already).
         guard generation == sessionGeneration else { throw VaultFailure(.other, code: "session_dropped") }
         session = s
+        devicesMade.add(s.device)
         memberVault.set(device: s.device)
         // A phone registered for a recovery holds the key the vault bound at the register (IOS-PLAN §6.2).
         config.attestStartOver?.set(recovering: s.device.recovering)
@@ -426,6 +433,9 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// (``mayHoldVault(_:)``) unless [vaultGone]: the member API, asked again, said explicitly that it has none.
     func dropSession(forget: Bool, vaultGone: Bool = false) async throws {
         if forget, !vaultGone, let refusal = startOverRefusal(session?.device) { throw refusal }
+        // A session still being opened is stopped and waited for, as at a wipe: none makes or writes a device after the
+        // forget.
+        if forget { _ = await cancelOpening() }
         let s = session
         session = nil
         sessionGeneration += 1
@@ -436,6 +446,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             return
         }
         if let d = s?.device { try await d.forget() }
+        await forgetEveryDevice()
         try await Self.forgetKeys(config)
         try phoneSecrets.delete()
         usesPhoneSecret = false

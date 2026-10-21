@@ -198,6 +198,8 @@ public final class FakeVaultService: @unchecked Sendable {
     var holdsDeletionUnlinkValue = false
     var slotQueuedAfterDeletionValue = 0
     var statusGateValue: FakeHTTPServer.Gate?
+    /// Holds the device relay's `register` answers (a session being opened) until released.
+    var registerGateValue: FakeHTTPServer.Gate?
     // The rotation, a new credential and the clone alarm (FakeVaultService+Credential.swift), under ``cond``.
     var alarmValue: FakeAlarm?
     var credentialKeyValue = FakeVaultService.credentialKeyID
@@ -217,6 +219,8 @@ public final class FakeVaultService: @unchecked Sendable {
     var identityRotationsValue = 0
     /// Connections, invitations, requests and blocks, and the emulated peer (FakeVaultService+Connections.swift).
     var social = FakeSocial()
+    /// Photo attachments and the blobs of both mailboxes (FakeVaultService+Attachments.swift).
+    var photos = FakePhotos()
     /// The feed, the audit log and the asks (FakeVaultService+Activity.swift, FakeVaultService+Approvals.swift).
     var activity = FakeActivity()
 

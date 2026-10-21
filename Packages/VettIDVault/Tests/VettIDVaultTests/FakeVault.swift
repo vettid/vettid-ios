@@ -28,6 +28,15 @@ final class FakeRelay: @unchecked Sendable {
     private var queued: [RelayMessage] = []
     private(set) var refused = 0
     private(set) var acked: [String] = []
+    /// Blobs by id (RELAY-PROTOCOL §6.8), with the mailbox each was put to; [refuseBlobs] refuses every put with its code.
+    private(set) var blobs: [String: (mailbox: String, bytes: [UInt8])] = [:]
+    var refuseBlobs: String? { get { lock.withLock { blobRefusal } } set { lock.withLock { blobRefusal = newValue } } }
+    private var blobRefusal: String?
+
+    /// Puts a blob as another depositor would (the vault uploading to this device's mailbox).
+    func putBlob(_ id: String, _ bytes: [UInt8], mailbox: String) { lock.withLock { blobs[id] = (mailbox, bytes) } }
+
+    func blob(_ id: String) -> [UInt8]? { lock.withLock { blobs[id]?.bytes } }
 
     init() {
         server.handle { [weak self] r in self?.answer(r) ?? .empty(500) }
@@ -64,11 +73,31 @@ final class FakeRelay: @unchecked Sendable {
                 let msg = JsonBuilder().string("msg_id", m.msgID).string("sender", m.sender).base64("payload", m.payload).build()
                 return .json(200, #"{"messages":[\#(msg)]}"#)
             }
+            if let b = blobAnswer(r) { return b }
             if path.hasPrefix("/v1/mailbox/"), r.method == "DELETE" {
                 acked.append(String(path.dropFirst("/v1/mailbox/".count)))
                 return .empty(204)
             }
             return .json(404, #"{"code":"not_found","message":""}"#)
+        }
+    }
+
+    /// `PUT /v1/blob/{mailbox}`, `GET` and `DELETE /v1/blob/{id}`; nil for any other path. Callers hold ``lock``.
+    private func blobAnswer(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer? {
+        guard r.path.hasPrefix("/v1/blob/") else { return nil }
+        let rest = String(r.path.dropFirst("/v1/blob/".count))
+        switch r.method {
+        case "PUT":
+            if let code = blobRefusal { return .json(409, #"{"code":"\#(code)","message":"","quota":"mailbox_blobs"}"#) }
+            let id = Ulid.new()
+            blobs[id] = (rest, r.body)
+            return .json(201, #"{"blob_id":"\#(id)","expires_at":"2026-10-28T00:00:00Z"}"#)
+        case "GET":
+            guard let b = blobs[rest] else { return .json(404, #"{"code":"blob_unknown","message":""}"#) }
+            return .bytes(200, b.bytes)
+        default:
+            blobs[rest] = nil
+            return .json(200, "{}")
         }
     }
 

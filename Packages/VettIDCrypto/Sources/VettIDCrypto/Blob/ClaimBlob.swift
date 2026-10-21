@@ -36,10 +36,16 @@ public enum ClaimBlob {
     /// A sealed blob: the bytes to upload, its fresh [key], the [sha256] of [blob] and the content's [size]. The caller
     /// wipes the key and the bytes once the reference has been sent (or abandoned).
     public struct Sealed: Sendable {
-        public let blob: [UInt8]
-        public let key: [UInt8]
+        public private(set) var blob: [UInt8]
+        public private(set) var key: [UInt8]
         public let sha256: [UInt8]
         public let size: Int
+
+        /// Zeroes the blob's bytes and its key in place (best effort: copies taken before are the holder's).
+        public mutating func wipe() {
+            Bytes.wipe(&blob)
+            Bytes.wipe(&key)
+        }
     }
 
     /// Padmé (Nikitin et al., 2019) for [l] ≥ 2: `E = floor(log2 L)`, `S = floor(log2 E) + 1`, `z = E - S`, and L

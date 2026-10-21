@@ -25,7 +25,7 @@ struct MessageList: View {
                     if state.olderAvailable { older }
                     ForEach(Self.days(state.messages), id: \.day) { group in
                         DayDivider(MessageTimes.dayLabel(group.day))
-                        ForEach(group.messages) { m in bubble(m).id(m.messageID) }
+                        ForEach(group.messages) { m in row(m).id(m.messageID) }
                     }
                 }
                 .padding(.vertical, Spacing.s)
@@ -53,6 +53,18 @@ struct MessageList: View {
         OlderRow(loading: state.loadingOlder, onLoad: actions.onLoadOlder)
             .onAppear { if trigger.appeared() { actions.onLoadOlder() } }
             .onDisappear { trigger.disappeared() }
+    }
+
+    /// A photo message as a photo bubble (VAULT-MESSAGING §10.5.1), any other as text.
+    @ViewBuilder private func row(_ m: MessageInfo) -> some View {
+        if m.attachment != nil {
+            PhotoBubble(
+                message: m, name: name, generation: state.photoGeneration, actions: actions.photos,
+                onDelete: { actions.onAskDelete(m) }
+            )
+        } else {
+            bubble(m)
+        }
     }
 
     private func bubble(_ m: MessageInfo) -> some View {

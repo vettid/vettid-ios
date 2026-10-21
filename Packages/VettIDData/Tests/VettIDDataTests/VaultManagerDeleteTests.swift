@@ -187,6 +187,39 @@ import VettIDVault
         try expectWiped()
     }
 
+    /// A request still on its way on the session the deletion closed (the attachments probe, the lists and the account read
+    /// after the unlock) ends after the wipe: nothing of it is written, no file and no key come back. Its last step is
+    /// played here on the device it held, after the wipe.
+    @Test func aRequestOnItsWayWritesNothingAfterTheWipe() async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.lockByItself(reason: "test")
+        #expect(await delete()?.code == VaultManager.codeDeleteUnconfirmed)
+        _ = try await m.unlock(pin: pin)
+        let device = try #require(m.session?.device)
+        #expect(await eventually { m.phase == .deleting })
+        m.onForeground()
+        #expect(await eventually { m.phase == .signedOut })
+        try expectWiped()
+        _ = try? await device.send("message.attachment.get")
+        try expectWiped()
+    }
+
+    /// A forget while a session is still being opened (its new device waiting for the relay's `register`): the opening is
+    /// stopped and waited for first, so that no device state is written after the forget.
+    @Test func aForgetStopsASessionBeingOpened() async throws {
+        defer { phone.close() }
+        service.holdRegisters()
+        let opening = Task { try await m.openSession() }
+        #expect(await eventually { service.heldRegisters == 1 })
+        let forget = Task { try await m.dropSession(forget: true, vaultGone: true) }
+        service.releaseRegisters()
+        try await forget.value
+        _ = try? await opening.value
+        #expect(m.session == nil)
+        #expect(!files.contains(VaultFiles.device), "files left: \(files)")
+    }
+
     /// The deletion's `device.unlinked{vault_deleted}` read while the unlock waits for its answer (its slot answers late):
     /// "being deleted" at once, and the unlock's end never puts the open app over it.
     @Test func anUnlinkDuringAnUnlockWins() async throws {

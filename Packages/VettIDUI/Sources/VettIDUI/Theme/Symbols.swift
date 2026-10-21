@@ -34,6 +34,10 @@ public enum VettIDSymbol: String, CaseIterable, Sendable {
     case contentCopy = "doc.on.doc" // ContentCopy
     case contentPaste = "doc.on.clipboard" // ContentPaste
     case share = "square.and.arrow.up" // Share
+    case download = "square.and.arrow.down" // Download (save a photo to the phone)
+    case image = "photo" // Image (a photo, the composer's photo button)
+    case photoCamera = "camera" // PhotoCamera
+    case cameraSwitch = "arrow.triangle.2.circlepath.camera" // Cameraswitch
     case delete = "trash" // Delete
     case show = "eye" // Visibility
     case hide = "eye.slash" // VisibilityOff

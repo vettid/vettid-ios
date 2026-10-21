@@ -239,8 +239,9 @@ public final class MessagesManager: MessagesRepository {
         }
     }
 
-    /// `sync.event{message.receipt}` (the peer's vault stored or read an outgoing message) and `{message.read}` (another
-    /// device of the owner read an incoming one). (`message.attachment` comes with the photos, IOS-PLAN §8 I2.4.)
+    /// `sync.event{message.receipt}` (the peer's vault stored or read an outgoing message), `{message.read}` (another
+    /// device of the owner read an incoming one) and `{message.attachment}` (each change of a photo's state, §10.5.1; the
+    /// message itself is unchanged).
     private func onSync(_ b: JsonObject) {
         guard let conn = VaultJSON.string(b, "connection_id"), let id = VaultJSON.string(b, "message_id") else { return }
         switch VaultJSON.string(b, "kind") {
@@ -253,10 +254,19 @@ public final class MessagesManager: MessagesRepository {
             if !found { keepReceipt(PendingReceipt(connectionID: conn, messageID: id, read: read)) }
         case "message.read":
             _ = patch(conn, id) { $0.read = true }
+        case "message.attachment":
+            let state = AttachmentState.of(VaultJSON.string(b, "state")), reason = VaultJSON.string(b, "reason")
+            _ = patch(conn, id) { m in
+                m.attachment?.state = state
+                m.attachment?.reason = reason
+            }
         default:
             break
         }
     }
+
+    /// A message this phone sent another way (a photo, ``AttachmentManager``) joins its conversation.
+    public func addSent(_ m: MessageInfo) { upsert(m) }
 
     /// A message joins its conversation: a new one at the end, in the order it reached this phone (the vault's order),
     /// never by `sent_at`; one already there is replaced, keeping the receipts it had.
