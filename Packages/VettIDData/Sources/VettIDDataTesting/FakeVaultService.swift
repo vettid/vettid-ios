@@ -236,6 +236,8 @@ public final class FakeVaultService: @unchecked Sendable {
     var activity = FakeActivity()
     /// The member's own profile object (FakeVaultService+Profile.swift).
     var profile = FakeProfile()
+    /// The member's items (FakeVaultService+Items.swift), under ``cond``.
+    var items = FakeItemStore()
 
     public init() throws {
         etk = try KemPrivateKey.generate()

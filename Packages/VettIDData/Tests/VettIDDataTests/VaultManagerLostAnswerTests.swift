@@ -34,6 +34,9 @@ import VettIDVault
         try await m.createCredential(password: password, backup: true, pin: pin) { _ in }
         try await m.finishSetup()
         #expect(m.phase == .unlocked)
+        // The opening's reads done (the items are read last): with 1 s a try, a request queued behind them on a loaded
+        // machine runs out of tries.
+        #expect(await eventually { m.items.load == .loaded })
     }
 
     /// The vault's clock and the phone's, moved together past the change's `exp`.

@@ -60,10 +60,11 @@ extension VaultManager {
         approvals.onEvent(m)
     }
 
-    /// Entering the hold (§3.6.3): the feed is not shown, and no photo is kept.
+    /// Entering the hold (§3.6.3): the feed is not shown, and no photo, item or revealed value is kept.
     func activityHeld() {
         feed.clear()
         attachments.clear()
+        items.clear()
     }
 
     /// Held or due (§3.6.3), as the owner check's state says: no feed content is kept, nor the member's own names, full
@@ -73,10 +74,18 @@ extension VaultManager {
         checks.onHeldChange = { [weak feed] held in
             if held {
                 feed?.clear()
-                // Held or due: no photo or thumbnail kept (ANDROID-PLAN "Photo attachments").
+                // Held or due: no photo or thumbnail kept (ANDROID-PLAN "Photo attachments"), and no item or revealed value
+                // (chosen; not in the spec: vettid-android keeps the item list while held).
                 ref.manager?.attachments.clear()
+                ref.manager?.items.clear()
             } else if ref.manager?.phase == .unlocked {
                 feed?.catchUp()
+                // Another device's check: the items, dropped at the hold, are read again. This phone's own check reads
+                // them with the other lists, last (`onPassed`, which follows at once), so not here as well.
+                Task { @MainActor in
+                    guard let items = ref.manager?.items, !items.listsReadPending else { return }
+                    items.refreshQuietly()
+                }
             }
             guard let m = ref.manager else { return }
             switch OwnProfileStep.onCheck(wasHeld: !held, held: held, phase: m.phase) {
@@ -98,6 +107,7 @@ extension VaultManager {
     /// A wipe, or a deleted vault: every list, and what the phone keeps of them.
     func clearLists() {
         forgetOwnProfile()
+        items.clear()
         connections.clear()
         messages.clear()
         attachments.reset()

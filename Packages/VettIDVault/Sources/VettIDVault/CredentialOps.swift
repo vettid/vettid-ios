@@ -108,7 +108,8 @@ struct CredentialOps: Sendable {
             try await gate(Self.carriesPin(fields))
             try noSecretSent(since, type)
             let utk = try await takeUTK()
-            return try await sealedAt(type, utk: utk, fields: fields, CredOpOptions(withBlob: false, outerRaw: outer))
+            let a = try await sealedAt(type, utk: utk, fields: fields, CredOpOptions(withBlob: false, outerRaw: outer))
+            return (a.body, a.ts)
         }
     }
 
@@ -116,6 +117,24 @@ struct CredentialOps: Sendable {
     /// them (and [options]' outer members); on `stale_credential` the latest blob is fetched once and the operation sent
     /// again with a fresh UTK.
     func credOp(_ type: String, _ fields: [SealedField], _ options: CredOpOptions = CredOpOptions()) async throws -> [UInt8] {
+        try await credOpAnswer(type, fields, options).body
+    }
+
+    /// ``credOp(_:_:_:)`` whose answer carries a value sealed to a one-time reply key (§3.5.4): a fresh key per attempt,
+    /// its public key sent as the payload's `reply_key`, and the answer's [member] (standard base64) opened with it for
+    /// the request's inner id. Returns the body and the opened plaintext, which the caller wipes. Mirrors vettid-android
+    /// `CredentialOps.credOp` with `reply = true` and `open`.
+    func credOpOpening(
+        _ type: String, _ fields: [SealedField], member: String, _ options: CredOpOptions = CredOpOptions()
+    ) async throws -> (body: [UInt8], opened: [UInt8]) {
+        var o = options
+        o.replyMember = member
+        let a = try await credOpAnswer(type, fields, o)
+        guard let opened = a.opened else { throw VaultStateError(message: "\(type) without \(member)") }
+        return (a.body, opened)
+    }
+
+    private func credOpAnswer(_ type: String, _ fields: [SealedField], _ options: CredOpOptions) async throws -> Answered {
         let since = device.secretsSent
         return try await device.credentialLock.withLock {
             // Nothing is taken from the pool for an operation that cannot be sent.
@@ -125,13 +144,13 @@ struct CredentialOps: Sendable {
             try await gate(Self.carriesPin(fields))
             try noSecretSent(since, type)
             do {
-                return try await sealed(type, utk: try await takeUTK(), fields: fields, options)
+                return try await sealedAt(type, utk: try await takeUTK(), fields: fields, options)
             } catch let e as VaultOpError where e.code == Self.codeStaleCredential {
                 try await fetch()
                 // Never resent with the typed secrets while a change may have moved them (§11.14.9 step 4).
                 try await gate(Self.carriesPin(fields))
                 try noSecretSent(since, type)
-                return try await sealed(type, utk: try await takeUTK(), fields: fields, options)
+                return try await sealedAt(type, utk: try await takeUTK(), fields: fields, options)
             }
         }
     }
@@ -160,12 +179,26 @@ struct CredentialOps: Sendable {
         try await sealedAt(type, utk: utk, fields: fields, options, id: id, onOK: onOK).body
     }
 
-    /// ``sealed(_:utk:fields:_:id:onOK:)`` with the `ts` of the vault's answer.
+    /// A sealed operation's answer: its body, the `ts` of the vault's answer, and the value it carries sealed to the
+    /// request's reply key, opened (``CredOpOptions/replyMember``).
+    struct Answered {
+        let body: [UInt8]
+        let ts: Date
+        var opened: [UInt8]?
+    }
+
+    /// ``sealed(_:utk:fields:_:id:onOK:)`` with the `ts` of the vault's answer, and with [options]' reply key the value
+    /// sealed to it, opened.
     private func sealedAt(
         _ type: String, utk: UtkRecord, fields: [SealedField], _ options: CredOpOptions, id: String? = nil,
         onOK: (@Sendable () async -> Void)? = nil
-    ) async throws -> (body: [UInt8], ts: Date) {
+    ) async throws -> Answered {
         let id = id ?? device.newRequestID()
+        // A fresh one-time reply key for this attempt (§3.5.4), destroyed once its value is opened or the request ended.
+        let reply = options.replyMember == nil ? nil : try KemPrivateKey.generate()
+        defer { reply?.destroy() }
+        var fields = fields
+        if let reply { fields.append(.string("reply_key", Base64s.encodeStd(reply.publicKey.bytes))) }
         let body = try build(type, utk: utk, fields: fields, id: id, options)
         // Every credential request carries an `exp` and stays unsettled until its answer or its `exp` has passed by more
         // than a minute (VAULT-MESSAGING 0.46.0 §11.14.9 step 1).
@@ -184,7 +217,14 @@ struct CredentialOps: Sendable {
         // Its own `ok` decides before anything else is done with the answer (a blob that cannot be kept after it, or an
         // acknowledgement refused, does not undo it).
         if r.inner.status == Inner.statusOK, let onOK { await onOK() }
-        return (try await answered(type, r), r.ts)
+        var a = Answered(body: try await answered(type, r), ts: r.ts)
+        if let reply, let member = options.replyMember {
+            guard let vaultID = device.vaultID, let sealed = VaultJSON.string(VaultJSON.object(a.body), member) else {
+                throw VaultStateError(message: "\(type) without \(member)")
+            }
+            a.opened = try CredentialSeal.openValue(reply: reply, vaultID: vaultID, innerID: id, sealed: try Base64s.decodeStd(sealed))
+        }
+        return a
     }
 
     /// The outer body of a sealed operation: [fields] sealed to [utk] for the inner id [id], the blob when [options] say
@@ -200,6 +240,7 @@ struct CredentialOps: Sendable {
             switch f {
             case .string(let k, let v): b.string(k, nfc && Self.passwordKeys.contains(k) ? Passwords.nfc(v) : v)
             case .bool(let k, let v): b.bool(k, v)
+            case .raw(let k, let json): b.raw(k, json)
             }
         }
         var plaintext = b.bytes()
@@ -487,6 +528,9 @@ struct CredOpOptions: Sendable {
     var outerRaw: [(String, String)] = []
     var unanswered = false
     var exp: Date?
+    /// The member of the answer sealed to a one-time reply key (§3.5.4: a critical item's `values_sealed`), which the
+    /// request then carries as `reply_key`.
+    var replyMember: String?
 }
 
 /// A credential operation whose answer did not arrive once its request may have gone out (no answer to the automatic
@@ -497,8 +541,11 @@ public struct RequestUnanswered: Error, Sendable, CustomStringConvertible {
     public var description: String { "\(type): no answer" }
 }
 
-/// One member of a sealed payload (§3.5.4): a string (a password is normalized for a vault of release R) or a bool.
+/// One member of a sealed payload (§3.5.4): a string (a password is normalized for a vault of release R), a bool, or
+/// encoded JSON.
 enum SealedField: Sendable {
     case string(String, String)
     case bool(String, Bool)
+    /// A member whose value is encoded JSON (a critical item's `item`, §10.7).
+    case raw(String, String)
 }

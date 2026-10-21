@@ -40,6 +40,16 @@ extension FakeVaultService {
         set { locked { holdsDeletionUnlinkValue = newValue } }
     }
 
+    /// Sends the `device.unlinked{vault_deleted}` that ``holdsDeletionUnlink`` held back (once the vault deleted itself),
+    /// and holds none from now on.
+    public func deliverDeletionUnlink() {
+        locked {
+            holdsDeletionUnlinkValue = false
+            guard vaultDeletedValue else { return }
+            try? reply("device.unlinked", #"{"reason":"vault_deleted"}"#)
+        }
+    }
+
     /// The member API still lists the vault after it deleted itself (the `deleted` event not yet recorded), until false.
     public var statusLagsDeletion: Bool {
         get { locked { statusLagsDeletionValue } }
