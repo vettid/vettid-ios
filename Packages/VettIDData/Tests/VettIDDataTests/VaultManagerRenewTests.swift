@@ -205,7 +205,7 @@ import VettIDVault
         #expect(try m.phoneSecrets.currentSecret() == service.currentSecret)
     }
 
-    /// VAULT-MESSAGING 0.51.1; IOS-PLAN 0.1.13: a renew that never arrived is being decided before a PIN change, and the
+    /// VAULT-MESSAGING 0.51.1; IOS-PLAN 0.1.13 §6.3: a renew that never arrived is being decided before a PIN change, and the
     /// vault answers its `credential.version` `forbidden` (another phone is the holder): the renew's candidate goes, the
     /// PIN change is refused with "Your vault moved to a new phone" and nothing of it is sent. The candidate shares the
     /// current record's phone key, which stays (only keys no record names are deleted): the vault opens with the same PIN.
@@ -236,9 +236,10 @@ import VettIDVault
     }
 
     /// The renew's own request answered `forbidden` (IOS-PLAN §4.4 (3)): "Your vault moved to a new phone". A refusal, so it
-    /// did not apply (VAULT-MESSAGING 0.47.0 §11.14.9 step 1): nothing is left to decide, no change ends, the current
-    /// record and its phone key stay, and the vault opens with the same PIN.
-    @Test func theRenewsOwnForbiddenIsNotTheHolder() async throws {
+    /// did not apply (VAULT-MESSAGING 0.47.0 §11.14.9 step 1): its record stays a candidate for a retry with nothing left
+    /// to decide (no request stored with it), no change ends, the current record and its phone key stay, and the vault
+    /// opens with the same PIN.
+    @Test func theRenewsOwnForbiddenIsShownAsAnotherHolder() async throws {
         defer { phone.close() }
         try await setUp()
         let current = try #require(try m.phoneSecrets.current())
@@ -246,7 +247,9 @@ import VettIDVault
         service.refuseNext(VaultApi.typeSecretRenew, code: VaultManager.codeNotHolder)
         let f = await renew()
         #expect(f?.kind == .notHolder && f?.code == VaultManager.codeNotHolder, "\(String(describing: f))")
-        #expect(try m.phoneSecrets.current() == current && m.phoneSecrets.records().candidates.allSatisfy { $0.sent == nil })
+        let candidates = try m.phoneSecrets.records().candidates
+        #expect(candidates.count == 1 && candidates.first?.sent == nil, "the record kept for a retry, nothing to decide")
+        #expect(try m.phoneSecrets.current() == current)
         #expect(phone.phoneKeys.count == keys && m.changeCheck == nil && !m.credentialRequired)
         try await m.lock()
         #expect(try await m.unlock(pin: pin) == .success)

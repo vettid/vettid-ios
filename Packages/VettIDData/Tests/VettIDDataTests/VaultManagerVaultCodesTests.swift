@@ -91,20 +91,16 @@ import VettIDDataTesting
         #expect(await eventually { !service.backupSetting })
     }
 
-    /// `forbidden` to the resent setting: `settings.set` is not holder-only, so it is the code (IOS-PLAN §4.4 (2), (3)),
-    /// not "Your vault moved to a new phone"; the root screen does not come back, nothing is kept for another "Try
-    /// again", the setting is unchanged, no change ends and nothing is erased.
+    /// `forbidden` to the resend of a setting (``Resend/setting(key:json:)``, the request "Try again" sends again by
+    /// itself, as ``tryAgainResendsASettingsChange()`` shows): `settings.set` is not holder-only, so it is the code
+    /// (IOS-PLAN §4.4 (2), (3)), not "Your vault moved to a new phone"; the root screen is not raised, nothing is kept for
+    /// another "Try again", the setting is unchanged, no change ends and nothing is erased.
     @Test func forbiddenToTheResentSettingIsTheCode() async throws {
         defer { phone.close() }
         try await setUp()
         let keys = phone.phoneKeys.count
-        service.refuseNext("settings.set", code: "credential_required", body: noHolder)
-        #expect(await vaultFailure { try await m.setBackup(false) }?.kind == .credentialRequired)
-        let resend = try #require(m.credentialRequiredResend)
         service.refuseNext("settings.set", code: "forbidden")
-        m.credentialRequiredTryAgain()
-        #expect(await eventually { service.requestsSeen.filter { $0 == "settings.set" }.count == 2 })
-        service.refuseNext("settings.set", code: "forbidden")
+        let resend = Resend.setting(key: VaultManager.keyBackup, json: "false")
         #expect(await vaultFailure { try await m.resend(resend) }?.kind == .vaultCode("forbidden"))
         #expect(!m.credentialRequired && m.credentialRequiredResend == nil && m.changeCheck == nil)
         #expect(service.backupSetting && phone.phoneKeys.count == keys && m.phase == .unlocked && m.usesPhoneSecret)
