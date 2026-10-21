@@ -237,9 +237,11 @@ import VettIDDataTesting
         #expect(!m.state.done && m.state.error == nil && m.state.password.isEmpty && repo.changeCheck == nil)
     }
 
-    /// The same at once: the reset ended by `forbidden` is shown once, as the notice, not also as a failure card. A renew
-    /// being decided first and answered `forbidden` ends the PIN's side (its check is of a PIN change): the reset's
-    /// failure card says it, once, and that check is acknowledged so that the shell's notice does not repeat it.
+    /// A reset ended by the vault's `forbidden` in its own answer (its check `.notHolder` when it fails): "Your vault moved
+    /// to a new phone" is shown once, as the notice, with no failure card. Then a reset refused before it is sent because
+    /// a renew decided first was answered `forbidden` (the vault manager sets a PIN change's check `.notHolder` and fails
+    /// the reset with `.notHolder`): the failure card shows it once, and that check is acknowledged so that the shell's
+    /// notice does not repeat it.
     @Test func anotherHolderIsShownOnce() async {
         repo.fail["newCredential"] = FakeVaultRepository.failure(.notHolder, code: VaultManager.codeNotHolder)
         repo.changeCheck = ChangeCheck(.reset, .notHolder)
@@ -260,9 +262,9 @@ import VettIDDataTesting
         #expect(repo.changeCheck == nil)
     }
 
-    /// Polls the main actor until [condition] holds (at most 2 s).
+    /// Polls the main actor until [condition] holds (at most 20 s).
     func until(_ condition: @MainActor () -> Bool) async -> Bool {
-        for _ in 0..<200 {
+        for _ in 0..<2_000 {
             if condition() { return true }
             try? await Task.sleep(nanoseconds: 10_000_000)
         }

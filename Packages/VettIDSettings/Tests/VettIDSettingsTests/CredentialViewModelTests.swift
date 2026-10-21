@@ -166,7 +166,7 @@ import VettIDDataTesting
         #expect(m.state.check == .notApplied && m.state.error == nil && m.state.password == "a much better passphrase here")
     }
 
-    /// VAULT-MESSAGING 0.51.1; IOS-PLAN 0.1.13: the vault's `forbidden` ended the change: "Your vault moved to a new
+    /// VAULT-MESSAGING 0.51.1; IOS-PLAN 0.1.13 §6.3: the vault's `forbidden` ended the change: "Your vault moved to a new
     /// phone" once, as the change's notice (no failure card), acknowledged, nothing kept.
     @Test func anotherHolderIsShownOnceAsTheNotice() async {
         repo.phoneSecret = true
