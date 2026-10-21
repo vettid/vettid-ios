@@ -14,7 +14,7 @@ public struct PhotoActions {
     /// One reader per picked picture, read (into memory) and prepared one at a time.
     public var onPicked: @MainActor ([ConversationViewModel.PhotoSource]) -> Void = { _ in }
     /// A shot from the camera, encoded in memory.
-    public var onShot: @MainActor ([UInt8]) -> Void = { _ in }
+    public var onShot: @MainActor (PhotoBytes) -> Void = { _ in }
     public var onCloseCamera: @MainActor () -> Void = {}
     public var onCaption: @MainActor (String) -> Void = { _ in }
     public var onSend: @MainActor () -> Void = {}
@@ -51,7 +51,9 @@ struct PhotoButton: View {
         .accessibilityIdentifier("photo")
         .photosPicker(
             isPresented: $picking, selection: $picked, maxSelectionCount: PhotoDraft.maxPhotos, matching: .images,
-            preferredItemEncoding: .compatible
+            // The picture as the library holds it (HEIC included, which ImageIO reads): no transcoded copy is made for the
+            // app (chosen; not in the spec).
+            preferredItemEncoding: .current
         )
         .onChange(of: picked) { _, items in
             guard !items.isEmpty else { return }
@@ -61,13 +63,16 @@ struct PhotoButton: View {
     }
 }
 
-/// Reading a picked picture into memory: the picker's data, at most ``PhotoLimits/sourceMaxBytes`` (a larger one is a
-/// pick that could not be used), never a file of the app's.
+/// Reading a picked picture into memory: the picker's data, never a file of the app's. One over
+/// ``PhotoLimits/sourceMaxBytes`` is "too large to send". The bound is checked once the data is in memory (chosen; not in
+/// the spec): a bounded read would need a file representation, which iOS hands over as a copy in the app's own temporary
+/// directory, and the plan wants no copy of a picture on disk.
 enum PickedPhotos {
     static func reader(_ item: PhotosPickerItem) -> ConversationViewModel.PhotoSource {
         {
-            guard let data = try? await item.loadTransferable(type: Data.self), data.count <= PhotoLimits.sourceMaxBytes else { return nil }
-            return [UInt8](data)
+            guard let data = try? await item.loadTransferable(type: Data.self) else { return nil }
+            guard data.count <= PhotoLimits.sourceMaxBytes else { throw PhotoError(.tooLarge) }
+            return PhotoBytes([UInt8](data))
         }
     }
 }
@@ -211,8 +216,11 @@ struct PhotoBubble: View {
 
     private func load() async {
         thumb = nil // after a clear the old thumbnail goes first
-        guard let bytes = await actions.thumbnail(message.messageID) else { return }
-        thumb = await PhotoImages.thumbnail(bytes)
+        guard let bytes = await actions.thumbnail(message.messageID), !Task.isCancelled else { return }
+        let image = await PhotoImages.thumbnail(bytes)
+        // A newer load (a clear, a new state) cancelled this one: what it read is not shown.
+        guard !Task.isCancelled else { return }
+        thumb = image
     }
 }
 #endif

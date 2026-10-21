@@ -28,7 +28,7 @@ struct PhotoCaptureOverlay: View {
     @State private var access = CameraAccess.current()
     @State private var lens = CameraLens.back
     @State private var both = false
-    @State private var shot: [UInt8]?
+    @State private var shot: PhotoBytes?
     @State private var review: UIImage?
     @State private var unavailable = false
     @State private var handle = PhotoCameraHandle()
@@ -94,13 +94,14 @@ struct PhotoCaptureOverlay: View {
     private func take() {
         handle.take? { bytes in
             guard let bytes else { return }
-            shot = bytes
-            Task { review = await PhotoImages.shot(bytes, edge: 1_440) }
+            let held = PhotoBytes(bytes)
+            shot = held
+            Task { review = await PhotoImages.shot(held.copy(), edge: 1_440) }
         }
     }
 
     private func discardShot() {
-        if shot != nil { shot?.withUnsafeMutableBufferPointer { p in for i in p.indices { p[i] = 0 } } }
+        shot?.wipe()
         shot = nil
         review = nil
     }

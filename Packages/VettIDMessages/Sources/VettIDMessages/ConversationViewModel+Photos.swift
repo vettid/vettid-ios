@@ -7,8 +7,9 @@ import VettIDMedia
 // cancelled with a discard, and dropped at every clear of the attachment memory. Mirrors the photo part of vettid-android
 // `ConversationViewModel`.
 extension ConversationViewModel {
-    /// A picked picture's reader: its bytes in memory, nil when it cannot be read. Called one at a time.
-    public typealias PhotoSource = @Sendable () async -> [UInt8]?
+    /// A picked picture's reader: its bytes in memory, in a holder they are zeroed in once prepared; nil when it cannot be
+    /// read, ``PhotoError`` with ``PhotoFailure/tooLarge`` for one over the bound. Called one at a time.
+    public typealias PhotoSource = @Sendable () async throws -> PhotoBytes?
 
     public func startCapture() { local.capturing = true }
 
@@ -25,7 +26,7 @@ extension ConversationViewModel {
     }
 
     /// A shot from the app's camera, encoded in memory (never a file); zeroed here once prepared.
-    public func onShot(_ shot: [UInt8]) {
+    public func onShot(_ shot: PhotoBytes) {
         guard let attachments else { return }
         photosCancelled = false
         local.capturing = false
@@ -69,11 +70,18 @@ extension ConversationViewModel {
         }
     }
 
-    /// A message's thumbnail, from memory or fetched (`part: "thumb"`); nil when it cannot be had.
+    /// A message's thumbnail, from memory or fetched (`part: "thumb"`); nil when it cannot be had, or a clear came while
+    /// it was on its way.
     public func thumbnail(_ messageID: String) async -> [UInt8]? {
         guard let attachments else { return nil }
         if let t = attachments.cachedThumbnail(connectionID, messageID: messageID) { return t }
-        return try? await attachments.thumbnail(connectionID, messageID: messageID)
+        let mark = attachments.cleared
+        guard var t = try? await attachments.thumbnail(connectionID, messageID: messageID) else { return nil }
+        guard attachments.cleared == mark else {
+            t.withUnsafeMutableBufferPointer { p in for i in p.indices { p[i] = 0 } }
+            return nil
+        }
+        return t
     }
 
     // MARK: - Internals
@@ -84,9 +92,20 @@ extension ConversationViewModel {
         var failed = 0
         for read in sources {
             if photosCancelled || Task.isCancelled { break }
-            let src = await read()
-            if photosCancelled || Task.isCancelled { break }
-            let (photo, failure) = await prepareOne(src, attachments)
+            let src: PhotoBytes?, readFailure: PhotoProblem?
+            do {
+                (src, readFailure) = (try await read(), nil)
+            } catch let e as PhotoError {
+                (src, readFailure) = (nil, .of(e.failure))
+            } catch {
+                (src, readFailure) = (nil, .unreadable)
+            }
+            if photosCancelled || Task.isCancelled {
+                src?.wipe()
+                break
+            }
+            var (photo, failure): (PreparedPhoto?, PhotoProblem?) = (nil, readFailure)
+            if readFailure == nil { (photo, failure) = await prepareOne(src, attachments) }
             if let photo { ready.append(photo) }
             if let failure {
                 failed += 1
@@ -102,10 +121,11 @@ extension ConversationViewModel {
         local.photoDraft = PhotoDraft(photos: ready, problem: problem, failedPicks: ready.isEmpty || camera ? 0 : failed)
     }
 
-    /// Prepares one picked picture and zeroes its source; the problem when it cannot be used.
-    private func prepareOne(_ src: [UInt8]?, _ attachments: any AttachmentsRepository) async -> (PreparedPhoto?, PhotoProblem?) {
-        guard var src, !src.isEmpty else { return (nil, .unreadable) }
-        defer { src.withUnsafeMutableBufferPointer { p in for i in p.indices { p[i] = 0 } } }
+    /// Prepares one picked picture and zeroes its source in place; the problem when it cannot be used.
+    private func prepareOne(_ src: PhotoBytes?, _ attachments: any AttachmentsRepository) async -> (PreparedPhoto?, PhotoProblem?) {
+        guard let src else { return (nil, .unreadable) }
+        defer { src.wipe() }
+        guard src.count > 0 else { return (nil, .unreadable) }
         do {
             let p = try await attachments.prepare(src)
             photoHold.add(p)

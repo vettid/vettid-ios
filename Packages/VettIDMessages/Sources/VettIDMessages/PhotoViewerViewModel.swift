@@ -83,16 +83,19 @@ public final class PhotoViewerViewModel {
         state.problem = nil
         let name = messages.messages(connectionID).first { $0.messageID == messageID }?.attachment?.name
         let (attachments, c, m) = (attachments, connectionID, messageID)
+        let mark = attachments.cleared
         work.launch { [weak self] in
             do {
                 let p = try await attachments.photo(c, messageID: m)
-                guard let self else { return p.wipe() }
+                // Gone, or a clear came while it was on its way (``onCleared(_:)`` said so): it is not shown.
+                guard let self, attachments.cleared == mark else { return p.wipe() }
                 held.set(p)
                 var s = PhotoViewerState(loading: false)
                 s.photo = p
                 s.name = name
                 state = s
             } catch {
+                guard attachments.cleared == mark else { return }
                 var s = PhotoViewerState(loading: false)
                 s.name = name
                 s.error = failureKind(error)

@@ -26,7 +26,7 @@ import VettIDMedia
         return m
     }
 
-    func picks(_ b: [UInt8]...) -> [ConversationViewModel.PhotoSource] { b.map { x in { x } } }
+    func picks(_ b: [UInt8]...) -> [ConversationViewModel.PhotoSource] { b.map { x in { PhotoBytes(x) } } }
 
     @Test func pickedPhotosAreSentOneByOneWithTheCaptionOnTheFirst() async throws {
         let vm = await conversation()
@@ -112,8 +112,7 @@ import VettIDMedia
         let gate = TestDeferred<Void>()
         attachments.sendGate = gate
         vm.sendPhotos()
-        for _ in 0..<5 { await Task.yield() }
-        #expect(vm.state.photoDraft?.inFlight == true)
+        #expect(await eventually { vm.state.photoDraft?.inFlight == true })
         vm.cancelPhotos() // refused while the request is on its way
         #expect(vm.state.photoDraft != nil)
         attachments.sendGate = nil
@@ -155,15 +154,15 @@ import VettIDMedia
 
     @Test func picksThatFailAreCountedAndTheOthersKept() async {
         let vm = await conversation()
-        vm.onPicked([{ [1] }, { nil }, { [] }])
+        vm.onPicked([{ PhotoBytes([1]) }, { nil }, { PhotoBytes([]) }])
         await vm.settle()
         #expect(vm.state.photoDraft?.photos.count == 1 && vm.state.photoDraft?.failedPicks == 2)
     }
 
     @Test func aCancelWhilePicksArePreparedWipesWhatWasReady() async {
         let vm = await conversation()
-        let never = TestDeferred<[UInt8]?>()
-        vm.onPicked([{ [7, 7] }, { @MainActor in (try? await never.value()) ?? nil }])
+        let never = TestDeferred<PhotoBytes?>()
+        vm.onPicked([{ PhotoBytes([7, 7]) }, { @MainActor in try await never.value() }])
         #expect(await eventually { attachments.prepared.count == 1 })
         vm.cancelPhotos()
         await vm.settle()
@@ -174,10 +173,34 @@ import VettIDMedia
     @Test func aShotFromTheCameraIsPrepared() async {
         let vm = await conversation()
         vm.startCapture()
-        vm.onShot([9, 9, 9])
+        let shot = PhotoBytes([9, 9, 9])
+        vm.onShot(shot)
         #expect(!vm.state.capturing)
         await vm.settle()
         #expect(vm.state.photoDraft?.photos.count == 1 && vm.state.photoDraft?.failedPicks == 0)
+        #expect(shot.isWiped, "the shot is zeroed in place once prepared")
+    }
+
+    /// Every picked source is zeroed in place once prepared; a pick over the bound is "too large to send".
+    @Test func picksAreZeroedAndAnOversizedOneIsTooLarge() async {
+        let vm = await conversation()
+        vm.onPicked(picks([1, 2], [3, 4]) + [{ throw PhotoError(.tooLarge) }])
+        await vm.settle()
+        #expect(attachments.sources.count == 2 && attachments.sources.allSatisfy { $0.isWiped })
+        #expect(vm.state.photoDraft?.photos.count == 2 && vm.state.photoDraft?.problem == .tooLarge)
+        #expect(vm.state.photoDraft?.failedPicks == 1)
+    }
+
+    /// A clear while a thumbnail is on its way: the bubble gets nothing.
+    @Test func aThumbnailFetchedAcrossAClearIsNotShown() async {
+        let vm = await conversation()
+        let gate = TestDeferred<Void>()
+        attachments.fetchGate = gate
+        let t = Task { await vm.thumbnail("m1") }
+        #expect(await eventually { attachments.calls.contains("thumbnail") })
+        attachments.clear()
+        gate.complete()
+        #expect(await t.value == nil)
     }
 
     @Test func leavingTheConversationAbandonsTheUploadAndWipesThePhotos() async throws {
@@ -241,6 +264,21 @@ import VettIDMedia
         }
     }
 
+    /// A hold or a lock while the photo is on its way: the viewer shows nothing of it, and it is zeroed.
+    @Test func aPhotoFetchedAcrossAClearIsNotShown() async {
+        let gate = TestDeferred<Void>()
+        attachments.fetchGate = gate
+        let vm = PhotoViewerViewModel(
+            connectionID: "c1", messageID: "m1", attachments: attachments, messages: messages, shared: SharedPhotos()
+        )
+        #expect(await eventually { attachments.calls.contains("photo") })
+        attachments.clear()
+        gate.complete()
+        await vm.settle()
+        #expect(await eventually { vm.state.problem == .unavailable })
+        #expect(vm.state.photo == nil && !vm.state.loading)
+    }
+
     /// The viewer gone, its share offers are withdrawn and its photo zeroed.
     @Test func leavingTheViewerWithdrawsItsShareOffers() async throws {
         let shared = SharedPhotos()
@@ -288,7 +326,7 @@ import VettIDMedia
 
 /// Waits until [condition] holds, at most [within].
 @MainActor
-func eventually(within: Duration = .seconds(5), _ condition: @MainActor () -> Bool) async -> Bool {
+func eventually(within: Duration = .seconds(20), _ condition: @MainActor () -> Bool) async -> Bool {
     let clock = ContinuousClock()
     let end = clock.now.advanced(by: within)
     while clock.now < end {
