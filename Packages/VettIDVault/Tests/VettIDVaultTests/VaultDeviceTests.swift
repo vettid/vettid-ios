@@ -445,8 +445,9 @@ import VettIDTesting
         let started = Date()
         let status = Task { try await d.op("vault.status", timeout: 60) }
         let req = try v.open(try await relay.nextDeposit().payload)
-        let saved = store.load()
         await d.halt()
+        // Taken once the halt has waited for the send holding the lock (its own save after the deposit is before it).
+        let saved = store.load()
         await #expect(throws: (any Error).self) { _ = try await status.value }
         #expect(Date().timeIntervalSince(started) < 30, "ended by the halt, not by its timeout")
         await #expect(throws: VaultStateError.self) {
