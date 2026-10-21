@@ -438,8 +438,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// (``mayHoldVault(_:)``) unless [vaultGone]: the member API, asked again, said explicitly that it has none.
     func dropSession(forget: Bool, vaultGone: Bool = false) async throws {
         if forget, !vaultGone, let refusal = startOverRefusal(session?.device) { throw refusal }
-        // A session still being opened is stopped and waited for, as at a wipe: none makes or writes a device after the
-        // forget.
+        // A session still being opened is stopped and waited for, as at a wipe: no device made or written after the forget.
         if forget { _ = await cancelOpening() }
         let s = session
         session = nil
@@ -460,6 +459,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         renewSecretSuggested = false
         forgetChangeCheck()
         releaseUpdate.clear()
+        forgetOwnProfile()
         unlockWindow = nil
         try record.update(since: record.generation) {
             $0.setupComplete = false

@@ -270,7 +270,12 @@ public struct SharedProfileRoute: View {
         }
         .onAppear { if model == nil { model = SharedProfileViewModel(profiles: profiles, accounts: accounts) } }
         .onDisappear { machine.reset() }
-        .task(id: ShownPhoto(state)) { photo = await ShownPhoto.decoded(state) }
+        .task(id: ShownPhoto(state)) {
+            let decoded = await ShownPhoto.decoded(state)
+            // A decode that began before the photo changed or was cleared does not show it after.
+            guard !Task.isCancelled else { return }
+            photo = decoded
+        }
     }
 
     private var actions: SharedProfileActions {

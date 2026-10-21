@@ -72,8 +72,16 @@ public final class PendingPhoto: Equatable, Sendable, CustomStringConvertible, C
         return PendingPhoto(PhotoBytes(taking: &raw))
     }
 
-    /// The standard base64 `profile.set{photo}` takes.
-    public func base64() -> String { bytes.withBytes { Data($0).base64EncodedString() } }
+    /// The standard base64 `profile.set{photo}` takes, read in place (no copy of the bytes that the zeroing would miss).
+    public func base64() -> String {
+        bytes.withBytes { b in
+            b.withUnsafeBufferPointer { p in
+                guard let base = p.baseAddress else { return "" }
+                return Data(bytesNoCopy: UnsafeMutableRawPointer(mutating: base), count: p.count, deallocator: .none)
+                    .base64EncodedString()
+            }
+        }
+    }
 
     public func wipe() { bytes.wipe() }
 
@@ -188,6 +196,12 @@ public final class SharedProfileViewModel {
     /// `profile.set{photo}`; it stays as a preview (with "Save photo") if the vault refuses. Nil: it could not be encoded.
     public func photoTaken(_ base64: String?) {
         let photo = base64.flatMap(PendingPhoto.of)
+        // Encoded while the vault closed (a lock, the hold or the due state, IOS-PLAN §4.7): zeroed, never kept or sent.
+        guard accounts.account.shownInShell != nil, profiles.profile != nil else {
+            photo?.wipe()
+            local.photoBusy = false
+            return
+        }
         setPending(photo)
         local.photoBusy = false
         local.photoUnreadable = photo == nil

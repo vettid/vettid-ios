@@ -47,9 +47,10 @@ import VettIDDataTesting
         service.accountSnapshot(Self.snapshot.replacingOccurrences(of: "10:00:00Z", with: "11:00:00Z").replacingOccurrences(of: "Lovelace", with: "King"))
         #expect(await eventually { m.account?.lastName == "King" })
         try await phone.restart()
+        #expect(m.account?.fullName == nil, "nothing of it on the phone")
         try await m.refresh()
-        #expect(m.account?.fullName == nil && m.account?.emailHint == "m***@example.com", "only the hint on the phone")
-        if m.phase == .locked { #expect(try await m.unlock(pin: pin) == .success) }
+        // The vault is still open: the start reads the account from it again.
+        #expect(m.phase == .unlocked)
         #expect(await eventually { m.account?.fullName == "Ada King" })
     }
 

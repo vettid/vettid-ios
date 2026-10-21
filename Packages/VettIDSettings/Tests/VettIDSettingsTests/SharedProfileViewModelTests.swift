@@ -125,6 +125,26 @@ import VettIDMedia
         #expect(m.state.displayName == "" && m.state.pendingPhoto == nil && pending?.bytes.isWiped == true)
     }
 
+    /// The lock lands while the taken photo is being encoded (off the main actor): the photo that arrives after it is
+    /// zeroed, never kept or sent.
+    @Test func aPhotoEncodedAfterTheLockIsNeitherKeptNorSent() async {
+        let m = model()
+        await m.settle()
+        m.photoEncoding()
+        repo.profile = nil
+        #expect(await eventually { !m.state.photoUnreadable && m.state.pendingPhoto == nil })
+        m.photoTaken("/9j/4AAQ")
+        await m.settle()
+        #expect(m.state.pendingPhoto == nil && !m.state.photoBusy && !repo.calls.contains("setPhoto"))
+        // The hold likewise.
+        repo.profile = OwnProfile(version: 3, displayName: "", firstName: "Ada", lastName: "Lovelace", fingerprint: nil)
+        repo.account = AccountInfo(emailHint: "a***@example.com")
+        m.photoEncoding()
+        m.photoTaken("/9j/4AAQ")
+        await m.settle()
+        #expect(m.state.pendingPhoto == nil && !repo.calls.contains("setPhoto"))
+    }
+
     @Test func aDiscardedOrSavedPhotoIsZeroed() async {
         let m = model()
         await m.settle()

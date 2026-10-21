@@ -165,4 +165,14 @@ import VettIDDataTesting
         #expect(try await m.ownerChecks.check(pin: pin, password: password) == .passed)
         #expect(await eventually { m.account?.fullName == "Ada Lovelace" && m.profiles.profile != nil }, "read again after the check")
     }
+
+    /// Forgetting this phone's device (a redeem over a stored one, a deleted vault in a build that cannot wipe) forgets the
+    /// own account and profile with it. Mirrors vettid-android #167's forget path.
+    @Test func forgettingTheDeviceForgetsTheOwnAccount() async throws {
+        defer { phone.close() }
+        try await setUp()
+        #expect(await eventually { m.account.shownInShell != nil && m.profiles.profile != nil })
+        try await m.dropSession(forget: true, vaultGone: true)
+        #expect(m.ownAccount.snapshot == nil && m.account.shownInShell == nil && m.profiles.profile == nil)
+    }
 }
