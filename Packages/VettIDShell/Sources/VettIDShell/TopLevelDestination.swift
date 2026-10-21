@@ -41,8 +41,8 @@ public enum TopLevelDestination: String, CaseIterable, Sendable {
 }
 
 /// The screens pushed over a top-level screen so far (vettid-android's routes of `feature/settings`,
-/// `feature/credential`, `feature/connections`, `feature/messages`, `feature/notifications`, `feature/approvals` and
-/// `feature/history`).
+/// `feature/credential`, `feature/connections`, `feature/messages`, `feature/notifications`, `feature/approvals`,
+/// `feature/history` and `feature/items`).
 public enum ShellRoute: Hashable, Sendable {
     case vaultStatus
     case attestation
@@ -84,6 +84,14 @@ public enum ShellRoute: Hashable, Sendable {
     case approval(String)
     /// One History entry by its `seq` (VAULT-MESSAGING §10.9), from History or a connection's History.
     case historyEntry(Int64)
+    /// One item of the Vault (VAULT-MESSAGING §10.7), from the Vault, a History entry or a feed item.
+    case item(String)
+    /// "Add to vault": the templates and a blank item.
+    case newItem
+    /// Adding ([itemID] nil, from [template] or blank) or editing an item.
+    case itemEdit(itemID: String?, template: String?)
+    /// The tags (VAULT-MESSAGING §10.8), from the Vault's "Manage tags".
+    case tags
     /// A connection's History (ANDROID-PLAN §4 History: the connection preset), from its page.
     case connectionHistory(String)
 }

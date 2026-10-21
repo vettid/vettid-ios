@@ -129,6 +129,21 @@ import VettIDVault
         #expect(m.state.open == .devices)
     }
 
+    /// An `item.revealed` names its item and opens it from the Vault list; an item the list does not hold is gone.
+    @Test func anItemOpensFromTheVaultList() async throws {
+        let items = FakeItems()
+        items.add(FakeItems.item("01ITEM", "Bank login", sensitivity: .secret))
+        try await items.refresh()
+        let m = NotificationsViewModel(feed: feed, connections: connections, approvals: approvals, items: items)
+        await m.settle()
+        #expect(m.state.names.items == ["01ITEM": "Bank login"])
+        m.open(Self.item("i", "item.revealed", ref: "01ITEM"))
+        #expect(m.state.open == .item("01ITEM") && m.state.sheet == nil)
+        m.targetTaken()
+        m.open(Self.item("j", "item.revealed", ref: "01GONE"))
+        #expect(m.state.open == nil && m.state.sheet?.itemID == "j" && m.state.sheetGone)
+    }
+
     @Test func archiveAndUndoRestoreThePreviousStatus() async {
         feed.items = [Self.item("a"), Self.item("r", status: "read")]
         let m = await model()

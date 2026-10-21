@@ -178,8 +178,11 @@ import VettIDOnboarding
         m.openFeedTarget(.sheet)
         #expect(m.path == [
             .notifications(archived: false), .conversation("c1"), .connection("c2"), .connection("c3"), .connection("c4"), .alarm,
-            .credential, .vaultStatus,
+            .credential, .vaultStatus, .item("i"),
         ])
+        // An item once (a History entry's "Open the item" over the item it opened).
+        m.openItem("i")
+        #expect(m.path.last == .item("i") && m.path.count { $0 == .item("i") } == 1)
         m.openFeedTarget(.connections)
         #expect(m.destination == .connections && m.path.isEmpty)
         m.openFeedTarget(.history)

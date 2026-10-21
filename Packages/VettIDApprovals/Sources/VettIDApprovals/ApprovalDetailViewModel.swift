@@ -126,8 +126,8 @@ public final class ApprovalDetailViewModel {
     private var local: ApprovalDetailState
 
     /// [key]: the approval's ``PendingApproval/key``. [connections]: for the requester's name. [items]: the member's items a
-    /// category entry can be answered with (the Vault screens bring them, IOS-PLAN §8 I3.1; until then none, so a category
-    /// entry cannot be granted: chosen; not in the spec).
+    /// category entry can be answered with (from the Vault list; without it none, so a category entry cannot be granted:
+    /// chosen; not in the spec).
     public init(
         key: String, approvals: any ApprovalsRepository, connections: (any ConnectionsRepository)? = nil, items: [AnswerItem] = []
     ) {

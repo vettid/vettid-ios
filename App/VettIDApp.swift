@@ -268,7 +268,7 @@ struct AppRoot: View {
                     releaseUpdates: vault.releaseUpdate, releaseNotes: releaseNotes, releaseInbox: releaseInbox,
                     connections: vault.connections, connectionRequests: vault.connections, inviteInbox: inviteInbox,
                     messages: vault.messages, attachments: vault.attachments, feed: vault.feed, approvals: vault.approvals,
-                    history: vault.history, historyExport: vault.historyExport
+                    history: vault.history, historyExport: vault.historyExport, items: vault.items, sharing: vault.sharing
                 ) { openPortal() }
             }
         }
