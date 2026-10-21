@@ -124,6 +124,9 @@ public final class VaultDevice: @unchecked Sendable {
     /// The changes and renews this device sent (``CredentialOps``), counted under ``credentialLock`` as each goes out:
     /// an operation that began before one went out is refused (§11.14.9 step 2). Read and written under ``mem``.
     private var secretsSentCount = 0
+    /// The `allowed_after` of the last `too_soon` to a UTK resync (``CredentialOps``), on the vault's clock; in memory
+    /// only. Read and written under ``mem``.
+    private var utkResyncAfter: Date?
     let mem = NSLock()
     let own: RelayClient
     var relays: [String: RelayClient] = [:]
@@ -218,6 +221,12 @@ public final class VaultDevice: @unchecked Sendable {
 
     /// A change or a renew goes out now. Callers hold ``credentialLock``.
     func secretSent() { mem.withLock { secretsSentCount += 1 } }
+
+    /// No UTK resync is sent before this instant on the vault's clock (VAULT-MESSAGING 0.52.0 §3.5.4 "Resync").
+    var utkResyncAllowedAfter: Date? {
+        get { mem.withLock { utkResyncAfter } }
+        set { mem.withLock { utkResyncAfter = newValue } }
+    }
 
     /// True once device.paired arrived: the session with the vault is up.
     public var paired: Bool { mem.withLock { isPaired } }

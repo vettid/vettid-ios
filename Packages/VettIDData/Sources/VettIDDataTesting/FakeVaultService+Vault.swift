@@ -160,15 +160,24 @@ extension FakeVaultService {
         // answer, never run again.
         guard try arrives(m) else { return }
         let body = try StrictJson.parseObject(m.body)
+        // VAULT-MESSAGING 0.52.0 §3.5.4 "Using a UTK": a readable `utk_id` naming a UTK of the pool spends it before
+        // anything else is checked, whatever the answer.
+        presented = nil
+        if let id = try? body.string("utk_id"), id.count == 16, id.allSatisfy({ $0.isHexDigit && !$0.isUppercase }),
+           let ltk = utks.removeValue(forKey: id) {
+            presented = (id, ltk)
+        }
         if let r = refuseNextAnswers.removeValue(forKey: m.type) { return try replyError(m, r.error, body: r.body) }
         if let refusal = refusal(m.type) { return try reply(m.type, "{}", re: m.id, error: refusal) }
         // §3.6.3: the owner check's clock before each batch, then its gate on the app.
         try ownerCheckTick()
         if !holdAllows(m.type) { return try reply(m.type, "{}", re: m.id, error: "owner_check_required") }
-        // §3.5.9: a clone alarm holds the credential operations, before the UTK is spent.
+        // §3.5.9: the holder's types to another app, then a clone alarm holding the credential operations (the UTK
+        // already spent, 0.52.0).
+        if notHolderValue, Self.holderTypes.contains(m.type) { return try reply(m.type, "{}", re: m.id, error: "forbidden") }
         if let freeze = alarmRefusal(m.type) { return try reply(m.type, "{}", re: m.id, error: freeze) }
         switch m.type {
-        case "credential.utk.get": try reply(m.type, #"{"utks":\#(try issueUTKs(3))}"#, re: m.id)
+        case "credential.utk.get": try utkGet(m, body)
         case "credential.create": try create(m, body)
         case "credential.get": try reply(m.type, #"{"credential":"\#(currentBlob)","version":\#(credentialVersion),"updated_at":"2026-10-18T00:00:00Z"}"#, re: m.id)
         case "vault.status": try status(m)
@@ -222,13 +231,14 @@ extension FakeVaultService {
         try reply(m.type, #"{"version":\#(settingsVersion)}"#, re: m.id)
     }
 
-    /// credential.create (§3.5.5; release R `sealed{pin, password}`, §11.14.9): `exists` once the vault has one; a weak
-    /// password when the test asked for it (§11.14.7). Callers hold ``cond``.
+    /// credential.create (§3.5.5; release R `sealed{pin, password}`, §11.14.9) in vettid-vault's order: the UTK spent,
+    /// then `exists` once the vault has one; a weak password when the test asked for it (§11.14.7). Callers hold
+    /// ``cond``.
     private func create(_ m: Inner, _ body: JsonObject) throws {
-        if hasCredential { return try reply(m.type, "{}", re: m.id, error: "exists") }
         let utk = try body.string("utk_id")
-        guard let ltk = utks.removeValue(forKey: utk) else { return try reply(m.type, "{}", re: m.id, error: "utk_invalid") }
+        guard let ltk = spend(utk) else { return try reply(m.type, "{}", re: m.id, error: "utk_invalid") }
         let pt = try CredentialSeal.openPayload(ltk: ltk, vaultID: vaultID, utkID: utk, type: m.type, innerID: m.id, sealed: try body.base64("sealed"))
+        if hasCredential { return try reply(m.type, "{}", re: m.id, error: "exists") }
         let p = try StrictJson.parseObject(pt)
         if let reason = weakPasswordReason {
             weakPasswordReason = nil
@@ -241,6 +251,40 @@ extension FakeVaultService {
         // §3.6.1: the first credential.create starts the owner check's clock.
         startCheckClock()
         try reply(m.type, #"{"credential":"\#(currentBlob)","version":1,"key":"k","utks":\#(try issueUTKs(2))}"#, re: m.id)
+    }
+
+    /// The private key of the UTK [id] the request presented, already spent (VAULT-MESSAGING 0.52.0 §3.5.4); nil for
+    /// any other (`utk_invalid`). Callers hold ``cond``.
+    func spend(_ id: String) -> KemPrivateKey? {
+        guard let p = presented, p.id == id else { return nil }
+        presented = nil
+        return p.ltk
+    }
+
+    /// The minimum time between two UTK resyncs of a device, divided by the release's `time_scale` (VAULT-MESSAGING
+    /// 0.52.0 §3.5.4 "Resync", §11.10.8).
+    static let resyncEvery: TimeInterval = 600
+
+    /// `credential.utk.get`: the pool topped up (none while ``vaultPoolFull``); with `"resync": true` the pool dropped
+    /// and 20 issued, once per 10 minutes (scaled), else `too_soon{allowed_after}` and nothing changed. Callers hold
+    /// ``cond``.
+    private func utkGet(_ m: Inner, _ body: JsonObject) throws {
+        guard (try? body.bool("resync")) == true else {
+            return try reply(m.type, #"{"utks":\#(vaultPoolFullValue ? "[]" : try issueUTKs(3))}"#, re: m.id)
+        }
+        let now = vaultNow
+        if let last = lastResync {
+            let after = last.addingTimeInterval(Self.resyncEvery / Double(max(timeScaleValue ?? 1, 1)))
+            if now < after {
+                resyncsValue.append(false)
+                return try reply(m.type, #"{"allowed_after":"\#(Timestamps.formatMillis(after))"}"#, re: m.id, error: "too_soon")
+            }
+        }
+        resyncsValue.append(true)
+        lastResync = now
+        utks = [:]
+        vaultPoolFullValue = false
+        try reply(m.type, #"{"utks":\#(try issueUTKs(20))}"#, re: m.id)
     }
 
     /// [n] fresh UTKs (§3.5.4), their private keys kept. Callers hold ``cond``.

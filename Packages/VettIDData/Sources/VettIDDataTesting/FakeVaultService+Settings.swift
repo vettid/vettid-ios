@@ -133,7 +133,7 @@ extension FakeVaultService {
     /// The sealed payload of a holder operation, its UTK spent (`utk_invalid` answered, and nil, when it is not one).
     func opened(_ m: Inner, _ body: JsonObject) throws -> JsonObject? {
         let utk = try body.string("utk_id")
-        guard let ltk = utks.removeValue(forKey: utk) else {
+        guard let ltk = spend(utk) else {
             try reply(m.type, "{}", re: m.id, error: "utk_invalid")
             return nil
         }

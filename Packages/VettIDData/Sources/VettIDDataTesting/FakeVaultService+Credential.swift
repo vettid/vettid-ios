@@ -11,7 +11,8 @@ import VettIDTesting
 // CEK rotated, the window ended and an open alarm resolved), the holder's `credential.reset` (checked as an owner check,
 // its `bad_pin` and `bad_password` failed checks; then the new password's rules; version 1 of a new credential under a
 // new key, the owner-check clock started afresh), and `credential.alarm.confirm` (`frozen` to `rotation_required`, with
-// `sync.event`). While an alarm is open the credential operations are refused before the UTK is spent (`gate`).
+// `sync.event`). While an alarm is open the credential operations are refused after the UTK is spent (`gate`; VAULT-MESSAGING
+// 0.52.0 §3.5.4).
 extension FakeVaultService {
     /// An open clone alarm (§3.5.9).
     struct FakeAlarm {
@@ -30,6 +31,13 @@ extension FakeVaultService {
     /// The types a frozen credential still accepts; in state `rotation_required` also ``allowedRotation``.
     static let allowedFrozen: Set = ["credential.utk.get", "credential.version", "credential.lock", "credential.alarm.confirm"]
     static let allowedRotation: Set = ["credential.get", "credential.ack", "credential.rotate"]
+    /// vettid-vault's `holderOnly` (§3.5.9), with `credential.reset` (the holder's only): refused `forbidden` to an app
+    /// that is not the holder.
+    static let holderTypes: Set = [
+        "credential.get", "credential.ack", "credential.alarm.confirm", "device.transfer.create", "device.transfer.reject",
+        "vault.delete", typeOwnerCheck, "account.name.set", "pin.change", "vault.secret.renew", "credential.reset",
+        "credential.unlock",
+    ]
     /// The credential feature's types the fake handles (the alarm's gate applies to them).
     static let credentialTypes: Set = [
         "credential.get", "credential.ack", "credential.unlock", "credential.rotate", "credential.password.change", "credential.reset",
