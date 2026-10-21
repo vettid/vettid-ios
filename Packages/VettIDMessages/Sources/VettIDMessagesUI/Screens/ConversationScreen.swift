@@ -4,8 +4,8 @@ import VettIDData
 import VettIDMessages
 import VettIDUI
 
-/// What the conversation screen can ask for. Mirrors vettid-android `ConversationActions` without its photos (IOS-PLAN
-/// §8 I2.4), with the link question's answers.
+/// What the conversation screen can ask for. Mirrors vettid-android `ConversationActions`, with the link question's
+/// answers.
 public struct ConversationActions {
     public var onBack: @MainActor () -> Void = {}
     public var onDraft: @MainActor (String) -> Void = { _ in }
@@ -23,6 +23,8 @@ public struct ConversationActions {
     /// "Open": the route hands the re-checked URL to the system, or an invitation to the accept screen.
     public var onConfirmLink: @MainActor () -> Void = {}
     public var onDismissLink: @MainActor () -> Void = {}
+    /// The photos (VAULT-MESSAGING §10.5.1): the button, the camera, the draft, the bubbles and the viewer.
+    public var photos = PhotoActions()
 
     public init() {}
 }
@@ -30,6 +32,7 @@ public struct ConversationActions {
 /// A conversation (ANDROID-PLAN §4): the connection's name, the bubbles by day with their delivery state, older messages
 /// on reaching the top, a failure notice, and the reply field at the bottom (a sentence instead while the connection is
 /// not active). A long press on a bubble offers the delete, confirmed first; a link asks "Open link to <host>?" first.
+/// Photos: the composer's photo button, the camera and the prepared photos over the conversation, the photo bubbles.
 /// Mirrors vettid-android `ConversationScreen`.
 public struct ConversationScreen: View {
     let state: ConversationState
@@ -81,7 +84,25 @@ public struct ConversationScreen: View {
             confirmLabel: MessagesStrings.openLinkConfirm,
             onConfirm: actions.onConfirmLink
         )
+        .fullScreenCover(isPresented: Binding(get: { photoCover }, set: { if !$0 { closePhotoCover() } })) {
+            if state.capturing {
+                PhotoCaptureOverlay(actions: actions.photos)
+            } else if let draft = state.photoDraft {
+                PhotoDraftOverlay(draft: draft, name: isolated, actions: actions.photos)
+            }
+        }
         .accessibilityIdentifier("conversation_screen")
+    }
+
+    /// The camera, or the prepared photos waiting for Send or Cancel.
+    var photoCover: Bool { state.capturing || state.photoDraft != nil }
+
+    private func closePhotoCover() {
+        if state.capturing {
+            actions.photos.onCloseCamera()
+        } else if state.photoDraft?.inFlight == false {
+            actions.photos.onCancel()
+        }
     }
 }
 
@@ -123,10 +144,11 @@ struct Composer: View {
                 .accessibilityIdentifier("conversation_inactive")
         } else {
             HStack(alignment: .center, spacing: Spacing.s) {
+                if state.photosAvailable { PhotoButton(enabled: state.photoDraft == nil, actions: actions.photos) }
                 field
                 sendButton
             }
-            .padding(.leading, Spacing.gutter)
+            .padding(.leading, state.photosAvailable ? Spacing.xs : Spacing.gutter)
             .padding(.trailing, Spacing.s)
             .padding(.vertical, Spacing.s)
         }

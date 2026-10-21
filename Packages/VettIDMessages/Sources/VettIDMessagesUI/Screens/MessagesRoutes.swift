@@ -18,6 +18,8 @@ public struct MessagesHost {
     /// A confirmed link that is a VettID invitation: the accept screen (the connections feature), where the member
     /// confirms before anything is sent.
     public var onInviteLink: @MainActor (String) -> Void = { _ in }
+    /// The viewer of a message's photo, by connection and message (only the ids travel).
+    public var onOpenPhoto: @MainActor (String, String) -> Void = { _, _ in }
 
     public init() {}
 }
@@ -63,22 +65,30 @@ public struct ConversationRoute: View {
     private let connectionID: String
     private let messages: any MessagesRepository
     private let connections: any ConnectionsRepository
+    private let attachments: (any AttachmentsRepository)?
     private let host: MessagesHost
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     @State private var model: ConversationViewModel?
 
-    public init(_ connectionID: String, messages: any MessagesRepository, connections: any ConnectionsRepository, host: MessagesHost) {
+    /// [attachments]: the photos (VAULT-MESSAGING §10.5.1); nil offers none.
+    public init(
+        _ connectionID: String, messages: any MessagesRepository, connections: any ConnectionsRepository,
+        attachments: (any AttachmentsRepository)? = nil, host: MessagesHost
+    ) {
         self.connectionID = connectionID
         self.messages = messages
         self.connections = connections
+        self.attachments = attachments
         self.host = host
     }
 
     public var body: some View {
         ConversationScreen(state: model?.state ?? ConversationState(connectionID: connectionID), actions: actions)
             .onAppear {
-                let m = model ?? ConversationViewModel(connectionID: connectionID, messages: messages, connections: connections)
+                let m = model ?? ConversationViewModel(
+                    connectionID: connectionID, messages: messages, connections: connections, attachments: attachments
+                )
                 model = m
                 m.setForeground(scenePhase == .active)
                 m.setShown(true)
@@ -103,7 +113,56 @@ public struct ConversationRoute: View {
         a.onLink = { m.askOpen($0) }
         a.onConfirmLink = { LinkOpening.perform(m.confirmLink(), open: { openURL($0) }, invite: host.onInviteLink) }
         a.onDismissLink = { m.dismissLink() }
+        a.photos = Self.photoActions(m, id, host)
         return a
+    }
+
+    private static func photoActions(_ m: ConversationViewModel, _ id: String, _ host: MessagesHost) -> PhotoActions {
+        var p = PhotoActions()
+        p.onTakePhoto = { m.startCapture() }
+        p.onPicked = { m.onPicked($0) }
+        p.onShot = { m.onShot($0) }
+        p.onCloseCamera = { m.stopCapture() }
+        p.onCaption = { m.setPhotoCaption($0) }
+        p.onSend = { m.sendPhotos() }
+        p.onCancel = { m.cancelPhotos() }
+        p.onDismissProblem = { m.dismissPhotoProblem() }
+        p.onOpen = { host.onOpenPhoto(id, $0) }
+        p.thumbnail = { await m.thumbnail($0) }
+        return p
+    }
+}
+
+/// The photo viewer of one message with its view model (only the ids travel; the photo stays in memory). Mirrors
+/// vettid-android `messagesDestination`'s `PhotoViewerRoute`.
+public struct PhotoViewerRoute: View {
+    private let connectionID: String
+    private let messageID: String
+    private let attachments: any AttachmentsRepository
+    private let messages: any MessagesRepository
+    private let host: MessagesHost
+    @State private var model: PhotoViewerViewModel?
+
+    public init(
+        connectionID: String, messageID: String, attachments: any AttachmentsRepository, messages: any MessagesRepository,
+        host: MessagesHost
+    ) {
+        self.connectionID = connectionID
+        self.messageID = messageID
+        self.attachments = attachments
+        self.messages = messages
+        self.host = host
+    }
+
+    public var body: some View {
+        PhotoViewerScreen(state: model?.state ?? PhotoViewerState(), onBack: host.onBack, onRetry: { model?.load() })
+            .onAppear {
+                if model == nil {
+                    model = PhotoViewerViewModel(
+                        connectionID: connectionID, messageID: messageID, attachments: attachments, messages: messages
+                    )
+                }
+            }
     }
 }
 

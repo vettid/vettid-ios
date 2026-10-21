@@ -10,7 +10,7 @@ import VettIDUI
 
 /// The Messages screens: their texts (vettid-android's, word for word), every state rendered, the rows' lines, the bubbles'
 /// states and links, the days, and when the top loads older messages. Mirrors vettid-android's `feature/messages` screen
-/// tests without the photos.
+/// tests (the photos in ``PhotoScreensTests``).
 @MainActor
 @Suite struct MessagesScreensTests {
     static func connection(_ id: String, first: String? = "Ada", state: ConnectionState = .active) -> ConnectionInfo {
@@ -32,7 +32,7 @@ import VettIDUI
             .appendingPathComponent("Sources/VettIDMessagesUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 41)
+        #expect(keys.count == 93)
         let missing = "\u{0}missing"
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)
