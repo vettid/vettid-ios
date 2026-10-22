@@ -17,6 +17,9 @@ public final class FakeSharing: SharingRepository {
     public var change = TagChange(version: 1, items: 0)
     /// When set, a dry run waits for it (a request on its way).
     public var dryRunGate: TestDeferred<Void>?
+    /// When set, a dry run and a fetch wait for it after taking their answer (a request on its way that a cancel does not stop).
+    public var previewHold: TestHold?
+    public var fetchHold: TestHold?
     /// What a dry run answers.
     public var preview = RulePreview(matches: [], total: 0)
     /// The grants and requests `grant.list` answers.
@@ -143,7 +146,9 @@ public final class FakeSharing: SharingRepository {
     public func preview(_ draft: RuleDraft) async throws -> RulePreview {
         try call("preview")
         if let dryRunGate { try await dryRunGate.value() }
-        return preview
+        let answer = preview
+        if let previewHold { await previewHold.wait() }
+        return answer
     }
 
     @discardableResult
@@ -185,6 +190,7 @@ public final class FakeSharing: SharingRepository {
 
     public func fetchShared(_ grantID: String) async throws -> FetchOutcome {
         try call("fetch:\(grantID)")
+        if let fetchHold { await fetchHold.wait() }
         if let why = refusals[grantID] { return .refused(why, retryAfter: retryAfter[grantID]) }
         return contents[grantID].map(FetchOutcome.shared) ?? .refused("unavailable")
     }
