@@ -83,9 +83,9 @@ public enum ItemsStrings {
 
     public static var sensitivitySecretNote: String {
         String(
-            localized: "items_sensitivity_secret_note",
+            localized: "ios_items_sensitivity_secret_note",
             defaultValue: """
-                Hidden until you reveal it with your fingerprint or screen lock; every reveal is recorded
+                Hidden until you reveal it with Face ID, Touch ID or your iPhone passcode; every reveal is recorded
                 """,
             bundle: .module
         )

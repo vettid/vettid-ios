@@ -89,13 +89,13 @@ struct EditFixture {
         #expect(!vm.state.inProfile)
     }
 
-    @Test func aPhoneIsStoredAsTypedWithinItsCharacters() async throws {
-        // Chosen; not in the spec: no phone-number library (see PhoneInput).
-        let vm = f.vm(template: "phone_number")
-        vm.setFieldText(0, "+44 20 7946 0958")
+    @Test func aPhoneIsStoredInE164() async throws {
+        // VAULT-MESSAGING §10.7 "Phone values" (0.55.0): the extension dropped, a possible number in E.164.
+        let vm = ItemEditViewModel(itemID: nil, template: "phone_number", items: f.items, sharing: f.sharing, connections: f.connections, impactDelay: .zero, region: "GB")
+        vm.setFieldText(0, "020 7946 0958 x12")
         vm.save()
         await vm.settle()
-        #expect(try #require(f.stored(vm.state.savedID)).fields.map(\.value) == [.text("+44 20 7946 0958")])
+        #expect(try #require(f.stored(vm.state.savedID)).fields.map(\.value) == [.text("+442079460958")])
     }
 
     @Test func noTemplateSuggestsAReservedTag() {

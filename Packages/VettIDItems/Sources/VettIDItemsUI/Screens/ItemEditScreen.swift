@@ -146,6 +146,7 @@ public struct ItemEditRoute: View {
 /// vettid-android `ItemEditScreen`.
 public struct ItemEditScreen: View {
     @Environment(\.vettIDColors) private var colors
+    @Environment(ScreenshotAllowance.self) private var allowance: ScreenshotAllowance?
     let state: ItemEditState
     let actions: ItemEditActions
 
@@ -187,7 +188,11 @@ public struct ItemEditScreen: View {
                     .accessibilityIdentifier("item_edit_save")
             }
         ) {
-            ItemEditForm(state: state, actions: actions)
+            // What is typed and shown here (values, notes, a one-time code seed) stays out of screenshots and recordings
+            // unless "Allow screenshots" is on, as on the item's screen (IOS-PLAN §6.4, ID10, I3.1).
+            SecureContainer(isSecure: !(allowance?.allowed ?? false)) {
+                ItemEditForm(state: state, actions: actions)
+            }
         }
         .accessibilityIdentifier("item_edit")
         .modifier(ItemEditDialogs(state: state, actions: actions))

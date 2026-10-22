@@ -7,7 +7,8 @@ import VettIDData
 // swiftlint:disable line_length
 
 /// The Vault's texts: every key of vettid-android's `feature/items` `strings.xml` (277 strings) and `strings_sharing.xml`
-/// (158 strings, 24 plurals) resolves to its own text, and the tags screen's words.
+/// (158 strings, 24 plurals) resolves to its own text (0.55.0 adds `items_phone_extension_note` and the plural
+/// `items_share_preview_more`; the iPhone's two secret-item texts are `ios_items_…`), and the tags screen's words.
 @Suite struct ItemsTextTests {
     @Test func everyStringResolves() throws {
         let url = URL(fileURLWithPath: #filePath)
@@ -15,12 +16,14 @@ import VettIDData
             .appendingPathComponent("Sources/VettIDItems/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let strings = try #require(doc["strings"] as? [String: Any])
-        #expect(strings.count == 277 + 158 + 24)
+        let expected = 277 + 158 + 24 + 2
+        #expect(strings.count == expected)
         let missing = "\u{0}missing"
         for key in strings.keys {
             let text = ItemsStrings.bundle.localizedString(forKey: key, value: missing, table: nil)
             #expect(!text.isEmpty && text != key && text != missing, "\(key)")
-            #expect(key.hasPrefix("items_"), "\(key)")
+            let named = key.hasPrefix("items_") || key.hasPrefix("ios_items_")
+            #expect(named, "\(key)")
         }
     }
 
@@ -37,7 +40,12 @@ import VettIDData
 
     @Test func aChangeSaysWhatItSharesAndAsks() {
         let c = TagChange(version: 3, items: 2, shares: [SharePreview(ruleID: "r1", itemID: "i1", mode: .auto), SharePreview(ruleID: "r2", itemID: "i2", mode: .ask)], sharesTotal: 3)
-        #expect(ItemsText.change(c, renaming: true) == "This changes 2 items. 1 item is then shared automatically. You will be asked about sharing 2 items.")
+        #expect(ItemsText.change(c, renaming: true) == "This changes 2 items. 1 item is then shared automatically. You will be asked about sharing 1 item. 1 more may be shared.")
+        // Entries beyond the listed ones are not counted as asked (§10.8, 0.55.0): only said to be possibly shared.
+        let listed = TagChange(version: 3, items: 2, shares: [SharePreview(ruleID: "r2", itemID: "i2", mode: .ask)], sharesTotal: 5)
+        #expect(ItemsText.change(listed, renaming: true) == "This changes 2 items. You will be asked about sharing 1 item. 4 more may be shared.")
+        let all = TagChange(version: 3, items: 1, shares: [SharePreview(ruleID: "r1", itemID: "i1", mode: .auto)], sharesTotal: 1)
+        #expect(ItemsText.change(all, renaming: true) == "This changes 1 item. 1 item is then shared automatically.")
         #expect(ItemsText.change(c, renaming: false) == "This changes 2 items.")
         #expect(ItemsText.change(TagChange(version: 1, items: 1), renaming: true) == "This changes 1 item.")
         // An `auto` share an `ask` rule holds back (§10.8, 0.23.1 `ask_rule_id`) is asked about, not automatic.

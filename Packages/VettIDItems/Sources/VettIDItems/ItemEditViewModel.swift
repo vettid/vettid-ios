@@ -34,6 +34,11 @@ public final class ItemEditViewModel {
     @ObservationIgnored var contentDirty = false
     /// The member confirmed the warning for leaving `critical` (for this save).
     @ObservationIgnored var leaveConfirmed = false
+    /// The draft as the item was loaded (nil for a new item): a field that still equals its stored self is sent exactly as
+    /// stored, and only a field the member edited or created gets its canonical form (VAULT-MESSAGING §10.7).
+    @ObservationIgnored var original: ItemDraft?
+    /// The region of a phone number typed without a `+` (the device's locale region; nil: none).
+    @ObservationIgnored let region: String?
 
     struct ImpactKey: Equatable {
         var tags: [String]
@@ -47,8 +52,9 @@ public final class ItemEditViewModel {
     public init(
         itemID: String?, template: String? = nil, items: any ItemsRepository, sharing: (any SharingRepository)? = nil,
         connections: (any ConnectionsRepository)? = nil, now: @escaping @Sendable () -> Date = { Date() },
-        impactDelay: Duration = .milliseconds(400)
+        impactDelay: Duration = .milliseconds(400), region: String? = PhoneInput.deviceRegion
     ) {
+        self.region = region
         self.items = items
         self.sharing = sharing
         self.connections = connections
@@ -180,7 +186,9 @@ public final class ItemEditViewModel {
         state.loading = false
         state.version = d.version
         state.prompt = nil
-        setDraft(ItemTemplates.withHints(ItemDraft.of(d)), dirty: false)
+        let loaded = ItemTemplates.withHints(ItemDraft.of(d))
+        original = loaded
+        setDraft(loaded, dirty: false)
     }
 
     func setDraft(_ d: ItemDraft, dirty: Bool = true) {
@@ -194,12 +202,19 @@ public final class ItemEditViewModel {
         impact()
     }
 
-    /// The checks of the draft as it would be saved: under the template's name when the name is left empty, and with the
-    /// size limit of the protection it will have (12 KiB for critical, §10.7).
+    /// The checks of the draft as it would be saved: under the template's name when the name is left empty, in the canonical
+    /// form of every field the member edited (§10.7), and with the size limit of the protection it will have (12 KiB for
+    /// critical, §10.7).
     func checkOf(_ d: ItemDraft, _ s: ItemEditState) -> DraftCheck {
-        var named = named(d, s)
-        named.sensitivity = s.protectionTo ?? d.sensitivity
-        return ItemChecks.check(named)
+        var checked = saved(d, s)
+        checked.sensitivity = s.protectionTo ?? d.sensitivity
+        return ItemChecks.check(checked)
+    }
+
+    /// The draft as `item.put` sends it: ``named(_:_:)``, then the canonical forms of the fields the member edited or
+    /// created (``CanonicalForms/draft(_:original:region:)``); the others exactly as stored.
+    func saved(_ d: ItemDraft, _ s: ItemEditState) -> ItemDraft {
+        CanonicalForms.draft(named(d, s), original: original, region: region)
     }
 
     /// The draft under the template's name when the member left the name empty.
@@ -208,17 +223,6 @@ public final class ItemEditViewModel {
         var n = d
         n.name = hint
         return n
-    }
-
-    /// Phone values as saved (``PhoneInput/stored(_:)``).
-    func phonesStored(_ d: ItemDraft) -> ItemDraft {
-        var out = d
-        out.fields = d.fields.map { f in
-            var c = f
-            if f.kind == FieldKinds.phone, !f.text.trimmingCharacters(in: .whitespaces).isEmpty { c.text = PhoneInput.stored(f.text) }
-            return c
-        }
-        return out
     }
 
     func change(_ f: (inout ItemDraft) -> Void) {

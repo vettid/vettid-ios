@@ -9,13 +9,11 @@ import VettIDData
 public enum FieldInput {
     /// §10.7: `-?[0-9]{1,32}(\.[0-9]{1,32})?`.
     public static let maxNumberDigits = 32
-    public static let maxPhone = 32
     public static let maxEmail = 254
     public static let maxURL = 2_048
     /// A base32 secret: 16–256 characters and up to 6 `=` of padding (§10.7).
     public static let maxOtpSecret = 256 + 6
     static let otpauth = "otpauth:"
-    static let phoneSigns = Set(" +-().")
 
     /// Kinds whose value has a format the input enforces (and whose rule shows while it is incomplete).
     public static let formatted: Set<String> = [
@@ -67,10 +65,9 @@ public enum FieldInput {
         return out
     }
 
-    /// At most 32 digits, spaces and `+-().` (§10.7).
-    public static func phone(_ typed: String) -> String {
-        String(typed.filter { ($0.isASCII && $0.isNumber) || phoneSigns.contains($0) }.prefix(maxPhone))
-    }
+    /// What a phone input keeps of [typed] (``PhoneInput/edit(_:)``): the number as a `+` and digits, and an extension
+    /// (VAULT-MESSAGING §10.7 "Phone values") as typed until it is saved, where it is dropped.
+    public static func phone(_ typed: String) -> String { PhoneInput.edit(typed) }
 
     /// A TOTP seed (§10.7): an `otpauth://` URI (the scheme in lower case, no white space), or a base32 secret in upper
     /// case with only its alphabet (A–Z, 2–7) and trailing `=`: the spaces and dashes a site shows a key with go. While the
@@ -107,7 +104,9 @@ public enum FieldInput {
 
     /// Whether [text] is not (yet) a value of [kind] (§10.7): its rule then shows under the field while typing.
     public static func incomplete(_ kind: String, _ text: String) -> Bool {
-        formatted.contains(kind) && !text.isEmpty && ItemChecks.valueProblems(kind, .text(text)).contains(.valueInvalid)
+        // A phone number is always saved in a form the table allows (§10.7 "Phone values"): "Check this number" says the rest.
+        guard kind != FieldKinds.phone, formatted.contains(kind), !text.isEmpty else { return false }
+        return ItemChecks.valueProblems(kind, .text(text)).contains(.valueInvalid)
     }
 }
 
@@ -137,7 +136,11 @@ public enum DateInput {
     /// works), or nil when no date can begin so and the change is refused. A deletion (fewer digits than [old] held)
     /// always goes through, so a digit in the middle can be taken out and typed again.
     public static func accept(old: String, typed: String, monthOnly: Bool) -> String? {
-        let d = String(digits(typed).prefix(monthOnly ? month : day))
+        // A month field takes the year and the month only (0.55.3): one more digit typed is refused, and a pasted full date
+        // is kept whole so that the field says it is not a month, never cut.
+        let all = digits(typed)
+        if monthOnly, all.count > month, (1...1).contains(all.count - digits(old).count) { return nil }
+        let d = String(all.prefix(day))
         return possible(d) || d.count < digits(old).count ? format(d) : nil
     }
 
@@ -183,17 +186,4 @@ public enum DateInput {
         let p = stored.split(separator: "-").compactMap { Int($0) }
         return (p[0], p[1])
     }
-}
-
-/// A `phone` value (§10.7 allows at most 32 digits, spaces and `+-().`). vettid-android draws libphonenumber's as-you-type
-/// format over the digits, stores a number that parses in international format and shows it for the viewer's region; the
-/// iPhone app has no phone-number library, so a number is kept and shown as typed, within §10.7's characters (chosen; not
-/// in the spec: a library such as libphonenumber would be a new dependency, asked of the owner). Mirrors the parts of
-/// vettid-android `PhoneInput` that need no library.
-public enum PhoneInput {
-    /// What is saved for [text]: as typed, within §10.7's characters.
-    public static func stored(_ text: String) -> String { FieldInput.phone(text) }
-
-    /// A stored number as shown: as stored.
-    public static func display(_ stored: String) -> String { stored }
 }

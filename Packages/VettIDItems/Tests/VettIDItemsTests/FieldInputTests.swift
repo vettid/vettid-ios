@@ -25,13 +25,15 @@ import VettIDData
         for v in ["-3.5", "42", "0.5", "1234.50"] { #expect(valid(FieldKinds.number, v), "\(v)") }
     }
 
-    @Test func phonesTakeOnlyDigitsSpacesAndPlusMinusBracketsPoint() {
-        #expect(FieldInput.phone("+44 (20) 7946-0000.") == "+44 (20) 7946-0000.")
-        #expect(FieldInput.phone("+1 555 0100 ext#") == "+1 555 0100 ")
+    @Test func phonesKeepTheNumberAsPlusAndDigitsAndAnExtensionAsTyped() {
+        // The edit text holds the number as a `+` and digits (at most 15), the formats being drawn over it.
+        #expect(FieldInput.phone("+44 (20) 7946-0000.") == "+442079460000")
         #expect(FieldInput.phone("call") == "")
         #expect(FieldInput.phone(String(repeating: "1", count: 40)).count == 32)
+        // An extension marker, found before any character is filtered, stays with what follows until the field is saved.
+        #expect(FieldInput.phone("+1 555 0100 ext#") == "+15550100ext#")
+        #expect(FieldInput.phone("020 7946 0958 X123") == "02079460958X123")
         #expect(valid(FieldKinds.phone, FieldInput.phone("tel: +44 20 7946 0000")))
-        #expect(PhoneInput.stored("+44 20 7946 0958") == "+44 20 7946 0958" && PhoneInput.display("555-12") == "555-12")
     }
 
     @Test func emailsAndUrlsHoldNoWhiteSpace() {
@@ -97,9 +99,9 @@ import VettIDData
         #expect(DateInput.accept(old: "", typed: "30.04.2031", monthOnly: false) == nil)
     }
 
-    @Test func aMonthAndYearStopsAtTheMonth() {
-        #expect(DateInput.accept(old: "2031-04", typed: "20310430", monthOnly: true) == "2031-04")
-        #expect(DateInput.accept(old: "", typed: "2031-04-30", monthOnly: true) == "2031-04")
+    @Test func aMonthFieldTakesTheMonthAndKeepsAPastedDateWhole() {
+        #expect(DateInput.accept(old: "2031-04", typed: "20310430", monthOnly: true) == "2031-04-30")
+        #expect(DateInput.accept(old: "", typed: "2031-04-30", monthOnly: true) == "2031-04-30")
         #expect(valid(FieldKinds.date, "2031-04"))
         #expect(DateInput.month(year: 2031, month: 4) == "2031-04")
         #expect(DateInput.isMonth("2031-04") && !DateInput.isMonth("2031-04-30"))

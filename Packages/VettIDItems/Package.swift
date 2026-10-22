@@ -14,6 +14,10 @@ let package = Package(
         .package(path: "../VettIDData"),
         .package(path: "../VettIDVault"),
         .package(path: "../VettIDUI"),
+        // The phone numbers of §10.7 "Phone values" (VAULT-MESSAGING 0.55.0): libphonenumber's metadata, as-you-type and
+        // display formats (IOS-PLAN §4.8; the owner accepted the dependency). Not pinned to a release: the app follows
+        // the current libphonenumber metadata, since validity can change with it (VAULT-MESSAGING 0.55.4 §10.7).
+        .package(url: "https://github.com/PhoneNumberKit/PhoneNumberKit.git", from: "5.0.10"),
     ],
     targets: [
         // The view models, their state and every text of the Vault (vettid-android's `strings.xml` and
@@ -23,6 +27,7 @@ let package = Package(
             dependencies: [
                 .product(name: "VettIDData", package: "VettIDData"),
                 .product(name: "VettIDVault", package: "VettIDVault"),
+                .product(name: "PhoneNumberKit", package: "PhoneNumberKit"),
             ],
             resources: [.process("Resources/Localizable.xcstrings")]
         ),
