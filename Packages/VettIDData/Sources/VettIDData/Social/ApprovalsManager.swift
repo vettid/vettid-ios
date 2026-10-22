@@ -43,7 +43,20 @@ public final class ApprovalsManager: ApprovalsRepository {
     @ObservationIgnored private var changes = 0
     @ObservationIgnored private var changedAt: [String: Int] = [:]
     /// The share items decided, and at which change: a list read before does not bring them back.
-    @ObservationIgnored private var decidedLog: [(at: Int, ids: Set<String>)] = []
+    @ObservationIgnored private var decidedLog: [ShareDecidedMark] = []
+    /// Where the reads on their way began.
+    @ObservationIgnored private var readSinces: [Int] = []
+
+    /// Share items decided for one subject, and at which change.
+    struct ShareDecidedMark {
+        var at: Int
+        var subject: String
+        var ruleID: String
+        var ids: Set<String>
+    }
+
+    /// The subject a share question is for; a rule of no known subject is its own.
+    static func subjectKey(_ d: ShareDecision) -> String { ShareQuestions.subject(d) ?? "rule:\(d.ruleID)" }
     /// Told of each decided ask, with its feed item's kinds and `ref` (``FeedAsks``): the item is marked read.
     @ObservationIgnored public var onDecided: @MainActor (_ kinds: Set<String>, _ ref: String) -> Void = { _, _ in }
 
@@ -175,8 +188,17 @@ public final class ApprovalsManager: ApprovalsRepository {
         changedAt[p.key] = changes
         // A batch for a question the list holds adds to it at once, not at the next read.
         if case .share(let s) = p, let i = listed.firstIndex(where: { $0.key == p.key }), case .share(var d) = listed[i] {
+            let before = Dictionary(d.items.map { ($0.itemID, $0) }, uniquingKeysWith: { a, _ in a })
+            let added = s.items.map { n -> ShareItem in
+                guard let old = before[n.itemID] else { return n }
+                var i = n
+                if i.name.isEmpty { i.name = old.name }
+                i.askRuleID = n.askRuleID ?? old.askRuleID
+                i.shared = n.shared || old.shared
+                return i
+            }
             let named = Set(s.items.map(\.itemID))
-            d.items = d.items.filter { !named.contains($0.itemID) } + s.items
+            d.items = d.items.filter { !named.contains($0.itemID) } + added
             listed[i] = .share(d)
         }
         edit { events in
@@ -221,11 +243,12 @@ public final class ApprovalsManager: ApprovalsRepository {
     func shareDecided(_ ruleID: String, _ done: [String]) {
         let gone = Set(done)
         guard !gone.isEmpty else { return }
-        var subject: String?
-        if case .share(let d)? = find("share:\(ruleID)") { subject = ShareQuestions.subject(d) }
-        let applies = { (d: ShareDecision) in d.ruleID == ruleID || (subject != nil && ShareQuestions.subject(d) == subject) }
+        var subject = "rule:\(ruleID)"
+        if case .share(let d)? = find("share:\(ruleID)") { subject = Self.subjectKey(d) }
+        let applies = { (d: ShareDecision) in d.ruleID == ruleID || Self.subjectKey(d) == subject }
         changes += 1
-        decidedLog.append((changes, gone))
+        if !readSinces.isEmpty { decidedLog.append(ShareDecidedMark(at: changes, subject: subject, ruleID: ruleID, ids: gone)) }
+        if decidedLog.count > Self.maxDecidedLog { decidedLog.removeFirst(decidedLog.count - Self.maxDecidedLog) }
         listed = listed.compactMap { a in
             guard case .share(var d) = a, applies(d) else { return a }
             d.items.removeAll { gone.contains($0.itemID) }
@@ -256,58 +279,96 @@ public final class ApprovalsManager: ApprovalsRepository {
     public func refreshApprovals() async throws { try await refreshApprovals(quietly: false) }
 
     /// [requests] false: the connection requests are read by the caller.
-    func refreshApprovals(quietly: Bool, requests: Bool = true) async throws { // swiftlint:disable:this cyclomatic_complexity
+    func refreshApprovals(quietly: Bool, requests: Bool = true) async throws {
         let g = generation
         let since = changes
         let t = now()
+        // Reads may overlap (the quiet one and the screen's): what was decided stays marked until no read that began before
+        // it is on its way.
+        readSinces.append(since)
+        defer {
+            if let i = readSinces.firstIndex(of: since) { readSinces.remove(at: i) }
+            let floor = readSinces.min() ?? Int.max
+            decidedLog.removeAll { $0.at <= floor }
+        }
         if requests { try? await connections.refreshRequests(quietly: quietly) }
         let o = try await guarded { quietly ? try await quietOps() : try await ops() }
-        // An older release without one of the lists: nothing listed for it, and nothing dropped by it.
-        let grants = try? await o.grantList()
-        let critical = try? await o.criticalUseList()
-        // The share decisions (§10.12): nil when the vault answered neither list, so that nothing is dropped by it.
-        let names = itemNames()
-        let shares = try? await SharePending.decisions(
-            pendingPage: { try await o.sharePendingPage(after: $0, limit: SharePending.page) },
-            rulePage: { try await o.shareRulePage(after: $0) }, names: names, at: t
-        )
+        let lists = await readLists(o, at: t)
         guard g == generation else { return }
-        var next: [PendingApproval] = []
-        if let shares { next += shares.map(PendingApproval.share) }
-        if let grants {
-            next += VaultJSON.objects(grants, "pending").compactMap { ApprovalParser.grant($0, at: t) }.map(PendingApproval.grant)
-        }
-        if let critical {
-            next += VaultJSON.objects(critical, "incoming").compactMap { ApprovalParser.critical($0, at: t) }.map(PendingApproval.critical)
-        }
         let changed = { (key: String) in (self.changedAt[key] ?? 0) > since }
-        // A request that changed during the read is not taken from the list, except a share question a batch arrived for:
-        // its items stay, less what was decided meanwhile, with the batch's (chosen; not in the spec).
-        let decidedSince = decidedLog.filter { $0.at > since }.reduce(into: Set<String>()) { $0.formUnion($1.ids) }
-        let events = stored.compactMap(parsed)
-        next = next.compactMap { a in
-            guard changed(a.key) else { return a }
-            guard case .share(var d) = a, case .share(let e)? = events.first(where: { $0.key == a.key }) else { return nil }
-            d.items.removeAll { decidedSince.contains($0.itemID) }
-            let have = Set(d.items.map(\.itemID))
-            d.items += e.items.filter { !have.contains($0.itemID) }
-            return d.items.isEmpty ? nil : .share(d)
-        }
-        decidedLog.removeAll()
+        let next = mergedWithChanges(lists.approvals(at: t), since: since, changed: changed)
         listed = next
         // The lists are authoritative for what they cover: decided or expired requests kept from events are dropped.
         let keys = Set(next.map(\.key))
         edit { events in
             events.removeAll { e in
                 guard let p = parsed(e) else { return true }
-                let covered = switch p {
-                case .grant: grants != nil
-                case .critical: critical != nil
-                case .share: shares != nil
-                default: false
-                }
-                return (covered && !keys.contains(p.key) && !changed(p.key)) || (p.exp ?? .distantFuture) <= t
+                return (lists.covers(p) && !keys.contains(p.key) && !changed(p.key)) || (p.exp ?? .distantFuture) <= t
             }
+        }
+    }
+
+    /// What the vault listed: grant requests, critical-item requests and share decisions, each nil when the vault did not
+    /// answer (an older release without the list: nothing listed for it, and nothing dropped by it).
+    struct Lists {
+        var grants: JsonObject?
+        var critical: JsonObject?
+        var shares: [ShareDecision]?
+
+        func approvals(at t: Date) -> [PendingApproval] {
+            var out: [PendingApproval] = shares.map { $0.map(PendingApproval.share) } ?? []
+            if let grants {
+                out += VaultJSON.objects(grants, "pending").compactMap { ApprovalParser.grant($0, at: t) }
+                    .map(PendingApproval.grant)
+            }
+            if let critical {
+                out += VaultJSON.objects(critical, "incoming").compactMap { ApprovalParser.critical($0, at: t) }
+                    .map(PendingApproval.critical)
+            }
+            return out
+        }
+
+        /// Whether a list that was read says which requests of [p]'s kind are still waiting.
+        func covers(_ p: PendingApproval) -> Bool {
+            switch p {
+            case .grant: grants != nil
+            case .critical: critical != nil
+            case .share: shares != nil
+            default: false
+            }
+        }
+    }
+
+    private func readLists(_ o: any ApprovalOps, at t: Date) async -> Lists {
+        let names = itemNames()
+        // The share decisions (§10.12): nil when the vault answered neither list.
+        let shares = try? await SharePending.decisions(
+            pendingPage: { try await o.sharePendingPage(after: $0, limit: SharePending.page) },
+            rulePage: { try await o.shareRulePage(after: $0) }, names: names, at: t
+        )
+        return Lists(grants: try? await o.grantList(), critical: try? await o.criticalUseList(), shares: shares)
+    }
+
+    /// At most this many share decisions are remembered for reads on their way.
+    static let maxDecidedLog = 64
+
+    /// [next], as a read that began at change [since] listed it, with what changed during the read: the items decided for a
+    /// subject leave every share question of that subject; any other request that changed is not taken from the list,
+    /// except a share question a batch arrived for, whose items stay, with the batch's (chosen; not in the spec).
+    private func mergedWithChanges(_ next: [PendingApproval], since: Int, changed: (String) -> Bool) -> [PendingApproval] {
+        let marks = decidedLog.filter { $0.at > since }
+        let events = stored.compactMap(parsed)
+        return next.compactMap { a in
+            guard case .share(var d) = a else { return changed(a.key) ? nil : a }
+            let mine = marks.filter { $0.ruleID == d.ruleID || $0.subject == Self.subjectKey(d) }
+            let gone = mine.reduce(into: Set<String>()) { $0.formUnion($1.ids) }
+            d.items.removeAll { gone.contains($0.itemID) }
+            if changed(a.key) {
+                guard case .share(let e)? = events.first(where: { $0.key == a.key }) else { return nil }
+                let have = Set(d.items.map(\.itemID))
+                d.items += e.items.filter { !have.contains($0.itemID) }
+            }
+            return d.items.isEmpty ? nil : .share(d)
         }
     }
 

@@ -22,6 +22,8 @@ final class FakeApprovalOps: ApprovalOps, @unchecked Sendable {
     var pendingPages: [String] = []
     var rulePages: [String] = []
     var shareCalls: [String] = []
+    /// What `share.decide` answers.
+    var shareAnswer = "{}"
     /// When set, `share.pending.list` waits for it once it has its page (a read on its way).
     var pendingGate: TestDeferred<Void>?
 
@@ -59,11 +61,11 @@ final class FakeApprovalOps: ApprovalOps, @unchecked Sendable {
     func criticalUseDeny(_ requestID: String) async throws { try call("criticalDeny:\(requestID)") }
     func shareDecide(_ ruleID: String, include: [String], decline: [String]) async throws -> JsonObject {
         try call("shareBoth:\(ruleID):\(include):\(decline)")
-        return try StrictJson.parseObject("{}")
+        return try StrictJson.parseObject(shareAnswer)
     }
     func shareDecide(_ ruleID: String, items: [String], approve: Bool) async throws -> JsonObject {
         try call("shareOne:\(ruleID):\(items):\(approve)")
-        return try StrictJson.parseObject("{}")
+        return try StrictJson.parseObject(shareAnswer)
     }
     func sharePendingPage(after: String?, limit: Int?) async throws -> JsonObject {
         shareCalls.append("pending:\(after ?? "nil"):\(limit ?? 0)")

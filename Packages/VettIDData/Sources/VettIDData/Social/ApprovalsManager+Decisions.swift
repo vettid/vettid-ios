@@ -86,14 +86,19 @@ extension ApprovalsManager {
             throw VaultFailure(.other, code: "bad_request")
         }
         try await decide("share:\(ruleID)") { o in
+            var answers: [JsonObject] = []
             do {
-                _ = try await o.shareDecide(ruleID, include: include, decline: decline)
+                answers.append(try await o.shareDecide(ruleID, include: include, decline: decline))
             } catch let e as VaultOpError where e.code == "bad_request" || e.code == "unsupported_type" {
-                if !include.isEmpty { _ = try await o.shareDecide(ruleID, items: include, approve: true) }
-                if !decline.isEmpty { _ = try await o.shareDecide(ruleID, items: decline, approve: false) }
+                if !include.isEmpty { answers.append(try await o.shareDecide(ruleID, items: include, approve: true)) }
+                if !decline.isEmpty { answers.append(try await o.shareDecide(ruleID, items: decline, approve: false)) }
             }
-            // One answer per item and subject (§10.12): the vault decided them in the subject's other rules too.
-            self.shareDecided(ruleID, all)
+            // One answer per item and subject (§10.12): the answer's `included` and `declined` list every item the decision
+            // changed, in the subject's other rules too (a vault before 0.23.0 asks per rule and lists only this rule's).
+            // An answer with neither member is taken as having changed what was sent (chosen; not in the spec).
+            let listed = answers.contains { $0.has("included") || $0.has("declined") }
+            let changed = answers.flatMap { VaultJSON.strings($0, "included") + VaultJSON.strings($0, "declined") }
+            self.shareDecided(ruleID, listed ? changed : all)
         }
     }
 

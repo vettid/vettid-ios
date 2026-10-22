@@ -139,6 +139,92 @@ import VettIDDataTesting
         #expect(Set(share(m, "r1")?.items.map(\.itemID) ?? []) == ["A", "B"], "A listed, B arrived, C decided meanwhile")
     }
 
+    func started(_ read: @escaping @MainActor () async throws -> Void) async -> Task<Void, any Error> {
+        let before = ops.shareCalls.count
+        let task = Task { try await read() }
+        _ = await eventually { ops.shareCalls.count > before && ops.pendingPages.isEmpty }
+        return task
+    }
+
+    /// A decision made while a read is on its way is not undone by what the read brings: also for the subject's other
+    /// rules, which the decision did not name.
+    @Test func aDecisionDuringTheReadIsNotUndoneByIt() async throws {
+        // (a) another device decided C of r1 while the read had it.
+        ops.pendingPages = [#"{"pending":[\#(entry("r1", "A")),\#(entry("r1", "C"))]}"#]
+        ops.rulePages = [Self.rules]
+        let gate = TestDeferred<Void>()
+        ops.pendingGate = gate
+        let m = manager()
+        let read = await started { try await m.refreshApprovals() }
+        m.onEvent(event("sync.event", #"{"kind":"share.decided","rule_id":"r1","included":["C"],"declined":[]}"#))
+        gate.complete()
+        try await read.value
+        #expect(share(m, "r1")?.items.map(\.itemID) == ["A"])
+
+        // (b) this phone decided i1 of r1 during a read that lists it under r2 too.
+        ops.pendingGate = nil
+        ops.pendingPages = [#"{"pending":[\#(entry("r1", "i1")),\#(entry("r2", "i1")),\#(entry("r2", "i3"))]}"#]
+        ops.rulePages = [Self.rules]
+        try await m.refreshApprovals()
+        ops.shareAnswer = #"{"included":["i1"],"declined":[]}"#
+        let second = TestDeferred<Void>()
+        ops.pendingGate = second
+        ops.pendingPages = [#"{"pending":[\#(entry("r1", "i1")),\#(entry("r2", "i1")),\#(entry("r2", "i3"))]}"#]
+        ops.rulePages = [Self.rules]
+        let again = await started { try await m.refreshApprovals() }
+        try await m.decideShare("r1", include: ["i1"], decline: [])
+        second.complete()
+        try await again.value
+        #expect(share(m, "r1") == nil && share(m, "r2")?.items.map(\.itemID) == ["i3"])
+    }
+
+    /// The marks are the subject's: c1's decision never strips c2's question; and the vault's answer, not the request,
+    /// says what a decision changed.
+    @Test func aDecisionIsScopedToItsSubjectAndTheAnswersItems() async throws {
+        let other = #"{"rule_id":"r3","subject":{"connection_id":"c2"},"item_id":"i1","name":"i1","category":"other","sensitivity":"data"}"#
+        ops.pendingPages = [#"{"pending":[\#(entry("r1", "i1")),\#(entry("r2", "i3")),\#(other)]}"#]
+        ops.rulePages = [Self.rules]
+        let gate = TestDeferred<Void>()
+        ops.pendingGate = gate
+        let m = manager()
+        let read = await started { try await m.refreshApprovals() }
+        m.onEvent(event("sync.event", #"{"kind":"share.decided","rule_id":"r1","included":["i1"],"declined":[]}"#))
+        gate.complete()
+        try await read.value
+        #expect(share(m, "r3")?.items.map(\.itemID) == ["i1"] && share(m, "r2")?.items.map(\.itemID) == ["i3"] && share(m, "r1") == nil)
+
+        // The answer lists i3, which the subject's other rule r2 held: it leaves r2 though it was not sent.
+        ops.pendingGate = nil
+        ops.pendingPages = [#"{"pending":[\#(entry("r1", "i1")),\#(entry("r2", "i3"))]}"#]
+        ops.rulePages = [Self.rules]
+        try await m.refreshApprovals()
+        ops.shareAnswer = #"{"included":["i1","i3"],"declined":[]}"#
+        try await m.decideShare("r1", include: ["i1"], decline: [])
+        #expect(share(m, "r2") == nil)
+    }
+
+    /// Two reads overlap: a decision made after the older began stays marked until the older is done.
+    @Test func overlappingReadsKeepTheMarksTheOlderNeeds() async throws {
+        ops.pendingPages = [#"{"pending":[\#(entry("r1", "A")),\#(entry("r1", "C"))]}"#]
+        ops.rulePages = [Self.rules]
+        let gate = TestDeferred<Void>()
+        ops.pendingGate = gate
+        let m = manager()
+        let older = await started { try await m.refreshApprovals() }
+        m.onEvent(event("sync.event", #"{"kind":"share.decided","rule_id":"r1","included":["C"],"declined":[]}"#))
+        // A newer read, which sees the decision, ends first.
+        let free = TestDeferred<Void>()
+        ops.pendingGate = free
+        ops.pendingPages = [#"{"pending":[\#(entry("r1", "A"))]}"#]
+        ops.rulePages = [Self.rules]
+        let newer = await started { try await m.refreshApprovals() }
+        free.complete()
+        try await newer.value
+        gate.complete()
+        try await older.value
+        #expect(share(m, "r1")?.items.map(\.itemID) == ["A"])
+    }
+
     @Test func oneQuestionPerItemAndSubject() async throws {
         ops.pendingPages = [#"{"pending":[{"rule_id":"r1","subject":{"connection_id":"c1"},"item_id":"i1","name":"A","category":"other","sensitivity":"data"},{"rule_id":"r2","subject":{"connection_id":"c1"},"item_id":"i1","name":"A","category":"other","sensitivity":"data","ask_rule_id":"r1"},{"rule_id":"r2","subject":{"connection_id":"c1"},"item_id":"i2","name":"B","category":"other","sensitivity":"data"}]}"#]
         ops.rulePages = [Self.rules]
