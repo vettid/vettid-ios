@@ -195,7 +195,9 @@ struct ValueEditor: View {
                 placeholder: placeholder ?? caption, text: kind == FieldKinds.phone ? PhoneInput.mask(field.text) : field.text,
                 isError: isError
             ) {
-                actions.onFieldText(index, FieldInput.accept(kind, $0))
+                // A deletion that removes only drawn separators takes the digit before them too.
+                let typed = kind == FieldKinds.phone ? PhoneInput.afterDeletion(shown: PhoneInput.mask(field.text), typed: $0) : $0
+                actions.onFieldText(index, FieldInput.accept(kind, typed))
             }
             .keyboardType(Self.keyboard(kind))
             .textInputAutocapitalization(free ? .sentences : .never)

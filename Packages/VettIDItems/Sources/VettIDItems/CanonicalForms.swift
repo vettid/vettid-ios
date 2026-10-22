@@ -115,10 +115,11 @@ public enum CanonicalForms {
         let head = lower(uri).hasPrefix("otpauth://") ? "otpauth://" + uri.dropFirst("otpauth://".count) : uri
         guard let q = head.firstIndex(of: "?") else { return head }
         let params = head[head.index(after: q)...].split(separator: "&", omittingEmptySubsequences: false).map { p -> String in
+            // §10.7: other parameters stay as given and only the secret's value is canonical (its name as typed).
             guard lower(String(p)).hasPrefix("secret=") else { return String(p) }
             let value = upper(String(p.dropFirst("secret=".count)))
             let clean = String(String.UnicodeScalarView(value.unicodeScalars.filter { !$0.properties.isWhitespace && $0 != "=" }))
-            return "secret=" + clean
+            return String(p.prefix("secret=".count)) + clean
         }
         return head[...q] + params.joined(separator: "&")
     }

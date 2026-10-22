@@ -89,19 +89,26 @@ public enum PhoneInput {
     public static func stored(_ text: String, region: String? = deviceRegion) -> String {
         let d = dialable(split(text).number)
         guard !d.digits.isEmpty else { return "" }
-        return PhoneRules.e164(d.digits, plus: d.plus, region: region) ?? (d.plus ? "+" : "") + d.digits.prefix(maxDigits)
+        // The digits are cut to 15 before they are read, as vettid-android's `raw` does before `stored` parses them
+        // (ANDROID-PLAN: "a number longer than 15 digits cut to 15"; VAULT-MESSAGING §10.7 "Phone values" 2 reads "the rest").
+        let digits = String(d.digits.prefix(maxDigits))
+        return PhoneRules.e164(digits, plus: d.plus, region: region) ?? (d.plus ? "+" : "") + digits
     }
 
-    /// Whether [text] has digits but is not a possible number: "Check this number" shows (never a block).
+    /// Whether [text] has digits but is not a valid number (libphonenumber's `isValidNumber`, as vettid-android's `doubtful`):
+    /// "Check this number" shows, never a block. A possible number that is not valid is stored in E.164 and still gets the
+    /// hint (chosen: follows the code, ANDROID-PLAN keeps `doubtful` unchanged; VAULT-MESSAGING §10.7 "Phone values" 3 ties
+    /// the hint to the fallback form).
     public static func doubtful(_ text: String, region: String? = deviceRegion) -> Bool {
         let d = dialable(split(text).number)
-        return !d.digits.isEmpty && PhoneRules.e164(d.digits, plus: d.plus, region: region) == nil
+        guard !d.digits.isEmpty else { return false }
+        return !engine.isValid((d.plus ? "+" : "") + d.digits.prefix(maxDigits), region: region)
     }
 
     // MARK: - What is shown
 
-    /// A stored number as shown: in national format for a number of [region], else in international format; what the
-    /// library does not read stays as stored. Display only.
+    /// A stored number as shown: in national format for a number of [region], else in international format; what is not a
+    /// valid number stays as stored (as vettid-android). Display only.
     public static func display(_ stored: String, region: String? = deviceRegion) -> String {
         guard !stored.isEmpty else { return stored }
         let d = dialable(stored)
@@ -114,8 +121,39 @@ public enum PhoneInput {
         let (number, tail) = split(edit)
         let d = dialable(number)
         let raw = (d.plus ? "+" : "") + d.digits.prefix(maxDigits)
-        let drawn = d.digits.isEmpty || (region == nil && !d.plus) ? raw : engine.partial(raw, region: region)
+        var drawn = d.digits.isEmpty || (region == nil && !d.plus) ? raw : engine.partial(raw, region: region)
+        if raw.hasPrefix("+1") { drawn = internationalNanp(drawn) }
         return tail.isEmpty ? drawn : drawn + " " + tail
+    }
+
+    /// libphonenumber draws a North American number with its country code as `+1 650-253-0000`, PhoneNumberKit's partial
+    /// format as `+1 (650) 253-0000`.
+    static func internationalNanp(_ drawn: String) -> String {
+        guard drawn.hasPrefix("+1 (") else { return drawn }
+        var s = String(drawn.dropFirst(4))
+        if let close = s.firstIndex(of: ")") {
+            let rest = s[s.index(after: close)...].drop(while: { $0 == " " })
+            s = String(s[..<close]) + (rest.isEmpty ? "" : "-" + rest)
+        }
+        return "+1 " + s
+    }
+
+    /// The text to read when [typed] replaced [shown] (the drawn number) and only separators (`(`, `)`, `-`, spaces) are gone:
+    /// the digit before them goes too, or a backspace over a drawn separator would delete nothing. Any other change is
+    /// [typed] as it is. Cursor position in the middle of a number needs a check on the iPhone.
+    public static func afterDeletion(shown: String, typed: String) -> String {
+        guard typed.count < shown.count, !hasExtension(shown) else { return typed }
+        let s = Array(shown), t = Array(typed)
+        var p = 0
+        while p < t.count, s[p] == t[p] { p += 1 }
+        let removed = s.count - t.count
+        guard p + removed <= s.count, Array(s[(p + removed)...]) == Array(t[p...]) else { return typed }
+        let isDial = { (c: Character) in (c.isASCII && c.isNumber) || c == "+" }
+        guard s[p..<(p + removed)].allSatisfy({ !isDial($0) }) else { return typed }
+        var head = Array(t[..<p])
+        guard let i = head.lastIndex(where: isDial) else { return typed }
+        head.remove(at: i)
+        return String(head) + String(t[p...])
     }
 
     private static let engine = PhoneEngine()
@@ -126,14 +164,21 @@ private final class PhoneEngine: @unchecked Sendable {
     private let lock = NSLock()
     private let utility = PhoneNumberUtility()
 
+    /// libphonenumber's `isValidNumber` (PhoneNumberKit parses only what it can type as a valid number).
+    func isValid(_ number: String, region: String?) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard number.hasPrefix("+") || region != nil else { return false }
+        return utility.isValidPhoneNumber(number, withRegion: region ?? "US")
+    }
+
+    /// The number in national format for a number of [region], else international; nil when it is not a valid number.
     func display(_ number: String, region: String?) -> String? {
         lock.lock()
         defer { lock.unlock() }
         let plus = number.hasPrefix("+")
         guard plus || region != nil else { return nil }
-        guard let parsed = try? utility.parse(number, withRegion: region ?? "US", ignoreType: true, ignorePrefixValidation: true) else {
-            return nil
-        }
+        guard let parsed = try? utility.parse(number, withRegion: region ?? "US") else { return nil }
         let home = region != nil && utility.getRegionCode(of: parsed) == region
         return utility.format(parsed, toType: home ? .national : .international)
     }

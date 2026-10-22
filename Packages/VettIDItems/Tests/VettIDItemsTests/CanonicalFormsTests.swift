@@ -137,6 +137,50 @@ import VettIDDataTesting
         #expect(PhoneInput.mask("", region: "US") == "")
     }
 
+    @Test func theDigitsAreCutToFifteenBeforeTheyAreRead() {
+        // As vettid-android: `raw` takes 15 digits, then `stored` parses them.
+        #expect(PhoneInput.stored("+49 12345678901234", region: "DE") == "+491234567890123")
+        #expect(PhoneInput.stored("9712345678901234", region: "AE") == "+971234567890123")
+        #expect(PhoneInput.stored("+4303456789012345", region: "AT") == "+43345678901234")
+    }
+
+    @Test func theHintFollowsValidityNotPossibility() {
+        // As vettid-android's `doubtful` (libphonenumber `isValidNumber`).
+        let doubtful: [(String, String)] = [("555 555 5555", "US"), ("+1 555 555 5555", "US"), ("876 123 4567", "JM"), ("054-123-4567", "IL"), ("0549 123456", "SM"), ("+882 1234 5678 90", "US"), ("55512", "US")]
+        for (t, r) in doubtful { #expect(PhoneInput.doubtful(t, region: r), "\(t) \(r)") }
+        for (t, r) in [("6502530000", "US"), ("+442079460958", "US"), ("020 7946 0958", "GB"), ("", "US")] { #expect(!PhoneInput.doubtful(t, region: r), "\(t) \(r)") }
+        #expect(PhoneInput.doubtful("6502530000", region: nil))
+        // A possible number that is not valid is still stored in E.164.
+        #expect(PhoneInput.stored("555 555 5555", region: "US") == "+15555555555")
+    }
+
+    @Test func aNumberThatIsNotValidIsShownAsStoredAndTheCountryCodeDrawsInternationalFormat() {
+        #expect(PhoneInput.display("+15555555555", region: "US") == "+15555555555")
+        #expect(PhoneInput.mask("+16502530000", region: "DE") == "+1 650-253-0000")
+        #expect(PhoneInput.mask("+1650", region: "DE") == "+1 650")
+        #expect(PhoneInput.mask("+16502", region: "DE") == "+1 650-2")
+        #expect(PhoneInput.mask("6502", region: "US") == "650-2")
+        #expect(PhoneInput.mask("030123456", region: "DE") == "030 123456")
+        #expect(PhoneInput.mask("+4930123456", region: "US") == "+49 30 123456")
+    }
+
+    @Test func deletingOnlyDrawnSeparatorsDeletesTheDigitBeforeThem() {
+        let shown = "(650) 253-0000"
+        // Backspace over the space after ")", over ")", over "-" and over "(".
+        #expect(PhoneInput.afterDeletion(shown: shown, typed: "(650)253-0000") == "(65)253-0000")
+        #expect(PhoneInput.afterDeletion(shown: shown, typed: "(650 253-0000") == "(65 253-0000")
+        #expect(PhoneInput.afterDeletion(shown: shown, typed: "(650) 2530000") == "(650) 250000")
+        // A digit deleted, a paste, an insertion and an extension are as typed.
+        #expect(PhoneInput.afterDeletion(shown: shown, typed: "(650) 253-000") == "(650) 253-000")
+        #expect(PhoneInput.afterDeletion(shown: shown, typed: "(650) 253-00001") == "(650) 253-00001")
+        #expect(PhoneInput.afterDeletion(shown: "(650) 253-0000 x1", typed: "(650) 253-0000x1") == "(650) 253-0000x1")
+        // Nothing before the separator to delete.
+        #expect(PhoneInput.afterDeletion(shown: "(650", typed: "650") == "650")
+        // The edit text that results has one digit less.
+        let after = PhoneInput.afterDeletion(shown: "(650) 253", typed: "(650)253")
+        #expect(PhoneInput.edit(after) == "65253")
+    }
+
     // MARK: - The other kinds
 
     @Test func numbersAreStoredAsTypedTrimmedWithOneLeadingPlusDropped() {

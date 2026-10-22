@@ -6,7 +6,9 @@ import PhoneNumberKit
 /// valid number and has no possible-number check, so the lenient parse of libphonenumber's `parseHelper` (the country code,
 /// the international prefix, the national prefix) and its `testNumberLength` are written here over that metadata (chosen;
 /// not in the spec: IOS-PLAN §4.8 leaves the port to the app, which must give Android's results). The general
-/// description's lengths are the union of the lengths of every number type of the territory, as libphonenumber builds them.
+/// description's lengths are the union of the lengths of every number type of the territory, as libphonenumber builds them
+/// (libphonenumber's builder leaves `noInternationalDialling` out of that union and this one includes it; no territory
+/// differs today).
 enum PhoneRules {
     /// libphonenumber's `ValidationResult`.
     enum Length { case possible, localOnly, tooShort, tooLong, invalidLength }
