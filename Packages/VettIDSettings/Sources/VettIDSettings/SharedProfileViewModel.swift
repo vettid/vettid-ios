@@ -5,7 +5,7 @@ import VettIDData
 import VettIDMedia
 
 /// The shared-profile screen's state (VAULT-MESSAGING §10.8). Never printed with its photos. Mirrors vettid-android
-/// `SharedProfileUiState` (less the `@profile` items, which come with the items of IOS-PLAN §8 I3).
+/// `SharedProfileUiState`.
 public struct SharedProfileState: Equatable, Sendable, CustomStringConvertible, CustomReflectable {
     /// §10.8: a display name of at most 128 bytes.
     public static let maxDisplayNameBytes = 128
@@ -28,6 +28,12 @@ public struct SharedProfileState: Equatable, Sendable, CustomStringConvertible, 
     /// The taken photo could not be encoded.
     public var photoUnreadable = false
     public var photoSaved = false
+    /// The member's items tagged `@profile` (§10.8): every connection sees them in the shared profile.
+    public var profileItems: [ItemSummary] = []
+    /// Standard items that could join the profile (`@profile` is only on `data` items).
+    public var candidates: [ItemSummary] = []
+    public var pickingItem = false
+    public var itemsBusy = false
 
     public init(account: AccountInfo? = nil, profile: OwnProfile? = nil) {
         self.account = account
@@ -102,18 +108,21 @@ public final class PendingPhoto: Equatable, Sendable, CustomStringConvertible, C
 @MainActor
 @Observable
 public final class SharedProfileViewModel {
-    private var local: SharedProfileState
+    var local: SharedProfileState
 
     @ObservationIgnored private let profiles: any ProfileRepository
     @ObservationIgnored private let accounts: any AccountRepository
-    @ObservationIgnored private let work = Work()
+    @ObservationIgnored let items: (any ItemsRepository)?
+    @ObservationIgnored let work = Work()
     @ObservationIgnored private let followers = TaskBag()
     /// The taken photo held now, for the zeroing when the screen goes (`deinit`, vettid-android `onCleared`).
     @ObservationIgnored private let held = OSAllocatedUnfairLock<PendingPhoto?>(initialState: nil)
 
-    public init(profiles: any ProfileRepository, accounts: any AccountRepository) {
+    /// [items]: the Vault list, for the `@profile` items (add one, take one out, open one).
+    public init(profiles: any ProfileRepository, accounts: any AccountRepository, items: (any ItemsRepository)? = nil) {
         self.profiles = profiles
         self.accounts = accounts
+        self.items = items
         local = SharedProfileState(account: accounts.account, profile: profiles.profile)
         followers.add(follow(self, read: { $0.accounts.account.shownInShell == nil }, apply: { m, closed in
             if closed { m.dropDrafts() }
@@ -129,6 +138,7 @@ public final class SharedProfileViewModel {
             }
         }
         work.launch { await accounts.refreshAccount() }
+        if let items, items.load == .notLoaded { work.launch { try? await items.refresh() } }
     }
 
     deinit {
@@ -146,6 +156,9 @@ public final class SharedProfileViewModel {
         if s.account.shownInShell == nil { s.account?.nameRequest = nil }
         s.profile = profiles.profile
         if !s.edited { s.displayName = s.profile?.displayName ?? "" }
+        let sorted = (items?.items ?? []).sorted { $0.name.lowercased() < $1.name.lowercased() }
+        s.profileItems = sorted.filter { $0.tags.contains(ItemChecks.profileTag) }
+        s.candidates = sorted.filter { $0.sensitivity == .data && !$0.tags.contains(ItemChecks.profileTag) }
         return s
     }
 
@@ -262,7 +275,7 @@ public final class SharedProfileViewModel {
         }
     }
 
-    private func failed(_ e: any Error) {
+    func failed(_ e: any Error) {
         local.error = failureKind(e)
         local.limit = (e as? VaultFailure)?.limit
     }

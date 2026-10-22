@@ -71,6 +71,7 @@ public final class NotificationsViewModel {
     @ObservationIgnored private let feed: any FeedRepository
     @ObservationIgnored private let connections: (any ConnectionsRepository)?
     @ObservationIgnored private let approvals: (any ApprovalsRepository)?
+    @ObservationIgnored private let items: (any ItemsRepository)?
     @ObservationIgnored private let work = Work()
     @ObservationIgnored private let follows = TaskBag()
     /// Whether the screen is in view.
@@ -81,17 +82,19 @@ public final class NotificationsViewModel {
     @ObservationIgnored private var handled = Set<String>()
     private var local: NotificationsState
 
-    /// [archived]: the Archived view. [connections] and [approvals]: the names (the items' names come with the Vault
-    /// screens, IOS-PLAN §8 I3.1).
+    /// [archived]: the Archived view. [connections], [approvals] and [items]: the names, followed as they change; the Vault
+    /// list is read quietly when it has not been read (an `item.revealed` opens its item).
     public init(
         feed: any FeedRepository, connections: (any ConnectionsRepository)? = nil, approvals: (any ApprovalsRepository)? = nil,
-        archived: Bool = false
+        items: (any ItemsRepository)? = nil, archived: Bool = false
     ) {
         self.feed = feed
         self.connections = connections
         self.approvals = approvals
+        self.items = items
         local = NotificationsState(archived: archived)
         if feed.load == .notLoaded { refresh() }
+        items?.readIfNotLoaded()
         follows.add(follow(self, read: { $0.feed.items }, apply: { m, _ in m.onItems() }))
     }
 
@@ -104,7 +107,7 @@ public final class NotificationsViewModel {
         var s = local
         s.items = feed.items
         s.load = feed.load
-        s.names = FeedNames(connections: connections?.connections ?? [], approvals: approvals?.approvals ?? [])
+        s.names = FeedNames(connections: connections?.connections ?? [], items: items?.names ?? [:], approvals: approvals?.approvals ?? [])
         return s
     }
 

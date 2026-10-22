@@ -80,10 +80,17 @@ public extension View {
     func systemBackGesture() -> some View {
         background(BackGestureEnabler().frame(width: 0, height: 0).accessibilityHidden(true))
     }
+
+    /// Turns the system back gestures off while [blocked] (a pushed screen with unsaved changes, whose back arrow asks
+    /// first): the edge swipe and, from iOS 26, the swipe from anywhere in the content. On again when it is not, or when
+    /// the screen goes. Put it on the screen's outermost view, so that it holds while a step replaces the screen's content.
+    func blocksBackGesture(_ blocked: Bool) -> some View {
+        background(BackGestureBlocker(blocked: blocked).frame(width: 0, height: 0).accessibilityHidden(true))
+    }
 }
 
 /// Finds the navigation controller of the stack it is placed in and lets its pop gesture begin whenever a screen is
-/// pushed, whatever the bar.
+/// pushed, whatever the bar (``PopGestureDelegate`` decides).
 private struct BackGestureEnabler: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> Probe { Probe() }
     func updateUIViewController(_ controller: Probe, context: Context) { controller.attach() }
@@ -100,31 +107,93 @@ private struct BackGestureEnabler: UIViewControllerRepresentable {
         }
 
         func attach() {
-            guard let nav = navigationController, let pop = nav.interactivePopGestureRecognizer else { return }
-            if !(pop.delegate is PopGestureDelegate) {
-                let delegate = PopGestureDelegate(nav)
-                objc_setAssociatedObject(nav, &PopGestureDelegate.key, delegate, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-                pop.delegate = delegate
-            }
-            pop.isEnabled = true
+            guard let nav = navigationController, PopGestureDelegate.of(nav) != nil else { return }
+            nav.interactivePopGestureRecognizer?.isEnabled = true
         }
     }
 }
 
-/// Lets the pop gesture begin while a screen is pushed and no transition runs (never on the root, where it would leave the
-/// stack stuck).
+/// ``View/blocksBackGesture(_:)``: each probe holds its own block on the stack (``PopGestureDelegate/block(_:by:)``), so
+/// that a probe going never clears a block another one holds (a step that replaces the screen's content).
+private struct BackGestureBlocker: UIViewControllerRepresentable {
+    let blocked: Bool
+
+    func makeUIViewController(context: Context) -> Probe { Probe() }
+    func updateUIViewController(_ controller: Probe, context: Context) { controller.apply(blocked) }
+
+    final class Probe: UIViewController {
+        private var blocked = false
+        /// The stack this probe blocked, to release it there.
+        private weak var held: UINavigationController?
+
+        func apply(_ b: Bool) {
+            blocked = b
+            guard let nav = navigationController ?? held else { return }
+            PopGestureDelegate.of(nav)?.block(b, by: self)
+            held = b ? nav : nil
+        }
+
+        override func didMove(toParent parent: UIViewController?) {
+            super.didMove(toParent: parent)
+            apply(blocked)
+        }
+
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            apply(blocked)
+        }
+
+        override func viewWillDisappear(_ animated: Bool) {
+            super.viewWillDisappear(animated)
+            release()
+        }
+
+        private func release() {
+            if let nav = held { PopGestureDelegate.of(nav)?.block(false, by: self) }
+            held = nil
+        }
+
+        deinit {
+            MainActor.assumeIsolated { release() }
+        }
+    }
+}
+
+/// Lets the back gestures begin while a screen is pushed, no transition runs and no screen holds a block (never on the
+/// root, where it would leave the stack stuck): the delegate of the edge swipe. From iOS 26 the swipe from anywhere in the
+/// content keeps its own delegate and is turned off while blocked.
 @MainActor
-private final class PopGestureDelegate: NSObject, UIGestureRecognizerDelegate {
+final class PopGestureDelegate: NSObject, UIGestureRecognizerDelegate {
     nonisolated(unsafe) static var key: UInt8 = 0
     private weak var nav: UINavigationController?
+    /// The probes that hold a block (a pushed screen with unsaved changes, ``View/blocksBackGesture(_:)``).
+    private var holders = Set<ObjectIdentifier>()
+
+    var blocked: Bool { !holders.isEmpty }
+
+    /// [owner] blocks the back gestures, or releases its own block; another owner's block stays.
+    func block(_ on: Bool, by owner: AnyObject) {
+        if on { holders.insert(ObjectIdentifier(owner)) } else { holders.remove(ObjectIdentifier(owner)) }
+        if #available(iOS 26.0, *) { nav?.interactiveContentPopGestureRecognizer?.isEnabled = !blocked }
+    }
 
     init(_ nav: UINavigationController) {
         self.nav = nav
     }
 
+    /// [nav]'s delegate, installed on first use; nil when the stack has no pop gesture.
+    static func of(_ nav: UINavigationController) -> PopGestureDelegate? {
+        if let d = objc_getAssociatedObject(nav, &key) as? PopGestureDelegate { return d }
+        guard let pop = nav.interactivePopGestureRecognizer else { return nil }
+        let d = PopGestureDelegate(nav)
+        objc_setAssociatedObject(nav, &key, d, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        pop.delegate = d
+        return d
+    }
+
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-        // Never during a push or pop already under way.
-        guard let nav, nav.transitionCoordinator == nil else { return false }
+        // Never during a push or pop already under way, nor from the root, nor while the screen on top blocks it.
+        guard !blocked, let nav, nav.transitionCoordinator == nil else { return false }
         return nav.viewControllers.count > 1
     }
 }

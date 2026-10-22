@@ -11,7 +11,7 @@ public struct HistoryHost {
     public var onBack: @MainActor () -> Void = {}
     /// A connection's page (the entry's connection).
     public var onOpenConnection: @MainActor (String) -> Void = { _ in }
-    /// An item of the Vault (an item entry's); nil until the Vault screens (IOS-PLAN §8 I3.1).
+    /// An item of the Vault (an item entry's); nil without the Vault screens.
     public var onOpenItem: (@MainActor (String) -> Void)?
     /// The credential alarm (an open alarm refuses an export).
     public var onOpenAlarm: @MainActor () -> Void = {}
@@ -33,16 +33,20 @@ public struct HistoryRoute: View {
     private let connectionID: String?
     private let chrome: ShellChrome?
     private let host: HistoryHost
+    private let items: (any ItemsRepository)?
     @State private var model: HistoryViewModel?
     @State private var exportModel: HistoryExportViewModel?
 
+    /// [items]: the Vault list, whose names the item entries show ("Deleted item" for one it does not hold).
     public init(
         history: any HistoryRepository, export: any HistoryExportRepository, connections: (any ConnectionsRepository)? = nil,
-        ownerChecks: (any OwnerCheckRepository)? = nil, connectionID: String? = nil, chrome: ShellChrome?, host: HistoryHost
+        ownerChecks: (any OwnerCheckRepository)? = nil, items: (any ItemsRepository)? = nil, connectionID: String? = nil,
+        chrome: ShellChrome?, host: HistoryHost
     ) {
         self.history = history
         self.export = export
         self.connections = connections
+        self.items = items
         self.ownerChecks = ownerChecks
         self.connectionID = connectionID
         self.chrome = chrome
@@ -64,7 +68,10 @@ public struct HistoryRoute: View {
         }
         .onAppear {
             if model == nil {
-                model = HistoryViewModel(history: history, connections: connections, ownerChecks: ownerChecks, connectionID: connectionID)
+                model = HistoryViewModel(
+                    history: history, connections: connections, ownerChecks: ownerChecks, connectionID: connectionID,
+                    items: items
+                )
             }
             if exportModel == nil { exportModel = HistoryExportViewModel(repo: export) }
         }
@@ -121,20 +128,28 @@ public struct HistoryEntryRoute: View {
     private let seq: Int64
     private let history: any HistoryRepository
     private let connections: (any ConnectionsRepository)?
+    private let items: (any ItemsRepository)?
     private let host: HistoryHost
     @State private var model: HistoryEntryViewModel?
 
-    public init(_ seq: Int64, history: any HistoryRepository, connections: (any ConnectionsRepository)? = nil, host: HistoryHost) {
+    /// [items]: the Vault list (the entry's item, its name and "Open the item").
+    public init(
+        _ seq: Int64, history: any HistoryRepository, connections: (any ConnectionsRepository)? = nil, items: (any ItemsRepository)? = nil,
+        host: HistoryHost
+    ) {
         self.seq = seq
         self.history = history
         self.connections = connections
+        self.items = items
         self.host = host
     }
 
     public var body: some View {
         HistoryEntryScreen(state: model?.state ?? HistoryEntryState(), actions: actions)
             .onAppear {
-                if model == nil { model = HistoryEntryViewModel(seq: seq, history: history, connections: connections) }
+                if model == nil {
+                    model = HistoryEntryViewModel(seq: seq, history: history, connections: connections, items: items)
+                }
             }
     }
 

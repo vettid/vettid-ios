@@ -121,18 +121,22 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
 public final class ApprovalDetailViewModel {
     @ObservationIgnored private let repo: any ApprovalsRepository
     @ObservationIgnored private let connections: (any ConnectionsRepository)?
+    @ObservationIgnored private let vault: (any ItemsRepository)?
     @ObservationIgnored private let work = Work()
     @ObservationIgnored private let follows = TaskBag()
     private var local: ApprovalDetailState
 
     /// [key]: the approval's ``PendingApproval/key``. [connections]: for the requester's name. [items]: the member's items a
-    /// category entry can be answered with (the Vault screens bring them, IOS-PLAN §8 I3.1; until then none, so a category
-    /// entry cannot be granted: chosen; not in the spec).
+    /// category entry can be answered with; [vault] in its place: the Vault list, read quietly when it has not been read
+    /// and followed as it changes (without either none, so a category entry cannot be granted: chosen; not in the spec).
     public init(
-        key: String, approvals: any ApprovalsRepository, connections: (any ConnectionsRepository)? = nil, items: [AnswerItem] = []
+        key: String, approvals: any ApprovalsRepository, connections: (any ConnectionsRepository)? = nil, items: [AnswerItem] = [],
+        vault: (any ItemsRepository)? = nil
     ) {
         repo = approvals
         self.connections = connections
+        self.vault = vault
+        vault?.readIfNotLoaded()
         local = ApprovalDetailState(key: key)
         local.approval = approvals.approvals.first { $0.key == key }
         local.items = items.sorted { $0.name.lowercased() < $1.name.lowercased() }
@@ -159,6 +163,7 @@ public final class ApprovalDetailViewModel {
 
     public var state: ApprovalDetailState {
         var s = local
+        if let vault { s.items = Self.answers(vault.items) }
         let now = repo.approvals.first { $0.key == local.key }
         s.approval = now ?? local.approval
         s.gone = now == nil && local.approval != nil && !local.done && !local.busy && local.criticalResult == nil
@@ -171,6 +176,12 @@ public final class ApprovalDetailViewModel {
     }
 
     private static func connectionID(_ a: PendingApproval) -> String? { a.connectionID }
+
+    /// The Vault list's items as answers, by name.
+    static func answers(_ items: [ItemSummary]) -> [AnswerItem] {
+        items.map { AnswerItem(id: $0.itemID, name: $0.name, category: $0.category, critical: $0.sensitivity == .critical) }
+            .sorted { $0.name.lowercased() < $1.name.lowercased() }
+    }
 
     public func setPassword(_ v: String) {
         local.password = v

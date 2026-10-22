@@ -2,7 +2,7 @@
 import PackageDescription
 
 // The Vault (vettid-android `feature/items`): the member's items and their tags (IOS-PLAN §8 I3.1; ANDROID-PLAN §4
-// Vault; VAULT-ITEMS). I3.1b brings the tags' screen and the colours of the tags; the item screens follow.
+// Vault; VAULT-ITEMS): the Vault list, an item's screen, adding and editing from the templates, and the tags.
 let package = Package(
     name: "VettIDItems",
     defaultLocalization: "en",
@@ -41,7 +41,10 @@ let package = Package(
                 "VettIDItems",
                 .product(name: "VettIDData", package: "VettIDData"),
                 .product(name: "VettIDDataTesting", package: "VettIDData"),
-            ]
+            ],
+            // vettid-vault's registry of templates (Resources/SOURCE.md).
+            exclude: ["Resources/SOURCE.md"],
+            resources: [.copy("Resources/item-templates.json")]
         ),
         .testTarget(
             name: "VettIDItemsUITests",

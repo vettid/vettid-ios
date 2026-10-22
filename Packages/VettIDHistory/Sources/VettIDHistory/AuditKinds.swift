@@ -6,6 +6,13 @@ import VettIDData
 /// agents (§10.11), and a generic title for a kind this app does not know (a newer vault's), which shows the kind itself.
 /// The titles are keys of ``HistoryKindTexts``; ``HistoryText`` reads them. Mirrors vettid-android `AuditKinds`.
 public enum AuditKinds {
+    /// The Vault list's names by item id, read when asked (nil before the list is read); nil without the list.
+    @MainActor
+    static func itemNames(_ items: (any ItemsRepository)?) -> (@MainActor () -> [String: String]?)? {
+        guard let items else { return nil }
+        return { items.names }
+    }
+
     /// The kinds whose `ref` is an `item_id` (§10.9: the vault's search reads the item's name for them), with
     /// `leash.item.run`, `.proxy` and `.changed` (IOS-PLAN §4.1).
     public static let itemRefKinds: Set<String> = [
