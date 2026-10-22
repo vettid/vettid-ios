@@ -243,13 +243,13 @@
         }
       }
     },
-    "items_sensitivity_secret_note": {
+    "ios_items_sensitivity_secret_note": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Hidden until you reveal it with your fingerprint or screen lock; every reveal is recorded"
+            "value": "Hidden until you reveal it with Face ID, Touch ID or your iPhone passcode; every reveal is recorded"
           }
         }
       }
@@ -1761,13 +1761,13 @@
         }
       }
     },
-    "items_secret_hidden_body": {
+    "ios_items_secret_hidden_body": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Its values are hidden. Revealing them asks for your fingerprint or screen lock and is recorded in your history."
+            "value": "Its values are hidden. Revealing them asks for Face ID, Touch ID or your iPhone passcode and is recorded in your history."
           }
         }
       }
@@ -3498,6 +3498,40 @@
                 "stringUnit": {
                   "state": "translated",
                   "value": "You will be asked about sharing %lld items."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "items_phone_extension_note": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensions aren't saved; add it to the item's notes."
+          }
+        }
+      }
+    },
+    "items_share_preview_more": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld more may be shared."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld more may be shared."
                 }
               }
             }

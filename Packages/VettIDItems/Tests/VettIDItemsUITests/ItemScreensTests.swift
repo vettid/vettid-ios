@@ -161,6 +161,46 @@ import VettIDUI
         window.isHidden = true
     }
 
+    /// Puts [content] in a window, finds its text field captioned "Memo", gives it the focus and answers whether the field
+    /// sits on the secure layer and took the focus.
+    private func focusMemo(_ content: (ItemEditState, ItemEditActions) -> some View) async throws -> (secure: Bool, focused: Bool) {
+        var state = ItemEditState()
+        state.loading = false
+        state.draft = ItemDraft(name: "Note", fields: [DraftField(label: "Memo", kind: FieldKinds.text)])
+        let host = UIHostingController(rootView: content(state, ItemEditActions()).vettIDTheme(.dark))
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        func all(_ v: UIView) -> [UIView] { [v] + v.subviews.flatMap(all) }
+        var memo: UITextField?
+        for _ in 0..<40 where memo == nil {
+            host.view.layoutIfNeeded()
+            memo = all(host.view).compactMap { $0 as? UITextField }.first { $0.placeholder == "Memo" }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        let field = try #require(memo)
+        var secure = false
+        var up: UIView? = field
+        while let u = up {
+            secure = secure || String(describing: type(of: u)).contains("Canvas")
+            up = u.superview
+        }
+        let focused = field.becomeFirstResponder() && field.isFirstResponder
+        window.isHidden = true
+        return (secure, focused)
+    }
+
+    /// The editor is drawn on the same layer as the item's screen (IOS-PLAN I3.1, ID10): its text fields sit on the layer and
+    /// take the focus, as they do outside the container (the control). What no test here can see, and is checked on the
+    /// iPhone: the software keyboard, typing and scrolling to a focused field, and VoiceOver.
+    @Test func theEditorIsInTheSecureContainerAndItsFieldsTakeTheFocus() async throws {
+        try #require(SecureLayer.isAvailable, "no secure layer on this iOS: the cover and capture hiding protect the values")
+        let inside = try await focusMemo { ItemEditScreen(state: $0, actions: $1) }
+        #expect(inside.secure && inside.focused)
+        let outside = try await focusMemo { ItemEditForm(state: $0, actions: $1) }
+        #expect(!outside.secure && outside.focused)
+    }
+
     @Test func everyCategoryHasItsGlyph() {
         #expect(ItemTemplates.categories.allSatisfy { ItemSymbols.category($0.id) != .folder || $0.id == "other" })
         #expect(ItemSymbols.category("loyalty_cards") == .folder)

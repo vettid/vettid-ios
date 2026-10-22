@@ -154,10 +154,10 @@ public extension ItemsStrings {
 
     static var secretHiddenBody: String {
         String(
-            localized: "items_secret_hidden_body",
+            localized: "ios_items_secret_hidden_body",
             defaultValue: """
-                Its values are hidden. Revealing them asks for your fingerprint or screen lock and is recorded in \
-                your history.
+                Its values are hidden. Revealing them asks for Face ID, Touch ID or your iPhone passcode and is \
+                recorded in your history.
                 """,
             bundle: .module
         )
@@ -345,7 +345,16 @@ public extension ItemsStrings {
 
     static var saveItem: String { String(localized: "items_save_item", defaultValue: "Save item", bundle: .module) }
 
-    static var phoneCheck: String { String(localized: "items_phone_check", defaultValue: "Check this number", bundle: .module) }
+    static var phoneExtensionNote: String {
+        String(
+            localized: "items_phone_extension_note", defaultValue: "Extensions aren't saved; add it to the item's notes.",
+            bundle: .module
+        )
+    }
+
+    static var phoneCheck: String {
+        String(localized: "items_phone_check", defaultValue: "Check this number", bundle: .module)
+    }
 
     static var name: String { String(localized: "items_name", defaultValue: "Name", bundle: .module) }
 

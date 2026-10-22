@@ -408,6 +408,10 @@ public extension ItemsStrings {
         String(localized: "items_tags_change_shared", defaultValue: "\(a) items are then shared automatically.", bundle: .module)
     }
 
+    static func sharePreviewMore(_ a: Int) -> String {
+        String(localized: "items_share_preview_more", defaultValue: "\(a) more may be shared.", bundle: .module)
+    }
+
     static func tagsChangeAsked(_ a: Int) -> String {
         String(localized: "items_tags_change_asked", defaultValue: "You will be asked about sharing \(a) items.", bundle: .module)
     }
