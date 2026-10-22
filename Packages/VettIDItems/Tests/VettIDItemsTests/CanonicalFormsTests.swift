@@ -135,6 +135,8 @@ import VettIDDataTesting
         #expect(PhoneInput.display("+442079460958", region: "GB") == "020 7946 0958")
         #expect(PhoneInput.display("+442079460958", region: "US") == "+44 20 7946 0958")
         #expect(PhoneInput.display("+16502530000", region: "US") == "(650) 253-0000")
+        // The national prefix rule draws the first group the format uses: $2 for Argentina's mobiles (libphonenumber).
+        #expect(PhoneInput.display("+5491123456789", region: "AR") == "011 15-2345-6789")
         #expect(PhoneInput.display("+16502530000", region: "GB") == "+1 650-253-0000")
         // What the library does not read is shown as stored.
         #expect(PhoneInput.display("55512", region: "US") == "55512" && PhoneInput.display("", region: "US") == "")

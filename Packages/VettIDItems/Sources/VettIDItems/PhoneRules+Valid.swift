@@ -61,9 +61,12 @@ extension PhoneRules {
         var out = national
         if let f = list.first(where: { fits($0, national) }) {
             var template = f.format
-            if !international, let rule = f.prefixRule, !rule.isEmpty {
-                let r = rule.replacingOccurrences(of: "$NP", with: t.nationalPrefix ?? "").replacingOccurrences(of: "$FG", with: "$1")
-                if let at = template.range(of: "\\$\\d", options: .regularExpression) { template.replaceSubrange(at, with: r) }
+            // $FG is the first group the template draws, which is not always $1 (Argentina's mobiles start at $2).
+            if !international, let rule = f.prefixRule, !rule.isEmpty,
+               let at = template.range(of: "\\$\\d", options: .regularExpression) {
+                let r = rule.replacingOccurrences(of: "$NP", with: t.nationalPrefix ?? "")
+                    .replacingOccurrences(of: "$FG", with: String(template[at]))
+                template.replaceSubrange(at, with: r)
             }
             if let regex = try? NSRegularExpression(pattern: "^(?:" + f.pattern + ")$") {
                 out = regex.stringByReplacingMatches(
