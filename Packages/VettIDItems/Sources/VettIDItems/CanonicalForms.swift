@@ -53,12 +53,6 @@ public enum CanonicalForms {
         return t.hasPrefix("+") ? String(t.dropFirst()) : t
     }
 
-    /// `date`: `YYYY-MM` when the field is a month and year ([month]: its template carries `"format": "month"`, or it holds
-    /// `YYYY-MM` already), else the form typed; the app never invents a day.
-    public static func date(_ typed: String, month: Bool) -> String {
-        month && typed.utf8.count == 10 ? String(typed.prefix(7)) : typed
-    }
-
     /// `email`: trimmed, the domain (after the last `@`) lower-cased, the local part as typed.
     public static func email(_ typed: String) -> String {
         let t = trim(typed)
@@ -66,30 +60,41 @@ public enum CanonicalForms {
         return t[...at] + lower(String(t[t.index(after: at)...]))
     }
 
-    /// `url`: trimmed; a text that starts with `scheme://` keeps its scheme and host lower-cased; `mailto:`, `tel:` and
-    /// `sms:` keep their form with the scheme lower-cased; anything else gets `https://` in front (and so its host lower-cased). The rest as typed.
+    /// `url` (0.55.3), trimmed first, the first rule that matches wins: (a) `scheme://` keeps its scheme and lower-cases its
+    /// host (after `userinfo@`, up to `:port`, `/`, `?` or `#`; a bracketed IPv6 literal is the host as a whole and the port
+    /// follows the `]`); (b) `mailto:`, `tel:` and `sms:` (any case) keep their form with the scheme lower-cased; (c) a text
+    /// with no `/` before its first `:`, whose part before it is a scheme without a `.` and which is not a host and port
+    /// (`:` and digits up to `/`, `?`, `#` or the end) keeps its scheme the same way (`urn:isbn:1`, `foo:`, `C:\path`);
+    /// (d) anything else gets `https://` and its host lower-cased as in (a). The rest as typed.
     public static func url(_ typed: String) -> String {
         let t = trim(typed)
         guard !t.isEmpty else { return t }
-        if let r = t.range(of: "^[A-Za-z][A-Za-z0-9+.-]*://", options: .regularExpression) {
-            let rest = t[r.upperBound...]
-            let end = rest.firstIndex(where: { "/?#".contains($0) }) ?? rest.endIndex
-            let authority = rest[..<end]
-            let userinfo = authority.lastIndex(of: "@").map { authority[...$0] } ?? ""
-            let hostPort = authority.dropFirst(userinfo.count)
-            let hostEnd: String.Index
-            if hostPort.first == "[" {
-                hostEnd = hostPort.firstIndex(of: "]").map { hostPort.index(after: $0) } ?? hostPort.endIndex
-            } else {
-                hostEnd = hostPort.firstIndex(of: ":") ?? hostPort.endIndex
-            }
-            return lower(String(t[r])) + userinfo + lower(String(hostPort[..<hostEnd])) + hostPort[hostEnd...] + rest[end...]
-        }
+        if let r = t.range(of: "^[A-Za-z][A-Za-z0-9+.-]*://", options: .regularExpression) { return lowerHost(t, schemeEnd: r) }
         let lowered = lower(t)
-        for scheme in ["mailto:", "tel:", "sms:"] where lowered.hasPrefix(scheme) {
-            return scheme + t.dropFirst(scheme.count)
+        for scheme in ["mailto:", "tel:", "sms:"] where lowered.hasPrefix(scheme) { return scheme + t.dropFirst(scheme.count) }
+        if let colon = t.firstIndex(of: ":"), !t[..<colon].contains("/"),
+           t[..<colon].range(of: "^[A-Za-z][A-Za-z0-9+.-]*$", options: .regularExpression) != nil, !t[..<colon].contains("."),
+           t[t.index(after: colon)...].range(of: "^[0-9]+([/?#]|$)", options: .regularExpression) == nil {
+            return lower(String(t[...colon])) + t[t.index(after: colon)...]
         }
-        return url("https://" + t)
+        let https = "https://" + t
+        return lowerHost(https, schemeEnd: https.range(of: "^https://", options: .regularExpression) ?? https.startIndex..<https.startIndex)
+    }
+
+    /// [t] with the scheme before [schemeEnd] and the host after it lower-cased (rule (a) of ``url(_:)``).
+    private static func lowerHost(_ t: String, schemeEnd r: Range<String.Index>) -> String {
+        let rest = t[r.upperBound...]
+        let end = rest.firstIndex(where: { "/?#".contains($0) }) ?? rest.endIndex
+        let authority = rest[..<end]
+        let userinfo = authority.lastIndex(of: "@").map { authority[...$0] } ?? ""
+        let hostPort = authority.dropFirst(userinfo.count)
+        let hostEnd: String.Index
+        if hostPort.first == "[" {
+            hostEnd = hostPort.firstIndex(of: "]").map { hostPort.index(after: $0) } ?? hostPort.endIndex
+        } else {
+            hostEnd = hostPort.firstIndex(of: ":") ?? hostPort.endIndex
+        }
+        return lower(String(t[r])) + userinfo + lower(String(hostPort[..<hostEnd])) + hostPort[hostEnd...] + rest[end...]
     }
 
     /// The label as a path segment of an `otpauth://` URI: its UTF-8 bytes, every one but `A-Za-z0-9-._~` as `%XX` in
@@ -156,7 +161,6 @@ public enum CanonicalForms {
         switch f.kind {
         case FieldKinds.text: trim(f.text)
         case FieldKinds.number: number(f.text)
-        case FieldKinds.date: date(f.text, month: f.monthYear)
         case FieldKinds.email: email(f.text)
         case FieldKinds.url: url(f.text)
         case FieldKinds.phone: PhoneInput.stored(f.text, region: region)

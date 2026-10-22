@@ -31,7 +31,7 @@ public struct DraftField: Equatable, Sendable, CustomStringConvertible, CustomRe
     public var value: FieldValue { kind == FieldKinds.address ? .address(address) : .text(text) }
 
     /// `YYYY-MM`.
-    static let yearMonthLength = 7
+    public static let yearMonthLength = 7
 
     public static func of(_ f: ItemFieldView) -> DraftField {
         switch f.value {

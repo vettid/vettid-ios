@@ -136,7 +136,11 @@ public enum DateInput {
     /// works), or nil when no date can begin so and the change is refused. A deletion (fewer digits than [old] held)
     /// always goes through, so a digit in the middle can be taken out and typed again.
     public static func accept(old: String, typed: String, monthOnly: Bool) -> String? {
-        let d = String(digits(typed).prefix(monthOnly ? month : day))
+        // A month field takes the year and the month only (0.55.3): one more digit typed is refused, and a pasted full date
+        // is kept whole so that the field says it is not a month, never cut.
+        let all = digits(typed)
+        if monthOnly, all.count > month, (1...1).contains(all.count - digits(old).count) { return nil }
+        let d = String(all.prefix(day))
         return possible(d) || d.count < digits(old).count ? format(d) : nil
     }
 

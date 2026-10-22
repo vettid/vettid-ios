@@ -27,13 +27,41 @@ enum PhoneRules {
         var generalPattern: String?
         var national: [Int]
         var localOnly: Set<Int>
+        var leadingDigits: String?
+        var nationalPrefix: String?
+        /// The number types libphonenumber tells apart for `isValidNumber`, in its order.
+        var types: [Desc] = []
+        var formats: [Format] = []
+    }
+
+    /// A number type: its national number pattern and, when the metadata gives them, the lengths it allows.
+    struct Desc: Sendable {
+        var pattern: String
+        var lengths: Set<Int>?
+    }
+
+    /// A formatting pattern of a territory (libphonenumber's `NumberFormat`); [intl] is nil when the format has no
+    /// `intlFormat`, `"NA"` when it has no international form.
+    struct Format: Sendable {
+        var pattern: String
+        var leading: [String]
+        var format: String
+        var intl: String?
+        var prefixRule: String?
     }
 
     struct Metadata: Sendable {
         var byID: [String: Territory] = [:]
         /// The main territory of a country calling code (libphonenumber's `getRegionCodeForCountryCode`).
         var mainByCode: [Int: Territory] = [:]
+        /// Every territory of a country calling code, the main one first (libphonenumber's `regionsByCountryCode`).
+        var regionsByCode: [Int: [Territory]] = [:]
     }
+
+    /// The types `isValidNumber` tries, in libphonenumber's order (`noInternationalDialling` is not one of them).
+    private static let validTypes = [
+        "premiumRate", "tollFree", "sharedCost", "voip", "personalNumber", "pager", "uan", "voicemail", "fixedLine", "mobile",
+    ]
 
     private static let types = [
         "fixedLine", "mobile", "pager", "personalNumber", "premiumRate", "sharedCost", "tollFree", "voicemail", "voip", "uan",
@@ -60,19 +88,43 @@ enum PhoneRules {
                 local.formUnion(lengths(l["localOnly"] as? String))
             }
             let general = (o["generalDesc"] as? [String: Any])?["nationalNumberPattern"] as? String
-            let t = Territory(
+            var t = Territory(
                 id: id, countryCode: cc, main: (o["mainCountryForCode"] as? String) == "true",
                 internationalPrefix: o["internationalPrefix"] as? String,
                 nationalPrefixForParsing: (o["nationalPrefixForParsing"] as? String) ?? (o["nationalPrefix"] as? String),
                 nationalPrefixTransformRule: o["nationalPrefixTransformRule"] as? String, generalPattern: general,
-                national: national.sorted(), localOnly: local.subtracting(national)
+                national: national.sorted(), localOnly: local.subtracting(national),
+                leadingDigits: o["leadingDigits"] as? String, nationalPrefix: o["nationalPrefix"] as? String
             )
+            t.types = validTypes.compactMap { name in
+                guard let desc = o[name] as? [String: Any], let pattern = desc["nationalNumberPattern"] as? String else { return nil }
+                let l = (desc["possibleLengths"] as? [String: Any])?["national"] as? String
+                return Desc(pattern: pattern, lengths: l.map { lengths($0) })
+            }
+            t.formats = formats(o)
             m.byID[id] = t
-            if t.main || m.mainByCode[cc] == nil { m.mainByCode[cc] = t }
+            m.regionsByCode[cc, default: []].append(t)
         }
-        // A territory flagged as the main one wins over the first listed.
-        for t in m.byID.values where t.main { m.mainByCode[t.countryCode] = t }
+        // A territory flagged as the main one comes first and wins the country code.
+        for (cc, list) in m.regionsByCode {
+            let ordered = list.filter(\.main) + list.filter { !$0.main }
+            m.regionsByCode[cc] = ordered
+            m.mainByCode[cc] = ordered[0]
+        }
         return m
+    }
+
+    private static func formats(_ o: [String: Any]) -> [Format] {
+        let raw = (o["availableFormats"] as? [String: Any])?["numberFormat"]
+        let list = (raw as? [[String: Any]]) ?? (raw as? [String: Any]).map { [$0] } ?? []
+        return list.compactMap { f in
+            guard let pattern = f["pattern"] as? String, let format = f["format"] as? String else { return nil }
+            let leading = (f["leadingDigits"] as? [String]) ?? (f["leadingDigits"] as? String).map { [$0] } ?? []
+            return Format(
+                pattern: pattern, leading: leading, format: format, intl: f["intlFormat"] as? String,
+                prefixRule: f["nationalPrefixFormattingRule"] as? String
+            )
+        }
     }
 
     /// `"6,[8-10]"` as 6, 8, 9, 10.
@@ -103,13 +155,13 @@ enum PhoneRules {
 
     // MARK: - Regular expressions
 
-    private static func matchesEntirely(_ pattern: String?, _ s: String) -> Bool {
+    static func matchesEntirely(_ pattern: String?, _ s: String) -> Bool {
         guard let pattern, let r = try? NSRegularExpression(pattern: "^(?:" + pattern + ")$") else { return false }
         return r.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)) != nil
     }
 
     /// The match of [pattern] at the start of [s] (`lookingAt`).
-    private static func leading(_ pattern: String, _ s: String) -> NSTextCheckingResult? {
+    static func leading(_ pattern: String, _ s: String) -> NSTextCheckingResult? {
         guard let r = try? NSRegularExpression(pattern: "^(?:" + pattern + ")") else { return nil }
         return r.firstMatch(in: s, range: NSRange(s.startIndex..., in: s))
     }

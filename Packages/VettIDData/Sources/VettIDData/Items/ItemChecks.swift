@@ -88,7 +88,9 @@ public enum ItemChecks {
         for (i, f) in d.fields.enumerated() {
             // A kept value was checked by the vault for its kind (§10.7 Kept values); a kept file field cannot exist.
             let value = f.kept && f.kind != FieldKinds.file ? [] : valueProblems(f.kind, f.value)
-            let all = labelProblems(f.label.itemTrimmed).union(value)
+            var all = labelProblems(f.label.itemTrimmed).union(value)
+            // A month field takes the year and the month only: a full date is refused, never cut (0.55.3).
+            if f.kind == FieldKinds.date, f.monthYear, !f.kept, f.text.utf8.count > DraftField.yearMonthLength { all.insert(.valueInvalid) }
             if !all.isEmpty { fieldProblems[i] = all }
         }
         let max = d.sensitivity == .critical ? maxCriticalBytes : maxItemBytes

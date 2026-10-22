@@ -9,10 +9,10 @@ import PhoneNumberKit
 /// without a `+` is the device's locale region (``deviceRegion``); with none, such a number is not read as a phone
 /// number. Mirrors vettid-android `PhoneInput`; the library is PhoneNumberKit (libphonenumber's metadata and formats).
 public enum PhoneInput {
-    /// At most this many digits are stored when the text is not a possible number (§10.7 "Phone values" 3).
-    public static let maxDigits = 15
-    /// What the edit text holds of an extension (a marker and what follows), as a bound.
-    static let maxExtension = 32
+    /// Every writer keeps the edit text of a phone field, the extension marker text included, to this many characters
+    /// (VAULT-MESSAGING 0.55.4 §10.7 "Phone values" 3), so the fallback form always satisfies the table. No digit is cut
+    /// before the number is read.
+    public static let maxEditLength = 32
 
     /// The locale's region (`Locale.current.region`): iOS has no reliable network or SIM country; nil when the locale has
     /// none or the library does not know it.
@@ -66,11 +66,11 @@ public enum PhoneInput {
         return (plus, digits)
     }
 
-    /// The dialable characters of [text] without its extension: a leading `+` if typed, then at most ``maxDigits`` digits;
+    /// The dialable characters of [text] without its extension: a leading `+` if typed, then all its digits;
     /// `""` with no digit (the form for what is not a possible number).
     public static func raw(_ text: String) -> String {
         let d = dialable(split(text).number)
-        return d.digits.isEmpty ? "" : (d.plus ? "+" : "") + d.digits.prefix(maxDigits)
+        return d.digits.isEmpty ? "" : (d.plus ? "+" : "") + d.digits
     }
 
     /// What the edit text keeps of [typed] (a typed or pasted text, whole): the number as ``raw(_:)`` has it (a bare `+` kept
@@ -78,8 +78,8 @@ public enum PhoneInput {
     public static func edit(_ typed: String) -> String {
         let (number, tail) = split(typed)
         let d = dialable(number)
-        let head = (d.plus ? "+" : "") + d.digits.prefix(maxDigits)
-        return head + FieldInput.utf8Take(tail.filter { !$0.isNewline }, maxExtension)
+        let head = (d.plus ? "+" : "") + d.digits
+        return String((head + tail.filter { !$0.isNewline }).prefix(maxEditLength))
     }
 
     // MARK: - What is stored
@@ -89,20 +89,17 @@ public enum PhoneInput {
     public static func stored(_ text: String, region: String? = deviceRegion) -> String {
         let d = dialable(split(text).number)
         guard !d.digits.isEmpty else { return "" }
-        // The digits are cut to 15 before they are read, as vettid-android's `raw` does before `stored` parses them
-        // (ANDROID-PLAN: "a number longer than 15 digits cut to 15"; VAULT-MESSAGING §10.7 "Phone values" 2 reads "the rest").
-        let digits = String(d.digits.prefix(maxDigits))
-        return PhoneRules.e164(digits, plus: d.plus, region: region) ?? (d.plus ? "+" : "") + digits
+        // No digit is cut (0.55.4): the library decides, and a number it does not find possible keeps all its digits.
+        return PhoneRules.e164(d.digits, plus: d.plus, region: region) ?? (d.plus ? "+" : "") + d.digits
     }
 
-    /// Whether [text] has digits but is not a valid number (libphonenumber's `isValidNumber`, as vettid-android's `doubtful`):
-    /// "Check this number" shows, never a block. A possible number that is not valid is stored in E.164 and still gets the
-    /// hint (chosen: follows the code, ANDROID-PLAN keeps `doubtful` unchanged; VAULT-MESSAGING §10.7 "Phone values" 3 ties
-    /// the hint to the fallback form).
+    /// Whether [text] has digits but is not a valid number (libphonenumber's `isValidNumber`; VAULT-MESSAGING 0.55.4 §10.7
+    /// "Phone values" 3): "Check this number" shows whether the value is stored as E.164 or as dialable characters, and
+    /// never blocks.
     public static func doubtful(_ text: String, region: String? = deviceRegion) -> Bool {
         let d = dialable(split(text).number)
         guard !d.digits.isEmpty else { return false }
-        return !engine.isValid((d.plus ? "+" : "") + d.digits.prefix(maxDigits), region: region)
+        return !PhoneRules.isValid(d.digits, plus: d.plus, region: region)
     }
 
     // MARK: - What is shown
@@ -112,7 +109,11 @@ public enum PhoneInput {
     public static func display(_ stored: String, region: String? = deviceRegion) -> String {
         guard !stored.isEmpty else { return stored }
         let d = dialable(stored)
-        return engine.display(d.plus ? "+" + d.digits : d.digits, region: region) ?? stored
+        guard let v = PhoneRules.valid(d.digits, plus: d.plus, region: region) else { return stored }
+        let home = region != nil && v.territory.id == region?.uppercased()
+        // Formats come from the main territory of the country calling code, as libphonenumber's `format` takes them.
+        let formats = PhoneRules.metadata.mainByCode[v.code] ?? v.territory
+        return PhoneRules.formatted(v.national, code: v.code, in: formats, international: !home)
     }
 
     /// The edit text drawn as the member types: the number in the as-you-type format (for [region], or by its country code
@@ -120,9 +121,15 @@ public enum PhoneInput {
     public static func mask(_ edit: String, region: String? = deviceRegion) -> String {
         let (number, tail) = split(edit)
         let d = dialable(number)
-        let raw = (d.plus ? "+" : "") + d.digits.prefix(maxDigits)
+        let raw = (d.plus ? "+" : "") + d.digits
         var drawn = d.digits.isEmpty || (region == nil && !d.plus) ? raw : engine.partial(raw, region: region)
-        if raw.hasPrefix("+1") { drawn = internationalNanp(drawn) }
+        if raw.hasPrefix("+1") {
+            drawn = internationalNanp(drawn)
+        } else if !d.plus, d.digits.hasPrefix("1"), let r = region, PhoneRules.metadata.byID[r.uppercased()]?.countryCode == 1 {
+            // A North American number dialled with its trunk 1: `1 650-253-0000`.
+            let rest = String(d.digits.dropFirst())
+            drawn = rest.isEmpty ? "1" : "1 " + internationalNanp(engine.partial("+1" + rest, region: region)).dropFirst(3)
+        }
         return tail.isEmpty ? drawn : drawn + " " + tail
     }
 
@@ -159,29 +166,10 @@ public enum PhoneInput {
     private static let engine = PhoneEngine()
 }
 
-/// PhoneNumberKit's formats, behind a lock (its utility keeps caches and is not documented as thread-safe).
+/// PhoneNumberKit's as-you-type formatter, behind a lock (its utility keeps caches and is not documented as thread-safe).
 private final class PhoneEngine: @unchecked Sendable {
     private let lock = NSLock()
     private let utility = PhoneNumberUtility()
-
-    /// libphonenumber's `isValidNumber` (PhoneNumberKit parses only what it can type as a valid number).
-    func isValid(_ number: String, region: String?) -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        guard number.hasPrefix("+") || region != nil else { return false }
-        return utility.isValidPhoneNumber(number, withRegion: region ?? "US")
-    }
-
-    /// The number in national format for a number of [region], else international; nil when it is not a valid number.
-    func display(_ number: String, region: String?) -> String? {
-        lock.lock()
-        defer { lock.unlock() }
-        let plus = number.hasPrefix("+")
-        guard plus || region != nil else { return nil }
-        guard let parsed = try? utility.parse(number, withRegion: region ?? "US") else { return nil }
-        let home = region != nil && utility.getRegionCode(of: parsed) == region
-        return utility.format(parsed, toType: home ? .national : .international)
-    }
 
     func partial(_ raw: String, region: String?) -> String {
         lock.lock()

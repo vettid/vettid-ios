@@ -43,10 +43,25 @@ import VettIDDataTesting
         #expect(PhoneInput.doubtful("253-0000", region: "US"))
     }
 
-    @Test func aNumberLongerThanFifteenDigitsIsCutToFifteen() {
-        #expect(PhoneInput.stored("+1234567890123456789", region: "US") == "+123456789012345")
-        #expect(PhoneInput.stored("12345678901234567890", region: nil) == "123456789012345")
-        #expect(PhoneInput.stored("12345678901234567890", region: "US").filter(\.isNumber).count <= 15)
+    @Test func noDigitIsCutAndTheLibraryDecidesWhatIsPossible() {
+        // VAULT-MESSAGING 0.55.4: a possible number is E.164 whatever its length; the fallback keeps all its digits.
+        #expect(PhoneInput.stored("+49 12345678901234", region: "DE") == "+4912345678901234")
+        #expect(PhoneInput.stored("012345678901234", region: "DE") == "+4912345678901234")
+        #expect(PhoneInput.stored("+491234567890123456", region: "DE") == "+491234567890123456")
+        for t in ["+49 12345678901234", "012345678901234", "+491234567890123456"] { #expect(PhoneInput.doubtful(t, region: "DE"), "\(t)") }
+        #expect(PhoneInput.stored("12345678901234567890", region: nil) == "12345678901234567890")
+        #expect(PhoneInput.raw("+1234567890123456789012") == "+1234567890123456789012")
+    }
+
+    @Test func theEditTextIsAtMost32CharactersMarkerIncluded() {
+        let long = "+" + String(repeating: "1", count: 40)
+        #expect(PhoneInput.edit(long).count == 32)
+        let withMarker = PhoneInput.edit("+442079460958 ext. " + String(repeating: "9", count: 40))
+        #expect(withMarker.count == 32 && withMarker.hasPrefix("+442079460958ext. 99"))
+        #expect(PhoneInput.edit(PhoneInput.edit(long)) == PhoneInput.edit(long))
+        #expect(valid(FieldKinds.phone, PhoneInput.stored(withMarker, region: "US")))
+        #expect(valid(FieldKinds.phone, PhoneInput.stored(PhoneInput.edit(long), region: "US")))
+        #expect(FieldInput.phone(String(repeating: "1", count: 60)).count == 32)
     }
 
     @Test func textWithoutADigitIsEmpty() {
@@ -137,11 +152,24 @@ import VettIDDataTesting
         #expect(PhoneInput.mask("", region: "US") == "")
     }
 
-    @Test func theDigitsAreCutToFifteenBeforeTheyAreRead() {
-        // As vettid-android: `raw` takes 15 digits, then `stored` parses them.
-        #expect(PhoneInput.stored("+49 12345678901234", region: "DE") == "+491234567890123")
-        #expect(PhoneInput.stored("9712345678901234", region: "AE") == "+971234567890123")
-        #expect(PhoneInput.stored("+4303456789012345", region: "AT") == "+43345678901234")
+    @Test func validityFollowsLibphonenumberOnTheCasesPhoneNumberKitGetsWrong() {
+        // The verdicts of libphonenumber's isValidNumber reasoned from its metadata (a 7-digit Caribbean number is local only:
+        // read in BB it is 246 + the number, which no BB pattern has; Channel Islands and Isle of Man have their own regions
+        // under +44; Madagascar and Brazil transform the national prefix; +800 is a non-geographic code; the trunk 0 after
+        // the country code is dropped).
+        for (r, e) in [("BB", "+12462345678"), ("BM", "+14412345678"), ("TT", "+18682345678")] {
+            #expect(PhoneInput.stored("2345678", region: r) == e && !PhoneInput.doubtful("2345678", region: r), "\(r)")
+        }
+        // The Bahamas transform only numbers that start 3-5 or 7-9; this one stays local only, and is not valid.
+        #expect(PhoneInput.stored("2345678", region: "BS") == "2345678" && PhoneInput.doubtful("2345678", region: "BS"))
+        #expect(PhoneInput.stored("01534 123456", region: "JE") == "+441534123456" && !PhoneInput.doubtful("01534 123456", region: "JE"))
+        #expect(PhoneInput.stored("01481 256789", region: "GG") == "+441481256789" && !PhoneInput.doubtful("01481 256789", region: "GG"))
+        #expect(PhoneInput.stored("01624 512345", region: "IM") == "+441624512345" && !PhoneInput.doubtful("01624 512345", region: "IM"))
+        #expect(PhoneInput.stored("032 12 345 67", region: "MG") == "+261321234567" && !PhoneInput.doubtful("032 12 345 67", region: "MG"))
+        #expect(PhoneInput.stored("021 21 2345 6789", region: "BR") == "+552123456789" && !PhoneInput.doubtful("021 21 2345 6789", region: "BR"))
+        #expect(PhoneInput.stored("+800 1234 5678", region: "US") == "+80012345678" && !PhoneInput.doubtful("+800 1234 5678", region: "US"))
+        #expect(PhoneInput.stored("971034567890", region: "AE") == "+97134567890" && !PhoneInput.doubtful("971034567890", region: "AE"))
+        #expect(PhoneInput.stored("351234", region: "NF") == "+672351234" && !PhoneInput.doubtful("351234", region: "NF"))
     }
 
     @Test func theHintFollowsValidityNotPossibility() {
@@ -162,6 +190,20 @@ import VettIDDataTesting
         #expect(PhoneInput.mask("6502", region: "US") == "650-2")
         #expect(PhoneInput.mask("030123456", region: "DE") == "030 123456")
         #expect(PhoneInput.mask("+4930123456", region: "US") == "+49 30 123456")
+        // A trunk 1 is drawn as Android does.
+        #expect(PhoneInput.mask("16502530000", region: "US") == "1 650-253-0000")
+        #expect(PhoneInput.mask("1650", region: "US") == "1 650")
+    }
+
+    @Test func displayFollowsLibphonenumberFormatsOnTheCasesPhoneNumberKitGetsWrong() {
+        // No "NA" for the Cocos and Christmas Islands, which have no formats.
+        for v in ["+61891621234", "+61891641234"] { #expect(!PhoneInput.display(v, region: "US").contains("NA"), "\(v)") }
+        // A 16-digit German number loses no digit.
+        #expect(PhoneInput.display("+4923456789012345", region: "DE") == "0234 56789012345")
+        #expect(PhoneInput.display("+4923456789012345", region: "US") == "+49 234 56789012345")
+        // Valid numbers PhoneNumberKit called not valid are formatted.
+        #expect(PhoneInput.display("+441534123456", region: "GB") == "+44 1534 123456")
+        #expect(PhoneInput.display("+12462345678", region: "US") == "+1 246-234-5678")
     }
 
     @Test func deletingOnlyDrawnSeparatorsDeletesTheDigitBeforeThem() {
@@ -196,12 +238,23 @@ import VettIDDataTesting
         #expect(CanonicalForms.number("++5") == "+5")
     }
 
-    @Test func datesKeepTheirForm() {
-        #expect(CanonicalForms.date("2031-04-30", month: false) == "2031-04-30")
-        #expect(CanonicalForms.date("2031-04", month: true) == "2031-04")
-        #expect(CanonicalForms.date("2031-04-30", month: true) == "2031-04")
-        // A day is never invented.
-        #expect(CanonicalForms.date("2031-04", month: false) == "2031-04")
+    @Test func datesKeepTheirFormAndAMonthFieldRefusesAFullDate() {
+        // A canonical date is the text as it is; the form is the field's: a stored month stays a month, a day a day.
+        var month = DraftField(label: "Expires", kind: FieldKinds.date, text: "2031-04", monthYear: true)
+        #expect(CanonicalForms.field(month, touched: true, region: nil).text == "2031-04")
+        // A month-only value in a day field is accepted as YYYY-MM (valid under the table).
+        let day = DraftField(label: "On", kind: FieldKinds.date, text: "2031-04")
+        #expect(CanonicalForms.field(day, touched: true, region: nil).text == "2031-04")
+        #expect(ItemChecks.check(ItemDraft(name: "X", fields: [day])).ok)
+        // A full date in a month field is refused with the existing date message, never cut.
+        month.text = "2031-04-30"
+        #expect(CanonicalForms.field(month, touched: true, region: nil).text == "2031-04-30")
+        #expect(ItemChecks.check(ItemDraft(name: "X", fields: [month])).fieldProblems[0] == [.valueInvalid])
+        // The input: a seventh digit is refused, a pasted full date is kept whole (and then refused), nothing is cut.
+        #expect(DateInput.accept(old: "2031-04", typed: "2031043", monthOnly: true) == nil)
+        #expect(DateInput.accept(old: "", typed: "20310430", monthOnly: true) == "2031-04-30")
+        #expect(DateInput.accept(old: "2031-04-30", typed: "2031043", monthOnly: true) == "2031-04-3")
+        #expect(DateInput.accept(old: "", typed: "203104", monthOnly: true) == "2031-04")
     }
 
     @Test func emailsAreTrimmedAndTheirDomainLowerCased() {
@@ -220,14 +273,25 @@ import VettIDDataTesting
         #expect(CanonicalForms.url("HTTP://Example.com/A") == "http://example.com/A")
         #expect(CanonicalForms.url("  HTTPS://User:Pw@Example.COM:8080/Path?Q=1#Frag ") == "https://User:Pw@example.com:8080/Path?Q=1#Frag")
         #expect(CanonicalForms.url("ftp://Host") == "ftp://host")
+        #expect(CanonicalForms.url("HTTP://[2001:DB8::1]:8080/A") == "http://[2001:db8::1]:8080/A")
         #expect(CanonicalForms.url("https://[::1]:80/X") == "https://[::1]:80/X")
         #expect(CanonicalForms.url("MAILTO:a@b.c") == "mailto:a@b.c")
+        #expect(CanonicalForms.url("Mailto:a@b.c") == "mailto:a@b.c")
         #expect(CanonicalForms.url("Tel:+442079460958") == "tel:+442079460958")
         #expect(CanonicalForms.url("SMS:+15550100") == "sms:+15550100")
+        // (c) a scheme without `//`.
+        for kept in ["urn:isbn:1", "bitcoin:bc1qxyz", "geo:1,2", "foo:", "tel:5550100"] { #expect(CanonicalForms.url(kept) == kept, "\(kept)") }
+        #expect(CanonicalForms.url("URN:isbn:1") == "urn:isbn:1")
+        #expect(CanonicalForms.url("C:\\path") == "c:\\path")
+        // (d) a host and port, or anything else, gets https://.
         #expect(CanonicalForms.url("localhost:8080/x") == "https://localhost:8080/x")
+        #expect(CanonicalForms.url("Example.com:443/A") == "https://example.com:443/A")
+        #expect(CanonicalForms.url("user@Host:22") == "https://user@host:22")
         #expect(CanonicalForms.url("Example.com/A") == "https://example.com/A")
         #expect(CanonicalForms.url("") == "")
-        for s in ["http://example.com/A", "mailto:a@b.c", "https://localhost:8080/x"] { #expect(valid(FieldKinds.url, s)) }
+        for s in ["http://example.com/A", "mailto:a@b.c", "https://localhost:8080/x", "urn:isbn:1", "bitcoin:bc1qxyz", "geo:1,2", "foo:", "tel:5550100", "c:\\path", "https://user@host:22", "https://example.com:443/A"] {
+            #expect(valid(FieldKinds.url, s), "\(s)")
+        }
     }
 
     @Test func aBareSecretBecomesAnOtpauthUri() {
