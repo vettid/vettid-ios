@@ -144,7 +144,7 @@ import VettIDDataTesting
         #expect(rule("r9", ["a", "b"]).multiTag && !ask.multiTag)
     }
 
-    /// §10.12 (owner's review of #181): a rule is named by its tags; two that read the same differ by mode, then end.
+    /// §10.12 ("Naming a rule to the member"): a rule is named by its tags; two that read the same differ by mode, then end.
     @Test func rulesAreNamedByTheirTags() {
         #expect(RuleNames.text(["medical"], .any) == "medical")
         #expect(RuleNames.text(["medical", "id"], .all) == "medical + id")

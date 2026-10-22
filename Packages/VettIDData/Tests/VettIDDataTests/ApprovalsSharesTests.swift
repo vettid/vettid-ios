@@ -91,6 +91,54 @@ import VettIDDataTesting
         #expect(s.receivedAt == OwnerCheckManager.instant("2026-10-08T10:00:00Z"))
     }
 
+    func entry(_ rule: String, _ item: String) -> String {
+        #"{"rule_id":"\#(rule)","subject":{"connection_id":"c1"},"item_id":"\#(item)","name":"\#(item)","category":"other","sensitivity":"data"}"#
+    }
+
+    /// An item decided in one rule leaves the subject's other rules' questions too (§10.12 one answer per item and subject),
+    /// also when another device decided it, and without a new read.
+    @Test func aDecidedItemDoesNotComeBackUnderTheSubjectsOtherRule() async throws {
+        ops.pendingPages = [#"{"pending":[\#(entry("r1", "i1")),\#(entry("r1", "i2")),\#(entry("r2", "i1"))]}"#]
+        ops.rulePages = [Self.rules]
+        let m = manager()
+        try await m.refreshApprovals()
+        #expect(share(m, "r1")?.items.map(\.itemID) == ["i1", "i2"] && share(m, "r2") == nil)
+        m.onEvent(event("sync.event", #"{"kind":"share.decided","rule_id":"r1","included":["i1"],"declined":[]}"#))
+        #expect(share(m, "r1")?.items.map(\.itemID) == ["i2"] && share(m, "r2") == nil)
+        m.onEvent(event("sync.event", #"{"kind":"share.decided","rule_id":"r1","included":[],"declined":["i2"]}"#))
+        #expect(m.approvals.isEmpty)
+        // Decided here: the same.
+        ops.pendingPages = [#"{"pending":[\#(entry("r1", "i1")),\#(entry("r2", "i1")),\#(entry("r2", "i3"))]}"#]
+        ops.rulePages = [Self.rules]
+        try await m.refreshApprovals()
+        try await m.decideShare("r1", include: ["i1"], decline: [])
+        #expect(share(m, "r1") == nil && share(m, "r2")?.items.map(\.itemID) == ["i3"])
+    }
+
+    @Test func aBatchForAListedQuestionShowsAtOnce() async throws {
+        ops.pendingPages = [#"{"pending":[\#(entry("r1", "A"))]}"#]
+        ops.rulePages = [Self.rules]
+        let m = manager()
+        try await m.refreshApprovals()
+        m.onEvent(event("share.pending", #"{"rule_id":"r1","subject":{"connection_id":"c1"},"items":[{"item_id":"B","name":"B","category":"other","sensitivity":"data"}]}"#))
+        #expect(share(m, "r1")?.items.map(\.itemID) == ["A", "B"])
+    }
+
+    @Test func aBatchThatArrivesDuringTheReadIsKeptWithTheListedItems() async throws {
+        ops.pendingPages = [#"{"pending":[\#(entry("r1", "A")),\#(entry("r1", "C"))]}"#]
+        ops.rulePages = [Self.rules]
+        let gate = TestDeferred<Void>()
+        ops.pendingGate = gate
+        let m = manager()
+        let read = Task { try await m.refreshApprovals() }
+        #expect(await eventually { ops.shareCalls.contains("pending:nil:500") && ops.pendingPages.isEmpty })
+        m.onEvent(event("share.pending", #"{"rule_id":"r1","subject":{"connection_id":"c1"},"items":[{"item_id":"B","name":"B","category":"other","sensitivity":"data"}]}"#))
+        m.onEvent(event("sync.event", #"{"kind":"share.decided","rule_id":"r1","included":["C"],"declined":[]}"#))
+        gate.complete()
+        try await read.value
+        #expect(Set(share(m, "r1")?.items.map(\.itemID) ?? []) == ["A", "B"], "A listed, B arrived, C decided meanwhile")
+    }
+
     @Test func oneQuestionPerItemAndSubject() async throws {
         ops.pendingPages = [#"{"pending":[{"rule_id":"r1","subject":{"connection_id":"c1"},"item_id":"i1","name":"A","category":"other","sensitivity":"data"},{"rule_id":"r2","subject":{"connection_id":"c1"},"item_id":"i1","name":"A","category":"other","sensitivity":"data","ask_rule_id":"r1"},{"rule_id":"r2","subject":{"connection_id":"c1"},"item_id":"i2","name":"B","category":"other","sensitivity":"data"}]}"#]
         ops.rulePages = [Self.rules]

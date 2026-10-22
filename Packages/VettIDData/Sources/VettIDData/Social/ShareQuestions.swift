@@ -32,7 +32,7 @@ public enum ShareQuestions {
         }
     }
 
-    private static func subject(_ d: ShareDecision) -> String? {
+    static func subject(_ d: ShareDecision) -> String? {
         d.subjectConnectionID.map { "c:\($0)" } ?? d.subjectAgentID.map { "a:\($0)" }
     }
 }

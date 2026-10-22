@@ -6,6 +6,7 @@ import VettIDCrypto
 /// `expired`, `exhausted`, `unavailable`, and since 0.23.0 `rate_limited`). Mirrors vettid-android `GrantFetched`.
 public final class GrantFetched: @unchecked Sendable, CustomStringConvertible, CustomReflectable {
     public let grantID: String
+    private let lock = NSLock()
     private var held: [UInt8]?
     public let usesLeft: Int64?
     public let error: String?
@@ -22,9 +23,16 @@ public final class GrantFetched: @unchecked Sendable, CustomStringConvertible, C
 
     /// Hands over the opened content, leaving none here: the caller wipes what it got.
     public func takeContent() -> [UInt8]? {
-        let c = held
-        held = nil
-        return c
+        lock.withLock {
+            let c = held
+            held = nil
+            return c
+        }
+    }
+
+    /// Content nobody took is wiped.
+    deinit {
+        if held != nil { Bytes.wipe(&held!) }
     }
 
     public var description: String { "GrantFetched(\(grantID), error=\(error ?? "none"))" }

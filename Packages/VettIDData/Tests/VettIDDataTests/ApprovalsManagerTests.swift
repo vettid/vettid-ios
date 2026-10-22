@@ -22,6 +22,8 @@ final class FakeApprovalOps: ApprovalOps, @unchecked Sendable {
     var pendingPages: [String] = []
     var rulePages: [String] = []
     var shareCalls: [String] = []
+    /// When set, `share.pending.list` waits for it once it has its page (a read on its way).
+    var pendingGate: TestDeferred<Void>?
 
     private func call(_ name: String) throws {
         calls.append(name)
@@ -66,7 +68,9 @@ final class FakeApprovalOps: ApprovalOps, @unchecked Sendable {
     func sharePendingPage(after: String?, limit: Int?) async throws -> JsonObject {
         shareCalls.append("pending:\(after ?? "nil"):\(limit ?? 0)")
         guard !pendingPages.isEmpty else { throw Self.error("unsupported_type") }
-        return try StrictJson.parseObject(pendingPages.removeFirst())
+        let page = pendingPages.removeFirst()
+        if let g = pendingGate { try await g.value() }
+        return try StrictJson.parseObject(page)
     }
     func shareRulePage(after: String?) async throws -> JsonObject {
         shareCalls.append("rules:\(after ?? "nil")")

@@ -92,6 +92,8 @@ extension ApprovalsManager {
                 if !include.isEmpty { _ = try await o.shareDecide(ruleID, items: include, approve: true) }
                 if !decline.isEmpty { _ = try await o.shareDecide(ruleID, items: decline, approve: false) }
             }
+            // One answer per item and subject (§10.12): the vault decided them in the subject's other rules too.
+            self.shareDecided(ruleID, all)
         }
     }
 

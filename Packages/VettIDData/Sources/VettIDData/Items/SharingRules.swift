@@ -107,7 +107,7 @@ public enum RuleOverlaps {
     }
 }
 
-/// How a rule is named to the member (§10.12, owner's review of #181): rules have no names, so a rule is its tags in the
+/// How a rule is named to the member (§10.12 "Naming a rule to the member"): rules have no names, so a rule is its tags in the
 /// rule's order, joined by " + " for `match: all` and " or " for `any`. Two rules of one subject that would read the same
 /// are told apart by their mode, then their end (``Qualifier``). Mirrors vettid-android `RuleNames`.
 public enum RuleNames {

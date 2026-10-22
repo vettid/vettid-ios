@@ -116,6 +116,7 @@ import VettIDDataTesting
 
         // One answer includes the item in both rules; each issues its grant.
         try await approvals.decideShare(ask.ruleID, include: [allergies], decline: [])
+        #expect(shareDecisions().isEmpty, "the item does not come back under the other rule before the next read")
         let rules = try await sharing.rules(connectionID: id)
         #expect(rules.map(\.included) == [[allergies], [allergies]] && rules.allSatisfy { $0.pending.isEmpty })
         #expect(service.ruleGrants(ask.ruleID).map(\.state) == ["active"] && service.ruleGrants(auto.ruleID).map(\.state) == ["active"])
