@@ -101,7 +101,7 @@ public enum TagMatch: String, Sendable {
 }
 
 /// A share rule (§10.12): a connection (or agent) may read the items whose tags match. Read here for the tags' screens
-/// (which rules name a tag, what an item's tags share); the rules are edited with the sharing screens (IOS-PLAN §8 I3.2).
+/// (which rules name a tag, what an item's tags share); edited as a ``RuleDraft``.
 /// Mirrors vettid-android `ShareRule`.
 public struct ShareRule: Equatable, Sendable, Identifiable {
     public var ruleID: String

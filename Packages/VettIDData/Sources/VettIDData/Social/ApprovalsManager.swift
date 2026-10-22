@@ -33,6 +33,8 @@ public final class ApprovalsManager: ApprovalsRepository {
     @ObservationIgnored private let load: @MainActor () throws -> [UInt8]?
     @ObservationIgnored private let persist: @MainActor ([UInt8]) throws -> Void
     @ObservationIgnored let now: @Sendable () -> Date
+    /// The items by id, to name what a vault before 0.21.0 asks about (``SharePending``); empty when not known.
+    @ObservationIgnored let itemNames: @MainActor () -> [String: ShareItem]
     @ObservationIgnored private var loaded = false
     /// Bumped whenever what was read from the open vault is dropped: a list read before is not published.
     @ObservationIgnored private var generation = 0
@@ -53,8 +55,10 @@ public final class ApprovalsManager: ApprovalsRepository {
         openUnlockWindow: @escaping @MainActor (String) async throws -> Void = { _ in },
         load: @escaping @MainActor () throws -> [UInt8]? = { nil },
         persist: @escaping @MainActor ([UInt8]) throws -> Void = { _ in },
-        now: @escaping @Sendable () -> Date = { Date() }
+        now: @escaping @Sendable () -> Date = { Date() },
+        itemNames: @escaping @MainActor () -> [String: ShareItem] = { [:] }
     ) {
+        self.itemNames = itemNames
         self.connections = connections
         self.ops = ops
         self.quietOps = quietOps ?? ops
@@ -69,13 +73,38 @@ public final class ApprovalsManager: ApprovalsRepository {
     public var approvals: [PendingApproval] {
         _ = storedVersion
         let t = now()
-        let fromEvents = stored.compactMap(parsed)
-        // Events carry what lists leave out (a critical request's payload): they win for the same key.
+        // Events carry what lists leave out (a critical request's payload): they win for the same key. A share decision's
+        // event names its items; the list says which are still pending, with the rule's tags and the subject's rules.
+        let fromEvents = Self.enriched(stored.compactMap(parsed), by: listed)
         let keys = Set(fromEvents.map(\.key))
         var seen = Set<String>()
         let all = (fromEvents + listed.filter { !keys.contains($0.key) } + connections.requests.map(PendingApproval.connection))
             .filter { ($0.exp ?? .distantFuture) > t && seen.insert($0.key).inserted }
-        return all.sorted { $0.receivedAt > $1.receivedAt }
+        // One question per item and subject (0.23.0 §10.12).
+        return ShareQuestions.dedupe(all).sorted { $0.receivedAt > $1.receivedAt }
+    }
+
+    /// A share decision kept from events, with what the list knows of it: the list's items (named by the event where the
+    /// list has no name), the rule's tags and the subject's rules (chosen as vettid-android's merge).
+    static func enriched(_ events: [PendingApproval], by listed: [PendingApproval]) -> [PendingApproval] {
+        var shares: [String: ShareDecision] = [:]
+        for case .share(let s) in listed { shares[PendingApproval.share(s).key] = s }
+        guard !shares.isEmpty else { return events }
+        return events.map { e in
+            guard case .share(var d) = e, let l = shares[e.key] else { return e }
+            let named = Dictionary(d.items.map { ($0.itemID, $0) }, uniquingKeysWith: { a, _ in a })
+            d.items = l.items.map { li in
+                guard let ev = named[li.itemID] else { return li }
+                var i = li
+                if i.name.isEmpty { i.name = ev.name }
+                i.askRuleID = li.askRuleID ?? ev.askRuleID
+                i.shared = li.shared || ev.shared
+                return i
+            }
+            d.tags = l.tags
+            d.rules = l.rules
+            return .share(d)
+        }
     }
 
     func parsed(_ e: StoredEvent) -> PendingApproval? {
@@ -217,8 +246,15 @@ public final class ApprovalsManager: ApprovalsRepository {
         // An older release without one of the lists: nothing listed for it, and nothing dropped by it.
         let grants = try? await o.grantList()
         let critical = try? await o.criticalUseList()
+        // The share decisions (§10.12): nil when the vault answered neither list, so that nothing is dropped by it.
+        let names = itemNames()
+        let shares = try? await SharePending.decisions(
+            pendingPage: { try await o.sharePendingPage(after: $0, limit: SharePending.page) },
+            rulePage: { try await o.shareRulePage(after: $0) }, names: names, at: t
+        )
         guard g == generation else { return }
         var next: [PendingApproval] = []
+        if let shares { next += shares.map(PendingApproval.share) }
         if let grants {
             next += VaultJSON.objects(grants, "pending").compactMap { ApprovalParser.grant($0, at: t) }.map(PendingApproval.grant)
         }
@@ -236,6 +272,7 @@ public final class ApprovalsManager: ApprovalsRepository {
                 let covered = switch p {
                 case .grant: grants != nil
                 case .critical: critical != nil
+                case .share: shares != nil
                 default: false
                 }
                 return (covered && !keys.contains(p.key) && !changed(p.key)) || (p.exp ?? .distantFuture) <= t

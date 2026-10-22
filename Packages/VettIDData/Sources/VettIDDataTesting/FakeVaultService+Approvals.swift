@@ -30,6 +30,8 @@ struct FakeAsks {
     var challenges: [String: String] = [:]
     /// The share rules' questions waiting, by rule id: the items.
     var shares: [String: [String]] = [:]
+    /// The connection each of those rules is for.
+    var shareSubjects: [String: String] = [:]
     /// What the connections were answered, in order: `<type>:<request id>:<outcome>`.
     var answered: [String] = []
 }
@@ -41,7 +43,8 @@ extension FakeVaultService {
         switch m.type {
         case "grant.list":
             let pending = activity.asks.grants.values.sorted { $0.id < $1.id }.map(\.json)
-            try reply(m.type, #"{"given":[],"received":[],"pending":\#(JsonBuilder.array(pending)),"requested":[]}"#, re: m.id)
+            let g = grants
+            try reply(m.type, #"{"given":\#(JsonBuilder.array(g.given.map { $0.json("given") })),"received":\#(JsonBuilder.array(g.received.map { $0.json("received") })),"pending":\#(JsonBuilder.array(pending)),"requested":\#(JsonBuilder.array(g.requested.map(\.json)))}"#, re: m.id)
         case "grant.decide": try grantDecide(m, body, id)
         case "critical-secret-use.list":
             let incoming = activity.asks.critical.values.sorted { $0.id < $1.id }.map { criticalJSON($0, payload: false) }
@@ -56,6 +59,8 @@ extension FakeVaultService {
             try reply(m.type, "{}", re: m.id)
         case "connection.authenticate.approve", "connection.authenticate.deny": try authenticateDecide(m, id)
         case "share.decide": try shareDecide(m, body)
+        case "share.rule.set", "share.rule.delete", "share.pending.list", "grant.request", "grant.revoke", "grant.fetch":
+            try sharingRequest(m, body)
         // vettid-vault lists the app itself with an empty name; another device of the owner here has one.
         case "device.list": try reply(m.type, #"{"devices":[{"id":"dev-1","kind":"app","state":"active","name":""},{"id":"dev-2","kind":"desktop","state":"active","name":"Work laptop"}]}"#, re: m.id)
         default: try reply(m.type, "{}", re: m.id, error: "unsupported_type")
@@ -146,6 +151,7 @@ extension FakeVaultService {
         activity.asks.shares[rule] = left.isEmpty ? nil : left
         for i in included { record("share.included", ref: i) }
         for i in declined { record("share.declined", ref: i) }
+        shareDecided(rule, included: included, declined: declined)
         let list = { (ids: [String]) in JsonBuilder.array(ids.map(JsonBuilder.quote)) }
         try reply(m.type, #"{"included":\#(list(included)),"declined":\#(list(declined))}"#, re: m.id)
     }
@@ -207,6 +213,7 @@ extension FakeVaultService {
         try locked {
             let known = activity.asks.shares[ruleID] ?? []
             activity.asks.shares[ruleID] = known + items.filter { !known.contains($0) }
+            activity.asks.shareSubjects[ruleID] = connectionID
             let list = items.map { JsonBuilder().string("item_id", $0).string("name", "Item \($0.suffix(2))").string("category", "other").string("sensitivity", "data").build() }
             try reply("share.pending", #"{"rule_id":"\#(ruleID)","subject":{"connection_id":"\#(connectionID)"},"items":\#(JsonBuilder.array(list))}"#)
             try addFeedItem("share.pending", connectionID: connectionID, ref: ruleID)

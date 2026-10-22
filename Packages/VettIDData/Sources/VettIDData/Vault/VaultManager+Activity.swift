@@ -43,7 +43,15 @@ extension VaultManager {
                 guard !rec.closed else { return }
                 if b.isEmpty { try file.clear() } else { try file.save(b) }
             },
-            now: config.now
+            now: config.now,
+            // A vault before 0.21.0 lists only the ids of what waits: named from the item list where the app has it.
+            itemNames: {
+                var names: [String: ShareItem] = [:]
+                for i in ref.manager?.items.items ?? [] {
+                    names[i.itemID] = ShareItem(itemID: i.itemID, name: i.name, category: i.category, sensitivity: i.sensitivity.wire)
+                }
+                return names
+            }
         )
         approvals.onDecided = { [weak feed] kinds, ref in feed?.markReadWhere(kinds: kinds, ref: ref) }
         followHold(checks, ref, feed)

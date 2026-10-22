@@ -9,7 +9,7 @@ import VettIDDataTesting
 // swiftlint:disable line_length
 
 /// TEST ONLY. The vault calls of ``SharingManager``: every call recorded, answers set by the test, every member behind a
-/// lock. Mirrors the `Ops` of vettid-android's `SharingManagerTest` (the tags and the read of the rules).
+/// lock. Mirrors the `Ops` of vettid-android's `SharingManagerTest`.
 final class FakeSharingOps: SharingOps, @unchecked Sendable {
     @TestLocked var calls: [String] = []
     @TestLocked var tagPages: [TagPage] = []
@@ -45,6 +45,41 @@ final class FakeSharingOps: SharingOps, @unchecked Sendable {
     func ruleList(connectionID: String?, after: String?) async throws -> JsonObject {
         calls.append("ruleList:\(connectionID ?? "nil"):\(after ?? "nil")")
         return try StrictJson.parseObject(rulePages.isEmpty ? "{}" : rulePages.removeFirst())
+    }
+
+    /// The bodies `share.rule.set` was sent, and what it answers.
+    @TestLocked var ruleSets: [JsonObject] = []
+    @TestLocked var ruleAnswer = "{}"
+    @TestLocked var fetched: GrantFetched?
+    @TestLocked var asked: Asked?
+
+    struct Asked: Sendable {
+        var connectionID: String
+        var item: JsonObject
+        var reason: String?
+    }
+
+    func ruleSet(_ body: JsonObject) async throws -> JsonObject {
+        ruleSets.append(body)
+        return try StrictJson.parseObject(ruleAnswer)
+    }
+
+    func ruleDelete(_ ruleID: String) async throws { calls.append("ruleDelete:\(ruleID)") }
+
+    func grantList() async throws -> JsonObject {
+        try StrictJson.parseObject(#"{"given":[{"grant_id":"g1","connection_id":"c1","direction":"given","kind":"item","ref":"i1","rule_id":"r1","name":"Allergies","category":"medical","uses":3,"used":1,"state":"active"}],"received":[{"grant_id":"g2","connection_id":"c2","direction":"received","kind":"item","ref":"x9","name":"Insurance card","category":"insurance","expires_at":"2026-10-14T00:00:00.000Z","state":"active","labels":[{"field_id":"f1","label":"Number","kind":"text"},{"label":"no id"},{"field_id":"f3","label":"Valid to","kind":"date"}]},{"grant_id":"g3"}],"pending":[],"requested":[{"request_id":"q1","connection_id":"c2","items":[{"kind":"category","ref":"medical","label":"Your vaccination record"},{"kind":"item","ref":"01ITEM"},{"ref":"no-kind"}],"state":"granted"},{"request_id":"q2","connection_id":"c2","items":[]},{"connection_id":"c9"}]}"#)
+    }
+
+    func grantRevoke(_ grantID: String) async throws { calls.append("revoke:\(grantID)") }
+
+    func grantRequest(connectionID: String, items: [JsonObject], reason: String?) async throws -> String {
+        asked = Asked(connectionID: connectionID, item: items[0], reason: reason)
+        return "01REQ"
+    }
+
+    func grantFetch(_ grantID: String) async throws -> GrantFetched {
+        calls.append("fetch:\(grantID)")
+        return fetched!
     }
 }
 
@@ -275,54 +310,13 @@ final class FakeSharingOps: SharingOps, @unchecked Sendable {
     }
 }
 
-/// ``FakeSharingOps`` whose `tag.set` waits for [gate].
-private final class GatedSetOps: SharingOps, @unchecked Sendable {
-    let inner: FakeSharingOps
-    let gate: TestDeferred<Void>
-    @TestLocked var waiting = false
-
-    init(inner: FakeSharingOps, gate: TestDeferred<Void>) {
-        self.inner = inner
-        self.gate = gate
-    }
-
-    func tagList(after: String?) async throws -> TagPage { try await inner.tagList(after: after) }
-
-    func tagSet(version: Int64, tag: String, color: String?, icon: String?, description: String?) async throws -> Int64 {
-        waiting = true
-        try await gate.value()
-        return try await inner.tagSet(version: version, tag: tag, color: color, icon: icon, description: description)
-    }
-
-    func tagMerge(version: Int64, from: [String], into: String, dryRun: Bool) async throws -> JsonObject {
-        try await inner.tagMerge(version: version, from: from, into: into, dryRun: dryRun)
-    }
-
-    func tagDelete(version: Int64, tag: String, dryRun: Bool) async throws -> JsonObject {
-        try await inner.tagDelete(version: version, tag: tag, dryRun: dryRun)
-    }
-
-    func ruleList(connectionID: String?, after: String?) async throws -> JsonObject {
-        try await inner.ruleList(connectionID: connectionID, after: after)
-    }
+/// A ``SharingOps`` that passes every call to a ``FakeSharingOps``; a wrapper changes the one it needs to.
+private protocol ForwardingSharingOps: SharingOps {
+    var inner: FakeSharingOps { get }
 }
 
-/// ``FakeSharingOps`` whose `tag.list` waits for [gate].
-private final class SlowTagOps: SharingOps, @unchecked Sendable {
-    let inner: FakeSharingOps
-    let gate: TestDeferred<Void>
-    @TestLocked var waiting = false
-
-    init(inner: FakeSharingOps, gate: TestDeferred<Void>) {
-        self.inner = inner
-        self.gate = gate
-    }
-
-    func tagList(after: String?) async throws -> TagPage {
-        waiting = true
-        try await gate.value()
-        return try await inner.tagList(after: after)
-    }
+extension ForwardingSharingOps {
+    func tagList(after: String?) async throws -> TagPage { try await inner.tagList(after: after) }
 
     func tagSet(version: Int64, tag: String, color: String?, icon: String?, description: String?) async throws -> Int64 {
         try await inner.tagSet(version: version, tag: tag, color: color, icon: icon, description: description)
@@ -338,6 +332,53 @@ private final class SlowTagOps: SharingOps, @unchecked Sendable {
 
     func ruleList(connectionID: String?, after: String?) async throws -> JsonObject {
         try await inner.ruleList(connectionID: connectionID, after: after)
+    }
+
+    func ruleSet(_ body: JsonObject) async throws -> JsonObject { try await inner.ruleSet(body) }
+    func ruleDelete(_ ruleID: String) async throws { try await inner.ruleDelete(ruleID) }
+    func grantList() async throws -> JsonObject { try await inner.grantList() }
+    func grantRevoke(_ grantID: String) async throws { try await inner.grantRevoke(grantID) }
+
+    func grantRequest(connectionID: String, items: [JsonObject], reason: String?) async throws -> String {
+        try await inner.grantRequest(connectionID: connectionID, items: items, reason: reason)
+    }
+
+    func grantFetch(_ grantID: String) async throws -> GrantFetched { try await inner.grantFetch(grantID) }
+}
+
+/// ``FakeSharingOps`` whose `tag.set` waits for [gate].
+private final class GatedSetOps: ForwardingSharingOps, @unchecked Sendable {
+    let inner: FakeSharingOps
+    let gate: TestDeferred<Void>
+    @TestLocked var waiting = false
+
+    init(inner: FakeSharingOps, gate: TestDeferred<Void>) {
+        self.inner = inner
+        self.gate = gate
+    }
+
+    func tagSet(version: Int64, tag: String, color: String?, icon: String?, description: String?) async throws -> Int64 {
+        waiting = true
+        try await gate.value()
+        return try await inner.tagSet(version: version, tag: tag, color: color, icon: icon, description: description)
+    }
+}
+
+/// ``FakeSharingOps`` whose `tag.list` waits for [gate].
+private final class SlowTagOps: ForwardingSharingOps, @unchecked Sendable {
+    let inner: FakeSharingOps
+    let gate: TestDeferred<Void>
+    @TestLocked var waiting = false
+
+    init(inner: FakeSharingOps, gate: TestDeferred<Void>) {
+        self.inner = inner
+        self.gate = gate
+    }
+
+    func tagList(after: String?) async throws -> TagPage {
+        waiting = true
+        try await gate.value()
+        return try await inner.tagList(after: after)
     }
 }
 

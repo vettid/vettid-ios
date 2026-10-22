@@ -19,12 +19,41 @@ struct FakeTagStore {
         var connectionID: String
         var tags: [String]
         var mode: String
+        var version: Int64 = 1
+        var match = "any"
+        var uses: Int?
+        var perHour: Int?
+        var perDay: Int?
+        var expiresAt: String?
+        var includeExisting = true
+        /// The items the rule includes and the member declined; the pending ones are the rule's question (``FakeAsks``).
+        var included: [String] = []
+        var declined: [String] = []
+
+        /// Whether an item with [itemTags] matches (§10.12).
+        func matches(_ itemTags: [String]) -> Bool {
+            match == "all" ? tags.allSatisfy(itemTags.contains) : tags.contains(where: itemTags.contains)
+        }
+
+        /// The rule as `share.rule.list` and `share.rule.set` give it; [pending] the items of its question.
+        func json(pending: [String]) -> String {
+            let list = { (ids: [String]) in JsonBuilder.array(ids.sorted().map(JsonBuilder.quote)) }
+            let b = JsonBuilder().string("rule_id", id).uint("version", UInt64(version))
+                .raw("subject", JsonBuilder().string("connection_id", connectionID).build())
+                .raw("tags", JsonBuilder.array(tags.map(JsonBuilder.quote))).string("match", match).string("access", "read").string("mode", mode)
+            if let uses { b.uint("uses", UInt64(uses)) }
+            if let perHour { b.uint("per_hour", UInt64(perHour)) }
+            if let perDay { b.uint("per_day", UInt64(perDay)) }
+            if let expiresAt { b.string("expires_at", expiresAt) }
+            return b.bool("include_existing", includeExisting).string("created_at", "2026-10-20T12:00:00Z").string("updated_at", "2026-10-21T12:00:00Z")
+                .raw("included", list(included)).raw("pending", list(pending)).raw("declined", list(declined)).build()
+        }
     }
 
     var version: Int64 = 1
     var entries: [String: Entry] = [:]
     var rules: [Rule] = []
-    /// The types of the tag requests the vault received, with `:dry` for a dry run.
+    /// The types of the tag requests the vault received, with `:dry` for a dry run (`share.rule.list` is a sharing request).
     var seen: [String] = []
 }
 
@@ -77,7 +106,12 @@ extension FakeVaultService {
     // MARK: - The requests
 
     func tagRequest(_ m: Inner, _ body: JsonObject) throws {
-        tagStore.seen.append(m.type + ((try? body.bool("dry_run")) == true ? ":dry" : ""))
+        // The read of the rules is the approvals' too (the rules' tags name a share question): it is a sharing request.
+        if m.type == "share.rule.list" {
+            grants.seen.append(m.type)
+        } else {
+            tagStore.seen.append(m.type + ((try? body.bool("dry_run")) == true ? ":dry" : ""))
+        }
         do {
             switch m.type {
             case "tag.list": try reply(m.type, tagList(), re: m.id)
@@ -192,8 +226,8 @@ extension FakeVaultService {
 
     private func ruleList(_ body: JsonObject) -> String {
         let conn = try? body.optString("connection_id")
-        let rules = tagStore.rules.filter { conn == nil || $0.connectionID == conn }.map { r in
-            #"{"rule_id":"\#(r.id)","version":1,"subject":{"connection_id":"\#(r.connectionID)"},"tags":\#(JsonBuilder.array(r.tags.map(JsonBuilder.quote))),"match":"any","access":"read","mode":"\#(r.mode)","include_existing":true}"#
+        let rules = tagStore.rules.filter { conn == nil || $0.connectionID == conn }.sorted { $0.id < $1.id }.map { r in
+            r.json(pending: activity.asks.shares[r.id] ?? [])
         }
         return #"{"rules":[\#(rules.joined(separator: ","))]}"#
     }

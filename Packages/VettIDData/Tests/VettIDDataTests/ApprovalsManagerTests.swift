@@ -17,6 +17,11 @@ final class FakeApprovalOps: ApprovalOps, @unchecked Sendable {
     var criticalBody = "{}"
     var listsFail = false
     var getGate: TestDeferred<Void>?
+    /// The pages `share.pending.list` and `share.rule.list` answer, in order; none: `unsupported_type`. Their calls are in
+    /// ``shareCalls``, not in ``calls``.
+    var pendingPages: [String] = []
+    var rulePages: [String] = []
+    var shareCalls: [String] = []
 
     private func call(_ name: String) throws {
         calls.append(name)
@@ -57,6 +62,16 @@ final class FakeApprovalOps: ApprovalOps, @unchecked Sendable {
     func shareDecide(_ ruleID: String, items: [String], approve: Bool) async throws -> JsonObject {
         try call("shareOne:\(ruleID):\(items):\(approve)")
         return try StrictJson.parseObject("{}")
+    }
+    func sharePendingPage(after: String?, limit: Int?) async throws -> JsonObject {
+        shareCalls.append("pending:\(after ?? "nil"):\(limit ?? 0)")
+        guard !pendingPages.isEmpty else { throw Self.error("unsupported_type") }
+        return try StrictJson.parseObject(pendingPages.removeFirst())
+    }
+    func shareRulePage(after: String?) async throws -> JsonObject {
+        shareCalls.append("rules:\(after ?? "nil")")
+        guard !rulePages.isEmpty else { throw Self.error("unsupported_type") }
+        return try StrictJson.parseObject(rulePages.removeFirst())
     }
     func sessionDeny(_ requestID: String) async throws { try call("sessionDeny:\(requestID)") }
     func approvalDecide(_ approvalID: String, approve: Bool) async throws -> String? {

@@ -5,8 +5,7 @@ import VettIDVault
 
 /// Tags and sharing (VAULT-MESSAGING §10.8 tags, §10.12 share rules), as ``Repositories.swift`` describes the
 /// repositories. Every failure is a ``VaultFailure``; a tag a share rule names cannot be deleted
-/// (``FailureKind/inUse``). This row has the tag registry and the read of the rules; the rules' edits and the grants come
-/// with the sharing screens (IOS-PLAN §8 I3.2). Mirrors vettid-android `SharingRepository`.
+/// (``FailureKind/inUse``). Mirrors vettid-android `SharingRepository`.
 @MainActor
 public protocol SharingRepository: AnyObject, Observable, Sendable {
     /// The tag registry and the tags in use, as last listed; nil before, and again after another device changed the tags
@@ -53,6 +52,30 @@ public protocol SharingRepository: AnyObject, Observable, Sendable {
 
     /// Every share rule (of [connectionID] when given), sorted by `rule_id`.
     func rules(connectionID: String?) async throws -> [ShareRule]
+
+    /// What [draft] would match (`share.rule.set{dry_run: true}`), changing nothing.
+    func preview(_ draft: RuleDraft) async throws -> RulePreview
+
+    /// Creates or replaces a rule (`share.rule.set`); a draft that fails ``RuleDraft/valid(now:)`` is `bad_request` and not
+    /// sent. The tag registry is read again after it (its rules changed).
+    @discardableResult
+    func saveRule(_ draft: RuleDraft) async throws -> ShareRule
+
+    func deleteRule(_ ruleID: String) async throws
+
+    /// Grants given and received, and the requests made (`grant.list`).
+    func grants() async throws -> GrantLists
+
+    /// Revokes a grant given, or gives up one received.
+    func revokeGrant(_ grantID: String) async throws
+
+    /// Asks a connection for "your <category>" (§10.12 `grant.request`, a category entry the other member answers with one
+    /// of their items); [label] (at most 128 bytes) describes it, [reason] (at most 256 bytes) says why. Returns the
+    /// request id.
+    func requestGrant(connectionID: String, category: String, label: String?, reason: String?) async throws -> String
+
+    /// Fetches what a connection shares with the member under a received grant (each fetch may count a use).
+    func fetchShared(_ grantID: String) async throws -> FetchOutcome
 }
 
 /// The vault calls behind ``SharingManager``, so that it can be tested without a vault. Mirrors vettid-android
@@ -63,6 +86,12 @@ public protocol SharingOps: Sendable {
     func tagMerge(version: Int64, from: [String], into: String, dryRun: Bool) async throws -> JsonObject
     func tagDelete(version: Int64, tag: String, dryRun: Bool) async throws -> JsonObject
     func ruleList(connectionID: String?, after: String?) async throws -> JsonObject
+    func ruleSet(_ body: JsonObject) async throws -> JsonObject
+    func ruleDelete(_ ruleID: String) async throws
+    func grantList() async throws -> JsonObject
+    func grantRevoke(_ grantID: String) async throws
+    func grantRequest(connectionID: String, items: [JsonObject], reason: String?) async throws -> String
+    func grantFetch(_ grantID: String) async throws -> GrantFetched
 }
 
 /// ``SharingOps`` over the vault client. Mirrors vettid-android `VaultSharingOps`.
@@ -86,4 +115,18 @@ struct VaultSharingOps: SharingOps {
     func ruleList(connectionID: String?, after: String?) async throws -> JsonObject {
         try await api.shareRuleList(connectionID: connectionID, after: after)
     }
+
+    func ruleSet(_ body: JsonObject) async throws -> JsonObject { try await api.shareRuleSet(body) }
+
+    func ruleDelete(_ ruleID: String) async throws { try await api.shareRuleDelete(ruleID) }
+
+    func grantList() async throws -> JsonObject { try await api.grantList() }
+
+    func grantRevoke(_ grantID: String) async throws { try await api.grantRevoke(grantID) }
+
+    func grantRequest(connectionID: String, items: [JsonObject], reason: String?) async throws -> String {
+        try await api.grantRequest(connectionID, items: items, reason: reason)
+    }
+
+    func grantFetch(_ grantID: String) async throws -> GrantFetched { try await api.grantFetch(grantID) }
 }
