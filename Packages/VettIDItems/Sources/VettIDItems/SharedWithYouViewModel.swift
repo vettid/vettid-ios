@@ -106,16 +106,20 @@ public final class SharedWithYouViewModel {
         state.loading = true
         state.error = nil
         let id = state.connectionID
+        let at = epoch
         work.launch { [weak self, sharing] in
             do {
                 let g = try await sharing.grants()
                 guard let self else { return }
+                state.loading = false
+                // An answer read before the vault was cleared is not shown.
+                guard epoch == at else { return }
                 state.received = grantOrder(g.received.filter { $0.connectionID == id })
                 state.requested = g.requested.filter { $0.connectionID == id }
-                state.loading = false
             } catch {
                 guard let self else { return }
                 state.loading = false
+                guard epoch == at else { return }
                 state.fail(error)
             }
         }
@@ -160,14 +164,17 @@ public final class SharedWithYouViewModel {
         let id = state.connectionID
         state.ask?.busy = true
         state.error = nil
+        let at = epoch
         work.launch { [weak self, sharing] in
             do {
                 _ = try await sharing.requestGrant(connectionID: id, category: form.category, label: form.label, reason: form.reason)
-                self?.state.ask = nil
-                self?.state.asked = true
-                self?.load()
+                guard let self, epoch == at else { return }
+                state.ask = nil
+                state.asked = true
+                load()
             } catch {
-                guard let self else { return }
+                // After a clear the typed form stays dropped.
+                guard let self, epoch == at else { return }
                 state.ask = form
                 state.fail(error)
             }
@@ -182,13 +189,16 @@ public final class SharedWithYouViewModel {
     public func giveUp() {
         guard let g = state.confirmGiveUp else { return }
         state.confirmGiveUp = nil
+        let at = epoch
         work.launch { [weak self, sharing] in
             do {
                 try await sharing.revokeGrant(g.grantID)
-                self?.state.opened[g.grantID] = nil
-                self?.load()
+                guard let self, epoch == at else { return }
+                state.opened[g.grantID] = nil
+                load()
             } catch {
-                self?.state.fail(error)
+                guard let self, epoch == at else { return }
+                state.fail(error)
             }
         }
     }

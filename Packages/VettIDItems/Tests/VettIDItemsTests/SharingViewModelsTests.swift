@@ -461,6 +461,32 @@ extension SharingViewModelsTests {
         #expect(vm.state.opened.isEmpty)
     }
 
+    /// An ask on its way when the vault is cleared never brings the typed form back, whether it fails or succeeds.
+    @Test func anAskOnItsWayWhenTheVaultIsClearedDoesNotBringTheFormBack() async {
+        let vm = await sharedVM()
+        let hold = TestHold()
+        sharing.requestHold = hold
+        vm.openAsk(true)
+        vm.setAsk(GrantAskForm(category: "insurance", label: "Your insurance card", reason: "For the trip"))
+        vm.sendAsk()
+        #expect(await eventually { hold.count == 1 })
+        items.clear()
+        #expect(await eventually { vm.state.ask == nil })
+        sharing.fail["requestGrant"] = VaultFailure(.notFound)
+        hold.releaseAll()
+        await vm.settle()
+        #expect(vm.state.ask == nil && vm.state.error == nil && !vm.state.asked)
+
+        vm.openAsk(true)
+        vm.setAsk(GrantAskForm(category: "insurance", label: "Card"))
+        vm.sendAsk()
+        #expect(await eventually { hold.count == 2 })
+        items.clear()
+        hold.releaseAll()
+        await vm.settle()
+        #expect(vm.state.ask == nil && !vm.state.asked)
+    }
+
     @Test func whenTheVaultIsClearedTheRuleDraftIsDroppedAndTheEditorCloses() async {
         let vm = await ruleVM()
         vm.selectTag("medical")

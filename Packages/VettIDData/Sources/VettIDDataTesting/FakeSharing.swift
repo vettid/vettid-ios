@@ -20,6 +20,7 @@ public final class FakeSharing: SharingRepository {
     /// When set, a dry run and a fetch wait for it after taking their answer (a request on its way that a cancel does not stop).
     public var previewHold: TestHold?
     public var fetchHold: TestHold?
+    public var requestHold: TestHold?
     /// What a dry run answers.
     public var preview = RulePreview(matches: [], total: 0)
     /// The grants and requests `grant.list` answers.
@@ -183,6 +184,7 @@ public final class FakeSharing: SharingRepository {
     }
 
     public func requestGrant(connectionID: String, category: String, label: String?, reason: String?) async throws -> String {
+        if let requestHold { await requestHold.wait() }
         try call("requestGrant")
         requests.append(RequestMade(connectionID: connectionID, category: category, label: label, reason: reason))
         return "01REQ\(requests.count)"
