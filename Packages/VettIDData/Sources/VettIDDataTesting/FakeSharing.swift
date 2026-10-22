@@ -2,9 +2,9 @@ import Foundation
 import Observation
 import VettIDData
 
-/// TEST ONLY. Tags and share rules in memory for view-model tests: calls are recorded in ``calls``; ``fail`` makes the next
+/// TEST ONLY. Tags, share rules and grants in memory for view-model tests: calls are recorded in ``calls``; ``fail`` makes the next
 /// call of a name throw; tags a rule names refuse deletion as the vault does (`in_use`). Observable, as
-/// ``SharingManager`` is. Mirrors vettid-android `FakeSharing` (its tags and the read of the rules).
+/// ``SharingManager`` is. Mirrors vettid-android `FakeSharing`.
 @MainActor
 @Observable
 public final class FakeSharing: SharingRepository {
@@ -17,6 +17,29 @@ public final class FakeSharing: SharingRepository {
     public var change = TagChange(version: 1, items: 0)
     /// When set, a dry run waits for it (a request on its way).
     public var dryRunGate: TestDeferred<Void>?
+    /// What a dry run answers.
+    public var preview = RulePreview(matches: [], total: 0)
+    /// The grants and requests `grant.list` answers.
+    public var given: [GrantView] = []
+    public var received: [GrantView] = []
+    public var requested: [GrantAsk] = []
+    /// What a fetch answers, by grant id: the content, or a refusal (with its `retry_after` for `rate_limited`).
+    public var contents: [String: SharedContent] = [:]
+    public var refusals: [String: String] = [:]
+    public var retryAfter: [String: Int64] = [:]
+    /// The drafts saved, in order.
+    public var saved: [RuleDraft] = []
+
+    /// A request for a category as it was made.
+    public struct RequestMade: Equatable, Sendable {
+        public var connectionID: String
+        public var category: String
+        public var label: String?
+        public var reason: String?
+    }
+
+    public var requests: [RequestMade] = []
+    private var nextRule = 1
     public var tags: TagRegistry?
     public var colors: [String: String] = [:]
     /// Tags passed to ``onTagsUsed(_:)``.
@@ -115,5 +138,54 @@ public final class FakeSharing: SharingRepository {
     public func rules(connectionID: String?) async throws -> [ShareRule] {
         try call("rules")
         return rulesStored.filter { connectionID == nil || $0.connectionID == connectionID }.sorted { $0.ruleID < $1.ruleID }
+    }
+
+    public func preview(_ draft: RuleDraft) async throws -> RulePreview {
+        try call("preview")
+        if let dryRunGate { try await dryRunGate.value() }
+        return preview
+    }
+
+    @discardableResult
+    public func saveRule(_ draft: RuleDraft) async throws -> ShareRule {
+        try call("saveRule")
+        saved.append(draft)
+        nextRule += 1
+        let r = ShareRule(
+            ruleID: draft.ruleID ?? "01RULE\(nextRule - 1)", version: (draft.version ?? 0) + 1, connectionID: draft.connectionID,
+            tags: draft.tags, match: draft.match, mode: draft.mode, uses: draft.uses, expiresAt: draft.expiresAt,
+            includeExisting: draft.includeExisting, perHour: draft.perHour, perDay: draft.perDay
+        )
+        rulesStored.removeAll { $0.ruleID == r.ruleID }
+        rulesStored.append(r)
+        return r
+    }
+
+    public func deleteRule(_ ruleID: String) async throws {
+        try call("deleteRule")
+        rulesStored.removeAll { $0.ruleID == ruleID }
+    }
+
+    public func grants() async throws -> GrantLists {
+        try call("grants")
+        return GrantLists(given: given, received: received, requested: requested)
+    }
+
+    public func revokeGrant(_ grantID: String) async throws {
+        try call("revoke:\(grantID)")
+        for i in given.indices where given[i].grantID == grantID { given[i].state = "revoked" }
+        for i in received.indices where received[i].grantID == grantID { received[i].state = "revoked" }
+    }
+
+    public func requestGrant(connectionID: String, category: String, label: String?, reason: String?) async throws -> String {
+        try call("requestGrant")
+        requests.append(RequestMade(connectionID: connectionID, category: category, label: label, reason: reason))
+        return "01REQ\(requests.count)"
+    }
+
+    public func fetchShared(_ grantID: String) async throws -> FetchOutcome {
+        try call("fetch:\(grantID)")
+        if let why = refusals[grantID] { return .refused(why, retryAfter: retryAfter[grantID]) }
+        return contents[grantID].map(FetchOutcome.shared) ?? .refused("unavailable")
     }
 }

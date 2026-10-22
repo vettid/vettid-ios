@@ -6,7 +6,7 @@ import VettIDVault
 /// ``SharingRepository`` over ``SharingOps``. [onItemsChanged] re-reads the item list after a tag change (the items' tags
 /// change with it, without `item.changed` notices, §10.8). The registry is in memory only, dropped whenever the vault is
 /// not open, held or due, and at a wipe (``clear()``); an answer asked for before a clear is not kept (chosen; not in the
-/// spec, as the items). Mirrors vettid-android `SharingManager` (its tags and the read of the rules).
+/// spec, as the items). Mirrors vettid-android `SharingManager`.
 @MainActor
 @Observable
 public final class SharingManager: SharingRepository {
@@ -75,11 +75,11 @@ public final class SharingManager: SharingRepository {
         if m.type == "sync.event", VaultJSON.string(m.object, "kind") == "tag.changed" { tags = nil }
     }
 
-    private func run<T>(_ body: () async throws -> T) async throws -> T { try await notes.run(body) }
+    func run<T>(_ body: () async throws -> T) async throws -> T { try await notes.run(body) }
 
     private func runQuietly<T>(_ body: () async throws -> T) async throws -> T { try await quietNotes.run(body) }
 
-    private static func badRequest() -> VaultFailure { VaultFailure(.other, code: codeBadRequest) }
+    static func badRequest() -> VaultFailure { VaultFailure(.other, code: codeBadRequest) }
 
     @discardableResult
     public func refreshTags() async throws -> TagRegistry { try await refreshTags(quietly: false) }
@@ -129,7 +129,7 @@ public final class SharingManager: SharingRepository {
 
     /// The registry read again after a write: quietly (never opening a session), and not at all when a clear came since
     /// the write began ([mark]).
-    private func afterWrite(_ mark: Int) async {
+    func afterWrite(_ mark: Int) async {
         guard mark == cleared else { return }
         _ = try? await refreshTags(quietly: true)
     }

@@ -33,6 +33,8 @@ public final class ApprovalsManager: ApprovalsRepository {
     @ObservationIgnored private let load: @MainActor () throws -> [UInt8]?
     @ObservationIgnored private let persist: @MainActor ([UInt8]) throws -> Void
     @ObservationIgnored let now: @Sendable () -> Date
+    /// The items by id, to name what a vault before 0.21.0 asks about (``SharePending``); empty when not known.
+    @ObservationIgnored let itemNames: @MainActor () -> [String: ShareItem]
     @ObservationIgnored private var loaded = false
     /// Bumped whenever what was read from the open vault is dropped: a list read before is not published.
     @ObservationIgnored private var generation = 0
@@ -40,6 +42,21 @@ public final class ApprovalsManager: ApprovalsRepository {
     /// before that neither brings back one that left nor drops one that arrived (chosen; not in the spec).
     @ObservationIgnored private var changes = 0
     @ObservationIgnored private var changedAt: [String: Int] = [:]
+    /// The share items decided, and at which change: a list read before does not bring them back.
+    @ObservationIgnored private var decidedLog: [ShareDecidedMark] = []
+    /// Where the reads on their way began.
+    @ObservationIgnored private var readSinces: [Int] = []
+
+    /// Share items decided for one subject, and at which change.
+    struct ShareDecidedMark {
+        var at: Int
+        var subject: String
+        var ruleID: String
+        var ids: Set<String>
+    }
+
+    /// The subject a share question is for; a rule of no known subject is its own.
+    static func subjectKey(_ d: ShareDecision) -> String { ShareQuestions.subject(d) ?? "rule:\(d.ruleID)" }
     /// Told of each decided ask, with its feed item's kinds and `ref` (``FeedAsks``): the item is marked read.
     @ObservationIgnored public var onDecided: @MainActor (_ kinds: Set<String>, _ ref: String) -> Void = { _, _ in }
 
@@ -53,8 +70,10 @@ public final class ApprovalsManager: ApprovalsRepository {
         openUnlockWindow: @escaping @MainActor (String) async throws -> Void = { _ in },
         load: @escaping @MainActor () throws -> [UInt8]? = { nil },
         persist: @escaping @MainActor ([UInt8]) throws -> Void = { _ in },
-        now: @escaping @Sendable () -> Date = { Date() }
+        now: @escaping @Sendable () -> Date = { Date() },
+        itemNames: @escaping @MainActor () -> [String: ShareItem] = { [:] }
     ) {
+        self.itemNames = itemNames
         self.connections = connections
         self.ops = ops
         self.quietOps = quietOps ?? ops
@@ -69,13 +88,38 @@ public final class ApprovalsManager: ApprovalsRepository {
     public var approvals: [PendingApproval] {
         _ = storedVersion
         let t = now()
-        let fromEvents = stored.compactMap(parsed)
-        // Events carry what lists leave out (a critical request's payload): they win for the same key.
+        // Events carry what lists leave out (a critical request's payload): they win for the same key. A share decision's
+        // event names its items; the list says which are still pending, with the rule's tags and the subject's rules.
+        let fromEvents = Self.enriched(stored.compactMap(parsed), by: listed)
         let keys = Set(fromEvents.map(\.key))
         var seen = Set<String>()
         let all = (fromEvents + listed.filter { !keys.contains($0.key) } + connections.requests.map(PendingApproval.connection))
             .filter { ($0.exp ?? .distantFuture) > t && seen.insert($0.key).inserted }
-        return all.sorted { $0.receivedAt > $1.receivedAt }
+        // One question per item and subject (0.23.0 §10.12).
+        return ShareQuestions.dedupe(all).sorted { $0.receivedAt > $1.receivedAt }
+    }
+
+    /// A share decision kept from events, with what the list knows of it: the list's items (named by the event where the
+    /// list has no name), the rule's tags and the subject's rules (chosen as vettid-android's merge).
+    static func enriched(_ events: [PendingApproval], by listed: [PendingApproval]) -> [PendingApproval] {
+        var shares: [String: ShareDecision] = [:]
+        for case .share(let s) in listed { shares[PendingApproval.share(s).key] = s }
+        guard !shares.isEmpty else { return events }
+        return events.map { e in
+            guard case .share(var d) = e, let l = shares[e.key] else { return e }
+            let named = Dictionary(d.items.map { ($0.itemID, $0) }, uniquingKeysWith: { a, _ in a })
+            d.items = l.items.map { li in
+                guard let ev = named[li.itemID] else { return li }
+                var i = li
+                if i.name.isEmpty { i.name = ev.name }
+                i.askRuleID = li.askRuleID ?? ev.askRuleID
+                i.shared = li.shared || ev.shared
+                return i
+            }
+            d.tags = l.tags
+            d.rules = l.rules
+            return .share(d)
+        }
     }
 
     func parsed(_ e: StoredEvent) -> PendingApproval? {
@@ -142,6 +186,21 @@ public final class ApprovalsManager: ApprovalsRepository {
         let at = now()
         changes += 1
         changedAt[p.key] = changes
+        // A batch for a question the list holds adds to it at once, not at the next read.
+        if case .share(let s) = p, let i = listed.firstIndex(where: { $0.key == p.key }), case .share(var d) = listed[i] {
+            let before = Dictionary(d.items.map { ($0.itemID, $0) }, uniquingKeysWith: { a, _ in a })
+            let added = s.items.map { n -> ShareItem in
+                guard let old = before[n.itemID] else { return n }
+                var i = n
+                if i.name.isEmpty { i.name = old.name }
+                i.askRuleID = n.askRuleID ?? old.askRuleID
+                i.shared = n.shared || old.shared
+                return i
+            }
+            let named = Set(s.items.map(\.itemID))
+            d.items = d.items.filter { !named.contains($0.itemID) } + added
+            listed[i] = .share(d)
+        }
         edit { events in
             let old = events.first { parsed($0)?.key == p.key }
             events.removeAll { parsed($0)?.key == p.key }
@@ -179,13 +238,25 @@ public final class ApprovalsManager: ApprovalsRepository {
         "critical-secret-use.decided": ("critical:", "request_id"), "approval.decided": ("device:approval.pending:", "approval_id"),
     ]
 
-    /// The items another device decided leave the rule's question; one with none left goes.
-    private func shareDecided(_ ruleID: String, _ done: [String]) {
+    /// The items decided (here or on another device) leave the questions of the rule and of the subject's other rules, where
+    /// they wait too (one answer per item and subject, §10.12); a question with none left goes. Kept events and the list.
+    func shareDecided(_ ruleID: String, _ done: [String]) {
         let gone = Set(done)
         guard !gone.isEmpty else { return }
+        var subject = "rule:\(ruleID)"
+        if case .share(let d)? = find("share:\(ruleID)") { subject = Self.subjectKey(d) }
+        let applies = { (d: ShareDecision) in d.ruleID == ruleID || Self.subjectKey(d) == subject }
+        changes += 1
+        if !readSinces.isEmpty { decidedLog.append(ShareDecidedMark(at: changes, subject: subject, ruleID: ruleID, ids: gone)) }
+        if decidedLog.count > Self.maxDecidedLog { decidedLog.removeFirst(decidedLog.count - Self.maxDecidedLog) }
+        listed = listed.compactMap { a in
+            guard case .share(var d) = a, applies(d) else { return a }
+            d.items.removeAll { gone.contains($0.itemID) }
+            return d.items.isEmpty ? nil : .share(d)
+        }
         edit { events in
             events = events.compactMap { e in
-                guard parsed(e)?.key == "share:\(ruleID)", let o = try? StrictJson.parseObject(Array(e.body.utf8)) else { return e }
+                guard case .share(let d)? = parsed(e), applies(d), let o = try? StrictJson.parseObject(Array(e.body.utf8)) else { return e }
                 let left = VaultJSON.objects(o, "items").filter { !gone.contains(VaultJSON.string($0, "item_id") ?? "") }
                 if left.isEmpty { return nil }
                 let b = JsonBuilder()
@@ -212,34 +283,92 @@ public final class ApprovalsManager: ApprovalsRepository {
         let g = generation
         let since = changes
         let t = now()
+        // Reads may overlap (the quiet one and the screen's): what was decided stays marked until no read that began before
+        // it is on its way.
+        readSinces.append(since)
+        defer {
+            if let i = readSinces.firstIndex(of: since) { readSinces.remove(at: i) }
+            let floor = readSinces.min() ?? Int.max
+            decidedLog.removeAll { $0.at <= floor }
+        }
         if requests { try? await connections.refreshRequests(quietly: quietly) }
         let o = try await guarded { quietly ? try await quietOps() : try await ops() }
-        // An older release without one of the lists: nothing listed for it, and nothing dropped by it.
-        let grants = try? await o.grantList()
-        let critical = try? await o.criticalUseList()
+        let lists = await readLists(o, at: t)
         guard g == generation else { return }
-        var next: [PendingApproval] = []
-        if let grants {
-            next += VaultJSON.objects(grants, "pending").compactMap { ApprovalParser.grant($0, at: t) }.map(PendingApproval.grant)
-        }
-        if let critical {
-            next += VaultJSON.objects(critical, "incoming").compactMap { ApprovalParser.critical($0, at: t) }.map(PendingApproval.critical)
-        }
         let changed = { (key: String) in (self.changedAt[key] ?? 0) > since }
-        next.removeAll { changed($0.key) }
+        let next = mergedWithChanges(lists.approvals(at: t), since: since, changed: changed)
         listed = next
         // The lists are authoritative for what they cover: decided or expired requests kept from events are dropped.
         let keys = Set(next.map(\.key))
         edit { events in
             events.removeAll { e in
                 guard let p = parsed(e) else { return true }
-                let covered = switch p {
-                case .grant: grants != nil
-                case .critical: critical != nil
-                default: false
-                }
-                return (covered && !keys.contains(p.key) && !changed(p.key)) || (p.exp ?? .distantFuture) <= t
+                return (lists.covers(p) && !keys.contains(p.key) && !changed(p.key)) || (p.exp ?? .distantFuture) <= t
             }
+        }
+    }
+
+    /// What the vault listed: grant requests, critical-item requests and share decisions, each nil when the vault did not
+    /// answer (an older release without the list: nothing listed for it, and nothing dropped by it).
+    struct Lists {
+        var grants: JsonObject?
+        var critical: JsonObject?
+        var shares: [ShareDecision]?
+
+        func approvals(at t: Date) -> [PendingApproval] {
+            var out: [PendingApproval] = shares.map { $0.map(PendingApproval.share) } ?? []
+            if let grants {
+                out += VaultJSON.objects(grants, "pending").compactMap { ApprovalParser.grant($0, at: t) }
+                    .map(PendingApproval.grant)
+            }
+            if let critical {
+                out += VaultJSON.objects(critical, "incoming").compactMap { ApprovalParser.critical($0, at: t) }
+                    .map(PendingApproval.critical)
+            }
+            return out
+        }
+
+        /// Whether a list that was read says which requests of [p]'s kind are still waiting.
+        func covers(_ p: PendingApproval) -> Bool {
+            switch p {
+            case .grant: grants != nil
+            case .critical: critical != nil
+            case .share: shares != nil
+            default: false
+            }
+        }
+    }
+
+    private func readLists(_ o: any ApprovalOps, at t: Date) async -> Lists {
+        let names = itemNames()
+        // The share decisions (§10.12): nil when the vault answered neither list.
+        let shares = try? await SharePending.decisions(
+            pendingPage: { try await o.sharePendingPage(after: $0, limit: SharePending.page) },
+            rulePage: { try await o.shareRulePage(after: $0) }, names: names, at: t
+        )
+        return Lists(grants: try? await o.grantList(), critical: try? await o.criticalUseList(), shares: shares)
+    }
+
+    /// At most this many share decisions are remembered for reads on their way.
+    static let maxDecidedLog = 64
+
+    /// [next], as a read that began at change [since] listed it, with what changed during the read: the items decided for a
+    /// subject leave every share question of that subject; any other request that changed is not taken from the list,
+    /// except a share question a batch arrived for, whose items stay, with the batch's (chosen; not in the spec).
+    private func mergedWithChanges(_ next: [PendingApproval], since: Int, changed: (String) -> Bool) -> [PendingApproval] {
+        let marks = decidedLog.filter { $0.at > since }
+        let events = stored.compactMap(parsed)
+        return next.compactMap { a in
+            guard case .share(var d) = a else { return changed(a.key) ? nil : a }
+            let mine = marks.filter { $0.ruleID == d.ruleID || $0.subject == Self.subjectKey(d) }
+            let gone = mine.reduce(into: Set<String>()) { $0.formUnion($1.ids) }
+            d.items.removeAll { gone.contains($0.itemID) }
+            if changed(a.key) {
+                guard case .share(let e)? = events.first(where: { $0.key == a.key }) else { return nil }
+                let have = Set(d.items.map(\.itemID))
+                d.items += e.items.filter { !have.contains($0.itemID) }
+            }
+            return d.items.isEmpty ? nil : .share(d)
         }
     }
 

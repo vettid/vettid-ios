@@ -18,9 +18,19 @@ public protocol ApprovalOps: Sendable {
     func shareDecide(_ ruleID: String, items: [String], approve: Bool) async throws -> JsonObject
     func sessionDeny(_ requestID: String) async throws
     func approvalDecide(_ approvalID: String, approve: Bool) async throws -> String?
+    /// One page of `share.pending.list` (0.21.0, §10.12) from [after].
+    func sharePendingPage(after: String?, limit: Int?) async throws -> JsonObject
+    /// One page of `share.rule.list` from [after]: the rules' tags and the subject's other rules.
+    func shareRulePage(after: String?) async throws -> JsonObject
 }
 
-extension VaultApi: ApprovalOps {}
+extension VaultApi: ApprovalOps {
+    public func sharePendingPage(after: String?, limit: Int?) async throws -> JsonObject {
+        try await sharePendingList(after: after, limit: limit)
+    }
+
+    public func shareRulePage(after: String?) async throws -> JsonObject { try await shareRuleList(after: after) }
+}
 
 /// Everything that waits for the member's decision (ANDROID-PLAN §4 Approvals), as ``Repositories.swift`` describes the
 /// repositories: the connection requests of either side (they move here from the Connections list, IOS-PLAN §8 I2.3,

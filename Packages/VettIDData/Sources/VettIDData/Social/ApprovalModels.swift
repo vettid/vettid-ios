@@ -7,6 +7,12 @@ public struct GrantFieldLabel: Equatable, Sendable, Codable {
     public var fieldID: String
     public var label: String
     public var kind: String
+
+    public init(fieldID: String, label: String, kind: String) {
+        self.fieldID = fieldID
+        self.label = label
+        self.kind = kind
+    }
 }
 
 /// An entry of a grant request (§10.12): an item the asker names (`kind` `item`), or a category the member answers with
@@ -42,7 +48,8 @@ public struct GrantDecision: Equatable, Sendable {
 
 /// An item waiting for a share decision (§10.12 `share.pending`). Since 0.23.0: [askRuleID] names the `ask` rule of the
 /// same subject that holds it in an `auto` rule, and [shared] says another rule of the subject already shares it, which
-/// a decline stops. Mirrors vettid-android `ShareItem`.
+/// a decline stops. [alsoIn] are the subject's other rules where it waits too (one answer for all, ``ShareQuestions``).
+/// Mirrors vettid-android `ShareItem`.
 public struct ShareItem: Equatable, Sendable {
     public var itemID: String
     public var name: String
@@ -50,6 +57,20 @@ public struct ShareItem: Equatable, Sendable {
     public var sensitivity: String
     public var askRuleID: String?
     public var shared: Bool
+    public var alsoIn: [String]
+
+    public init(
+        itemID: String, name: String, category: String, sensitivity: String, askRuleID: String? = nil, shared: Bool = false,
+        alsoIn: [String] = []
+    ) {
+        self.itemID = itemID
+        self.name = name
+        self.category = category
+        self.sensitivity = sensitivity
+        self.askRuleID = askRuleID
+        self.shared = shared
+        self.alsoIn = alsoIn
+    }
 }
 
 /// `connection.authenticate.pending` (§10.4): sign a connection's challenge with the credential key.
@@ -113,8 +134,9 @@ public struct CriticalUse: Equatable, Sendable {
     }
 }
 
-/// `share.pending` (§10.12): items one of the member's share rules asks about. The rule's tags and the subject's other
-/// rules come from `share.rule.list` with the share rules (IOS-PLAN §8 I3.2).
+/// `share.pending` (§10.12): items one of the member's share rules asks about. The rule's [tags] and the subject's other
+/// [rules] (this one included, to name the rule that asks, 0.23.0) come from `share.rule.list`; empty when unknown. Mirrors
+/// vettid-android `Approval.ShareDecision`.
 public struct ShareDecision: Equatable, Sendable {
     public var ruleID: String
     public var subjectConnectionID: String?
@@ -122,6 +144,11 @@ public struct ShareDecision: Equatable, Sendable {
     public var items: [ShareItem]
     public var reason: String?
     public var receivedAt: Date
+    public var tags: [String] = []
+    public var rules: [ShareRule] = []
+
+    /// This rule, when the subject's rules are known.
+    public var rule: ShareRule? { rules.first { $0.ruleID == ruleID } }
 }
 
 /// A desktop's or an agent's request (`approval.pending`, `device.session.pending`, §6.8): the app pairs no desktops or
