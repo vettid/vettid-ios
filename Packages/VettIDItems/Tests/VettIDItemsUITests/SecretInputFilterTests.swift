@@ -30,9 +30,9 @@ import VettIDData
     }
 
     @Test func aPhoneNumberKeepsOnlyItsCharacters() {
-        let v = Value("+44 20")
-        let r = edit(v, typed: "+44 20x", accept: ValueEditor.accept(FieldKinds.phone))
-        #expect(r.shown == "+44 20" && r.kept == "+44 20")
+        let v = Value("+4420")
+        let r = edit(v, typed: "+4420y", accept: ValueEditor.accept(FieldKinds.phone))
+        #expect(r.shown == "+4420" && r.kept == "+4420")
     }
 
     @Test func aDateRefusesWhatNoDateCanBeginWith() {

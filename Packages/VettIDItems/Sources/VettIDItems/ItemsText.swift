@@ -54,12 +54,15 @@ public enum ItemsText {
     public static func change(_ c: TagChange, renaming: Bool) -> String {
         let items = ItemsStrings.tagsChangeItems(c.items)
         guard renaming, c.sharesTotal > 0 else { return items }
-        // An `auto` entry an `ask` rule holds is asked (0.23.1 `ask_rule_id`); the entries past what fits count as asked.
+        // VAULT-MESSAGING §10.8 (0.55.0): of the entries listed, an `auto` entry an `ask` rule holds (`ask_rule_id`) counts
+        // as asked with the `ask` ones; the entries past what fits are not counted, only said to be possibly shared.
         let auto = c.shares.count(where: \.automatic)
-        let asked = c.sharesTotal - auto
+        let asked = c.shares.count - auto
+        let more = max(c.sharesTotal - c.shares.count, 0)
         var out = [items]
         if auto > 0 { out.append(ItemsStrings.tagsChangeShared(auto)) }
         if asked > 0 { out.append(ItemsStrings.tagsChangeAsked(asked)) }
+        if more > 0 { out.append(ItemsStrings.sharePreviewMore(more)) }
         return out.joined(separator: " ")
     }
 

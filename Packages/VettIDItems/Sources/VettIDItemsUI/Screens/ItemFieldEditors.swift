@@ -143,10 +143,24 @@ struct ValueEditor: View {
     }
 
     var body: some View {
-        input
-            .accessibilityIdentifier("item_edit_field_value_\(index)")
-            .onAppear { if focus { focused = true } }
-            .onChange(of: focus) { _, now in if now { focused = true } }
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            input
+                .accessibilityIdentifier("item_edit_field_value_\(index)")
+                .onAppear { if focus { focused = true } }
+                .onChange(of: focus) { _, now in if now { focused = true } }
+            if let note = phoneNote {
+                Text(note).vettIDFont(.bodySmall).foregroundStyle(colors.onSurfaceVariant)
+                    .accessibilityIdentifier("item_edit_field_phone_note_\(index)")
+            }
+        }
+    }
+
+    /// A phone number's notes (VAULT-MESSAGING §10.7 "Phone values"): while an extension marker is typed, that extensions are
+    /// not saved; else "Check this number" for what is not a possible number (never a block).
+    private var phoneNote: String? {
+        guard kind == FieldKinds.phone, !field.kept else { return nil }
+        if PhoneInput.hasExtension(field.text) { return ItemsStrings.phoneExtensionNote }
+        return PhoneInput.doubtful(field.text) ? ItemsStrings.phoneCheck : nil
     }
 
     @ViewBuilder private var input: some View {
@@ -176,8 +190,14 @@ struct ValueEditor: View {
                 .accessibilityLabel(caption)
         } else {
             let free = kind == FieldKinds.text
-            PlainField(placeholder: placeholder ?? caption, text: field.text, isError: isError) {
-                actions.onFieldText(index, FieldInput.accept(kind, $0))
+            // A phone number is drawn in the as-you-type format over its digits (display only: the text kept is the digits).
+            PlainField(
+                placeholder: placeholder ?? caption, text: kind == FieldKinds.phone ? PhoneInput.mask(field.text) : field.text,
+                isError: isError
+            ) {
+                // A deletion that removes only drawn separators takes the digit before them too.
+                let typed = kind == FieldKinds.phone ? PhoneInput.afterDeletion(shown: PhoneInput.mask(field.text), typed: $0) : $0
+                actions.onFieldText(index, FieldInput.accept(kind, typed))
             }
             .keyboardType(Self.keyboard(kind))
             .textInputAutocapitalization(free ? .sentences : .never)

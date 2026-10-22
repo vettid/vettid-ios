@@ -56,7 +56,7 @@ extension ItemEditViewModel {
     /// and says the protection did not change, and saving again retries only that.
     private func send(_ p: PasswordPrompt?, _ pw: String) {
         let s = state
-        let draft = phonesStored(named(s.draft, s))
+        let draft = saved(s.draft, s)
         let to = s.protectionTo
         let onlyProtection = !contentDirty && to != nil
         state.busy = true
