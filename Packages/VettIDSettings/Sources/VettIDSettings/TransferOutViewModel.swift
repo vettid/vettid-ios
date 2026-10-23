@@ -174,8 +174,9 @@ public final class TransferOutViewModel: TransferOutActions {
                 return
             }
             guard !Task.isCancelled, self != nil else {
-                // The code was made after the member left: cancel it, so that it cannot be used (best effort).
-                try? await move.transferReject(transferID: offer.transferID)
+                // The code was made after the member left: cancel it, so that it cannot be used (best effort; chosen, not in
+                // the spec: vettid-android lets it expire). From a task of its own, as leave() does: this one is cancelled.
+                Task { @MainActor [move, id = offer.transferID] in try? await move.transferReject(transferID: id) }
                 return
             }
             // The strong reference lives only inside these blocks, never across an await.

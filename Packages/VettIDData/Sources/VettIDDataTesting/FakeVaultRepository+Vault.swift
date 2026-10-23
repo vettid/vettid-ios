@@ -304,6 +304,8 @@ extension FakeVaultRepository: MoveRepository {
     }
 
     public func transferReject(transferID: String) async throws {
+        // As a real call would: a cancelled caller sends nothing.
+        try Task.checkCancellation()
         try call("transferReject")
         lastTransferRejected = transferID
     }
