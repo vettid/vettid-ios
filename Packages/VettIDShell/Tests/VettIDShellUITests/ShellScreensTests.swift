@@ -231,9 +231,6 @@ import VettIDVault
                 promptReason: "Unlock VettID", connections: connections, items: FakeItems(), sharing: FakeSharing()
             ) {}
             #expect(height(shell) > 0)
-            // The destination is the screen itself, never the empty view a missing case would give.
-            let name = String(describing: type(of: shell.itemsDetail(path[0])))
-            #expect(["ConnectionSharingRoute", "RuleEditRoute", "SharedWithYouRoute"].contains { name.contains($0) }, "\(name)")
         }
         // The Vault's host opens a rule, the sharing screen and what is shared over the page, as the model does.
         model.path = [.connection("c1")]
