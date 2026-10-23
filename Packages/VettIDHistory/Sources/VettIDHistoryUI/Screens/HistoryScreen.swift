@@ -59,6 +59,8 @@ public struct HistoryScreen: View {
                 }
             }
         }
+        // A container: without it the identifier lands on every element inside, the top bar's buttons included.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("history_screen")
     }
 
