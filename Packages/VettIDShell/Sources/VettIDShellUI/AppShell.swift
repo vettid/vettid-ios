@@ -215,7 +215,6 @@ public struct AppShell: View {
                         ReleaseUpdateBanner(updates: releaseUpdates) { model.push(.releaseUpdate) }
                     }
                     changeCheckNotice
-                    MoveNotices(vault: vault)
                     renewPrompt
                     rotateOffer
                     NavigationStack(path: $model.path) {

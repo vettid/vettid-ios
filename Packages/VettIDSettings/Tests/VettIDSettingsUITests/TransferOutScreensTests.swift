@@ -145,6 +145,18 @@ import VettIDUI
         #expect(model.state.step == .intro && model.state.offer == nil)
     }
 
+    /// An approval in flight is not rejected when the screen is replaced; every other step leaves the transfer.
+    @Test func anApprovalInFlightIsNotRejectedWhenTheScreenGoes() {
+        var s = TransferOutState()
+        for step in [TransferOutStep.intro, .showing, .compare, .signer, .approve, .expired, .rejected, .moved] {
+            s.step = step
+            s.busy = false
+            #expect(TransferOutRoute.leaves(s), "\(step)")
+            s.busy = true
+            #expect(TransferOutRoute.leaves(s) == (step != .approve), "\(step), busy")
+        }
+    }
+
     private func height(_ view: some View) -> CGFloat {
         UIHostingController(rootView: view.vettIDTheme(.light)).sizeThatFits(in: CGSize(width: 390, height: 844)).height
     }

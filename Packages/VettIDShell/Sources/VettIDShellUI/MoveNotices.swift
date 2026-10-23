@@ -9,15 +9,34 @@ import VettIDUI
 /// screen the unlock itself finishes it); the old phone that took the vault back ("The move didn't finish" succeeded), the
 /// move that did not happen after the 7 days, and the keys removed from the old phone are each told once, until "OK". The
 /// sheet stays through the lock and unlock it sends (and cannot be dismissed while they run). Mirrors vettid-android
-/// `MoveNotices`.
-struct MoveNotices: View {
+/// `MoveNotices`. Drawn by the root above every phase, so that the notice of a wipe (``movedAway``) is seen on the welcome screen.
+public struct MoveNotices: View {
     @Environment(\.vettIDColors) private var colors
     let vault: any VaultRepository
+    let phase: AppPhase
+    /// HOOK for I3.3a part 2: the day-7 check of a kept transfer is still pending (the vault has not yet said whether the move
+    /// happened), so "The move was not done" waits. False by default; the root passes the repository's flag once it exists.
+    let keptCheckPending: Bool
     @State private var finishMoveOpen = false
 
-    var body: some View {
+    public init(vault: any VaultRepository, phase: AppPhase, keptCheckPending: Bool = false) {
+        self.vault = vault
+        self.phase = phase
+        self.keptCheckPending = keptCheckPending
+    }
+
+    /// The sheet is offered while the vault is open, and kept through the lock and unlock it sends.
+    static func showsSheet(pending: Bool, phase: AppPhase, finishingMove: Bool) -> Bool {
+        pending && (phase == .unlocked || finishingMove)
+    }
+
+    private var showsSheet: Bool {
+        Self.showsSheet(pending: vault.finishMovePending, phase: phase, finishingMove: vault.finishingMove)
+    }
+
+    public var body: some View {
         VStack(spacing: 0) {
-            if vault.finishMovePending, !vault.finishingMove {
+            if vault.finishMovePending, phase == .unlocked {
                 InfoBanner(
                     ShellMoveStrings.rootFinishMove, actionLabel: ShellMoveStrings.rootFinishMoveAction,
                     onAction: { finishMoveOpen = true }
@@ -32,7 +51,7 @@ struct MoveNotices: View {
                 .accessibilityIdentifier("moved_back_banner")
             }
             // The vault confirmed at the end of the 7 days that this phone is still its app: the move did not happen.
-            if vault.moveNotDone {
+            if vault.moveNotDone, !keptCheckPending {
                 InfoBanner(
                     ShellMoveStrings.rootMoveNotDone, actionLabel: ShellStrings.ownerCheckNoticeOk,
                     onAction: { vault.acknowledgeMoveNotDone() }
@@ -48,7 +67,7 @@ struct MoveNotices: View {
                 .accessibilityIdentifier("moved_away_banner")
             }
         }
-        .sheet(isPresented: Binding(get: { finishMoveOpen && vault.finishMovePending }, set: { finishMoveOpen = $0 })) {
+        .sheet(isPresented: Binding(get: { finishMoveOpen && showsSheet }, set: { finishMoveOpen = $0 })) {
             FinishMoveRoute(vault: vault) { if !vault.finishingMove { finishMoveOpen = false } }
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)

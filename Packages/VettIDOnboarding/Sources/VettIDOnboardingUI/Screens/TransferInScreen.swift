@@ -241,6 +241,7 @@ public struct TransferInRoute: View {
     private let vault: any VaultRepository
     private let onLeave: @MainActor () -> Void
     private let camera: AnyView?
+    @Environment(\.scenePhase) private var scenePhase
     @State private var model: TransferInViewModel?
 
     public init(
@@ -267,16 +268,26 @@ public struct TransferInRoute: View {
             finishPane: AnyView(FinishMoveRoute(vault: vault) { model?.finish() })
         )
         .onAppear { if model == nil { model = TransferInViewModel(move: move, vault: vault) } }
-        .onDisappear { Self.leave(model, movedIn: vault.movedIn) }
+        .onDisappear { Self.leave(model, move: move, movedIn: vault.movedIn) }
+        // The pasted code is also forgotten when the app leaves the foreground and when the iPhone locks (IOS-PLAN §6.3;
+        // chosen; vettid-android has no such rule).
+        .onChange(of: scenePhase) { _, now in if now == .background { model?.setInput("") } }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.protectedDataWillBecomeUnavailableNotification)) { _ in
+            model?.setInput("")
+        }
     }
 
     /// The screen goes: a transfer under way is cancelled, and the pasted code is forgotten. Not when the transfer completed
     /// ([movedIn]): the approval can replace this screen with the move's last screen before the model shows it, and then
     /// nothing is dropped.
-    static func leave(_ model: TransferInViewModel?, movedIn: Bool) {
+    static func leave(_ model: TransferInViewModel?, move: any MoveRepository, movedIn: Bool) {
         guard let model else { return }
         model.setInput("")
-        if cancels(model.state.step), !movedIn { model.cancel() }
+        guard cancels(model.state.step), !movedIn else { return }
+        model.cancel()
+        // The model is freed with the screen and takes its own work with it: the handshake is dropped from a task of its own
+        // (best effort, as ``TransferOutViewModel/leave()`` rejects its code).
+        Task { @MainActor in try? await move.abandonTransferIn() }
     }
 
     /// The steps in which leaving cancels the transfer (the handshake is under way); after the approval nothing is cancelled.

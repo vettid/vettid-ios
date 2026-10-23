@@ -133,18 +133,23 @@ import VettIDUI
             let vault = FakeVaultRepository(.setup(.vaultElsewhere))
             vault.movedInFlag = movedIn
             let clock = VirtualTime()
-            let model = TransferInViewModel(move: vault, vault: vault, now: clock.now, sleep: clock.sleep)
-            model.scan()
-            model.scanned(try qr(clock))
-            await clock.runCurrent()
-            #expect(model.state.step == .compare)
-            var window: UIWindow? = host(TransferInRoute(move: vault, vault: vault, onLeave: {}, camera: nil, model: model))
+            // The test keeps no reference to the model: the route alone owns it, and it is freed with the screen.
+            var window: UIWindow? = try await handshakeWindow(vault, clock)
             window?.rootViewController = nil
             window?.isHidden = true
             window = nil
             let abandoned = await eventually { vault.calls.contains("abandonTransferIn") }
             #expect(abandoned == !movedIn, "movedIn \(movedIn)")
         }
+    }
+
+    private func handshakeWindow(_ vault: FakeVaultRepository, _ clock: VirtualTime) async throws -> UIWindow {
+        let model = TransferInViewModel(move: vault, vault: vault, now: clock.now, sleep: clock.sleep)
+        model.scan()
+        model.scanned(try qr(clock))
+        await clock.runCurrent()
+        #expect(model.state.step == .compare)
+        return host(TransferInRoute(move: vault, vault: vault, onLeave: {}, camera: nil, model: model))
     }
 
     @Test func onlyAHandshakeUnderWayIsCancelled() {

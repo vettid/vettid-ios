@@ -73,10 +73,23 @@ public struct TransferOutContent: View {
             .forgetsSecrets(scenePhase: scenePhase) {
                 // IOS-PLAN §6.3: typed secrets are dropped when the screen goes, the app leaves the foreground, the iPhone locks.
                 pin.clear()
-                if state.step == .approve {
+                if state.step == .approve, !state.busy {
+                    // The question over the keypad goes too, so that "Move" is not left asking about a PIN that is gone.
+                    actions.askApprove(false)
                     actions.setPin("")
                     actions.setPassword("")
                 }
+            }
+            // A new step starts with an empty keypad; the copied mark belongs to the code shown.
+            .onChange(of: state.step) { _, _ in
+                pin.clear()
+                copied = false
+            }
+            .onChange(of: state.offer?.transferID) { _, _ in copied = false }
+            // The approval's question was dismissed without "Move": the PIN handed over for it goes (not while the approval
+            // runs, which has taken it already).
+            .onChange(of: state.confirmApprove) { was, now in
+                if was, !now, !state.busy, state.step == .approve { actions.setPin("") }
             }
             .accessibilityIdentifier("transfer_out")
     }
@@ -356,7 +369,12 @@ public struct TransferOutRoute: View {
             onBack: onBack
         )
         .onAppear { if model == nil { model = TransferOutViewModel(move: move, vault: vault) } }
-        .onDisappear { model?.leave() }
+        .onDisappear { if let model, Self.leaves(model.state) { model.leave() } }
     }
+
+    /// Whether the screen going away leaves the transfer (cancels the open code). Not while the approval is in flight: it is
+    /// on its way to the vault, and a reject sent after it would race it (vettid-android leaves only from its back actions;
+    /// chosen; not in the spec).
+    static func leaves(_ state: TransferOutState) -> Bool { !(state.step == .approve && state.busy) }
 }
 #endif

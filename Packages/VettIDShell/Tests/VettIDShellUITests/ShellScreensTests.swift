@@ -44,7 +44,7 @@ import VettIDVault
     /// The notices of a move (release R, §11.14.10): the old phone's three are each told once; none shows nothing.
     @Test func theMoveNoticesShowWhatIsSet() {
         let vault = FakeVaultRepository(.unlocked)
-        #expect(height(MoveNotices(vault: vault)) == 0)
+        #expect(height(MoveNotices(vault: vault, phase: .unlocked)) == 0)
         let flags: [(FakeVaultRepository) -> Void] = [
             { $0.finishMovePending = true }, { $0.movedBack = true }, { $0.moveNotDone = true }, { $0.movedAway = true },
         ]
@@ -52,9 +52,14 @@ import VettIDVault
         for set in flags {
             let v = FakeVaultRepository(.unlocked)
             set(v)
-            heights.append(height(MoveNotices(vault: v)))
+            heights.append(height(MoveNotices(vault: v, phase: .unlocked)))
         }
         #expect(heights.allSatisfy { $0 > 0 })
+        // The sheet is offered while the vault is open and kept through the move's own lock; never without a move to finish.
+        #expect(MoveNotices.showsSheet(pending: true, phase: .unlocked, finishingMove: false))
+        #expect(MoveNotices.showsSheet(pending: true, phase: .locked, finishingMove: true))
+        #expect(!MoveNotices.showsSheet(pending: true, phase: .locked, finishingMove: false))
+        #expect(!MoveNotices.showsSheet(pending: false, phase: .unlocked, finishingMove: false))
         #expect(ShellMoveStrings.rootFinishMove == "Finish moving your vault to this phone: enter your PIN on this phone.")
         #expect(ShellMoveStrings.rootFinishMoveAction == "Finish the move")
         #expect(ShellMoveStrings.rootMovedBack == "This phone is your vault's phone again. Start the move again when you are ready.")
