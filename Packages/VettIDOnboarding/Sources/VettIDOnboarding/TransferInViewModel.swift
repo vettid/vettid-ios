@@ -100,61 +100,98 @@ public final class TransferInViewModel: TransferInActions {
         state.error = nil
         state.sas = nil
         waiter?.cancel()
-        waiter = Task { [weak self] in await self?.connect(text, from: from) }
+        // The task holds the model weakly and never across an await, so a dropped model can deinit (and cancel it); and
+        // after every await it stops if it was cancelled: Swift cannot interrupt an await, and a repository that returns
+        // normally after `cancel()` must not move the state.
+        waiter = Task { @MainActor [weak self, move, vault, now, sleep] in
+            let deadline = now().addingTimeInterval(Self.window)
+            guard let sas = await Self.connect(Weak(self), move, sleep, text, from: from) else { return }
+            await Self.awaitApproval(Weak(self), move, vault, sas: sas, deadline: deadline)
+        }
     }
 
-    private func connect(_ text: String, from: TransferInStep) async {
-        let deadline = now().addingTimeInterval(Self.window)
+    /// The model, held weakly (a task's frame must not keep it alive across an await).
+    private struct Weak {
+        weak var model: TransferInViewModel?
+        init(_ model: TransferInViewModel?) { self.model = model }
+    }
+
+    /// The SAS, or nil when the step ended (a failure, no `hs.resp` within 60 s, or cancelled; the state says which).
+    private static func connect(
+        _ w: Weak, _ move: any MoveRepository, _ sleep: @escaping @Sendable (Duration) async throws -> Void, _ text: String,
+        from: TransferInStep
+    ) async -> String? {
         let sas: String?
         do {
-            sas = try await sasWithin(text)
-        } catch let e as VaultFailure {
-            connectFailed(from, e)
-            return
+            sas = try await sasWithin(move, sleep, text)
         } catch {
-            return
+            if !Task.isCancelled { w.model?.connectFailed(from, failure(of: error)) }
+            return nil
         }
+        guard !Task.isCancelled else { return nil }
         guard let sas else {
             // §6.7.1 step 2: stop waiting for hs.resp after 60 s; the handshake state is dropped.
-            state.step = .notAnswered
-            state.busy = false
-            await abandon()
+            w.model?.state.step = .notAnswered
+            w.model?.state.busy = false
+            // Nothing to drop when it fails.
+            try? await move.abandonTransferIn()
+            return nil
+        }
+        return sas
+    }
+
+    /// Shows the SAS, then waits for the old phone's approval and takes the credential over.
+    private static func awaitApproval(
+        _ w: Weak, _ move: any MoveRepository, _ vault: any VaultRepository, sas: String, deadline: Date
+    ) async {
+        do {
+            // Held only here, never across the await below.
+            guard let vm = w.model else { return }
+            vm.state.step = .compare
+            vm.state.busy = false
+            vm.state.sas = sas
+            vm.state.deadline = deadline
+            vm.startTicker(deadline)
+        }
+        let canUnlock: Bool
+        do {
+            canUnlock = try await move.awaitTransferIn()
+        } catch {
+            if !Task.isCancelled { w.model?.approvalFailed(failure(of: error)) }
             return
         }
-        state.step = .compare
-        state.busy = false
-        state.sas = sas
-        state.deadline = deadline
-        startTicker(deadline)
-        do {
-            let canUnlock = try await move.awaitTransferIn()
-            ticker?.cancel()
-            state.step = .done
-            state.sas = nil
-            state.canUnlockLater = canUnlock
-            state.phoneSecret = vault.usesPhoneSecret
-        } catch let e as VaultFailure {
-            ticker?.cancel()
-            state.sas = nil
-            switch e.kind {
-            case .rejected: state.step = .rejected
-            case .noResponse: state.step = .timedOut
-            default:
-                state.step = .intro
-                state.error = e.kind
-                state.errorCode = e.code
-            }
-        } catch {
-            ticker?.cancel()
+        guard !Task.isCancelled, let vm = w.model else { return }
+        vm.ticker?.cancel()
+        vm.state.step = .done
+        vm.state.sas = nil
+        vm.state.canUnlockLater = canUnlock
+        vm.state.phoneSecret = vault.usesPhoneSecret
+    }
+
+    /// A failure as a ``VaultFailure``: any other error is ``FailureKind/other``, so the screen never freezes in a step.
+    private static func failure(of error: any Error) -> VaultFailure {
+        (error as? VaultFailure) ?? VaultFailure(.other)
+    }
+
+    private func approvalFailed(_ e: VaultFailure) {
+        ticker?.cancel()
+        state.sas = nil
+        switch e.kind {
+        case .rejected: state.step = .rejected
+        case .noResponse: state.step = .timedOut
+        default:
+            state.step = .intro
+            state.error = e.kind
+            state.errorCode = e.code
         }
     }
 
     /// The SAS the vault's `hs.resp` gave, or nil when none came within ``MoveCodes/hsRespWait`` (the late answer, if any,
-    /// is cancelled and changes nothing).
-    private func sasWithin(_ code: String) async throws -> String? {
-        let move = move
-        let sleep = sleep
-        return try await withThrowingTaskGroup(of: String?.self) { group in
+    /// is cancelled and changes nothing). Relies on ``MoveRepository/transferIn(code:)`` honouring cancellation.
+    private static func sasWithin(
+        _ move: any MoveRepository, _ sleep: @escaping @Sendable (Duration) async throws -> Void, _ code: String
+    ) async throws -> String? {
+        try await withThrowingTaskGroup(of: String?.self) { group in
             group.addTask { () async throws -> String? in try await move.transferIn(code: code) }
             group.addTask { try await sleep(MoveCodes.hsRespWait); return nil }
             defer { group.cancelAll() }
@@ -179,12 +216,9 @@ public final class TransferInViewModel: TransferInActions {
 
     private func startTicker(_ deadline: Date) {
         ticker?.cancel()
-        let sleep = sleep
-        ticker = Task { [weak self] in
-            while let self {
-                let left = max(Int64(deadline.timeIntervalSince(self.now()).rounded(.down)), 0)
-                self.state.secondsLeft = left
-                if left == 0 { return }
+        ticker = Task { @MainActor [weak self, sleep] in
+            // The model is held only inside `tickOnce`, never across the sleep.
+            while !Task.isCancelled, self?.tickOnce(deadline) == true {
                 do {
                     try await sleep(.seconds(1))
                 } catch {
@@ -192,6 +226,13 @@ public final class TransferInViewModel: TransferInActions {
                 }
             }
         }
+    }
+
+    /// Shows the seconds left; false when the window is over.
+    private func tickOnce(_ deadline: Date) -> Bool {
+        let left = max(Int64(deadline.timeIntervalSince(now()).rounded(.down)), 0)
+        state.secondsLeft = left
+        return left > 0
     }
 
     /// Leaves a transfer in progress: nothing was approved, so nothing changes; the handshake state is dropped.

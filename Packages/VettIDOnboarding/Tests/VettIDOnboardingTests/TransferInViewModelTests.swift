@@ -215,6 +215,83 @@ import VettIDDataTesting
         #expect(vm.state.step == .intro && vm.state.error == .vaultUnavailable && vm.state.errorCode == "down" && vm.state.sas == nil)
     }
 
+    struct Odd: Error {}
+
+    /// Swift cannot interrupt an await: a SAS that arrives in the same instant as `cancel()` changes nothing.
+    @Test func aSasThatReturnsAfterCancelDoesNotShowTheCompareStep() async throws {
+        let hs = TestDeferred<String>()
+        vault.transferHsResp = hs
+        let vm = model()
+        vm.scan()
+        vm.scanned(try qr())
+        await clock.runCurrent()
+        hs.complete("042817")
+        vm.cancel() // before the model's task can run again
+        await clock.advance(seconds: 2)
+        #expect(vm.state.step == .intro && vm.state.sas == nil && vm.state.secondsLeft == 0)
+        #expect(!vault.calls.contains("awaitTransferIn"))
+    }
+
+    @Test func anApprovalThatReturnsAfterCancelDoesNotMoveToDone() async throws {
+        let vm = model()
+        vm.scan()
+        vm.scanned(try qr())
+        await clock.runCurrent()
+        vault.transferApproval.complete()
+        vm.back() // cancels
+        await clock.advance(seconds: 2)
+        #expect(vm.state.step == .intro && vm.state.sas == nil)
+    }
+
+    @Test func aFailureThatReturnsAfterCancelChangesNothing() async throws {
+        let vm = model()
+        vm.scan()
+        vm.scanned(try qr())
+        await clock.runCurrent()
+        vault.transferApproval.fail(FakeVaultRepository.failure(.rejected, code: "rejected"))
+        vm.cancel()
+        await clock.advance(seconds: 2)
+        #expect(vm.state.step == .intro)
+    }
+
+    /// An error that is not a vault failure ends the step with "other": the screen never freezes.
+    @Test func anotherErrorWhileConnectingReturnsToTheCode() async throws {
+        let hs = TestDeferred<String>()
+        vault.transferHsResp = hs
+        let vm = model()
+        vm.scan()
+        vm.scanned(try qr())
+        await clock.runCurrent()
+        hs.fail(Odd())
+        await clock.runCurrent()
+        #expect(vm.state.step == .scan && vm.state.error == .other && !vm.state.busy)
+    }
+
+    @Test func anotherErrorWhileWaitingForTheApprovalReturnsToTheStart() async throws {
+        let vm = model()
+        vm.scan()
+        vm.scanned(try qr())
+        await clock.runCurrent()
+        vault.transferApproval.fail(Odd())
+        await clock.advance(seconds: 2)
+        #expect(vm.state.step == .intro && vm.state.error == .other && vm.state.sas == nil)
+    }
+
+    /// A dropped model deinits although its tasks wait: they hold it weakly.
+    @Test func aDroppedModelDeinitsWhileItsTasksWait() async throws {
+        weak var weakModel: TransferInViewModel?
+        do {
+            let vm = model()
+            weakModel = vm
+            vm.scan()
+            vm.scanned(try qr())
+            await clock.runCurrent()
+            #expect(vm.state.step == .compare)
+        }
+        await clock.advance(seconds: 3)
+        #expect(weakModel == nil)
+    }
+
     @Test func theStateNamesNoCodeOrSas() async throws {
         let vm = model()
         vm.scan()

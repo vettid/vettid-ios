@@ -114,6 +114,15 @@ import VettIDData
         #expect(r.calls.isEmpty && r.phase == .locked)
     }
 
+    /// The default `finishMove(pin:taken:)` never drops `taken`: a PIN taken before a change is sent nothing.
+    @Test func theDefaultFinishMoveRefusesAPinTakenBeforeAChange() async throws {
+        let r = Minimal()
+        #expect(try await r.finishMove(pin: "1", taken: 5) == .failed(.credentialUnsettled, code: "pin_taken_before_change"))
+        #expect(r.calls.isEmpty)
+        #expect(try await r.finishMove(pin: "1", taken: 0) == .success)
+        #expect(try await r.finishMove(pin: "1", taken: nil) == .success)
+    }
+
     @Test func theDefaultsFallBackToTheEarlierOperations() async throws {
         let r = Minimal()
         #expect(try await r.finishMove(pin: "1") == .success)

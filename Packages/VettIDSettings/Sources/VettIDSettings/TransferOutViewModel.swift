@@ -162,45 +162,57 @@ public final class TransferOutViewModel: TransferOutActions {
         state = TransferOutState()
         state.busy = true
         waiter?.cancel()
-        waiter = Task { [weak self] in await self?.show() }
-    }
-
-    private func show() async {
-        let offer: TransferOfferView
-        do {
-            offer = try await move.transferCreate()
-        } catch {
-            fail(error, step: .intro)
-            return
+        // The task holds the model weakly and never across an await, and stops after any await if it was cancelled (Swift
+        // cannot interrupt an await): a late offer or pending after `leave()` changes nothing.
+        waiter = Task { @MainActor [weak self, move, now] in
+            let offer: TransferOfferView
+            do {
+                offer = try await move.transferCreate()
+            } catch {
+                guard !Task.isCancelled else { return }
+                self?.fail(error, step: .intro)
+                return
+            }
+            guard !Task.isCancelled, self != nil else {
+                // The code was made after the member left: cancel it, so that it cannot be used (best effort).
+                try? await move.transferReject(transferID: offer.transferID)
+                return
+            }
+            // The strong reference lives only inside these blocks, never across an await.
+            do {
+                guard let vm = self else { return }
+                vm.state.step = .showing
+                vm.state.busy = false
+                vm.state.offer = offer
+                vm.state.deadline = offer.expiresAt
+                vm.startTicker(offer.expiresAt)
+            }
+            let pending: TransferPendingView?
+            do {
+                pending = try await move.awaitTransferPending(transferID: offer.transferID, until: offer.expiresAt)
+            } catch {
+                guard !Task.isCancelled else { return }
+                if let vm = self {
+                    let f = Self.failure(of: error)
+                    vm.state.error = f.kind
+                    vm.state.errorCode = f.code
+                    vm.expire()
+                }
+                return
+            }
+            guard !Task.isCancelled, let vm = self else { return }
+            guard let pending else {
+                vm.expire()
+                return
+            }
+            // The approval window: 10 minutes after the new phone's hs.init (§6.7, 0.10.4), counted from here.
+            let window = now().addingTimeInterval(Self.window)
+            vm.state.step = .compare
+            vm.state.pending = pending
+            vm.state.deadline = window
+            vm.state.error = nil
+            vm.startTicker(window)
         }
-        state.step = .showing
-        state.busy = false
-        state.offer = offer
-        state.deadline = offer.expiresAt
-        startTicker(offer.expiresAt)
-        let pending: TransferPendingView?
-        do {
-            pending = try await move.awaitTransferPending(transferID: offer.transferID, until: offer.expiresAt)
-        } catch is CancellationError {
-            return
-        } catch {
-            let f = Self.failure(of: error)
-            state.error = f.kind
-            state.errorCode = f.code
-            expire()
-            return
-        }
-        guard let pending else {
-            expire()
-            return
-        }
-        // The approval window: 10 minutes after the new phone's hs.init (§6.7, 0.10.4), counted from here.
-        let window = now().addingTimeInterval(Self.window)
-        state.step = .compare
-        state.pending = pending
-        state.deadline = window
-        state.error = nil
-        startTicker(window)
     }
 
     private static func failure(of error: any Error) -> (kind: FailureKind, code: String?) {
@@ -218,15 +230,9 @@ public final class TransferOutViewModel: TransferOutActions {
 
     private func startTicker(_ deadline: Date) {
         ticker?.cancel()
-        let sleep = sleep
-        ticker = Task { [weak self] in
-            while let self {
-                let left = max(Int64(deadline.timeIntervalSince(self.now()).rounded(.down)), 0)
-                self.state.secondsLeft = left
-                if left == 0 {
-                    if Self.openSteps.contains(self.state.step) { self.expire() }
-                    return
-                }
+        ticker = Task { @MainActor [weak self, sleep] in
+            // The model is held only inside `tickOnce`, never across the sleep.
+            while !Task.isCancelled, self?.tickOnce(deadline) == true {
                 do {
                     try await sleep(.seconds(1))
                 } catch {
@@ -234,6 +240,17 @@ public final class TransferOutViewModel: TransferOutActions {
                 }
             }
         }
+    }
+
+    /// Shows the seconds left; false when the window is over (the transfer expires if it is still open).
+    private func tickOnce(_ deadline: Date) -> Bool {
+        let left = max(Int64(deadline.timeIntervalSince(now()).rounded(.down)), 0)
+        state.secondsLeft = left
+        if left == 0 {
+            if Self.openSteps.contains(state.step) { expire() }
+            return false
+        }
+        return true
     }
 
     private func expire() {
@@ -362,15 +379,15 @@ public final class TransferOutViewModel: TransferOutActions {
     private func startBackoff(_ seconds: Int64) {
         backoff?.cancel()
         state.waitSeconds = seconds
-        let sleep = sleep
-        backoff = Task { [weak self] in
-            while let self, self.state.waitSeconds > 0 {
+        backoff = Task { @MainActor [weak self, sleep] in
+            while !Task.isCancelled, (self?.state.waitSeconds ?? 0) > 0 {
                 do {
                     try await sleep(.seconds(1))
                 } catch {
                     return
                 }
-                self.state.waitSeconds = max(self.state.waitSeconds - 1, 0)
+                guard let vm = self else { return }
+                vm.state.waitSeconds = max(vm.state.waitSeconds - 1, 0)
             }
         }
     }

@@ -281,6 +281,7 @@ extension FakeVaultRepository: MoveRepository {
 
     public func transferCreate() async throws -> TransferOfferView {
         try call("transferCreate")
+        if let transferCreateGate { try await transferCreateGate.value() }
         return offer
     }
 

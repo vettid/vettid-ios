@@ -206,6 +206,8 @@ public final class FakeVaultRepository: CustomStringConvertible {
     /// Completes the old phone's wait for `device.transfer.pending` (nil: the code expired).
     public var pendingTransfer = TestDeferred<TransferPendingView?>()
     public var lastTransferApproved: String?
+    /// When set, ``transferCreate()`` waits for it (a `device.transfer.create` still on its way).
+    public var transferCreateGate: TestDeferred<Void>?
     public var lastTransferRejected: String?
     /// Whether the vault's `device.unlinked{transferred}` follows an approval (and wipes this phone).
     public var transferConfirmed = true

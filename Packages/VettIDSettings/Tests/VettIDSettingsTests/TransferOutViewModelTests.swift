@@ -300,6 +300,57 @@ import VettIDDataTesting
         #expect(vm.state.step == .expired && vm.state.error == .network)
     }
 
+    /// Leaving while `device.transfer.create` is on its way: the late offer does not bring the code back.
+    @Test func aLateOfferAfterLeavingDoesNotShowTheCode() async {
+        let gate = TestDeferred<Void>()
+        vault.transferCreateGate = gate
+        let vm = model()
+        vm.create()
+        await clock.runCurrent()
+        vm.leave()
+        gate.complete()
+        await clock.advance(seconds: 2)
+        #expect(vm.state.step == .intro && vm.state.offer == nil && !vm.state.busy && vm.state.error == nil)
+    }
+
+    /// The same when the create returns in the very instant of leaving: the code is shown nowhere, and cancelled at the vault.
+    @Test func anOfferThatReturnsAfterLeavingIsCancelledAtTheVault() async {
+        let gate = TestDeferred<Void>()
+        vault.transferCreateGate = gate
+        let vm = model()
+        vm.create()
+        await clock.runCurrent()
+        gate.complete()
+        vm.leave() // before the model's task can run again
+        await clock.advance(seconds: 2)
+        #expect(vm.state.step == .intro && vm.state.offer == nil)
+        #expect(vault.lastTransferRejected == vault.offer.transferID)
+    }
+
+    @Test func aPendingThatReturnsAfterLeavingChangesNothing() async {
+        let vm = model()
+        vm.create()
+        await clock.runCurrent()
+        vault.pendingTransfer.complete(pending)
+        vm.leave()
+        await clock.advance(seconds: 2)
+        #expect(vm.state.step == .intro && vm.state.pending == nil)
+    }
+
+    /// A dropped model deinits although its tasks wait: they hold it weakly.
+    @Test func aDroppedModelDeinitsWhileItsTasksWait() async {
+        weak var weakModel: TransferOutViewModel?
+        do {
+            let vm = model()
+            weakModel = vm
+            vm.create()
+            await clock.runCurrent()
+            #expect(vm.state.step == .showing)
+        }
+        await clock.advance(seconds: 3)
+        #expect(weakModel == nil)
+    }
+
     @Test func thePinKeepsOnlyDigitsUpToTheLimit() {
         let vm = model()
         vm.setPin("12ab34-56" + String(repeating: "7", count: 40))

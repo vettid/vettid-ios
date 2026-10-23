@@ -221,7 +221,7 @@ public protocol VaultRepository: AnyObject, Observable, Sendable {
     /// (VAULT-MESSAGING §11.14.9 step 2; chosen; not in the spec) ``finishMove(pin:)`` with the PIN as the screen's keypad
     /// took it: [taken] is ``pinGeneration`` when the keypad became usable (nil: read now). Once it moved, nothing is sent:
     /// ``UnlockAttempt/failed(_:code:retryAfterSeconds:)`` with ``FailureKind/credentialUnsettled`` and the PIN is asked for
-    /// again. Default: ``finishMove(pin:)``.
+    /// again. Default: that refusal, else ``finishMove(pin:)``; a real repository overrides it.
     func finishMove(pin: String, taken: Int?) async throws -> UnlockAttempt
 
     /// (VAULT-MESSAGING §11.14.9 step 2; chosen; not in the spec) Which PIN the vault expects, as a generation that moves
@@ -375,7 +375,11 @@ public extension VaultRepository {
         return try await unlock(pin: pin, approve: nil, cancelRecovery: false)
     }
 
-    func finishMove(pin: String, taken: Int?) async throws -> UnlockAttempt { try await finishMove(pin: pin) }
+    func finishMove(pin: String, taken: Int?) async throws -> UnlockAttempt {
+        // Safe by default: a PIN taken before a change is sent nothing; a real repository overrides it.
+        if let taken, taken != pinGeneration { return .failed(.credentialUnsettled, code: "pin_taken_before_change") }
+        return try await finishMove(pin: pin)
+    }
     var pinGeneration: Int { 0 }
     var finishMoveHold: FailureKind? { nil }
     var transferKeepSeconds: Int64 { KeptTransfer.keepMs(timeScale: timeScale) / 1000 }
@@ -500,6 +504,9 @@ public protocol MoveRepository: AnyObject, Sendable {
     /// Starts the transfer from the old phone's code ([code]: the scanned QR or a pasted link) and returns the SAS once
     /// the handshake checked out. Without the vault's `hs.resp` within ``MoveCodes/hsRespWait``, drops the transfer and
     /// fails with ``FailureKind/noResponse`` and ``MoveCodes/hsUnanswered``.
+    ///
+    /// **Must honour task cancellation**, including its wait for `hs.resp`: the view model ends that wait after
+    /// ``MoveCodes/hsRespWait`` by cancelling this call, and a late `hs.resp` must change nothing.
     func transferIn(code: String) async throws -> String
 
     /// Waits for the old phone's approval, then takes the credential over (`credential.get`, `credential.ack`,
