@@ -288,6 +288,19 @@ public final class ApprovalsManager: ApprovalsRepository {
         }
     }
 
+    /// The keys of the share questions held (listed or kept) for the subject of rule [ruleID], that rule's own included.
+    func shareKeys(subjectOf ruleID: String) -> Set<String> {
+        var subject = "rule:\(ruleID)"
+        if case .share(let d)? = find("share:\(ruleID)") { subject = Self.subjectKey(d) }
+        let all = listed + stored.compactMap(parsed)
+        var keys: Set<String> = ["share:\(ruleID)"]
+        for case .share(let d) in all where Self.subjectKey(d) == subject { keys.insert(PendingApproval.share(d).key) }
+        return keys
+    }
+
+    /// Whether the approval [key] is still held, listed or kept.
+    func holds(_ key: String) -> Bool { listed.contains { $0.key == key } || stored.contains { parsed($0)?.key == key } }
+
     /// Drops the approval [key] from the file and the lists.
     func drop(_ key: String) {
         changes += 1

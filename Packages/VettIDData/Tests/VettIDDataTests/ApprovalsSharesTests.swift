@@ -293,6 +293,26 @@ import VettIDDataTesting
         #expect(read == ["r1"])
     }
 
+    /// One answer per item and subject: a decision that empties the subject's other rule marks its feed item read too.
+    /// Item A waits in r1 and r2, B in r2 only; deciding r2's B, then r1's A, leaves both questions empty and both read.
+    /// Another subject's question (r3, for c2) is left alone.
+    @Test func aDecisionMarksReadEveryQuestionOfTheSubjectItEmptied() async throws {
+        let other = #"{"rule_id":"r3","subject":{"connection_id":"c2"},"item_id":"A","name":"A","category":"other","sensitivity":"data"}"#
+        ops.pendingPages = [#"{"pending":[\#(entry("r1", "A")),\#(entry("r2", "A")),\#(entry("r2", "B")),\#(other)]}"#]
+        ops.rulePages = [#"{"rules":[{"rule_id":"r1","subject":{"connection_id":"c1"},"tags":["medical"]},{"rule_id":"r2","subject":{"connection_id":"c1"},"tags":["insurance"],"mode":"auto"},{"rule_id":"r3","subject":{"connection_id":"c2"},"tags":["medical"]}]}"#]
+        let m = manager()
+        var read: [String] = []
+        m.onDecided = { _, ref in read.append(ref) }
+        try await m.refreshApprovals()
+        ops.shareAnswer = #"{"included":["B"],"declined":[]}"#
+        try await m.decideShare("r2", include: ["B"], decline: [])
+        #expect(read.isEmpty, "r2 still holds A")
+        ops.shareAnswer = #"{"included":["A"],"declined":[]}"#
+        try await m.decideShare("r1", include: ["A"], decline: [])
+        #expect(Set(read) == ["r1", "r2"])
+        #expect(share(m, "r3")?.items.map(\.itemID) == ["A"], "c2's question keeps its own A")
+    }
+
     /// A batch's item decided after the batch leaves; one a batch asks again after its decision stays.
     @Test func aBatchDuringTheReadKeepsTheOrderOfItsDecisions() async throws {
         ops.pendingPages = [#"{"pending":[\#(entry("r1", "A")),\#(entry("r1", "C"))]}"#]

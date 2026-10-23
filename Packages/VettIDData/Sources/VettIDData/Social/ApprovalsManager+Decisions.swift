@@ -91,6 +91,8 @@ extension ApprovalsManager {
         // Only the items the answer decided leave: the question keeps the rest, and the batches noted for a read on its
         // way (VAULT-MESSAGING 0.55.7 §10.12; a question is forgotten only on `not_found`, rule 3).
         let key = "share:\(ruleID)"
+        // The subject's questions before the decision: one answer per item and subject (§10.12) can empty the others too.
+        let subjectKeys = shareKeys(subjectOf: ruleID)
         try await decide(key, whole: false) { o in
             var answers: [JsonObject] = []
             do {
@@ -111,8 +113,9 @@ extension ApprovalsManager {
             let ignored = Set(all).subtracting(done)
             if !ignored.isEmpty { self.removeShareItems(ignored) { $0.ruleID == ruleID } }
         }
-        // The feed item is read only when nothing of the question is left (a batch may have added an item meanwhile).
-        if !listed.contains(where: { $0.key == key }), !stored.contains(where: { parsed($0)?.key == key }) { decided(key) }
+        // A feed item is read only when nothing of its question is left (a batch may have added an item meanwhile): the
+        // decided rule's, and those of the subject's other rules the decision emptied.
+        for k in subjectKeys.sorted() where !holds(k) { decided(k) }
     }
 
     /// `share.decide`'s limit: 1–500 distinct items in all (vettid-vault `MaxDecide`).
