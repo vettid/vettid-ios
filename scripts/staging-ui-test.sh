@@ -288,7 +288,7 @@ xcodebuild test-without-building \
       # Longest first, so that a value holding another (a message holding the name) goes whole.
       # A list of connections ("Name=label;Name=label") is redacted whole and name by name (not the labels).
       @s = sort { length($b) <=> length($a) } grep { length }
-        map { my $v = $ENV{"TEST_RUNNER_$_"} // ""; ($v, ($_ eq "VETTID_STAGING_PEER_NAME" ? map { (split /=/, $_, 2)[0] } split(/;/, $v) : ())) }
+        map { my $v = $ENV{"TEST_RUNNER_$_"} // ""; ($v, ($_ eq "VETTID_STAGING_PEER_NAME" ? map { my $n = (split /=/, $_, 2)[0]; $n =~ s/^\s+|\s+$//g; $n } split(/;/, $v) : ())) }
         qw(VETTID_STAGING_EMAIL VETTID_STAGING_CODE VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_LINK
            VETTID_STAGING_PEER_NAME VETTID_STAGING_MESSAGE VETTID_STAGING_EXPECT)
     }

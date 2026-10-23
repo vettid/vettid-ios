@@ -91,14 +91,12 @@ extension StagingTests {
         return nil
     }
 
-    /// How many incoming bubbles from [peer] show [text]: a wait counts only those that arrive after it began.
+    /// The incoming bubbles from [peer] that show [text], as read (each with its time): a wait counts only one that is
+    /// not among those it began with, whether or not older ones are still drawn.
     @MainActor
-    func incomingCount(_ app: XCUIApplication, peer: String, text: String) -> Int {
-        guard let root = try? app.snapshot() else { return 0 }
-        return ordered(under: root).filter { e in
-            let label = Self.plain(e.label)
-            return label.hasPrefix(peer + ": ") && label.contains(text)
-        }.count
+    func incomingBubbles(_ app: XCUIApplication, peer: String, text: String) -> Set<String> {
+        guard let root = try? app.snapshot() else { return [] }
+        return Set(ordered(under: root).map { Self.plain($0.label) }.filter { $0.hasPrefix(peer + ": ") && $0.contains(text) })
     }
 }
 
@@ -216,11 +214,11 @@ extension StagingTests {
         continueAfterFailure = true
         var received = false
         if openConversation(app, peer: peer) {
-            let before = incomingCount(app, peer: peer, text: expected)
+            let before = incomingBubbles(app, peer: peer, text: expected)
             let deadline = Date().addingTimeInterval(limit)
             while !received, Date() < deadline {
                 received = waitUntil(timeout: max(min(Self.reopenEvery, deadline.timeIntervalSinceNow), 0)) {
-                    incomingCount(app, peer: peer, text: expected) > before
+                    !incomingBubbles(app, peer: peer, text: expected).subtracting(before).isEmpty
                 }
                 if !received, Date() < deadline {
                     tap(app.buttons["top_bar_back"].firstMatch)
@@ -288,15 +286,15 @@ extension StagingTests {
         guard openAtStart(app, pin: pin, password: password) else { return }
         continueAfterFailure = true
         var sent: [String] = []
-        var before: [Int] = []
+        var before: [Set<String>] = []
         for peer in peers {
             guard openConversation(app, peer: peer.name) else {
                 sent.append("none")
-                before.append(0)
+                before.append([])
                 print("MESSAGE_STATE: none")
                 continue
             }
-            before.append(incomingCount(app, peer: peer.name, text: expected))
+            before.append(incomingBubbles(app, peer: peer.name, text: expected))
             let state = send(app, "\(prefix) to \(peer.label) \(Self.utcNow().suffix(9).dropLast())")
             sent.append(state)
             print("MESSAGE_STATE: \(state)")
@@ -307,7 +305,7 @@ extension StagingTests {
         while got.contains(false), Date() < deadline {
             for (i, peer) in peers.enumerated() where !got[i] && Date() < deadline {
                 if openConversation(app, peer: peer.name) {
-                    got[i] = waitUntil(timeout: 5) { incomingCount(app, peer: peer.name, text: expected) > before[i] }
+                    got[i] = waitUntil(timeout: 5) { !incomingBubbles(app, peer: peer.name, text: expected).subtracting(before[i]).isEmpty }
                     if got[i] || Date() >= deadline { snap(app, "sendall-\(peer.label)") }
                     tap(app.buttons["top_bar_back"].firstMatch)
                 }
