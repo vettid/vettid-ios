@@ -2515,6 +2515,105 @@
           }
         }
       }
+    },
+    "data_transfer_signer_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The new phone's VettID %1$@; this one %2$@. Continue only if you installed it yourself."
+          }
+        }
+      }
+    },
+    "data_transfer_signer_body_iphone": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The new phone's VettID %1$@. That is not the version your vault used on Android before. Continue only if you installed it yourself."
+          }
+        }
+      }
+    },
+    "data_transfer_signer_new_google_play": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "was installed from Google Play (signed by Google)"
+          }
+        }
+      }
+    },
+    "data_transfer_signer_new_vettid": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "was installed from F-Droid or direct (signed by VettID)"
+          }
+        }
+      }
+    },
+    "data_transfer_signer_new_development": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "is a development build"
+          }
+        }
+      }
+    },
+    "data_transfer_signer_new_other": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "has a different signer"
+          }
+        }
+      }
+    },
+    "data_transfer_signer_this_google_play": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "is from Google Play (signed by Google)"
+          }
+        }
+      }
+    },
+    "data_transfer_signer_this_vettid": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "is from F-Droid or direct (signed by VettID)"
+          }
+        }
+      }
+    },
+    "data_transfer_signer_this_development": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "is a development build"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

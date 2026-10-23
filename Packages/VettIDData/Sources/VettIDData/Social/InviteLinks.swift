@@ -7,8 +7,8 @@ import VettIDCrypto
 /// inside a longer text (a URL whose fragment, query value or last path segment is the link, or a message with the link
 /// on a line of its own). The host of a URL is never trusted: the payload's `r` decides the relay, and only the bare
 /// payload is passed to the vault. The Universal Link `https://relay.vettid.org/connect` and the scheme `vettid://connect`
-/// open the app (IOS-PLAN §6.8). Mirrors vettid-android `InviteLinks` (the transfer codes of §6.7.1 come with the
-/// transfer, IOS-PLAN §8 I3).
+/// open the app (IOS-PLAN §6.8). Mirrors vettid-android `InviteLinks`; the transfer codes of §6.7.1 are
+/// ``parseTransfer(_:now:)``.
 public enum InviteLinks {
     /// What a pasted or scanned text holds.
     public enum Parsed: Equatable, Sendable {
@@ -73,7 +73,7 @@ public enum InviteLinks {
         return .ok(link: link, exp: exp)
     }
 
-    private static func decode(_ s: String) -> InviteQr? {
+    static func decode(_ s: String) -> InviteQr? {
         s.hasPrefix("{") ? try? InviteQr.parse(Array(s.utf8)) : try? InviteQr.parseLink(s)
     }
 
@@ -82,7 +82,7 @@ public enum InviteLinks {
 
     /// The texts to try, in order: the whole text, without white space, the fragment (and its last `=` value), the last
     /// `=` value, the last path segment, then every long run of link characters.
-    private static func candidates(_ t: String) -> [String] {
+    static func candidates(_ t: String) -> [String] {
         var out = [t]
         if t.hasPrefix("{") { return out }
         let noSpace = String(t.unicodeScalars.filter { !CharacterSet.whitespacesAndNewlines.contains($0) })

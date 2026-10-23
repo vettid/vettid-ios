@@ -4,6 +4,33 @@ import VettIDCrypto
 // Release R (VAULT-MESSAGING §11.14.9): the changes of PIN and phone secret, holder credential operations, and the
 // decision of a change whose answer was lost ("A lost answer"). Mirrors vettid-android `ReleaseRApi.kt`.
 extension VaultApi {
+    /// `device.transfer.approve` (§6.7.1 step 3) with the blob and, sealed to a UTK, the PIN and the password. `{}` (before
+    /// release R) means the transfer is complete: this app has been removed; release R answers `{"unlink":
+    /// "after_new_unlock"}` (``TransferApproved``). [signer] (0.27.0): the new app's signer class, the holder's explicit
+    /// confirmation, sent when the pending said `signer_changed`; nil sends no member. Without it the vault answers
+    /// `signer_unconfirmed` before it tries the PIN, and the transfer stays open; (0.52.0) the UTK is spent all the same,
+    /// and the next approval takes a fresh one. Mirrors vettid-android `VaultApi.transferApprove`.
+    public func transferApprove(
+        transferID: String, pin: String, password: String, signer: String? = nil
+    ) async throws -> TransferApproved {
+        var options = CredOpOptions()
+        options.outer = [("transfer_id", transferID)] + (signer.map { [("signer", $0)] } ?? [])
+        let body = try await credential.credOp(
+            Self.typeTransferApprove, [.string("password", password), .string("pin", pin)], options
+        )
+        return TransferApproved.of(VaultJSON.object(body))
+    }
+
+    public static let typeTransferApprove = "device.transfer.approve"
+
+    /// After a direct transfer (§6.7.1 step 5): fetches the blob the vault kept (`credential.get`), confirms it
+    /// (`credential.ack`) and fills the UTK pool (`credential.utk.get`). Mirrors vettid-android
+    /// `VaultApi.credentialTakeOver`.
+    public func credentialTakeOver() async throws {
+        try await credential.fetch()
+        try await topUpUTKs()
+    }
+
     /// `pin.change`: the current PIN, the new one, the password and the phone's next epoch's secret, sealed to one UTK,
     /// with the blob (``CredentialOps/change(_:_:onMarker:)``): once the request is fixed, [onMarker] stores its marker
     /// and candidate and returns the next secret (wiped here once sealed). Returns the answer's `epoch_advanced`: only

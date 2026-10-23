@@ -104,6 +104,12 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var deletionCheck = DeletionCheck.undecided
     public var transferKeptSince: Date?
     public var finishMovePending = false
+    /// Which PIN the vault expects (``VaultRepository/pinGeneration``), moved by the test.
+    public var pinGeneration = 0
+    /// "Finish the move" is held (``VaultRepository/finishMoveHold``): nothing is sent.
+    public var finishMoveHold: FailureKind?
+    /// The `taken` of every ``finishMove(pin:taken:)`` that was sent (nil: read now), in order.
+    public var finishMoveTaken: [Int?] = []
     public var finishingMove = false
     public var finishMoveFailure: FailureKind?
     public var movedBack = false
@@ -200,6 +206,8 @@ public final class FakeVaultRepository: CustomStringConvertible {
     /// Completes the old phone's wait for `device.transfer.pending` (nil: the code expired).
     public var pendingTransfer = TestDeferred<TransferPendingView?>()
     public var lastTransferApproved: String?
+    /// When set, ``transferCreate()`` waits for it (a `device.transfer.create` still on its way).
+    public var transferCreateGate: TestDeferred<Void>?
     public var lastTransferRejected: String?
     /// Whether the vault's `device.unlinked{transferred}` follows an approval (and wipes this phone).
     public var transferConfirmed = true

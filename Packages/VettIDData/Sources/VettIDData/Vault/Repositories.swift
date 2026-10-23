@@ -218,6 +218,26 @@ public protocol VaultRepository: AnyObject, Observable, Sendable {
     /// that asked stays. Default: ``lock()`` then ``unlock(pin:approve:cancelRecovery:)``.
     func finishMove(pin: String) async throws -> UnlockAttempt
 
+    /// (VAULT-MESSAGING §11.14.9 step 2; chosen; not in the spec) ``finishMove(pin:)`` with the PIN as the screen's keypad
+    /// took it: [taken] is ``pinGeneration`` when the keypad became usable (nil: read now). Once it moved, nothing is sent:
+    /// ``UnlockAttempt/failed(_:code:retryAfterSeconds:)`` with ``FailureKind/credentialUnsettled`` and the PIN is asked for
+    /// again. Default: that refusal, else ``finishMove(pin:)``; a real repository overrides it.
+    func finishMove(pin: String, taken: Int?) async throws -> UnlockAttempt
+
+    /// (VAULT-MESSAGING §11.14.9 step 2; chosen; not in the spec) Which PIN the vault expects, as a generation that moves
+    /// with every change of it (``PhoneSecrets/pinGeneration``): a screen that unlocks with a PIN typed on it reads it when
+    /// its keypad becomes usable and hands it over with the PIN (``finishMove(pin:taken:)``). Default: 0.
+    var pinGeneration: Int { get }
+
+    /// (VAULT-MESSAGING 0.45.0 §11.14.9 step 2) A PIN or password change is being decided, or the PIN is uncertain: no lock
+    /// and unlock with a PIN typed on "Finish the move" until it is (the gate's text); nil when the move can be finished.
+    /// Default: nil.
+    var finishMoveHold: FailureKind? { get }
+
+    /// (STAGING-TIME-SCALE, S10) How long this phone keeps its keys after approving a transfer, for the texts: 7 days,
+    /// divided by the vault's time scale (``KeptTransfer/keepMs(timeScale:)``). Default: from ``timeScale``.
+    var transferKeepSeconds: Int64 { get }
+
     /// (Release R) True while ``finishMove(pin:)`` runs, for at most a bounded time.
     var finishingMove: Bool { get }
 
@@ -355,6 +375,15 @@ public extension VaultRepository {
         return try await unlock(pin: pin, approve: nil, cancelRecovery: false)
     }
 
+    func finishMove(pin: String, taken: Int?) async throws -> UnlockAttempt {
+        // Safe by default: a PIN taken before a change is sent nothing; a real repository overrides it.
+        if let taken, taken != pinGeneration { return .failed(.credentialUnsettled, code: "pin_taken_before_change") }
+        return try await finishMove(pin: pin)
+    }
+    var pinGeneration: Int { 0 }
+    var finishMoveHold: FailureKind? { nil }
+    var transferKeepSeconds: Int64 { KeptTransfer.keepMs(timeScale: timeScale) / 1000 }
+
     var finishingMove: Bool { false }
     var finishMoveFailure: FailureKind? { nil }
     func acknowledgeFinishMoveFailure() {}
@@ -475,6 +504,9 @@ public protocol MoveRepository: AnyObject, Sendable {
     /// Starts the transfer from the old phone's code ([code]: the scanned QR or a pasted link) and returns the SAS once
     /// the handshake checked out. Without the vault's `hs.resp` within ``MoveCodes/hsRespWait``, drops the transfer and
     /// fails with ``FailureKind/noResponse`` and ``MoveCodes/hsUnanswered``.
+    ///
+    /// **Must honour task cancellation**, including its wait for `hs.resp`: the view model ends that wait after
+    /// ``MoveCodes/hsRespWait`` by cancelling this call, and a late `hs.resp` must change nothing.
     func transferIn(code: String) async throws -> String
 
     /// Waits for the old phone's approval, then takes the credential over (`credential.get`, `credential.ack`,
