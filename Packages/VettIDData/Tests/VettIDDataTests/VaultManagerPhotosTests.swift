@@ -129,7 +129,8 @@ enum TestPhotos {
         let inID = try service.peerSendsPhoto(
             id, content: theirs.jpeg.copy(), thumb: theirs.thumb.copy(), width: 800, height: 600, name: "../x\u{202E}gpj.png"
         )
-        #expect(await eventually { msgs.messages(id).last?.messageID == inID })
+        // The message is listed before its photo is stored; under load the store can come a little later.
+        #expect(await eventually { msgs.messages(id).last?.messageID == inID && msgs.messages(id).last?.attachment?.state == .stored })
         let incoming = try #require(msgs.messages(id).last?.attachment)
         #expect(incoming.state == .stored && incoming.name == "xgpj.png" && incoming.width == 800 && incoming.viewable)
         #expect(att.cachedThumbnail(id, messageID: inID) == theirs.thumb.copy(), "the thumbnail of message.new, in memory")
