@@ -858,6 +858,61 @@
           }
         }
       }
+    },
+    "root_finish_move": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finish moving your vault to this phone: enter your PIN on this phone."
+          }
+        }
+      }
+    },
+    "root_finish_move_action": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finish the move"
+          }
+        }
+      }
+    },
+    "root_moved_back": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This phone is your vault's phone again. Start the move again when you are ready."
+          }
+        }
+      }
+    },
+    "root_move_not_done": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault did not move to your new phone: it still works with this phone, which keeps its keys. Start the move again when you are ready."
+          }
+        }
+      }
+    },
+    "root_moved_away": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault has moved to your new phone. VettID has removed its keys from this phone."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

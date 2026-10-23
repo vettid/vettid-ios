@@ -21,6 +21,8 @@ public struct SettingsHost {
     public var onCredential: @MainActor () -> Void = {}
     /// Settings → Security → New phone secret (release R).
     public var onNewPhoneSecret: @MainActor () -> Void = {}
+    /// Settings → Security → Move to a new phone; nil hides the row.
+    public var onTransferOut: (@MainActor () -> Void)?
     /// Settings → Account → Delete vault.
     public var onDeleteVault: @MainActor () -> Void = {}
     /// Settings → Privacy → Shared profile.
@@ -113,6 +115,7 @@ public struct SettingsRoute: View {
         a.changePin = host.onChangePin
         a.credential = host.onCredential
         a.newPhoneSecret = host.onNewPhoneSecret
+        a.transfer = host.onTransferOut
         a.deleteVault = host.onDeleteVault
         a.sharedProfile = host.onSharedProfile
         a.setScreenshotsAllowed = { m.setScreenshotsAllowed($0) }

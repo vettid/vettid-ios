@@ -19,6 +19,8 @@ public struct SettingsActions {
     public var changePin: @MainActor () -> Void = {}
     public var credential: @MainActor () -> Void = {}
     public var newPhoneSecret: @MainActor () -> Void = {}
+    /// Settings → Security → Move to a new phone; nil hides the row (the move is not offered, e.g. in a preview).
+    public var transfer: (@MainActor () -> Void)?
     public var setScreenshotsAllowed: @MainActor (Bool) -> Void = { _ in }
     public var deleteVault: @MainActor () -> Void = {}
     public var setAppLock: @MainActor (Bool) -> Void = { _ in }
@@ -39,8 +41,8 @@ public struct SettingsActions {
 /// Settings (ANDROID-PLAN §4 "Screens", Settings): the account card, then Vault, Security, Privacy, App and Account, in
 /// vettid-android's order; grouped cards (Proton); the vault's lock and Allow screenshots confirm first. A row is shown
 /// only once its feature works; "Update available" while the vault has a release update to approve (RELEASE-UPDATES §2);
-/// the rest come with the rows of IOS-PLAN §8 that bring them: Notifications (phase P, IOS-PLAN §6.7), Move to a new
-/// phone and Recovery (I3, VAULT-MESSAGING §6.7.1, §11.11), Privacy's "Sharing rules" (I3, VAULT-MESSAGING §10.12), and
+/// the rest come with the rows of IOS-PLAN §8 that bring them: Notifications (phase P, IOS-PLAN §6.7), Recovery
+/// (I3, VAULT-MESSAGING §11.11), Privacy's "Sharing rules" (I3, VAULT-MESSAGING §10.12), and
 /// Allow screenshots (IOS-PLAN §4), which waits for the first screen that holds the secure
 /// layer (`SecureContainer`: received photos, I2; the typed recovery code and the recovery open, I3): until then it would
 /// turn off nothing (``screenshotsRowShown``). Mirrors vettid-android `SettingsContent`.
@@ -97,6 +99,14 @@ public struct SettingsContent: View {
                         )
                         .accessibilityIdentifier("credential_row")
                         SettingsDivider()
+                        if let transfer = actions.transfer {
+                            SettingsRow(
+                                TransferStrings.securityTransfer, icon: .phonelinkSetup, supporting: TransferStrings.securityTransferBody,
+                                action: transfer
+                            )
+                            .accessibilityIdentifier("transfer")
+                            SettingsDivider()
+                        }
                         if state.phoneSecret {
                             SettingsRow(
                                 SecurityStrings.newSecret, icon: .key, supporting: SecurityStrings.newSecretRowBody,

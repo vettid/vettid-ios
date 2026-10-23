@@ -244,10 +244,20 @@ struct AppRoot: View {
         }
     }
 
+    /// The move's repository, once `VaultManager` adopts ``MoveRepository`` (IOS-PLAN §8 I3.3a): until then none, and the
+    /// transfer is not offered. Read through the protocol, so that this compiles before and after.
+    private var move: (any MoveRepository)? { (vault as any VaultRepository) as? any MoveRepository }
+
+    /// The onboarding flow's later screens: the transfer from the old phone and the move's last screen when the move
+    /// repository is there; the recovery waits for its own row.
+    private var onboardingRoutes: OnboardingRoutes {
+        move.map { OnboardingRoutes.moves(move: $0, vault: vault) } ?? .pending
+    }
+
     @ViewBuilder private var phaseContent: some View {
         switch vault.phase {
         case .signedOut, .setup:
-            OnboardingFlow(account: vault, vault: vault, inbox: inbox, routes: .pending) { openPortal() }
+            OnboardingFlow(account: vault, vault: vault, inbox: inbox, routes: onboardingRoutes) { openPortal() }
         case .starting:
             StartingScreen()
         case .unreachable:
@@ -268,7 +278,8 @@ struct AppRoot: View {
                     releaseUpdates: vault.releaseUpdate, releaseNotes: releaseNotes, releaseInbox: releaseInbox,
                     connections: vault.connections, connectionRequests: vault.connections, inviteInbox: inviteInbox,
                     messages: vault.messages, attachments: vault.attachments, feed: vault.feed, approvals: vault.approvals,
-                    history: vault.history, historyExport: vault.historyExport, items: vault.items, sharing: vault.sharing
+                    history: vault.history, historyExport: vault.historyExport, items: vault.items, sharing: vault.sharing,
+                    move: move
                 ) { openPortal() }
             }
         }
