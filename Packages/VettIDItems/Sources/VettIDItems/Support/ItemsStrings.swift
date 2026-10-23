@@ -170,6 +170,10 @@ public enum ItemsStrings {
         String(localized: "items_rule_date", defaultValue: "Enter a date as YYYY-MM-DD or YYYY-MM", bundle: .module)
     }
 
+    public static var ruleMonth: String {
+        String(localized: "items_rule_month", defaultValue: "Enter a month and year, such as 2033-05", bundle: .module)
+    }
+
     public static var ruleEmail: String {
         String(localized: "items_rule_email", defaultValue: "Enter an email address, such as name@example.com", bundle: .module)
     }

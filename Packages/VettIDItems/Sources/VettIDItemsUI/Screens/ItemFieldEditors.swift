@@ -58,16 +58,7 @@ struct FieldEditor: View {
         }
     }
 
-    /// A label's problem first, then the value's; a value that is not (yet) one of its kind says its rule while typing.
-    private var errorText: String? {
-        let labelProblem = [DraftProblem.labelEmpty, .labelTooLong].first { problems.contains($0) }
-            ?? (problems.contains(.badCharacter) && !ItemChecks.labelProblems(field.label.trimmingCharacters(in: .whitespaces)).isEmpty
-                ? .badCharacter : nil)
-        if let labelProblem { return ItemsText.problem(labelProblem) }
-        let valueProblem = problems.subtracting([.labelEmpty, .labelTooLong]).sorted { "\($0)" < "\($1)" }.first
-        let live: DraftProblem? = !field.kept && FieldInput.incomplete(field.kind, field.text) ? .valueInvalid : nil
-        return (valueProblem ?? live).map { ItemsText.problem($0, kind: field.kind) }
-    }
+    private var errorText: String? { ItemsText.fieldError(field, problems: problems) }
 }
 
 /// A field's ⋯ menu: Rename…, Change type… (unsaved fields only, §10.7), Move up, Move down, Remove.

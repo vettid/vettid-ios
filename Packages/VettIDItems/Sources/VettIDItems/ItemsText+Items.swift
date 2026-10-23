@@ -42,11 +42,12 @@ public extension ItemsText {
         f.kind == FieldKinds.date && f.monthYear ? ItemsStrings.kindMonthYear : kind(f.kind)
     }
 
-    /// What a value of [kind] must look like, for an invalid one (§10.7).
-    static func kindRule(_ kind: String) -> String {
+    /// What a value of [kind] must look like, for an invalid one (§10.7); [monthYear]: a date entered as a month and year.
+    static func kindRule(_ kind: String, monthYear: Bool = false) -> String {
         switch kind {
         case FieldKinds.number: ItemsStrings.ruleNumber
-        case FieldKinds.date: ItemsStrings.ruleDate
+        // A month-and-year field names its own form for any invalid value, a full date included (VAULT-MESSAGING 0.55.5 §10.7).
+        case FieldKinds.date: monthYear ? ItemsStrings.ruleMonth : ItemsStrings.ruleDate
         case FieldKinds.email: ItemsStrings.ruleEmail
         case FieldKinds.phone: ItemsStrings.rulePhone
         case FieldKinds.url: ItemsStrings.ruleUrl
@@ -54,6 +55,21 @@ public extension ItemsText {
         case FieldKinds.address: ItemsStrings.ruleAddress
         default: ItemsStrings.ruleText
         }
+    }
+
+    /// A field's message: a label's problem first, then the value's; a value that is not (yet) one of its kind says its
+    /// rule while typing, and so does a full date in a month field (VAULT-MESSAGING 0.55.5 §10.7).
+    static func fieldError(_ field: DraftField, problems: Set<DraftProblem>) -> String? {
+        let labelProblem = [DraftProblem.labelEmpty, .labelTooLong].first { problems.contains($0) }
+            ?? (problems.contains(.badCharacter) && !ItemChecks.labelProblems(field.label.trimmingCharacters(in: .whitespaces)).isEmpty
+                ? .badCharacter : nil)
+        if let labelProblem { return problem(labelProblem) }
+        let valueProblem = problems.subtracting([.labelEmpty, .labelTooLong]).sorted { "\($0)" < "\($1)" }.first
+        let month = field.kind == FieldKinds.date && field.monthYear
+        let invalid = (month && field.text.utf8.count > DraftField.yearMonthLength) || FieldInput.incomplete(field.kind, field.text)
+        let live: DraftProblem? = !field.kept && invalid ? .valueInvalid : nil
+        guard let p = valueProblem ?? live else { return nil }
+        return p == .valueInvalid ? kindRule(field.kind, monthYear: field.monthYear) : problem(p, kind: field.kind)
     }
 
     /// A category as shown: a recommended one's label, a member-defined one humanized.
