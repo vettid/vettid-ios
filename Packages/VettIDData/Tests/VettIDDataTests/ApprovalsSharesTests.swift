@@ -139,6 +139,77 @@ import VettIDDataTesting
         #expect(Set(share(m, "r1")?.items.map(\.itemID) ?? []) == ["A", "B"], "A listed, B arrived, C decided meanwhile")
     }
 
+    func batch(_ rule: String, _ ids: String...) -> VaultMessage {
+        let items = ids.map { #"{"item_id":"\#($0)","name":"\#($0)","category":"other","sensitivity":"data"}"# }
+        return event("share.pending", #"{"rule_id":"\#(rule)","subject":{"connection_id":"c1"},"items":[\#(items.joined(separator: ","))]}"#)
+    }
+
+    /// Only the batches that arrive during a read are added to what it lists: the kept event adds up the older batches
+    /// too, and an item of those the vault no longer lists (withdrawn, or decided elsewhere) does not come back.
+    @Test func aBatchDuringTheReadAddsOnlyItsOwnItems() async throws {
+        let m = manager()
+        m.onEvent(batch("r1", "X"))
+        ops.pendingPages = [#"{"pending":[\#(entry("r1", "A"))]}"#]
+        ops.rulePages = [Self.rules]
+        let gate = TestDeferred<Void>()
+        ops.pendingGate = gate
+        let read = await started { try await m.refreshApprovals() }
+        m.onEvent(batch("r1", "B"))
+        gate.complete()
+        try await read.value
+        #expect(share(m, "r1")?.items.map(\.itemID) == ["A", "B"], "X was withdrawn before the read")
+    }
+
+    /// A question the read does not list at all (its only item was withdrawn) keeps only the batches of the read's time.
+    @Test func aBatchDuringTheReadOfAnUnlistedQuestionAddsOnlyItsOwnItems() async throws {
+        let m = manager()
+        m.onEvent(batch("r1", "X"))
+        ops.pendingPages = [#"{"pending":[]}"#]
+        ops.rulePages = [Self.rules]
+        let gate = TestDeferred<Void>()
+        ops.pendingGate = gate
+        let read = await started { try await m.refreshApprovals() }
+        m.onEvent(batch("r1", "B"))
+        gate.complete()
+        try await read.value
+        #expect(share(m, "r1")?.items.map(\.itemID) == ["B"], "X was withdrawn before the read")
+        // And the kept event holds only B: a later screen without a read does not bring X back.
+        #expect(share(manager(), "r1")?.items.map(\.itemID) == ["B"])
+    }
+
+    /// A question the vault no longer knows (`not_found` on a decision) forgets the batches before it.
+    @Test func aBatchBeforeANotFoundDecisionDoesNotComeBack() async throws {
+        ops.pendingPages = [#"{"pending":[\#(entry("r1", "A"))]}"#]
+        ops.rulePages = [Self.rules]
+        let gate = TestDeferred<Void>()
+        ops.pendingGate = gate
+        let m = manager()
+        let read = await started { try await m.refreshApprovals() }
+        m.onEvent(batch("r1", "B"))
+        ops.errors["shareBoth"] = FakeApprovalOps.error("not_found")
+        await #expect(throws: VaultFailure.self) { try await m.decideShare("r1", include: ["B"], decline: []) }
+        m.onEvent(batch("r1", "C"))
+        gate.complete()
+        try await read.value
+        #expect(share(m, "r1")?.items.map(\.itemID) == ["A", "C"], "B came before the vault said it had no such question")
+    }
+
+    /// A batch's item decided after the batch leaves; one a batch asks again after its decision stays.
+    @Test func aBatchDuringTheReadKeepsTheOrderOfItsDecisions() async throws {
+        ops.pendingPages = [#"{"pending":[\#(entry("r1", "A")),\#(entry("r1", "C"))]}"#]
+        ops.rulePages = [Self.rules]
+        let gate = TestDeferred<Void>()
+        ops.pendingGate = gate
+        let m = manager()
+        let read = await started { try await m.refreshApprovals() }
+        m.onEvent(batch("r1", "B"))
+        m.onEvent(event("sync.event", #"{"kind":"share.decided","rule_id":"r1","included":["B","C"],"declined":[]}"#))
+        m.onEvent(batch("r1", "C"))
+        gate.complete()
+        try await read.value
+        #expect(share(m, "r1")?.items.map(\.itemID) == ["A", "C"], "B decided after its batch, C asked again after its decision")
+    }
+
     func started(_ read: @escaping @MainActor () async throws -> Void) async -> Task<Void, any Error> {
         let before = ops.shareCalls.count
         let task = Task { try await read() }
