@@ -93,8 +93,6 @@ public enum VettIDSymbol: String, CaseIterable, Sendable {
     case document = "doc.text" // Description (a note; a standard item)
     case accountBalanceWallet = "wallet.pass" // AccountBalanceWallet (a crypto wallet)
     case folder = "folder" // Folder (other)
-    case outbox = "arrow.up.doc" // Outbox (what the member shares with a connection)
-    case inbox = "arrow.down.doc" // MoveToInbox (what a connection shares with the member)
     case dragUp = "arrow.up" // ArrowUpward (a field moved up)
     case dragDown = "arrow.down" // ArrowDownward (a field moved down)
 
@@ -121,6 +119,11 @@ public enum VettIDSymbol: String, CaseIterable, Sendable {
     case radioChecked = "largecircle.fill.circle" // RadioButtonChecked
     case checkBox = "checkmark.square.fill" // CheckBox
     case checkBoxOutline = "square" // CheckBoxOutlineBlank
+
+    /// Outbox (what the member shares with a connection): the same tray as ``unarchive``.
+    public static var outbox: VettIDSymbol { .unarchive }
+    /// MoveToInbox (what a connection shares with the member): the same tray as ``archive``.
+    public static var inbox: VettIDSymbol { .archive }
 
     public var image: Image { Image(systemName: rawValue) }
 }

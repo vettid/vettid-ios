@@ -250,6 +250,7 @@ private struct RuleLine: View {
 
     private var summary: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // The raw tag in its colour, as vettid-android (no "Shared profile" for `@profile`).
             ChipFlow(spacing: Spacing.xs, lineSpacing: Spacing.xs) { ForEach(rule.tags, id: \.self) { TagChip($0) } }
             if rule.tags.count > 1 {
                 Text(SharingCardTexts.match(rule.match))

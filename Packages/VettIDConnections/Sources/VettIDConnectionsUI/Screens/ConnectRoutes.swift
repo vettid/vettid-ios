@@ -201,6 +201,7 @@ public struct ConnectionDetailRoute: View {
     private let connections: any ConnectionsRepository
     private let sharing: (any SharingRepository)?
     private let host: ConnectHost
+    @Environment(\.scenePhase) private var scenePhase
     @State private var model: ConnectionDetailViewModel?
 
     /// [sharing]: what the sharing cards read and delete a rule with; nil while the app has no sharing (no cards).
@@ -221,14 +222,23 @@ public struct ConnectionDetailRoute: View {
                     model = ConnectionDetailViewModel(connectionID: connectionID, connections: connections, sharing: sharing)
                 }
             }
+            // The app came back from the background: both directions are read again (vettid-android reads on ON_RESUME).
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { model?.loadSharing() }
+            }
     }
 
     private var actions: DetailActions {
+        Self.actions(model, connectionID: connectionID, hasSharing: sharing != nil, host: host)
+    }
+
+    /// What the page asks for, over the view model and the app's hooks.
+    static func actions(_ model: ConnectionDetailViewModel?, connectionID: String, hasSharing: Bool, host: ConnectHost) -> DetailActions {
         var a = DetailActions()
         a.onBack = host.onBack
         a.onMessage = opening(host.onOpenConversation, connectionID)
         a.onHistory = opening(host.onOpenHistory, connectionID)
-        if sharing != nil {
+        if hasSharing {
             let id = connectionID
             a.onSharing = opening(host.onOpenSharing, id)
             a.onSharedWithYou = opening(host.onOpenShared, id)

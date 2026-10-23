@@ -38,7 +38,8 @@ public struct DetailActions {
 
     public init() {}
 
-    /// The page shows the sharing cards only once the app has a sharing screen for every one of their actions.
+    /// The page shows the sharing cards only once the app has a sharing screen for every one of their actions (chosen; not in
+    /// the spec: vettid-android's hooks always exist).
     var hasSharing: Bool {
         onSharing != nil && onSharedWithYou != nil && onShareItems != nil && onOpenRule != nil && onAskForSomething != nil
     }
@@ -162,13 +163,16 @@ struct DetailContent: View {
 
     /// Two directions, two cards: what goes out of the vault, what comes in (owner request 2026-10-08, as vettid-android).
     @ViewBuilder private func sharingCards(_ c: ConnectionInfo) -> some View {
-        if let onShare = actions.onShareItems, let onOpenRule = actions.onOpenRule, let onManage = actions.onSharing,
-           let onAsk = actions.onAskForSomething, let onOpen = actions.onSharedWithYou {
+        if actions.hasSharing {
             OutgoingSharingCard(
-                sharing: state.sharing, first: c.sharingName, onShare: onShare, onOpenRule: onOpenRule, onManage: onManage,
+                sharing: state.sharing, first: c.sharingName, onShare: { actions.onShareItems?() },
+                onOpenRule: { actions.onOpenRule?($0) }, onManage: { actions.onSharing?() },
                 onDeleteRule: { actions.onAskDeleteRule($0) }
             )
-            IncomingSharingCard(sharing: state.sharing, first: c.sharingName, onAsk: onAsk, onOpen: onOpen)
+            IncomingSharingCard(
+                sharing: state.sharing, first: c.sharingName, onAsk: { actions.onAskForSomething?() },
+                onOpen: { actions.onSharedWithYou?() }
+            )
         }
     }
 

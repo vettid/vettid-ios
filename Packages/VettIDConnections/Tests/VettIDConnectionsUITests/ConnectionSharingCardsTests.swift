@@ -137,14 +137,51 @@ import VettIDUI
         actions.onShareItems = {}
         actions.onOpenRule = { _ in }
         #expect(!actions.hasSharing)
-        actions.onAskForSomething = {}
-        #expect(actions.hasSharing)
         var state = ConnectionDetailState(connectionID: "c1")
         state.loading = false
         state.connection = ConnectionsScreensTests.connection("c1")
         state.sharing = DetailSharing(rules: [rule1], given: [outGrant], received: [inGrant], loaded: true)
         state.deleteRule = rule1
-        #expect(height(ConnectionDetailScreen(state: state, actions: actions)) > 0)
+        let without = height(ConnectionDetailScreen(state: state, actions: actions))
+        actions.onAskForSomething = {}
+        #expect(actions.hasSharing)
+        let with = height(ConnectionDetailScreen(state: state, actions: actions))
+        // The two cards are what the hooks add; the page is taller by them.
+        #expect(with > without + 100)
+        // Not for a connection that is not active.
+        state.connection?.state = .stale
+        #expect(height(ConnectionDetailScreen(state: state, actions: actions)) < with)
+    }
+
+    /// The page's actions reach the app's hooks: a new rule, a rule, "Manage", "Ask for something", "See what is shared".
+    @Test func theActionsOpenTheRuleEditorAndTheAsk() {
+        var asked: [String] = []
+        var host = ConnectHost()
+        host.onOpenSharing = { asked.append("manage:\($0)") }
+        host.onOpenShared = { asked.append("open:\($0)") }
+        host.onOpenShareRule = { asked.append("rule:\($0):\($1 ?? "new")") }
+        host.onAskFor = { asked.append("ask:\($0)") }
+        let actions = ConnectionDetailRoute.actions(nil, connectionID: "c1", hasSharing: true, host: host)
+        #expect(actions.hasSharing)
+        actions.onShareItems?()
+        actions.onOpenRule?("r1")
+        actions.onSharing?()
+        actions.onAskForSomething?()
+        actions.onSharedWithYou?()
+        #expect(asked == ["rule:c1:new", "rule:c1:r1", "manage:c1", "ask:c1", "open:c1"])
+        // No sharing in the app, or a host without the rule editor: no cards.
+        #expect(!ConnectionDetailRoute.actions(nil, connectionID: "c1", hasSharing: false, host: host).hasSharing)
+        host.onOpenShareRule = nil
+        #expect(!ConnectionDetailRoute.actions(nil, connectionID: "c1", hasSharing: true, host: host).hasSharing)
+    }
+
+    /// At 64 rules the card names the limit (VAULT-MESSAGING §10.12 `share_rules_subject`) and adds no rule.
+    @Test func atSixtyFourRulesTheCardNamesTheLimit() {
+        #expect(VaultLimit(OutgoingSharingCard.limitName, max: Int64(RuleDraft.maxRulesPerSubject)).message
+            == "This connection has the most share rules it can have (64).")
+        let full = DetailSharing(rules: (1...64).map { ShareRule(ruleID: "f\($0)", connectionID: "c1", tags: ["t\($0)"]) }, loaded: true)
+        #expect(full.atRuleLimit)
+        #expect(height(OutgoingSharingCard(sharing: full, first: "Ada", onShare: {}, onOpenRule: { _ in }, onManage: {}, onDeleteRule: { _ in })) > 0)
     }
 
     private func height(_ view: some View) -> CGFloat {

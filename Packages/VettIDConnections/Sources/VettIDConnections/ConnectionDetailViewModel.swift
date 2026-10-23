@@ -86,7 +86,7 @@ public extension ConnectionInfo {
 @Observable
 public final class ConnectionDetailViewModel {
     @ObservationIgnored private let connections: any ConnectionsRepository
-    /// Nil while the app has no sharing (the cards are not shown then).
+    /// Nil while the app has no sharing (the cards are not shown then; chosen; not in the spec: vettid-android always has it).
     @ObservationIgnored private let sharing: (any SharingRepository)?
     @ObservationIgnored private let work = Work()
     @ObservationIgnored private let follows = TaskBag()
@@ -119,6 +119,8 @@ public final class ConnectionDetailViewModel {
         } else if listed {
             local.connection = nil
             local.gone = true
+            local.sharing = DetailSharing()
+            local.deleteRule = nil
         }
     }
 
@@ -153,13 +155,16 @@ public final class ConnectionDetailViewModel {
                 let inForce = { (list: [GrantView]) in
                     list.filter { $0.connectionID == id && $0.active }.sorted { $0.name.lowercased() < $1.name.lowercased() }
                 }
-                self?.local.sharing = DetailSharing(
+                // An answer that lands after the connection is gone is dropped (nothing read stays shown).
+                guard let self, !local.gone else { return }
+                local.sharing = DetailSharing(
                     rules: rules, given: inForce(g.given), received: inForce(g.received),
                     asked: g.requested.filter { $0.connectionID == id && $0.state == Self.askPending }, loaded: true
                 )
             } catch {
-                self?.local.sharing.loaded = true
-                self?.local.sharing.failed = true
+                guard let self, !local.gone else { return }
+                local.sharing.loaded = true
+                local.sharing.failed = true
             }
         }
     }

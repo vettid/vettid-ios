@@ -254,4 +254,23 @@ import VettIDDataTesting
         let m = await model()
         #expect(!"\(m.state.sharing)".contains("Allergies") && !String(reflecting: m.state.sharing).contains("Allergies"))
     }
+
+    /// Once the vault no longer lists the connection nothing of its sharing stays: the cards, a rule waiting to be deleted,
+    /// and an answer still on its way.
+    @Test func theSharingGoesWithTheConnection() async {
+        fake.connections = [Samples.active("c1"), Samples.active("c2")]
+        sharing.rulesStored = [rule1]
+        sharing.given = [outGrant]
+        let m = await model()
+        #expect(m.state.sharing.loaded && !m.state.sharing.rules.isEmpty)
+        m.askDeleteRule(rule1)
+        fake.connections = []
+        await m.settle()
+        #expect(m.state.gone && m.state.deleteRule == nil)
+        #expect(m.state.sharing == DetailSharing())
+        // A read that lands after that is dropped.
+        m.loadSharing()
+        await m.settle()
+        #expect(m.state.sharing == DetailSharing())
+    }
 }

@@ -468,7 +468,7 @@ public struct AppShell: View {
         return l
     }
 
-    private var connectHost: ConnectHost {
+    var connectHost: ConnectHost {
         let model = model
         var h = ConnectHost()
         h.onBack = { model.pop() }
