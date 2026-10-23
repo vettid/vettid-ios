@@ -76,6 +76,9 @@ public struct TopLevelScaffold<Content: View, Overlay: View, Actions: View>: Vie
         }
         .overlay(alignment: .bottom) { overlay }
         .background(colors.background)
+        // A container, as DetailScaffold is: a screen's identifier on the scaffold is the container's own, and every
+        // identifier inside (the top bar's buttons, the search field, the rows) keeps its own (UI tests find them).
+        .accessibilityElement(children: .contain)
     }
 }
 
