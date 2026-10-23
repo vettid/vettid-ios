@@ -44,6 +44,8 @@ public final class ApprovalsManager: ApprovalsRepository {
     @ObservationIgnored private var changedAt: [String: Int] = [:]
     /// The share items decided, and at which change: a list read before does not bring them back.
     @ObservationIgnored private var decidedLog: [ShareDecidedMark] = []
+    /// The `share.pending` batches, and at which change: a list read before keeps them, and only them.
+    @ObservationIgnored private var batchLog: [ShareBatch] = []
     /// Where the reads on their way began.
     @ObservationIgnored private var readSinces: [Int] = []
 
@@ -53,6 +55,13 @@ public final class ApprovalsManager: ApprovalsRepository {
         var subject: String
         var ruleID: String
         var ids: Set<String>
+    }
+
+    /// A `share.pending` batch for one question, and at which change.
+    struct ShareBatch {
+        var at: Int
+        var key: String
+        var items: [ShareItem]
     }
 
     /// The subject a share question is for; a rule of no known subject is its own.
@@ -186,6 +195,10 @@ public final class ApprovalsManager: ApprovalsRepository {
         let at = now()
         changes += 1
         changedAt[p.key] = changes
+        if case .share(let s) = p, !readSinces.isEmpty {
+            batchLog.append(ShareBatch(at: changes, key: p.key, items: s.items))
+            if batchLog.count > Self.maxDecidedLog { batchLog.removeFirst(batchLog.count - Self.maxDecidedLog) }
+        }
         // A batch for a question the list holds adds to it at once, not at the next read.
         if case .share(let s) = p, let i = listed.firstIndex(where: { $0.key == p.key }), case .share(var d) = listed[i] {
             let before = Dictionary(d.items.map { ($0.itemID, $0) }, uniquingKeysWith: { a, _ in a })
@@ -270,6 +283,8 @@ public final class ApprovalsManager: ApprovalsRepository {
     func drop(_ key: String) {
         changes += 1
         changedAt[key] = changes
+        // A batch before this does not come back to a read on its way.
+        batchLog.removeAll { $0.key == key }
         edit { $0.removeAll { parsed($0)?.key == key } }
         listed.removeAll { $0.key == key }
     }
@@ -290,6 +305,7 @@ public final class ApprovalsManager: ApprovalsRepository {
             if let i = readSinces.firstIndex(of: since) { readSinces.remove(at: i) }
             let floor = readSinces.min() ?? Int.max
             decidedLog.removeAll { $0.at <= floor }
+            batchLog.removeAll { $0.at <= floor }
         }
         if requests { try? await connections.refreshRequests(quietly: quietly) }
         let o = try await guarded { quietly ? try await quietOps() : try await ops() }
@@ -300,12 +316,32 @@ public final class ApprovalsManager: ApprovalsRepository {
         listed = next
         // The lists are authoritative for what they cover: decided or expired requests kept from events are dropped.
         let keys = Set(next.map(\.key))
+        let batched = batchedItems(since: since)
         edit { events in
-            events.removeAll { e in
-                guard let p = parsed(e) else { return true }
-                return (lists.covers(p) && !keys.contains(p.key) && !changed(p.key)) || (p.exp ?? .distantFuture) <= t
+            events = events.compactMap { e in
+                guard let p = parsed(e), (p.exp ?? .distantFuture) > t else { return nil }
+                guard lists.covers(p), !keys.contains(p.key) else { return e }
+                guard changed(p.key) else { return nil }
+                // A share question the read does not list keeps only the items of the batches that arrived during it.
+                guard case .share = p else { return e }
+                return Self.withItems(e, batched[p.key] ?? [])
             }
         }
+    }
+
+    /// The ids of the items each share question's batches brought after change [since].
+    private func batchedItems(since: Int) -> [String: Set<String>] {
+        batchLog.filter { $0.at > since }.reduce(into: [:]) { $0[$1.key, default: []].formUnion($1.items.map(\.itemID)) }
+    }
+
+    /// [e] with only the items [ids] names, or nil when it names none of them.
+    static func withItems(_ e: StoredEvent, _ ids: Set<String>) -> StoredEvent? {
+        guard let o = try? StrictJson.parseObject(Array(e.body.utf8)) else { return nil }
+        let left = VaultJSON.objects(o, "items").filter { ids.contains(VaultJSON.string($0, "item_id") ?? "") }
+        if left.isEmpty { return nil }
+        let b = JsonBuilder()
+        for (name, value) in o.members where name != "items" { b.raw(name, value.raw) }
+        return StoredEvent(type: e.type, body: b.raw("items", JsonBuilder.array(left.map(\.raw))).build(), at: e.at)
     }
 
     /// What the vault listed: grant requests, critical-item requests and share decisions, each nil when the vault did not
@@ -349,14 +385,18 @@ public final class ApprovalsManager: ApprovalsRepository {
         return Lists(grants: try? await o.grantList(), critical: try? await o.criticalUseList(), shares: shares)
     }
 
-    /// At most this many share decisions are remembered for reads on their way.
+    /// At most this many share decisions, and as many batches, are remembered for reads on their way: past that, the
+    /// oldest are forgotten, and a read on its way may show a decided item again, or miss a batch's item, until the next.
     static let maxDecidedLog = 64
 
     /// [next], as a read that began at change [since] listed it, with what changed during the read: the items decided for a
     /// subject leave every share question of that subject; any other request that changed is not taken from the list,
-    /// except a share question a batch arrived for, whose items stay, with the batch's (chosen; not in the spec).
+    /// except a share question a batch arrived for, whose items stay, with the items of the batches that arrived during
+    /// the read and were not decided after (§10.12; chosen; not in the spec). The kept event adds up every batch, older
+    /// ones too: an item the vault no longer lists does not come back from it.
     private func mergedWithChanges(_ next: [PendingApproval], since: Int, changed: (String) -> Bool) -> [PendingApproval] {
         let marks = decidedLog.filter { $0.at > since }
+        let batches = batchLog.filter { $0.at > since }
         let events = stored.compactMap(parsed)
         return next.compactMap { a in
             guard case .share(var d) = a else { return changed(a.key) ? nil : a }
@@ -364,9 +404,12 @@ public final class ApprovalsManager: ApprovalsRepository {
             let gone = mine.reduce(into: Set<String>()) { $0.formUnion($1.ids) }
             d.items.removeAll { gone.contains($0.itemID) }
             if changed(a.key) {
-                guard case .share(let e)? = events.first(where: { $0.key == a.key }) else { return nil }
-                let have = Set(d.items.map(\.itemID))
-                d.items += e.items.filter { !have.contains($0.itemID) }
+                guard events.contains(where: { $0.key == a.key }) else { return nil }
+                var have = Set(d.items.map(\.itemID))
+                for b in batches where b.key == a.key {
+                    let later = mine.filter { $0.at > b.at }.reduce(into: Set<String>()) { $0.formUnion($1.ids) }
+                    d.items += b.items.filter { !later.contains($0.itemID) && have.insert($0.itemID).inserted }
+                }
             }
             return d.items.isEmpty ? nil : .share(d)
         }
