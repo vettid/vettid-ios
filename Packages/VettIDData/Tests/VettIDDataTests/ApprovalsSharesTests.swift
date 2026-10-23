@@ -194,6 +194,54 @@ import VettIDDataTesting
         #expect(share(m, "r1")?.items.map(\.itemID) == ["A", "C"], "B came before the vault said it had no such question")
     }
 
+    /// A decision takes out only what the vault's answer decided (VAULT-MESSAGING 0.55.7 §10.12): a batch that arrived
+    /// after the screen showed the question, during a read, stays with the read's other undecided entries.
+    @Test func aDecisionDuringTheReadKeepsTheQuestionsOtherItems() async throws {
+        ops.pendingPages = [#"{"pending":[\#(entry("r1", "A")),\#(entry("r1", "C")),\#(entry("r1", "D"))]}"#]
+        ops.rulePages = [Self.rules]
+        let gate = TestDeferred<Void>()
+        ops.pendingGate = gate
+        let m = manager()
+        let read = await started { try await m.refreshApprovals() }
+        m.onEvent(batch("r1", "B"))
+        ops.shareAnswer = #"{"included":["A"],"declined":["C"]}"#
+        try await m.decideShare("r1", include: ["A"], decline: ["C"])
+        gate.complete()
+        try await read.value
+        #expect(share(m, "r1")?.items.map(\.itemID) == ["D", "B"], "D listed and undecided, B arrived during the read")
+    }
+
+    /// A decision that empties a batch's kept event is not a drop: the read's other entries for the rule stay.
+    @Test func aDecisionOfABatchDuringTheReadKeepsTheReadsEntries() async throws {
+        ops.pendingPages = [#"{"pending":[\#(entry("r1", "A")),\#(entry("r1", "D"))]}"#]
+        ops.rulePages = [Self.rules]
+        let gate = TestDeferred<Void>()
+        ops.pendingGate = gate
+        let m = manager()
+        let read = await started { try await m.refreshApprovals() }
+        m.onEvent(batch("r1", "B"))
+        ops.shareAnswer = #"{"included":["B"],"declined":[]}"#
+        try await m.decideShare("r1", include: ["B"], decline: [])
+        gate.complete()
+        try await read.value
+        #expect(share(m, "r1")?.items.map(\.itemID) == ["A", "D"])
+    }
+
+    /// Without a read on its way: the items the answer did not name stay in the question.
+    @Test func aDecisionKeepsTheItemsItDidNotDecide() async throws {
+        ops.pendingPages = [#"{"pending":[\#(entry("r1", "A"))]}"#]
+        ops.rulePages = [Self.rules]
+        let m = manager()
+        try await m.refreshApprovals()
+        m.onEvent(batch("r1", "B"))
+        ops.shareAnswer = #"{"included":["A"],"declined":[]}"#
+        try await m.decideShare("r1", include: ["A"], decline: [])
+        #expect(share(m, "r1")?.items.map(\.itemID) == ["B"])
+        ops.shareAnswer = #"{"included":["B"],"declined":[]}"#
+        try await m.decideShare("r1", include: ["B"], decline: [])
+        #expect(share(m, "r1") == nil, "a question with nothing left goes")
+    }
+
     /// A batch's item decided after the batch leaves; one a batch asks again after its decision stays.
     @Test func aBatchDuringTheReadKeepsTheOrderOfItsDecisions() async throws {
         ops.pendingPages = [#"{"pending":[\#(entry("r1", "A")),\#(entry("r1", "C"))]}"#]

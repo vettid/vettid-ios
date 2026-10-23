@@ -42,6 +42,9 @@ public final class ApprovalsManager: ApprovalsRepository {
     /// before that neither brings back one that left nor drops one that arrived (chosen; not in the spec).
     @ObservationIgnored private var changes = 0
     @ObservationIgnored private var changedAt: [String: Int] = [:]
+    /// When each approval was dropped (decided, or `not_found` on a decision): a share question dropped during a read is
+    /// not taken from its list (VAULT-MESSAGING 0.55.7 §10.12 rule 3).
+    @ObservationIgnored private var droppedAt: [String: Int] = [:]
     /// The share items decided, and at which change: a list read before does not bring them back.
     @ObservationIgnored private var decidedLog: [ShareDecidedMark] = []
     /// The `share.pending` batches, and at which change: a list read before keeps them, and only them.
@@ -283,6 +286,7 @@ public final class ApprovalsManager: ApprovalsRepository {
     func drop(_ key: String) {
         changes += 1
         changedAt[key] = changes
+        droppedAt[key] = changes
         // A batch before this does not come back to a read on its way.
         batchLog.removeAll { $0.key == key }
         edit { $0.removeAll { parsed($0)?.key == key } }
@@ -392,8 +396,8 @@ public final class ApprovalsManager: ApprovalsRepository {
     /// [next], as a read that began at change [since] listed it, with what changed during the read: the items decided for a
     /// subject leave every share question of that subject; any other request that changed is not taken from the list,
     /// except a share question a batch arrived for, whose items stay, with the items of the batches that arrived during
-    /// the read and were not decided after (§10.12; chosen; not in the spec). The kept event adds up every batch, older
-    /// ones too: an item the vault no longer lists does not come back from it.
+    /// the read and were not decided after (VAULT-MESSAGING 0.55.7 §10.12, rules 1 and 2). The kept event adds up every
+    /// batch, older ones too: an item the vault no longer lists does not come back from it.
     private func mergedWithChanges(_ next: [PendingApproval], since: Int, changed: (String) -> Bool) -> [PendingApproval] {
         let marks = decidedLog.filter { $0.at > since }
         let batches = batchLog.filter { $0.at > since }
@@ -404,7 +408,8 @@ public final class ApprovalsManager: ApprovalsRepository {
             let gone = mine.reduce(into: Set<String>()) { $0.formUnion($1.ids) }
             d.items.removeAll { gone.contains($0.itemID) }
             if changed(a.key) {
-                guard events.contains(where: { $0.key == a.key }) else { return nil }
+                // Dropped during the read with no batch since: gone. A decision that emptied a batch's event is not a drop.
+                if (droppedAt[a.key] ?? 0) > since, !events.contains(where: { $0.key == a.key }) { return nil }
                 var have = Set(d.items.map(\.itemID))
                 for b in batches where b.key == a.key {
                     let later = mine.filter { $0.at > b.at }.reduce(into: Set<String>()) { $0.formUnion($1.ids) }

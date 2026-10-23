@@ -6,15 +6,18 @@ import VettIDVault
 // leaves the list and its feed item is marked read. The connection requests are decided by the ``ConnectionsManager``.
 // Mirrors the decisions of vettid-android `SocialManager`.
 extension ApprovalsManager {
-    /// Runs a decision; a request the vault no longer knows (`not_found`) leaves the list too.
-    private func decide(_ key: String, _ body: (any ApprovalOps) async throws -> Void) async throws {
+    /// Runs a decision; a request the vault no longer knows (`not_found`) leaves the list too. [dropsOnSuccess] false: the
+    /// body itself takes out what the vault's answer decided (a share question keeps its other items, §10.12).
+    private func decide(
+        _ key: String, dropsOnSuccess: Bool = true, _ body: (any ApprovalOps) async throws -> Void
+    ) async throws {
         do {
             try await guarded { try await body(try await ops()) }
         } catch let f as VaultFailure where f.kind == .notFound {
             drop(key)
             throw f
         }
-        drop(key)
+        if dropsOnSuccess { drop(key) }
         decided(key)
     }
 
@@ -79,13 +82,15 @@ extension ApprovalsManager {
     /// with nothing changed): the two lists then go as two `{items, approve}` calls. A request that is malformed in either
     /// form (more than 500 items together, an item twice or in both lists) is refused here and never split into two calls
     /// that are not atomic (chosen; not in the spec). With the fallback, an inclusion that went through stays when the
-    /// decline after it fails: the failure is shown, and the question keeps the declined items.
+    /// decline after it fails: the failure is shown, and the question keeps all its items until the next read.
     public func decideShare(_ ruleID: String, include: [String], decline: [String]) async throws {
         let all = include + decline
         guard !all.isEmpty, all.count <= Self.maxShareDecide, Set(all).count == all.count else {
             throw VaultFailure(.other, code: "bad_request")
         }
-        try await decide("share:\(ruleID)") { o in
+        // Only the items the answer decided leave: the question keeps the rest, and the batches noted for a read on its
+        // way (VAULT-MESSAGING 0.55.7 §10.12; a question is forgotten only on `not_found`, rule 3).
+        try await decide("share:\(ruleID)", dropsOnSuccess: false) { o in
             var answers: [JsonObject] = []
             do {
                 answers.append(try await o.shareDecide(ruleID, include: include, decline: decline))
