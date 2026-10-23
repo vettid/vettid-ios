@@ -221,6 +221,26 @@ import VettIDDataTesting
         #expect(g.state.error == .limit && g.state.limit?.name == "grants_given" && g.state.retryUntil == nil)
     }
 
+    /// §10.12: a tap decides only the share items the screen showed, not one a batch added just before it. Mirrors
+    /// vettid-android `aShareDecisionDecidesOnlyTheItemsShown`.
+    @Test func aShareDecisionDecidesOnlyTheItemsShown() async {
+        fake.listed = [Samples.share()]
+        let m = await model("share:r1")
+        m.toggleShareItem("s2")
+        // A batch lands before the tap: s3 is in the live question but was never on screen.
+        guard case .share(var d) = Samples.share() else { return }
+        d.items.append(ShareItem(itemID: "s3", name: "Vaccines", category: "medical", sensitivity: "data", askRuleID: nil, shared: false))
+        fake.listed = [.share(d)]
+        m.approve(shown: ["s1", "s2"])
+        await m.settle()
+        #expect(fake.lastShare?.include == ["s1"] && fake.lastShare?.decline == ["s2"])
+        fake.listed = [.share(d)]
+        let other = await model("share:r1")
+        other.deny(shown: ["s1", "s2"])
+        await other.settle()
+        #expect(fake.lastShare?.include == [] && fake.lastShare?.decline == ["s1", "s2"])
+    }
+
     /// §10.12: ticked items are shared, unticked ones declined; "Do not share" declines them all.
     @Test func aShareQuestionSharesTheTickedItems() async {
         fake.listed = [Samples.share()]

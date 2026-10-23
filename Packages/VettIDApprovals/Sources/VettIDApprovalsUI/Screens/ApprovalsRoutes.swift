@@ -90,8 +90,11 @@ public struct ApprovalDetailRoute: View {
         a.onBack = host.onBack
         guard let m = model else { return a }
         a.onPassword = { m.setPassword($0) }
-        a.onApprove = { m.approve() }
-        a.onDeny = { m.deny() }
+        // The share items this render shows: a tap decides these, not a question a later batch changed (§10.12).
+        var shown: [String]?
+        if case .share(let d)? = m.state.approval { shown = d.items.map(\.itemID) }
+        a.onApprove = { m.approve(shown: shown) }
+        a.onDeny = { m.deny(shown: shown) }
         a.onAskBlock = { m.askBlock($0) }
         a.onBlock = { m.block() }
         a.onToggleShareItem = { m.toggleShareItem($0) }

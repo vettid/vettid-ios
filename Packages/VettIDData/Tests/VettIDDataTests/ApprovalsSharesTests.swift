@@ -242,6 +242,57 @@ import VettIDDataTesting
         #expect(share(m, "r1") == nil, "a question with nothing left goes")
     }
 
+    /// A read the vault did not answer covers nothing: the share questions known from the last read stay (VAULT-MESSAGING
+    /// 0.55.7 §10.12).
+    @Test func aShareReadThatFailsKeepsWhatWasKnown() async throws {
+        ops.pendingPages = [#"{"pending":[\#(entry("r1", "A"))]}"#]
+        ops.rulePages = [Self.rules]
+        let m = manager()
+        try await m.refreshApprovals()
+        #expect(share(m, "r1")?.items.map(\.itemID) == ["A"])
+        // Neither share list answers now.
+        try await m.refreshApprovals()
+        #expect(share(m, "r1")?.items.map(\.itemID) == ["A"])
+    }
+
+    /// Sent but not named by the answer: the vault did not hold it pending. It leaves the rule's question, but is not a
+    /// decision: a read on its way still brings it.
+    @Test func anItemTheAnswerDoesNotNameLeavesButIsNotADecision() async throws {
+        ops.pendingPages = [#"{"pending":[\#(entry("r1", "A")),\#(entry("r1", "B"))]}"#]
+        ops.rulePages = [Self.rules]
+        let m = manager()
+        try await m.refreshApprovals()
+        ops.shareAnswer = #"{"included":["A"],"declined":[]}"#
+        try await m.decideShare("r1", include: ["A", "B"], decline: [])
+        #expect(share(m, "r1") == nil, "A decided, B not pending at the vault")
+        ops.pendingPages = [#"{"pending":[\#(entry("r1", "A")),\#(entry("r1", "B"))]}"#]
+        ops.rulePages = [Self.rules]
+        let gate = TestDeferred<Void>()
+        ops.pendingGate = gate
+        let read = await started { try await m.refreshApprovals() }
+        try await m.decideShare("r1", include: ["A", "B"], decline: [])
+        gate.complete()
+        try await read.value
+        #expect(share(m, "r1")?.items.map(\.itemID) == ["B"], "only A is a decision for the read on its way")
+    }
+
+    /// The feed item is read only once nothing of the question is left: an item a batch added meanwhile keeps it.
+    @Test func theFeedItemIsReadOnlyWhenTheQuestionIsGone() async throws {
+        ops.pendingPages = [#"{"pending":[\#(entry("r1", "A"))]}"#]
+        ops.rulePages = [Self.rules]
+        let m = manager()
+        var read: [String] = []
+        m.onDecided = { _, ref in read.append(ref) }
+        try await m.refreshApprovals()
+        m.onEvent(batch("r1", "B"))
+        ops.shareAnswer = #"{"included":["A"],"declined":[]}"#
+        try await m.decideShare("r1", include: ["A"], decline: [])
+        #expect(read.isEmpty && share(m, "r1")?.items.map(\.itemID) == ["B"])
+        ops.shareAnswer = #"{"included":["B"],"declined":[]}"#
+        try await m.decideShare("r1", include: ["B"], decline: [])
+        #expect(read == ["r1"])
+    }
+
     /// A batch's item decided after the batch leaves; one a batch asks again after its decision stays.
     @Test func aBatchDuringTheReadKeepsTheOrderOfItsDecisions() async throws {
         ops.pendingPages = [#"{"pending":[\#(entry("r1", "A")),\#(entry("r1", "C"))]}"#]
