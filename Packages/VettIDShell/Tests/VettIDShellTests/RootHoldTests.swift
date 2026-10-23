@@ -21,4 +21,10 @@ import VettIDData
         #expect(RootHold.shown(phase: .deleting, held: .unlocked, finishingMove: true) == .deleting)
         #expect(!RootHold.holds(phase: .deleting, finishingMove: true))
     }
+
+    /// Only the move's own lock and unlock are held: a wipe during the finish is shown at once.
+    @Test func aWipeDuringTheMoveIsShownAtOnce() {
+        #expect(RootHold.shown(phase: .signedOut, held: .unlocked, finishingMove: true) == .signedOut)
+        #expect(!RootHold.holds(phase: .signedOut, finishingMove: true))
+    }
 }

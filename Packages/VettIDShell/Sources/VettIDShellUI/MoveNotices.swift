@@ -14,15 +14,11 @@ public struct MoveNotices: View {
     @Environment(\.vettIDColors) private var colors
     let vault: any VaultRepository
     let phase: AppPhase
-    /// HOOK for I3.3a part 2: the day-7 check of a kept transfer is still pending (the vault has not yet said whether the move
-    /// happened), so "The move was not done" waits. False by default; the root passes the repository's flag once it exists.
-    let keptCheckPending: Bool
     @State private var finishMoveOpen = false
 
-    public init(vault: any VaultRepository, phase: AppPhase, keptCheckPending: Bool = false) {
+    public init(vault: any VaultRepository, phase: AppPhase) {
         self.vault = vault
         self.phase = phase
-        self.keptCheckPending = keptCheckPending
     }
 
     /// The sheet is offered while the vault is open, and kept through the lock and unlock it sends.
@@ -51,7 +47,7 @@ public struct MoveNotices: View {
                 .accessibilityIdentifier("moved_back_banner")
             }
             // The vault confirmed at the end of the 7 days that this phone is still its app: the move did not happen.
-            if vault.moveNotDone, !keptCheckPending {
+            if vault.moveNotDone {
                 InfoBanner(
                     ShellMoveStrings.rootMoveNotDone, actionLabel: ShellStrings.ownerCheckNoticeOk,
                     onAction: { vault.acknowledgeMoveNotDone() }
