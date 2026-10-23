@@ -99,11 +99,17 @@ import VettIDApprovals
         #expect(ApprovalTexts.expiryOptions(requested: nil) == [nil, 86_400, 2_592_000])
         #expect(ApprovalTexts.expiryLabel(nil, requested: 3_600) == "1 day" && ApprovalTexts.usesLabel(nil, requested: 3) == "They can read it 3 times.")
         #expect(ApprovalTexts.kind("otp") == "One-time code" && ApprovalTexts.kind("x") == "Other" && ApprovalTexts.operation("auth") == "Sign in (authenticate)")
-        guard case .share(let d) = Samples.share() else { return }
+        guard case .share(var d) = Samples.share() else { return }
         let lines = ShareExplanations.of(d.items[1], d)
         #expect(lines == [.asksFirst(ruleID: "r9"), .alreadyShared] && ShareExplanations.of(d.items[0], d).isEmpty)
-        #expect(ApprovalTexts.shareLine(lines[0], who: "Sam") == "Also covered by another of your rules, which asks you first")
-        #expect(ApprovalTexts.shareLine(lines[1], who: "Sam") == "Already shared with Sam by another rule. Not sharing it stops that sharing.")
+        // A rule the question does not know reads "another of your rules"; a known one is named by its tags (§10.12).
+        let none: [String: RuleNames.Name] = [:]
+        #expect(ApprovalTexts.shareLine(lines[0], in: d, names: none, who: "Sam") == "Also covered by another of your rules, which asks you first")
+        #expect(ApprovalTexts.shareLine(lines[1], in: d, names: none, who: "Sam") == "Already shared with Sam by another rule. Not sharing it stops that sharing.")
+        d.rules = [ShareRule(ruleID: "r9", connectionID: "c1", tags: ["medical"], mode: .ask), ShareRule(ruleID: "r3", connectionID: "c1", tags: ["id", "travel"], match: .all)]
+        let names = RuleNames.of(d.rules)
+        #expect(ApprovalTexts.shareLine(lines[0], in: d, names: names, who: "Sam") == "Also covered by your “medical” rule, which asks you first")
+        #expect(ApprovalTexts.shareLine(.alsoCovered(ruleID: "r3"), in: d, names: names, who: "Sam") == "Also covered by your “id + travel” rule")
         #expect(ApprovalTexts.peerDeclined(PeerDecline(requestID: "r", name: nil, outgoing: true, at: Date())) == "Someone declined your connection request")
         #expect(ApprovalTexts.peerDeclined(PeerDecline(requestID: "r", name: "Ada", outgoing: false, at: Date())) == "Ada declined the connection")
         #expect(ApprovalTexts.pausedTitle(ConnectionInfo(id: "c", name: "", state: .active)) == "A connection’s requests are paused")

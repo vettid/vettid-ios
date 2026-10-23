@@ -75,22 +75,25 @@ public enum AskBatches {
     }
 }
 
-/// Why a share question's item is asked and what an answer does (VAULT-MESSAGING 0.23.0 §10.12 Overlapping rules): an item
-/// an `ask` rule of the subject holds ("Also covered by …, which asks you first"), and an item another rule of the subject
-/// already shares, which a decline stops sharing. The rules a question's item also waits in, and the rules' names (by
-/// their tags), come with the share rules (IOS-PLAN §8 I3.2): until then a rule reads "another of your rules" (chosen; not
-/// in the spec). Mirrors vettid-android `ShareExplanations`.
+/// Why a share question's item is asked and what an answer does (VAULT-MESSAGING 0.23.0 §10.12 Overlapping rules): apps MUST
+/// explain an item an `ask` rule holds ("Also covered by your “medical” rule, which asks you first"), say that an item
+/// already shared by another rule of the subject stops being shared if declined, and the answer counts for every rule of the
+/// subject where the item waits (one question per item and subject). Mirrors vettid-android `ShareExplanations`.
 public enum ShareExplanations {
     public enum Line: Equatable, Sendable {
         /// `ask_rule_id`: the `ask` rule of the subject that holds the item.
         case asksFirst(ruleID: String)
+        /// Another rule of the subject where the item waits too (the answer counts there as well).
+        case alsoCovered(ruleID: String)
         /// `shared`: another rule of the subject already shares it; declining stops that.
         case alreadyShared
     }
 
     public static func of(_ item: ShareItem, _ decision: ShareDecision) -> [Line] {
         var out: [Line] = []
-        if let asker = item.askRuleID, asker != decision.ruleID { out.append(.asksFirst(ruleID: asker)) }
+        let asker = item.askRuleID.flatMap { $0 == decision.ruleID ? nil : $0 }
+        if let asker { out.append(.asksFirst(ruleID: asker)) }
+        for id in item.alsoIn where id != asker && id != decision.ruleID { out.append(.alsoCovered(ruleID: id)) }
         if item.shared { out.append(.alreadyShared) }
         return out
     }

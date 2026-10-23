@@ -242,6 +242,19 @@ import VettIDVault
         shell.itemsHost.onOpenRule("c1", nil)
         shell.itemsHost.onOpenRule("c1", "r1")
         #expect(model.path == [.connection("c1"), .ruleEdit(connectionID: "c1", ruleID: nil), .ruleEdit(connectionID: "c1", ruleID: "r1")])
+        // The connection page's hooks: Manage, Shared with you, "Ask for something", a new rule and a rule.
+        model.path = [.connection("c1")]
+        let host = shell.connectHost
+        host.onOpenSharing?("c1")
+        host.onOpenShared?("c1")
+        host.onAskFor?("c1")
+        host.onOpenShareRule?("c1", nil)
+        host.onOpenShareRule?("c1", "r2")
+        #expect(model.path == [
+            .connection("c1"), .connectionSharing("c1"), .sharedWithYou(connectionID: "c1", ask: false),
+            .sharedWithYou(connectionID: "c1", ask: true), .ruleEdit(connectionID: "c1", ruleID: nil),
+            .ruleEdit(connectionID: "c1", ruleID: "r2"),
+        ])
     }
 
     /// Approvals in the placeholder's place, a decision and the Notifications screens over it; the drawer's counts.

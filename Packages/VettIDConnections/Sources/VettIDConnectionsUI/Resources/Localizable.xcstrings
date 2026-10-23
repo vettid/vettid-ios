@@ -1662,6 +1662,677 @@
           }
         }
       }
+    },
+    "connections_share_out_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You share with %@"
+          }
+        }
+      }
+    },
+    "connections_share_out_title_unnamed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You share with this connection"
+          }
+        }
+      }
+    },
+    "connections_share_out_empty": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You’re not sharing anything with %@ yet."
+          }
+        }
+      }
+    },
+    "connections_share_out_empty_unnamed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You’re not sharing anything with this connection yet."
+          }
+        }
+      }
+    },
+    "connections_share_out_rules": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rules"
+          }
+        }
+      }
+    },
+    "connections_share_out_items": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Items they can see now"
+          }
+        }
+      }
+    },
+    "connections_share_out_action": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add a rule"
+          }
+        }
+      }
+    },
+    "connections_share_out_manage": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage what you share"
+          }
+        }
+      }
+    },
+    "connections_share_out_count": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld item shared"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld items shared"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "connections_share_in_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ shares with you"
+          }
+        }
+      }
+    },
+    "connections_share_in_title_unnamed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This connection shares with you"
+          }
+        }
+      }
+    },
+    "connections_share_in_empty": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ isn’t sharing anything with you yet."
+          }
+        }
+      }
+    },
+    "connections_share_in_empty_unnamed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This connection isn’t sharing anything with you yet."
+          }
+        }
+      }
+    },
+    "connections_share_in_action": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask for something"
+          }
+        }
+      }
+    },
+    "connections_share_in_open": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "See what is shared with you"
+          }
+        }
+      }
+    },
+    "connections_share_in_count": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld item shared with you"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld items shared with you"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "connections_share_in_asked": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "You asked for %lld thing; waiting for an answer."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "You asked for %lld things; waiting for an answer."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "connections_share_unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sharing could not be read just now."
+          }
+        }
+      }
+    },
+    "connections_share_rule_ask": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Asks you each time"
+          }
+        }
+      }
+    },
+    "connections_share_rule_auto": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shared automatically"
+          }
+        }
+      }
+    },
+    "connections_share_rule_all": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Items with all of these tags"
+          }
+        }
+      }
+    },
+    "connections_share_rule_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Items with any of these tags"
+          }
+        }
+      }
+    },
+    "connections_share_no_limit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "no fetch limit"
+          }
+        }
+      }
+    },
+    "connections_share_no_end": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "no end date"
+          }
+        }
+      }
+    },
+    "connections_share_rule_included": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld item shared now"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld items shared now"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "connections_share_rule_overlaps": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overlaps %@"
+          }
+        }
+      }
+    },
+    "connections_share_rule_asks_first_for": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Asks you first for the items %@ also covers"
+          }
+        }
+      }
+    },
+    "connections_rule_name": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "your “%@” rule"
+          }
+        }
+      }
+    },
+    "connections_rule_name_asks": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "your “%@” rule (asks first)"
+          }
+        }
+      }
+    },
+    "connections_rule_name_auto": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "your “%@” rule (shares automatically)"
+          }
+        }
+      }
+    },
+    "connections_rule_name_until": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "your “%1$@” rule (until %2$@)"
+          }
+        }
+      }
+    },
+    "connections_rule_name_no_end": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "your “%@” rule (no end date)"
+          }
+        }
+      }
+    },
+    "connections_share_per_hour": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "up to %lld an hour"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "up to %lld an hour"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "connections_share_per_day": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "up to %lld a day"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "up to %lld a day"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "connections_share_received_per_hour": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "up to %lld time an hour"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "up to %lld times an hour"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "connections_share_received_per_day": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "up to %lld time a day"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "up to %lld times a day"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "connections_share_rule_delete": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete this rule"
+          }
+        }
+      }
+    },
+    "connections_share_rule_delete_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete this sharing rule?"
+          }
+        }
+      }
+    },
+    "connections_share_rule_delete_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ can no longer fetch the items this rule shared. Items another rule shares stay shared, and nothing becomes shared because this rule is gone."
+          }
+        }
+      }
+    },
+    "connections_share_rule_delete_unnamed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This connection can no longer fetch the items this rule shared. Items another rule shares stay shared, and nothing becomes shared because this rule is gone."
+          }
+        }
+      }
+    },
+    "connections_share_rule_open": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change this rule"
+          }
+        }
+      }
+    },
+    "connections_share_rule_pending": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld waiting for you"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld waiting for you"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "connections_share_uses": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "up to %lld fetch of each item"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "up to %lld fetches of each item"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "connections_share_uses_left": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld use left"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld uses left"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "connections_share_until": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "until %@"
+          }
+        }
+      }
+    },
+    "connections_share_by_rule": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From a rule"
+          }
+        }
+      }
+    },
+    "connections_share_one_off": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shared once"
+          }
+        }
+      }
+    },
+    "connections_share_deleted_item": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deleted item"
+          }
+        }
+      }
+    },
+    "connections_share_theirs": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@’s"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

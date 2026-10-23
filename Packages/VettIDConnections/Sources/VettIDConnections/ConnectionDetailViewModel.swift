@@ -8,8 +8,7 @@ public enum DetailConfirm: Equatable, Sendable {
 }
 
 /// A connection's detail screen state. Names are the members' own: never printed, dumped or mirrored. Mirrors
-/// vettid-android `ConnectionDetailUiState` without what later rows bring: member authentication (IOS-PLAN §8 I2.3) and
-/// sharing both ways (the items phase).
+/// vettid-android `ConnectionDetailUiState` without member authentication (IOS-PLAN §8 I2.3).
 public struct ConnectionDetailState: Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     public var connectionID: String
     public var connection: ConnectionInfo?
@@ -19,6 +18,10 @@ public struct ConnectionDetailState: Equatable, Sendable, CustomStringConvertibl
     /// The connection is gone (removed here, or unknown to the vault): the screen closes.
     public var gone = false
     public var error: FailureKind?
+    /// Both directions of sharing with this connection (VAULT-ITEMS §6, VAULT-MESSAGING §10.12).
+    public var sharing = DetailSharing()
+    /// A share rule the member asked to delete, waiting for the confirmation.
+    public var deleteRule: ShareRule?
 
     public init(connectionID: String) { self.connectionID = connectionID }
 
@@ -77,22 +80,26 @@ public extension ConnectionInfo {
 
 /// A connection (ANDROID-PLAN §4): the profile it shares (self-asserted), its asks (mute, resume: VAULT-MESSAGING 0.23.0
 /// §10.4.1), favourite and remove (confirmed). No safety code, alias, note or block here (as vettid-android, whose owner
-/// decided so). Mirrors vettid-android `ConnectionDetailViewModel` without member authentication (IOS-PLAN §8 I2.3) and
-/// sharing (the items phase).
+/// decided so), and sharing both ways (what the member shares with it, what it shares with the member: §10.12). Mirrors
+/// vettid-android `ConnectionDetailViewModel` without member authentication (IOS-PLAN §8 I2.3).
 @MainActor
 @Observable
 public final class ConnectionDetailViewModel {
     @ObservationIgnored private let connections: any ConnectionsRepository
+    /// Nil while the app has no sharing (the cards are not shown then; chosen; not in the spec: vettid-android always has it).
+    @ObservationIgnored private let sharing: (any SharingRepository)?
     @ObservationIgnored private let work = Work()
     @ObservationIgnored private let follows = TaskBag()
     /// The connection was in the repository's list: once it is not, it is gone.
     @ObservationIgnored private var listed = false
     private var local: ConnectionDetailState
 
-    public init(connectionID: String, connections: any ConnectionsRepository) {
+    public init(connectionID: String, connections: any ConnectionsRepository, sharing: (any SharingRepository)? = nil) {
         self.connections = connections
+        self.sharing = sharing
         local = ConnectionDetailState(connectionID: connectionID)
         load()
+        loadSharing()
         follows.add(follow(self, read: { $0.inList }, apply: { $0.onListed($1) }))
     }
 
@@ -112,6 +119,8 @@ public final class ConnectionDetailViewModel {
         } else if listed {
             local.connection = nil
             local.gone = true
+            local.sharing = DetailSharing()
+            local.deleteRule = nil
         }
     }
 
@@ -133,6 +142,34 @@ public final class ConnectionDetailViewModel {
             }
         }
     }
+
+    /// Reads both directions again (`share.rule.list` for this connection, `grant.list`), e.g. when the screen comes back from
+    /// the rule editor. Only grants in force count; a failure leaves the rest of the screen as it is.
+    public func loadSharing() {
+        guard let sharing else { return }
+        let id = local.connectionID
+        work.launch { [weak self] in
+            do {
+                let rules = try await sharing.rules(connectionID: id).filter { $0.connectionID == id }
+                let g = try await sharing.grants()
+                let inForce = { (list: [GrantView]) in
+                    list.filter { $0.connectionID == id && $0.active }.sorted { $0.name.lowercased() < $1.name.lowercased() }
+                }
+                // An answer that lands after the connection is gone is dropped (nothing read stays shown).
+                guard let self, !local.gone else { return }
+                local.sharing = DetailSharing(
+                    rules: rules, given: inForce(g.given), received: inForce(g.received),
+                    asked: g.requested.filter { $0.connectionID == id && $0.state == Self.askPending }, loaded: true
+                )
+            } catch {
+                guard let self, !local.gone else { return }
+                local.sharing.loaded = true
+                local.sharing.failed = true
+            }
+        }
+    }
+
+    private static let askPending = "pending"
 
     /// The connection as the list has it now (a change from another device shows at once), else as read; nothing once
     /// it is gone.
@@ -177,6 +214,19 @@ public final class ConnectionDetailViewModel {
     }
 
     public func dismissNotice() { local.error = nil }
+
+    /// Asks to delete a share rule of this connection (nil: never mind).
+    public func askDeleteRule(_ rule: ShareRule?) { local.deleteRule = rule }
+
+    /// Deletes the rule asked about (`share.rule.delete`, §10.12): its items are withdrawn, then both directions are read again.
+    public func deleteRule() {
+        guard let r = local.deleteRule, let sharing else { return }
+        local.deleteRule = nil
+        act { [weak self] in
+            try await sharing.deleteRule(r.ruleID)
+            self?.loadSharing()
+        }
+    }
 
     private func act(_ body: @escaping @MainActor () async throws -> Void) {
         local.busy = true

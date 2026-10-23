@@ -5,17 +5,28 @@ import VettIDDataTesting
 @testable import VettIDConnections
 
 /// A connection's detail (ANDROID-PLAN §4; VAULT-MESSAGING §10.4, §10.4.1): loading, an unknown connection, the
-/// favourite, removing once confirmed, muting and resuming the asks, and the failures. Mirrors vettid-android
-/// `ConnectionsViewModelsTest`'s detail part.
+/// favourite, removing once confirmed, muting and resuming the asks, sharing both ways (VAULT-MESSAGING §10.12) and the
+/// failures. Mirrors vettid-android `ConnectionsViewModelsTest`'s detail part and `ConnectionSharingCardsTest`'s view-model
+/// cases.
 @MainActor
 @Suite struct ConnectionDetailViewModelTests {
     let fake = FakeConnections()
+    let sharing = FakeSharing()
 
     func model(_ id: String = "c1") async -> ConnectionDetailViewModel {
-        let m = ConnectionDetailViewModel(connectionID: id, connections: fake)
+        let m = ConnectionDetailViewModel(connectionID: id, connections: fake, sharing: sharing)
         await m.settle()
         return m
     }
+
+    private let rule1 = ShareRule(ruleID: "r1", connectionID: "c1", tags: ["medical"], mode: .auto, uses: 5, included: ["i1"])
+    private let rule2 = ShareRule(ruleID: "r2", connectionID: "c1", tags: ["drivers-license"], uses: 5, included: ["i2"], pending: ["i3"])
+    private let outGrant = GrantView(
+        grantID: "g1", connectionID: "c1", direction: .given, itemRef: "i1", name: "Allergies", category: "medical", ruleID: "r1"
+    )
+    private let inGrant = GrantView(
+        grantID: "g3", connectionID: "c1", direction: .received, itemRef: "x1", name: "Home address", category: "contact"
+    )
 
     @Test func itLoadsTheConnection() async {
         fake.connections = [Samples.active("c1")]
@@ -145,5 +156,121 @@ import VettIDDataTesting
         fake.connections = [Samples.active("c1")]
         let m = await model()
         #expect(!"\(m.state)".contains("Ada") && !String(reflecting: m.state).contains("Ada"))
+    }
+
+    // MARK: - Sharing both ways (§10.12)
+
+    /// Only this connection's sharing in force: its rules, the grants given and received that are active (by name), the asks
+    /// still waiting.
+    @Test func theDetailReadsOnlyThisConnectionsSharingInForce() async {
+        fake.connections = [Samples.active("c1")]
+        var revoked = outGrant
+        revoked.grantID = "g8"
+        revoked.state = "revoked"
+        var other = outGrant
+        other.grantID = "g9"
+        other.connectionID = "c9"
+        var expired = inGrant
+        expired.grantID = "g7"
+        expired.state = "expired"
+        sharing.rulesStored = [rule1, ShareRule(ruleID: "r9", connectionID: "c9", tags: ["x"])]
+        sharing.given = [outGrant, revoked, other]
+        sharing.received = [inGrant, expired]
+        sharing.requested = [
+            GrantAsk(requestID: "q1", connectionID: "c1", entries: [GrantAskEntry(kind: "category", ref: "insurance")], state: "pending"),
+            GrantAsk(requestID: "q2", connectionID: "c1", entries: [GrantAskEntry(kind: "category", ref: "medical")], state: "denied"),
+        ]
+        let m = await model()
+        let s = m.state.sharing
+        #expect(s.loaded && !s.failed)
+        #expect(s.rules.map(\.ruleID) == ["r1"] && s.given.map(\.grantID) == ["g1"] && s.received.map(\.grantID) == ["g3"])
+        #expect(s.asked.map(\.requestID) == ["q1"])
+        #expect(s.outgoingCount == 1 && s.incomingCount == 1)
+        // Back from the rule editor: read again.
+        sharing.received = []
+        m.loadSharing()
+        await m.settle()
+        #expect(m.state.sharing.incomingEmpty)
+    }
+
+    /// Each item once, however many grants name it; the rules at 64 name the limit.
+    @Test func theCountsAndTheLimit() {
+        var second = outGrant
+        second.grantID = "g2"
+        let full = (1...64).map { ShareRule(ruleID: "f\($0)", connectionID: "c1", tags: ["t\($0)"]) }
+        let s = DetailSharing(rules: full, given: [outGrant, second], loaded: true)
+        #expect(s.outgoingCount == 1 && s.atRuleLimit && !s.outgoingEmpty && s.incomingEmpty)
+        #expect(!DetailSharing(rules: [rule1]).atRuleLimit && DetailSharing().outgoingEmpty)
+        // Rules that cover the same tag and item name each other (§10.12).
+        let twin = ShareRule(ruleID: "r3", connectionID: "c1", tags: ["medical"], included: ["i1"])
+        #expect(DetailSharing(rules: [rule1, twin, rule2]).overlaps["r1"]?.map(\.ruleID) == ["r3"])
+    }
+
+    /// A rule is deleted only once confirmed, the card is read again, and a refusal shows on the detail.
+    @Test func aRuleIsDeletedOnlyOnceConfirmedAndTheCardIsReadAgain() async {
+        fake.connections = [Samples.active("c1")]
+        sharing.rulesStored = [rule1, rule2]
+        let m = await model()
+        m.askDeleteRule(rule2)
+        #expect(m.state.deleteRule?.ruleID == "r2")
+        m.askDeleteRule(nil)
+        m.deleteRule()
+        await m.settle()
+        #expect(!sharing.calls.contains("deleteRule"))
+        m.askDeleteRule(rule2)
+        m.deleteRule()
+        await m.settle()
+        #expect(sharing.calls.contains("deleteRule") && m.state.deleteRule == nil)
+        #expect(m.state.sharing.rules.map(\.ruleID) == ["r1"])
+        sharing.fail["deleteRule"] = VaultFailure(.network)
+        m.askDeleteRule(rule1)
+        m.deleteRule()
+        await m.settle()
+        #expect(m.state.error == .network)
+    }
+
+    /// The vault cannot say what is shared: the card says so and the rest of the detail stays.
+    @Test func aSharingFailureLeavesTheRestOfTheDetail() async {
+        fake.connections = [Samples.active("c1")]
+        sharing.fail["rules"] = VaultFailure(.network)
+        let m = await model()
+        #expect(m.state.sharing.failed && m.state.sharing.loaded && m.state.error == nil && m.state.connection?.id == "c1")
+    }
+
+    /// Without a sharing repository (an app without the Vault) nothing is read or deleted.
+    @Test func withoutSharingNothingIsRead() async {
+        fake.connections = [Samples.active("c1")]
+        let m = ConnectionDetailViewModel(connectionID: "c1", connections: fake)
+        await m.settle()
+        m.askDeleteRule(rule1)
+        m.deleteRule()
+        await m.settle()
+        #expect(!m.state.sharing.loaded && sharing.calls.isEmpty)
+    }
+
+    @Test func theSharingDoesNotPrintNames() async {
+        fake.connections = [Samples.active("c1")]
+        sharing.given = [outGrant]
+        let m = await model()
+        #expect(!"\(m.state.sharing)".contains("Allergies") && !String(reflecting: m.state.sharing).contains("Allergies"))
+    }
+
+    /// Once the vault no longer lists the connection nothing of its sharing stays: the cards, a rule waiting to be deleted,
+    /// and an answer still on its way.
+    @Test func theSharingGoesWithTheConnection() async {
+        fake.connections = [Samples.active("c1"), Samples.active("c2")]
+        sharing.rulesStored = [rule1]
+        sharing.given = [outGrant]
+        let m = await model()
+        #expect(m.state.sharing.loaded && !m.state.sharing.rules.isEmpty)
+        m.askDeleteRule(rule1)
+        fake.connections = []
+        await m.settle()
+        #expect(m.state.gone && m.state.deleteRule == nil)
+        #expect(m.state.sharing == DetailSharing())
+        // A read that lands after that is dropped.
+        m.loadSharing()
+        await m.settle()
+        #expect(m.state.sharing == DetailSharing())
     }
 }

@@ -120,5 +120,10 @@ public enum VettIDSymbol: String, CaseIterable, Sendable {
     case checkBox = "checkmark.square.fill" // CheckBox
     case checkBoxOutline = "square" // CheckBoxOutlineBlank
 
+    /// Outbox (what the member shares with a connection): the same tray as ``unarchive``.
+    public static var outbox: VettIDSymbol { .unarchive }
+    /// MoveToInbox (what a connection shares with the member): the same tray as ``archive``.
+    public static var inbox: VettIDSymbol { .archive }
+
     public var image: Image { Image(systemName: rawValue) }
 }

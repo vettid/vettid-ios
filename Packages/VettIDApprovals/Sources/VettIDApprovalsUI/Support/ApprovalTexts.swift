@@ -141,12 +141,33 @@ enum ApprovalTexts {
         return s.prefix(1).uppercased() + s.dropFirst()
     }
 
-    /// One explanation line of a share question's item (§10.12): a rule is named by its tags once the share rules are
-    /// here (IOS-PLAN §8 I3.2); until then "another of your rules".
-    static func shareLine(_ line: ShareExplanations.Line, who: String) -> String {
+    /// One explanation line of a share question's item, in the member's words (§10.12, rules named by their tags); a rule the
+    /// question does not know reads "another of your rules".
+    static func shareLine(
+        _ line: ShareExplanations.Line, in d: ShareDecision, names: [String: RuleNames.Name], who: String, zone: TimeZone = .current
+    ) -> String {
+        let id: String? = switch line {
+        case .asksFirst(let id), .alsoCovered(let id): id
+        case .alreadyShared: nil
+        }
+        let named = id.flatMap { id in d.rules.first { $0.ruleID == id } }.map { ruleNamed($0, names: names, zone: zone) }
+            ?? ApprovalsStrings.anotherRule
         switch line {
-        case .asksFirst: ApprovalsStrings.shareAlsoAsks(ApprovalsStrings.anotherRule)
-        case .alreadyShared: ApprovalsStrings.shareAlready(who)
+        case .asksFirst: return ApprovalsStrings.shareAlsoAsks(named)
+        case .alsoCovered: return ApprovalsStrings.shareAlso(named)
+        case .alreadyShared: return ApprovalsStrings.shareAlready(who)
+        }
+    }
+
+    /// "your “medical” rule" (§10.12: a rule is named by its tags), told apart when two of the subject read the same.
+    static func ruleNamed(_ r: ShareRule, names: [String: RuleNames.Name], zone: TimeZone = .current) -> String {
+        let n = names[r.ruleID] ?? RuleNames.Name(text: RuleNames.text(r))
+        switch n.qualifier {
+        case nil: return ApprovalsStrings.ruleName(n.text)
+        case .mode(let m)?: return m == .ask ? ApprovalsStrings.ruleNameAsks(n.text) : ApprovalsStrings.ruleNameAuto(n.text)
+        case .ends(let at)?:
+            let day = { (d: Date) in d.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted, timeZone: zone)) }
+            return at.map { ApprovalsStrings.ruleNameUntil(n.text, day($0)) } ?? ApprovalsStrings.ruleNameNoEnd(n.text)
         }
     }
 
