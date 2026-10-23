@@ -35,12 +35,13 @@ public extension ItemsText {
         }
     }
 
-    /// A request this vault made, by its state (`pending`, `granted`; anything else reads as denied).
+    /// A request this vault made, by its state (`granted` and `approved` read as shared, `denied` as denied; anything else
+    /// as waiting, as vettid-android's screen reads them).
     static func askState(_ state: String) -> String {
         switch state {
-        case "pending": ItemsStrings.askStatePending
-        case "granted": ItemsStrings.askStateGranted
-        default: ItemsStrings.askStateDenied
+        case "granted", "approved": ItemsStrings.askStateGranted
+        case "denied": ItemsStrings.askStateDenied
+        default: ItemsStrings.askStatePending
         }
     }
 }

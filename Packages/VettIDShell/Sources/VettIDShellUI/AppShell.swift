@@ -373,7 +373,7 @@ public struct AppShell: View {
             messagesDetail(route)
         case .notifications, .approval, .historyEntry, .connectionHistory:
             activityDetail(route)
-        case .item, .newItem, .itemEdit, .tags:
+        case .item, .newItem, .itemEdit, .tags, .connectionSharing, .ruleEdit, .sharedWithYou:
             itemsDetail(route)
         }
     }

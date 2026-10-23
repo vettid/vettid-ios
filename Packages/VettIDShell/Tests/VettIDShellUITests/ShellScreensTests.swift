@@ -210,6 +210,30 @@ import VettIDVault
         }
     }
 
+    /// What a connection can see, a share rule and what it shares, over the Vault's items and tags.
+    @Test func theSharingScreensRender() {
+        let repo = FakeVaultRepository(.unlocked)
+        let gate = OwnerCheckGate(gated: false, warning: false, holdOff: false, notices: [], presenceUnrecorded: false)
+        let connections = FakeConnections()
+        var c = ConnectionInfo(id: "c1", name: "", state: .active)
+        c.firstName = "Ada"
+        connections.connections = [c]
+        let model = ShellModel(account: repo, vault: repo, ownerChecks: repo)
+        let routes: [[ShellRoute]] = [
+            [.connectionSharing("c1")], [.ruleEdit(connectionID: "c1", ruleID: nil)], [.ruleEdit(connectionID: "c1", ruleID: "r1")],
+            [.sharedWithYou(connectionID: "c1", ask: false)], [.sharedWithYou(connectionID: "c1", ask: true)],
+        ]
+        for path in routes {
+            model.path = path
+            let shell = AppShell(
+                account: repo, vault: repo, ownerChecks: repo, credential: repo, profiles: repo, appLock: StillAppLock(),
+                model: model, gate: gate, now: now, version: AppVersion(name: "2.0.0", build: 1), installedFrom: .apple,
+                promptReason: "Unlock VettID", connections: connections, items: FakeItems(), sharing: FakeSharing()
+            ) {}
+            #expect(height(shell) > 0)
+        }
+    }
+
     /// Approvals in the placeholder's place, a decision and the Notifications screens over it; the drawer's counts.
     @Test func theApprovalsAndNotificationsRender() {
         let repo = FakeVaultRepository(.unlocked)

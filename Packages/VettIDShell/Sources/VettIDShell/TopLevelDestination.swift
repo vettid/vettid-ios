@@ -94,6 +94,13 @@ public enum ShellRoute: Hashable, Sendable {
     case tags
     /// A connection's History (ANDROID-PLAN §4 History: the connection preset), from its page.
     case connectionHistory(String)
+    /// What a connection can see of the Vault: its share rules and grants (VAULT-MESSAGING §10.12, §10.13), from the
+    /// connection's page.
+    case connectionSharing(String)
+    /// A share rule of a connection ([ruleID] nil: a new one), from its sharing screen or a feed item.
+    case ruleEdit(connectionID: String, ruleID: String?)
+    /// What a connection shares with the member; [ask] opens "Ask for something" at once (from the connection's page).
+    case sharedWithYou(connectionID: String, ask: Bool)
 }
 
 /// This build's version as the drawer's footer shows it ("VettID 2.0.0 (1)", vettid-android `drawer_version`).

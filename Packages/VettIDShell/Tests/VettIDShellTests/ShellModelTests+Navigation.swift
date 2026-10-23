@@ -206,4 +206,26 @@ import VettIDOnboarding
         m.openHistoryEntry(3)
         #expect(m.path == [.connection("c1"), .connectionHistory("c1"), .historyEntry(3)])
     }
+
+    /// What a connection can see, a share rule of it and what it shares open over its page, each once (IOS-PLAN §8 I3.2); a
+    /// new rule has no rule id, and a tag another rule shares opens that rule over the editor.
+    @Test func theSharingScreensOpenOnce() {
+        let m = model
+        m.navigate(.connections)
+        m.push(.connection("c1"))
+        m.openSharing("c1")
+        m.openSharing("c1")
+        m.openRule("c1", nil)
+        m.openRule("c1", nil)
+        m.openRule("c1", "r1")
+        let rules: [ShellRoute] = [.ruleEdit(connectionID: "c1", ruleID: nil), .ruleEdit(connectionID: "c1", ruleID: "r1")]
+        #expect(m.path == [.connection("c1"), .connectionSharing("c1")] + rules)
+        m.navigate(.connections)
+        m.push(.connection("c2"))
+        m.openShared("c2")
+        m.openShared("c2")
+        m.openShared("c2", ask: true)
+        let shared: [ShellRoute] = [.sharedWithYou(connectionID: "c2", ask: false), .sharedWithYou(connectionID: "c2", ask: true)]
+        #expect(m.path == [.connection("c2")] + shared)
+    }
 }

@@ -17,6 +17,9 @@ public struct ItemsHost {
     public var onBack: @MainActor () -> Void = {}
     /// Leaves the current screen for an item's (the editor, once saved, for the item it saved).
     public var replaceWithItem: @MainActor (String) -> Void = { _ in }
+    /// A share rule of a connection ([ruleID] nil: a new one), from the connection's sharing screen and from a tag another
+    /// rule already shares.
+    public var onOpenRule: @MainActor (_ connectionID: String, _ ruleID: String?) -> Void = { _, _ in }
 
     public init() {}
 }
