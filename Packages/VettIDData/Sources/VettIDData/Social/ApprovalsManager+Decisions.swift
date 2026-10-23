@@ -6,18 +6,18 @@ import VettIDVault
 // leaves the list and its feed item is marked read. The connection requests are decided by the ``ConnectionsManager``.
 // Mirrors the decisions of vettid-android `SocialManager`.
 extension ApprovalsManager {
-    /// Runs a decision; a request the vault no longer knows (`not_found`) leaves the list too. [dropsOnSuccess] false: the
-    /// body itself takes out what the vault's answer decided (a share question keeps its other items, §10.12).
-    private func decide(
-        _ key: String, dropsOnSuccess: Bool = true, _ body: (any ApprovalOps) async throws -> Void
-    ) async throws {
+    /// Runs a decision; a request the vault no longer knows (`not_found`) leaves the list too. [whole] false: the decision
+    /// does not answer the whole request: the body takes out what the vault's answer decided (a share question keeps its
+    /// other items, and its feed item is read only once nothing of it is left; VAULT-MESSAGING 0.55.7 §10.12).
+    private func decide(_ key: String, whole: Bool = true, _ body: (any ApprovalOps) async throws -> Void) async throws {
         do {
             try await guarded { try await body(try await ops()) }
         } catch let f as VaultFailure where f.kind == .notFound {
             drop(key)
             throw f
         }
-        if dropsOnSuccess { drop(key) }
+        guard whole else { return }
+        drop(key)
         decided(key)
     }
 
@@ -90,7 +90,10 @@ extension ApprovalsManager {
         }
         // Only the items the answer decided leave: the question keeps the rest, and the batches noted for a read on its
         // way (VAULT-MESSAGING 0.55.7 §10.12; a question is forgotten only on `not_found`, rule 3).
-        try await decide("share:\(ruleID)", dropsOnSuccess: false) { o in
+        let key = "share:\(ruleID)"
+        // The subject's questions before the decision: one answer per item and subject (§10.12) can empty the others too.
+        let subjectKeys = shareKeys(subjectOf: ruleID)
+        try await decide(key, whole: false) { o in
             var answers: [JsonObject] = []
             do {
                 answers.append(try await o.shareDecide(ruleID, include: include, decline: decline))
@@ -101,10 +104,18 @@ extension ApprovalsManager {
             // One answer per item and subject (§10.12): the answer's `included` and `declined` list every item the decision
             // changed, in the subject's other rules too (a vault before 0.23.0 asks per rule and lists only this rule's).
             // An answer with neither member is taken as having changed what was sent (chosen; not in the spec).
-            let listed = answers.contains { $0.has("included") || $0.has("declined") }
+            let named = answers.contains { $0.has("included") || $0.has("declined") }
             let changed = answers.flatMap { VaultJSON.strings($0, "included") + VaultJSON.strings($0, "declined") }
-            self.shareDecided(ruleID, listed ? changed : all)
+            let done = named ? changed : all
+            self.shareDecided(ruleID, done)
+            // Sent but not named by the answer: the vault did not hold them pending. They leave this rule's question only;
+            // that is not a decision, so nothing is noted for a read on its way (as vettid-android does).
+            let ignored = Set(all).subtracting(done)
+            if !ignored.isEmpty { self.removeShareItems(ignored) { $0.ruleID == ruleID } }
         }
+        // A feed item is read only when nothing of its question is left (a batch may have added an item meanwhile): the
+        // decided rule's, and those of the subject's other rules the decision emptied.
+        for k in subjectKeys.sorted() where !holds(k) { decided(k) }
     }
 
     /// `share.decide`'s limit: 1–500 distinct items in all (vettid-vault `MaxDecide`).

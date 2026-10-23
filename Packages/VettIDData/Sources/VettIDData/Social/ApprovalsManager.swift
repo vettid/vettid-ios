@@ -265,6 +265,12 @@ public final class ApprovalsManager: ApprovalsRepository {
         changes += 1
         if !readSinces.isEmpty { decidedLog.append(ShareDecidedMark(at: changes, subject: subject, ruleID: ruleID, ids: gone)) }
         if decidedLog.count > Self.maxDecidedLog { decidedLog.removeFirst(decidedLog.count - Self.maxDecidedLog) }
+        removeShareItems(gone, where: applies)
+    }
+
+    /// The items [gone] leave the share questions [applies] picks, in the list and the kept events; a question left empty
+    /// goes.
+    func removeShareItems(_ gone: Set<String>, where applies: (ShareDecision) -> Bool) {
         listed = listed.compactMap { a in
             guard case .share(var d) = a, applies(d) else { return a }
             d.items.removeAll { gone.contains($0.itemID) }
@@ -281,6 +287,19 @@ public final class ApprovalsManager: ApprovalsRepository {
             }
         }
     }
+
+    /// The keys of the share questions held (listed or kept) for the subject of rule [ruleID], that rule's own included.
+    func shareKeys(subjectOf ruleID: String) -> Set<String> {
+        var subject = "rule:\(ruleID)"
+        if case .share(let d)? = find("share:\(ruleID)") { subject = Self.subjectKey(d) }
+        let all = listed + stored.compactMap(parsed)
+        var keys: Set<String> = ["share:\(ruleID)"]
+        for case .share(let d) in all where Self.subjectKey(d) == subject { keys.insert(PendingApproval.share(d).key) }
+        return keys
+    }
+
+    /// Whether the approval [key] is still held, listed or kept.
+    func holds(_ key: String) -> Bool { listed.contains { $0.key == key } || stored.contains { parsed($0)?.key == key } }
 
     /// Drops the approval [key] from the file and the lists.
     func drop(_ key: String) {
@@ -316,7 +335,8 @@ public final class ApprovalsManager: ApprovalsRepository {
         let lists = await readLists(o, at: t)
         guard g == generation else { return }
         let changed = { (key: String) in (self.changedAt[key] ?? 0) > since }
-        let next = mergedWithChanges(lists.approvals(at: t), since: since, changed: changed)
+        // A list the vault did not answer covers nothing: what was known of it stays (VAULT-MESSAGING 0.55.7 §10.12).
+        let next = mergedWithChanges(lists.approvals(at: t), since: since, changed: changed) + listed.filter { !lists.covers($0) }
         listed = next
         // The lists are authoritative for what they cover: decided or expired requests kept from events are dropped.
         let keys = Set(next.map(\.key))

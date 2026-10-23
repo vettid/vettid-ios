@@ -223,7 +223,10 @@ public final class ApprovalDetailViewModel {
         if local.shareExcluded.contains(itemID) { local.shareExcluded.remove(itemID) } else { local.shareExcluded.insert(itemID) }
     }
 
-    public func approve() {
+    /// [shown]: for a share decision, the item ids the screen showed when the member tapped. Only those are decided, so a
+    /// `share.pending` batch that lands just before the tap is not included or declined unseen (VAULT-MESSAGING §10.12).
+    /// Mirrors vettid-android `ApprovalDetailViewModel.approve`.
+    public func approve(shown: [String]? = nil) {
         let s = state
         guard let a = s.approval, s.canApprove() else { return }
         let (repo, pw) = (repo, s.password)
@@ -243,7 +246,7 @@ public final class ApprovalDetailViewModel {
                 let status = try await repo.approveCriticalUse(c.requestID, password: pw)
                 self?.local.criticalResult = status ?? "ok"
             case .share(let d):
-                let ids = d.items.map(\.itemID)
+                let ids = shown ?? d.items.map(\.itemID)
                 try await repo.decideShare(
                     d.ruleID, include: ids.filter { !s.shareExcluded.contains($0) }, decline: ids.filter { s.shareExcluded.contains($0) }
                 )
@@ -252,7 +255,8 @@ public final class ApprovalDetailViewModel {
         }
     }
 
-    public func deny() {
+    /// [shown]: as for ``approve(shown:)``; only the share items the screen showed are declined.
+    public func deny(shown: [String]? = nil) {
         guard let a = state.approval else { return }
         let repo = repo
         decide {
@@ -263,7 +267,7 @@ public final class ApprovalDetailViewModel {
             case .grant(let g): try await repo.decideGrant(g.requestID, approve: false)
             case .critical(let c): try await repo.denyCriticalUse(c.requestID)
             // "Do not share": every item of the question declined (§10.12 `share.decide{decline}`).
-            case .share(let d): try await repo.decideShare(d.ruleID, include: [], decline: d.items.map(\.itemID))
+            case .share(let d): try await repo.decideShare(d.ruleID, include: [], decline: shown ?? d.items.map(\.itemID))
             case .device: try await repo.declineDeviceRequest(a.key)
             }
         }

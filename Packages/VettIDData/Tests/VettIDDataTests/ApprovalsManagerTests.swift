@@ -167,11 +167,13 @@ final class FakeApprovalOps: ApprovalOps, @unchecked Sendable {
         guard case .critical(let c)? = m.approvals.first(where: { $0.key == "critical:k1" }) else { throw CocoaError(.featureUnsupported) }
         #expect(!c.payloadVerified && c.suitable == true, "a list entry has no payload")
 
-        // An older vault without the lists: nothing dropped by them.
+        // An older vault without the lists: nothing dropped by them, and a list it did not answer covers nothing: what
+        // the last read listed stays (VAULT-MESSAGING 0.55.7 §10.12).
         m.onEvent(event("grant.pending", #"{"request_id":"g3","connection_id":"c1","items":[],"exp":"\#(exp)"}"#))
         ops.listsFail = true
         try await m.refreshApprovals()
         #expect(m.approvals.contains { $0.key == "grant:g3" })
+        #expect(m.approvals.contains { $0.key == "grant:g2" }, "listed by the read before, when the grant list answered")
     }
 
     @Test func aCriticalUseIsApprovedOnlyForAPayloadThatMatches() async throws {
