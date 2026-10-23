@@ -71,19 +71,22 @@
 #   testStagingApproveRequest            Approvals -> the link requests whose safety codes are VETTID_STAGING_SAFETY_CODE
 #                                        (comma-separated), each opened and approved: an incoming request, or the
 #                                        member's own after joining a link (both members approve, VAULT-MESSAGING
-#                                        §6.4); prints "CONNECT_STATE: approved|not_approved|missing" for each.
+#                                        §6.4); prints "CONNECT_STATE: approved|not_approved|not_opened|missing" for
+#                                        each.
 #   testStagingRotate                    Settings -> Credential -> "Rotate the credential key" with the password (the
 #                                        vault's keys rotate with it, VAULT-MESSAGING §3.5.5); prints
 #                                        "ROTATE_STATE: done|failed|none".
 #   testStagingSendAll                   to each connection of VETTID_STAGING_PEER_NAME ("Name=label;Name=label"),
 #                                        "<VETTID_STAGING_MESSAGE> to <label> <UTC>" followed to Delivered (a
 #                                        "MESSAGE_STATE:" line each, in order); then each conversation checked for an
-#                                        incoming message holding VETTID_STAGING_EXPECT (a "MESSAGE_RECEIVED:" line each).
+#                                        new incoming message holding VETTID_STAGING_EXPECT (a "MESSAGE_RECEIVED:" line
+#                                        each).
 #   testStagingWaitMessage               the conversation with VETTID_STAGING_PEER_NAME kept open until a message from
-#                                        it holds VETTID_STAGING_EXPECT; prints "MESSAGE_RECEIVED: yes|no".
+#                                        it holds VETTID_STAGING_EXPECT (one already there does not count); prints
+#                                        "MESSAGE_RECEIVED: yes|no".
 #   testStagingLook, testStagingCheck    screenshots only, nothing tapped beyond navigation: Connections and Approvals
-#                                        (Look); Connections, the conversation with VETTID_STAGING_PEER_NAME and
-#                                        History (Check). Use --keep-result to read them.
+#                                        (Look); Connections, the conversation with VETTID_STAGING_PEER_NAME,
+#                                        Connections again and History (Check). Use --keep-result to read them.
 #
 # Inputs per test: testStagingEnroll needs all four of EMAIL, CODE, PIN and PASSWORD; every other test PIN and PASSWORD;
 # testStagingConnectAccept also VETTID_STAGING_LINK; VETTID_STAGING_SAFETY_CODE is optional (testStagingConnectApprove);
@@ -295,7 +298,7 @@ xcodebuild test-without-building \
     if (/CONNECT_STATE: ([a-z_]+)\s*$/) { $_ = "CONNECT_STATE: $1\n"; next }
     if (/MESSAGE_STATE: (none|sent|delivered|read)\s*$/) { $_ = "MESSAGE_STATE: $1\n"; next }
     if (/MESSAGE_RECEIVED: (yes|no)\s*$/) { $_ = "MESSAGE_RECEIVED: $1\n"; next }
-    if (/INVITE_LINK: (https:\/\/[A-Za-z0-9._~:\/?#\[\]@!$&()*+,;=%-]+|none)\s*$/) { $_ = "INVITE_LINK: $1\n"; next }
+    if (/INVITE_LINK: (https:\/\/[A-Za-z0-9._~:\/?#\[\]@!\$\&()*+,;=%-]+|none)\s*$/) { $_ = "INVITE_LINK: $1\n"; next }
     if (/ROTATE_STATE: (done|failed|none)\s*$/) { $_ = "ROTATE_STATE: $1\n"; next }
     if (/PHOTO_STATE: (none|sending|delivered|failed)\s*$/) { $_ = "PHOTO_STATE: $1\n"; next }
     if (/PHOTO_RECEIVED: (yes|no)\s*$/) { $_ = "PHOTO_RECEIVED: $1\n"; next }
