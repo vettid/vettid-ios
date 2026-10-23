@@ -141,3 +141,28 @@ public enum RetryIn {
         return Amount(scale: .hours, count: Int((minutes + 59) / 60))
     }
 }
+
+/// Text cut to a size in UTF-8 bytes. The ask form's limits (§10.12 `grant.request`: a label of at most 128 bytes, a reason
+/// of at most 256) are bytes, which the vault checks; Android's fields stop at as many characters, which lets a longer
+/// text through. Here the fields stop at the byte count, whole characters only (chosen; not in the spec).
+public enum Utf8Cap {
+    /// The longest start of [text] that takes at most [bytes] bytes, never splitting a character (a grapheme cluster).
+    public static func prefix(_ text: String, bytes: Int) -> String {
+        if text.utf8.count <= bytes { return text }
+        var out = ""
+        var used = 0
+        for c in text {
+            let n = c.utf8.count
+            if used + n > bytes { break }
+            out.append(c)
+            used += n
+        }
+        return out
+    }
+
+    /// The label of an ask, cut to ``SharingManager/maxLabel`` bytes.
+    public static func label(_ text: String) -> String { prefix(text, bytes: SharingManager.maxLabel) }
+
+    /// The reason of an ask, cut to ``SharingManager/maxReason`` bytes.
+    public static func reason(_ text: String) -> String { prefix(text, bytes: SharingManager.maxReason) }
+}

@@ -62,6 +62,8 @@ struct DialogSheet<Content: View>: View {
     let title: String
     let confirm: String
     let enabled: Bool
+    /// The confirm button's identifier (the field dialogs' by default).
+    var confirmID = "item_field_dialog_confirm"
     let onCancel: @MainActor () -> Void
     let onConfirm: @MainActor () -> Void
     @ViewBuilder let content: () -> Content
@@ -78,7 +80,7 @@ struct DialogSheet<Content: View>: View {
                         .foregroundStyle(enabled ? colors.primary : colors.onSurfaceVariant)
                         .frame(minHeight: Spacing.touchTarget)
                         .disabled(!enabled)
-                        .accessibilityIdentifier("item_field_dialog_confirm")
+                        .accessibilityIdentifier(confirmID)
                 }
             }
             .padding(Spacing.xl)

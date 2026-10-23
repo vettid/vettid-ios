@@ -114,6 +114,18 @@ public final class ShellModel {
     /// A connection's History over its page, once.
     public func openConnectionHistory(_ connectionID: String) { pushOnce(.connectionHistory(connectionID)) }
 
+    /// What a connection can see of the Vault, over its page, once.
+    public func openSharing(_ connectionID: String) { pushOnce(.connectionSharing(connectionID)) }
+
+    /// A share rule of a connection ([ruleID] nil: a new one) over the screen on top, once (a tag another rule already shares
+    /// opens that rule over the editor).
+    public func openRule(_ connectionID: String, _ ruleID: String?) { pushOnce(.ruleEdit(connectionID: connectionID, ruleID: ruleID)) }
+
+    /// What a connection shares with the member, over its page, once; [ask] opens "Ask for something" at once.
+    public func openShared(_ connectionID: String, ask: Bool = false) {
+        pushOnce(.sharedWithYou(connectionID: connectionID, ask: ask))
+    }
+
     private func pushOnce(_ r: ShellRoute) {
         if path.last != r { push(r) }
     }

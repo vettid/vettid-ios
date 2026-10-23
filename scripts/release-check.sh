@@ -43,11 +43,12 @@ SELF_TEST=0
 # the TEST attester and the software keys it composes are refused by name too.
 TEST_MARKERS=("VettIDTesting" "VettIDDataTesting" "VettIDKeysTesting" "VettIDAltChanTesting" "TESTTEAM00" "VETTID TEST ONLY"
   "DevStackWiring" "VETTID_DEVSTACK" "TestIOSAttester" "SoftwareAppKeyStore" "SoftwarePhoneSecretSource")
-# "Scan: another environment", "Keys gone, earlier keys to try", "Held: messages and a call waiting" and "Drawer open"
-# are titles of the onboarding, unlock, owner-check and shell screen catalogs (App/Debug, debug builds only); "Xcode
+# "Scan: another environment", "Keys gone, earlier keys to try", "Held: messages and a call waiting", "Drawer open" and
+# "Sharing: rules and grants" are titles of the onboarding, unlock, owner-check, shell and Vault sharing screen catalogs (App/Debug, debug builds only); "Xcode
 # (development)" is the development builds' "Installed from" line (IOS-PLAN ID15, App/InstalledFromBuild.swift).
 DEV_ONLY=("127.0.0.1" "relay.vettid.test" "vettid.start" "vettid.theme" "Component gallery" "Screen catalog"
   "Scan: another environment" "Keys gone, earlier keys to try" "Held: messages and a call waiting" "Drawer open"
+  "Sharing: rules and grants"
   "Xcode (development)")
 
 PRODUCTION_HOSTS=("account.vettid.org")

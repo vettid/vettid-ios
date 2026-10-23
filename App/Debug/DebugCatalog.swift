@@ -56,6 +56,7 @@ struct DebugCatalog<Root: View>: View {
                             SettingsRow("Unlock", icon: .lock) { path.append(.unlock) }
                             SettingsRow("Owner check and app lock", icon: .verifiedUser) { path.append(.ownerCheck) }
                             SettingsRow("Shell and settings", icon: .menu) { path.append(.shell) }
+                            SettingsRow("Vault sharing", icon: .vault) { path.append(.items) }
                         }
                     }
                 }
@@ -70,13 +71,15 @@ struct DebugCatalog<Root: View>: View {
             OwnerCheckCatalogScreen { back() }
         case .shell:
             ShellCatalogScreen { back() }
+        case .items:
+            ItemsCatalogScreen { back() }
         }
     }
 }
 
 /// A screen of the debug catalog.
 enum DebugCatalogEntry: String, Hashable, CaseIterable {
-    case catalog, gallery, onboarding, unlock, ownerCheck, shell
+    case catalog, gallery, onboarding, unlock, ownerCheck, shell, items
 
     /// The screen named by the `vettid.start` launch argument, if any.
     static var atLaunch: DebugCatalogEntry? {
