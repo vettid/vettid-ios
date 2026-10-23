@@ -147,11 +147,19 @@ extension VaultManager {
     /// read ``PhoneSecrets/pinGeneration`` when its keypad opens and pass it (``finishMove(pin:taken:)``), as the update's
     /// screens do, so that a change decided while the member types is covered too.
     public func finishMove(pin: String) async throws -> UnlockAttempt {
-        try await finishMove(pin: pin, taken: phoneSecrets.pinGeneration)
+        try await finishMove(pin: pin, taken: nil)
     }
 
-    /// "Finish the move" with a PIN taken at ``PhoneSecrets/pinGeneration`` [taken].
-    func finishMove(pin: String, taken: Int) async throws -> UnlockAttempt {
+    /// Which PIN the vault expects (``PhoneSecrets/pinGeneration``), for a screen's keypad.
+    public var pinGeneration: Int { phoneSecrets.pinGeneration }
+
+    /// The hold of "Finish the move" (``moveHold()``), read when asked; a hold that begins later is refused by
+    /// ``finishMove(pin:taken:)`` all the same.
+    public var finishMoveHold: FailureKind? { moveHold()?.kind }
+
+    /// "Finish the move" with a PIN taken at ``PhoneSecrets/pinGeneration`` [taken] (nil: read now).
+    public func finishMove(pin: String, taken: Int?) async throws -> UnlockAttempt {
+        let taken = taken ?? phoneSecrets.pinGeneration
         if let hold = moveHold() { throw hold }
         // A PIN taken before a change neither locks the vault nor is sent; checked again after the lock (a change decided
         // meanwhile) and right before the unlock goes out.

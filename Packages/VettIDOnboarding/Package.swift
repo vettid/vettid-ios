@@ -14,6 +14,8 @@ let package = Package(
         .package(path: "../VettIDUI"),
         // TEST ONLY: VaultOpError for the vault's weak_password reason in the tests.
         .package(path: "../VettIDVault"),
+        // TEST ONLY: InviteQr, to make the transfer codes the new phone scans.
+        .package(path: "../VettIDCrypto"),
     ],
     targets: [
         // The view model and its state: no UI, so `swift test` runs its tests on macOS.
@@ -42,6 +44,7 @@ let package = Package(
                 .product(name: "VettIDDataTesting", package: "VettIDData"),
                 .product(name: "VettIDAltChan", package: "VettIDAltChan"),
                 .product(name: "VettIDVault", package: "VettIDVault"),
+                .product(name: "VettIDCrypto", package: "VettIDCrypto"),
             ]
         ),
         .testTarget(

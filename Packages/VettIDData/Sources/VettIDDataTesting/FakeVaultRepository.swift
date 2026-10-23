@@ -104,6 +104,12 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var deletionCheck = DeletionCheck.undecided
     public var transferKeptSince: Date?
     public var finishMovePending = false
+    /// Which PIN the vault expects (``VaultRepository/pinGeneration``), moved by the test.
+    public var pinGeneration = 0
+    /// "Finish the move" is held (``VaultRepository/finishMoveHold``): nothing is sent.
+    public var finishMoveHold: FailureKind?
+    /// The `taken` of every ``finishMove(pin:taken:)`` that was sent (nil: read now), in order.
+    public var finishMoveTaken: [Int?] = []
     public var finishingMove = false
     public var finishMoveFailure: FailureKind?
     public var movedBack = false

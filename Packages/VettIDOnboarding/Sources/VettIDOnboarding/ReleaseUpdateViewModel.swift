@@ -251,23 +251,38 @@ final class KeypadReading {
 
     /// The reading for the PIN handed over now, and a fresh one for the next PIN if the keypad stays usable ([allowed]).
     func take(_ allowed: Bool, _ updates: any ReleaseUpdateRepository) -> Int? {
-        let taken = generation
-        generation = nil
-        follow(allowed, updates)
-        return taken
+        take(allowed) { updates.pinGeneration }
     }
 
     /// The first digit was typed into an empty keypad: the reading is taken afresh when the keypad is usable ([allowed]).
     func renew(_ allowed: Bool, _ updates: any ReleaseUpdateRepository) {
-        generation = allowed ? updates.pinGeneration : nil
+        renew(allowed) { updates.pinGeneration }
     }
 
     /// The keypad is usable ([allowed]) or not.
     func follow(_ allowed: Bool, _ updates: any ReleaseUpdateRepository) {
+        follow(allowed) { updates.pinGeneration }
+    }
+
+    /// As ``take(_:_:)``, for any source of the generation ("Finish the move" reads the vault's).
+    func take(_ allowed: Bool, _ pinGeneration: () -> Int) -> Int? {
+        let taken = generation
+        generation = nil
+        follow(allowed, pinGeneration)
+        return taken
+    }
+
+    /// As ``renew(_:_:)``.
+    func renew(_ allowed: Bool, _ pinGeneration: () -> Int) {
+        generation = allowed ? pinGeneration() : nil
+    }
+
+    /// As ``follow(_:_:)``.
+    func follow(_ allowed: Bool, _ pinGeneration: () -> Int) {
         if !allowed {
             generation = nil
         } else if generation == nil {
-            generation = updates.pinGeneration
+            generation = pinGeneration()
         }
     }
 }

@@ -212,6 +212,22 @@ public struct TransferPending: Equatable, Sendable {
     }
 }
 
+/// The old phone's approval answer (VAULT-MESSAGING 0.33.0 §11.14.10): [keepUntilNewUnlock] when the vault said
+/// `{"unlink": "after_new_unlock"}` (release R): this phone keeps its keys until `device.unlinked{transferred}` or for
+/// 7 days; `{}` from an earlier release, where the transfer is complete and this phone is removed at once. Mirrors
+/// vettid-android `TransferApproved`.
+public struct TransferApproved: Equatable, Sendable {
+    public let keepUntilNewUnlock: Bool
+
+    public init(keepUntilNewUnlock: Bool) {
+        self.keepUntilNewUnlock = keepUntilNewUnlock
+    }
+
+    static func of(_ o: JsonObject) -> TransferApproved {
+        TransferApproved(keepUntilNewUnlock: VaultJSON.string(o, "unlink") == "after_new_unlock")
+    }
+}
+
 /// A device of the vault (`device.list`, §10.3). `name` and `profile` are self-asserted.
 public struct DeviceEntry: Decodable, Equatable, Sendable {
     public let id: String
