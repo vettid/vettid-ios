@@ -86,6 +86,7 @@ extension FakeVaultService {
 
     func answerVaultRelay(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer {
         if r.method == "PUT", r.path == "/v1/blob/\(vaultMailbox)" { return vaultBlobPut(r) }
+        if r.method == "GET", r.path.hasPrefix("/v1/claim/") { return locked { transferClaim(r) } }
         guard r.method == "POST", r.path == "/v1/mailbox/\(vaultMailbox)" else { return .json(404, #"{"code":"not_found","message":""}"#) }
         // §12.5 step 2: a deleted vault's mailbox is gone, and every deposit is refused.
         if locked({ vaultDeletedValue }) { return .json(404, #"{"code":"mailbox_unknown","message":""}"#) }
@@ -102,12 +103,15 @@ extension FakeVaultService {
 
     /// A deposit to the vault: the device's hs.init, its hs.fin, or a request in the session. Callers hold ``cond``.
     private func deposited(_ raw: [UInt8]) throws {
+        // A transfer's target has no device until the new phone's hs.init arrives (FakeVaultService+Transfer.swift).
+        if device == nil, transfer.inviteID != nil { return try acceptTransferInit(raw) }
         guard let device else { return }
         if let r = responder {
             // §6.3: the hs.fin activates the epoch; device.paired follows in the session.
             let fin = try r.handleFin(raw, collectSender: device.relay.pk, now: Date())
             keyring.activate(fin.epoch, now: Date())
             responder = nil
+            if transfer.inviteID != nil { return try transferFinished() }
             try reply("device.paired", #"{"device_id":"dev-1","role":"app","vault_id":"\#(vaultID)","release":"\#(Self.pcr0)","release_number":3}"#)
             return
         }

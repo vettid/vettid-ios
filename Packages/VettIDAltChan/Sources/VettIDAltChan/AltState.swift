@@ -54,6 +54,9 @@ public struct AltState: Equatable, Sendable, CustomStringConvertible {
     /// (iOS) The App Attest key id of the request whose `vault.enrolled` arrived: the key the vault bound, which the app
     /// confirms (IOS-PLAN §6.2; chosen; not in the spec).
     public var enrolledAttestKeyID: [UInt8]?
+    /// (iOS) The App Attest key id a transfer's `hs.init` to this phone attested, until its `device.paired` (then it is
+    /// ``enrolledAttestKeyID``: the key the vault bound) or its abandonment (then it is discarded; chosen; not in the spec).
+    public var transferAttestKeyID: [UInt8]?
     /// Earlier requests of the same enrollment, oldest first (at most ``maxPriorEnrolls``): a request whose answer was
     /// lost may still have made the vault, and its `vault.enrolled` arrives after a retry replaced the newest nonce.
     public var enrollPrior: [EnrollAttempt] = []
@@ -72,6 +75,7 @@ public struct AltState: Equatable, Sendable, CustomStringConvertible {
         if !enrollVaultID.isEmpty { b.string("enroll_vault_id", enrollVaultID) }
         if let k = enrollAttestKeyID { b.base64("enroll_attest_key_id", k) }
         if let k = enrolledAttestKeyID { b.base64("enrolled_attest_key_id", k) }
+        if let k = transferAttestKeyID { b.base64("transfer_attest_key_id", k) }
         if !enrollPrior.isEmpty {
             b.raw("enroll_prior", JsonBuilder.array(enrollPrior.map(Self.priorJSON)))
         }
@@ -181,6 +185,7 @@ public struct AltState: Equatable, Sendable, CustomStringConvertible {
         a.enrollVaultID = try o.optString("enroll_vault_id") ?? ""
         a.enrollAttestKeyID = try o.optString("enroll_attest_key_id").map { try Base64s.decodeStd($0) }
         a.enrolledAttestKeyID = try o.optString("enrolled_attest_key_id").map { try Base64s.decodeStd($0) }
+        a.transferAttestKeyID = try o.optString("transfer_attest_key_id").map { try Base64s.decodeStd($0) }
         for v in try o.optArray("enroll_prior") ?? [] {
             let e = try v.asObject()
             a.enrollPrior.append(EnrollAttempt(

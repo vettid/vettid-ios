@@ -83,6 +83,11 @@ public final class TestVaultPhone {
     /// (IOS-PLAN §4.2) The waits between the re-reads of a vault being deleted: each waits until the test releases it, so
     /// that only the reads a test asks for (a start, a return to the foreground, Check again) happen meanwhile.
     public let deletionPauses = TestPauses()
+    /// The new phone's wait for the vault's `hs.resp` after a transfer's `hs.init` (60 s, §6.7.1 step 2): lasts until the
+    /// test releases it.
+    public let transferPauses = TestPauses()
+    /// The old phone's wait to the end of a kept transfer (7 days, §11.14.10): lasts until the test releases it.
+    public let keepPauses = TestPauses()
     /// Whether a change's wait lasts until the test releases it (``changeWaits``).
     public var holdsChangeWaits: Bool {
         get { changeWaits.holding }
@@ -120,7 +125,10 @@ public final class TestVaultPhone {
         let startOver = AttestStartOver()
         self.attester = attester
         attestStartOver = startOver
-        let waits = Waits(requestTimeout: requestTimeout, pauses: changePauses, changeWaits: changeWaits, deletion: deletionPauses)
+        let waits = Waits(
+            requestTimeout: requestTimeout, pauses: changePauses, changeWaits: changeWaits, deletion: deletionPauses,
+            transfer: transferPauses, keep: keepPauses
+        )
         manager = VaultManager(config: try Self.configured(
             service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock,
             wipes ? wipeTargets : nil, attester, startOver, waits, uptime
@@ -139,7 +147,10 @@ public final class TestVaultPhone {
     }
 
     private var waits: Waits {
-        Waits(requestTimeout: requestTimeout, pauses: changePauses, changeWaits: changeWaits, deletion: deletionPauses)
+        Waits(
+            requestTimeout: requestTimeout, pauses: changePauses, changeWaits: changeWaits, deletion: deletionPauses,
+            transfer: transferPauses, keep: keepPauses
+        )
     }
 
     /// A test phone's waits: how long a request waits for its answer, and the pauses the test releases.
@@ -148,6 +159,8 @@ public final class TestVaultPhone {
         let pauses: TestPauses
         let changeWaits: TestPauses
         let deletion: TestPauses
+        let transfer: TestPauses
+        let keep: TestPauses
     }
 
     // swiftlint:disable:next function_parameter_count
@@ -173,6 +186,11 @@ public final class TestVaultPhone {
         c.releaseUpdateSleep = { _ in try await Task.sleep(for: .milliseconds(5)) }
         let deletion = waits.deletion
         c.deletionSleep = { d in try await deletion.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
+        let transfer = waits.transfer, keep = waits.keep
+        c.transferSleep = { d in try await transfer.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
+        c.keepSleep = { d in try await keep.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
+        // The end-of-keep check's wait for `device.list`, short: an old phone the vault removed is answered nothing.
+        c.keptEndCheck = .milliseconds(800)
         c.uptime = { DeviceConfig.monotonicNow() + uptime.ahead }
         return c
     }

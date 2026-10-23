@@ -145,6 +145,17 @@ public struct VaultManagerConfig: Sendable {
     /// The pause before a change whose answer was lost is checked again (VAULT-MESSAGING §11.14.9 "A lost answer": 30 s,
     /// doubling up to 5 minutes), in seconds.
     public var changeCheckSleep: @Sendable (TimeInterval) async throws -> Void
+    /// How long "Finish the move" holds the screen that asked for it at most (``FinishMoveRunner``; as vettid-android's
+    /// 90 s hold, chosen; not in the spec).
+    public var finishMoveHold: Duration = .seconds(90)
+    /// The new phone's wait for the vault's `hs.resp` after its transfer `hs.init` (``MoveCodes/hsRespWait``; a pause the tests
+    /// release).
+    public var transferSleep: LockSleep = realLockSleep
+    /// The wait to the end of a kept transfer (``VaultManager/checkKeptTransfer()``; a pause the tests release).
+    public var keepSleep: LockSleep = realLockSleep
+    /// How long the end-of-keep check of a transfer's old phone waits for the vault's `device.list` (vettid-android
+    /// `KEPT_END_CHECK_MS`: 60 s).
+    public var keptEndCheck: Duration = .seconds(60)
     /// The monotonic clock the vault's clock is counted on between its answers (seconds; tests move it).
     public var uptime: @Sendable () -> TimeInterval = DeviceConfig.monotonicNow
     /// How a change of PIN or password waits for the credential operations before it (VAULT-MESSAGING §11.14.9 step 1:

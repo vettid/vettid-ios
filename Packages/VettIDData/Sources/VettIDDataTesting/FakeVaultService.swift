@@ -242,6 +242,8 @@ public final class FakeVaultService: @unchecked Sendable {
     var items = FakeItemStore()
     /// The tag registry and the share rules (FakeVaultService+Tags.swift), under ``cond``.
     var tagStore = FakeTagStore()
+    /// The direct transfer, in both directions (FakeVaultService+Transfer.swift), under ``cond``.
+    var transfer = FakeTransferStore()
     /// The grants given and received and the requests made (FakeVaultService+Sharing.swift), under ``cond``.
     var grants = FakeGrantStore()
 

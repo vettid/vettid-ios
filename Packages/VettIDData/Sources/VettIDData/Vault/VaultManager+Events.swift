@@ -46,6 +46,8 @@ extension VaultManager {
         foregrounds += 1
         backgrounded = false
         guard phase != .signedOut else { return }
+        // Release R (§11.14.10): the 7 days of a kept transfer are also checked on return, not only at a start.
+        resumeKeptTransfer()
         // IOS-PLAN §4.2: a vault being deleted is read again, and nothing else runs.
         if deletion != nil {
             Task { [weak self] in _ = await self?.checkDeletionAgain() }
@@ -131,7 +133,10 @@ extension VaultManager {
         case HolderPolicy.deviceUnlinked where VaultJSON.string(m.object, "reason") == Self.reasonVaultDeleted:
             onVaultDeletedEvent()
         case HolderPolicy.deviceUnlinked:
+            // Release R (§11.14.10): `transferred` on an old phone that kept its keys is the end of the kept transfer.
+            markMovedAway(m)
             if holder?.onVaultEvent(HolderPolicy.of(m)) != true {
+                wipeMovedAway = false
                 rereads += 1
                 Task { [weak self] in try? await self?.refresh() }
             }

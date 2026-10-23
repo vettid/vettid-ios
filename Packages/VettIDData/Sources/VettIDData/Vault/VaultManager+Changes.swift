@@ -52,8 +52,12 @@ extension VaultManager {
         changeCheck = nil
         heldChange = nil
         sendingChange = true
+        refreshFinishMoveHold()
         do {
-            defer { sendingChange = false }
+            defer {
+                sendingChange = false
+                refreshFinishMoveHold()
+            }
             try await body()
         } catch let u as ChangeUnanswered {
             heldChange = u.held
@@ -137,38 +141,6 @@ extension VaultManager {
         } catch {
             throw VaultFailures.map(error)
         }
-    }
-
-    /// (Release R, §11.14.10) "Finish the move": refused while a change is on its way or unresolved, or the PIN
-    /// uncertain (VAULT-MESSAGING 0.46.0 §11.14.9 step 2: only the unlock screen's two prompts send a PIN with a
-    /// candidate), with the hold's text; else `vault.lock` and the unlock with this phone's keys, as the default does.
-    /// The PIN is taken here: once which PIN the vault expects moved since (``PhoneSecrets/pinGeneration``), the unlock
-    /// sends nothing and fails with ``codePinTakenBefore``, and the PIN is asked for again. Its screen, when it comes, must
-    /// read ``PhoneSecrets/pinGeneration`` when its keypad opens and pass it (``finishMove(pin:taken:)``), as the update's
-    /// screens do, so that a change decided while the member types is covered too.
-    public func finishMove(pin: String) async throws -> UnlockAttempt {
-        try await finishMove(pin: pin, taken: nil)
-    }
-
-    /// Which PIN the vault expects (``PhoneSecrets/pinGeneration``), for a screen's keypad.
-    public var pinGeneration: Int { phoneSecrets.pinGeneration }
-
-    /// The hold of "Finish the move" (``moveHold()``), read when asked; a hold that begins later is refused by
-    /// ``finishMove(pin:taken:)`` all the same.
-    public var finishMoveHold: FailureKind? { moveHold()?.kind }
-
-    /// "Finish the move" with a PIN taken at ``PhoneSecrets/pinGeneration`` [taken] (nil: read now).
-    public func finishMove(pin: String, taken: Int?) async throws -> UnlockAttempt {
-        let taken = taken ?? phoneSecrets.pinGeneration
-        if let hold = moveHold() { throw hold }
-        // A PIN taken before a change neither locks the vault nor is sent; checked again after the lock (a change decided
-        // meanwhile) and right before the unlock goes out.
-        if let moved = pinTakenBefore(taken) { return .failed(moved.kind, code: moved.code) }
-        try await lock()
-        if let moved = pinTakenBefore(taken) { return .failed(moved.kind, code: moved.code) }
-        var route = UnlockRoute()
-        route.pinTaken = taken
-        return await unlockOutcome(pin: pin, options: UnlockOptions(), route: route).attempt
     }
 
     /// The one hold of a flow that unlocks with a PIN typed on its own screen (the release update, the unlock screen's
@@ -472,6 +444,7 @@ extension VaultManager {
     /// Which PIN the unlock asks for: while a PIN change is unresolved, or its PIN uncertain (0.45.0 step 5), and its
     /// record is still a candidate, the previous PIN, then (after `device_secret`) the new one.
     func refreshPinStep() {
+        defer { refreshFinishMoveHold() }
         guard twoStepOperation() != nil else {
             newPinAsked = false
             if unlockPinStep != .pin {

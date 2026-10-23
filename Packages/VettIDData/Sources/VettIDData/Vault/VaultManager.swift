@@ -68,7 +68,6 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     public internal(set) var renewSecretSuggested = false
     /// (STAGING-TIME-SCALE §5.2) The vault's time scale as this phone last learnt it (``LocalAccount/timeScale``).
     public internal(set) var timeScale: UInt64 = 1
-    public internal(set) var rotateOffered = false // (release R) ``LocalAccount/rotateOffer``
 
     // CredentialRepository.
     public internal(set) var alarm: CredentialAlarm?
@@ -106,8 +105,6 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// Bumped by each event that has the phase read again (`device.unlinked`, not a replacement): an unlock it reached
     /// on its way reads the phase again rather than publish its own (chosen; not in the spec).
     @ObservationIgnored var rereads = 0
-    /// The pending lock found at the start was taken up (once, after the first-run cleanup and the record).
-    @ObservationIgnored private var lockResumed = false
     @ObservationIgnored private(set) var holder: HolderWatch?
     @ObservationIgnored private(set) var refusals: RefusalWatch?
     /// The daily owner check (VAULT-MESSAGING §3.6): its state, the check, the interval and the hold.
@@ -144,8 +141,6 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored var deleteUnanswered: UnansweredDelete?
     /// TEST ONLY: replaces making the record of a confirmed `pin.change` current (a write that fails).
     @ObservationIgnored var confirmPinChangeOverride: (@MainActor (String) throws -> Void)?
-    /// (VAULT-MESSAGING §11.14.9 "A lost answer") Where the decision of a change whose answer was lost stands.
-    public internal(set) var changeCheck: ChangeCheck?
     /// (§11.14.9 step 5) Which PIN the unlock asks for while a PIN change is unresolved.
     public internal(set) var unlockPinStep: UnlockPinStep = .pin
     /// The unresolved change's request, to send again as the same request. In memory only, never on disk.
@@ -173,6 +168,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored var halted = false
     /// A wipe's marker left at the start was looked at (once, after the first-run cleanup).
     @ObservationIgnored private var wipeResumed = false
+    @ObservationIgnored let moveFlags = MoveFlags() // the move to another phone, and the rotate offer (VaultManager+MoveState)
     /// The tasks that follow the open session's events and refusals.
     @ObservationIgnored var observers: [Task<Void, Never>] = []
     /// Bumped by every return to the foreground: a background task that began before one does not stop the collection.
@@ -194,7 +190,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             let s = policy.accepts(a.timeScale) ? a.timeScale : 1
             scale.set(s)
             if ref.manager?.timeScale != s { ref.manager?.timeScale = s }
-            if ref.manager?.rotateOffered != a.rotateOffer { ref.manager?.rotateOffered = a.rotateOffer }
+            ref.manager?.recordChanged(a)
         }
         let ids = memberVault
         member = MemberApiClient(
@@ -300,12 +296,13 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         approvals.loadIfNeeded()
         memberVault.set(recorded: record.value.vaultID)
         if account == nil { publishAccount() }
-        if !lockResumed {
-            lockResumed = true
+        if !moveFlags.book.lockResumed {
+            moveFlags.book.lockResumed = true
             // A lock that was pending when the process ended: locked from the start, and tried again at once.
             lockGuard.keeper.resume()
             lockNotices.opened(at: record.value.lastOpenedMs.map { Date(timeIntervalSince1970: Double($0) / 1000) })
         }
+        resumeMoveState()
     }
 
     /// At the start, right after the first-run cleanup and before anything reads local files: a wipe a crash interrupted

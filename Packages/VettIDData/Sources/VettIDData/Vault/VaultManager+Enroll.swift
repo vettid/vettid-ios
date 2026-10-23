@@ -226,9 +226,9 @@ extension VaultManager {
     /// I3.3.
     public func finishSetup() async throws {
         let rec = record.generation
-        guard FinishSetupGate.allows(phase, lockPending: lockGuard.pending, finishingMove: false) else { return }
+        guard FinishSetupGate.allows(phase, lockPending: lockGuard.pending, finishingMove: finishMoveRunner.finishing) else { return }
         guard record.value.enrollConfirmed else { throw VaultFailure(.other, code: Self.codeEnrollUnconfirmed) }
-        try guardedSync { try record.update(since: rec) { $0.setupComplete = true } }
+        try guardedSync { try record.update(since: rec) { $0.setupComplete = true; $0.movedIn = false } }
         phase = .unlocked
     }
 }

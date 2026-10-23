@@ -1,0 +1,166 @@
+import Foundation
+import Observation
+import VettIDVault
+
+/// What the shell observes of the move to another phone (VAULT-MESSAGING §6.7.1, §11.14.10). Observable on its own, so
+/// that the manager's forwarding properties are tracked through it.
+@MainActor
+@Observable
+final class MoveFlags {
+    /// The bookkeeping of a transfer, in memory only (not observed), and the runner of "Finish the move" made at its first
+    /// use.
+    @ObservationIgnored let book = MoveBook()
+    @ObservationIgnored var runner: FinishMoveRunner?
+    var changeCheck: ChangeCheck?
+    var rotateOffered = false // (release R) ``LocalAccount/rotateOffer``
+    var movedIn = false
+    var finishMovePending = false
+    var transferKeptSince: Date?
+    var movedBack = false
+    var moveNotDone = false
+    var movedAway = false
+    var finishMoveHold: FailureKind?
+}
+
+/// The bookkeeping of a transfer, in memory only.
+@MainActor
+final class MoveBook {
+    /// When this (new) phone sent its transfer `hs.init`: it waits for the approval until 10 minutes after it.
+    var transferStartedAt: Date?
+    /// The transfer this (old) phone opened last, to cancel it when a new one is asked for.
+    var openTransferID: String?
+    /// The pending epoch-1 record of the transfer to this phone (``PhoneSecrets/reuseOrCreate(keyVault:)``), dropped when
+    /// the transfer is abandoned.
+    var transferEpochID: String?
+    /// The timer to the end of a kept transfer, and whether its end is being decided now.
+    var keptTimer: Task<Void, Never>?
+    var keptEnding = false
+    /// The pending lock found at the start was taken up (once, after the first-run cleanup and the record).
+    var lockResumed = false
+    /// The kept transfer of the record was looked at (once per process, at the start; then at each return to the foreground).
+    var keptResumed = false
+    /// The wipe that runs now is an old phone's at the end of a kept transfer (it says so on the welcome screen).
+    var wipeMovedAway = false
+}
+
+extension VaultManager {
+    /// (Release R, ANDROID-PLAN "Transfer") The offer to rotate the vault's keys after a PIN or password change.
+    public internal(set) var rotateOffered: Bool {
+        get { moveFlags.rotateOffered }
+        set { moveFlags.rotateOffered = newValue }
+    }
+
+    /// (VAULT-MESSAGING §11.14.9 "A lost answer") Where the decision of a change whose answer was lost stands. Every change
+    /// of it moves ``finishMoveHold`` too (it is the hold's text: checking, or unreachable).
+    public internal(set) var changeCheck: ChangeCheck? {
+        get { moveFlags.changeCheck }
+        set {
+            moveFlags.changeCheck = newValue
+            refreshFinishMoveHold()
+        }
+    }
+
+    /// "Finish the move" (VAULT-MESSAGING §11.14.10 step 4): once asked for, it completes (``FinishMoveRunner``).
+    var finishMoveRunner: FinishMoveRunner {
+        if let r = moveFlags.runner { return r }
+        let r = makeFinishMoveRunner()
+        moveFlags.runner = r
+        return r
+    }
+
+    /// This phone received its vault by a direct transfer and has not left onboarding yet (``LocalAccount/movedIn``).
+    public internal(set) var movedIn: Bool {
+        get { moveFlags.movedIn }
+        set { moveFlags.movedIn = newValue }
+    }
+
+    /// This new phone has not yet finished the move (``LocalAccount/finishMovePending``).
+    public internal(set) var finishMovePending: Bool {
+        get { moveFlags.finishMovePending }
+        set { moveFlags.finishMovePending = newValue }
+    }
+
+    /// When this old phone approved a transfer it still keeps the keys for; nil otherwise (``checkKeptTransfer()``).
+    public internal(set) var transferKeptSince: Date? {
+        get { moveFlags.transferKeptSince }
+        set { moveFlags.transferKeptSince = newValue }
+    }
+
+    /// This old phone opened the vault with its own keys after approving a transfer: it is the vault's phone again.
+    public internal(set) var movedBack: Bool {
+        get { moveFlags.movedBack }
+        set { moveFlags.movedBack = newValue }
+    }
+
+    /// The 7 days of a kept transfer ended and the vault still has this phone as its app: the move did not happen.
+    public internal(set) var moveNotDone: Bool {
+        get { moveFlags.moveNotDone }
+        set { moveFlags.moveNotDone = newValue }
+    }
+
+    /// This old phone removed its keys at the end of a kept transfer (``LocalWipe/movedAway``).
+    public internal(set) var movedAway: Bool {
+        get { moveFlags.movedAway }
+        set { moveFlags.movedAway = newValue }
+    }
+
+    /// (VAULT-MESSAGING 0.45.0 §11.14.9 step 2) Why "Finish the move" is held: a PIN or password change is being decided
+    /// or the PIN is uncertain (the gate's failure kind); nil when the move can be finished. Observable: updated wherever a
+    /// change starts or ends, or the PIN becomes uncertain or settles (``refreshFinishMoveHold()``).
+    public internal(set) var finishMoveHold: FailureKind? {
+        get { moveFlags.finishMoveHold }
+        set { moveFlags.finishMoveHold = newValue }
+    }
+
+    var transferStartedAt: Date? {
+        get { moveFlags.book.transferStartedAt }
+        set { moveFlags.book.transferStartedAt = newValue }
+    }
+
+    var openTransferID: String? {
+        get { moveFlags.book.openTransferID }
+        set { moveFlags.book.openTransferID = newValue }
+    }
+
+    var transferEpochID: String? {
+        get { moveFlags.book.transferEpochID }
+        set { moveFlags.book.transferEpochID = newValue }
+    }
+
+    var keptTimer: Task<Void, Never>? {
+        get { moveFlags.book.keptTimer }
+        set { moveFlags.book.keptTimer = newValue }
+    }
+
+    var keptEnding: Bool {
+        get { moveFlags.book.keptEnding }
+        set { moveFlags.book.keptEnding = newValue }
+    }
+
+    var wipeMovedAway: Bool {
+        get { moveFlags.book.wipeMovedAway }
+        set { moveFlags.book.wipeMovedAway = newValue }
+    }
+
+    /// The account record changed: what it says of the move and of the rotate offer reaches the observed properties.
+    func recordChanged(_ a: LocalAccount) {
+        if rotateOffered != a.rotateOffer { rotateOffered = a.rotateOffer }
+        if movedIn != a.movedIn { movedIn = a.movedIn }
+        if finishMovePending != a.finishMovePending { finishMovePending = a.finishMovePending }
+    }
+
+    /// At the start (once, after the first-run cleanup): the wipe's notice is read, and the 7 days of a kept transfer
+    /// (release R, §11.14.10) are checked.
+    func resumeMoveState() {
+        guard !moveFlags.book.keptResumed else { return }
+        moveFlags.book.keptResumed = true
+        movedAway = wiper?.movedAway ?? false
+        resumeKeptTransfer()
+    }
+
+    func makeFinishMoveRunner() -> FinishMoveRunner {
+        let ref = ManagerRef()
+        ref.manager = self
+        return Self.finishMoveRunner(ref, hold: config.finishMoveHold, sleep: config.lockTiming.sleep)
+    }
+}
