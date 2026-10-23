@@ -218,28 +218,31 @@ public protocol VaultRepository: AnyObject, Observable, Sendable {
     /// that asked stays. Default: ``lock()`` then ``unlock(pin:approve:cancelRecovery:)``.
     func finishMove(pin: String) async throws -> UnlockAttempt
 
-    /// (VAULT-MESSAGING §11.14.9 step 2; chosen; not in the spec) ``finishMove(pin:)`` with the PIN as the screen's keypad
-    /// took it: [taken] is ``pinGeneration`` when the keypad became usable (nil: read now). Once it moved, nothing is sent:
-    /// ``UnlockAttempt/failed(_:code:retryAfterSeconds:)`` with ``FailureKind/credentialUnsettled`` and the PIN is asked for
-    /// again. Default: that refusal, else ``finishMove(pin:)``; a real repository overrides it.
+    /// (VAULT-MESSAGING §11.14.9 step 2; chosen; not in the spec) ``finishMove(pin:)`` with the PIN as the keypad took it
+    /// ([taken]: ``pinGeneration`` then; nil: now). Once it moved, nothing is sent: ``FailureKind/credentialUnsettled``.
+    /// Default: that refusal, else ``finishMove(pin:)``; a real repository overrides it.
     func finishMove(pin: String, taken: Int?) async throws -> UnlockAttempt
 
     /// (VAULT-MESSAGING §11.14.9 step 2; chosen; not in the spec) Which PIN the vault expects, as a generation that moves
-    /// with every change of it (``PhoneSecrets/pinGeneration``): a screen that unlocks with a PIN typed on it reads it when
-    /// its keypad becomes usable and hands it over with the PIN (``finishMove(pin:taken:)``). Default: 0.
+    /// with every change of it (``PhoneSecrets/pinGeneration``), handed over with the PIN (``finishMove(pin:taken:)``).
+    /// Default: 0.
     var pinGeneration: Int { get }
 
-    /// (VAULT-MESSAGING 0.45.0 §11.14.9 step 2) A PIN or password change is being decided, or the PIN is uncertain: no lock
-    /// and unlock with a PIN typed on "Finish the move" until it is (the gate's text); nil when the move can be finished.
-    /// Default: nil.
+    /// (VAULT-MESSAGING 0.45.0 §11.14.9 step 2) Why "Finish the move" is held: a PIN or password change is being decided, or
+    /// the PIN is uncertain (the gate's text); nil when it can be finished. Default: nil.
     var finishMoveHold: FailureKind? { get }
 
-    /// (STAGING-TIME-SCALE, S10) How long this phone keeps its keys after approving a transfer, for the texts: 7 days,
-    /// divided by the vault's time scale (``KeptTransfer/keepMs(timeScale:)``). Default: from ``timeScale``.
+    /// (STAGING-TIME-SCALE, S10) How long this phone keeps its keys after a transfer's approval: 7 days divided by the time
+    /// scale. Default: from ``timeScale``.
     var transferKeepSeconds: Int64 { get }
 
-    /// (Release R) True while ``finishMove(pin:)`` runs, for at most a bounded time.
+    /// (Release R) True while ``finishMove(pin:)`` runs: from the same synchronous step as the call, before its own lock
+    /// makes the phase locked, to every exit (success, failure, wipe, deletion), so the screen that asked is held meanwhile.
     var finishingMove: Bool { get }
+
+    /// (Owner decision, 2026-10-23) The 7 days of a kept transfer are over with no definite answer yet: this phone keeps its
+    /// keys and checks again at each start and foreground. Default: false.
+    var keptCheckPending: Bool { get }
 
     /// (Release R) Why the last ``finishMove(pin:)`` did not open the vault (`transfer_incomplete`, a wrong PIN, a wait,
     /// the network), for the unlock screen that follows it; nil after a success or ``acknowledgeFinishMoveFailure()``.
@@ -374,15 +377,6 @@ public extension VaultRepository {
         try await lock()
         return try await unlock(pin: pin, approve: nil, cancelRecovery: false)
     }
-
-    func finishMove(pin: String, taken: Int?) async throws -> UnlockAttempt {
-        // Safe by default: a PIN taken before a change is sent nothing; a real repository overrides it.
-        if let taken, taken != pinGeneration { return .failed(.credentialUnsettled, code: "pin_taken_before_change") }
-        return try await finishMove(pin: pin)
-    }
-    var pinGeneration: Int { 0 }
-    var finishMoveHold: FailureKind? { nil }
-    var transferKeepSeconds: Int64 { KeptTransfer.keepMs(timeScale: timeScale) / 1000 }
 
     var finishingMove: Bool { false }
     var finishMoveFailure: FailureKind? { nil }

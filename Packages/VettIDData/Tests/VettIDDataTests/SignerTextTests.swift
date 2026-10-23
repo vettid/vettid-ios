@@ -28,7 +28,7 @@ import Testing
         #expect(SignerClass.of("hardware") == nil && SignerClass.of(nil) == nil)
     }
 
-    /// (chosen; not in the spec) An iPhone has no signer to name: the body names the new phone's only.
+    /// (Owner decision, 2026-10-23.) An iPhone has no signer to name: the body names the new phone's only.
     @Test func anIPhoneNamesOnlyTheNewPhone() {
         #expect(SignerText.changeBody(new: .googlePlay, current: nil)
             == "The new phone's VettID was installed from Google Play (signed by Google). That is not the version your vault "

@@ -67,14 +67,24 @@ public final class FinishMoveRunner {
     public func run(pin: String, taken: Int? = nil) async throws -> UnlockAttempt {
         if let current, running { return try await current.value }
         running = true
+        // Before the task is made, in the same synchronous step as the call: the screen that asked is held from here, so
+        // that the run's own lock (which makes the phase ``AppPhase/locked``) never shows the unlock screen mid-finish.
+        failure = nil
+        finishing = true
         let task = Task { @MainActor [self] in try await body(pin: pin, taken: taken) }
         current = task
         return try await task.value
     }
 
+    /// The hold ends now (a wipe, a deletion): ``finishing`` is false whatever the run still does. The run itself goes on to
+    /// its own end, which finds it already clear.
+    public func release() {
+        bound?.cancel()
+        bound = nil
+        finishing = false
+    }
+
     private func body(pin: String, taken: Int?) async throws -> UnlockAttempt {
-        failure = nil
-        finishing = true
         let hold = hold
         let sleep = sleep
         bound = Task { @MainActor [weak self] in

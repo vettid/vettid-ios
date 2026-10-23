@@ -143,9 +143,11 @@ extension VaultManager {
         // The move's state is the record's, which the wipe reset; the notice is the wipe's own (``LocalWipe/movedAway``).
         movedAway = wiper?.movedAway ?? false
         finishMoveRunner.clearFailure()
+        finishMoveRunner.release()
         keptTimer?.cancel()
         keptTimer = nil
         transferKeptSince = nil
+        keptCheckPending = false
         movedBack = false
         moveNotDone = false
         transferStartedAt = nil

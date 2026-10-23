@@ -94,6 +94,7 @@ public final class TestVaultPhone {
         set { changeWaits.holding = newValue }
     }
     private let requestTimeout: TimeInterval
+    private let keptEndCheck: Duration
     /// What this phone's wipe erases: its directory and its software keys.
     public let wipeTargets: TestWipeTargets
 
@@ -112,9 +113,12 @@ public final class TestVaultPhone {
     /// [requestTimeout]: how long a request waits for its answer before it is sent again (§8.6), for a request of a type
     /// whose answers the test makes go missing (``FakeVaultService/unanswered(_:)``); any other waits at least
     /// ``roomyRequestTimeout``. [wipes]: false for a build that cannot wipe.
-    public init(service: FakeVaultService, requestTimeout: TimeInterval = 5, wipes: Bool = true) throws {
+    public init(
+        service: FakeVaultService, requestTimeout: TimeInterval = 5, wipes: Bool = true, keptEndCheck: Duration = .seconds(20)
+    ) throws {
         self.service = service
         self.requestTimeout = requestTimeout
+        self.keptEndCheck = keptEndCheck
         self.wipes = wipes
         directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("vettid-manager-tests/\(UUID().uuidString)/VettID")
@@ -127,7 +131,7 @@ public final class TestVaultPhone {
         attestStartOver = startOver
         let waits = Waits(
             requestTimeout: requestTimeout, pauses: changePauses, changeWaits: changeWaits, deletion: deletionPauses,
-            transfer: transferPauses, keep: keepPauses
+            transfer: transferPauses, keep: keepPauses, keptEndCheck: keptEndCheck
         )
         manager = VaultManager(config: try Self.configured(
             service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock,
@@ -149,7 +153,7 @@ public final class TestVaultPhone {
     private var waits: Waits {
         Waits(
             requestTimeout: requestTimeout, pauses: changePauses, changeWaits: changeWaits, deletion: deletionPauses,
-            transfer: transferPauses, keep: keepPauses
+            transfer: transferPauses, keep: keepPauses, keptEndCheck: keptEndCheck
         )
     }
 
@@ -161,6 +165,7 @@ public final class TestVaultPhone {
         let deletion: TestPauses
         let transfer: TestPauses
         let keep: TestPauses
+        let keptEndCheck: Duration
     }
 
     // swiftlint:disable:next function_parameter_count
@@ -189,8 +194,9 @@ public final class TestVaultPhone {
         let transfer = waits.transfer, keep = waits.keep
         c.transferSleep = { d in try await transfer.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
         c.keepSleep = { d in try await keep.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
-        // The end-of-keep check's wait for `device.list`, short: an old phone the vault removed is answered nothing.
-        c.keptEndCheck = .milliseconds(800)
+        // The end-of-keep check's wait for `device.list`: long, so that a loaded machine still gets an answer; a test of
+        // the silence of a vault that removed this phone asks for a short one.
+        c.keptEndCheck = waits.keptEndCheck
         c.uptime = { DeviceConfig.monotonicNow() + uptime.ahead }
         return c
     }

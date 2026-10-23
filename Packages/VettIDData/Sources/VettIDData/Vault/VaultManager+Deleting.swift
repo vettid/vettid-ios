@@ -40,6 +40,7 @@ extension VaultManager {
     /// The vault closes at once and the marker is stored; the re-reads start (the first after 5 s).
     func enterDeleting(expOnPhone: Date?) {
         guard deletion == nil else { return }
+        finishMoveRunner.release()
         let since = config.now()
         var until = since.addingTimeInterval(Self.deletingBound)
         if let e = expOnPhone?.addingTimeInterval(Self.deletingAfterExp), e > until { until = e }

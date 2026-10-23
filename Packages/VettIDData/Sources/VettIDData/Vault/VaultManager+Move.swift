@@ -35,6 +35,8 @@ extension VaultManager: MoveRepository {
     public nonisolated static let codeNotTransfer = "not_transfer"
     /// How long the new phone waits for the old phone's approval after its `hs.init` (§6.7, 0.10.4).
     nonisolated static let pairingWindow: TimeInterval = 600
+    /// The wait beyond ``pairingWindow`` (owner decision, 2026-10-23: 11 minutes on the new phone, on both apps).
+    nonisolated static let pairingGrace: TimeInterval = 60
 
     // MARK: - Recovery (I3.4)
 
@@ -71,15 +73,22 @@ extension VaultManager: MoveRepository {
             let policy = config.trust.timeScales
             // Release R (§11.14.10): this phone's key and its secret of epoch 1 go in the hs.init. The vault id is not
             // known yet: they are made for "" (IOS-PLAN §6.1). Stored before the hs.init is sent; a retry reuses them.
-            try await d.startTransfer(link: link, attester: config.attester) { capabilities, scale in
-                try ReleasePath.requireR(capabilities)
-                try policy.check(scale)
-                let epoch = try secrets.reuseOrCreate(keyVault: "")
-                path.set(epoch.id, capabilities, scale)
-                return epoch.secret
+            do {
+                try await d.startTransfer(link: link, attester: config.attester) { [weak self] capabilities, scale in
+                    try ReleasePath.requireR(capabilities)
+                    try policy.check(scale)
+                    let epoch = try secrets.reuseOrCreate(keyVault: "")
+                    path.set(epoch.id, capabilities, scale)
+                    // Known at once, so that a failure after it can delete the record (``dropTransfer(_:)``).
+                    await self?.noteTransferEpoch(epoch.id)
+                    return epoch.secret
+                }
+            } catch {
+                // The device dropped the key it attested (``VaultDevice/startTransfer``); the epoch-1 record goes too.
+                await dropTransfer(d)
+                throw error
             }
-            let (epochID, capabilities, scale) = (path.value.id, path.value.capabilities, path.value.timeScale)
-            transferEpochID = epochID
+            let (capabilities, scale) = (path.value.capabilities, path.value.timeScale)
             usesPhoneSecret = phoneSecrets.inUse
             try record.update(since: rec) { $0.capabilities = capabilities }
             learnTimeScale(scale, since: rec)
@@ -93,6 +102,8 @@ extension VaultManager: MoveRepository {
             return sas
         }
     }
+
+    func noteTransferEpoch(_ id: String) { transferEpochID = id }
 
     /// The transfer code's link, or the failure of a text that is not one (nothing is fetched for it).
     private static func transferLink(_ code: String, now: Date) throws -> String {
@@ -125,7 +136,10 @@ extension VaultManager: MoveRepository {
             let s = try await openSession()
             let d = s.device
             let started = transferStartedAt ?? config.now()
-            let left = max(started.addingTimeInterval(Self.pairingWindow).timeIntervalSince(config.now()), 1)
+            // 60 s beyond the 10 minutes before this phone drops its handshake, key and secret (owner decision, 2026-10-23): an
+            // approval that completes at the vault just after this phone's limit, which counts from its own (earlier) start,
+            // is not lost.
+            let left = max(started.addingTimeInterval(Self.pairingWindow + Self.pairingGrace).timeIntervalSince(config.now()), 1)
             let guid: String?
             do {
                 guid = try await d.awaitTransfer(timeout: left)
@@ -227,17 +241,33 @@ extension VaultManager: MoveRepository {
     /// after the new phone's first unlock from storage (§11.14.10), so this phone keeps its keys until then or for 7 days
     /// (``KeptTransfer``): the time is stored before the approval is sent, so that an approval whose answer is lost is
     /// bounded too, and removed again when the approval is refused or does not keep the keys.
+    ///
+    /// Everything from storing the time to the keep or the restore runs in a task of its own: a caller that is cancelled (the
+    /// screen goes during the approval) only stops waiting, and what follows the vault's answer is never lost.
     public func transferApprove(transferID: String, pin: String, password: String, signer: String?) async throws -> Bool {
+        let task = Task { @MainActor [self] in
+            try await approveTransfer(transferID: transferID, pin: pin, password: password, signer: signer)
+        }
+        return try await task.value
+    }
+
+    private func approveTransfer(transferID: String, pin: String, password: String, signer: String?) async throws -> Bool {
         let rec = record.generation
         let before = (record.value.transferApprovedAtMs, record.value.transferKeepMs)
         // STAGING-TIME-SCALE (S10): the keep period is divided by the vault's time scale now, and kept with the time.
         let keepMs = KeptTransfer.keepMs(timeScale: timeScale)
         let stored = keepMs == KeptTransfer.keepPeriodMs ? nil : keepMs
-        try? record.update(since: rec) {
-            $0.transferApprovedAtMs = nowMs
-            $0.transferKeepMs = stored
+        let stamp = nowMs
+        // Nothing is sent when the time cannot be stored: the keys' bound would be lost with it.
+        guard try record.update(since: rec, { $0.transferApprovedAtMs = stamp; $0.transferKeepMs = stored }) else {
+            throw VaultFailure(.other, code: "record_closed")
         }
-        let restore: (inout LocalAccount) -> Void = { ($0.transferApprovedAtMs, $0.transferKeepMs) = before }
+        // Put back after the answer, for the record as it is then (a lock during the approval moved the generation, and a
+        // write for the record as it was would be dropped), and only while the stored time is still this approval's.
+        let restore: @MainActor () -> Void = { [self] in
+            guard record.value.transferApprovedAtMs == stamp else { return }
+            _ = try? record.update(since: record.generation) { ($0.transferApprovedAtMs, $0.transferKeepMs) = before }
+        }
         var keep = false
         let moved: Bool
         do {
@@ -251,13 +281,13 @@ extension VaultManager: MoveRepository {
                 }
             }
         } catch let e as VaultFailure {
-            if !KeptTransfer.mayHaveReached(e.kind) { _ = try? record.update(since: rec, restore) }
+            if !KeptTransfer.mayHaveReached(e.kind) { restore() }
             throw e
         }
         if keep {
             await checkKeptTransfer()
         } else {
-            _ = try? record.update(since: rec, restore)
+            restore()
         }
         return moved
     }

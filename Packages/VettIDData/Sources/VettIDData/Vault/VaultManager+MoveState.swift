@@ -16,6 +16,7 @@ final class MoveFlags {
     var movedIn = false
     var finishMovePending = false
     var transferKeptSince: Date?
+    var keptCheckPending = false
     var movedBack = false
     var moveNotDone = false
     var movedAway = false
@@ -39,6 +40,8 @@ final class MoveBook {
     var lockResumed = false
     /// The kept transfer of the record was looked at (once per process, at the start; then at each return to the foreground).
     var keptResumed = false
+    /// Bumped by every move to the foreground and to the background: a check that saw it change was interrupted.
+    var lifecycle = 0
     /// The wipe that runs now is an old phone's at the end of a kept transfer (it says so on the welcome screen).
     var wipeMovedAway = false
 }
@@ -84,6 +87,13 @@ extension VaultManager {
     public internal(set) var transferKeptSince: Date? {
         get { moveFlags.transferKeptSince }
         set { moveFlags.transferKeptSince = newValue }
+    }
+
+    /// The 7 days of a kept transfer are over and the vault has not given a definite answer yet (owner decision,
+    /// 2026-10-23): this phone keeps its keys and checks again at each start and foreground. The shell shows a plain notice.
+    public internal(set) var keptCheckPending: Bool {
+        get { moveFlags.keptCheckPending }
+        set { moveFlags.keptCheckPending = newValue }
     }
 
     /// This old phone opened the vault with its own keys after approving a transfer: it is the vault's phone again.

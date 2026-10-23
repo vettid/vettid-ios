@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import Testing
 import VettIDAltChan
 import VettIDCrypto
@@ -151,6 +152,19 @@ import VettIDDataTesting
         #expect(service.transferPaired)
     }
 
+    /// (Owner decision, 2026-10-23.) This phone waits 60 s beyond the 10 minutes, counted from its own earlier start: an approval
+    /// that completes at the vault just after the phone's limit is not lost.
+    @Test func anApprovalJustAfterThePhonesTenMinutesIsNotLost() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        phone.clockAhead = 630
+        let waiting = Task { try await m.awaitTransferIn() }
+        try await Task.sleep(for: .milliseconds(300))
+        service.approveTransferIn()
+        #expect(try await waiting.value)
+        #expect(m.finishMovePending)
+    }
+
     @Test func aRejectionDropsTheTransferAndTheKey() async throws {
         defer { phone.close() }
         _ = try await scanned()
@@ -236,6 +250,86 @@ import VettIDDataTesting
         screen.cancel()
         #expect(await eventually { !m.finishMovePending && !m.finishingMove })
         #expect(m.finishMoveFailure == nil && m.rotateOffered && service.isOpen)
+    }
+
+    /// The lock and the unlock are inside the runner's own task: a caller cancelled right after the lock does not stop the
+    /// unlock, and the vault opens.
+    @Test func aCallerCancelledAfterTheLockStillGetsTheVaultOpened() async throws {
+        defer { phone.close() }
+        try await transferred()
+        service.unlockAnswers(.held)
+        let locks = service.memberLocks + service.relayLocks
+        let sent = service.unlocks.count
+        let caller = Task { try await m.finishMove(pin: pin) }
+        #expect(await eventually { service.memberLocks + service.relayLocks > locks })
+        caller.cancel()
+        #expect(await eventually { service.unlocks.count == sent + 1 })
+        service.releaseHeldUnlock()
+        #expect(await eventually { !m.finishMovePending && !m.finishingMove })
+        #expect(m.finishMoveFailure == nil && service.isOpen && m.rotateOffered)
+    }
+
+    /// What ``finishingMove`` was at each change of the phase (read in the change's `willSet`, so before it happens).
+    @MainActor
+    final class PhaseLog {
+        var finishingAtChange: [Bool] = []
+        var phases: [AppPhase] = []
+
+        func watch(_ m: VaultManager) {
+            withObservationTracking { _ = m.phase } onChange: { [self] in
+                MainActor.assumeIsolated {
+                    finishingAtChange.append(m.finishingMove)
+                    phases.append(m.phase)
+                    watch(m)
+                }
+            }
+        }
+    }
+
+    /// The app holds the screen while ``finishingMove`` is true, so it must be true no later than the phase change that the
+    /// run's own lock makes.
+    @Test func finishingIsTrueBeforeThePhaseBecomesLocked() async throws {
+        defer { phone.close() }
+        try await transferred()
+        let log = PhaseLog()
+        log.watch(m)
+        #expect(try await m.finishMove(pin: pin) == .success)
+        // The lock made the phase locked; the unlock made it the open one again: both while the move was running.
+        #expect(log.finishingAtChange.count >= 2 && log.finishingAtChange.allSatisfy { $0 })
+        #expect(log.phases.first == .setup(.finishing) && !m.finishingMove)
+    }
+
+    /// Cleared on every exit: a failing finish (a wrong PIN, a refusal, a failure of the lock).
+    @Test func finishingIsClearedWhenTheMoveFails() async throws {
+        defer { phone.close() }
+        try await transferred()
+        let r = try await m.finishMove(pin: "111111")
+        if case .badPin = r {} else { Issue.record("\(r)") }
+        #expect(!m.finishingMove)
+        service.unlockAnswers(.sealed("transfer_incomplete"))
+        _ = try await m.finishMove(pin: pin)
+        #expect(!m.finishingMove)
+        // A failure of the vault's lock (the relay and the member API both refuse): thrown, and cleared all the same.
+        service.memberLockAnswer = .limited(5)
+        service.relayLockAnswer = .noAnswer
+        _ = try? await m.finishMove(pin: pin)
+        #expect(!m.finishingMove)
+    }
+
+    /// A wipe of this phone (or the vault's deletion) ends the hold at once, whatever the run still waits for.
+    @Test func finishingIsClearedByAWipe() async throws {
+        defer { phone.close() }
+        try await transferred()
+        service.unlockAnswers(.held)
+        let sent = service.unlocks.count
+        let run = Task { try await m.finishMove(pin: pin) }
+        #expect(await eventually { m.finishingMove })
+        #expect(await eventually { service.unlocks.count == sent + 1 })
+        try await m.eraseThisPhone()
+        #expect(m.phase == .signedOut && !m.finishingMove)
+        service.releaseHeldUnlock()
+        _ = try? await run.value
+        #expect(!m.finishingMove)
     }
 
     @Test func finishingIsSaidWhileTheMoveRuns() async throws {

@@ -114,6 +114,22 @@ import VettIDDataTesting
         #expect(m.record.value.transferApprovedAtMs == nil && m.transferKeptSince == nil && service.pinFailureCount == 0)
     }
 
+    /// The screen goes while the approval is on its way: the caller is cancelled, and what follows the vault's answer (the
+    /// record, the kept state) is still done.
+    @Test func aCancelledCallerStillGetsTheKeepRecorded() async throws {
+        defer { phone.close() }
+        try await setUp()
+        let offer = try await m.transferCreate()
+        service.holdMessages = true
+        let caller = Task { try await m.transferApprove(transferID: offer.transferID, pin: pin, password: password, signer: nil) }
+        #expect(await eventually { service.transferApprovals.count == 1 })
+        caller.cancel()
+        service.holdMessages = false
+        _ = try? await caller.value
+        #expect(await eventually { m.transferKeptSince != nil })
+        #expect(m.record.value.transferApprovedAtMs != nil && m.phase == .unlocked)
+    }
+
     /// A refusal (a wrong PIN) removes the stored time: the transfer was not approved.
     @Test func aRefusedApprovalRemovesTheStoredTime() async throws {
         defer { phone.close() }
@@ -210,15 +226,17 @@ import VettIDDataTesting
         #expect(await eventually { phone.keepPauses.lengths.last.map { abs($0 - 600) < 5 } == true })
     }
 
-    /// 7 days after the approval the vault no longer lists this phone (it answers nothing): the keys are removed.
+    /// 7 days after the approval the vault answers with a list that does not name this phone as its app: the keys are
+    /// removed (owner decision, 2026-10-23: only a definite answer erases).
     @Test func afterSevenDaysTheKeysAreRemoved() async throws {
         defer { phone.close() }
         try await setUp()
         _ = try await approve()
+        service.deviceListAnswer = .withoutThisPhone
         phone.clockAhead = week + 60
         await m.checkKeptTransfer()
         #expect(await eventually { m.phase == .signedOut })
-        #expect(m.movedAway && service.deviceListsAfterTransfer == 1)
+        #expect(m.movedAway && !m.keptCheckPending)
         #expect(try !phone.wipeTargets.keysLeft())
     }
 
@@ -246,6 +264,7 @@ import VettIDDataTesting
         defer { phone.close() }
         try await setUp()
         _ = try await approve()
+        service.deviceListAnswer = .withoutThisPhone
         phone.clockAhead = week
         await m.checkKeptTransfer()
         #expect(await eventually { m.phase == .signedOut })
@@ -262,6 +281,7 @@ import VettIDDataTesting
         let stored = try #require(m.record.value.transferApprovedAtMs)
         #expect(stored < approved - 2 * 86_400 * 1_000 && m.transferKeptSince != nil && m.phase == .unlocked)
         // 6 days 23 hours after the approval by the real time: more than 7 days after the clock was noticed behind.
+        service.deviceListAnswer = .withoutThisPhone
         phone.clockAhead = week - 3_600
         await m.checkKeptTransfer()
         #expect(await eventually { m.phase == .signedOut })
@@ -273,6 +293,7 @@ import VettIDDataTesting
         try await setUp()
         _ = try await approve()
         #expect(await eventually { !phone.keepPauses.lengths.isEmpty })
+        service.deviceListAnswer = .withoutThisPhone
         phone.clockAhead = week + 60
         phone.keepPauses.release()
         #expect(await eventually { m.phase == .signedOut })

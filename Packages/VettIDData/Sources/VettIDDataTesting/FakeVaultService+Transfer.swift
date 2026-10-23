@@ -31,6 +31,7 @@ struct FakeTransferStore {
     var approved = false
     var tookEffect = true
     var listRequests = 0
+    var listAnswer: FakeVaultService.DeviceListAnswer?
 }
 
 // TEST ONLY. A direct transfer in both directions, as vettid-vault answers it: as the new phone's target
@@ -188,6 +189,21 @@ extension FakeVaultService {
         set { locked { transfer.tookEffect = newValue } }
     }
 
+    /// How the vault answers `device.list` besides its transfer rules (nil: by them).
+    public enum DeviceListAnswer: Sendable {
+        /// An answer whose list does not name this phone.
+        case withoutThisPhone
+        /// An answer that names this phone as a `desktop`, not as the vault's app.
+        case thisPhoneAsDesktop
+        /// A refusal with this code.
+        case refused(String)
+    }
+
+    public var deviceListAnswer: DeviceListAnswer? {
+        get { locked { transfer.listAnswer } }
+        set { locked { transfer.listAnswer = newValue } }
+    }
+
     /// How many `device.list` requests reached the vault after an approval that took effect (never answered).
     public var deviceListsAfterTransfer: Int { locked { transfer.listRequests } }
 
@@ -212,15 +228,26 @@ extension FakeVaultService {
             if transfer.open == id { transfer.open = nil }
             try reply(m.type, "{}", re: m.id)
         case "device.transfer.approve": try transferApprove(m, body)
-        case "device.list":
-            // The vault removes the old app and its session at a completed approval: it cannot answer it any more.
-            if transfer.approved, transfer.tookEffect {
-                transfer.listRequests += 1
-                return
-            }
-            try reply(m.type, #"{"devices":[{"id":"dev-1","kind":"app","state":"active","name":""},{"id":"dev-2","kind":"desktop","state":"active","name":"Work laptop"}]}"#, re: m.id)
+        case "device.list": try deviceListRequest(m)
         default: try connectionsRequest(m, body)
         }
+    }
+
+    /// `device.list`: by the test's switch, else by the transfer's rules.
+    private func deviceListRequest(_ m: Inner) throws {
+        if let answer = transfer.listAnswer {
+            switch answer {
+            case .withoutThisPhone: return try reply(m.type, #"{"devices":[{"id":"dev-2","kind":"desktop","state":"active","name":"Work laptop"}]}"#, re: m.id)
+            case .thisPhoneAsDesktop: return try reply(m.type, #"{"devices":[{"id":"dev-1","kind":"desktop","state":"active","name":""}]}"#, re: m.id)
+            case .refused(let code): return try reply(m.type, "{}", re: m.id, error: code)
+            }
+        }
+        // The vault removes the old app and its session at a completed approval: it cannot answer it any more.
+        if transfer.approved, transfer.tookEffect {
+            transfer.listRequests += 1
+            return
+        }
+        try reply(m.type, #"{"devices":[{"id":"dev-1","kind":"app","state":"active","name":""},{"id":"dev-2","kind":"desktop","state":"active","name":"Work laptop"}]}"#, re: m.id)
     }
 
     private func transferCreate(_ m: Inner) throws {

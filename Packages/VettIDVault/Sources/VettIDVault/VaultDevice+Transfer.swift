@@ -61,6 +61,8 @@ extension VaultDevice {
             }
             let at = Date(timeIntervalSince1970: Double(Self.ms(t)) / 1000)
             let id = Ulid.new(at)
+            // A second code scanned while a transfer is open: the key the first one attested can no longer be bound.
+            if let old = mem.withLock({ alt().transferAttestKeyID }) { try? attester.discard(keyID: old) }
             let attest = try attester.attest(try AltChannel.devattChallenge(requestID: id, vaultID: "", ts: Timestamps.formatMillis(at)))
             // A new attestation is a new key (§11.7.1).
             let profile = JsonBuilder().string("name", mem.withLock { st.name }).bytes()
@@ -71,11 +73,29 @@ extension VaultDevice {
                 setAlt(a)
             }
             // §6.2, §6.7.1 (0.15.0): a transfer's hs.init carries the new app's app key.
-            try await startInit(
-                purpose: .app, ctx: b.inviteID, depositToken: b.token, profile: profile, at: at, deviceAttest: attest, id: id,
-                apiKey: secrets.apiKey, unlockSecret: unlockSecret
-            )
-            try save()
+            do {
+                try await startInit(
+                    purpose: .app, ctx: b.inviteID, depositToken: b.token, profile: profile, at: at, deviceAttest: attest, id: id,
+                    apiKey: secrets.apiKey, unlockSecret: unlockSecret
+                )
+                try save()
+            } catch {
+                discardFailedTransfer(attest, attester)
+                throw error
+            }
+        }
+    }
+
+    /// The `hs.init` could not be sent: the key it attested is bound by no vault (IOS-PLAN §6.2), and the handshake and the
+    /// pinned vault go with it.
+    private func discardFailedTransfer(_ attest: DeviceAttest, _ attester: any Attester) {
+        if let key = attest.iosKeyID { try? attester.discard(keyID: key) }
+        dropPairing()
+        mem.withLock {
+            st.vault = nil
+            var a = alt()
+            a.transferAttestKeyID = nil
+            setAlt(a)
         }
     }
 

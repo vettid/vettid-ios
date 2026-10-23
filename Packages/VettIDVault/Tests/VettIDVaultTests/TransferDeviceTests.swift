@@ -11,6 +11,18 @@ import VettIDCrypto
 /// A direct transfer, the new app's side (VAULT-MESSAGING §6.7.1, §11.14.10): the claim, the attested `hs.init` with the
 /// app key and the unlock secret, the SAS, `device.paired` with the `user_guid`, a rejection, and abandoning. Mirrors
 /// vettid-android `VaultDeviceTest`'s transfer cases.
+/// An attester that remembers which keys were discarded (IOS-PLAN §6.2).
+final class RecordingAttester: Attester, @unchecked Sendable {
+    let inner = TestIOSAttester()
+    private let lock = NSLock()
+    private var gone: [[UInt8]] = []
+    var discarded: [[UInt8]] { lock.withLock { gone } }
+
+    func attest(_ challenge: [UInt8]) throws -> DeviceAttest { try inner.attest(challenge) }
+    func assert(_ signed: AttestSigned) throws -> DeviceAssertion { try inner.assert(signed) }
+    func discard(keyID: [UInt8]) throws { lock.withLock { gone.append(keyID) } }
+}
+
 @Suite struct TransferDeviceTests {
     let base = VaultDeviceTests()
 
@@ -138,6 +150,32 @@ import VettIDCrypto
         let (paired, _) = try await base.pairedDevice()
         try await paired.abandonTransfer()
         #expect(paired.hasVault && paired.deviceID != nil)
+    }
+
+    /// A `hs.init` that could not be sent: the key it attested is bound by no vault, and the handshake and the pinned vault
+    /// go with it.
+    @Test func aFailedDepositDiscardsTheAttestedKey() async throws {
+        let p = try await newDevice()
+        let (d, v) = (p.device, p.vault)
+        let attester = RecordingAttester()
+        let (qr, _) = try code(v, d)
+        base.relay.refuseDeposits = "token_revoked"
+        await #expect(throws: (any Error).self) { try await d.startTransfer(link: try qr.link(), attester: attester) { _, _ in nil } }
+        #expect(attester.discarded.count == 1 && !d.hasVault && d.altState.transferAttestKeyID == nil && d.pairingSas == nil)
+    }
+
+    /// A second code scanned while a transfer is open: the key the first attested can no longer be bound.
+    @Test func aSecondCodeDiscardsTheFirstOnesKey() async throws {
+        let p = try await newDevice()
+        let (d, v) = (p.device, p.vault)
+        let attester = RecordingAttester()
+        let (first, _) = try code(v, d)
+        try await d.startTransfer(link: try first.link(), attester: attester) { _, _ in nil }
+        let firstKey = try #require(d.altState.transferAttestKeyID)
+        let (second, _) = try code(v, d)
+        try await d.startTransfer(link: try second.link(), attester: attester) { _, _ in nil }
+        #expect(attester.discarded == [firstKey])
+        #expect(d.altState.transferAttestKeyID != nil)
     }
 
     @Test func aPairedDeviceDoesNotStartATransfer() async throws {

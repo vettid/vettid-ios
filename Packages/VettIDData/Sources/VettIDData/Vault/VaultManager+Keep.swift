@@ -22,18 +22,22 @@ extension VaultManager {
         case .erase:
             keptTimer?.cancel()
             keptTimer = nil
+            keptCheckPending = true
             await endKeptTransfer()
         case .keep(let remainingMs):
             transferKeptSince = Date(timeIntervalSince1970: Double(at) / 1000)
+            keptCheckPending = false
             keptTimer?.cancel()
             let sleep = config.keepSleep
             keptTimer = Task { @MainActor [weak self] in
+                // A timer replaced before it began must not ask for its wait: the newest one is the one that runs.
+                guard !Task.isCancelled else { return }
                 do {
                     try await sleep(.milliseconds(remainingMs))
                 } catch {
                     return
                 }
-                guard let self else { return }
+                guard !Task.isCancelled, let self else { return }
                 // Not cancelled by the check it runs.
                 self.keptTimer = nil
                 await self.checkKeptTransfer()
@@ -41,51 +45,131 @@ extension VaultManager {
         }
     }
 
-    /// The 7 days are over (owner decision 2026-10-16): before erasing, ONE check with the vault over this phone's own
-    /// session (``stillTheVaultsApp()``). Confirmed: the transfer never took effect, this phone keeps its keys, the kept
-    /// state goes and the member is told (``moveNotDone``). Anything else (the vault no longer lists this phone, a refusal,
-    /// no answer within ``VaultManagerConfig/keptEndCheck``, any failure): this phone's keys are removed, as before. Never
-    /// retried: the bound stays 7 days.
+    /// What the end-of-keep check found (owner decisions of 2026-10-16 and 2026-10-23).
+    enum KeptEndCheck: Equatable {
+        /// The vault answered, and its list names this phone as its app.
+        case listed
+        /// The vault answered with a list that does not name this phone as an `app`: the only definite answer that erases
+        /// (besides the vault's own `device.unlinked{transferred}`).
+        case notListed
+        /// No definite answer (owner decision, 2026-10-23): no answer within ``VaultManagerConfig/keptEndCheck``, the vault
+        /// locked or a lock pending, any refusal or error, a cancellation, the app in or gone to the background (the wait's
+        /// clock runs while it is suspended), a halt. Never erases: this phone keeps its keys, ``keptCheckPending`` says so,
+        /// and the check is made again at each start and foreground, and after a pause, until the vault answers.
+        case notChecked
+    }
+
+    /// What one probe of the vault found, before the check weighs the app's own state.
+    enum KeptProbe: Equatable {
+        case listed, notListed, timedOut, notRun
+    }
+
+    /// How long a check that did not run waits before it is made again while the app is in the foreground (chosen; not
+    /// in the spec).
+    nonisolated static let keptRetryAfter: Duration = .seconds(300)
+
+    /// The 7 days are over (owner decisions of 2026-10-16 and 2026-10-23): a check with the vault over this phone's own
+    /// session (``keptEndCheck()``). Listed: the transfer never took effect, this phone keeps its keys, the kept state goes
+    /// and the member is told (``moveNotDone``), but only once the record has been written. Not listed (an answered list
+    /// without this phone as an `app`): this phone's keys are removed. Not checked: nothing is decided and nothing erased;
+    /// ``keptCheckPending`` stays true and the check is made again.
     func endKeptTransfer() async {
         guard !keptEnding else { return }
         keptEnding = true
         defer { keptEnding = false }
-        let rec = record.generation
         guard record.value.transferApprovedAtMs != nil else { return }
-        if await stillTheVaultsApp() {
+        switch await keptEndCheck() {
+        case .listed:
+            keptCheckPending = false
             keptTimer?.cancel()
             keptTimer = nil
-            _ = try? record.update(since: rec) { $0.transferApprovedAtMs = nil; $0.transferKeepMs = nil }
+            // The record is read again after the wait: a lock during it moved the generation, and a write for the record
+            // as it was before would be dropped. The member is told only when the write was made.
+            let wrote = (try? record.update(since: record.generation) { $0.transferApprovedAtMs = nil; $0.transferKeepMs = nil }) == true
+            guard wrote else { return scheduleKeptRetry() }
             transferKeptSince = nil
             moveNotDone = true
-        } else {
+        case .notListed:
+            guard !halted else { return }
+            keptCheckPending = false
             wipeMovedAway = true
             try? await eraseThisPhone()
+        case .notChecked:
+            scheduleKeptRetry()
         }
     }
 
-    /// `device.list` sent over this phone's end-to-end session with the vault, answered within
-    /// ``VaultManagerConfig/keptEndCheck``: true only when the answer lists this phone as the vault's app
-    /// (``KeptTransfer/stillTheApp(deviceList:deviceID:)``). The answer must be sealed under the session's keys (held only
-    /// by the enclave and this phone) and answer this request's fresh id; the vault removes the old app and its session at
-    /// a completed approval, so it cannot answer it any more.
-    func stillTheVaultsApp() async -> Bool {
+    /// The end of the keep is checked again after a pause, while the app is in the foreground; in the background the next
+    /// return to the foreground does it (``onForeground()``).
+    private func scheduleKeptRetry() {
+        guard !backgrounded, !halted, record.value.transferApprovedAtMs != nil else { return }
+        keptTimer?.cancel()
+        let sleep = config.keepSleep
+        keptTimer = Task { @MainActor [weak self] in
+            do {
+                try await sleep(Self.keptRetryAfter)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled, let self else { return }
+            self.keptTimer = nil
+            await self.checkKeptTransfer()
+        }
+    }
+
+    /// `device.list` sent over this phone's end-to-end session with the vault, opened and answered within
+    /// ``VaultManagerConfig/keptEndCheck`` (as vettid-android's `withTimeout` covers `session()`), and only in the
+    /// foreground: a check during which the app went to the background, or was halted, is ``KeptEndCheck/notChecked`` (the
+    /// wait's clock runs while the app is suspended, so its timer would win on the return). The answer must be sealed under
+    /// the session's keys (held only by the enclave and this phone) and answer this request's fresh id; the vault removes
+    /// the old app and its session at a completed approval, so it cannot answer it any more.
+    func keptEndCheck() async -> KeptEndCheck {
+        guard !backgrounded, !halted else { return .notChecked }
+        let began = moveFlags.book.lifecycle
         let limit = config.keptEndCheck
         let sleep = config.lockTiming.sleep
+        let probe: KeptProbe
+        do {
+            probe = try await withThrowingTaskGroup(of: KeptProbe.self) { group in
+                group.addTask { () async throws -> KeptProbe in await self.probeKeptEnd() }
+                group.addTask { try await sleep(limit); return .timedOut }
+                defer { group.cancelAll() }
+                return try await group.next() ?? .timedOut
+            }
+        } catch {
+            return .notChecked
+        }
+        guard !Task.isCancelled, !backgrounded, !halted, began == moveFlags.book.lifecycle else { return .notChecked }
+        switch probe {
+        case .listed: return .listed
+        case .notListed: return .notListed
+        // No answer (the vault locked, silent, slow): not a definite answer (owner decision, 2026-10-23).
+        case .timedOut, .notRun: return .notChecked
+        }
+    }
+
+    /// The probe: the session, the vault client and the list. Only an answered list is a verdict (``KeptProbe/listed``,
+    /// ``KeptProbe/notListed``); everything else (a cancellation, a lock pending, the iPhone locked, a refusal or an error)
+    /// is ``KeptProbe/notRun``.
+    private func probeKeptEnd() async -> KeptProbe {
         do {
             let s = try await openSession()
-            let id = s.device.deviceID
-            let api = try openApi(s)
-            let list: [DeviceEntry]? = try await withThrowingTaskGroup(of: [DeviceEntry]?.self) { group in
-                group.addTask { try await api.deviceList() }
-                group.addTask { try await sleep(limit); return nil }
-                defer { group.cancelAll() }
-                return try await group.next() ?? nil
+            let api: VaultApi
+            do {
+                api = try openApi(s)
+            } catch let f as VaultFailure where f.code == Self.codeLockPending {
+                return .notRun
             }
-            return KeptTransfer.stillTheApp(deviceList: list, deviceID: id)
+            let list = try await api.deviceList()
+            return KeptTransfer.stillTheApp(deviceList: list, deviceID: s.device.deviceID) ? .listed : .notListed
+        } catch is CancellationError {
+            return .notRun
+        } catch let f as VaultFailure where f.kind == .phoneLocked || f.code == "halted" || f.code == "session_dropped" {
+            return .notRun
         } catch {
-            // Any failure is "not confirmed".
-            return false
+            // A refusal or an error is not the vault's list: no definite answer (owner decision, 2026-10-23; vettid-android
+            // erased on it, and changes to match).
+            return .notRun
         }
     }
 
@@ -96,6 +180,7 @@ extension VaultManager {
         keptTimer = nil
         _ = try? record.update(since: rec) { $0.transferApprovedAtMs = nil; $0.transferKeepMs = nil }
         transferKeptSince = nil
+        keptCheckPending = false
         movedBack = true
     }
 
@@ -113,11 +198,12 @@ extension VaultManager {
     }
 
     /// The `device.unlinked{transferred}` that ends a kept transfer is also an old phone's removal of its keys: it says so
-    /// on the welcome screen (``wipeMovedAway``). Set before the event is handed to ``HolderWatch``, and cleared when the
-    /// event proves nothing.
+    /// on the welcome screen (``wipeMovedAway``). Set before the event is handed to ``HolderWatch``; only ever set, never
+    /// cleared by another event.
     func markMovedAway(_ m: VaultMessage) {
         let reason = VaultJSON.string(m.object, "reason")
-        wipeMovedAway = record.value.transferApprovedAtMs != nil && reason == HolderPolicy.reasonTransferred
+        // Only ever set (as vettid-android does): another `device.unlinked` must not clear it mid-wipe.
+        if record.value.transferApprovedAtMs != nil, reason == HolderPolicy.reasonTransferred { wipeMovedAway = true }
     }
 
     /// The vault's truth about this phone's transfer, read at the start of each session: the 7 days are checked again.
