@@ -273,8 +273,8 @@ struct GrantFacts: View {
 }
 
 /// A share rule's items waiting for the member (§10.12 `share.pending`): ticked items are shared, unticked ones declined
-/// (and not asked again until they gain the rule again). Mirrors vettid-android `ShareFacts`; the rule's tags come with
-/// the share rules (IOS-PLAN §8 I3.2).
+/// (and not asked again until they gain the rule again); the rule's tags say why they were asked. Mirrors vettid-android
+/// `ShareFacts`.
 struct ShareFacts: View {
     @Environment(\.vettIDColors) private var colors
     let decision: ShareDecision
@@ -287,19 +287,24 @@ struct ShareFacts: View {
     }
 
     var body: some View {
+        if !decision.tags.isEmpty {
+            FactLabel(ApprovalsStrings.shareTags)
+            FactValue(decision.tags.joined(separator: ", "))
+        }
         if let r = decision.reason {
             Text(r == "rule" ? ApprovalsStrings.shareReasonRule : ApprovalsStrings.shareReasonTagged)
                 .vettIDFont(.bodyMedium).foregroundStyle(colors.onSurfaceVariant).padding(.bottom, Spacing.s)
         }
         FactLabel(ApprovalsStrings.shareItems)
-        ForEach(decision.items, id: \.itemID) { item($0) }
+        let names = RuleNames.of(decision.rules)
+        ForEach(decision.items, id: \.itemID) { item($0, names) }
         FactNote(text: ApprovalsStrings.shareNote).padding(.top, Spacing.s)
-        if decision.items.contains(where: { $0.askRuleID != nil || $0.shared }) {
+        if decision.items.contains(where: { !$0.alsoIn.isEmpty || $0.askRuleID != nil || $0.shared }) {
             FactNote(text: ApprovalsStrings.shareOneAnswer(who)).accessibilityIdentifier("share_one_answer")
         }
     }
 
-    private func item(_ i: ShareItem) -> some View {
+    private func item(_ i: ShareItem, _ names: [String: RuleNames.Name]) -> some View {
         let on = !excluded.contains(i.itemID)
         return Button { onToggle(i.itemID) } label: {
             HStack(alignment: .top, spacing: Spacing.m) {
@@ -309,7 +314,11 @@ struct ShareFacts: View {
                     Text(i.name.isEmpty ? ApprovalsStrings.shareUnnamed : i.name).vettIDFont(.bodyLarge)
                     if i.sensitivity == "critical" { FactNote(text: ApprovalsStrings.shareUsable) }
                     ForEach(Array(ShareExplanations.of(i, decision).enumerated()), id: \.offset) { _, line in
-                        FactNote(text: ApprovalTexts.shareLine(line, who: who), color: line == .alreadyShared ? colors.error : nil)
+                        FactNote(
+                            text: ApprovalTexts.shareLine(line, in: decision, names: names, who: who),
+                            color: line == .alreadyShared ? colors.error : nil
+                        )
+                        .accessibilityIdentifier("share_item_note_\(i.itemID)")
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

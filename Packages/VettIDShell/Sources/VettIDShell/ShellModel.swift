@@ -77,10 +77,9 @@ public final class ShellModel {
     }
 
     /// The screen a feed item opens (ANDROID-PLAN §4 Notifications, 4), as vettid-android's `openFeedTarget`: Connections,
-    /// History and Settings (the daily check) as drawer destinations, the others over the current screen. A target whose
-    /// screen the iPhone app does not have yet goes to the nearest one (chosen; not in the spec): Shared with you and a
-    /// share rule to the connection's page (IOS-PLAN §8 I3.2). An item opens over the current screen; ``FeedTarget/sheet``
-    /// stays with the Notifications screen's sheet.
+    /// History and Settings (the daily check) as drawer destinations, the others over the current screen: Shared with you
+    /// and a share rule open their own screens (the rule editor, IOS-PLAN §8 I3.2). An item opens over the current screen;
+    /// ``FeedTarget/sheet`` stays with the Notifications screen's sheet.
     public func openFeedTarget(_ t: FeedTarget) {
         switch t {
         case .connections: navigate(.connections)
@@ -97,7 +96,9 @@ public final class ShellModel {
         switch t {
         case .devices: .vaultStatus
         case .approval(let key): .approval(key)
-        case .connection(let id), .sharedWithYou(let id), .shareRule(let id, _): .connection(id)
+        case .connection(let id): .connection(id)
+        case .sharedWithYou(let id): .sharedWithYou(connectionID: id, ask: false)
+        case .shareRule(let id, let ruleID): .ruleEdit(connectionID: id, ruleID: ruleID)
         case .alarm: .alarm
         case .credential: .credential
         case .item(let id): .item(id)

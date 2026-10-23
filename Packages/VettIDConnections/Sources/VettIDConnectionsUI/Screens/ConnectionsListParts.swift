@@ -6,8 +6,15 @@ import VettIDUI
 
 /// Dates and times as the connections screens show them, in the iPhone's zone and locale (vettid-android `Times`).
 enum ConnectTimes {
-    /// A full date and time (details, expiries).
-    static func full(_ d: Date) -> String { d.formatted(date: .abbreviated, time: .shortened) }
+    /// A full date and time (details, expiries), in [zone].
+    static func full(_ d: Date, zone: TimeZone = .current) -> String {
+        d.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened, timeZone: zone))
+    }
+
+    /// A calendar day as lists show it (vettid-android `Times.dayLabel`), in [zone].
+    static func dayLabel(_ d: Date, zone: TimeZone = .current) -> String {
+        d.formatted(Date.FormatStyle(date: .abbreviated, time: .omitted, timeZone: zone))
+    }
 
     /// A list row's date (Proton): the time today, the weekday this week, else the date.
     static func short(_ d: Date, now: Date = Date(), calendar: Calendar = .current) -> String {

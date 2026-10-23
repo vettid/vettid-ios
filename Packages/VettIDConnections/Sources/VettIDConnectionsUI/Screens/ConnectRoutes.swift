@@ -21,6 +21,14 @@ public struct ConnectHost {
     /// A connection's History (ANDROID-PLAN §4 History: the connection preset), from its page; nil while the app has no
     /// History.
     public var onOpenHistory: (@MainActor (String) -> Void)?
+    /// What the connection can see of the member's vault, over its page; nil while the app has no sharing.
+    public var onOpenSharing: (@MainActor (String) -> Void)?
+    /// What the connection shares with the member, over its page.
+    public var onOpenShared: (@MainActor (String) -> Void)?
+    /// A share rule of the connection ((connection, rule); the rule nil: a new one), in the rule editor.
+    public var onOpenShareRule: (@MainActor (String, String?) -> Void)?
+    /// Asking the connection for something (`grant.request`: "Shared with you", the ask opened at once).
+    public var onAskFor: (@MainActor (String) -> Void)?
 
     public init() {}
 }
@@ -191,18 +199,28 @@ public struct ConnectionsRoute: View {
 public struct ConnectionDetailRoute: View {
     private let connectionID: String
     private let connections: any ConnectionsRepository
+    private let sharing: (any SharingRepository)?
     private let host: ConnectHost
     @State private var model: ConnectionDetailViewModel?
 
-    public init(_ connectionID: String, connections: any ConnectionsRepository, host: ConnectHost) {
+    /// [sharing]: what the sharing cards read and delete a rule with; nil while the app has no sharing (no cards).
+    public init(
+        _ connectionID: String, connections: any ConnectionsRepository, sharing: (any SharingRepository)? = nil, host: ConnectHost
+    ) {
         self.connectionID = connectionID
         self.connections = connections
+        self.sharing = sharing
         self.host = host
     }
 
     public var body: some View {
         ConnectionDetailScreen(state: model?.state ?? ConnectionDetailState(connectionID: connectionID), actions: actions)
-            .onAppear { if model == nil { model = ConnectionDetailViewModel(connectionID: connectionID, connections: connections) } }
+            .onAppear {
+                // Back from the rule editor or the shared items: both directions are read again.
+                if let model { model.loadSharing() } else {
+                    model = ConnectionDetailViewModel(connectionID: connectionID, connections: connections, sharing: sharing)
+                }
+            }
     }
 
     private var actions: DetailActions {
@@ -210,6 +228,16 @@ public struct ConnectionDetailRoute: View {
         a.onBack = host.onBack
         a.onMessage = opening(host.onOpenConversation, connectionID)
         a.onHistory = opening(host.onOpenHistory, connectionID)
+        if sharing != nil {
+            let id = connectionID
+            a.onSharing = opening(host.onOpenSharing, id)
+            a.onSharedWithYou = opening(host.onOpenShared, id)
+            if let open = host.onOpenShareRule {
+                a.onShareItems = { open(id, nil) }
+                a.onOpenRule = { open(id, $0) }
+            }
+            a.onAskForSomething = opening(host.onAskFor, id)
+        }
         guard let m = model else { return a }
         a.onFavorite = { m.toggleFavorite() }
         a.onAsk = { m.ask($0) }
@@ -217,6 +245,8 @@ public struct ConnectionDetailRoute: View {
         a.onDismissNotice = { m.dismissNotice() }
         a.onMuteAsks = { m.muteAsks($0) }
         a.onResumeAsks = { m.resumeAsks() }
+        a.onAskDeleteRule = { m.askDeleteRule($0) }
+        a.onDeleteRule = { m.deleteRule() }
         a.onRetry = { m.load() }
         return a
     }

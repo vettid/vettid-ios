@@ -93,6 +93,8 @@ public enum VettIDSymbol: String, CaseIterable, Sendable {
     case document = "doc.text" // Description (a note; a standard item)
     case accountBalanceWallet = "wallet.pass" // AccountBalanceWallet (a crypto wallet)
     case folder = "folder" // Folder (other)
+    case outbox = "arrow.up.doc" // Outbox (what the member shares with a connection)
+    case inbox = "arrow.down.doc" // MoveToInbox (what a connection shares with the member)
     case dragUp = "arrow.up" // ArrowUpward (a field moved up)
     case dragDown = "arrow.down" // ArrowDownward (a field moved down)
 

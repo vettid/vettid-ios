@@ -5,8 +5,8 @@ import VettIDData
 import VettIDUI
 
 /// What the connection detail screen can ask for. Mirrors vettid-android `DetailActions` for what the iPhone has so far:
-/// [onMessage] and [onHistory] stay nil (the action hidden) while the app has no messages or History; member
-/// authentication and sharing come with their rows.
+/// [onMessage] and [onHistory] stay nil (the action hidden) while the app has no messages or History, and the sharing hooks
+/// while it has no sharing; member authentication comes with its row.
 public struct DetailActions {
     public var onBack: @MainActor () -> Void = {}
     public var onMessage: (@MainActor () -> Void)?
@@ -20,15 +20,34 @@ public struct DetailActions {
     public var onMuteAsks: @MainActor (Bool) -> Void = { _ in }
     /// Resumes paused asks, or allows declined ones again (`connection.asks.resume`).
     public var onResumeAsks: @MainActor () -> Void = {}
+    /// What the connection can see of the member's vault (its sharing screen); nil while the app has no sharing.
+    public var onSharing: (@MainActor () -> Void)?
+    /// What the connection shares with the member (its "Shared with you" screen).
+    public var onSharedWithYou: (@MainActor () -> Void)?
+    /// "Add a rule": a new share rule for this connection (§10.12).
+    public var onShareItems: (@MainActor () -> Void)?
+    /// A share rule of this connection's, to change.
+    public var onOpenRule: (@MainActor (String) -> Void)?
+    /// "Ask for something": a `grant.request` of this connection (§10.12).
+    public var onAskForSomething: (@MainActor () -> Void)?
+    /// Asks to delete a share rule (nil: never mind); [onDeleteRule] deletes it once confirmed.
+    public var onAskDeleteRule: @MainActor (ShareRule?) -> Void = { _ in }
+    public var onDeleteRule: @MainActor () -> Void = {}
     /// Reads the connection again after a failed first read.
     public var onRetry: @MainActor () -> Void = {}
 
     public init() {}
+
+    /// The page shows the sharing cards only once the app has a sharing screen for every one of their actions.
+    var hasSharing: Bool {
+        onSharing != nil && onSharedWithYou != nil && onShareItems != nil && onOpenRule != nil && onAskForSomething != nil
+    }
 }
 
 /// A connection (ANDROID-PLAN §4, 0.1.10): titled "First Last" from the names on the peer's VettID account, the display
 /// name secondary; its asks (muted or paused first); the profile shared with you (the names labelled as the account's,
-/// never verified; the extras as self-asserted); when it connected and was last active; and the vault key fingerprint,
+/// never verified; the extras as self-asserted); sharing both ways, "You share with <First>" and "<First> shares with you"
+/// (two cards, active connections only); when it connected and was last active; and the vault key fingerprint,
 /// the lasting identity check. The safety code belongs to the moment of connecting and is not shown here; nor are the
 /// owner's alias and note. The pill holds favourite and remove (confirmed). Mirrors vettid-android
 /// `ConnectionDetailScreen`.
@@ -76,6 +95,15 @@ public struct ConnectionDetailScreen: View {
             destructive: true,
             onConfirm: actions.onConfirm
         )
+        .confirmDialog(
+            isPresented: Binding(get: { state.deleteRule != nil }, set: { if !$0 { actions.onAskDeleteRule(nil) } }),
+            title: ConnectStrings.shareRuleDeleteTitle,
+            message: state.connection?.sharingName.map { ConnectStrings.shareRuleDeleteBody(AccountNames.isolate($0)) }
+                ?? ConnectStrings.shareRuleDeleteUnnamed,
+            confirmLabel: ConnectStrings.shareRuleDelete,
+            destructive: true,
+            onConfirm: actions.onDeleteRule
+        )
         .onChange(of: state.gone, initial: true) { _, gone in if gone { actions.onBack() } }
         .accessibilityIdentifier("connection_detail")
     }
@@ -96,7 +124,7 @@ public struct ConnectionDetailScreen: View {
     }
 }
 
-/// The page under the pill: the header, the notices, the asks, the profile, about, the fingerprint.
+/// The page under the pill: the header, the notices, the asks, the profile, the sharing cards, about, the fingerprint.
 struct DetailContent: View {
     @Environment(\.vettIDColors) private var colors
     @Environment(\.vettIDTimeScale) private var timeScale
@@ -119,6 +147,7 @@ struct DetailContent: View {
                 }
                 if let asks, asks.prominent { asksCard(asks, asksName) }
                 ProfileCard(connection: c)
+                if c.state == .active { sharingCards(c) }
                 if let asks, !asks.prominent { asksCard(asks, asksName) }
                 DetailCard {
                     CardTitle(text: ConnectStrings.detailAbout)
@@ -128,6 +157,18 @@ struct DetailContent: View {
                 if let f = c.keyFingerprint { FingerprintCard(fingerprint: f) }
             }
             .padding(.bottom, 104)
+        }
+    }
+
+    /// Two directions, two cards: what goes out of the vault, what comes in (owner request 2026-10-08, as vettid-android).
+    @ViewBuilder private func sharingCards(_ c: ConnectionInfo) -> some View {
+        if let onShare = actions.onShareItems, let onOpenRule = actions.onOpenRule, let onManage = actions.onSharing,
+           let onAsk = actions.onAskForSomething, let onOpen = actions.onSharedWithYou {
+            OutgoingSharingCard(
+                sharing: state.sharing, first: c.sharingName, onShare: onShare, onOpenRule: onOpenRule, onManage: onManage,
+                onDeleteRule: { actions.onAskDeleteRule($0) }
+            )
+            IncomingSharingCard(sharing: state.sharing, first: c.sharingName, onAsk: onAsk, onOpen: onOpen)
         }
     }
 

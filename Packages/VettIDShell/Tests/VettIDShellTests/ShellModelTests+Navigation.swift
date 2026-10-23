@@ -177,8 +177,8 @@ import VettIDOnboarding
         m.openFeedTarget(.item("i"))
         m.openFeedTarget(.sheet)
         #expect(m.path == [
-            .notifications(archived: false), .conversation("c1"), .connection("c2"), .connection("c3"), .connection("c4"), .alarm,
-            .credential, .vaultStatus, .item("i"),
+            .notifications(archived: false), .conversation("c1"), .connection("c2"), .sharedWithYou(connectionID: "c3", ask: false),
+            .ruleEdit(connectionID: "c4", ruleID: "r"), .alarm, .credential, .vaultStatus, .item("i"),
         ])
         // An item once (a History entry's "Open the item" over the item it opened).
         m.openItem("i")

@@ -414,7 +414,7 @@ public struct AppShell: View {
                 ConnectRoute(destination, connections: connections, requests: connectionRequests, host: connectHost)
             }
         case .connection(let id):
-            if let connections { ConnectionDetailRoute(id, connections: connections, host: connectHost) }
+            if let connections { ConnectionDetailRoute(id, connections: connections, sharing: sharing, host: connectHost) }
         default:
             EmptyView()
         }
@@ -480,6 +480,13 @@ public struct AppShell: View {
         if history != nil, historyExport != nil { h.onOpenHistory = { model.openConnectionHistory($0) } }
         // "Send a message" on a connection's page and after connecting, once the messages are there (IOS-PLAN §8 I2.2).
         if messages != nil { h.onOpenConversation = { model.openConversation($0) } }
+        // The sharing cards of a connection's page, once the Vault's sharing screens are there (IOS-PLAN §8 I3.2).
+        if items != nil, sharing != nil {
+            h.onOpenSharing = { model.openSharing($0) }
+            h.onOpenShared = { model.openShared($0) }
+            h.onOpenShareRule = { model.openRule($0, $1) }
+            h.onAskFor = { model.openShared($0, ask: true) }
+        }
         return h
     }
 
