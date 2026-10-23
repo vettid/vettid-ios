@@ -29,6 +29,8 @@ struct PlainField: View {
     let placeholder: String?
     let text: String
     var isError = false
+    /// A field that grows over these lines (the ask form's reason); nil: one line.
+    var lines: ClosedRange<Int>?
     let onChange: @MainActor (String) -> Void
 
     /// No AutoFill and no "Save Password?" (IOS-PLAN §6.5): the empty content type the secret fields use, so that iOS
@@ -36,7 +38,8 @@ struct PlainField: View {
     static let noAutofill = UITextContentType(rawValue: "")
 
     var body: some View {
-        TextField(placeholder ?? "", text: Binding(get: { text }, set: { onChange($0) }))
+        TextField(placeholder ?? "", text: Binding(get: { text }, set: { onChange($0) }), axis: lines == nil ? .horizontal : .vertical)
+            .lineLimit(lines ?? 1...1)
             .textContentType(Self.noAutofill)
             .vettIDFont(.bodyLarge)
             .frame(minHeight: Spacing.touchTarget)

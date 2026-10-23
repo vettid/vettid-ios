@@ -11,7 +11,7 @@ import VettIDUI
 /// Debug only: the Vault's sharing screens (what a connection can see, a share rule, what a connection shares) in each of
 /// their states with sample data, for the screen catalog and the previews; vettid-android's `ItemsCatalog` `items.sharing…`,
 /// `items.rule_…` and `items.shared_…` entries, under their names. Fixed states with actions that do nothing. The release
-/// check refuses its strings.
+/// check refuses its strings ("Sharing: rules and grants").
 enum ItemsCatalog {
     struct Entry: Identifiable, Sendable {
         let id: String

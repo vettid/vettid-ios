@@ -231,7 +231,20 @@ import VettIDVault
                 promptReason: "Unlock VettID", connections: connections, items: FakeItems(), sharing: FakeSharing()
             ) {}
             #expect(height(shell) > 0)
+            // The destination is the screen itself, never the empty view a missing case would give.
+            let name = String(describing: type(of: shell.itemsDetail(path[0])))
+            #expect(["ConnectionSharingRoute", "RuleEditRoute", "SharedWithYouRoute"].contains { name.contains($0) }, "\(name)")
         }
+        // The Vault's host opens a rule, the sharing screen and what is shared over the page, as the model does.
+        model.path = [.connection("c1")]
+        let shell = AppShell(
+            account: repo, vault: repo, ownerChecks: repo, credential: repo, profiles: repo, appLock: StillAppLock(),
+            model: model, gate: gate, now: now, version: AppVersion(name: "2.0.0", build: 1), installedFrom: .apple,
+            promptReason: "Unlock VettID", connections: connections, items: FakeItems(), sharing: FakeSharing()
+        ) {}
+        shell.itemsHost.onOpenRule("c1", nil)
+        shell.itemsHost.onOpenRule("c1", "r1")
+        #expect(model.path == [.connection("c1"), .ruleEdit(connectionID: "c1", ruleID: nil), .ruleEdit(connectionID: "c1", ruleID: "r1")])
     }
 
     /// Approvals in the placeholder's place, a decision and the Notifications screens over it; the drawer's counts.

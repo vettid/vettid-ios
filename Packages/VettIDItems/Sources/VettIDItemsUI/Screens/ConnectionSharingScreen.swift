@@ -40,7 +40,10 @@ public struct ConnectionSharingRoute: View {
     }
 
     public var body: some View {
-        ConnectionSharingScreen(state: model?.state ?? ConnectionSharingState(connectionID: connectionID), actions: actions(model))
+        ConnectionSharingScreen(
+            state: model?.state ?? ConnectionSharingState(connectionID: connectionID),
+            actions: Self.actions(model, connectionID: connectionID, host: host)
+        )
             .onAppear {
                 if let model { model.load() } else {
                     model = ConnectionSharingViewModel(connectionID: connectionID, sharing: sharing, items: items, connections: connections)
@@ -48,8 +51,7 @@ public struct ConnectionSharingRoute: View {
             }
     }
 
-    private func actions(_ m: ConnectionSharingViewModel?) -> ConnectionSharingActions {
-        let host = host, id = connectionID
+    static func actions(_ m: ConnectionSharingViewModel?, connectionID id: String, host: ItemsHost) -> ConnectionSharingActions {
         var a = ConnectionSharingActions()
         a.onBack = host.onBack
         a.onNewRule = { host.onOpenRule(id, nil) }

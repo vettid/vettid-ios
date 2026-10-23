@@ -248,8 +248,8 @@ struct RuleExistingSwitch: View {
     }
 }
 
-/// The connection's other rules covering the same tags or matched items, named by their tags (§10.12, owner's review of
-/// #181), with the 0.23.0 rule: asking wins (an item any of them asks about is shared only after the member approves it),
+/// The connection's other rules covering the same tags or matched items, named by their tags (VAULT-MESSAGING §10.12;
+/// vettid-android #181), with the 0.23.0 rule: asking wins (an item any of them asks about is shared only after the member approves it),
 /// one answer counts for all of them, and the strictest fetch limits apply. Mirrors vettid-android `OverlapCard`.
 struct RuleOverlapCard: View {
     @Environment(\.vettIDColors) private var colors

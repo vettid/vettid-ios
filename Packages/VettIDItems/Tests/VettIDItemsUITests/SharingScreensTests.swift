@@ -87,6 +87,30 @@ import VettIDUI
         #expect(opened == [nil, "r2"])
     }
 
+    @Test func theConnectionsActionsReachTheViewModelAndTheHost() async {
+        let sharing = FakeSharing()
+        sharing.rulesStored = [license]
+        sharing.given = [GrantView(grantID: "g1", connectionID: "c1", direction: .given, itemRef: "i1", name: "Passport", category: "identity_document")]
+        let vm = ConnectionSharingViewModel(connectionID: "c1", sharing: sharing, items: FakeItems(), connections: FakeConnections())
+        await vm.settle()
+        var opened: [String] = []
+        var host = ItemsHost()
+        host.onOpenRule = { id, rule in opened.append("\(id):\(rule ?? "new")") }
+        var left = 0
+        host.onBack = { left += 1 }
+        let a = ConnectionSharingRoute.actions(vm, connectionID: "c1", host: host)
+        a.onNewRule()
+        a.onOpenRule("r2")
+        a.onBack()
+        #expect(opened == ["c1:new", "c1:r2"] && left == 1)
+        a.onAskRevoke(vm.state.given[0])
+        #expect(vm.state.confirmRevoke?.grantID == "g1")
+        a.onRevoke()
+        await vm.settle()
+        #expect(vm.state.confirmRevoke == nil && sharing.calls.contains("revoke:g1"))
+        a.onDismissError()
+    }
+
     // MARK: - The rule editor
 
     private func edit(_ draft: RuleDraft = RuleDraft(connectionID: "c1"), tags: [String] = ["address", "medical", "travel"]) -> RuleEditState {
@@ -177,6 +201,41 @@ import VettIDUI
             #expect(height(EndPickerSheet(picker: picker, current: nil, actions: date, zone: utc, now: now)) > 0)
             #expect(height(EndPickerSheet(picker: picker, current: Date(timeIntervalSince1970: 1_798_718_400), actions: date, zone: utc, now: now)) > 0)
         }
+    }
+
+    @Test func theRuleActionsReachTheViewModelAndTheHost() async {
+        let sharing = FakeSharing()
+        sharing.registry = TagRegistry(version: 1, tags: [TagView(tag: "medical", items: 1)])
+        let vm = RuleEditViewModel(connectionID: "c1", ruleID: nil, sharing: sharing, items: FakeItems(), connections: FakeConnections(), debounce: .milliseconds(5))
+        await vm.settle()
+        var opened: [String?] = []
+        var left = 0
+        var host = ItemsHost()
+        host.onOpenRule = { _, rule in opened.append(rule) }
+        host.onBack = { left += 1 }
+        let a = RuleEditRoute.actions(vm, connectionID: "c1", host: host)
+        a.onTag("medical")
+        a.onMode(.auto)
+        a.onAskDiscard()
+        #expect(vm.state.confirmDiscard && vm.state.dirty)
+        a.onKeepEditing()
+        #expect(!vm.state.confirmDiscard && left == 0)
+        a.onAskDiscard()
+        a.onDiscard()
+        #expect(!vm.state.confirmDiscard && left == 1)
+        a.onOpenRule("r9")
+        a.onBack()
+        #expect(opened == ["r9"] && left == 2)
+        a.onAskDelete(true)
+        #expect(vm.state.confirmDelete)
+        a.onAskDelete(false)
+        a.onExpiry(.custom)
+        #expect(vm.state.endPicker == .date)
+        a.onCancelEnd()
+        #expect(vm.state.endPicker == nil)
+        a.onSave()
+        await vm.settle()
+        #expect(vm.state.done && sharing.saved.count == 1)
     }
 
     @Test func theRuleRouteWiresTheViewModelAndLeavesWhenDone() async {

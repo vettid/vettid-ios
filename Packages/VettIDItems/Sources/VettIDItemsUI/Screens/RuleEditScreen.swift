@@ -60,7 +60,7 @@ public struct RuleEditRoute: View {
     }
 
     public var body: some View {
-        RuleEditScreen(state: model?.state ?? loadingState, actions: actions(model))
+        RuleEditScreen(state: model?.state ?? loadingState, actions: Self.actions(model, connectionID: connectionID, host: host))
             .onAppear {
                 if model == nil {
                     model = RuleEditViewModel(
@@ -74,8 +74,7 @@ public struct RuleEditRoute: View {
 
     private var loadingState: RuleEditState { RuleEditState(draft: RuleDraft(connectionID: connectionID), loading: true) }
 
-    private func actions(_ m: RuleEditViewModel?) -> RuleEditActions {
-        let host = host, id = connectionID
+    static func actions(_ m: RuleEditViewModel?, connectionID id: String, host: ItemsHost) -> RuleEditActions {
         var a = RuleEditActions()
         a.onBack = host.onBack
         a.onOpenRule = { host.onOpenRule(id, $0) }

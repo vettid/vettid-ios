@@ -100,7 +100,7 @@ public struct SharedWithYouScreen: View {
     private var name: String { ItemsText.sharingName(state.connectionName) }
 
     private var askShown: Binding<Bool> {
-        Binding(get: { state.ask != nil }, set: { if !$0 { actions.onOpenAsk(false) } })
+        Binding(get: { state.ask != nil }, set: { if !$0, state.ask != nil { actions.onOpenAsk(false) } })
     }
 
     public var body: some View {
@@ -137,6 +137,8 @@ public struct SharedWithYouScreen: View {
                     .environment(\.vettIDColors, colors)
             }
         }
+        // A cover closes the form being typed, so that it does not come back when the cover lifts.
+        .closesWhenCovered { if state.ask != nil { actions.onOpenAsk(false) } }
         .confirmDialog(
             isPresented: Binding(get: { state.confirmGiveUp != nil }, set: { if !$0 { actions.onAskGiveUp(nil) } }),
             title: ItemsStrings.sharedGiveUpTitle(state.confirmGiveUp?.name ?? ""), message: ItemsStrings.sharedGiveUpBody(name),
@@ -299,7 +301,7 @@ struct AskSheet: View {
                     .accessibilityIdentifier("ask_label")
             }
             OutlinedInput(caption: ItemsStrings.askReason, supporting: nil) {
-                CappedField(text: form.reason, cap: Utf8Cap.reason) { var f = form; f.reason = $0; actions.onAsk(f) }
+                CappedField(text: form.reason, cap: Utf8Cap.reason, lines: 2...5) { var f = form; f.reason = $0; actions.onAsk(f) }
                     .accessibilityLabel(ItemsStrings.askReason)
                     .accessibilityIdentifier("ask_reason")
             }
@@ -315,17 +317,22 @@ struct CappedField: View {
     let text: String
     let cap: (String) -> String
     let onChange: @MainActor (String) -> Void
+    /// More than one line: the field grows over these lines (Android's reason field); nil: one line.
+    let lines: ClosedRange<Int>?
     @State private var typed: String
 
-    init(text: String, cap: @escaping (String) -> String, onChange: @escaping @MainActor (String) -> Void) {
+    init(
+        text: String, cap: @escaping (String) -> String, lines: ClosedRange<Int>? = nil, onChange: @escaping @MainActor (String) -> Void
+    ) {
         self.text = text
+        self.lines = lines
         self.cap = cap
         self.onChange = onChange
         _typed = State(initialValue: text)
     }
 
     var body: some View {
-        PlainField(placeholder: nil, text: typed) { typed = $0 }
+        PlainField(placeholder: nil, text: typed, lines: lines) { typed = $0 }
             .textInputAutocapitalization(.sentences)
             .onChange(of: typed) { _, now in
                 let kept = cap(now)

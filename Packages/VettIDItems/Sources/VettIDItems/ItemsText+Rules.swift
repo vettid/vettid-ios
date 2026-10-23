@@ -42,7 +42,7 @@ public extension ItemsText {
         return parts.joined(separator: " · ")
     }
 
-    /// A rule as the member reads it (§10.12, owner's review of #181): by its tags, "your “medical” rule" ("medical + id" for
+    /// A rule as the member reads it (VAULT-MESSAGING §10.12; vettid-android #181): by its tags, "your “medical” rule" ("medical + id" for
     /// all, "medical or id" for any), with what tells it apart from another rule of the subject that reads the same.
     static func ruleNamed(_ r: ShareRule, names: [String: RuleNames.Name] = [:], zone: TimeZone = .current) -> String {
         let n = names[r.ruleID] ?? RuleNames.Name(text: RuleNames.text(r))

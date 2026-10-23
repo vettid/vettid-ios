@@ -30,6 +30,8 @@ struct RuleEditDialogs: ViewModifier {
                 title: ItemsStrings.ruleDeleteTitle, message: ItemsStrings.ruleDeleteBody(name), confirmLabel: ItemsStrings.ruleDelete,
                 destructive: true, onConfirm: actions.onDelete
             )
+            // A cover (the app switcher's, or "This phone can't use your vault") ends the pick: it does not come back with it.
+            .closesWhenCovered { if state.endPicker != nil { actions.onCancelEnd() } }
             .sheet(isPresented: uncovered(pickerShown, covered: covered)) {
                 if let picker = state.endPicker {
                     EndPickerSheet(picker: picker, current: state.draft.expiresAt, actions: actions)
@@ -99,7 +101,7 @@ struct EndPickerSheet: View {
         case .date:
             DialogSheet(
                 title: ItemsStrings.ruleExpiry, confirm: ItemsStrings.ruleEndNext,
-                enabled: RuleEnds.selectable(pickedDay, now: now, zone: zone),
+                enabled: RuleEnds.selectable(pickedDay, now: now, zone: zone), confirmID: "rule_end_date_ok",
                 onCancel: actions.onCancelEnd, onConfirm: { actions.onEndDate(pickedDay) }
             ) {
                 DatePicker("", selection: $day, in: days, displayedComponents: .date)
@@ -111,7 +113,8 @@ struct EndPickerSheet: View {
             .accessibilityIdentifier("rule_end_date_sheet")
         case .time:
             DialogSheet(
-                title: ItemsStrings.ruleEndTime, confirm: ItemsStrings.ok, enabled: true, onCancel: actions.onCancelEnd,
+                title: ItemsStrings.ruleEndTime, confirm: ItemsStrings.ok, enabled: true, confirmID: "rule_end_time_ok",
+                onCancel: actions.onCancelEnd,
                 onConfirm: {
                     let c = calendar.dateComponents([.hour, .minute], from: time)
                     actions.onEndTime(c.hour ?? Self.defaultHour, c.minute ?? Self.defaultMinute)
