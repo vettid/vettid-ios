@@ -148,7 +148,7 @@ struct DetailContent: View {
                 }
                 if let asks, asks.prominent { asksCard(asks, asksName) }
                 ProfileCard(connection: c)
-                if c.state == .active { sharingCards(c) }
+                if Self.showsSharing(c, actions) { sharingCards(c) }
                 if let asks, !asks.prominent { asksCard(asks, asksName) }
                 DetailCard {
                     CardTitle(text: ConnectStrings.detailAbout)
@@ -161,19 +161,20 @@ struct DetailContent: View {
         }
     }
 
+    /// Whether the page shows the sharing cards: an active connection, with every sharing hook of the host.
+    static func showsSharing(_ c: ConnectionInfo, _ actions: DetailActions) -> Bool { c.state == .active && actions.hasSharing }
+
     /// Two directions, two cards: what goes out of the vault, what comes in (owner request 2026-10-08, as vettid-android).
     @ViewBuilder private func sharingCards(_ c: ConnectionInfo) -> some View {
-        if actions.hasSharing {
-            OutgoingSharingCard(
-                sharing: state.sharing, first: c.sharingName, onShare: { actions.onShareItems?() },
-                onOpenRule: { actions.onOpenRule?($0) }, onManage: { actions.onSharing?() },
-                onDeleteRule: { actions.onAskDeleteRule($0) }
-            )
-            IncomingSharingCard(
-                sharing: state.sharing, first: c.sharingName, onAsk: { actions.onAskForSomething?() },
-                onOpen: { actions.onSharedWithYou?() }
-            )
-        }
+        OutgoingSharingCard(
+            sharing: state.sharing, first: c.sharingName, onShare: { actions.onShareItems?() },
+            onOpenRule: { actions.onOpenRule?($0) }, onManage: { actions.onSharing?() },
+            onDeleteRule: { actions.onAskDeleteRule($0) }
+        )
+        IncomingSharingCard(
+            sharing: state.sharing, first: c.sharingName, onAsk: { actions.onAskForSomething?() },
+            onOpen: { actions.onSharedWithYou?() }
+        )
     }
 
     private func asksCard(_ asks: AsksView, _ name: String?) -> some View {

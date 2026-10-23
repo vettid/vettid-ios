@@ -129,7 +129,7 @@ import VettIDUI
         }
     }
 
-    @Test func theDetailShowsTheCardsOnlyWithEverySharingHook() {
+    @Test func theDetailShowsTheCardsOnlyWithEverySharingHook() throws {
         var actions = DetailActions()
         #expect(!actions.hasSharing)
         actions.onSharing = {}
@@ -142,15 +142,17 @@ import VettIDUI
         state.connection = ConnectionsScreensTests.connection("c1")
         state.sharing = DetailSharing(rules: [rule1], given: [outGrant], received: [inGrant], loaded: true)
         state.deleteRule = rule1
-        let without = height(ConnectionDetailScreen(state: state, actions: actions))
+        let c = try #require(state.connection)
+        // The page shows the cards only with every hook (the screen fills the window, so its height cannot tell).
+        #expect(!DetailContent.showsSharing(c, actions))
+        #expect(height(ConnectionDetailScreen(state: state, actions: actions)) > 0)
         actions.onAskForSomething = {}
-        #expect(actions.hasSharing)
-        let with = height(ConnectionDetailScreen(state: state, actions: actions))
-        // The two cards are what the hooks add; the page is taller by them.
-        #expect(with > without + 100)
+        #expect(actions.hasSharing && DetailContent.showsSharing(c, actions))
+        #expect(height(ConnectionDetailScreen(state: state, actions: actions)) > 0)
         // Not for a connection that is not active.
-        state.connection?.state = .stale
-        #expect(height(ConnectionDetailScreen(state: state, actions: actions)) < with)
+        var stale = c
+        stale.state = .stale
+        #expect(!DetailContent.showsSharing(stale, actions))
     }
 
     /// The page's actions reach the app's hooks: a new rule, a rule, "Manage", "Ask for something", "See what is shared".
