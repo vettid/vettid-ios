@@ -6,9 +6,10 @@ import VettIDData
 // Fixtures stay on one line each.
 // swiftlint:disable line_length
 
-/// The Vault's texts: every key of vettid-android's `feature/items` `strings.xml` (277 strings) and `strings_sharing.xml`
+/// The Vault's texts: every key of vettid-android's `feature/items` `strings.xml` (278 strings) and `strings_sharing.xml`
 /// (158 strings, 24 plurals) resolves to its own text (0.55.0 adds `items_phone_extension_note` and the plural
-/// `items_share_preview_more`; the iPhone's two secret-item texts are `ios_items_…`), and the tags screen's words.
+/// `items_share_preview_more`, 0.55.5 `items_rule_month`; the iPhone's two secret-item texts are `ios_items_…`), and
+/// the tags screen's words.
 @Suite struct ItemsTextTests {
     @Test func everyStringResolves() throws {
         let url = URL(fileURLWithPath: #filePath)
@@ -16,7 +17,7 @@ import VettIDData
             .appendingPathComponent("Sources/VettIDItems/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let strings = try #require(doc["strings"] as? [String: Any])
-        let expected = 277 + 158 + 24 + 2
+        let expected = 278 + 158 + 24 + 2
         #expect(strings.count == expected)
         let missing = "\u{0}missing"
         for key in strings.keys {
@@ -25,6 +26,32 @@ import VettIDData
             let named = key.hasPrefix("items_") || key.hasPrefix("ios_items_")
             #expect(named, "\(key)")
         }
+    }
+
+    /// VAULT-MESSAGING 0.55.5 §10.7: a month-and-year field names its own form for any invalid value, a full date typed or
+    /// pasted included; a day field keeps the date rule.
+    @Test func aMonthFieldSaysTheMonthRule() {
+        let month = "Enter a month and year, such as 2033-05", day = "Enter a date as YYYY-MM-DD or YYYY-MM"
+        let expires = DraftField(label: "Expires", kind: FieldKinds.date, text: "2033-05-15", monthYear: true)
+        #expect(ItemsText.fieldError(expires, problems: []) == month, "a full date, while typing")
+        #expect(ItemsText.fieldError(expires, problems: [.valueInvalid]) == month)
+        var partial = expires
+        partial.text = "2033-0"
+        #expect(ItemsText.fieldError(partial, problems: []) == month)
+        partial.text = "2033-05"
+        #expect(ItemsText.fieldError(partial, problems: []) == nil)
+        let issued = DraftField(label: "Issued", kind: FieldKinds.date, text: "2033-0")
+        #expect(ItemsText.fieldError(issued, problems: []) == day)
+        #expect(ItemsText.fieldError(DraftField(label: "Issued", kind: FieldKinds.date, text: "2033-05-15"), problems: []) == nil)
+        #expect(ItemsText.problem(.valueInvalid, kind: FieldKinds.date) == day)
+        #expect(ItemsText.kindRule(FieldKinds.date, monthYear: true) == month)
+        // The rest of the field's message is as before: a kept value says nothing while typing, a label's problem comes
+        // first, and another kind says its own rule.
+        var kept = expires
+        kept.kept = true
+        #expect(ItemsText.fieldError(kept, problems: []) == nil)
+        #expect(ItemsText.fieldError(expires, problems: [.labelEmpty, .valueInvalid]) == ItemsText.problem(.labelEmpty))
+        #expect(ItemsText.fieldError(DraftField(label: "Count", kind: FieldKinds.number, text: "4x"), problems: [.valueInvalid]) == ItemsStrings.ruleNumber)
     }
 
     @Test func theTagsScreensWords() {
