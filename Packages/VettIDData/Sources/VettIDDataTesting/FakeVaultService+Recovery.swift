@@ -54,6 +54,8 @@ extension FakeVaultService {
     /// (`409 recovery_not_available`, `409 recovery_unavailable`), or not reaching it.
     public enum RecoveryRegisterAnswer: Sendable {
         case ok, refused(String), apiNotAvailable, apiNoBackup, offline
+        /// The register is taken and applied, but its slot cannot be read (the answer is lost).
+        case answerLostAfterRegistering
     }
 
     /// How the open answers besides the vault's own rules.
@@ -199,7 +201,7 @@ extension FakeVaultService {
         case .offline: return .failure(.notConnectedToInternet)
         case .apiNotAvailable: return .json(409, #"{"error":"recovery_not_available"}"#)
         case .apiNoBackup: return .json(409, #"{"error":"recovery_unavailable"}"#)
-        case .ok, .refused: break
+        case .ok, .refused, .answerLostAfterRegistering: break
         }
         guard let o = try? StrictJson.parseObject(r.body), let rid = try? o.string("request_id"), let env = try? o.base64("envelope"),
               let request = try? openRequest(env), let body = try? StrictJson.parseObject(request.body), let app = try? body.obj("app"),
@@ -225,6 +227,7 @@ extension FakeVaultService {
             result = #"{"ok":true}"#
         }
         slots[rid] = try? Self.sealResult(kem, "vault.recovery.result", rid, result)
+        if case .answerLostAfterRegistering = answer { lostSlots.insert(rid) }
         return .json(202, #"{"vault_id":"\#(vaultID)"}"#)
     }
 

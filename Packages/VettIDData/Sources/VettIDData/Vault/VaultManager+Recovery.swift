@@ -8,10 +8,19 @@ import VettIDVault
 private final class RegisterEpoch: @unchecked Sendable {
     private let lock = NSLock()
     private var id: String?
+    private var madeHere: Bool?
 
     /// [created]: this call made the record; only then is it dropped when the register is refused.
-    func set(_ value: String, created: Bool) { lock.withLock { id = created ? value : nil } }
+    func set(_ value: String, created: Bool) {
+        lock.withLock {
+            id = created ? value : nil
+            madeHere = created
+        }
+    }
+
     var value: String? { lock.withLock { id } }
+    /// Whether no earlier register was built (nil: none was built by this call at all).
+    var created: Bool? { lock.withLock { madeHere } }
 }
 
 /// A secret kept in one buffer, so that wiping it wipes what was sent.
@@ -167,18 +176,18 @@ extension VaultManager {
             return .refused(code: Self.codeNotOffered)
         } catch let e as MemberApiError where e.code == MemberApiError.recoveryUnavailable {
             // 2.1.0: a recovery the enclave refused (no backup copy) is `unavailable`: the register is refused too.
-            try await dropRegistration(s, epoch.value)
+            try await dropRegistration(s, epoch, since: rec)
             return .refused(code: Self.codeNoBackup)
         } catch let e as MemberApiError where e.code == MemberApiError.recoveryNotAvailable {
             _ = e
             result = nil
         }
         guard let r = result else {
-            try await dropRegistration(s, epoch.value)
+            try await dropRegistration(s, epoch, since: rec)
             return .refused(code: Self.codeNotAvailable)
         }
         guard r.ok else {
-            try await dropRegistration(s, epoch.value)
+            try await dropRegistration(s, epoch, since: rec)
             return .refused(code: r.code ?? "retry")
         }
         usesPhoneSecret = phoneSecrets.inUse
@@ -205,12 +214,17 @@ extension VaultManager {
     /// A registration the enclave refused (§11.11.3), or the API did: forgotten, so that a new code can be tried, with the
     /// epoch-1 record it made (the register carried no secret, so no vault holds it; chosen, not in the spec: vettid-android
     /// keeps the phone key).
-    private func dropRegistration(_ s: VaultSession, _ epochID: String?) async throws {
+    ///
+    /// Only when this call made the epoch-1 record, so that no earlier register was built: an earlier one whose answer was lost
+    /// may have succeeded and bound the App Attest key, and this one is refused (`used`, `no_recovery`) because it did. Then the
+    /// registration, the marks and the record stay (chosen; not in the spec: vettid-android drops the registration).
+    private func dropRegistration(_ s: VaultSession, _ epoch: RegisterEpoch, since rec: Int) async throws {
+        guard epoch.created == true else { return }
         try await s.device.dropRecoveryRegistration()
         // Refused for certain: no vault holds the key this register attested.
-        _ = try? record.update(since: record.generation) { $0.recoveryRegistered = false }
+        _ = try? record.update(since: rec) { $0.recoveryRegistered = false }
         config.attestStartOver?.set(recovering: false)
-        if let epochID { _ = try? phoneSecrets.dropPending(id: epochID) }
+        if let epochID = epoch.value { _ = try? phoneSecrets.dropPending(id: epochID) }
         usesPhoneSecret = phoneSecrets.inUse
     }
 
@@ -264,7 +278,9 @@ extension VaultManager {
                 usesPhoneSecret = phoneSecrets.inUse
             }
             _ = try record.update(since: rec) {
-                $0.recoveryOpenUnanswered = false
+                // `no_recovery` after an open that got no answer is the lost-ok signal (§11.14.6): the mark stays until the
+                // resume or a start-over decides (chosen; not in the spec).
+                if r.code != Self.codeNoRecovery { $0.recoveryOpenUnanswered = false }
                 if let used { $0.recoveryAttemptsUsed = used }
             }
             guard r.ok else {
@@ -277,6 +293,8 @@ extension VaultManager {
             return out
         }
     }
+
+    private func clearOpenMark(since rec: Int) { _ = try? record.update(since: rec) { $0.recoveryOpenUnanswered = false } }
 
     /// The member API took an open: until its answer is read, the next answer says that this one may have been right.
     private func noteRecoveryOpenSent(since rec: Int) {
@@ -299,9 +317,14 @@ extension VaultManager {
             let rec = record.generation
             if d.recoveryOpenedNotFinished { return try await finishOpened(s, pin: pin, used: used, resuming: true, since: rec) }
             let u = try await unlockWithSecret(s, pin: pin, options: UnlockOptions(), path: .current)
-            if !u.ok { return RecoveryOpenOutcome(u.result.code ?? "retry", used: used, opened: true, attemptUsed: false) }
+            if !u.ok {
+                // The vault does not hold this phone's secret: no open of this phone was adopted.
+                if u.result.code == UnlockEpoch.deviceSecret { clearOpenMark(since: rec) }
+                return RecoveryOpenOutcome(u.result.code ?? "retry", used: used, opened: true, attemptUsed: false)
+            }
             // A result without `vault_bundle`: this phone is not the one a completed recovery made the app.
             guard d.recoveryOpenedNotFinished else {
+                clearOpenMark(since: rec)
                 return RecoveryOpenOutcome(Self.codeNoBundle, used: used, opened: true, attemptUsed: false)
             }
             var out = try await finishOpened(s, pin: pin, used: used, resuming: false, since: rec)
@@ -327,7 +350,10 @@ extension VaultManager {
         if let refused { return RecoveryOpenOutcome(refused, used: used, opened: true) }
         // Only now, with the credential on this phone, is the recovery over (until then the phone resumes it). The vault was
         // confirmed long ago (§3.5.7): this phone does not wait for `vault.enroll.confirm` (as after a transfer).
-        _ = try record.update(since: rec) { $0.enrollConfirmed = true }
+        _ = try record.update(since: rec) {
+            $0.enrollConfirmed = true
+            $0.recoveryOpenUnanswered = false
+        }
         try await d.finishRecoveryOpen()
         config.attestStartOver?.set(recovering: false)
         return RecoveryOpenOutcome("ok", used: used)

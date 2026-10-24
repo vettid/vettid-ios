@@ -181,6 +181,24 @@ import VettIDDataTesting
         #expect(vm.state.step == .open)
     }
 
+    /// The data layer's refusals of a start over and a registration are kinds of guidance the screens can text.
+    @Test func theRefusalsOfAnOpenThatWentOutAreGuidance() async throws {
+        let vm = await atTheOpen()
+        vault.fail["abandonRecovery"] = VaultFailure(.other, code: MoveCodes.recoveryOpened)
+        vm.askStartOver()
+        vm.confirmStartOver()
+        await vm.settle()
+        #expect(vm.state.guidance == .alreadyRecovered)
+        vault.recoveryStageValue = .code
+        let scanning = await model()
+        vault.fail["registerRecovery"] = VaultFailure(.other, code: VaultManager.codeRecoveryOpenSent)
+        scanning.scan()
+        scanning.scanned(qr)
+        await scanning.settle()
+        #expect(scanning.state.guidance == .finishWithPin && scanning.state.step == .scan)
+        #expect(RecoverState().guidance == nil)
+    }
+
     @Test func startOverIsOfferedOnlyWhereARegistrationIsHeld() async throws {
         let fresh = await model()
         fresh.askStartOver() // the intro: nothing registered, nothing to forget

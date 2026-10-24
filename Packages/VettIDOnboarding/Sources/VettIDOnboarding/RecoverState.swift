@@ -62,6 +62,16 @@ public enum TypedProblem: Equatable, Sendable, CaseIterable {
     case incomplete
 }
 
+/// What a refusal of the data layer asks of the member, for the screens to text (I3.4b has the words; chosen; not in the
+/// spec). Not a ``FailureKind``: the kinds have texts of their own in the data layer.
+public enum RecoverGuidance: Equatable, Sendable {
+    /// `recovery_open_sent`: an open went out and the vault may have adopted this phone: the lost-ok finish ("finish with your
+    /// PIN", ``RecoveryOpenViewModel/finishLostOk()``), not a new registration or a start over.
+    case finishWithPin
+    /// `recovery_opened`: this recovery already succeeded on this phone; finish it, never start over.
+    case alreadyRecovered
+}
+
 /// The state of the recovery flow. The typed entry is held in memory only: never in saved state, on disk, in a log or on the
 /// clipboard, and left out of the description. Mirrors vettid-android `RecoverUiState`.
 public struct RecoverState: Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
@@ -100,6 +110,15 @@ public struct RecoverState: Equatable, Sendable, CustomStringConvertible, Custom
         self.step = step
         self.startOverURL = startOverURL
         self.accountHost = accountHost
+    }
+
+    /// What ``errorCode`` asks of the member, when it is one of the data layer's refusals of a registration or a start over.
+    public var guidance: RecoverGuidance? {
+        switch errorCode {
+        case VaultManager.codeRecoveryOpenSent: .finishWithPin
+        case MoveCodes.recoveryOpened: .alreadyRecovered
+        default: nil
+        }
     }
 
     /// Complete groups of four typed so far (of ``RecoveryCodes/typedGroups``).
