@@ -64,8 +64,10 @@ extension VaultManagerRecoveryTests {
         #expect(m.record.value.recoveryOpenUnanswered)
         let a = await vaultFailure { try await m.abandonRecovery() }
         #expect(a?.code == VaultManager.codeRecoveryOpenUnknown)
-        let r = await vaultFailure { _ = try await m.registerRecovery(try scanned(made)) }
-        #expect(r?.code == VaultManager.codeRecoveryOpenUnknown)
+        // A new code for the same vault is not refused for the undecided verdict (owner decision 2026-10-24; spec text to
+        // follow): here the API has no such recovery any more (`404`), and nothing is changed.
+        let r = try await m.registerRecovery(try scanned(made))
+        #expect(r == .refused(code: VaultManager.codeNoRecovery))
         #expect(m.record.value.recoveryOpenUnanswered && pendingRecord && device?.recovering == true && m.phase != .signedOut)
     }
 

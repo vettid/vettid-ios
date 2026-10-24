@@ -74,7 +74,9 @@ public enum RecoverGuidance: Equatable, Sendable {
     /// be tried again (a start over or a new registration waits for an answer to it). It can also mean the vault has just adopted
     /// it (only the next key is set yet), so the lost-ok finish with the PIN is offered beside another open.
     case tryOpenAgain
-    /// `recovery_open_unknown`: the member API could not say whether the vault adopted this phone: try again in a moment.
+    /// `recovery_open_unknown`: the member API could not say whether the vault adopted this phone: a start over is refused, try
+    /// again in a moment. A new code for the same vault is not refused for it (owner decision 2026-10-24; spec text to follow:
+    /// it is registered with this phone's pending key), so no text of this case forbids scanning one.
     case retry
     /// `recovery_registered`: this phone is registered for another recovery, which a start over ends first.
     case startOverFirst

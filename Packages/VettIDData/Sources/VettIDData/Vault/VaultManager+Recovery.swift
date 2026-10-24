@@ -57,7 +57,9 @@ extension VaultManager {
     /// A start over or a registration while the member API says the recovery is still registered and this phone is not its app:
     /// the open can be tried again.
     public nonisolated static let codeRecoveryOpenPending = "recovery_open_pending"
-    /// A start over or a registration while the member API could not say whether the vault adopted this phone: try again.
+    /// A start over, or a registration for another vault, while the member API could not say whether the vault adopted this
+    /// phone: try again. A new code for the same vault is registered with the same key (owner decision 2026-10-24; spec text to
+    /// follow).
     public nonisolated static let codeRecoveryOpenUnknown = "recovery_open_unknown"
     /// A registration for another recovery while this phone is registered for one (a register of it may have been taken).
     public nonisolated static let codeRecoveryRegistered = "recovery_registered"
@@ -85,9 +87,9 @@ extension VaultManager {
 
     public func registerRecovery(_ code: RecoveryCode) async throws -> RecoveryRegistration {
         try await guarded {
-            let s = try await recoveryStart()
+            let (s, sameKey) = try await recoveryStart(vaultID: code.vaultID)
             // Known beforehand for a scanned code: refused before the claim, which would use one of the API's claim keys.
-            try refuseOtherRecovery(s.device, code.recoveryID)
+            try refuseOtherRecovery(s.device, code.recoveryID, sameKey: sameKey)
             let claimed: Claimed
             do {
                 // §11.11.7: the claim gives this phone's key the right to register, and names the member.
@@ -97,7 +99,7 @@ extension VaultManager {
             } catch let e as MemberApiError {
                 return try Self.claimRefusal(e)
             }
-            return try await registerClaimed(s, code, claimed)
+            return try await registerClaimed(s, code, claimed, sameKey: sameKey)
         }
     }
 
@@ -105,7 +107,8 @@ extension VaultManager {
     /// scan gives, and the register is the scanned one.
     public func registerTypedRecovery(_ typed: TypedRecoveryCode) async throws -> RecoveryRegistration {
         try await guarded {
-            let s = try await recoveryStart()
+            // The vault is known only after the claim: a registration on the same key is checked again then.
+            let (s, sameKey) = try await recoveryStart(vaultID: nil)
             let claimed: Claimed
             do {
                 claimed = try await member.recoveryClaim(locator: typed.locator, appKey: try config.keys.appKeys.getOrCreate().spki())
@@ -113,7 +116,7 @@ extension VaultManager {
                 return try Self.claimRefusal(e)
             }
             let code = try typed.recoveryCode(claimed: claimed, api: apiOrigin)
-            let r = try await registerClaimed(s, code, claimed)
+            let r = try await registerClaimed(s, code, claimed, sameKey: sameKey)
             // A refusal after the claim names the recovery, so that wrong codes are counted per recovery however they were read.
             if case .refused(let refusal, _) = r { return .refused(code: refusal, recoveryID: code.recoveryID) }
             return r
@@ -130,28 +133,47 @@ extension VaultManager {
         }
     }
 
-    /// The session of a registration. One vault per phone: none onto a phone that holds one, or may hold a provisional one
-    /// (``startOverRefusal(_:)``); a phone that is registered already may register again (another code).
-    private func recoveryStart() async throws -> VaultSession {
+    /// The session of a registration, and whether it is a registration on the same key. One vault per phone: none onto a phone
+    /// that holds one, or may hold a provisional one (``startOverRefusal(_:)``); a phone that is registered already may register
+    /// again (another code).
+    ///
+    /// Same key (owner decision 2026-10-24; spec text to follow): while an open went out unanswered
+    /// (``LocalAccount/recoveryOpenUnanswered``) and the member API cannot say whether the vault adopted this phone
+    /// (``OpenMarkVerdict/undecided``), a new code for the same vault is registered with the pending key the open carried.
+    /// Nothing is deleted. [vaultID]: the vault of the code, nil when only the claim names it (then the caller checks it with
+    /// ``requireSameVault(_:sameKey:)``). A start over stays refused (``abandonRecovery()``).
+    private func recoveryStart(vaultID: String?) async throws -> (VaultSession, sameKey: Bool) {
         try prepared()
         let s = try await openSession()
         let d = s.device
         if d.recovering {
             // Opened by the vault's `ok` and not finished: that recovery is finished, not registered again.
             if d.hasVault || d.deviceID != nil { throw VaultFailure(.vaultExists) }
+            var verdict: OpenMarkVerdict?
+            if record.value.recoveryOpenUnanswered {
+                verdict = await openMarkVerdict()
+                if verdict == .undecided, vaultID.map({ $0 == record.value.vaultID }) ?? true { return (s, true) }
+            }
             // An open went out (answered, or not: the vault may have adopted this phone's secret): its record is read here, before
             // a registration resets it, and the pending key stays for the resume. A start over ends it (chosen; not in the spec).
             if record.value.recoveryAttemptsUsed != nil { throw VaultFailure(.other, code: Self.codeRecoveryOpenSent) }
-            try await refuseWhileOpenMarked()
+            if let verdict { throw Self.markRefusal(verdict) }
         } else {
             if d.deviceID != nil { throw VaultFailure(.vaultExists) }
             if let refusal = startOverRefusal(d) { throw refusal }
         }
-        return s
+        return (s, false)
     }
 
-    /// Refuses a register of a recovery other than the one this phone is registered for (a register of it may have been taken).
-    private func refuseOtherRecovery(_ d: VaultDevice, _ recoveryID: String) throws {
+    /// A registration on the same key is for the vault of the unanswered open and no other.
+    private func requireSameVault(_ vaultID: String, sameKey: Bool) throws {
+        if sameKey, vaultID != record.value.vaultID { throw VaultFailure(.other, code: Self.codeRecoveryOpenUnknown) }
+    }
+
+    /// Refuses a register of a recovery other than the one this phone is registered for (a register of it may have been taken),
+    /// unless the registration is on the same key (the open's answer is undecided, ``recoveryStart(vaultID:)``).
+    private func refuseOtherRecovery(_ d: VaultDevice, _ recoveryID: String, sameKey: Bool) throws {
+        if sameKey { return }
         if d.recovering, record.value.recoveryRegistered, let known = d.recoveryID, known != recoveryID {
             throw VaultFailure(.other, code: Self.codeRecoveryRegistered)
         }
@@ -159,11 +181,18 @@ extension VaultManager {
 
     /// After the claim, however the code was read: the sealed `vault.recovery.register` (§11.11.3). The record is the
     /// claim's own, made now; what the registration writes belongs to it.
-    private func registerClaimed(_ s: VaultSession, _ code: RecoveryCode, _ claimed: Claimed) async throws -> RecoveryRegistration {
+    private func registerClaimed(
+        _ s: VaultSession, _ code: RecoveryCode, _ claimed: Claimed, sameKey: Bool
+    ) async throws -> RecoveryRegistration {
+        try requireSameVault(code.vaultID, sameKey: sameKey)
         // A register of another recovery may have been taken (its answer lost) and bound this phone's key: the registration it
         // would overwrite is ended by a start over first (chosen; not in the spec).
-        try refuseOtherRecovery(s.device, code.recoveryID)
-        try resetRecord(LocalAccount(userGuid: claimed.userGuid, vaultID: code.vaultID, emailHint: claimed.emailHint))
+        try refuseOtherRecovery(s.device, code.recoveryID, sameKey: sameKey)
+        var account = LocalAccount(userGuid: claimed.userGuid, vaultID: code.vaultID, emailHint: claimed.emailHint)
+        // The old open is still unanswered: the mark stays until the new open's answer proves the record existed, or completes
+        // (a lost `ok` is then still resumed with the same key). The record's other marks are the new recovery's own.
+        account.recoveryOpenUnanswered = sameKey
+        try resetRecord(account)
         publishAccount()
         let rec = record.generation
         let secrets = phoneSecrets

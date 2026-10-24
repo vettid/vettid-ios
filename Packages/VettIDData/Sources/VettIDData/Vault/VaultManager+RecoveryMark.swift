@@ -44,10 +44,14 @@ extension VaultManager {
     /// new registration. Only an answer that shows the vault adopted this phone, or still holds the recovery, changes the guidance; no answer clears the mark.
     func refuseWhileOpenMarked() async throws {
         guard record.value.recoveryOpenUnanswered else { return }
-        switch await openMarkVerdict() {
-        case .adopted: throw VaultFailure(.other, code: Self.codeRecoveryOpenSent)
-        case .stillRegistered: throw VaultFailure(.other, code: Self.codeRecoveryOpenPending)
-        case .undecided: throw VaultFailure(.other, code: Self.codeRecoveryOpenUnknown)
+        throw Self.markRefusal(await openMarkVerdict())
+    }
+
+    static func markRefusal(_ verdict: OpenMarkVerdict) -> VaultFailure {
+        switch verdict {
+        case .adopted: VaultFailure(.other, code: codeRecoveryOpenSent)
+        case .stillRegistered: VaultFailure(.other, code: codeRecoveryOpenPending)
+        case .undecided: VaultFailure(.other, code: codeRecoveryOpenUnknown)
         }
     }
 }
