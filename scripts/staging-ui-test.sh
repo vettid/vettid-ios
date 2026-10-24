@@ -92,13 +92,16 @@
 #   testStagingItemCreate                Vault -> Add -> a blank item (category Other, protection Data) named
 #                                        VETTID_STAGING_ITEM_LABEL, with one field holding VETTID_STAGING_ITEM_VALUE and
 #                                        the tag VETTID_STAGING_TAG, saved; prints "ITEM_STATE: created|altered|failed|none"
-#                                        (altered: the keyboard capitalizes each word, so give the value so).
+#                                        (altered: the keyboard capitalizes each word, so give the value so; the name
+#                                        field also capitalizes its first letter, so a name that starts in lower case
+#                                        reports altered). The tag is typed as the app keeps it: trimmed, in lower case.
 #   testStagingItemDelete                every item of the Vault whose name starts with VETTID_STAGING_ITEM_LABEL, opened
 #                                        and deleted; prints "ITEM_COUNT: <n>" and "ITEM_STATE: deleted|none|failed".
 #   testStagingRuleCreate                the connection's page (VETTID_STAGING_PEER_NAME) -> "Share" (a new rule): the tag
 #                                        VETTID_STAGING_TAG, the mode VETTID_STAGING_RULE_MODE (ask or auto; ask), the
 #                                        optional VETTID_STAGING_RULE_PER_DAY, "Save rule"; prints
-#                                        "RULE_STATE: saved|failed|none".
+#                                        "RULE_STATE: saved|failed|none"; fails when a rule of the connection already
+#                                        shares the tag. The tag is used in lower case, as the app's chips keep it.
 #   testStagingRuleDelete                the connection's page -> the bin of its rule for VETTID_STAGING_TAG, confirmed;
 #                                        prints "RULE_STATE: deleted|missing|failed".
 #   testStagingAsk                       the connection's page -> "Ask for something": VETTID_STAGING_ASK_CATEGORY
@@ -106,8 +109,11 @@
 #                                        VETTID_STAGING_ASK_REASON; prints "ASK_STATE: sent|failed|none".
 #   testStagingAskStatus                 the connection's "Shared by" screen, read until the ask for
 #                                        VETTID_STAGING_ITEM_LABEL is answered (VETTID_STAGING_WAIT seconds, 60); prints
-#                                        "ASK_STATE: waiting|shared|not_accepted|missing"; fails when
-#                                        VETTID_STAGING_ASK_EXPECT (shared or not_accepted) is set and differs.
+#                                        "ASK_STATE: waiting|shared|not_accepted|missing|unopened"; fails when the
+#                                        screen did not open, or when VETTID_STAGING_ASK_EXPECT (shared or
+#                                        not_accepted) is set and differs. The first row that starts with the label
+#                                        is read: give each run's ask a label of its own (no earlier ask or item
+#                                        of the connection with the same label).
 #   testStagingDecide                    Approvals -> the request from VETTID_STAGING_PEER_NAME of the kind
 #                                        VETTID_STAGING_APPROVAL (grant or share; grant), waited for (VETTID_STAGING_WAIT
 #                                        seconds, 120) and, with VETTID_STAGING_ITEM_LABEL set, the one that names that

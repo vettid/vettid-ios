@@ -130,7 +130,7 @@ extension StagingTests {
 
     /// How the connection answered the ask for `VETTID_STAGING_ITEM_LABEL`: on the connection's "Shared by" screen the
     /// "Ask for something" list, read (the screen opened again every 20 seconds) until the ask is no longer waiting, for up
-    /// to `VETTID_STAGING_WAIT` seconds (60). `ASK_STATE:` is `waiting`, `shared`, `not_accepted` or `missing`; with
+    /// to `VETTID_STAGING_WAIT` seconds (60). `ASK_STATE:` is `waiting`, `shared`, `not_accepted`, `missing` or `unopened` (the screen did not open: the test fails); with
     /// `VETTID_STAGING_ASK_EXPECT` set, any other state fails the test.
     @MainActor
     func testStagingAskStatus() throws {
@@ -147,6 +147,7 @@ extension StagingTests {
         let state = askState(app, peer: peer, label: label, wait: limit)
         print("ASK_STATE: \(state)")
         lock(app)
+        if state == "unopened" { fail(app, "The \"Shared by\" screen did not open.") }
         if let expect, state != expect { fail(app, "The ask is \(state), not \(expect).") }
     }
 

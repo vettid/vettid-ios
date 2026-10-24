@@ -47,6 +47,11 @@ extension StagingTests {
     /// Waiting for a screen's list to settle.
     static let settle: TimeInterval = 30
 
+    /// [tag] as the app's tag chips keep it: without the spaces around it, runs of spaces as one, in lower case.
+    static func normalizedTag(_ tag: String) -> String {
+        tag.split(separator: " ", omittingEmptySubsequences: true).joined(separator: " ").lowercased()
+    }
+
     // MARK: - Reading the screen
 
     /// Everything [element] shows, its descendants included: labels and values, without the bidi marks.
@@ -76,7 +81,9 @@ extension StagingTests {
     ) -> String? {
         for attempt in 0..<10 {
             if attempt > 0 {
-                let list = app.scrollViews.firstMatch
+                // The list itself: on the Vault the first scroll view is the filter chips' row.
+                let items = anyElement(app, "items_list")
+                let list = items.exists ? items : app.scrollViews.firstMatch
                 if attempt < 5 { list.swipeUp(velocity: .slow) } else { list.swipeDown(velocity: .slow) }
             }
             guard let root = try? app.snapshot() else { continue }
@@ -130,7 +137,7 @@ extension StagingTests {
         guard waitForAny(app, ["items_templates"], timeout: 30) != nil else { return "failed" }
         tap(anyElement(app, "items_template_blank"))
         guard waitForAny(app, ["item_edit"], timeout: 30) != nil else { return "failed" }
-        let filled = fillItem(app, label: label, value: value, tag: tag)
+        let filled = fillItem(app, label: label, value: value, tag: Self.normalizedTag(tag))
         guard filled == "filled" else {
             abandonEditor(app)
             return filled
@@ -140,6 +147,8 @@ extension StagingTests {
             abandonEditor(app)
             return "failed"
         }
+        // The page shows the name once the item is loaded.
+        guard waitForAny(app, ["item_name", "item_missing", "item_error"], timeout: Self.network) == "item_name" else { return "failed" }
         return Self.plain(anyElement(app, "item_name").label) == label ? "created" : "failed"
     }
 
@@ -155,6 +164,12 @@ extension StagingTests {
         let data = anyElement(app, "sensitivity_data")
         if data.exists, !data.isSelected { return "failed" }
 
+        let tagField = anyElement(app, "item_edit_tag_input")
+        guard reveal(app, tagField) else { return "failed" }
+        tagField.tap()
+        tagField.typeText(tag + "\n")
+        guard anyElement(app, "item_edit_tags").waitForExistence(timeout: 10) else { return "failed" }
+
         let add = anyElement(app, "item_edit_add_field")
         guard reveal(app, add) else { return "failed" }
         add.tap()
@@ -169,12 +184,7 @@ extension StagingTests {
         field.tap()
         field.typeText(value)
         guard waitUntil(timeout: 5, { (field.value as? String) == value }) else { return "altered" }
-
-        let tagField = anyElement(app, "item_edit_tag_input")
-        guard reveal(app, tagField) else { return "failed" }
-        tagField.tap()
-        tagField.typeText(tag + "\n")
-        return anyElement(app, "item_edit_tags").waitForExistence(timeout: 10) ? "filled" : "failed"
+        return "filled"
     }
 
     struct DeleteResult {
@@ -190,7 +200,11 @@ extension StagingTests {
             result.done = false
             return result
         }
-        _ = waitForAny(app, ["items_list", "items_empty", "items_error", "items_no_match"], timeout: Self.network)
+        guard let listed = waitForAny(app, ["items_list", "items_empty", "items_error", "items_no_match"], timeout: Self.network),
+              listed != "items_error" else {
+            result.done = false
+            return result
+        }
         while result.count < 50 {
             guard let id = findRow(app, idPrefix: "items_row_", { $0.hasPrefix(prefix) }) else { return result }
             guard deleteItem(app, rowID: id, prefix: prefix) else {
@@ -209,6 +223,7 @@ extension StagingTests {
     private func deleteItem(_ app: XCUIApplication, rowID: String, prefix: String) -> Bool {
         tap(anyElement(app, rowID))
         guard waitForAny(app, ["item_detail"], timeout: 30) != nil,
+              waitForAny(app, ["item_name", "item_missing", "item_error"], timeout: Self.network) == "item_name",
               Self.plain(anyElement(app, "item_name").label).hasPrefix(prefix) else {
             tap(app.buttons["top_bar_back"].firstMatch)
             return false
@@ -251,12 +266,19 @@ extension StagingTests {
     /// The "Share" button of the page's card (a new rule), the tag, the mode, the optional daily limit and "Save rule";
     /// `saved` once the page's card lists the rule, `failed` or `none`.
     @MainActor
-    func createRule(_ app: XCUIApplication, tag: String, mode: String, perDay: Int?) -> String {
+    func createRule(_ app: XCUIApplication, tag rawTag: String, mode: String, perDay: Int?) -> String {
+        let tag = Self.normalizedTag(rawTag)
         let share = anyElement(app, "sharing_out_share")
         guard scrollTo(app, share, within: Self.network), share.isEnabled else { return "none" }
         share.tap()
         guard waitForAny(app, ["rule_edit"], timeout: 30) != nil else { return "failed" }
-        // The tags come with the items: a tag no item carries is not offered.
+        // The tags come with the items: a tag no item carries is not offered. A tag another rule of the connection shares
+        // is offered as that rule (it would be opened, not made): the test fails rather than save a different rule.
+        _ = waitUntil(timeout: Self.settle) { shown(app)["rule_tag_\(tag)"] != nil || shown(app)["rule_tag_taken_\(tag)"] != nil }
+        if shown(app)["rule_tag_taken_\(tag)"] != nil {
+            fail(app, "A rule of the connection already shares the tag VETTID_STAGING_TAG.")
+            return leaveRule(app)
+        }
         let chip = anyElement(app, "rule_tag_\(tag)")
         let radio = anyElement(app, "rule_mode_\(mode)")
         guard reveal(app, chip) else { return leaveRule(app) }
@@ -286,7 +308,8 @@ extension StagingTests {
 
     /// The identifier suffix of the page card's rule for [tag], nil if the card lists none.
     @MainActor
-    func ruleRow(_ app: XCUIApplication, tag: String) -> String? {
+    func ruleRow(_ app: XCUIApplication, tag rawTag: String) -> String? {
+        let tag = Self.normalizedTag(rawTag)
         guard let root = try? app.snapshot() else { return nil }
         let prefix = "sharing_rule_row_"
         let hit = ordered(under: root).first { e in
@@ -297,7 +320,8 @@ extension StagingTests {
 
     /// The bin of the page card's rule for [tag] and its confirmation; `deleted`, `missing` or `failed`.
     @MainActor
-    func deleteRule(_ app: XCUIApplication, tag: String) -> String {
+    func deleteRule(_ app: XCUIApplication, tag rawTag: String) -> String {
+        let tag = Self.normalizedTag(rawTag)
         var suffix: String?
         _ = waitUntil(timeout: Self.settle) {
             suffix = ruleRow(app, tag: tag)
@@ -370,20 +394,23 @@ extension StagingTests {
     }
 
     /// The state of the ask for [label] ("<label>: waiting|shared|not accepted" on the "Shared by" screen), read again every
-    /// 20 seconds until it is not `waiting` or [wait] seconds pass; `missing` if no row names it.
+    /// 20 seconds until it is not `waiting` or [wait] seconds pass; `missing` if no row names it, `unopened` when the
+    /// screen did not open. The first row that starts with the label is read: the label of each run must be its own.
     @MainActor
     func askState(_ app: XCUIApplication, peer: String, label: String, wait: TimeInterval) -> String {
         let states = ["waiting": "waiting", "shared": "shared", "not accepted": "not_accepted"]
         let deadline = Date().addingTimeInterval(wait)
         var state = "missing"
         repeat {
-            guard openShared(app, peer: peer) else { return state }
-            _ = waitUntil(timeout: 15) { shown(app)["shared_with_you"] != nil }
-            sleep(3)
-            if let root = try? app.snapshot() {
-                let row = ordered(under: root).map { Self.plain($0.label) }.first { $0.hasPrefix(label + ": ") }
-                state = row.flatMap { states[String($0.dropFirst(label.count + 2))] } ?? "missing"
+            guard openShared(app, peer: peer) else { return "unopened" }
+            // The rows come after the screen: waited for up to the settle time.
+            var row: String?
+            _ = waitUntil(timeout: Self.settle) {
+                guard let root = try? app.snapshot() else { return false }
+                row = ordered(under: root).map { Self.plain($0.label) }.first { $0.hasPrefix(label + ": ") }
+                return row != nil
             }
+            state = row.flatMap { states[String($0.dropFirst(label.count + 2))] } ?? "missing"
             if state == "shared" || state == "not_accepted" || Date() >= deadline { break }
             tap(app.buttons["top_bar_back"].firstMatch)
             sleep(20)

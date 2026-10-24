@@ -55,7 +55,12 @@ extension StagingTests {
     @MainActor
     private func detailNames(_ app: XCUIApplication, _ label: String) -> Bool {
         guard let root = try? app.snapshot() else { return false }
-        return texts(under: root).contains { $0.contains(label) }
+        // The item's or entry's own element (a tick's label, "<name>" or "<name>, <note>"), not any text of the screen.
+        let prefixes = ["share_item_", "grant_entry_"]
+        return ordered(under: root).contains { e in
+            prefixes.contains { e.identifier.hasPrefix($0) } && !e.identifier.hasPrefix("share_item_note_")
+                && texts(under: e).contains { Self.named($0, label) }
+        }
     }
 
     /// The open request: the ticks, then the primary or secondary button; `approved`, `declined` or `not_decided`.
@@ -146,15 +151,22 @@ extension StagingTests {
         var answer = FetchAnswer(found: true)
         let show = anyElement(app, "fetch_\(card)")
         guard scrollTo(app, show, within: 15) else {
-            // No button: the grant is no longer active ("No longer shared").
-            answer.refused = "ended"
-            answer.answered = true
+            // No button at all: the grant is no longer active ("No longer shared"). A button that cannot be reached is
+            // not an answer.
+            if !show.exists {
+                answer.refused = "ended"
+                answer.answered = true
+            } else {
+                fail(app, "The button to fetch the item cannot be reached.")
+            }
             return answer
         }
         show.tap()
-        _ = waitUntil(timeout: Self.network * 2) { refusal(app, card: card) != nil || !show.exists }
+        // Answered: refused, or the button gone from a card that is still there (the fetched values replace it).
+        let shownContent = { !show.exists && snapshotElement(app, id: "received_\(card)") != nil }
+        _ = waitUntil(timeout: Self.network * 2) { refusal(app, card: card) != nil || shownContent() }
         answer.refused = refusal(app, card: card)
-        answer.answered = answer.refused != nil || !show.exists
+        answer.answered = answer.refused != nil || shownContent()
         if answer.refused == nil, answer.answered, let expected, let root = try? app.snapshot(),
            let element = ordered(under: root).first(where: { $0.identifier == "received_\(card)" }) {
             answer.match = texts(under: element).contains { $0.contains(expected) }
