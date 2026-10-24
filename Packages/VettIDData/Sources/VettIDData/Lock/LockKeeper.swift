@@ -100,6 +100,7 @@ public final class LockKeeper {
     @ObservationIgnored private let margin: Duration
     @ObservationIgnored private let sleep: LockSleep
     @ObservationIgnored private let onSaveFailed: @MainActor (any Error) -> Void
+    @ObservationIgnored private let onOpenedAgain: @MainActor (String?) -> Void
     @ObservationIgnored private let gate = AsyncGate()
     @ObservationIgnored private let kick = KickableWait()
     @ObservationIgnored private var retries: Task<Void, Never>?
@@ -114,6 +115,12 @@ public final class LockKeeper {
     @ObservationIgnored private var boundTo: String?
     /// (Release L) The lock ended as ``LockNotice/openedAgain``: this phone stays locked until an unlock here.
     @ObservationIgnored private var held = false
+    /// (Release L) The opening the last lock was bound to when the vault said it was over (`stale_lock`, slot `stale`): a
+    /// `vault.locking` naming it is an old opening's and confirms nothing (``deadUnlockID``). Ends with the next unlock here.
+    @ObservationIgnored private var dead: String?
+    /// When an attempt (or the retries' first one) last began, and whether one runs: the foreground does not start a second.
+    @ObservationIgnored private var attemptRunning = false
+    @ObservationIgnored private var attemptBeganAt: Date?
     /// While an unlock runs: ``asks`` when it began. Evidence from elsewhere does not confirm a lock asked after that:
     /// every unlock first locks a running vault (VAULT-MESSAGING §11.4), so its `vault.locking` and a status read during
     /// it say "locked" about the lock the unlock itself makes, which the unlock then opens again.
@@ -132,8 +139,10 @@ public final class LockKeeper {
         retryNowEvery: Duration = LockKeeper.retryNowEvery,
         relayMargin: Duration = LockKeeper.relayMargin,
         sleep: @escaping LockSleep = realLockSleep,
-        onSaveFailed: @escaping @MainActor (any Error) -> Void = { _ in }
+        onSaveFailed: @escaping @MainActor (any Error) -> Void = { _ in },
+        onOpenedAgain: @escaping @MainActor (String?) -> Void = { _ in }
     ) {
+        self.onOpenedAgain = onOpenedAgain
         self.store = store
         self.attempt = attempt
         self.now = now
@@ -158,6 +167,10 @@ public final class LockKeeper {
     /// The unlock the pending lock is bound to; nil without a pending lock, or for one made as before release L.
     public var boundUnlockID: String? { pending ? boundTo : nil }
 
+    /// (Release L) The unlock the last lock was bound to when it ended as ``LockNotice/openedAgain``, until an unlock here
+    /// succeeds: the vault is no longer under it.
+    public var deadUnlockID: String? { dead }
+
     /// (Release L) The last lock ended as ``LockNotice/openedAgain``, and no unlock here followed: not known locked.
     public var openedAgain: Bool { held }
 
@@ -176,6 +189,8 @@ public final class LockKeeper {
         guard let since = r.pendingSinceMs, !pending else { return }
         epoch += 1
         asks += 1
+        // The retries' first attempt starts at once: the foreground return of the same start does not make another.
+        attemptBeganAt = now()
         boundTo = r.unlockID
         notice = .unconfirmed(askedAt: Date(timeIntervalSince1970: Double(since) / 1000), attempts: 1)
         startRetries(epoch, atOnce: true)
@@ -205,9 +220,13 @@ public final class LockKeeper {
     }
 
     /// (Release L, "Lock it now") Binds the lock [mine], begun unbound, to [unlockID] before its first attempt; nothing if
-    /// another lock or an unlock took its place meanwhile. Nil leaves it unbound (as before L).
-    public func rebind(_ mine: Int, to unlockID: String?) {
+    /// another lock or an unlock took its place meanwhile. Nil leaves it unbound (as before L). [since]: the ``evidenceMark``
+    /// taken before the opening was read; an unlock that began or ended since, or is running, names the opening itself
+    /// (``unlocking(opened:unlockIDOf:_:)`` binds a lock asked meanwhile to it), and a value read before it is not used.
+    public func rebind(_ mine: Int, to unlockID: String?, since: Int? = nil) {
         guard epoch == mine, pending, let unlockID else { return }
+        if let since, since != unlockChanges { return }
+        if unlockBeganAt != nil { return }
         boundTo = unlockID
         write { r in
             var r = r
@@ -275,10 +294,23 @@ public final class LockKeeper {
     /// [retryNowEvery]. Returns whether a try was started.
     @discardableResult
     public func retryNow() -> Bool {
+        retry(consuming: true)
+    }
+
+    /// The return to the foreground (and the start of the process): a pending lock is tried at once, unless an attempt runs or
+    /// began less than [retryNowEvery] ago, and without using up the member's "Try again" (``retryNow()``).
+    @discardableResult
+    public func retryOnForeground() -> Bool {
+        if attemptRunning { return false }
+        if let began = attemptBeganAt, now().timeIntervalSince(began) < Double(retryEvery.milliseconds) / 1000 { return false }
+        return retry(consuming: false)
+    }
+
+    private func retry(consuming: Bool) -> Bool {
         let t = now()
         if !pending { return false }
         if let last = kickedAt, t.timeIntervalSince(last) < Double(retryEvery.milliseconds) / 1000 { return false }
-        kickedAt = t
+        if consuming { kickedAt = t }
         kick.kick()
         return true
     }
@@ -313,6 +345,7 @@ public final class LockKeeper {
         retries = nil
         boundTo = nil
         held = false
+        dead = nil
         relayUntilMs = nil
         write { $0 != LockRecord() ? LockRecord() : nil }
         notice = .none
@@ -346,6 +379,7 @@ public final class LockKeeper {
             let result = try await unlock()
             // A lock asked for while this unlock was on its way is newer than it: it stays, and is tried next.
             if opened(result) {
+                dead = nil
                 if asks == before {
                     epoch += 1
                     retries?.cancel()
@@ -385,6 +419,9 @@ public final class LockKeeper {
         await gate.withLock {
             if epoch != mine || !pending { return !pending }
             let bound = boundTo
+            attemptRunning = true
+            attemptBeganAt = now()
+            defer { attemptRunning = false }
             let outcome: LockOutcome
             do {
                 outcome = try await attempt(first, bound)
@@ -396,7 +433,11 @@ public final class LockKeeper {
             switch outcome {
             // Confirmed before anything failed: the member was never told otherwise.
             case .locked: confirm(late: n > 0)
-            case .openedAgain: end(.openedAgain)
+            case .openedAgain:
+                end(.openedAgain)
+                // The opening this lock was bound to is over: forgotten by the device, and its late notices confirm nothing.
+                dead = bound
+                onOpenedAgain(bound)
             case .unconfirmed: notice = .unconfirmed(askedAt: at, attempts: n + 1)
             }
             return outcome != .unconfirmed

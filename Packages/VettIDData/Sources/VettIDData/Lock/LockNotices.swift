@@ -23,6 +23,10 @@ final class LockNotices {
     /// The vault's current `unlock_id` as this phone knows it, nil when it holds none.
     var current: () -> String? = { nil }
 
+    /// (Release L) The opening the last lock was bound to when the vault said it was over (``LockKeeper/deadUnlockID``); a
+    /// notice that names it is the dead opening's, however late it says it is.
+    var dead: () -> String? = { nil }
+
     /// The last unlock's time; the one kept on the phone at a process start, so that a restart forgets nothing.
     private(set) var openedAt: Date?
 
@@ -53,6 +57,7 @@ final class LockNotices {
     /// Whether [m] is a `vault.locking` from before the vault last opened here (or, by its name, of another opening).
     func stale(_ m: VaultMessage) -> Bool {
         guard m.type == Self.type else { return false }
+        if let named = named(m), let dead = dead(), named == dead { return true }
         if let named = named(m), let mine = current() { return named != mine }
         return stale(type: m.type, ts: m.ts)
     }

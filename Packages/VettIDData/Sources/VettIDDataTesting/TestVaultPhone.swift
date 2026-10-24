@@ -107,6 +107,7 @@ public final class TestVaultPhone {
         set { changeWaits.holding = newValue }
     }
     private let requestTimeout: TimeInterval
+    private let lockStatusWait: TimeInterval
     /// What this phone's wipe erases: its directory and its software keys.
     public let wipeTargets: TestWipeTargets
 
@@ -124,9 +125,13 @@ public final class TestVaultPhone {
 
     /// [requestTimeout]: how long a request waits for its answer before it is sent again (§8.6), for a request of a type
     /// whose answers the test makes go missing (``FakeVaultService/unanswered(_:)``); any other waits at least
-    /// ``roomyRequestTimeout``. [wipes]: false for a build that cannot wipe.
-    public init(service: FakeVaultService, requestTimeout: TimeInterval = 5, wipes: Bool = true) throws {
+    /// ``roomyRequestTimeout``. [wipes]: false for a build that cannot wipe. [lockStatusWait]: how long "Lock it now" waits for the status
+    /// that names the opening (``LockTiming/lockStatusWait``).
+    public init(
+        service: FakeVaultService, requestTimeout: TimeInterval = 5, wipes: Bool = true, lockStatusWait: TimeInterval = 5
+    ) throws {
         self.service = service
+        self.lockStatusWait = lockStatusWait
         self.requestTimeout = requestTimeout
         self.wipes = wipes
         directory = FileManager.default.temporaryDirectory
@@ -141,7 +146,7 @@ public final class TestVaultPhone {
         let waits = Waits(
             requestTimeout: requestTimeout, pauses: changePauses, changeWaits: changeWaits, deletion: deletionPauses,
             transfer: transferPauses, keep: keepPauses, keptEnd: keptEndPauses, deadline: deadlinePauses,
-            collect: collectPauses
+            collect: collectPauses, lockStatusWait: lockStatusWait
         )
         manager = VaultManager(config: try Self.configured(
             service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock,
@@ -164,7 +169,7 @@ public final class TestVaultPhone {
         Waits(
             requestTimeout: requestTimeout, pauses: changePauses, changeWaits: changeWaits, deletion: deletionPauses,
             transfer: transferPauses, keep: keepPauses, keptEnd: keptEndPauses, deadline: deadlinePauses,
-            collect: collectPauses
+            collect: collectPauses, lockStatusWait: lockStatusWait
         )
     }
 
@@ -179,6 +184,7 @@ public final class TestVaultPhone {
         let keptEnd: TestPauses
         let deadline: TestPauses
         let collect: TestPauses
+        let lockStatusWait: TimeInterval
     }
 
     // swiftlint:disable:next function_parameter_count
@@ -193,6 +199,7 @@ public final class TestVaultPhone {
         c.attester = attester
         c.attestStartOver = startOver
         c.requestTimeout = waits.requestTimeout
+        c.lockTiming.lockStatusWait = waits.lockStatusWait
         let short = waits.requestTimeout, roomy = max(waits.requestTimeout, roomyRequestTimeout)
         // Weak: the device outlives the test (its collection and requests end later), and must not keep the fake running.
         c.requestTimeoutOf = { [weak service] in service?.unanswered($0) ?? true ? short : roomy }

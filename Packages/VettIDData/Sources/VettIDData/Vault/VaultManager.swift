@@ -215,7 +215,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         lockGuard = LockGuard(ports: lockPorts, now: config.now, sleep: timing.sleep) { attempt in
             LockKeeper(
                 store: lockFile, attempt: attempt, now: config.now, backoff: timing.backoff, relayMargin: timing.relayMargin,
-                sleep: timing.sleep
+                sleep: timing.sleep, onOpenedAgain: { ref.manager?.forgetUnlockID($0) }
             )
         }
         locking = LockSequence(sleep: timing.sleep)

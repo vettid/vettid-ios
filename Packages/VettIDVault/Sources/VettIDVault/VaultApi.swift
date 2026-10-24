@@ -100,6 +100,14 @@ public struct VaultApi: Sendable {
         return info
     }
 
+    /// A `vault.status`'s `unlock_id` for a lock to be bound to ("Lock it now"): nil when this device learned of an opening
+    /// (an unlock, an enroll, a recovery open) while the answer was on its way, as the answer may name the one before.
+    public func statusUnlockID() async throws -> String? {
+        let mark = device.openingMark()
+        let info = try await status()
+        return device.openingMark() == mark ? info.unlockId : nil
+    }
+
     /// `account.get` (§10.2, §11.13, 0.15.0): the member's account snapshot from the member API, display only.
     public func accountGet() async throws -> AccountView { try VaultJSON.decode(AccountView.self, try await op("account.get")) }
 

@@ -70,8 +70,13 @@ extension VaultManager {
     /// is compared with (release L: the device's current `unlock_id`, which a new process learns at its first status read).
     func resumeLockNotices() {
         lockNotices.current = { [weak self] in self?.session?.device.unlockID }
+        lockNotices.dead = { [weak self] in self?.lockGuard.keeper.deadUnlockID }
         lockNotices.opened(at: record.value.lastOpenedMs.map { Date(timeIntervalSince1970: Double($0) / 1000) })
     }
+
+    /// (Release L) A lock the vault said was over (`stale_lock`): the device forgets that opening's name, if it is still its
+    /// current one, so that no later lock is bound to it.
+    func forgetUnlockID(_ dead: String?) { session?.device.forgetUnlockID(ifEqual: dead) }
 
     /// Whether this phone is held locked: a lock is pending, or one ended because the vault was opened again since.
     public var lockHoldsPhone: Bool { lockGuard.holdsPhone }
@@ -110,6 +115,8 @@ extension VaultManager {
         // Pending, durably and unbound, before anything is read: a tap is never lost to a slow vault or a screen that goes
         // away. The rest runs in a task of its own.
         let mine = beginLock(unlockID: nil)
+        // An unlock that begins or ends before the answer names the opening itself: the answer is then not used.
+        let since = lockGuard.keeper.evidenceMark
         let wait = config.lockTiming.lockStatusWait
         let sleep = config.lockTiming.sleep
         Task { @MainActor [weak self] in
@@ -118,11 +125,12 @@ extension VaultManager {
             let id = await Self.within(wait, sleep: sleep) { [weak self] in
                 await LockAgain.unlockID {
                     guard let s = await self?.lockSession() else { return nil }
-                    return try await s.api.status().unlockId
+                    // Nil also when this device learned of an opening while the answer was on its way.
+                    return try await s.api.statusUnlockID()
                 }
             }
             let keeper: LockKeeper = lockGuard.keeper
-            keeper.rebind(mine, to: id)
+            keeper.rebind(mine, to: id, since: since)
             try? await locking.run(lock: { _ = await keeper.ask(mine) }, after: {})
         }
     }

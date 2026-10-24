@@ -63,11 +63,12 @@ import VettIDVault
         await clock.advance(by: 600_000)
         #expect(vault.attempts.count == 1)
         // Held across a process death: a new process starts with this phone locked, and says so again.
-        let later = keeper(MemoryLockStore(store.record))
+        let laterStore = MemoryLockStore(store.record)
+        let later = keeper(laterStore)
         later.resume()
         #expect(!later.pending && later.holdsPhone)
         #expect(later.notice == .openedAgain)
-        #expect(store.record.held)
+        #expect(laterStore.record.held, "the new process keeps it on the phone")
         // A new lock while held: pending again, and its confirmation ends the hold.
         vault.outcomes = [.locked]
         #expect(await k.ask(k.begin(unlockID: nil)))
@@ -169,6 +170,50 @@ import VettIDVault
         #expect(store.record == LockRecord(), "a lock that is no longer pending is not rebound")
     }
 
+    /// "Lock it now" asked while an unlock is on its way: the unlock binds it to the opening it made; a status answer that
+    /// arrives later (read before that opening, so naming the one before) does not take its place.
+    @Test func aLateStatusAnswerDoesNotRebindALockAskedDuringAnUnlock() async {
+        let k = keeper(backoff: { _ in .seconds(3600) })
+        let opening = "fedcba9876543210fedcba9876543210"
+        var mine = 0
+        var mark = 0
+        _ = await k.unlocking(opened: { $0 }, unlockIDOf: { _ in opening }) {
+            mine = k.begin(unlockID: nil)
+            mark = k.evidenceMark
+            // The status is answered while the unlock runs, under the opening before: not used.
+            k.rebind(mine, to: old, since: mark)
+            return true
+        }
+        #expect(store.record.unlockID == opening, "the unlock named the opening its lock is for")
+        // The answer of the status read arrives after the unlock's result.
+        k.rebind(mine, to: old, since: mark)
+        #expect(store.record.unlockID == opening && k.boundUnlockID == opening)
+        vault.outcomes = [.locked]
+        #expect(await k.ask(mine))
+        #expect(vault.bound == [opening], "the lock names the opening of this phone's own unlock")
+    }
+
+    /// A lock that ends as "opened again" leaves its name dead: told to the device, kept for the notices, ended by an unlock
+    /// here or by abandoning the vault.
+    @Test func aLockThatEndsOpenedAgainLeavesItsNameDead() async {
+        var told: [String?] = []
+        let v = vault
+        let k = LockKeeper(
+            store: store, attempt: { try await v.tryLock($0, $1) }, now: clock.now, backoff: { _ in .seconds(3600) },
+            sleep: clock.sleep, onOpenedAgain: { told.append($0) }
+        )
+        vault.outcomes = [.openedAgain]
+        _ = await k.ask(k.begin(unlockID: old))
+        #expect(told == [old] && k.deadUnlockID == old)
+        _ = await k.unlocking(opened: { $0 }) { true }
+        #expect(k.deadUnlockID == nil && !k.holdsPhone)
+        vault.outcomes = [.openedAgain]
+        _ = await k.ask(k.begin(unlockID: id))
+        #expect(k.deadUnlockID == id)
+        k.abandon()
+        #expect(k.deadUnlockID == nil)
+    }
+
     /// An abandoned vault leaves nothing held.
     @Test func abandoningTheVaultEndsTheHold() async {
         let k = keeper(backoff: { _ in .seconds(3600) })
@@ -256,6 +301,21 @@ import VettIDVault
         #expect(n.stale(named(t0.addingTimeInterval(-1), b)))
     }
 
+    /// The opening a lock was bound to when the vault said it was over is dead: its late notice is dropped, whether or not this
+    /// phone holds a current name, and whatever its time says; a newer name or none is judged as before.
+    @Test func aNoticeNamingTheDeadOpeningIsDropped() {
+        var current: String?
+        let n = LockNotices(opened: t0)
+        n.current = { current }
+        n.dead = { a }
+        #expect(n.stale(named(t0.addingTimeInterval(60), a)), "dead, though later than the last unlock and unjudged by a name")
+        current = b
+        #expect(n.stale(named(t0.addingTimeInterval(60), a)))
+        #expect(!n.stale(named(t0.addingTimeInterval(60), b)), "the newer opening's notice stands")
+        current = nil
+        #expect(!n.stale(named(t0.addingTimeInterval(60), nil)), "without a name: by the time, as before")
+    }
+
     @Test func onlyANoticeNamingTheBoundUnlockConfirmsABoundLock() {
         let n = LockNotices(opened: t0)
         n.current = { b }
@@ -266,5 +326,64 @@ import VettIDVault
         #expect(!n.confirms(named(t0, nil), bound: b))
         #expect(n.confirms(named(t0.addingTimeInterval(1), nil), bound: b))
         #expect(!n.confirms(named(t0.addingTimeInterval(1), nil, type: "vault.held"), bound: nil))
+    }
+}
+
+/// The return to the foreground retries a pending lock, but not over an attempt that runs or just began, and without using up
+/// the member's "Try again".
+@MainActor
+@Suite struct LockForegroundRetryTests {
+    let clock = VirtualClock()
+    let store = MemoryLockStore()
+    let vault: ScriptedLockVault
+
+    init() { vault = ScriptedLockVault(clock: clock) }
+
+    func keeper(_ s: (any LockRecordStore)? = nil) -> LockKeeper {
+        let v = vault
+        return LockKeeper(
+            store: s ?? store, attempt: { try await v.tryLock($0, $1) }, now: clock.now, backoff: { _ in .seconds(3600) },
+            sleep: clock.sleep
+        )
+    }
+
+    @Test func theForegroundDoesNotRaceAnAttemptThatJustBeganAndKeepsTryAgain() async {
+        let k = keeper()
+        _ = await k.ask(k.begin())
+        #expect(vault.attempts.count == 1)
+        await clock.advance(by: 1_000)
+        #expect(!k.retryOnForeground(), "an attempt began a second ago")
+        #expect(k.retryNow(), "the member's Try again is still theirs")
+        await clock.runCurrent()
+        #expect(vault.attempts.count == 2)
+        // Long after, the foreground tries; it does not use up Try again.
+        await clock.advance(by: 60_000)
+        #expect(k.retryOnForeground())
+        await clock.runCurrent()
+        #expect(vault.attempts.count == 3)
+        #expect(!k.retryOnForeground(), "just tried")
+        #expect(k.retryNow(), "Try again within 10 s of the foreground's try works")
+        await clock.runCurrent()
+        #expect(vault.attempts.count == 4)
+    }
+
+    @Test func theForegroundOfAProcessStartDoesNotMakeASecondAttempt() async {
+        _ = keeper().begin()
+        let next = keeper(MemoryLockStore(store.record))
+        next.resume()
+        #expect(!next.retryOnForeground(), "resume() made the attempt at once")
+        await clock.runCurrent()
+        #expect(vault.attempts.count == 1)
+    }
+
+    @Test func theForegroundDoesNotStartATryWhileOneRuns() async {
+        let k = keeper()
+        let forever = TestDeferred<Void>()
+        vault.onAttempt = { try await forever.value() }
+        let asking = Task { @MainActor in await k.ask(k.begin()) }
+        await clock.runCurrent()
+        await clock.advance(by: 60_000)
+        #expect(!k.retryOnForeground(), "an attempt is running")
+        asking.cancel()
     }
 }
