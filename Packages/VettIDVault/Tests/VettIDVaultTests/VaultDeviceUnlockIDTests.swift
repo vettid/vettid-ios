@@ -63,6 +63,20 @@ extension VaultDeviceTests {
         d.noteUnlockID(id, since: d.openingMark())
         #expect(d.unlockID == id, "one asked for since is")
     }
+
+    /// A `vault.status` asked for before an opening and answered after it names the opening before: it is not applied.
+    @Test func aStatusInFlightAcrossAnOpeningDoesNotReplaceTheNewerName() async throws {
+        let (d, v) = try await pairedDevice()
+        let api = VaultApi(device: d)
+        let old = "00112233445566778899aabbccddeeff"
+        let newer = "ffeeddccbbaa99887766554433221100"
+        let status = Task { try await api.status() }
+        let req = try v.open(try await relay.nextDeposit().payload)
+        d.recoveryOpened(unlockID: newer) // an opening came while the request was on its way
+        try await d.handle(try v.seal("vault.status", #"{"vault_id":"\#(v.vaultID)","unlock_id":"\#(old)"}"#, re: req.id, status: Inner.statusOK))
+        _ = try await status.value
+        #expect(d.unlockID == newer)
+    }
 }
 
 // swiftlint:enable line_length
