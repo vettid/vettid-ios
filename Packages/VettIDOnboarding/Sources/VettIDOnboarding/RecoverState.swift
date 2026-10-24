@@ -88,6 +88,14 @@ public struct RecoverState: Equatable, Sendable, CustomStringConvertible, Custom
     /// The account site's "Delete my vault and start over" page (MEMBER-API 2.1.0).
     public static let startOverPath = "/account/vault/deletion/"
 
+    /// The characters of one group of the typed code, and the groups of all of it (``RecoveryCodes``), for the screens.
+    public static let codeGroup = RecoveryCodes.group
+    public static let codeGroups = RecoveryCodes.typedGroups
+
+    /// Whether the typed field keeps [character] (a digit or letter of the code, also after I, L and O are read as 1 and 0); a
+    /// separator or a refused character is not kept.
+    public static func keepsTyped(_ character: Character) -> Bool { !RecoveryCodes.typedInput(String(character)).text.isEmpty }
+
     public var step: RecoverStep = .loading
     /// The account the vault belongs to, masked (`email_hint` from the claim, §11.11.7).
     public var emailHint = ""
@@ -161,6 +169,8 @@ public protocol RecoverActions: AnyObject, Sendable {
     func setTyped(_ v: String)
     /// **Continue** on the typed entry.
     func submitTyped()
+    /// From a code step whose refusal is ``RecoverGuidance``: to the open step.
+    func showOpen()
     /// "Start over" on the open step: asks first (``RecoverState/confirmStartOver``).
     func askStartOver()
     func dismissStartOver()
@@ -181,6 +191,7 @@ public final class NoRecoverActions: RecoverActions {
     public func type() {}
     public func setTyped(_ v: String) {}
     public func submitTyped() {}
+    public func showOpen() {}
     public func askStartOver() {}
     public func dismissStartOver() {}
     public func confirmStartOver() {}

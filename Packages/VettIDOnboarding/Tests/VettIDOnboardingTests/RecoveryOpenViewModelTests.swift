@@ -31,6 +31,19 @@ import VettIDDataTesting
         await vm.settle()
     }
 
+    /// The app leaves the foreground: what was typed goes, the check goes back to the fields, a send under way is left alone.
+    @Test func forgettingTheSecretsEmptiesTheEntriesAndTheCheck() async throws {
+        let vm = await model()
+        vm.setPin("975310")
+        vm.setPassword("correct horse battery")
+        vm.review()
+        #expect(vm.state.step == .check)
+        vm.forgetSecrets()
+        #expect(vm.state.step == .enter && vm.state.pin.isEmpty && vm.state.password.isEmpty && !vm.state.canContinue)
+        vm.review()
+        #expect(vm.state.step == .enter, "nothing is checked or sent without the entries")
+    }
+
     @Test func okShowsTheAttemptsUsedBeforeTheAppOpens() async throws {
         vault.recoveryOpenOutcomes = [RecoveryOpenOutcome("ok", used: 2)]
         let vm = await model()
