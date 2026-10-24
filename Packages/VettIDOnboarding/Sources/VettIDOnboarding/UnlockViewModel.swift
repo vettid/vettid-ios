@@ -56,8 +56,10 @@ public final class UnlockViewModel: UnlockActions {
         if let ownerCheck {
             followers.add(follow(
                 ownerCheck,
-                read: { OwnerCheckFlags(due: $0.ownerCheck?.gated(now()) == true, locked: $0.lockedByOwnerCheck) },
-                apply: { [weak self] _, f in self?.ownerCheck(due: f.due, lockedByChecks: f.locked) }
+                read: {
+                    OwnerCheckFlags(due: $0.ownerCheck?.gated(now()) == true, locked: $0.lockedByOwnerCheck, idle: $0.idleLockedNow(now()))
+                },
+                apply: { [weak self] _, f in self?.ownerCheck(due: f.due, lockedByChecks: f.locked, idleLocked: f.idle) }
             ))
             // The deadline passes by itself while the screen is open: the password is then asked for too.
             followers.add(Task { @MainActor [weak self, weak ownerCheck] in
@@ -68,7 +70,10 @@ public final class UnlockViewModel: UnlockActions {
                         return
                     }
                     guard let self, let repo = ownerCheck else { return }
-                    self.ownerCheck(due: repo.ownerCheck?.gated(now()) == true, lockedByChecks: repo.lockedByOwnerCheck)
+                    self.ownerCheck(
+                        due: repo.ownerCheck?.gated(now()) == true, lockedByChecks: repo.lockedByOwnerCheck,
+                        idleLocked: repo.idleLockedNow(now())
+                    )
                 }
             })
         }
@@ -80,10 +85,12 @@ public final class UnlockViewModel: UnlockActions {
         notesTask?.cancel()
     }
 
-    /// The owner check's state, from its repository (the vault past its deadline, or locked after ten checks).
-    func ownerCheck(due: Bool, lockedByChecks: Bool) {
-        state.checkDue = due || lockedByChecks
+    /// The owner check's state, from its repository (the vault past its deadline, locked after ten checks, or (release L,
+    /// §3.6.8) locked by itself because no check was passed in time: said here, with the unlock and the check on one screen).
+    func ownerCheck(due: Bool, lockedByChecks: Bool, idleLocked: IdleLocked? = nil) {
+        state.checkDue = due || lockedByChecks || idleLocked != nil
         state.lockedByOwnerCheck = lockedByChecks
+        state.idleLocked = idleLocked
     }
 
     // MARK: - Tasks
@@ -434,4 +441,5 @@ public final class UnlockViewModel: UnlockActions {
 private struct OwnerCheckFlags: Equatable, Sendable {
     let due: Bool
     let locked: Bool
+    let idle: IdleLocked?
 }

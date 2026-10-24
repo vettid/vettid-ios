@@ -1,4 +1,5 @@
 import Foundation
+import VettIDData
 
 // The unlock screen, the root screens and the stuck screens: vettid-android `feature/onboarding` `strings.xml`,
 // `strings_owner_check.xml`, the app's `root_*` and core/ui's `core_ui_erase_phone_body`, word for word.
@@ -359,6 +360,33 @@ extension OnboardingStrings {
             defaultValue: """
                 Your vault locked itself after ten wrong daily checks in a row. Unlock it with your PIN; it then asks \
                 for the check again.
+                """,
+            bundle: .module
+        )
+    }
+    /// Release L (VAULT-MESSAGING §3.6.8): the vault locked itself. Title and body as ANDROID-PLAN §4 "Locking the vault"
+    /// part 2 (approved by the owner 2026-10-24), under vettid-android's keys.
+    static var unlockIdleLockedTitle: String {
+        String(localized: "unlock_idle_locked_title", defaultValue: "Your vault locked itself", bundle: .module)
+    }
+    /// [after]: how long past the deadline that was, as the vault ran it ("7 days", "7 hours" on staging); nil: not known.
+    static func unlockIdleLocked(_ after: Int64?) -> String {
+        guard let after else {
+            return String(
+                localized: "unlock_idle_locked_body_unknown",
+                defaultValue: """
+                    You hadn't checked in, so your vault locked. Unlock it with your PIN to carry on. New messages wait for up \
+                    to 14 days.
+                    """,
+                bundle: .module
+            )
+        }
+        let time = IdleLockText.duration(after)
+        return String(
+            localized: "unlock_idle_locked_body",
+            defaultValue: """
+                You hadn't checked in for \(time), so your vault locked. Unlock it with your PIN to carry on. New messages wait \
+                for up to 14 days.
                 """,
             bundle: .module
         )

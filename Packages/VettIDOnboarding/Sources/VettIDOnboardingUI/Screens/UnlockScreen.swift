@@ -269,6 +269,14 @@ struct UnlockNotices: View {
         if state.lockedByOwnerCheck {
             NoticeCard(.urgent, title: OnboardingStrings.unlockOwnerCheckLockedTitle, message: OnboardingStrings.unlockOwnerCheckLockedBody)
                 .accessibilityIdentifier("unlock_owner_check_locked")
+        } else if let idle = state.idleLocked {
+            // (Release L, §3.6.8; ANDROID-PLAN §4 "Locking the vault" part 2) It locked itself: why, then the unlock and the
+            // check on this screen. The staging note where a scaled wait is shown.
+            NoticeCard(
+                .warning, title: OnboardingStrings.unlockIdleLockedTitle,
+                message: OnboardingStrings.unlockIdleLocked(idle.afterSeconds) + (state.stagingNote.map { "\n\n" + $0 } ?? "")
+            )
+            .accessibilityIdentifier("unlock_idle_locked")
         } else if state.checkDue {
             NoticeCard(.info, title: OnboardingStrings.unlockOwnerCheckTitle, message: OnboardingStrings.unlockOwnerCheckBody)
                 .accessibilityIdentifier("unlock_owner_check")

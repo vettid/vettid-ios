@@ -17,6 +17,15 @@ extension OnboardingStrings {
             bundle: .module
         )
     }
+    /// Release L (ANDROID-PLAN §4 "Locking the vault" part 2; approved by the owner 2026-10-24): the held and daily-check
+    /// screens. [when]: a date and time.
+    static func ownerCheckIdleLockAt(_ when: String) -> String {
+        String(
+            localized: "ownercheck_idle_lock_at",
+            defaultValue: "Your vault locks itself on \(when) if you don't check in.",
+            bundle: .module
+        )
+    }
     static var ownerCheckTitleVoluntary: String {
         String(localized: "ownercheck_title_voluntary", defaultValue: "Check now", bundle: .module)
     }
