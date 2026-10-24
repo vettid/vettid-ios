@@ -231,7 +231,7 @@ extension StagingTests {
         // Answered: refused, or the button gone from a card that is still there with its "Stop asking" button (the grant
         // is active, so the fetched values replaced the button, rather than the grant having ended).
         let shownContent = {
-            !show.exists && snapshotElement(app, id: "received_\(card)") != nil && snapshotElement(app, id: "give_up_\(card)") != nil
+            !show.exists && self.snapshotElement(app, id: "received_\(card)") != nil && self.snapshotElement(app, id: "give_up_\(card)") != nil
         }
         _ = waitUntil(timeout: Self.network * 2) { refusal(app, card: card) != nil || shownContent() }
         answer.refused = refusal(app, card: card)
