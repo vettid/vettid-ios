@@ -140,6 +140,8 @@ public struct SettingsRoute: View {
         a.checkNow = { host.onOwnerCheck(false) }
         a.dismissOffer = { m.dismissOffer() }
         a.dismissError = { m.dismissError() }
+        a.setIdleLock = { m.setIdleLock($0) }
+        a.dismissIdleNote = { m.dismissIdleNote() }
         return a
     }
 }

@@ -217,3 +217,18 @@ import VettIDVault
 }
 
 // swiftlint:enable line_length
+
+/// The idle lock's time as the screens and the notification say it. Mirrors vettid-android `FeedNotifierTest`
+/// `durationsAreSaidAsOnTheScreens`.
+@Suite struct IdleLockTextTests {
+    @Test func durationsAreSaidAsOnTheScreens() {
+        #expect(IdleLockText.duration(3_600) == "1 hour")
+        // As the setting names it.
+        #expect(IdleLockText.duration(86_400) == "1 day")
+        #expect(IdleLockText.duration(604_800) == "7 days")
+        #expect(IdleLockText.duration(2_592_000) == "30 days")
+        #expect(IdleLockText.duration(25_200) == "7 hours")
+        #expect(IdleLockText.duration(150) == "150 seconds")
+        #expect(IdleLockText.duration(900) == "15 minutes")
+    }
+}

@@ -12,15 +12,27 @@ public struct OwnerCheckSettingsState: Equatable, Sendable {
     public var offerCheck = false
     /// (STAGING-TIME-SCALE §5.2) The vault's time scale: the interval is shown in real units with its scaled value.
     public var timeScale: UInt64
+    /// (Release L, VAULT-MESSAGING §3.6.8) The idle lock's setting; nil for a vault that does not have it (before L): no row.
+    public var idleLock: IdleLockSetting?
+    /// A longer idle-lock value was just chosen: it takes effect after the next check (said once).
+    public var idleLongerNote = false
 
     public init(
-        view: OwnerCheckView? = nil, busy: Bool = false, error: FailureKind? = nil, offerCheck: Bool = false, timeScale: UInt64 = 1
+        view: OwnerCheckView? = nil, busy: Bool = false, error: FailureKind? = nil, offerCheck: Bool = false, timeScale: UInt64 = 1,
+        idleLock: IdleLockSetting? = nil, idleLongerNote: Bool = false
     ) {
         self.view = view
         self.busy = busy
         self.error = error
         self.offerCheck = offerCheck
         self.timeScale = timeScale
+        self.idleLock = idleLock
+        self.idleLongerNote = idleLongerNote
+    }
+
+    /// [text] for an idle-lock value of [seconds] with its scaled value on a staging vault ("7 days (staging: 7 hours)").
+    public func idleLockText(_ text: String, seconds: Int64) -> String {
+        TimeScales.withStaging(text, TimeInterval(seconds), by: timeScale)
     }
 
     /// [text] for an interval of [hours] with its scaled value on a staging vault ("Every 24 hours (staging: 1 hour)",
@@ -48,6 +60,7 @@ public final class OwnerCheckSettingsViewModel {
     private var busy = false
     private var error: FailureKind?
     private var offerCheck = false
+    private var idleLongerNote = false
 
     @ObservationIgnored private let repo: any OwnerCheckRepository
     @ObservationIgnored private let work = Work()
@@ -56,13 +69,29 @@ public final class OwnerCheckSettingsViewModel {
     public init(repo: any OwnerCheckRepository) {
         self.repo = repo
         work.launch { [repo] in try? await repo.refreshOwnerCheck() }
+        // (Release L) Whether the vault has the idle lock, and its value.
+        work.launch { [repo] in try? await repo.refreshIdleLockSetting() }
     }
 
     deinit { work.cancelAll() }
 
     public var state: OwnerCheckSettingsState {
-        OwnerCheckSettingsState(view: repo.ownerCheck, busy: busy, error: error, offerCheck: offerCheck, timeScale: repo.timeScale)
+        OwnerCheckSettingsState(
+            view: repo.ownerCheck, busy: busy, error: error, offerCheck: offerCheck, timeScale: repo.timeScale,
+            idleLock: repo.idleLockSetting, idleLongerNote: idleLongerNote
+        )
     }
+
+    /// (Release L, VAULT-MESSAGING §3.6.8) The idle lock's value: a shorter one applies at once, a longer one after the next
+    /// check, which the member is told.
+    public func setIdleLock(_ seconds: Int64) {
+        guard let before = repo.idleLockSetting, seconds != before.seconds else { return }
+        act({ repo in try await repo.setIdleLockAfter(seconds: seconds) }, then: { m in
+            if m.repo.idleLockSetting?.afterNextCheck == true { m.idleLongerNote = true }
+        })
+    }
+
+    public func dismissIdleNote() { idleLongerNote = false }
 
     /// A shorter interval applies at once and may put the vault on hold: a check is offered with it.
     public func setIntervalHours(_ hours: Int) {

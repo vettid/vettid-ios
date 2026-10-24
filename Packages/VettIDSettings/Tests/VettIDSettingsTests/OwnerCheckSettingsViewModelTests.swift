@@ -16,7 +16,7 @@ import VettIDDataTesting
     @Test func theVaultsCheckIsReadAtOnce() async {
         let m = OwnerCheckSettingsViewModel(repo: repo)
         await m.settle()
-        #expect(repo.calls == ["refreshOwnerCheck"])
+        #expect(repo.calls == ["refreshOwnerCheck", "refreshIdleLockSetting"])
         #expect(m.state.view == repo.ownerCheck && m.state.intervalHours == 24)
     }
 
@@ -67,5 +67,38 @@ import VettIDDataTesting
         #expect(m.state.error == .ownerCheckRequired && !m.state.offerCheck)
         m.dismissError()
         #expect(m.state.error == nil)
+    }
+
+    /// Release L (§3.6.8): no row for a vault before L; a longer value is said to take effect after the next check.
+    @Test func theIdleLockSettingSaysWhenALongerValueTakesEffect() async {
+        let m = OwnerCheckSettingsViewModel(repo: repo)
+        await m.settle()
+        // A vault before L: no row.
+        #expect(m.state.idleLock == nil)
+        repo.idleLockSetting = IdleLockSetting(seconds: 604_800)
+        m.setIdleLock(86_400)
+        await m.settle()
+        #expect(m.state.idleLock == IdleLockSetting(seconds: 86_400))
+        // Shorter: at once, nothing to say.
+        #expect(!m.state.idleLongerNote)
+        m.setIdleLock(2_592_000)
+        await m.settle()
+        #expect(m.state.idleLongerNote)
+        #expect(m.state.idleLock?.afterNextCheck == true)
+        m.dismissIdleNote()
+        #expect(!m.state.idleLongerNote)
+        // The same value sends nothing.
+        let sent = repo.calls.filter { $0 == "setIdleLockAfter" }.count
+        m.setIdleLock(2_592_000)
+        await m.settle()
+        #expect(repo.calls.filter { $0 == "setIdleLockAfter" }.count == sent)
+    }
+
+    /// The choices on a staging vault show the scaled value beside the real one.
+    @Test func aStagingVaultShowsTheIdleLockAsItRuns() {
+        repo.timeScale = 24
+        let m = OwnerCheckSettingsViewModel(repo: repo)
+        #expect(m.state.idleLockText("7 days", seconds: 604_800) == "7 days (staging: 7 hours)")
+        #expect(OwnerCheckSettingsState().idleLockText("7 days", seconds: 604_800) == "7 days")
     }
 }

@@ -21,7 +21,7 @@ import VettIDUI
             .appendingPathComponent("Sources/VettIDSettingsUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 446)
+        #expect(keys.count == 451)
         let missing = "\u{0}missing"
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)
@@ -42,6 +42,13 @@ import VettIDUI
         #expect(SettingsStrings.ownerCheckEvery(1) == "Every hour")
         #expect(SettingsStrings.ownerCheckEvery(4) == "Every 4 hours")
         #expect(SettingsStrings.ownerCheckNext("Oct 18") == "next by Oct 18")
+        // Release L (VAULT-MESSAGING §3.6.8): the idle lock's setting, as ANDROID-PLAN §4 "Locking the vault" part 2 words it.
+        #expect(SettingsStrings.idleLock == "Lock my vault by itself after")
+        #expect(SettingsStrings.idleLockNextCheck == "This takes effect after your next check.")
+        #expect(SettingsStrings.idleLockBody
+            == "If you don't pass the daily check for this long, your vault locks itself and stops receiving until you unlock it.")
+        #expect(IdleLockSetting.choices.map { OwnerCheckSettingsRows.idleLockUnits($0) }
+            == ["1 hour", "1 day", "7 days", "14 days", "30 days"])
         #expect(SettingsStrings.statusReleaseValue(3, "active") == "Release 3 (active)")
         #expect(SettingsStrings.statusAdvisory
             == "Status comes from the account service and is for information only; your vault's own answers decide.")
@@ -217,6 +224,14 @@ import VettIDUI
             SettingsState(appLockSuggestPasscode: true),
             SettingsState(update: ReleaseUpdateOffer(current: Self.release(4, "retired"), target: Self.release(5))),
         ]
+        // The idle lock's row, also with a longer value waiting and its note, on a staging vault.
+        let idle = [
+            OwnerCheckSettingsState(view: check, idleLock: IdleLockSetting(seconds: 604_800)),
+            OwnerCheckSettingsState(
+                view: check, timeScale: 24, idleLock: IdleLockSetting(seconds: 2_592_000, inForceSeconds: 3_600), idleLongerNote: true
+            ),
+        ]
+        for o in idle { #expect(height(SettingsContent(state: SettingsState(), ownerCheck: o, now: now)) > 0) }
         for s in states {
             #expect(height(SettingsContent(state: s, ownerCheck: OwnerCheckSettingsState(view: check), now: now)) > 0)
             #expect(height(SettingsContent(state: s, now: now)) > 0)
