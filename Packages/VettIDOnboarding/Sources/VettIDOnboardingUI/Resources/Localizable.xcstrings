@@ -3257,7 +3257,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "This phone can't confirm it yet."
+            "value": "This phone can't confirm the deletion."
           }
         }
       }

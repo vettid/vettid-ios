@@ -321,13 +321,13 @@ public protocol VaultRepository: AnyObject, Observable, Sendable {
     /// `pin.change` (§10.6).
     func changePin(pin: String, newPin: String) async throws
 
-    /// `vault.delete` (§12.5): irreversible. After the vault's answer VettID's data on this phone is erased and ``phase`` is
-    /// ``AppPhase/signedOut``. No answer, and the member API not yet showing the vault gone: ``FailureKind/noResponse``
-    /// with code `delete_unconfirmed` (``checkVaultDeleted()`` asks again).
+    /// `vault.delete` (§12.5): irreversible. After the vault's answer ``phase`` is ``AppPhase/deleting`` (nothing is erased
+    /// until the member confirms "Remove from this phone"). No answer, and the vault's `device.unlinked{vault_deleted}` not
+    /// seen: ``FailureKind/noResponse`` with code `delete_unconfirmed` (``checkVaultDeleted()`` asks again).
     func deleteVault(pin: String, password: String) async throws
 
-    /// After a deletion whose answer was lost: what the member API now says (``DeletionCheck``; gone: VettID's data on
-    /// this phone is erased). Nothing is sent to the vault. Default: ``DeletionCheck/undecided``.
+    /// After a deletion whose answer was lost: what the member API now says (``DeletionCheck``). Nothing is sent to the
+    /// vault and nothing is erased. Default: ``DeletionCheck/undecided``.
     func checkVaultDeleted() async throws -> DeletionCheck
 
     /// A recovery in progress, from `GET /api/vault/status` (it is cancelled on the account portal, or by an unlock).
@@ -582,7 +582,7 @@ public enum MoveCodes {
 
 /// What a check after a deletion whose answer was lost found (chosen; not in the spec).
 public enum DeletionCheck: Equatable, Sendable {
-    /// The member API says explicitly that the account has no vault: it deleted itself, and VettID's data on this phone was erased.
+    /// A definite word that the vault is gone. Nothing produces it yet (`{vault: null}` is advisory, owner decision 2026-10-24).
     case deleted
     /// The vault is still listed more than a minute after the deletion's `exp`, by the vault's clock: no copy of it can
     /// apply any more. Nothing was deleted; the member may try again.

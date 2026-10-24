@@ -2,25 +2,27 @@ import Foundation
 import VettIDVault
 
 // Delete vault (VAULT-MESSAGING §12.5, `vault.delete` by the holder) and what follows it on this phone. Mirrors
-// vettid-android `VaultManager.deleteVault` and `afterVaultDeleted`.
+// vettid-android `VaultManager.deleteVault` (and its unmerged branch `fix/no-erase-on-401`).
+//
+// Owner decision, 2026-10-24: nothing here erases VettID's data on this phone by itself. The vault's answer to
+// `vault.delete` starts "being deleted" (IOS-PLAN §4.2, ``enterDeleting(expOnPhone:)``), as its sealed
+// `device.unlinked{vault_deleted}` does; from there the member API's answers never erase (``DeletionRead``), and past the
+// bound the member confirms "Remove from this phone".
 //
 // A lost answer (chosen; not in the spec, which is silent on it): the vault may have deleted itself while this phone
-// heard nothing. Its relay mailbox is then gone and nothing answers again, so a retry would wait in vain. The request
-// carries an `exp` (10 minutes on the vault's clock), so that a copy waiting in a locked vault's mailbox never applies
-// after it. After no answer the app asks the member API (`GET /api/vault/status`): an explicit "no vault" right after the
-// member's confirmed deletion means it applied, and VettID's data on this phone is erased as after the vault's own answer; the vault still
-// listed more than a minute after `exp` means it did not and never will; anything else is undecided
-// (``codeDeleteUnconfirmed``): the screen says so and offers to check again (nothing sent to the vault) besides a new try.
-// `device.unlinked{vault_deleted}` opens "being deleted" (IOS-PLAN §4.2, ``enterDeleting(expOnPhone:)``), which waits
-// for the member API to no longer list the vault, so the member is never stuck.
+// heard nothing. The request carries an `exp` (10 minutes on the vault's clock), so that a copy waiting in a locked
+// vault's mailbox never applies after it. After no answer the deletion is undecided (``codeDeleteUnconfirmed``) unless the
+// vault's `device.unlinked{vault_deleted}` came meanwhile (then "being deleted"). The screen says so and offers to check
+// again (nothing sent to the vault) besides a new try. The member API's `{vault: null}` (advisory) decides nothing: the
+// vault still listed more than a minute after `exp` means it did not and never will.
 extension VaultManager {
     /// The code of a deletion whose answer was lost and which the member API did not yet show as done.
     public nonisolated static let codeDeleteUnconfirmed = "delete_unconfirmed"
 
     /// `vault.delete` (§12.5) with the PIN and the credential password: irreversible; the screen confirms first. After the
-    /// vault's answer VettID's data on this phone is erased (the welcome screen follows, as a new vault needs a new setup code). Refused
+    /// vault's answer "being deleted" starts (nothing is erased until the member confirms the removal). Refused
     /// while a change of PIN or password is unresolved (§11.14.9 step 2: a credential operation). Runs to its end even if
-    /// the caller is cancelled: a deletion that applied always erases VettID's data here. A vault with a credential but no
+    /// the caller is cancelled: a deletion that applied always starts "being deleted" here. A vault with a credential but no
     /// holder refuses it `credential_required{reason: "no_holder"}` (VAULT-MESSAGING 0.54.0 §3.5.9, §10.2): the root screen
     /// "This phone can't use your vault" (``noted(_:since:resend:)``), nothing erased.
     public func deleteVault(pin: String, password: String) async throws {
@@ -31,17 +33,15 @@ extension VaultManager {
         guard try await task.value else { throw VaultFailure(.noResponse, code: Self.codeDeleteUnconfirmed) }
     }
 
-    /// After a deletion whose answer was lost (in this process): what the member API says now (``DeletionCheck``), VettID's
-    /// data on this phone erased when the vault is gone. Nothing is sent to the vault. Without such a deletion: undecided (the root's
-    /// "no vault" screen decides then).
+    /// After a deletion whose answer was lost (in this process): what the member API says now (``DeletionCheck``). Nothing is
+    /// sent to the vault and nothing is erased: `{vault: null}` is advisory, so it stays undecided; the vault still listed
+    /// after the deadline is ``DeletionCheck/notDeleted``. Without such a deletion: undecided (the root's "no vault"
+    /// screen decides then).
     public func checkVaultDeleted() async throws -> DeletionCheck {
         guard let pending = deleteUnanswered else { return .undecided }
         let task = Task { @MainActor [weak self] () -> DeletionCheck in
             guard let self else { return .undecided }
             switch await vaultListed() {
-            case false?:
-                await afterVaultDeleted()
-                return .deleted
             case true? where pending.passed(config.uptime()):
                 deleteUnanswered = nil
                 return .notDeleted
@@ -52,8 +52,8 @@ extension VaultManager {
         return await task.value
     }
 
-    /// One deletion: true when VettID's data on this phone was erased after it (or, its answer lost, the vault said it is
-    /// being deleted: IOS-PLAN §4.2), false when its answer was lost and it is undecided.
+    /// One deletion: true when "being deleted" started after it (the vault answered, or, its answer lost, said it is being
+    /// deleted: IOS-PLAN §4.2), false when its answer was lost and it is undecided. Nothing is erased here.
     private func deleteOnce(pin: String, password: String) async throws -> Bool {
         ownDelete = OwnDelete()
         defer { ownDelete = nil }
@@ -65,11 +65,12 @@ extension VaultManager {
             if ownDeleteUnlinked() { return true }
             throw error
         }
-        if !answered, await vaultListed() != false {
-            // The vault's `device.unlinked{vault_deleted}` came meanwhile: the deletion applied; wait for the member API.
+        guard answered else {
+            // The vault's `device.unlinked{vault_deleted}` came meanwhile: the deletion applied. `{vault: null}` decides nothing.
             return ownDeleteUnlinked()
         }
-        await afterVaultDeleted()
+        deleteUnanswered = nil
+        enterDeleting(expOnPhone: ownDelete?.expOnPhone)
         return true
     }
 

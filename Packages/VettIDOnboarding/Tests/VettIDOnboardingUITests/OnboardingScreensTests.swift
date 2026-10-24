@@ -47,7 +47,7 @@ import VettIDUI
 
     @Test func theTextsAreAndroids() {
         // A vault being deleted: the texts of vettid-android's unmerged branch `fix/no-erase-on-401`.
-        #expect(OnboardingStrings.vaultDeletingUnconfirmed == "This phone can't confirm it yet.")
+        #expect(OnboardingStrings.vaultDeletingUnconfirmed == "This phone can't confirm the deletion.")
         #expect(OnboardingStrings.vaultDeletingRemove == "Remove from this phone")
         #expect(OnboardingStrings.vaultDeletingRemoveConfirmTitle == "Remove VettID from this phone?")
         #expect(OnboardingStrings.vaultDeletingRemoveConfirm == "Remove")

@@ -214,7 +214,7 @@ public final class FakeVaultService: @unchecked Sendable {
     /// The vault deleted itself (§12.5): it answers nothing more and its mailbox refuses every deposit.
     var vaultDeletedValue = false
     var statusLagsDeletionValue = false
-    /// `GET /api/vault/status` answers `401 unauthorized` (the row, and with it the app key, removed).
+    /// `GET /api/vault/status` answers a bare `401 unauthorized` (a deleted vault's, but also a clock, nonce or key fault).
     var statusUnauthorizedValue = false
     /// `GET /api/vault/status` answers `403 forbidden`.
     var statusForbiddenValue = false

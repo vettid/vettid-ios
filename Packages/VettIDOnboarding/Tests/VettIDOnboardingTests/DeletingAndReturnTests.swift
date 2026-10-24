@@ -77,7 +77,7 @@ import VettIDDataTesting
         #expect(!vm.state.slow)
         vault.deletion?.slow = true
         await Task.yield()
-        for _ in 0..<20 where !vm.state.slow { await Task.yield() }
+        #expect(await eventually { vm.state.slow }, "the bound is reached")
         #expect(vm.state.slow)
         vm.checkAgain()
         vm.checkAgain()
@@ -96,7 +96,7 @@ import VettIDDataTesting
         vault.deletion = VaultDeletion(since: Date(), until: Date(), slow: true)
         vault.deletionReads = [.unreachable, .unconfirmed, .unconfirmedClock]
         let vm = VaultDeletingViewModel(account: vault)
-        for _ in 0..<20 where !vm.state.slow { await Task.yield() }
+        #expect(await eventually { vm.state.slow }, "the bound is reached")
         for note in [DeletionCheckNote.unreachable, .cannotConfirm, .cannotConfirmClock] {
             vm.checkAgain()
             await vm.settle()
@@ -114,7 +114,7 @@ import VettIDDataTesting
         await vm.settleRemoval()
         #expect(!vm.state.removeConfirm && vault.calls.allSatisfy { $0 != "eraseThisPhone" }, "not offered before the bound")
         vault.deletion?.slow = true
-        for _ in 0..<20 where !vm.state.slow { await Task.yield() }
+        #expect(await eventually { vm.state.slow }, "the bound is reached")
         vm.askRemove()
         #expect(vm.state.removeConfirm)
         vm.dismissRemove()

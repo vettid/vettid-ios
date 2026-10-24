@@ -49,7 +49,7 @@ extension OnboardingStrings {
     }
     // The texts of vettid-android's unmerged branch `fix/no-erase-on-401` (drafts for the owner's approval).
     static var vaultDeletingUnconfirmed: String {
-        String(localized: "vault_deleting_unconfirmed", defaultValue: "This phone can't confirm it yet.", bundle: .module)
+        String(localized: "vault_deleting_unconfirmed", defaultValue: "This phone can't confirm the deletion.", bundle: .module)
     }
     static var vaultDeletingCannotConfirm: String {
         String(

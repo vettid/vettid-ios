@@ -99,7 +99,7 @@ import VettIDDataTesting
 
         service.noHolder = false
         #expect(await vaultFailure { try await m.deleteVault(pin: pin, password: password) } == nil)
-        #expect(service.vaultDeleted && m.phase == .signedOut)
+        #expect(service.vaultDeleted && m.phase == .deleting)
     }
 
     /// A request without a secret that sets the same value again (`settings.set`) is sent again by "Try again"; it is the

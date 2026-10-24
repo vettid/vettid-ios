@@ -19,9 +19,9 @@ struct OwnDelete {
 // member API's future `410 vault_deleted`) ends it through ``deletionGone()``. Nothing is sent to the vault meanwhile:
 // no session opens.
 //
-// (Chosen; not in the spec) A deletion this phone sent and the vault answered erases this phone at once, as before: the
-// answer says that it applied. The event during this phone's own deletion is left to it: an answer erases, a lost answer
-// opens this state with the request's `exp` in the bound.
+// A deletion this phone sent and the vault answered starts this state too (as vettid-android's `deleteVault` does), with
+// the request's `exp` in the bound. The event during this phone's own deletion is left to it: an answer starts this
+// state, a lost answer starts it only when the event came.
 extension VaultManager {
     /// The code of an operation refused because the vault is being deleted.
     public nonisolated static let codeVaultDeleting = "vault_deleting"

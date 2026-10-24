@@ -146,11 +146,15 @@ import VettIDDataTesting
     @Test func aClockBehindTheMarkerIsStillFinishingAtOnce() async throws {
         defer { phone.close() }
         try await deleting()
+        #expect(await eventually { !phone.deletionPauses.lengths.isEmpty }, "the first manager's schedule slept")
+        let before = phone.deletionPauses.lengths
         phone.clockAhead = -86400
         try await phone.restart()
         try await m.refresh()
         #expect(await eventually { m.deletion?.slow == true })
-        #expect(phone.deletionPauses.lengths.allSatisfy { $0 <= 60 })
+        let waits = phone.deletionPauses.lengths
+        #expect(!waits.isEmpty && waits.allSatisfy { $0 <= 60 })
+        #expect(waits == before, "no new timer: still finishing at once")
     }
 
     /// The schedule's first read comes after its first pause (5 s); still listed, the state stays.
