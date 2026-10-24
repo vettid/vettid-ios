@@ -185,6 +185,7 @@ import VettIDDataTesting
         let keep: Int64 = 7 * 3_600_000
         #expect(m.record.value.transferKeepMs == keep)
         // 6 hours later: kept; the timer runs for the hour left.
+        phone.freezeClocks()
         phone.clockAhead = 6 * 3_600
         await m.checkKeptTransfer()
         #expect(m.transferKeptSince != nil && m.phase == .unlocked)
@@ -221,6 +222,7 @@ import VettIDDataTesting
         defer { phone.close() }
         try await setUp()
         _ = try await approve()
+        phone.freezeClocks() // the 600 s left are measured against a clock that stands still
         phone.clockAhead = week - 600
         await m.checkKeptTransfer()
         #expect(m.transferKeptSince != nil && m.phase == .unlocked && service.deviceListsAfterTransfer == 0)

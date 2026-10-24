@@ -275,7 +275,7 @@ extension VaultManager {
     /// One unlock with this phone's unlock secret (release R, §11.14.1): the current record, then the candidates and the
     /// pending epoch-1 records after `device_secret` (``PhoneSecrets/unlock(isolation:attempt:)``), or the replaced
     /// records on the member's tap. IOS-PLAN ID8: an instance without `recovery_r` is refused before anything is built.
-    private func unlockWithSecret(
+    func unlockWithSecret(
         _ s: VaultSession, pin: String, options: UnlockOptions, path: UnlockSecretPath, tries: UnlockTries = .all,
         route: UnlockRoute = UnlockRoute()
     ) async throws -> UnlockOutcome {

@@ -127,6 +127,7 @@ final class Box<T: Sendable>: @unchecked Sendable {
         await #expect(throws: MemberApiError(status: 401, code: MemberApiError.clockSkew)) { _ = try await skewed.vaultStatus() }
         let fine = api(appAuth(Box(Self.vid)), now: { apiTime.addingTimeInterval(60) })
         for _ in 0..<2 { server.enqueue(.json(401, #"{"error":"unauthorized"}"#, headers: ["Date": date])) }
+        // A `Date` within the limit leaves the refusal as it is.
         await #expect(throws: MemberApiError(status: 401, code: MemberApiError.unauthorized)) { _ = try await fine.vaultStatus() }
     }
 

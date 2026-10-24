@@ -60,7 +60,8 @@ import VettIDDataTesting
         let unlocks = service.unlocks.count
         let r = try await m.unlock(pin: pin)
         #expect(r == .failed(.vaultUnavailable, code: VaultManager.codeVaultDeleting))
-        #expect(service.requestsSeen.count == seen && service.unlocks.count == unlocks)
+        #expect(service.unlocks.count == unlocks)
+        #expect(service.requestsSeen.count == seen, "sent after the event: \(service.requestsSeen.dropFirst(seen))")
         #expect(m.phase == .deleting)
     }
 

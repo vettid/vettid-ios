@@ -28,8 +28,7 @@ private final class TransferPath: @unchecked Sendable {
 // the SAS and takes the credential over; the old phone shows the code, compares the SAS and approves with the PIN and the
 // password. Mirrors vettid-android `VaultManager`'s direct transfer (`transferIn`, `awaitTransferIn`, `abandonTransferIn`,
 // `transferCreate`, `awaitTransferPending`, `transferApprove`, `transferReject`). The old phone's keys after the approval:
-// ``VaultManager+Keep``. Recovery (§11.11) comes with I3.4: its requirements of ``MoveRepository`` answer
-// ``FailureKind/notSupported`` until then.
+// ``VaultManager+Keep``. Recovery (§11.11): ``VaultManager+Recovery``.
 extension VaultManager: MoveRepository {
     /// The code of a scanned or pasted text that is not a transfer code (vettid-android `CODE_NOT_TRANSFER`).
     public nonisolated static let codeNotTransfer = "not_transfer"
@@ -37,18 +36,6 @@ extension VaultManager: MoveRepository {
     nonisolated static let pairingWindow: TimeInterval = 660
     /// The collect before the drop is bounded by this many seconds in all (VAULT-MESSAGING §11.14.10 rule 5).
     nonisolated static let collectBound: TimeInterval = 30
-
-    // MARK: - Recovery (I3.4)
-
-    public func recoveryStage() async throws -> RecoveryStage { throw Self.recoveryNotYet }
-    public func registerRecovery(_ code: RecoveryCode) async throws -> RecoveryRegistration { throw Self.recoveryNotYet }
-    public func registerTypedRecovery(_ typed: TypedRecoveryCode) async throws -> RecoveryRegistration { throw Self.recoveryNotYet }
-    public func recoveryPreflight() async throws -> PreflightInfo { throw Self.recoveryNotYet }
-    public func recoveryUnlock(pin: String, approve: ReleaseView?) async throws -> UnlockAttempt { throw Self.recoveryNotYet }
-    public func recoveryCredentialBackup() async throws -> Bool? { throw Self.recoveryNotYet }
-    public func recoverCredential(password: String) async throws -> RecoverOutcome { throw Self.recoveryNotYet }
-
-    private static var recoveryNotYet: VaultFailure { VaultFailure(.notSupported, code: "recovery_not_available") }
 
     // MARK: - The new phone (§6.7.1)
 

@@ -188,6 +188,13 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var recoveryAttemptsUsed: Int?
     /// What ``resumeLostOk(pin:)`` answers, in order; an empty queue answers `ok`.
     public var lostOkOutcomes: [RecoveryOpenOutcome] = []
+    /// ``finishRecoveryOpen()`` leaves the phone at ``SetupStage/finishing`` (the onboarding ignores that phase under the
+    /// recovery screen): the screen's hand-over to ``finishSetup()`` opens the app.
+    public var recoveryOpenLeavesFinishing = false
+    /// A lock asked for after the `ok` is pending: ``finishRecoveryOpen()`` leaves the phone locked and says so.
+    public var recoveryLockPending = false
+    /// ``finishRecoveryOpen()`` throws this, not a ``VaultFailure`` (the account record's write).
+    public var recoveryFinishError: (any Error)?
 
     // MoveRepository: transfer.
     public var transferSas = "042817"

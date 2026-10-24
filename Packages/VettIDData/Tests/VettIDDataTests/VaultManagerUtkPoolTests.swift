@@ -65,8 +65,11 @@ import VettIDDataTesting
 
     @Test func aSecondResyncWithinItsPeriodIsTooSoon() async throws {
         defer { phone.close() }
-        // The phone reads the vault's clock from its answers (the 10 minutes and `allowed_after` are on it).
+        // The phone reads the vault's clock from its answers (the 10 minutes and `allowed_after` are on it). Frozen, so that
+        // the 25 s window is the test's, not the machine's.
         service.stampsOnVaultClock = true
+        service.freezeVaultClock()
+        phone.freezeClocks()
         try await setUp()
         service.notHolder = true
         service.vaultPoolFull = true
