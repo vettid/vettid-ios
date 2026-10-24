@@ -182,7 +182,11 @@ private struct OpenEntry: View {
             }
         }
         .disabled(side.busy)
-        .onAppear { refill() }
+        .onAppear {
+            refill()
+            if onStartOver != nil { side.probe?("start_over") }
+            if side.busy { side.probe?("busy") }
+        }
         .accessibilityIdentifier("open_enter")
     }
 }
@@ -245,6 +249,7 @@ private struct OpenCheck: View {
             }
         }
         .disabled(side.busy)
+        .onAppear { if side.busy { side.probe?("busy") } }
         .accessibilityIdentifier("open_check_step")
     }
 }
@@ -253,6 +258,23 @@ private struct OpenSending: View {
     var body: some View {
         FormScaffold(title: RecoveryScreenStrings.recoverTitle, primaryLabel: nil, onPrimary: {}) {
             WaitingRow(text: RecoveryScreenStrings.iosRecoverOpenSending, identifier: "open_sending")
+        }
+    }
+}
+
+/// A tick every second until [end], and one at [end]: the countdown stops with the wait.
+struct SecondsUntil: TimelineSchedule {
+    let end: Date
+
+    func entries(from start: Date, mode: TimelineScheduleMode) -> AnyIterator<Date> {
+        var next = start
+        var done = false
+        return AnyIterator {
+            if done { return nil }
+            let current = min(next, end)
+            if current >= end { done = true }
+            next = next.addingTimeInterval(1)
+            return current
         }
     }
 }
@@ -269,7 +291,7 @@ private struct OpenAnswer: View {
         if let o = state.outcome {
             // The clock ticks only while a wait runs.
             if let at = o.retryAt, at > Date() {
-                TimelineView(.periodic(from: .now, by: 1)) { context in answer(o, now: context.date) }
+                TimelineView(SecondsUntil(end: at)) { context in answer(o, now: context.date) }
             } else {
                 answer(o, now: Date())
             }
