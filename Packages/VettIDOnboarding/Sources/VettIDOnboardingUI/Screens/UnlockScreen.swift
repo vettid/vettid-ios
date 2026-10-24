@@ -323,6 +323,15 @@ struct LockNoticeView: View {
                 TextLink(OnboardingStrings.unlockLockOk) { actions.dismissLockNotice() }
             }
             .accessibilityIdentifier("unlock_lock_confirmed")
+        // (Release L) The vault was opened again after this lock: not locked, and said so. This phone stays locked.
+        case .openedAgain:
+            NoticeCard(.urgent, title: OnboardingStrings.unlockLockOpenedAgainTitle, message: OnboardingStrings.unlockLockOpenedAgainBody) {
+                // (Owner decision 2026-10-24) A fresh lock of the vault as it is now.
+                TextLink(OnboardingStrings.unlockLockAgain) { actions.lockAgain() }
+                    .accessibilityIdentifier("unlock_lock_again")
+                TextLink(OnboardingStrings.unlockLockOk) { actions.dismissLockNotice() }
+            }
+            .accessibilityIdentifier("unlock_lock_opened_again")
         case .none:
             EmptyView()
         }

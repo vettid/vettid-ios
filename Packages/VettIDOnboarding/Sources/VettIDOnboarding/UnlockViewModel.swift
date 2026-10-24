@@ -267,6 +267,10 @@ public final class UnlockViewModel: UnlockActions {
 
     public func dismissLockNotice() { vault.dismissLockNotice() }
 
+    public func lockAgain() {
+        Task { [vault] in await vault.lockAgain() }
+    }
+
     public func dismissMoveFailure() { vault.acknowledgeFinishMoveFailure() }
 
     // MARK: - One unlock
