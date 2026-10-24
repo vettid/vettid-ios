@@ -60,20 +60,6 @@ import VettIDVault
         #expect(await eventually { !m.lockHoldsPhone })
     }
 
-    /// An unlock between the status request and its answer: the answer may name the opening before, and is not used.
-    @Test func aStatusAnsweredAcrossAnOpeningNamesNothing() async throws {
-        defer { phone.close() }
-        try await openVault()
-        let api = try #require(m.session?.api)
-        let known = try #require(service.currentUnlockID)
-        #expect(try await api.statusUnlockID() == known)
-        // An opening (a recovery open, as an unlock result does) is learned of while the answer is on its way.
-        let reading = Task { @MainActor in try await api.statusUnlockID() }
-        await Task.yield()
-        api.device.recoveryOpened(unlockID: "ffeeddccbbaa99887766554433221100")
-        #expect(try await reading.value == nil)
-    }
-
     /// (a) A late `vault.locking` that names the dead opening confirms nothing while held; (b) a plain lock afterwards is not
     /// bound to the dead name.
     @Test func theNameOfALockThatEndedOpenedAgainIsForgotten() async throws {

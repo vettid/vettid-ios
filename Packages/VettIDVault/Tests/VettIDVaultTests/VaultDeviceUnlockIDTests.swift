@@ -77,6 +77,23 @@ extension VaultDeviceTests {
         _ = try await status.value
         #expect(d.unlockID == newer)
     }
+
+    /// "Lock it now" binds its lock to a `vault.status`'s name only if no opening came while the answer was on its way; a read
+    /// with none returns the name.
+    @Test func aStatusNameForALockIsNilAcrossAnOpening() async throws {
+        let (d, v) = try await pairedDevice()
+        let api = VaultApi(device: d)
+        let older = "00112233445566778899aabbccddeeff"
+        let status = Task { try await api.statusUnlockID() }
+        let req = try v.open(try await relay.nextDeposit().payload)
+        d.recoveryOpened(unlockID: "ffeeddccbbaa99887766554433221100")
+        try await d.handle(try v.seal("vault.status", #"{"vault_id":"\#(v.vaultID)","unlock_id":"\#(older)"}"#, re: req.id, status: Inner.statusOK))
+        #expect(try await status.value == nil)
+        let again = Task { try await api.statusUnlockID() }
+        let req2 = try v.open(try await relay.nextDeposit().payload)
+        try await d.handle(try v.seal("vault.status", #"{"vault_id":"\#(v.vaultID)","unlock_id":"\#(older)"}"#, re: req2.id, status: Inner.statusOK))
+        #expect(try await again.value == older)
+    }
 }
 
 // swiftlint:enable line_length
