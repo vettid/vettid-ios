@@ -5,7 +5,7 @@
 # the enrollment code comes from the account site's "Enroll a phone", signed in as the test member, just before the run
 # (it lives 5 minutes and works once).
 #
-#   scripts/staging-ui-test.sh --device <id> --test <test> [--inputs <file>] [--fresh] [--skip-build] [--keep-result]
+#   scripts/staging-ui-test.sh --device <id> --test <test> [--inputs <file>] [--fresh] [--skip-build] [--keep-result] [--auto-match]
 #
 #   --device <id>     the iPhone (`xcrun devicectl list devices`)
 #   --test <test>     testStagingEnroll, testStagingUnlockLock, testStagingApproveUpdate,
@@ -20,11 +20,14 @@
 #                     tests, VETTID_STAGING_PEER_NAME, VETTID_STAGING_MESSAGE and VETTID_STAGING_EXPECT, and for the
 #                     photo tests, VETTID_STAGING_PEER_NAME and optionally VETTID_STAGING_PHOTO_TIMEOUT (quotes around
 #                     a value and CRLF line ends are stripped), and for the transfer tests, VETTID_STAGING_TRANSFER_CODE
-#                     (testStagingTransferIn) and optionally VETTID_STAGING_TRANSFER_TIMEOUT and VETTID_STAGING_TRANSFER_AUTO_MATCH; only the file is read then. Without it they are read from the
-#                     environment of the same names. Prefer the file: nothing lands in the shell history.
+#                     (testStagingTransferIn) and optionally VETTID_STAGING_TRANSFER_TIMEOUT. Only the file is read
+#                     then; without it they are read from the environment of the same names. Prefer the file:
+#                     nothing lands in the shell history.
 #   --fresh           remove VettID Staging from the iPhone first, and its vault keys with it: only for
 #                     testStagingEnroll with all four inputs set; asks y/N on a terminal
 #   --skip-build      reuse the last build-for-testing
+#   --auto-match      only with --test testStagingTransferOut: the test taps "The codes match" itself, so the safety
+#                     codes are NOT compared (a warning is printed first). Only this flag enables it.
 #   --keep-result     keep the result bundle (it holds what was typed) in the private cache directory
 #
 # The tests (each ends with the vault locked and the lock confirmed):
@@ -93,12 +96,14 @@
 #                                        match" or "Reject" on this iPhone; it never approves by itself. After the match: the
 #                                        change of signer when shown ("TRANSFER_SIGNER: shown", a move between platforms),
 #                                        PIN on the keypad (nothing is sent unless it holds every digit) and the password,
-#                                        "Move"; prints "TRANSFER_AFTER: welcome_notice|welcome|unlock|app_shell|none" (what the
-#                                        app shows once the vault has left) and "TRANSFER_STATE: moved|rejected|expired|
-#                                        no_decision|no_link|no_phone|no_safety_code|approve_failed|moved_unconfirmed|
-#                                        moved_still_open|error|none". A vault still on the phone is locked. With
-#                                        VETTID_STAGING_TRANSFER_AUTO_MATCH=1 the test taps "The codes match" itself and prints
-#                                        "TRANSFER_SAS_UNCHECKED": the comparison is then not made by the test.
+#                                        "Move"; prints "TRANSFER_AFTER: kept|welcome_notice|welcome|none" (release R keeps the keys
+#                                        until the new phone has finished: nothing more is tapped and nothing is locked;
+#                                        or the app erased itself) and "TRANSFER_STATE: moved|rejected|expired|no_decision|
+#                                        no_link|no_phone|no_safety_code|approve_failed|error|none". After a state other
+#                                        than moved the vault is locked, once no approval is in flight. With --auto-match
+#                                        (this test only) the test taps "The codes match" itself and prints
+#                                        "TRANSFER_SAS_UNCHECKED": the comparison is then NOT made. It cannot be set by the
+#                                        inputs file or the environment.
 #   testStagingTransferIn                the new phone, a fresh app (no --fresh: remove the app by hand): "Move from my
 #                                        old phone", the code pasted from VETTID_STAGING_TRANSFER_CODE, prints
 #                                        "SAFETY_CODE: <code>", waits up to VETTID_STAGING_TRANSFER_TIMEOUT for the old
@@ -159,14 +164,14 @@ REPO=$(pwd -P)
 
 NAMES=(VETTID_STAGING_EMAIL VETTID_STAGING_CODE VETTID_STAGING_PIN VETTID_STAGING_PASSWORD)
 # The connect, message and photo tests' inputs: optional, never counted as missing for the others.
-OPTIONAL=(VETTID_STAGING_LINK VETTID_STAGING_TRANSFER_CODE VETTID_STAGING_TRANSFER_TIMEOUT VETTID_STAGING_TRANSFER_AUTO_MATCH VETTID_STAGING_SAFETY_CODE VETTID_STAGING_PEER_NAME VETTID_STAGING_MESSAGE VETTID_STAGING_EXPECT
+OPTIONAL=(VETTID_STAGING_LINK VETTID_STAGING_TRANSFER_CODE VETTID_STAGING_TRANSFER_TIMEOUT VETTID_STAGING_SAFETY_CODE VETTID_STAGING_PEER_NAME VETTID_STAGING_MESSAGE VETTID_STAGING_EXPECT
   VETTID_STAGING_PHOTO_TIMEOUT VETTID_STAGING_PHOTO_EXISTING VETTID_STAGING_WAIT)
 ALL=("${NAMES[@]}" "${OPTIONAL[@]}")
 BUNDLE_ID=com.vettid.app.staging
 
 usage() { sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//' >&2; exit 2; }
 
-DEVICE="" TEST="" INPUTS="" FRESH=0 SKIP_BUILD=0 KEEP=0
+DEVICE="" TEST="" INPUTS="" FRESH=0 SKIP_BUILD=0 KEEP=0 AUTO_MATCH=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --device) DEVICE=${2:-}; shift 2 ;;
@@ -175,6 +180,7 @@ while [[ $# -gt 0 ]]; do
     --fresh) FRESH=1; shift ;;
     --skip-build) SKIP_BUILD=1; shift ;;
     --keep-result) KEEP=1; shift ;;
+    --auto-match) AUTO_MATCH=1; shift ;;
     -h|--help) usage ;;
     *) echo "unknown argument: $1" >&2; usage ;;
   esac
@@ -195,6 +201,17 @@ case "${TEST}" in
        "testStagingLook or testStagingCheck" >&2
      usage ;;
 esac
+
+# The comparison of the safety codes is never skipped by accident: only the flag, only for the old phone's test, and
+# never through an inputs file (an unknown name there is refused) or the environment.
+if [[ -n "${VETTID_STAGING_TRANSFER_AUTO_MATCH:-}" || -n "${TEST_RUNNER_VETTID_STAGING_TRANSFER_AUTO_MATCH:-}" ]]; then
+  echo "refusing: VETTID_STAGING_TRANSFER_AUTO_MATCH in the environment; use --auto-match" >&2
+  exit 1
+fi
+if [[ ${AUTO_MATCH} -eq 1 && "${TEST}" != testStagingTransferOut ]]; then
+  echo "refusing --auto-match: it is only for --test testStagingTransferOut" >&2
+  exit 1
+fi
 
 # The inputs this test needs (the others are passed when set, and unused).
 case "${TEST}" in
@@ -270,6 +287,9 @@ chmod 700 "${CACHE}" "${CACHE}/results"
 DERIVED="${CACHE}/DerivedData"
 DEST="platform=iOS,id=${DEVICE}"
 
+if [[ ${AUTO_MATCH} -eq 1 ]]; then
+  echo "WARNING: --auto-match: the safety code will NOT be compared; the old phone approves by itself" >&2
+fi
 if [[ ${SKIP_BUILD} -eq 0 ]]; then
   echo "== build-for-testing (Staging)"
   xcodebuild build-for-testing \
@@ -306,6 +326,7 @@ for n in "${ALL[@]}"; do
   if [[ -n "${!v}" ]]; then export "TEST_RUNNER_${n}=${!v}"; fi
 done
 
+if [[ ${AUTO_MATCH} -eq 1 ]]; then export TEST_RUNNER_VETTID_STAGING_TRANSFER_AUTO_MATCH=1; fi
 RESULT="${CACHE}/results/${TEST}-$(date +%Y%m%d-%H%M%S).xcresult"
 if [[ ${KEEP} -eq 0 ]]; then
   # The bundle holds what was typed: it goes however the run ends.
@@ -338,7 +359,7 @@ xcodebuild test-without-building \
     if (/INVITE_LINK: (https:\/\/[A-Za-z0-9._~:\/?#\[\]@!\$\&()*+,;=%-]+|none)\s*$/) { $_ = "INVITE_LINK: $1\n"; next }
     if (/TRANSFER_LINK: (https:\/\/[A-Za-z0-9._~:\/?#\[\]@!\$\&()*+,;=%-]+|none)\s*$/) { $_ = "TRANSFER_LINK: $1\n"; next }
     if (/TRANSFER_STATE: ([a-z_]+)\s*$/) { $_ = "TRANSFER_STATE: $1\n"; next }
-    if (/TRANSFER_AFTER: (welcome_notice|welcome|unlock|app_shell|none)\s*$/) { $_ = "TRANSFER_AFTER: $1\n"; next }
+    if (/TRANSFER_AFTER: (kept|welcome_notice|welcome|none)\s*$/) { $_ = "TRANSFER_AFTER: $1\n"; next }
     if (/TRANSFER_SAS_UNCHECKED\s*$/) { $_ = "TRANSFER_SAS_UNCHECKED\n"; next }
     if (/TRANSFER_OPERATOR: compare the safety codes on both phones and tap on this iPhone\s*$/) {
       $_ = "TRANSFER_OPERATOR: compare the safety codes on both phones and tap on this iPhone\n"; next

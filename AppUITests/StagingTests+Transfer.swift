@@ -7,7 +7,7 @@ import XCTest
 /// reports the transfer code (a link) on a `TRANSFER_LINK:` line; the new phone is given it as
 /// `VETTID_STAGING_TRANSFER_CODE`. Both report their safety code on a `SAFETY_CODE:` line; a person compares them on the
 /// two phones and taps "The codes match" (or "Reject") on the old phone, which never approves by itself (unless
-/// `VETTID_STAGING_TRANSFER_AUTO_MATCH=1`, which prints `TRANSFER_SAS_UNCHECKED`). The outcome is on a `TRANSFER_STATE:`
+/// the script's `--auto-match`, which prints `TRANSFER_SAS_UNCHECKED`). The outcome is on a `TRANSFER_STATE:`
 /// line. The code is valid for a few minutes and works once; it is never printed
 /// except on the old phone's `TRANSFER_LINK:` line, which is its purpose. No failure message carries it.
 extension StagingTests {
@@ -66,7 +66,7 @@ extension StagingTests {
     }
 
     /// What a transfer test was given: the PIN, the password (optional on the new phone), whether the old phone may tap
-    /// "The codes match" itself (`VETTID_STAGING_TRANSFER_AUTO_MATCH=1`), and the wait.
+    /// "The codes match" itself (the script's `--auto-match`), and the wait.
     struct TransferInputs {
         let pin: String
         let password: String?
@@ -197,17 +197,19 @@ extension StagingTests {
     /// `VETTID_STAGING_TRANSFER_TIMEOUT`) for the new phone to connect; its safety code reported on a `SAFETY_CODE:` line,
     /// with a `TRANSFER_OPERATOR:` line asking for the comparison. The test then waits (up to the same time) for a person
     /// to tap "The codes match" or "Reject" on this iPhone: it never approves by itself, except with the explicit opt-in
-    /// `VETTID_STAGING_TRANSFER_AUTO_MATCH=1` (then `TRANSFER_SAS_UNCHECKED` is printed). After the match, the change of
+    /// the script's `--auto-match` (then `TRANSFER_SAS_UNCHECKED` is printed). After the match, the change of
     /// signer accepted when shown (a move across platforms), the PIN on the keypad and the credential password, and the
-    /// approval. Reported on a `TRANSFER_STATE:` line: `moved` (the vault left this phone; `TRANSFER_AFTER:` then says
-    /// what the app shows: `welcome_notice`, `welcome`, `unlock`, `app_shell` or `none`), `rejected`, `expired`,
-    /// `no_decision`, `no_link`, `no_phone`, `no_safety_code`, `approve_failed`, `error`, `none`. A vault that stays on
-    /// this phone is locked at the end.
+    /// approval. Reported on a `TRANSFER_STATE:` line: `moved` (the approval went through; `TRANSFER_AFTER:` then says
+    /// what this phone shows: `kept` when the moved screen says the keys stay until the new phone has finished (release R:
+    /// the test taps nothing more and never locks, the vault is the new phone's to finish), `welcome` or `welcome_notice`
+    /// when the app erased itself, `none`), `rejected`, `expired`, `no_decision`, `no_link`, `no_phone`, `no_safety_code`, `approve_failed`, `error`, `none`. After any
+    /// other state the vault is locked once no approval is in flight (a lock is never sent after a successful approval).
     @MainActor
     func testStagingTransferOut() throws {
         let pin = try Self.pin()
         let password = try Self.input("VETTID_STAGING_PASSWORD")
         let limit = try Self.transferWait()
+        // Only the script's `--auto-match` sets this.
         let auto = ProcessInfo.processInfo.environment["VETTID_STAGING_TRANSFER_AUTO_MATCH"] == "1"
 
         let app = launch()
@@ -221,9 +223,9 @@ extension StagingTests {
             state = moveOut(app, TransferInputs(pin: pin, password: password, autoMatch: auto, limit: limit))
         }
         Self.report(transferState: state)
-        if state != "moved" {
-            lock(app)
-            fail(app, "The move did not happen: \(state).")
+        guard state == "moved" else {
+            if settledOut(app) { lock(app) }
+            return fail(app, "The move did not happen: \(state).")
         }
     }
 
@@ -301,35 +303,60 @@ extension StagingTests {
         guard confirmAlert(app, label: "Move") else { return "approve_failed" }
         failOnSavePassword(app)
 
-        switch transferStep(app, ["transfer_moved", "transfer_rejected", "transfer_expired"], timeout: Self.network * 2) {
-        case "transfer_moved": return leaveMoved(app)
+        // A wiped phone erases itself to the welcome screen and never shows the moved screen.
+        let ends = ["transfer_moved", "welcome_recover", "transfer_rejected", "transfer_expired"]
+        switch transferStep(app, ends, timeout: Self.network * 2) {
+        case "welcome_recover": return movedAway(app)
+        case "transfer_moved": return afterApproval(app)
         case "transfer_rejected": return "rejected"
         case "transfer_expired": return "expired"
         default: return "approve_failed"
         }
     }
 
-    /// "Done" on the moved screen, then where the app ends (a `TRANSFER_AFTER:` line): the welcome screen, with the notice
-    /// that the vault is no longer here or without it, the unlock screen, the open app (a vault still on this phone fails
-    /// the test), or `none`.
+    /// Before a cleanup lock: a confirmation left open is cancelled, and the approval is waited for if it is in flight (its
+    /// Reject is disabled while it runs; Back would send a reject that races it). False, with the failure, when it never
+    /// settles: nothing is locked then.
     @MainActor
-    private func leaveMoved(_ app: XCUIApplication) -> String {
-        let done = app.buttons["form_primary"]
-        guard done.waitForExistence(timeout: 10) else { return "moved_unconfirmed" }
-        done.tap()
-        var after = "none"
-        _ = waitUntil(timeout: Self.network) {
-            after = Self.endScreen(shown(app))
-            return after != "none"
+    private func settledOut(_ app: XCUIApplication) -> Bool {
+        let alert = app.alerts.firstMatch
+        if alert.exists {
+            let cancel = alert.buttons["Cancel"]
+            (cancel.exists ? cancel : alert.buttons.element(boundBy: alert.buttons.count - 1)).tap()
+            _ = waitUntil(timeout: 10) { !alert.exists }
         }
-        Self.say("TRANSFER_AFTER: \(after)")
-        return after == "app_shell" ? "moved_still_open" : "moved"
+        let reject = app.buttons["form_secondary"]
+        let settled = waitUntil(timeout: Self.network * 2) {
+            let screen = shown(app)
+            return !screen.isEmpty && (screen["transfer_approve"] == nil || (reject.exists && reject.isEnabled))
+        }
+        if !settled { fail(app, "The approval is still running: the vault was not locked.") }
+        return settled
     }
 
-    /// Which of the welcome (with or without the deletion notice), the unlock and the open app [screen] shows, else `none`.
-    static func endScreen(_ screen: [String: String]) -> String {
-        if screen["welcome_recover"] != nil { return screen["vault_deleted_notice"] != nil ? "welcome_notice" : "welcome" }
-        if screen["unlock"] != nil { return "unlock" }
-        return screen["app_shell"] != nil ? "app_shell" : "none"
+    /// The approval went through and the app erased itself: where it ended is reported.
+    @MainActor
+    private func movedAway(_ app: XCUIApplication) -> String {
+        Self.say("TRANSFER_AFTER: \(shown(app)["vault_deleted_notice"] != nil ? "welcome_notice" : "welcome")")
+        return "moved"
+    }
+
+    /// The moved screen. Nothing is tapped and nothing is locked: the new phone finishes the move, and a lock or a Back
+    /// from here could race it. On release R the screen says the keys are kept (`TRANSFER_AFTER: kept`); otherwise the phone
+    /// erases itself, which is waited for (`welcome`), or `none` is reported.
+    @MainActor
+    private func afterApproval(_ app: XCUIApplication) -> String {
+        if (shown(app)["transfer_moved"] ?? "").contains("Finish the move on your new phone") {
+            Self.say("TRANSFER_AFTER: kept")
+            return "moved"
+        }
+        var wiped = false
+        _ = waitUntil(timeout: Self.network) {
+            wiped = shown(app)["welcome_recover"] != nil
+            return wiped
+        }
+        if wiped { return movedAway(app) }
+        Self.say("TRANSFER_AFTER: none")
+        return "moved"
     }
 }

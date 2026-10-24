@@ -95,8 +95,10 @@ class VaultUITestCase: XCTestCase {
             key.tap()
         }
         let dots = app.descendants(matching: .any)["pin_dots"]
-        if dots.exists, let entered = dots.value as? String, entered != String(pin.count) {
-            fail(app, "The keypad holds \(entered) digits, not \(pin.count); nothing was sent.")
+        // Fails closed: a keypad whose digit count cannot be read is not trusted.
+        guard dots.exists, let entered = dots.value as? String, entered == String(pin.count) else {
+            let held = (dots.value as? String).map { "\($0) digits, not \(pin.count)" } ?? "an unreadable number of digits"
+            fail(app, "The keypad holds \(held); nothing was sent.")
             return false
         }
         return true
