@@ -182,6 +182,8 @@ public protocol RecoverActions: AnyObject, Sendable {
     func setTyped(_ v: String)
     /// **Continue** on the typed entry.
     func submitTyped()
+    /// From a code step whose refusal is ``RecoverGuidance``: to the open step.
+    func showOpen()
     /// "Start over" on the open step: asks first (``RecoverState/confirmStartOver``).
     func askStartOver()
     func dismissStartOver()
@@ -203,6 +205,7 @@ public final class NoRecoverActions: RecoverActions {
     public func type() {}
     public func setTyped(_ v: String) {}
     public func submitTyped() {}
+    public func showOpen() {}
     public func askStartOver() {}
     public func dismissStartOver() {}
     public func confirmStartOver() {}
