@@ -145,6 +145,7 @@ public final class RecoverViewModel: RecoverActions {
         state.step = .scan
         state.refusal = nil
         state.error = nil
+        state.errorCode = nil
         state.typedProblem = nil
     }
 
@@ -155,6 +156,7 @@ public final class RecoverViewModel: RecoverActions {
         state.step = .type
         state.refusal = nil
         state.error = nil
+        state.errorCode = nil
         state.typedProblem = nil
     }
 
@@ -167,6 +169,8 @@ public final class RecoverViewModel: RecoverActions {
         case .scan, .type:
             state.step = codeHome
             state.refusal = nil
+            state.error = nil
+            state.errorCode = nil
             state.typedProblem = nil
             return true
         default:
@@ -239,6 +243,7 @@ public final class RecoverViewModel: RecoverActions {
         state.typedGroup = 0
         state.refusal = nil
         state.error = nil
+        state.errorCode = nil
     }
 
     /// The claim and the register, however the code was read. Wrong codes are counted per recovery: the one the answer names
@@ -250,6 +255,7 @@ public final class RecoverViewModel: RecoverActions {
         state.busy = true
         state.refusal = nil
         state.error = nil
+        state.errorCode = nil
         state.retrySeconds = 0
         work.launch { [weak self] in
             do {
@@ -340,6 +346,7 @@ public final class RecoverViewModel: RecoverActions {
         state.step = from
         state.busy = false
         state.refusal = refusal
+        state.errorCode = nil
         state.wrongCodes = wrong
         if ended { state.typed = "" }
         state.typedProblem = nil
