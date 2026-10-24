@@ -426,7 +426,7 @@ final class StagingTests: VaultUITestCase {
 
     /// Settings, from the drawer. (An app left open on Settings has no menu button there: Settings has a back arrow.)
     @MainActor
-    private func openSettings(_ app: XCUIApplication) {
+    func openSettings(_ app: XCUIApplication) {
         if app.buttons["top_bar_menu"].waitForExistence(timeout: 10) {
             tap(app.buttons["top_bar_menu"])
             tap(app.buttons["drawer_settings"])

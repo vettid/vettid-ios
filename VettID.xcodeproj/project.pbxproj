@@ -106,6 +106,7 @@
 		E31752E547A8824927CA5268 /* OpenedLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B98D2160C0CA834233FD82C /* OpenedLinkTests.swift */; };
 		E439EBDBA3C877F67536A6AB /* ThemeChoiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC218FA20D284028E26100BA /* ThemeChoiceTests.swift */; };
 		E47F8A336CA8647AB9653FFA /* GalleryScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FA837F1B3F48BDD0B340707 /* GalleryScreen.swift */; };
+		EB2DE1A4E67EB0C6E529D097 /* StagingTests+Mesh.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9506AF3AA287477B16E8612D /* StagingTests+Mesh.swift */; };
 		EEF954DC3356D2023F69D301 /* VettIDData in Frameworks */ = {isa = PBXBuildFile; productRef = D206CA22B8283CD5891C9982 /* VettIDData */; };
 		F1ADABC2B7218CFC0367D5AF /* VettIDSettings in Frameworks */ = {isa = PBXBuildFile; productRef = 68FCA0E7F927360E3D19644D /* VettIDSettings */; };
 		F21B6E1EA994ED4C1AC65DEE /* AppLockGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CBB4C9A8E482B333CED7362 /* AppLockGate.swift */; };
@@ -181,6 +182,7 @@
 		8DCA5F5A4698204295F4776B /* PhotoPermissionsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoPermissionsTests.swift; sourceTree = "<group>"; };
 		8EA490A99EEA3D46D0CCDA5B /* VettIDOnboarding */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDOnboarding; path = Packages/VettIDOnboarding; sourceTree = SOURCE_ROOT; };
 		93AFC9E49CAEEB5D0ABC86DF /* SettingsFlowsCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsFlowsCatalog.swift; sourceTree = "<group>"; };
+		9506AF3AA287477B16E8612D /* StagingTests+Mesh.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StagingTests+Mesh.swift"; sourceTree = "<group>"; };
 		99011BCFDF16002458067C88 /* ShellCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellCatalogTests.swift; sourceTree = "<group>"; };
 		9B4477541F907F6E92A131BB /* KeychainTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainTests.swift; sourceTree = "<group>"; };
 		9D2B5CA030BC6FA62B3EEF7D /* AppAttestDeviceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAttestDeviceTests.swift; sourceTree = "<group>"; };
@@ -305,6 +307,7 @@
 				CEAFD630960C3CA7D7885DEB /* GalleryScreenshots.swift */,
 				A34C0ED8CB57521C8F3EF6D6 /* StagingTests.swift */,
 				A84B69E505CEC2E1129233E9 /* StagingTests+Connect.swift */,
+				9506AF3AA287477B16E8612D /* StagingTests+Mesh.swift */,
 				2D4DA90211D97D9417FAC02C /* StagingTests+Messages.swift */,
 				1AFE8FE46F7ABE0D9CA0684B /* StagingTests+Photos.swift */,
 				73029356B90552AC0C29EE9F /* StagingUITests.xctestplan */,
@@ -729,6 +732,7 @@
 			files = (
 				91EB5DA7D60B53E6CE50FCE0 /* GalleryScreenshots.swift in Sources */,
 				27B46D91B919FFCEA4228483 /* StagingTests+Connect.swift in Sources */,
+				EB2DE1A4E67EB0C6E529D097 /* StagingTests+Mesh.swift in Sources */,
 				0E4BA253AB8E8655B797C7F6 /* StagingTests+Messages.swift in Sources */,
 				92ABE83488BD43FFAE0F21B4 /* StagingTests+Photos.swift in Sources */,
 				16CC7F1AD834271FC0C79440 /* StagingTests.swift in Sources */,
