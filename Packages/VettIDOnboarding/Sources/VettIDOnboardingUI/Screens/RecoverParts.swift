@@ -73,13 +73,16 @@ struct GuidanceNotice: View {
         }
     }
 
+    /// The guidance that offers the lost-ok finish with the PIN (an open went out, or the recovery already succeeded).
+    static func offersFinish(_ g: RecoverGuidance) -> Bool { g == .finishWithPin || g == .tryOpenAgain || g == .alreadyRecovered }
+
     /// The guidance that goes on at the open step; "retry" has nothing to go to.
     private var goesOn: Bool { guidance != .retry }
 
     var body: some View {
         NoticeCard(.warning, title: RecoveryOpenStrings.onboardingOpenAnswerTitle, message: message) {
             VStack(alignment: .leading, spacing: 0) {
-                if let onFinishWithPin, guidance == .finishWithPin || guidance == .tryOpenAgain {
+                if let onFinishWithPin, Self.offersFinish(guidance) {
                     TextLink(RecoveryScreenStrings.onboardingOpenLostTitle, identifier: "guidance_finish", action: onFinishWithPin)
                 }
                 if let onGoToOpen, goesOn {

@@ -149,7 +149,9 @@ public struct RecoverContent: View {
                     SecretTextEditor(
                         RecoveryScreenStrings.recoverTypeLabel,
                         text: Binding(get: { TypedCodeFormat.grouped(state.typed) }, set: { actions.setTyped($0) }),
-                        placeholder: RecoveryScreenStrings.recoverTypeLabel, isError: problem != nil, pasteOnly: true
+                        placeholder: RecoveryScreenStrings.recoverTypeLabel, isError: problem != nil, pasteOnly: true,
+                        // Return is Done (as on Android): it continues when Continue is enabled.
+                        onSubmit: { if state.typedComplete && !state.busy { actions.submitTyped() } }
                     )
                     .disabled(state.busy)
                 }
@@ -277,14 +279,15 @@ public struct RecoverRoute: View {
         let problem: OpenSideNotice? = state.guidance.map(OpenSideNotice.guidance) ?? state.error.map(OpenSideNotice.failure)
         return AnyView(
             RecoveryOpenRoute(
-                move: move, account: account, problem: problem, onStartOver: { model.askStartOver() }, onOpened: { model.finish() }
+                move: move, account: account, problem: problem, busy: state.busy, onStartOver: { model.askStartOver() },
+                onOpened: { model.finish() }
             )
         )
     }
 
-    /// The typed code is forgotten (only the type step holds one).
+    /// The typed code is forgotten, whatever the step and whatever runs.
     static func forget(_ model: RecoverViewModel?) {
-        model?.setTyped("")
+        model?.forgetTyped()
     }
 }
 #endif

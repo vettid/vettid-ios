@@ -58,6 +58,9 @@ public struct RecoveryOpenContent: View {
     let state: RecoveryOpenState
     let actions: RecoveryOpenActions
     let problem: OpenSideNotice?
+    let busy: Bool
+    /// TEST ONLY: told which notice (`guidance`, `error`) a step shows when it appears.
+    let noticeProbe: (@MainActor (String) -> Void)?
     let onStartOver: (@MainActor () -> Void)?
     let onOpened: @MainActor () -> Void
     @State private var pin: PinBuffer
@@ -67,6 +70,8 @@ public struct RecoveryOpenContent: View {
         state: RecoveryOpenState,
         actions: RecoveryOpenActions = RecoveryOpenActions(),
         problem: OpenSideNotice? = nil,
+        busy: Bool = false,
+        noticeProbe: (@MainActor (String) -> Void)? = nil,
         onStartOver: (@MainActor () -> Void)? = nil,
         onOpened: @escaping @MainActor () -> Void = {},
         pin: PinBuffer = PinBuffer()
@@ -74,6 +79,8 @@ public struct RecoveryOpenContent: View {
         self.state = state
         self.actions = actions
         self.problem = problem
+        self.busy = busy
+        self.noticeProbe = noticeProbe
         self.onStartOver = onStartOver
         self.onOpened = onOpened
         _pin = State(initialValue: pin)
@@ -118,14 +125,17 @@ public struct RecoveryOpenContent: View {
 
     /// The screen is out of captures whatever the app-wide setting says (as vettid-android's `SecureWindow`).
     @ViewBuilder private var screen: some View {
+        // After a recovery that already succeeded on this phone nothing is started over (the notice offers the finish).
+        let startOver = problem == .guidance(.alreadyRecovered) ? nil : onStartOver
+        let side = OpenSide(problem: problem, busy: busy, finishWithPin: { actions.finishLostOk() }, probe: noticeProbe)
         SecureContainer(isSecure: true) {
             switch state.step {
-            case .enter: OpenEntry(state: state, actions: actions, problem: problem, onStartOver: onStartOver, pin: pin)
-            case .check: OpenCheck(state: state, actions: actions, timeScale: timeScale)
+            case .enter: OpenEntry(state: state, actions: actions, side: side, onStartOver: startOver, pin: pin)
+            case .check: OpenCheck(state: state, actions: actions, side: side, timeScale: timeScale)
             case .sending: OpenSending()
             case .answered:
-                OpenAnswer(state: state, actions: actions, onStartOver: onStartOver, timeScale: timeScale)
-            case .finish: OpenFinish(state: state, actions: actions, timeScale: timeScale, pin: pin)
+                OpenAnswer(state: state, actions: actions, side: side, onStartOver: startOver, timeScale: timeScale)
+            case .finish: OpenFinish(state: state, actions: actions, side: side, timeScale: timeScale, pin: pin)
             case .done: OpenDone(state: state, actions: actions, timeScale: timeScale)
             }
         }
@@ -137,11 +147,11 @@ public struct RecoveryOpenContent: View {
 private struct OpenEntry: View {
     let state: RecoveryOpenState
     let actions: RecoveryOpenActions
-    let problem: OpenSideNotice?
+    let side: OpenSide
     let onStartOver: (@MainActor () -> Void)?
     let pin: PinBuffer
 
-    private var canContinue: Bool { pin.count >= RecoveryOpenState.minPin && !state.password.isEmpty }
+    private var canContinue: Bool { !side.busy && pin.count >= RecoveryOpenState.minPin && !state.password.isEmpty }
 
     private func review() {
         guard canContinue else { return }
@@ -157,11 +167,11 @@ private struct OpenEntry: View {
     var body: some View {
         FormScaffold(
             title: RecoveryScreenStrings.onboardingOpenTitle, primaryLabel: RecoveryScreenStrings.onboardingOpenContinue,
-            primaryEnabled: canContinue, secondaryLabel: onStartOver == nil ? nil : RecoveryScreenStrings.recoverStartOver,
+            primaryEnabled: canContinue, busy: side.busy, secondaryLabel: onStartOver == nil ? nil : RecoveryScreenStrings.recoverStartOver,
             onPrimary: review, onSecondary: { onStartOver?() }
         ) {
             VStack(alignment: .leading, spacing: Spacing.m) {
-                OpenSideNoticeView(problem: problem, onFinishWithPin: { actions.finishLostOk() })
+                OpenSideNoticeView(side: side)
                 PinEntry(label: RecoveryScreenStrings.onboardingOpenPin, buffer: pin, identifier: "open_pin")
                 SecretField(
                     RecoveryScreenStrings.onboardingOpenPassword,
@@ -171,24 +181,35 @@ private struct OpenEntry: View {
                 Text(RecoveryScreenStrings.onboardingOpenTen).vettIDFont(.bodyMedium)
             }
         }
+        .disabled(side.busy)
         .onAppear { refill() }
         .accessibilityIdentifier("open_enter")
     }
 }
 
-/// What the flow says on the open step besides the fields: the guidance of a refused start over (with the lost-ok finish where
-/// it applies), or the failure.
+/// What the flow says on the open steps besides their own: the guidance of a refused start over or the failure of one, and
+/// whether the start over still runs (the steps then take no input).
+struct OpenSide {
+    let problem: OpenSideNotice?
+    let busy: Bool
+    let finishWithPin: @MainActor () -> Void
+    var probe: (@MainActor (String) -> Void)?
+}
+
+/// The notice of ``OpenSide`` (with the lost-ok finish where the guidance offers it, unless [finishLink] is false).
 private struct OpenSideNoticeView: View {
     @Environment(\.vettIDTimeScale) private var timeScale
-    let problem: OpenSideNotice?
-    let onFinishWithPin: @MainActor () -> Void
+    let side: OpenSide
+    var finishLink = true
 
     var body: some View {
-        if case .guidance(let g) = problem {
-            GuidanceNotice(guidance: g, onFinishWithPin: g == .finishWithPin || g == .tryOpenAgain ? onFinishWithPin : nil)
-        } else if case .failure(let kind) = problem {
+        if case .guidance(let g) = side.problem {
+            GuidanceNotice(guidance: g, onFinishWithPin: GuidanceNotice.offersFinish(g) && finishLink ? side.finishWithPin : nil)
+                .onAppear { side.probe?("guidance") }
+        } else if case .failure(let kind) = side.problem {
             NoticeCard(.urgent, title: MoveStrings.recoverFailedTitle, message: kind.message(timeScale: timeScale))
                 .accessibilityIdentifier("error")
+                .onAppear { side.probe?("error") }
         }
     }
 }
@@ -198,14 +219,17 @@ private struct OpenSideNoticeView: View {
 private struct OpenCheck: View {
     let state: RecoveryOpenState
     let actions: RecoveryOpenActions
+    let side: OpenSide
     let timeScale: UInt64
 
     var body: some View {
         FormScaffold(
             title: RecoveryScreenStrings.onboardingOpenTitle, primaryLabel: RecoveryScreenStrings.onboardingOpenSend,
-            secondaryLabel: RecoveryScreenStrings.onboardingOpenChange, onPrimary: actions.send, onSecondary: actions.change
+            primaryEnabled: !side.busy, busy: side.busy, secondaryLabel: RecoveryScreenStrings.onboardingOpenChange,
+            onPrimary: actions.send, onSecondary: actions.change
         ) {
             VStack(alignment: .leading, spacing: Spacing.m) {
+                OpenSideNoticeView(side: side)
                 if let w = state.warning {
                     NoticeCard(
                         .warning, title: RecoveryScreenStrings.onboardingOpenWarningTitle,
@@ -220,6 +244,7 @@ private struct OpenCheck: View {
                 }
             }
         }
+        .disabled(side.busy)
         .accessibilityIdentifier("open_check_step")
     }
 }
@@ -236,12 +261,18 @@ private struct OpenSending: View {
 private struct OpenAnswer: View {
     let state: RecoveryOpenState
     let actions: RecoveryOpenActions
+    let side: OpenSide
     let onStartOver: (@MainActor () -> Void)?
     let timeScale: UInt64
 
     var body: some View {
         if let o = state.outcome {
-            TimelineView(.periodic(from: .now, by: 1)) { context in answer(o, now: context.date) }
+            // The clock ticks only while a wait runs.
+            if let at = o.retryAt, at > Date() {
+                TimelineView(.periodic(from: .now, by: 1)) { context in answer(o, now: context.date) }
+            } else {
+                answer(o, now: Date())
+            }
         } else {
             noAnswer
         }
@@ -256,11 +287,12 @@ private struct OpenAnswer: View {
             : newRecovery ? RecoveryScreenStrings.onboardingOpenNewRecovery : nil
         let ended = o.code == "exhausted" || o.code == "stored_mismatch"
         return FormScaffold(
-            title: RecoveryScreenStrings.recoverTitle, primaryLabel: primary,
+            title: RecoveryScreenStrings.recoverTitle, primaryLabel: primary, primaryEnabled: !side.busy, busy: side.busy,
             secondaryLabel: onStartOver != nil && !newRecovery ? RecoveryScreenStrings.recoverStartOver : nil,
             onPrimary: { if canAgain { actions.again() } else { onStartOver?() } }, onSecondary: { onStartOver?() }
         ) {
             VStack(alignment: .leading, spacing: Spacing.m) {
+                OpenSideNoticeView(side: side)
                 NoticeCard(
                     ended ? .urgent : .warning, title: RecoveryOpenStrings.onboardingOpenAnswerTitle,
                     message: RecoveryTexts.openAnswer(t, retryAt: RecoveryTexts.retryAt(o.retryAt))
@@ -281,6 +313,7 @@ private struct OpenAnswer: View {
                 }
             }
         }
+        .disabled(side.busy)
         .accessibilityIdentifier("open_answered")
     }
 
@@ -292,10 +325,11 @@ private struct OpenAnswer: View {
             ? RecoveryOpenStrings.onboardingOpenUnreadable : (failure ?? .other).message(timeScale: timeScale)
         return FormScaffold(
             title: RecoveryScreenStrings.recoverTitle, primaryLabel: RecoveryScreenStrings.onboardingOpenTryAgain,
-            secondaryLabel: onStartOver == nil ? nil : RecoveryScreenStrings.recoverStartOver,
+            primaryEnabled: !side.busy, busy: side.busy, secondaryLabel: onStartOver == nil ? nil : RecoveryScreenStrings.recoverStartOver,
             onPrimary: actions.again, onSecondary: { onStartOver?() }
         ) {
             VStack(alignment: .leading, spacing: Spacing.m) {
+                OpenSideNoticeView(side: side)
                 NoticeCard(.warning, title: RecoveryOpenStrings.onboardingOpenAnswerTitle, message: text)
                     .accessibilityAddTraits(.updatesFrequently)
                     .accessibilityIdentifier("open_no_answer")
@@ -305,6 +339,7 @@ private struct OpenAnswer: View {
                 }
             }
         }
+        .disabled(side.busy)
         .accessibilityIdentifier("open_answered")
     }
 }
@@ -314,10 +349,11 @@ private struct OpenAnswer: View {
 private struct OpenFinish: View {
     let state: RecoveryOpenState
     let actions: RecoveryOpenActions
+    let side: OpenSide
     let timeScale: UInt64
     let pin: PinBuffer
 
-    private var canFinish: Bool { pin.count >= RecoveryOpenState.minPin }
+    private var canFinish: Bool { !side.busy && pin.count >= RecoveryOpenState.minPin }
 
     private func finish() {
         guard canFinish else { return }
@@ -329,11 +365,13 @@ private struct OpenFinish: View {
         FormScaffold(
             title: state.lostOk ? RecoveryScreenStrings.onboardingOpenLostTitle : RecoveryScreenStrings.onboardingOpenFinishTitle,
             message: state.lostOk ? RecoveryScreenStrings.onboardingOpenLostBody : RecoveryScreenStrings.onboardingOpenFinishBody,
-            primaryLabel: RecoveryScreenStrings.onboardingOpenFinishGo, primaryEnabled: canFinish,
+            primaryLabel: RecoveryScreenStrings.onboardingOpenFinishGo, primaryEnabled: canFinish, busy: side.busy,
             secondaryLabel: state.lostOk ? RecoveryScreenStrings.onboardingOpenBack : nil, onPrimary: finish,
             onSecondary: actions.again
         ) {
             VStack(alignment: .leading, spacing: Spacing.m) {
+                // Already on the finish step: the notice offers no second way to it.
+                OpenSideNoticeView(side: side, finishLink: false)
                 PinEntry(label: RecoveryScreenStrings.onboardingOpenPin, buffer: pin, identifier: "open_finish_pin")
                 if let o = state.outcome, o.opened {
                     NoticeCard(
@@ -353,6 +391,7 @@ private struct OpenFinish: View {
                 }
             }
         }
+        .disabled(side.busy)
         .accessibilityIdentifier("open_finish")
     }
 }
@@ -397,18 +436,20 @@ struct RecoveryOpenRoute: View {
     let move: any MoveRepository
     let account: any AccountRepository
     let problem: OpenSideNotice?
+    let busy: Bool
     let onStartOver: @MainActor () -> Void
     let onOpened: @MainActor () -> Void
     @State private var model: RecoveryOpenViewModel?
 
     init(
-        move: any MoveRepository, account: any AccountRepository, problem: OpenSideNotice?,
+        move: any MoveRepository, account: any AccountRepository, problem: OpenSideNotice?, busy: Bool = false,
         onStartOver: @escaping @MainActor () -> Void, onOpened: @escaping @MainActor () -> Void,
         model: RecoveryOpenViewModel? = nil
     ) {
         self.move = move
         self.account = account
         self.problem = problem
+        self.busy = busy
         self.onStartOver = onStartOver
         self.onOpened = onOpened
         _model = State(initialValue: model)
@@ -417,7 +458,7 @@ struct RecoveryOpenRoute: View {
     var body: some View {
         RecoveryOpenContent(
             state: model?.state ?? RecoveryOpenState(), actions: model.map(RecoveryOpenActions.init) ?? RecoveryOpenActions(),
-            problem: problem, onStartOver: onStartOver, onOpened: onOpened
+            problem: problem, busy: busy, onStartOver: onStartOver, onOpened: onOpened
         )
         .onAppear { if model == nil { model = RecoveryOpenViewModel(move: move, account: account) } }
         .onDisappear { model?.forgetSecrets() }
