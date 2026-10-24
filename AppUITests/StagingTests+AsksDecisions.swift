@@ -55,11 +55,13 @@ extension StagingTests {
     @MainActor
     private func detailNames(_ app: XCUIApplication, _ label: String) -> Bool {
         guard let root = try? app.snapshot() else { return false }
-        // The item's or entry's own element (a tick's label, "<name>" or "<name>, <note>"), not any text of the screen.
-        let prefixes = ["share_item_", "grant_entry_"]
+        // The item's or entry's own element, not any text of the screen: a share question's item reads "<name>" or
+        // "<name>, <note>", a grant entry as `entryNamed` says.
         return ordered(under: root).contains { e in
-            prefixes.contains { e.identifier.hasPrefix($0) } && !e.identifier.hasPrefix("share_item_note_")
-                && texts(under: e).contains { Self.named($0, label) }
+            if e.identifier.hasPrefix("share_item_") && !e.identifier.hasPrefix("share_item_note_") {
+                return texts(under: e).contains { Self.named($0, label) }
+            }
+            return e.identifier.hasPrefix("grant_entry_") && texts(under: e).contains { Self.entryNamed($0, label) }
         }
     }
 
@@ -67,7 +69,8 @@ extension StagingTests {
     @MainActor
     private func decide(_ app: XCUIApplication, _ ask: Approval) -> String {
         if ask.approve {
-            guard setTicks(app, ask, names: ask.include, on: true), setTicks(app, ask, names: ask.decline, on: false) else {
+            guard ask.kind != "grant" || answerCategories(app, ask), setTicks(app, ask, names: ask.include, on: true),
+                  setTicks(app, ask, names: ask.decline, on: false) else {
                 tap(app.buttons["top_bar_back"].firstMatch)
                 return "not_decided"
             }
@@ -99,11 +102,45 @@ extension StagingTests {
         }
     }
 
+    /// The category entries of a grant request that the test approves (those of the include list, or all when it is empty,
+    /// and not those of the decline list) answered with an item, which ticks them: the picker's menu, the item named by
+    /// `VETTID_STAGING_GRANT_ITEM` or, without it, the first offered. False when a picker offers nothing or the answer
+    /// does not take. (A category entry cannot be ticked, nor the request approved, before it is answered.)
+    @MainActor
+    private func answerCategories(_ app: XCUIApplication, _ ask: Approval) -> Bool {
+        guard let root = try? app.snapshot() else { return false }
+        let entries = ordered(under: root).filter { e in
+            e.identifier.hasPrefix("grant_entry_") && ordered(under: e).contains { $0.identifier.hasPrefix("grant_answer_") }
+        }
+        for entry in entries {
+            let names = texts(under: entry)
+            guard ask.include.isEmpty || ask.include.contains(where: { n in names.contains { Self.entryNamed($0, n) } }),
+                  !ask.decline.contains(where: { n in names.contains { Self.entryNamed($0, n) } }) else { continue }
+            let picker = anyElement(app, "grant_answer_" + entry.identifier.dropFirst("grant_entry_".count))
+            guard picker.exists else { return false }
+            tap(picker)
+            // The menu's entries carry no identifier: found by the item's name, else the first of the menu.
+            let choice = ask.answer.map { app.buttons[$0].firstMatch } ?? app.menus.firstMatch.buttons.firstMatch
+            guard choice.waitForExistence(timeout: 10) else {
+                fail(app, "The picker of a category entry offered no item to answer with.")
+                return false
+            }
+            choice.tap()
+            // Chosen, the picker reads "<name> (change)".
+            guard waitUntil(timeout: 10, {
+                snapshotElement(app, id: entry.identifier).map { texts(under: $0) }?.contains { $0.hasSuffix("(change)") } ?? false
+            }) else {
+                return false
+            }
+        }
+        return true
+    }
+
     /// Each of [names] ticked or unticked as [on] says; false when an item is not listed or the tick does not take.
     @MainActor
     private func setTicks(_ app: XCUIApplication, _ ask: Approval, names: [String], on: Bool) -> Bool {
         for name in names {
-            guard let tick = ticks(app, ask).first(where: { Self.named($0.label, name) }) else { return false }
+            guard let tick = ticks(app, ask).first(where: { Self.entryNamed($0.label, name, kind: ask.kind) }) else { return false }
             if tick.on == on { continue }
             let target = anyElement(app, tick.id)
             tap(ask.kind == "share" ? target : target.buttons.firstMatch)
@@ -162,8 +199,11 @@ extension StagingTests {
             return answer
         }
         show.tap()
-        // Answered: refused, or the button gone from a card that is still there (the fetched values replace it).
-        let shownContent = { !show.exists && snapshotElement(app, id: "received_\(card)") != nil }
+        // Answered: refused, or the button gone from a card that is still there with its "Stop asking" button (the grant
+        // is active, so the fetched values replaced the button, rather than the grant having ended).
+        let shownContent = {
+            !show.exists && snapshotElement(app, id: "received_\(card)") != nil && snapshotElement(app, id: "give_up_\(card)") != nil
+        }
         _ = waitUntil(timeout: Self.network * 2) { refusal(app, card: card) != nil || shownContent() }
         answer.refused = refusal(app, card: card)
         answer.answered = answer.refused != nil || shownContent()

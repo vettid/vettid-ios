@@ -12,8 +12,8 @@ import XCTest
 /// (`ask` or `auto`), `VETTID_STAGING_RULE_PER_DAY`, `VETTID_STAGING_ASK_REASON`, `VETTID_STAGING_ASK_CATEGORY`,
 /// `VETTID_STAGING_ASK_EXPECT` (`shared` or `not_accepted`), `VETTID_STAGING_APPROVAL` (`grant` or `share`),
 /// `VETTID_STAGING_DECISION` (`approve` or `decline`), `VETTID_STAGING_SHARE_INCLUDE` and `VETTID_STAGING_SHARE_DECLINE`
-/// (item names, `;`-separated), `VETTID_STAGING_EXPECT` (the text a fetch must hold), `VETTID_STAGING_FETCH_TIMES`,
-/// `VETTID_STAGING_REFUSED` (the refusal the last fetch must meet) and `VETTID_STAGING_WAIT` (seconds).
+/// (item names, `;`-separated), `VETTID_STAGING_GRANT_ITEM` (the item that answers a category entry),
+/// `VETTID_STAGING_EXPECT` (the text a fetch must hold), `VETTID_STAGING_FETCH_TIMES`, `VETTID_STAGING_REFUSED` (the refusal the last fetch must meet) and `VETTID_STAGING_WAIT` (seconds).
 ///
 /// Like the other multi-step tests, each goes on to the lock after a failed step (``continueAfterFailure`` is on once the
 /// vault is open) and fails once the vault is locked.
@@ -130,8 +130,8 @@ extension StagingTests {
 
     /// How the connection answered the ask for `VETTID_STAGING_ITEM_LABEL`: on the connection's "Shared by" screen the
     /// "Ask for something" list, read (the screen opened again every 20 seconds) until the ask is no longer waiting, for up
-    /// to `VETTID_STAGING_WAIT` seconds (60). `ASK_STATE:` is `waiting`, `shared`, `not_accepted`, `missing` or `unopened` (the screen did not open: the test fails); with
-    /// `VETTID_STAGING_ASK_EXPECT` set, any other state fails the test.
+    /// to `VETTID_STAGING_WAIT` seconds (60). `ASK_STATE:` is `waiting`, `shared`, `not_accepted`, `missing` or `unopened`
+    /// (the screen did not open: the test fails); with `VETTID_STAGING_ASK_EXPECT` set, any other state fails the test.
     @MainActor
     func testStagingAskStatus() throws {
         let pin = try Self.pin()
@@ -157,7 +157,9 @@ extension StagingTests {
     /// see your items", or `share`: "Share with a connection?"; `grant` by default), waited for up to
     /// `VETTID_STAGING_WAIT` seconds (120), and, when `VETTID_STAGING_ITEM_LABEL` is set, the one that names that item.
     /// For an approval the items of `VETTID_STAGING_SHARE_INCLUDE` are ticked and those of `VETTID_STAGING_SHARE_DECLINE`
-    /// unticked first (the other ticks stay as they are); then `VETTID_STAGING_DECISION` (`approve`: the primary button,
+    /// unticked first (the other ticks stay as they are; a grant request's entry is named by its item or by the asked
+    /// label), and each category entry to approve is answered with the item named by `VETTID_STAGING_GRANT_ITEM` (the first
+    /// offered by default), which ticks it; then `VETTID_STAGING_DECISION` (`approve`: the primary button,
     /// `decline`: "Deny" or "Do not share"). Reported on a `SHARE_STATE:` line (`approved`, `declined`, `not_decided`,
     /// `not_opened` or `missing`).
     @MainActor
@@ -169,7 +171,8 @@ extension StagingTests {
         let decision = try Self.required("VETTID_STAGING_DECISION", ["approve", "decline"])
         let ask = Approval(
             peer: peer, kind: kind, approve: decision == "approve", label: Self.optional("VETTID_STAGING_ITEM_LABEL"),
-            include: Self.list("VETTID_STAGING_SHARE_INCLUDE"), decline: Self.list("VETTID_STAGING_SHARE_DECLINE")
+            include: Self.list("VETTID_STAGING_SHARE_INCLUDE"), decline: Self.list("VETTID_STAGING_SHARE_DECLINE"),
+            answer: Self.optional("VETTID_STAGING_GRANT_ITEM")
         )
         let limit = try Self.wait(120)
 

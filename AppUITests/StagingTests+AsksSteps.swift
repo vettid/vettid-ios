@@ -15,6 +15,8 @@ extension StagingTests {
         let label: String?
         let include: [String]
         let decline: [String]
+        /// The name of the item that answers a category entry of a grant request; the first offered when nil.
+        let answer: String?
 
         /// The title of the kind's row, as Approvals shows it.
         var title: String { kind == "share" ? "Share with a connection?" : "Request to see your items" }
@@ -71,6 +73,16 @@ extension StagingTests {
     static func named(_ label: String, _ name: String) -> Bool {
         let l = plain(label)
         return l == name || l.hasPrefix(name + ",")
+    }
+
+    /// Whether the tick or entry text [text] names [name]. A share question's item is "<name>" (`named`); a grant request's
+    /// entry also reads "Any <name> item (you choose which)" for a category and "<name> (not in your vault)" for an item
+    /// the vault lacks. (The English texts of the approvals screen, the only localization; a test bundle cannot read the
+    /// app's strings.)
+    static func entryNamed(_ text: String, _ name: String, kind: String = "grant") -> Bool {
+        let t = plain(text)
+        if named(t, name) { return true }
+        return kind == "grant" && (t.hasPrefix("Any \(name) item") || t == "\(name) (not in your vault)")
     }
 
     /// The identifier of the first element (`<idPrefix><…>`, not one of [excluding]) whose text satisfies [test], looking

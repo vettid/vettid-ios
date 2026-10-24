@@ -118,7 +118,10 @@
 #                                        VETTID_STAGING_APPROVAL (grant or share; grant), waited for (VETTID_STAGING_WAIT
 #                                        seconds, 120) and, with VETTID_STAGING_ITEM_LABEL set, the one that names that
 #                                        item; to approve, the items of VETTID_STAGING_SHARE_INCLUDE ticked and those of
-#                                        VETTID_STAGING_SHARE_DECLINE unticked first (";"-separated names); then
+#                                        VETTID_STAGING_SHARE_DECLINE unticked first (";"-separated names; a grant
+#                                        request's entry is named by its item or by the asked label); each category
+#                                        entry ("Any <label> item") is answered with the item named by
+#                                        VETTID_STAGING_GRANT_ITEM (the first offered when unset), which ticks it; then
 #                                        VETTID_STAGING_DECISION (approve or decline); prints
 #                                        "SHARE_STATE: approved|declined|not_decided|not_opened|missing".
 #   testStagingFetch                     the connection's "Shared by" screen (VETTID_STAGING_WAIT seconds, 120, for the
@@ -148,7 +151,8 @@
 # VETTID_STAGING_ASK_CATEGORY); testStagingAskStatus, testStagingFetch and testStagingRevoke VETTID_STAGING_PEER_NAME and
 # VETTID_STAGING_ITEM_LABEL (optional VETTID_STAGING_ASK_EXPECT, VETTID_STAGING_EXPECT, VETTID_STAGING_FETCH_TIMES,
 # VETTID_STAGING_REFUSED); testStagingDecide VETTID_STAGING_PEER_NAME and VETTID_STAGING_DECISION (optional
-# VETTID_STAGING_APPROVAL, VETTID_STAGING_ITEM_LABEL, VETTID_STAGING_SHARE_INCLUDE, VETTID_STAGING_SHARE_DECLINE).
+# VETTID_STAGING_APPROVAL, VETTID_STAGING_ITEM_LABEL, VETTID_STAGING_SHARE_INCLUDE, VETTID_STAGING_SHARE_DECLINE,
+# VETTID_STAGING_GRANT_ITEM).
 #
 # A test without its inputs is skipped. The inputs reach only the test step, as TEST_RUNNER_<NAME> (xcodebuild passes
 # them to the runner as <NAME>), never a command line or the build; xcodebuild's output is shown with them (the link
@@ -183,7 +187,7 @@ OPTIONAL=(VETTID_STAGING_LINK VETTID_STAGING_SAFETY_CODE VETTID_STAGING_PEER_NAM
 OPTIONAL+=(VETTID_STAGING_ITEM_LABEL VETTID_STAGING_ITEM_VALUE VETTID_STAGING_TAG VETTID_STAGING_RULE_MODE
   VETTID_STAGING_RULE_PER_DAY VETTID_STAGING_ASK_REASON VETTID_STAGING_ASK_CATEGORY VETTID_STAGING_ASK_EXPECT
   VETTID_STAGING_APPROVAL VETTID_STAGING_DECISION VETTID_STAGING_SHARE_INCLUDE VETTID_STAGING_SHARE_DECLINE
-  VETTID_STAGING_FETCH_TIMES VETTID_STAGING_REFUSED)
+  VETTID_STAGING_GRANT_ITEM VETTID_STAGING_FETCH_TIMES VETTID_STAGING_REFUSED)
 ALL=("${NAMES[@]}" "${OPTIONAL[@]}")
 BUNDLE_ID=com.vettid.app.staging
 
@@ -364,7 +368,7 @@ xcodebuild test-without-building \
         map { my $k = $_; my $v = $ENV{"TEST_RUNNER_$k"} // ""; ($v, ($lists{$k} ? map { my $n = ($k eq "VETTID_STAGING_PEER_NAME" ? (split /=/, $_, 2)[0] : $_); $n =~ s/^\s+|\s+$//g; $n } split(/;/, $v) : ())) }
         qw(VETTID_STAGING_EMAIL VETTID_STAGING_CODE VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_LINK
            VETTID_STAGING_PEER_NAME VETTID_STAGING_MESSAGE VETTID_STAGING_EXPECT VETTID_STAGING_ITEM_LABEL
-           VETTID_STAGING_ITEM_VALUE VETTID_STAGING_TAG VETTID_STAGING_ASK_REASON
+           VETTID_STAGING_ITEM_VALUE VETTID_STAGING_TAG VETTID_STAGING_ASK_REASON VETTID_STAGING_GRANT_ITEM
            VETTID_STAGING_SHARE_INCLUDE VETTID_STAGING_SHARE_DECLINE)
     }
     # The connect, message and photo tests report lines: the code, the state or the answer alone, never anything else of the
