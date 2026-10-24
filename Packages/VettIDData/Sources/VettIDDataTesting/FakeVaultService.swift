@@ -140,6 +140,8 @@ public final class FakeVaultService: @unchecked Sendable {
     var headerSeq: UInt64 = 1
     var stateSeq: UInt64 = 2
     var vaultClockAhead: TimeInterval = 0
+    /// Set by ``freezeVaultClock()``: the vault's clock stands still there, moved only by ``advanceVaultClock(_:)``.
+    var vaultClockFrozenAt: Date?
     var unlockAnswers: [UnlockAnswer] = []
     var unlocksValue: [UnlockSeen] = []
     /// The releases the fake runs and the release updates it was sent (``FakeVaultService+Release.swift``).

@@ -39,8 +39,8 @@ extension FakeVaultService {
 
     // MARK: - Switches and what was seen
 
-    /// The vault's clock (the real one moved ahead by ``advanceVaultClock(_:)``).
-    var vaultNow: Date { Date().addingTimeInterval(vaultClockAhead) }
+    /// The vault's clock (the real one, or the frozen one, moved ahead by ``advanceVaultClock(_:)``).
+    var vaultNow: Date { (vaultClockFrozenAt ?? Date()).addingTimeInterval(vaultClockAhead) }
 
     public var ownerChecks: [OwnerCheckSeen] { locked { ownerChecksValue } }
     /// Consecutive failed checks (§3.6.4).

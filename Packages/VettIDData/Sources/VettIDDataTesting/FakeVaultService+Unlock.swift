@@ -97,6 +97,10 @@ extension FakeVaultService {
     /// The vault's clock moves ahead (a backoff runs out).
     public func advanceVaultClock(_ seconds: TimeInterval) { locked { vaultClockAhead += seconds } }
 
+    /// The vault's clock stops at now and then moves only by ``advanceVaultClock(_:)``: a test of a window of seconds on it
+    /// does not depend on how long the machine takes.
+    public func freezeVaultClock() { locked { vaultClockFrozenAt = Date() } }
+
     /// The vault now holds [secret] as this phone's (a `pin.change` or `vault.secret.renew` it stored, whose answer the
     /// phone did not get).
     public func storeSecret(_ secret: [UInt8]) { locked { vaultSecret = secret } }
@@ -178,7 +182,7 @@ extension FakeVaultService {
 
     /// The vault's own rules, in the order of `UnlockAlt`. Callers hold ``cond``.
     private func unlockResult(pin: String, secret: [UInt8]?, update: UpdateSeen?) -> String {
-        let now = Date().addingTimeInterval(vaultClockAhead)
+        let now = vaultNow
         guard let secret, secret.count == 32 else { return refused("bad_request") }
         if let until = backoffUntil, now < until { return refused("backoff", retryAfter: until.timeIntervalSince(now)) }
         // openDEK: the secret is checked before the PIN, and its failure is not a PIN attempt.
