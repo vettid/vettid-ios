@@ -13,15 +13,19 @@ public struct SecretTextEditor: View {
     private let focus: Bool
     private let pasteOnly: Bool
     private let onSubmit: (() -> Void)?
+    private let keeps: ((Character) -> Bool)?
     @Environment(\.vettIDColors) private var colors
 
     /// [focus]: the editor takes the keyboard (once, each time it turns true). [pasteOnly]: the text menu offers no Copy or
     /// Cut, so what is typed here never reaches the clipboard (a recovery code, VAULT-MESSAGING §11.11.10: "the code does
     /// not go to a clipboard"); a paste is allowed. A paste-only editor also shows the model's text again when the model refuses
-    /// what was typed. [onSubmit]: the Return key calls it instead of adding a line.
+    /// what was typed, and keeps the cursor after the same characters when the text is drawn again (a text in groups); [keeps] says
+    /// which characters the model keeps (default: those that are not whitespace). [onSubmit]: the Return key calls it instead of
+    /// adding a line (and is labelled Done).
     public init(
         _ label: String, text: Binding<String>, placeholder: String? = nil, isError: Bool = false, focus: Bool = false,
-        pasteOnly: Bool = false, onSubmit: (() -> Void)? = nil
+        pasteOnly: Bool = false, onSubmit: (() -> Void)? = nil,
+        keeps: ((Character) -> Bool)? = nil
     ) {
         self.label = label
         _text = text
@@ -30,10 +34,11 @@ public struct SecretTextEditor: View {
         self.focus = focus
         self.pasteOnly = pasteOnly
         self.onSubmit = onSubmit
+        self.keeps = keeps
     }
 
     public var body: some View {
-        SecretTextView(text: $text, focus: focus, pasteOnly: pasteOnly, onSubmit: onSubmit)
+        SecretTextView(text: $text, focus: focus, pasteOnly: pasteOnly, onSubmit: onSubmit, keeps: keeps)
             .frame(minHeight: Spacing.touchTarget * 2)
             .overlay(alignment: .topLeading) {
                 if text.isEmpty, let placeholder {
@@ -59,6 +64,7 @@ struct SecretTextView: UIViewRepresentable {
     var focus = false
     var pasteOnly = false
     var onSubmit: (() -> Void)?
+    var keeps: ((Character) -> Bool)?
 
     final class Coordinator: NSObject, UITextViewDelegate {
         var parent: SecretTextView
@@ -73,7 +79,7 @@ struct SecretTextView: UIViewRepresentable {
             guard parent.pasteOnly else { return }
             DispatchQueue.main.async { [weak self, weak view] in
                 guard let self, let view, view.text != self.parent.text else { return }
-                SecretTextView.show(self.parent.text, in: view)
+                SecretTextView.show(self.parent.text, in: view, keeps: self.parent.keeps)
             }
         }
 
@@ -97,6 +103,7 @@ struct SecretTextView: UIViewRepresentable {
         v.autocapitalizationType = .none
         v.inlinePredictionType = .no
         v.keyboardType = .asciiCapable
+        if onSubmit != nil { v.returnKeyType = .done }
         v.font = UIFont.preferredFont(forTextStyle: .body)
         v.adjustsFontForContentSizeCategory = true
         v.backgroundColor = .clear
@@ -109,23 +116,32 @@ struct SecretTextView: UIViewRepresentable {
 
     func updateUIView(_ v: UITextView, context: Context) {
         context.coordinator.parent = self
-        if v.text != text { Self.show(text, in: v) }
+        if v.text != text {
+            if pasteOnly { Self.show(text, in: v, keeps: keeps) } else { v.text = text }
+        }
         SecretFocus.request(focus, v, &context.coordinator.focused)
     }
 
-    /// [text] in [v], the cursor kept after the same number of characters that are not whitespace (a text that is redrawn in
-    /// groups keeps the member's place).
-    static func show(_ text: String, in v: UITextView) {
+    /// [text] in [v], the cursor kept after the same number of characters that [keeps] (default: not whitespace) in what was
+    /// there before it (a text that is redrawn in groups, or without what the model refused, keeps the member's place). A view
+    /// that is not being edited puts the cursor at the end.
+    static func show(_ text: String, in v: UITextView, keeps: ((Character) -> Bool)? = nil) {
+        let kept = keeps ?? { !$0.isWhitespace }
         let before = v.text ?? ""
+        let editing = v.isFirstResponder || v.selectedRange.length > 0 || v.selectedRange.location < (before as NSString).length
         let cursor = min(v.selectedRange.location, (before as NSString).length)
-        let significant = (before as NSString).substring(to: cursor).filter { !$0.isWhitespace }.count
+        let significant = (before as NSString).substring(to: cursor).filter(kept).count
         v.text = text
+        guard editing else {
+            v.selectedRange = NSRange(location: (text as NSString).length, length: 0)
+            return
+        }
         var seen = 0
         var offset = 0
         for character in text {
             if seen == significant { break }
             offset += character.utf16.count
-            if !character.isWhitespace { seen += 1 }
+            if kept(character) { seen += 1 }
         }
         v.selectedRange = NSRange(location: offset, length: 0)
     }
