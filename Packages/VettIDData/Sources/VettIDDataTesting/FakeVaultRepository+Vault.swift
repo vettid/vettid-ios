@@ -164,12 +164,13 @@ extension FakeVaultRepository: VaultRepository {
         try call("deleteVault")
         lastPin = pin
         lastPassword = password
-        phase = .signedOut // a new vault needs a new setup code
+        // As the real one: "being deleted" (nothing is erased until the member confirms the removal there).
+        deletion = VaultDeletion(since: Date(), until: Date().addingTimeInterval(600))
+        phase = .deleting
     }
 
     public func checkVaultDeleted() async throws -> DeletionCheck {
         try call("checkVaultDeleted")
-        if deletionCheck == .deleted { phase = .signedOut }
         return deletionCheck
     }
 

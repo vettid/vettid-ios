@@ -66,7 +66,8 @@ extension VaultManager {
         return .deleting
     }
 
-    /// Check again (after the bound; a second tap waits for the first), and a return to the foreground: one read.
+    /// One read of the status now, or the one already on its way (Check again, and a return to the foreground). It never
+    /// erases: only a definite word does (none yet), or the member's confirmed removal.
     public func checkDeletionAgain() async -> DeletionRead {
         guard deletion != nil else { return .gone }
         return await deletionReads.readOnce()

@@ -100,7 +100,7 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var lastRenew: (pin: String, password: String)?
     /// (iPhone, IOS-PLAN §6.3 item 5) The earlier-secret step opened the vault: the prompt for a new phone secret.
     public var renewSecretSuggested = false
-    /// What ``checkVaultDeleted()`` finds after a deletion whose answer was lost .
+    /// What ``checkVaultDeleted()`` finds after a deletion whose answer was lost.
     public var deletionCheck = DeletionCheck.undecided
     public var transferKeptSince: Date?
     public var finishMovePending = false

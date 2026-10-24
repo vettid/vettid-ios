@@ -76,7 +76,6 @@ import VettIDDataTesting
         let vm = VaultDeletingViewModel(account: vault)
         #expect(!vm.state.slow)
         vault.deletion?.slow = true
-        await Task.yield()
         #expect(await eventually { vm.state.slow }, "the bound is reached")
         #expect(vm.state.slow)
         vm.checkAgain()
@@ -131,8 +130,7 @@ import VettIDDataTesting
         let account = FakeVaultRepository(.signedOut)
         account.vaultDeletedNotice = true
         let vm = OnboardingViewModel(account: account, vault: account, inbox: SetupLinkInbox())
-        for _ in 0..<5 { await Task.yield() }
-        #expect(vm.state.deletedNotice)
+        #expect(await eventually { vm.state.deletedNotice })
         vm.dismissDeletedNotice()
         #expect(!vm.state.deletedNotice && !account.vaultDeletedNotice)
     }

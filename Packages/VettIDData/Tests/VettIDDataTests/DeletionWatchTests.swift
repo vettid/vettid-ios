@@ -79,8 +79,8 @@ import Testing
         #expect(s.reads == 1 && s.waits.isEmpty && s.slow == 1)
     }
 
-    /// A clock that jumps back a day after the start: the next wait is capped at 60 s, so the bound is seen again at once
-    /// (past it as the clock moved back before the start), and the schedule ends in "still finishing" with no long wait.
+    /// A clock a day behind the start is past the bound at once (it cannot be trusted to count down): "still finishing"
+    /// with no sleep and no read.
     @Test func aClockMovedBackDoesNotStretchTheWait() async {
         let s = Script()
         let since = s.now
@@ -118,7 +118,7 @@ import Testing
         )
         async let a = w.readOnce()
         async let b = w.readOnce()
-        for _ in 0..<50 where release == nil { await Task.yield() }
+        #expect(await eventually { release != nil }, "the read started")
         release?.resume()
         let ra = await a
         let rb = await b

@@ -177,8 +177,8 @@ enum SecurityStrings {
         String(
             localized: "ios_settings_delete_unconfirmed",
             defaultValue: """
-                Your vault didn't answer, so VettID doesn't know yet whether it was deleted. Check again in a moment. If it \
-                was deleted, VettID's data is then erased from this phone.
+                Your vault did not answer, so this phone can't tell yet whether it was deleted. Check again in a moment. \
+                VettID's data stays on this phone until the deletion is confirmed.
                 """,
             bundle: .module
         )

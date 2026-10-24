@@ -88,7 +88,7 @@ import VettIDDataTesting
         #expect(!repo.calls.contains("deleteVault"))
         m.confirm()
         await m.settle()
-        #expect(repo.phase == .signedOut && repo.lastPin == "40281795" && repo.lastPassword == "pw")
+        #expect(repo.phase == .deleting && repo.lastPin == "40281795" && repo.lastPassword == "pw")
     }
 
     /// Each of the phrase, a PIN of 4 digits at least, the password and the acknowledgement is needed.
@@ -137,7 +137,7 @@ import VettIDDataTesting
     }
 
     /// A lost answer the account service does not yet show as done: said so, nothing else; "Check again" asks the
-    /// account service (nothing to the vault) until it shows the vault gone.
+    /// account service (nothing to the vault, nothing erased): still undecided, the phone stays as it is.
     @Test func aLostAnswerIsCheckedAgain() async {
         repo.fail["deleteVault"] = VaultFailure(.noResponse, code: VaultManager.codeDeleteUnconfirmed)
         let m = filled()
@@ -147,10 +147,10 @@ import VettIDDataTesting
         m.checkAgain()
         await m.settle()
         #expect(m.state.unconfirmed && repo.phase == .unlocked)
-        repo.deletionCheck = .deleted
         m.checkAgain()
         await m.settle()
-        #expect(!m.state.unconfirmed && repo.phase == .signedOut)
+        #expect(m.state.unconfirmed && repo.phase == .unlocked)
+        #expect(repo.calls.filter { $0 == "checkVaultDeleted" }.count == 2)
         #expect(repo.calls.filter { $0 == "deleteVault" }.count == 1)
     }
 
@@ -170,7 +170,7 @@ import VettIDDataTesting
         m.confirm()
         #expect(!m.state.notDeleted && !m.state.unconfirmed && m.state.busy)
         await m.settle()
-        #expect(repo.phase == .signedOut)
+        #expect(repo.phase == .deleting && repo.deletion != nil, "the answer starts being deleted; nothing is erased")
     }
 
     /// The app leaving the foreground drops the PIN, the password and the final confirmation.
