@@ -4592,6 +4592,556 @@
           }
         }
       }
+    },
+    "recover_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recover your vault"
+          }
+        }
+      }
+    },
+    "recover_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your account site shows a recovery QR code %@ after you start a recovery there. Open it (Vault, then Recovery, then Show the code) and scan it with this phone, or type the code shown under it."
+          }
+        }
+      }
+    },
+    "recover_need_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The recovery code from the account site, your vault PIN and your credential password. This phone then replaces your old one, which erases VettID the next time it reaches your vault."
+          }
+        }
+      }
+    },
+    "recover_scan": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan the code"
+          }
+        }
+      }
+    },
+    "recover_open_site": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open the account site"
+          }
+        }
+      }
+    },
+    "recover_scan_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan the recovery code"
+          }
+        }
+      }
+    },
+    "recover_scan_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Point the camera at the code on the account site."
+          }
+        }
+      }
+    },
+    "recover_type": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type the code instead"
+          }
+        }
+      }
+    },
+    "recover_scan_instead": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan instead"
+          }
+        }
+      }
+    },
+    "recover_type_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type your recovery code"
+          }
+        }
+      }
+    },
+    "recover_type_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On the account site, under the QR code, there are 12 groups of four characters. Type them all, in order."
+          }
+        }
+      }
+    },
+    "recover_type_label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovery code"
+          }
+        }
+      }
+    },
+    "recover_type_groups": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld of %2$lld groups"
+          }
+        }
+      }
+    },
+    "recover_registering": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking the code with your vault"
+          }
+        }
+      }
+    },
+    "recover_registering_starting": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If your vault was not running, it is starting now. This can take a couple of minutes."
+          }
+        }
+      }
+    },
+    "recover_start_over": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start over"
+          }
+        }
+      }
+    },
+    "recover_start_over_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start over on this phone?"
+          }
+        }
+      }
+    },
+    "recover_start_over_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This phone forgets the recovery it registered and goes back to the start. There you can recover again, use a setup code or move VettID from your old phone.\n\nThe recovery itself is not cancelled by this: it stays open until you cancel it on the account site or it expires, and its code cannot be used a second time. To recover with this phone later, cancel it there and start a new recovery. Your vault is not changed."
+          }
+        }
+      }
+    },
+    "recover_no_backup_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This vault cannot be recovered"
+          }
+        }
+      }
+    },
+    "recover_no_backup_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Its credential backup was off, so VettID offers no way back into it: nothing in it can be released to a phone without the credential."
+          }
+        }
+      }
+    },
+    "recover_no_backup_notice": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This vault cannot be recovered: its credential backup was off. Delete it on the account site and start over with a new setup code."
+          }
+        }
+      }
+    },
+    "recover_no_backup_start_over": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete my vault and start over"
+          }
+        }
+      }
+    },
+    "recover_no_backup_new_vault": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I have a new setup code"
+          }
+        }
+      }
+    },
+    "onboarding_open_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your PIN and your password"
+          }
+        }
+      }
+    },
+    "onboarding_open_pin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault PIN"
+          }
+        }
+      }
+    },
+    "onboarding_open_password": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credential password"
+          }
+        }
+      }
+    },
+    "onboarding_open_ten": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter both. You have 10 attempts in total for this vault, not 10 a day."
+          }
+        }
+      }
+    },
+    "onboarding_open_continue": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue"
+          }
+        }
+      }
+    },
+    "onboarding_open_check": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is what will be sent. PIN: %1$@. Password: %2$@. Look at both. A wrong entry uses one of your attempts."
+          }
+        }
+      }
+    },
+    "onboarding_open_send": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send"
+          }
+        }
+      }
+    },
+    "onboarding_open_change": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change"
+          }
+        }
+      }
+    },
+    "onboarding_open_warning_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Before you send"
+          }
+        }
+      }
+    },
+    "onboarding_open_try_again": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try again"
+          }
+        }
+      }
+    },
+    "onboarding_open_lost_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finish with your PIN"
+          }
+        }
+      }
+    },
+    "onboarding_open_lost_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If your last attempt recovered your vault but its answer was lost, your PIN finishes the recovery on this phone. This does not use any of your attempts."
+          }
+        }
+      }
+    },
+    "onboarding_open_back": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back to the recovery"
+          }
+        }
+      }
+    },
+    "onboarding_open_new_recovery": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start a new recovery"
+          }
+        }
+      }
+    },
+    "onboarding_open_finish_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finish the recovery"
+          }
+        }
+      }
+    },
+    "onboarding_open_finish_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault was recovered onto this phone, but this phone could not open it yet. Enter your PIN to finish. This does not use any of your attempts."
+          }
+        }
+      }
+    },
+    "onboarding_open_finish_go": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finish"
+          }
+        }
+      }
+    },
+    "onboarding_open_finish_gone": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault no longer accepts this phone. It may have been recovered onto another phone, or deleted."
+          }
+        }
+      }
+    },
+    "onboarding_open_finish_erase_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This erases VettID's data on this phone only: its keys, your account details and the app's settings. It cannot be undone.\n\nYour vault was recovered onto this phone and may still count on it. Erase only if your vault now works on another phone, or if you are sure it is gone."
+          }
+        }
+      }
+    },
+    "ios_recover_guidance_finish_with_pin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "An attempt to open your vault was already sent from this phone, and your vault may have accepted it. Finish with your PIN. Do not start over or scan a new code."
+          }
+        }
+      }
+    },
+    "ios_recover_guidance_already_recovered": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This phone has already recovered your vault. Finish the recovery. Do not start over."
+          }
+        }
+      }
+    },
+    "ios_recover_guidance_try_open_again": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The recovery is still registered for this phone. Enter your PIN and password again. If your last attempt may have worked, finish with your PIN instead."
+          }
+        }
+      }
+    },
+    "ios_recover_guidance_retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID could not tell just now whether your vault accepted this phone. Try again in a moment."
+          }
+        }
+      }
+    },
+    "ios_recover_guidance_start_over_first": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This phone is registered for another recovery. Start over first, then scan this code."
+          }
+        }
+      }
+    },
+    "ios_recover_guidance_go": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Go to the recovery"
+          }
+        }
+      }
+    },
+    "ios_recover_stage_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID could not read where your recovery stands, so it shows nothing else yet. Try again."
+          }
+        }
+      }
+    },
+    "ios_recover_open_sending": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sending to your vault"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
