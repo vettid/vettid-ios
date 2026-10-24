@@ -133,6 +133,41 @@ import VettIDVault
         #expect(m.idleLockedNow(later) == IdleLocked(afterSeconds: 604_800))
     }
 
+    /// Locked for another reason than the idle lock (a notice with none, `recovery`, `owner_check`): `idle_lock_at` passing
+    /// later does not say it locked itself, and a restart does not forget it.
+    @Test(arguments: [#"{}"#, #"{"reason":"recovery"}"#, #"{"reason":"owner_check"}"#])
+    func aLockForAnotherReasonIsNotSaidToBeAnIdleLock(body: String) async throws {
+        let ops = FakeOwnerCheckOps()
+        let m = manager(ops)
+        try await readBeforeTheDeadline(ops, m)
+        let later = at(idleAt).addingTimeInterval(60)
+        m.onEvent(event("vault.locking", body))
+        #expect(m.idleLockedNow(later) == nil)
+        #expect(manager(FakeOwnerCheckOps()).idleLockedNow(later) == nil)
+        m.onOpened()
+        #expect(m.idleLockedNow(later) == IdleLocked(afterSeconds: 604_800))
+    }
+
+    /// A flag set before any view of the check was read (a kill right after) is kept, and the view read later does not drop it.
+    @Test func theFlagsAreKeptWithoutAViewOfTheCheck() async throws {
+        let m = manager(FakeOwnerCheckOps())
+        #expect(m.ownerCheck == nil)
+        m.onEvent(event("vault.locking", #"{"reason":"idle"}"#))
+        let restarted = manager(FakeOwnerCheckOps())
+        #expect(restarted.ownerCheck == nil)
+        #expect(restarted.idleLocked == IdleLocked(afterSeconds: nil))
+        restarted.onOpened()
+        stored.bytes = nil
+        let other = manager(FakeOwnerCheckOps())
+        other.onLockedHere()
+        let again = manager(FakeOwnerCheckOps())
+        #expect(again.ownerCheck == nil)
+        let ops = FakeOwnerCheckOps()
+        try await readBeforeTheDeadline(ops, again)
+        #expect(again.idleLockedNow(at(idleAt).addingTimeInterval(60)) == nil)
+        #expect(manager(FakeOwnerCheckOps()).idleLockedNow(at(idleAt).addingTimeInterval(60)) == nil)
+    }
+
     /// The setting: none for a vault before L; a shorter value in force at once, a longer one after the next check, and the
     /// lowest set since the last check stays in force (owner decision 2026-10-23).
     @Test func theIdleLockSettingShorterAtOnceLongerAfterTheNextCheck() async throws {

@@ -63,6 +63,19 @@ import VettIDDataTesting
         #expect(checks.ownerCheck?.idleAfterSeconds == 2_592_000)
     }
 
+    /// The member's own lock, whatever `idle_lock_at` says later, is not said to be the vault locking itself.
+    @Test func aLockByTheMemberIsNotSaidToBeAnIdleLockWhenIdleLockAtPasses() async throws {
+        defer { phone.close() }
+        try await setUp()
+        try await checks.refreshOwnerCheck()
+        let idleAt = try #require(checks.ownerCheck?.idleLockAt)
+        let later = idleAt.addingTimeInterval(60)
+        try await m.lock()
+        #expect(checks.idleLockedNow(later) == nil)
+        await m.lockAgain()
+        #expect(checks.idleLockedNow(later) == nil)
+    }
+
     @Test func aVaultBeforeLHasNoSettingAndNoTime() async throws {
         defer { phone.close() }
         service.idleLockSupported = false

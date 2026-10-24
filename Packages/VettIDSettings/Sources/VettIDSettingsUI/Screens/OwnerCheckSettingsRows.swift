@@ -61,7 +61,7 @@ struct OwnerCheckSettingsRows: View {
                 // A longer value was chosen: it takes effect after the next check (said once).
                 .alert(
                     SettingsStrings.idleLock,
-                    isPresented: Binding(get: { state.idleLongerNote }, set: { if !$0 { actions.dismissIdleNote() } })
+                    isPresented: Binding(get: { state.idleLongerNote && !covered }, set: { if !$0 { actions.dismissIdleNote() } })
                 ) {
                     Button(SettingsStrings.done, action: actions.dismissIdleNote)
                 } message: {

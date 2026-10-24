@@ -204,7 +204,7 @@ public protocol OwnerCheckRepository: AnyObject, Observable, Sendable {
     /// (Release L) Why the locked vault is locked, if it locked itself: the notice (``idleLocked``), or, lacking it (the
     /// phone was off), a time past the ``OwnerCheckView/idleLockAt`` the app last read ("the app says why from the notice
     /// or, lacking it, from `idle_lock_at` as it last read it", §3.6.8), unless the member locked the vault on this phone
-    /// since (``onLockedHere()``).
+    /// since or it locked for another reason (``onLockedHere()``).
     func idleLockedNow(_ now: Date) -> IdleLocked?
 
     /// (Release L) The member locked the vault on this phone: a later unlock screen does not say it locked itself.
@@ -263,12 +263,6 @@ public extension OwnerCheckRepository {
     func onLockedHere() {}
     func refreshIdleLockSetting() async throws {}
     func setIdleLockAfter(seconds: Int64) async throws {}
-
-    func idleLockedNow(_ now: Date) -> IdleLocked? {
-        idleLocked ?? ownerCheck.flatMap { v in
-            v.idleLockAt.flatMap { $0 <= now ? IdleLocked(afterSeconds: v.idleAfterSeconds) : nil }
-        }
-    }
 
     var notices: [OwnerCheckNotice] { [] }
     var presenceUnrecorded: Bool { false }

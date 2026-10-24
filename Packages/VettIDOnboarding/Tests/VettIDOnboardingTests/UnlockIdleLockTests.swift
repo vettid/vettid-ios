@@ -31,8 +31,23 @@ import VettIDDataTesting
             state: .held, deadline: deadline, intervalSeconds: 86_400, failures: 0, hold: true,
             idleLockAt: deadline.addingTimeInterval(604_800)
         )
+        // As the manager: the time is the value read before the deadline, not `idle_lock_at` less the deadline.
+        vault.idleAfterKnown = 604_800
         let vm = UnlockViewModel(vault: vault, account: vault, ownerCheck: vault, tick: ticker.tick)
         await vm.settle()
         #expect(vm.state.idleLocked == IdleLocked(afterSeconds: 604_800))
+    }
+
+    /// The member locked the vault on this phone: `idle_lock_at` passing says nothing.
+    @Test func aLockMadeHereIsNotSaidToBeAnIdleLock() async {
+        let deadline = Date().addingTimeInterval(-8 * 86_400)
+        vault.ownerCheck = OwnerCheckView(
+            state: .held, deadline: deadline, intervalSeconds: 86_400, failures: 0, hold: true,
+            idleLockAt: deadline.addingTimeInterval(604_800)
+        )
+        vault.onLockedHere()
+        let vm = UnlockViewModel(vault: vault, account: vault, ownerCheck: vault, tick: ticker.tick)
+        await vm.settle()
+        #expect(vm.state.idleLocked == nil)
     }
 }
