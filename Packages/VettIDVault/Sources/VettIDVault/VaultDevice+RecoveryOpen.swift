@@ -14,6 +14,9 @@ extension VaultDevice {
     /// ``finishRecoveryOpen()``.
     public var recoveryOpenedNotFinished: Bool { mem.withLock { st.vault != nil && st.recovery != nil } }
 
+    /// The `recovery_id` this app is registered for, while recovering.
+    public var recoveryID: String? { mem.withLock { st.recovery?.recoveryID } }
+
     /// While recovering: the vault's `credential_backup` from this app's unlock result (§11.11.5 step 1, a vault before
     /// release R); nil when not reported. A release R vault does not send it (§11.14.6 "What is removed in release R").
     public var recoveryCredentialBackup: Bool? { mem.withLock { st.recovery?.credentialBackup } }

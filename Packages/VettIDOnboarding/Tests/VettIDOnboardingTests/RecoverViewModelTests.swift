@@ -197,6 +197,14 @@ import VettIDDataTesting
         await scanning.settle()
         #expect(scanning.state.guidance == .finishWithPin && scanning.state.step == .scan)
         #expect(RecoverState().guidance == nil)
+        var s = RecoverState()
+        for (code, g) in [
+            (VaultManager.codeRecoveryOpenPending, RecoverGuidance.tryOpenAgain), (VaultManager.codeRecoveryOpenUnknown, .retry),
+            (VaultManager.codeRecoveryRegistered, .startOverFirst),
+        ] {
+            s.errorCode = code
+            #expect(s.guidance == g)
+        }
     }
 
     @Test func startOverIsOfferedOnlyWhereARegistrationIsHeld() async throws {

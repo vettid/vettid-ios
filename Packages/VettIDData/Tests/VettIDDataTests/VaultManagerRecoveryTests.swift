@@ -357,19 +357,29 @@ import VettIDDataTesting
         #expect(try await m.resumeLostOk(pin: pin).ok)
     }
 
+    /// A registered phone the vault did not adopt is not one of its unlock keys: its unlock is answered random bytes. The member
+    /// API says the recovery is still registered, and this phone is not its app: the open can be tried again.
     @Test func aRecoveryThatDidNotCompleteHereIsNotResumed() async throws {
         defer { phone.close() }
         _ = try await registered()
-        // The vault never completed it: its unlock key is not this phone's.
         let outcome = try await m.resumeLostOk(pin: pin)
-        #expect(outcome.code == "device_secret" && outcome.opened && outcome.attemptUsed == false)
+        #expect(outcome == RecoveryOpenOutcome(VaultManager.codeNoBundle, opened: true, attemptUsed: false))
         #expect(device?.recovering == true && device?.hasVault == false)
-        // An unlock that opens without handing over a bundle: this phone is not the one a completed recovery made the app.
+    }
+
+    /// An unlock that opens without handing over a bundle proves the vault accepts this phone's key: nothing is cleared.
+    @Test func anOkUnlockWithoutABundleKeepsTheMarkAndTheKey() async throws {
+        defer { phone.close() }
+        _ = try await registered()
+        service.recoveryOpenAnswers(.unreadable)
+        _ = await vaultFailure { _ = try await m.recoveryOpen(pin: "111111", password: password) }
         let secret = try m.phoneSecrets.reuseOrCreate(keyVault: service.vaultID).secret
         service.storeSecret(secret)
-        let noBundle = try await m.resumeLostOk(pin: pin)
-        #expect(noBundle == RecoveryOpenOutcome(VaultManager.codeNoBundle, opened: true, attemptUsed: false))
-        #expect(device?.hasVault == false)
+        service.registeredPhoneHoldsUnlockKey()
+        let f = await vaultFailure { _ = try await m.resumeLostOk(pin: pin) }
+        #expect(f?.code == MoveCodes.recoveryOpened && m.record.value.recoveryOpenUnanswered)
+        let a = await vaultFailure { try await m.abandonRecovery() }
+        #expect(a?.code != nil && (pendingRecord || hasCurrentRecord) && device?.recovering == true)
     }
 
     @Test func aPhoneWithNothingToResumeSaysSo() async throws {

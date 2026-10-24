@@ -70,6 +70,13 @@ public enum RecoverGuidance: Equatable, Sendable {
     case finishWithPin
     /// `recovery_opened`: this recovery already succeeded on this phone; finish it, never start over.
     case alreadyRecovered
+    /// `recovery_open_pending`: the member API says the recovery is still registered and this phone is not its app: the open can
+    /// be tried again (a start over or a new registration waits for an answer to it).
+    case tryOpenAgain
+    /// `recovery_open_unknown`: the member API could not say whether the vault adopted this phone: try again in a moment.
+    case retry
+    /// `recovery_registered`: this phone is registered for another recovery, which a start over ends first.
+    case startOverFirst
 }
 
 /// The state of the recovery flow. The typed entry is held in memory only: never in saved state, on disk, in a log or on the
@@ -117,6 +124,9 @@ public struct RecoverState: Equatable, Sendable, CustomStringConvertible, Custom
         switch errorCode {
         case VaultManager.codeRecoveryOpenSent: .finishWithPin
         case MoveCodes.recoveryOpened: .alreadyRecovered
+        case VaultManager.codeRecoveryOpenPending: .tryOpenAgain
+        case VaultManager.codeRecoveryOpenUnknown: .retry
+        case VaultManager.codeRecoveryRegistered: .startOverFirst
         default: nil
         }
     }

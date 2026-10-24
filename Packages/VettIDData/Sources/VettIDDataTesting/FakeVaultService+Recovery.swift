@@ -25,6 +25,11 @@ struct FakeRecoveryStore {
     var phone: FakeRecoveryPhone?
     /// The recovery record was removed by an `ok` open; the phone's first-handshake invitation stands until it pairs.
     var completed = false
+    /// The recovery was cancelled or replaced: the member API takes its recovering key no more (`401`).
+    var cancelled = false
+    /// The registered phone is one of the vault's unlock keys though it was not adopted (a fixture for an unlock that opens
+    /// without a bundle); otherwise a registered phone not adopted is answered random bytes, as a key the vault does not hold.
+    var phoneHoldsUnlockKey = false
     var invitation = false
     var used = 0
     var lastWrong: String?
@@ -149,6 +154,12 @@ extension FakeVaultService {
         }
     }
 
+    /// The recovery ended for the member API (cancelled, replaced): the recovering key's `status` is `401`, a claim `404`.
+    public func cancelRecoveryAtApi() { locked { recovery.cancelled = true } }
+
+    /// The registered phone is an unlock key of the vault though it was not adopted (an ok unlock without a bundle).
+    public func registeredPhoneHoldsUnlockKey() { locked { recovery.phoneHoldsUnlockKey = true } }
+
     /// The next claims answer these, in order; then the recovery's rules.
     public func recoveryClaimAnswers(_ answers: RecoveryClaimAnswer...) { locked { recovery.claimAnswers += answers } }
     /// The next registers answer these, in order; then ``RecoveryRegisterAnswer/ok``.
@@ -189,7 +200,7 @@ extension FakeVaultService {
         let vault = try? o.string("vault_id"), id = try? o.string("recovery_id")
         recovery.claims.append(RecoveryClaimSeen(kind: locator == nil ? "qr" : "locator", vaultID: vault, recoveryID: id, locator: locator, appKey: appKey))
         let known = locator.map { $0 == recovery.locator } ?? (vault == vaultID && id == recovery.recoveryID)
-        guard known, let rid = recovery.recoveryID, !recovery.completed else { return .json(404, #"{"error":"not_found"}"#) }
+        guard known, let rid = recovery.recoveryID, !recovery.completed, !recovery.cancelled else { return .json(404, #"{"error":"not_found"}"#) }
         return .json(200, #"{"user_guid":"\#(userGuid)","email_hint":"\#(emailHint)","vault_id":"\#(vaultID)","recovery_id":"\#(rid)"}"#)
     }
 
@@ -281,7 +292,7 @@ extension FakeVaultService {
             if counted { b = b.raw("attempts", #"{"used":\#(recovery.used),"of":10}"#) }
             return b.build()
         }
-        guard recoveryID == recovery.recoveryID, !recovery.completed else { return refused("no_recovery", used: false, counted: false) }
+        guard recoveryID == recovery.recoveryID, !recovery.completed, !recovery.cancelled else { return refused("no_recovery", used: false, counted: false) }
         guard secret.count == 32 else { return refused("bad_request", used: false, counted: false) }
         if recovery.used >= 10 { return refused("exhausted", used: false) }
         let entry = "\(pin)\n\(password)"
@@ -314,6 +325,15 @@ extension FakeVaultService {
         var lines = body.members.filter { $0.name != "request_id" && $0.name != "app" }.map { "\($0.name)=\($0.value)" }
         lines += app.members.map { "app.\($0.name)=" + (own.contains($0.name) ? "<own>" : "\($0.value)") }
         return lines.sorted().joined(separator: "\n")
+    }
+
+    /// `GET /api/vault/status` for the recovering phone's key: `401` once the recovery ended without it; `recovery: null` once the
+    /// vault made it the app key (MEMBER-API "Completed"); the recovery `registered` before. Callers hold ``cond``.
+    func recoveryStatusField() -> (unauthorized: Bool, member: String) {
+        guard recovery.phone != nil else { return (false, "") }
+        if recovery.completed { return (false, "") }
+        if recovery.cancelled { return (true, "") }
+        return (false, #","recovery":{"state":"registered","available_at":""}"#)
     }
 
     /// The vault's bundle (§3.4): its identity, KEM and relay keys.

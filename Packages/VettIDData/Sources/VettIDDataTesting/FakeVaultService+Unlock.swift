@@ -145,7 +145,7 @@ extension FakeVaultService {
 
     /// `POST /api/vault/unlock`: the sealed `vault.unlock` opened with the ETK and answered in its slot. Callers hold
     /// ``cond``.
-    func unlock(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer {
+    func unlock(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer { // swiftlint:disable:this cyclomatic_complexity
         let answer = unlockAnswers.isEmpty ? UnlockAnswer.vault : unlockAnswers.removeFirst()
         if case .offline = answer { return .failure(.notConnectedToInternet) }
         if case .unavailable = answer { return .json(503, #"{"error":"vault_unavailable"}"#) }
@@ -153,6 +153,11 @@ extension FakeVaultService {
               let request = try? openRequest(env), let body = try? StrictJson.parseObject(request.body), let kem = device?.kem ?? recovery.phone?.kem
         else { return .json(400, #"{"error":"bad_request"}"#) }
         let pin = (try? body.string("pin")) ?? ""
+        // A registered phone the vault did not adopt is not one of its unlock keys: random bytes (§11.4).
+        if device == nil, recovery.phone != nil, !recovery.phoneHoldsUnlockKey {
+            plainSlots[rid] = JsonBuilder().string("status", "done").base64("envelope", Randomness.bytes(5252)).build()
+            return .json(202, "{}")
+        }
         let secret = try? body.base64("unlock_secret")
         let cancel = body.has("cancel_recovery")
         // The vault records the highest manifest serial it was sent (§11.10.4) and answers it.

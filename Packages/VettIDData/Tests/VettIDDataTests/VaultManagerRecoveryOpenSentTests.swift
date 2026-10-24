@@ -43,17 +43,87 @@ extension VaultManagerRecoveryTests {
         #expect(try await m.resumeLostOk(pin: pin).ok && !m.record.value.recoveryOpenUnanswered)
     }
 
-    /// The resume finds the vault does not hold this phone's secret: nothing was adopted, the mark goes, a start over works.
-    @Test func aResumeThatFindsNothingAdoptedClearsTheMark() async throws {
+    /// The open's answer was lost and the vault did not complete; the recovery then ended at the member API (cancelled, replaced):
+    /// the unlock is unreadable, and the status is refused `401` (§11.11.7): not adopted, so the mark goes and a start over works.
+    @Test func aRecoveryThatEndedWithoutThisPhoneClearsTheMark() async throws {
         defer { phone.close() }
-        _ = try await registered()
+        let made = try await registered()
         service.recoveryOpenAnswers(.unreadable)
         _ = await vaultFailure { _ = try await m.recoveryOpen(pin: "111111", password: password) }
         #expect(m.record.value.recoveryOpenUnanswered)
-        #expect(try await m.resumeLostOk(pin: pin).code == "device_secret")
+        service.cancelRecoveryAtApi()
+        // Every new open is `no_recovery` and keeps the mark; the member API decides.
+        #expect(try await m.recoveryOpen(pin: pin, password: password).code == "no_recovery" && m.record.value.recoveryOpenUnanswered)
+        let outcome = try await m.resumeLostOk(pin: pin)
+        #expect(outcome.code == "no_recovery" && !outcome.opened && !outcome.afterUnanswered)
         #expect(!m.record.value.recoveryOpenUnanswered)
         try await m.abandonRecovery()
         #expect(m.phase == .signedOut)
+        _ = made
+    }
+
+    /// The start over and a new registration ask the member API themselves.
+    @Test func theMemberApiDecidesAStartOverAndANewRegistration() async throws {
+        defer { phone.close() }
+        let made = try await registered()
+        service.recoveryOpenAnswers(.unreadable)
+        _ = await vaultFailure { _ = try await m.recoveryOpen(pin: "111111", password: password) }
+        // Still registered, this phone not the app: the open can be tried again.
+        #expect(await vaultFailure { try await m.abandonRecovery() }?.code == VaultManager.codeRecoveryOpenPending)
+        #expect(await vaultFailure { _ = try await m.registerRecovery(try scanned(made)) }?.code == VaultManager.codeRecoveryOpenPending)
+        // The service cannot say: try again, nothing cleared.
+        service.status("unlocked", noVault: true)
+        #expect(await vaultFailure { try await m.abandonRecovery() }?.code == VaultManager.codeRecoveryOpenUnknown)
+        #expect(m.record.value.recoveryOpenUnanswered && pendingRecord)
+        service.status("unlocked")
+        // The recovery ended: both go through.
+        service.cancelRecoveryAtApi()
+        try await m.abandonRecovery()
+        #expect(!m.record.value.recoveryOpenUnanswered && m.phase == .signedOut)
+    }
+
+    /// Only an answer that proves the record existed clears the mark (§11.14.6 steps 1 to 3).
+    @Test func onlyAnswersThatProveTheRecordExistedClearTheMark() async throws {
+        defer { phone.close() }
+        _ = try await registered()
+        func marked() async -> Bool {
+            service.recoveryOpenAnswers(.unreadable)
+            _ = await vaultFailure { _ = try await m.recoveryOpen(pin: "111111", password: password) }
+            return m.record.value.recoveryOpenUnanswered
+        }
+        for code in ["attestation", "manifest", "wrong_release", "bad_request", "no_recovery"] {
+            #expect(await marked())
+            service.recoveryOpenAnswers(.refused(code))
+            _ = try await m.recoveryOpen(pin: pin, password: password)
+            #expect(m.record.value.recoveryOpenUnanswered, "\(code) keeps the mark")
+        }
+        for code in ["busy", "not_armed", "stored_mismatch", "expired", "retry", "counter_unavailable"] {
+            #expect(await marked())
+            service.recoveryOpenAnswers(.refused(code))
+            _ = try await m.recoveryOpen(pin: pin, password: password)
+            #expect(!m.record.value.recoveryOpenUnanswered, "\(code) clears the mark")
+        }
+        // An answer with the counter's attempts (a wrong entry) too.
+        #expect(await marked())
+        #expect(try await m.recoveryOpen(pin: "222222", password: password).code == "wrong")
+        #expect(!m.record.value.recoveryOpenUnanswered)
+    }
+
+    /// A register of another recovery would overwrite the registration of one whose register may have been taken.
+    @Test func aSecondRegisterForAnotherRecoveryAsksForAStartOverFirst() async throws {
+        defer { phone.close() }
+        let first = try armed()
+        service.recoveryRegisterAnswers(.answerLostAfterRegistering)
+        _ = await vaultFailure { _ = try await m.registerRecovery(try scanned(first)) }
+        #expect(device?.recoveryID == first.recoveryID && m.record.value.recoveryRegistered)
+        let second = try armed()
+        let f = await vaultFailure { _ = try await m.registerRecovery(try scanned(second)) }
+        #expect(f?.code == VaultManager.codeRecoveryRegistered && device?.recoveryID == first.recoveryID)
+        #expect(m.record.value.vaultID == first.vaultID)
+        // The same recovery again is a retry.
+        #expect(device?.recovering == true)
+        try await m.abandonRecovery()
+        #expect(try await m.registerRecovery(try scanned(second)) == .registered(emailHint: service.emailHint))
     }
 
     @Test func registeringAgainAfterAnAnsweredOpenIsRefusedToo() async throws {

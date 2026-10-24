@@ -443,10 +443,12 @@ public final class FakeVaultService: @unchecked Sendable {
             case ("POST", "/api/vault/recovery/open"): return recoveryOpen(r)
             case ("GET", "/api/vault/status"):
                 if statusUnauthorizedValue { return .json(401, #"{"error":"unauthorized"}"#) }
+                let rs = recoveryStatusField()
+                if rs.unauthorized { return .json(401, #"{"error":"unauthorized"}"#) }
                 let a: FakeHTTPServer.Answer = if noVault || vaultDeletedValue && !statusLagsDeletionValue {
                     .json(200, #"{"vault":null}"#)
                 } else {
-                    .json(200, #"{"vault":{"vault_id":"\#(vaultID)","state":"\#(statusState)","release":{"number":\#(releases.routed),"status":"active"}}}"#)
+                    .json(200, #"{"vault":{"vault_id":"\#(vaultID)","state":"\#(statusState)","release":{"number":\#(releases.routed),"status":"active"}\#(rs.member)}}"#)
                 }
                 return statusGateValue.map { .held($0, a) } ?? a
             default:

@@ -54,6 +54,13 @@ extension VaultManager {
     public nonisolated static let codeNoBundle = "no_bundle"
     /// A registration or a start-over while an open went out (answered or not): the vault may hold this phone's secret.
     public nonisolated static let codeRecoveryOpenSent = "recovery_open_sent"
+    /// A start over or a registration while the member API says the recovery is still registered and this phone is not its app:
+    /// the open can be tried again.
+    public nonisolated static let codeRecoveryOpenPending = "recovery_open_pending"
+    /// A start over or a registration while the member API could not say whether the vault adopted this phone: try again.
+    public nonisolated static let codeRecoveryOpenUnknown = "recovery_open_unknown"
+    /// A registration for another recovery while this phone is registered for one (a register of it may have been taken).
+    public nonisolated static let codeRecoveryRegistered = "recovery_registered"
     /// The requirements of the recovery of before release R (IOS-PLAN ID8).
     public nonisolated static let codeRecoveryBeforeR = "recovery_before_release_r"
     /// The recovered phone's handshake right after `ok` (§11.14.6), and, for a recovery whose `ok` came earlier, the wait
@@ -132,9 +139,8 @@ extension VaultManager {
             if d.hasVault || d.deviceID != nil { throw VaultFailure(.vaultExists) }
             // An open went out (answered, or not: the vault may have adopted this phone's secret): its record is read here, before
             // a registration resets it, and the pending key stays for the resume. A start over ends it (chosen; not in the spec).
-            if record.value.recoveryOpenUnanswered || record.value.recoveryAttemptsUsed != nil {
-                throw VaultFailure(.other, code: Self.codeRecoveryOpenSent)
-            }
+            if record.value.recoveryAttemptsUsed != nil { throw VaultFailure(.other, code: Self.codeRecoveryOpenSent) }
+            try await refuseWhileOpenMarked()
         } else {
             if d.deviceID != nil { throw VaultFailure(.vaultExists) }
             if let refusal = startOverRefusal(d) { throw refusal }
@@ -145,6 +151,11 @@ extension VaultManager {
     /// After the claim, however the code was read: the sealed `vault.recovery.register` (§11.11.3). The record is the
     /// claim's own, made now; what the registration writes belongs to it.
     private func registerClaimed(_ s: VaultSession, _ code: RecoveryCode, _ claimed: Claimed) async throws -> RecoveryRegistration {
+        // A register of another recovery may have been taken (its answer lost) and bound this phone's key: the registration it
+        // would overwrite is ended by a start over first (chosen; not in the spec).
+        if s.device.recovering, record.value.recoveryRegistered, let known = s.device.recoveryID, known != code.recoveryID {
+            throw VaultFailure(.other, code: Self.codeRecoveryRegistered)
+        }
         try resetRecord(LocalAccount(userGuid: claimed.userGuid, vaultID: code.vaultID, emailHint: claimed.emailHint))
         publishAccount()
         let rec = record.generation
@@ -278,9 +289,10 @@ extension VaultManager {
                 usesPhoneSecret = phoneSecrets.inUse
             }
             _ = try record.update(since: rec) {
-                // `no_recovery` after an open that got no answer is the lost-ok signal (§11.14.6): the mark stays until the
-                // resume or a start-over decides (chosen; not in the spec).
-                if r.code != Self.codeNoRecovery { $0.recoveryOpenUnanswered = false }
+                // Only an answer that proves the recovery record still existed says that no earlier open was adopted (§11.14.6
+                // steps 1 to 3): not `no_recovery` (the lost-ok signal), nor `attestation`, `manifest`, `wrong_release` or
+                // `bad_request`, which may be decided before the record is read (chosen; not in the spec).
+                if r.ok || r.counted || Self.recordExistedCodes.contains(r.code) { $0.recoveryOpenUnanswered = false }
                 if let used { $0.recoveryAttemptsUsed = used }
             }
             guard r.ok else {
@@ -294,7 +306,7 @@ extension VaultManager {
         }
     }
 
-    private func clearOpenMark(since rec: Int) { _ = try? record.update(since: rec) { $0.recoveryOpenUnanswered = false } }
+    func clearOpenMark(since rec: Int) { _ = try? record.update(since: rec) { $0.recoveryOpenUnanswered = false } }
 
     /// The member API took an open: until its answer is read, the next answer says that this one may have been right.
     private func noteRecoveryOpenSent(since rec: Int) {
@@ -316,16 +328,31 @@ extension VaultManager {
             let used = record.value.recoveryAttemptsUsed
             let rec = record.generation
             if d.recoveryOpenedNotFinished { return try await finishOpened(s, pin: pin, used: used, resuming: true, since: rec) }
-            let u = try await unlockWithSecret(s, pin: pin, options: UnlockOptions(), path: .current)
+            let u: UnlockOutcome
+            do {
+                u = try await unlockWithSecret(s, pin: pin, options: UnlockOptions(), path: .current)
+            } catch {
+                // A registered phone the vault did not adopt is not one of its unlock keys: it answers random bytes (§11.4,
+                // §11.14.6 "A lost ok"). The member API says whether it did (§11.11.7).
+                guard (VaultFailures.map(error) as? VaultFailure)?.code == "unreadable_result" else { throw error }
+                switch await openMarkVerdict() {
+                case .notAdopted:
+                    clearOpenMark(since: rec)
+                    return RecoveryOpenOutcome(Self.codeNoRecovery, used: used, attemptUsed: false)
+                case .stillRegistered:
+                    return RecoveryOpenOutcome(Self.codeNoBundle, used: used, opened: true, attemptUsed: false)
+                case .adopted, .undecided: throw error
+                }
+            }
             if !u.ok {
                 // The vault does not hold this phone's secret: no open of this phone was adopted.
                 if u.result.code == UnlockEpoch.deviceSecret { clearOpenMark(since: rec) }
                 return RecoveryOpenOutcome(u.result.code ?? "retry", used: used, opened: true, attemptUsed: false)
             }
-            // A result without `vault_bundle`: this phone is not the one a completed recovery made the app.
+            // A result without `vault_bundle` from an unlock that opened: the vault accepts this phone's key, so an open may
+            // have been adopted. The mark stays, and this phone is not abandoned (as `recovery_opened`).
             guard d.recoveryOpenedNotFinished else {
-                clearOpenMark(since: rec)
-                return RecoveryOpenOutcome(Self.codeNoBundle, used: used, opened: true, attemptUsed: false)
+                throw VaultFailure(.other, code: MoveCodes.recoveryOpened)
             }
             var out = try await finishOpened(s, pin: pin, used: used, resuming: false, since: rec)
             out.attemptUsed = false
@@ -458,7 +485,7 @@ extension VaultManager {
             if d.hasVault || d.deviceID != nil || d.recoveryOpenedNotFinished {
                 throw VaultFailure(.other, code: MoveCodes.recoveryOpened)
             }
-            if record.value.recoveryOpenUnanswered { throw VaultFailure(.other, code: Self.codeRecoveryOpenSent) }
+            try await refuseWhileOpenMarked()
             try await dropSession(forget: true, registrationOnly: true)
             try resetRecord(LocalAccount())
             config.attestStartOver?.set(recovering: false)
