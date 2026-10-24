@@ -72,6 +72,12 @@ public final class TestVaultPhone {
         get { uptime.ahead }
         set { uptime.ahead = newValue }
     }
+    /// Stops this phone's clock and its monotonic clock at now, as ``FakeVaultService/freezeVaultClock()`` stops the
+    /// vault's: a test of a window of seconds then depends on the clocks it moves, not on how long the machine takes.
+    public func freezeClocks() {
+        clock.freeze()
+        uptime.freeze()
+    }
     private let gate = PrepareSwitch()
     private let clock = TestPhoneClock()
     private let uptime = TestPhoneClock()
@@ -206,7 +212,7 @@ public final class TestVaultPhone {
         c.keptEndSleep = { d in try await keptEnd.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
         c.transferDeadlineSleep = { d in try await deadline.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
         c.transferCollectSleep = { d in try await collect.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
-        c.uptime = { DeviceConfig.monotonicNow() + uptime.ahead }
+        c.uptime = { uptime.monotonic }
         return c
     }
 
@@ -360,13 +366,26 @@ public final class TestPauses: @unchecked Sendable {
 final class TestPhoneClock: @unchecked Sendable {
     private let lock = NSLock()
     private var offset: TimeInterval = 0
+    private var frozenAt: Date?
+    private var frozenUptime: TimeInterval?
 
     var ahead: TimeInterval {
         get { lock.withLock { offset } }
         set { lock.withLock { offset = newValue } }
     }
 
-    var now: Date { Date().addingTimeInterval(ahead) }
+    /// Stops the clock at now: from then on only ``ahead`` moves it.
+    func freeze() {
+        lock.withLock {
+            frozenAt = Date()
+            frozenUptime = DeviceConfig.monotonicNow()
+        }
+    }
+
+    /// The monotonic clock (``DeviceConfig/monotonicNow()``), moved by ``ahead`` and stopped by ``freeze()``.
+    var monotonic: TimeInterval { lock.withLock { (frozenUptime ?? DeviceConfig.monotonicNow()) + offset } }
+
+    var now: Date { lock.withLock { (frozenAt ?? Date()).addingTimeInterval(offset) } }
 }
 
 /// The first-run gate of a test phone: open unless a test sets a failure.

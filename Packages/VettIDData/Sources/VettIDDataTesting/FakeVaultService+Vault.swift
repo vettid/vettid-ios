@@ -116,6 +116,7 @@ extension FakeVaultService {
             keyring.activate(fin.epoch, now: Date())
             responder = nil
             if transfer.inviteID != nil { return try transferFinished() }
+            recoveryPaired()
             try reply("device.paired", #"{"device_id":"dev-1","role":"app","vault_id":"\#(vaultID)","release":"\#(Self.pcr0)","release_number":3}"#)
             return
         }
@@ -125,6 +126,7 @@ extension FakeVaultService {
             let kem = kem
             let p = try PendingInit.open(raw, lookup: { k in k == kem.publicKey.kid ? kem : nil }, now: Date())
             deviceIk = p.body.from.ik
+            if recovery.invitation { recovery.handshakeContexts.append(p.body.ctx) }
             let (resp, env) = try p.respond(ResponderConfig(identity: ik, token: try token(device.relay), policy: .vaultToDevice, collectSender: device.relay.pk))
             responder = resp
             queue(env)

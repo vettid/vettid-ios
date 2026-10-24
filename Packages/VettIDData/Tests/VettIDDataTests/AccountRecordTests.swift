@@ -33,6 +33,29 @@ import VettIDVault
         #expect(again.value.info() == AccountInfo(emailHint: "m***@example.com"))
     }
 
+    /// (Release R, §11.14.6) An open that got no answer and the attempts last reported are kept across a restart; an older
+    /// record has neither.
+    @Test func theRecoveryOpensStateIsKeptAcrossARestart() throws {
+        let r = AccountRecord(store: store())
+        try r.load()
+        try r.reset(LocalAccount(userGuid: "u", vaultID: "v", emailHint: "m***@example.com"))
+        #expect(!r.value.recoveryOpenUnanswered && r.value.recoveryAttemptsUsed == nil && !r.value.recoveryRegistered)
+        try r.update(since: r.generation) {
+            $0.recoveryOpenUnanswered = true
+            $0.recoveryAttemptsUsed = 3
+            $0.recoveryRegistered = true
+        }
+        let again = AccountRecord(store: store())
+        try again.load()
+        #expect(again.value.recoveryOpenUnanswered && again.value.recoveryAttemptsUsed == 3)
+        // The vault holds the key the register attested: no start-over replaces a damaged key record, also when recovered.
+        #expect(!again.value.noVaultHoldsAttestKey)
+        try store().save(Array(#"{"user_guid":"u"}"#.utf8))
+        let older = AccountRecord(store: store())
+        try older.load()
+        #expect(!older.value.recoveryOpenUnanswered && older.value.recoveryAttemptsUsed == nil)
+    }
+
     /// Members of a later build are ignored; a missing member takes its default.
     @Test func unknownMembersAreIgnored() throws {
         try store().save(Array(#"{"user_guid":"u","snapshot":{"x":1},"setup_complete":true}"#.utf8))

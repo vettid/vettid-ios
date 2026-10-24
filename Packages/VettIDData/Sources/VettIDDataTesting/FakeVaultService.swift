@@ -140,6 +140,8 @@ public final class FakeVaultService: @unchecked Sendable {
     var headerSeq: UInt64 = 1
     var stateSeq: UInt64 = 2
     var vaultClockAhead: TimeInterval = 0
+    /// Set by ``freezeVaultClock()``: the vault's clock stands still there, moved only by ``advanceVaultClock(_:)``.
+    var vaultClockFrozenAt: Date?
     var unlockAnswers: [UnlockAnswer] = []
     var unlocksValue: [UnlockSeen] = []
     /// The releases the fake runs and the release updates it was sent (``FakeVaultService+Release.swift``).
@@ -244,6 +246,8 @@ public final class FakeVaultService: @unchecked Sendable {
     var tagStore = FakeTagStore()
     /// The direct transfer, in both directions (FakeVaultService+Transfer.swift), under ``cond``.
     var transfer = FakeTransferStore()
+    /// The recovery on a new phone (FakeVaultService+Recovery.swift), under ``cond``.
+    var recovery = FakeRecoveryStore()
     /// The grants given and received and the requests made (FakeVaultService+Sharing.swift), under ``cond``.
     var grants = FakeGrantStore()
 
@@ -434,12 +438,17 @@ public final class FakeVaultService: @unchecked Sendable {
             case ("POST", "/api/vault/enroll"): return enroll(r)
             case ("POST", "/api/vault/unlock"): return unlock(r)
             case ("POST", "/api/vault/lock"): return memberLock(r)
+            case ("POST", "/api/vault/recovery/claim"): return recoveryClaim(r)
+            case ("POST", "/api/vault/recovery/register"): return recoveryRegister(r)
+            case ("POST", "/api/vault/recovery/open"): return recoveryOpen(r)
             case ("GET", "/api/vault/status"):
                 if statusUnauthorizedValue { return .json(401, #"{"error":"unauthorized"}"#) }
+                let rs = recoveryStatusField()
+                if let refused = rs.unauthorized { return refused }
                 let a: FakeHTTPServer.Answer = if noVault || vaultDeletedValue && !statusLagsDeletionValue {
                     .json(200, #"{"vault":null}"#)
                 } else {
-                    .json(200, #"{"vault":{"vault_id":"\#(vaultID)","state":"\#(statusState)","release":{"number":\#(releases.routed),"status":"active"}}}"#)
+                    .json(200, #"{"vault":{"vault_id":"\#(vaultID)","state":"\#(statusState)","release":{"number":\#(releases.routed),"status":"active"}\#(rs.member)}}"#)
                 }
                 return statusGateValue.map { .held($0, a) } ?? a
             default:

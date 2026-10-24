@@ -225,10 +225,18 @@ extension VaultManager {
     /// pending, and never before `vault.enroll.confirm` was answered. "Finish the move", which also holds it, comes with
     /// I3.3.
     public func finishSetup() async throws {
+        _ = try finishSetupGated()
+    }
+
+    /// ``finishSetup()``; false when its gate refused (nothing written, the phase left as it is). Mirrors vettid-android
+    /// `VaultManager.finishSetupGated` (the record's write and the phase are set in one step on the main actor, so a lock
+    /// or a wipe cannot come between them).
+    func finishSetupGated() throws -> Bool {
         let rec = record.generation
-        guard FinishSetupGate.allows(phase, lockPending: lockGuard.pending, finishingMove: finishMoveRunner.finishing) else { return }
+        guard FinishSetupGate.allows(phase, lockPending: lockGuard.pending, finishingMove: finishMoveRunner.finishing) else { return false }
         guard record.value.enrollConfirmed else { throw VaultFailure(.other, code: Self.codeEnrollUnconfirmed) }
         try guardedSync { try record.update(since: rec) { $0.setupComplete = true; $0.movedIn = false } }
         phase = .unlocked
+        return true
     }
 }

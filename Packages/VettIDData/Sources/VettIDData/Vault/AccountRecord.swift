@@ -11,7 +11,7 @@ import VettIDVault
 struct LocalAccount: Codable, Equatable, Sendable {
     /// Whether no vault made, being made or moved to this phone can hold one of its App Attest keys (``AttestStartOver``;
     /// chosen; not in the spec).
-    var noVaultHoldsAttestKey: Bool { !enrolledHere && enrollStartedMs == nil && !transferIn && !setupComplete }
+    var noVaultHoldsAttestKey: Bool { !enrolledHere && enrollStartedMs == nil && !transferIn && !recoveryRegistered && !setupComplete }
 
     var userGuid = ""
     var vaultID = ""
@@ -44,6 +44,9 @@ struct LocalAccount: Codable, Equatable, Sendable {
     /// a drop deletes, and no other (recovery makes records of the same kind). It is this phone's secret once the transfer is
     /// paired (chosen; not in the spec).
     var transferEpochID: String?
+    /// This phone registered for a recovery (VAULT-MESSAGING §11.11.3): the vault bound its App Attest key at the register
+    /// (IOS-PLAN §6.2), and the recovery that follows is this phone's way to the vault until the member leaves onboarding.
+    var recoveryRegistered = false
     /// The member left onboarding (``VaultManager/finishSetup()``).
     var setupComplete = false
     /// (§11.10.9) The capabilities of the vault's instance this phone last verified (`recovery_offered`).
@@ -82,6 +85,12 @@ struct LocalAccount: Codable, Equatable, Sendable {
     /// (Release R, ANDROID-PLAN "Transfer") The offer to rotate the vault's keys after a PIN or password change, until a
     /// rotation or the member puts it away; kept so that a restart does not lose it.
     var rotateOffer = false
+    /// (Release R, §11.14.6) A `vault.recovery.open` the member API took got no answer (the relay, a timeout, the answer
+    /// unreadable): the next answer says that the entry before it may have been right (``RecoveryOpenOutcome/afterUnanswered``).
+    var recoveryOpenUnanswered = false
+    /// (Release R, §11.14.4) The attempts used of the registered recovery, as the vault's counter last reported them; nil
+    /// before it ever answered.
+    var recoveryAttemptsUsed: Int?
     /// (IOS-PLAN §4.2) The vault said it is being deleted: a start opens on "being deleted" until the member API no longer
     /// lists it. Non-secret; erased with the record.
     var deleting: DeletingMarker?
@@ -98,6 +107,7 @@ struct LocalAccount: Codable, Equatable, Sendable {
         case transferGen = "transfer_gen"
         case transferStartedMs = "transfer_started_ms"
         case transferEpochID = "transfer_epoch_id"
+        case recoveryRegistered = "recovery_registered"
         case setupComplete = "setup_complete"
         case capabilities
         case timeScale = "time_scale"
@@ -111,6 +121,8 @@ struct LocalAccount: Codable, Equatable, Sendable {
         case lastOpenedMs = "last_opened_ms"
         case lockFileInUse = "lock_file_in_use"
         case rotateOffer = "rotate_offer"
+        case recoveryOpenUnanswered = "recovery_open_unanswered"
+        case recoveryAttemptsUsed = "recovery_attempts_used"
         case deleting
     }
 
@@ -135,6 +147,7 @@ struct LocalAccount: Codable, Equatable, Sendable {
         transferGen = try c.decodeIfPresent(Int.self, forKey: .transferGen) ?? 0
         transferStartedMs = try c.decodeIfPresent(Int64.self, forKey: .transferStartedMs)
         transferEpochID = try c.decodeIfPresent(String.self, forKey: .transferEpochID)
+        recoveryRegistered = try c.decodeIfPresent(Bool.self, forKey: .recoveryRegistered) ?? false
         setupComplete = try c.decodeIfPresent(Bool.self, forKey: .setupComplete) ?? false
         capabilities = try c.decodeIfPresent([String].self, forKey: .capabilities) ?? []
         // A scale of 0 is never stored; read as real time.
@@ -149,6 +162,8 @@ struct LocalAccount: Codable, Equatable, Sendable {
         lastOpenedMs = try c.decodeIfPresent(Int64.self, forKey: .lastOpenedMs)
         lockFileInUse = try c.decodeIfPresent(Bool.self, forKey: .lockFileInUse) ?? false
         rotateOffer = try c.decodeIfPresent(Bool.self, forKey: .rotateOffer) ?? false
+        recoveryOpenUnanswered = try c.decodeIfPresent(Bool.self, forKey: .recoveryOpenUnanswered) ?? false
+        recoveryAttemptsUsed = try c.decodeIfPresent(Int.self, forKey: .recoveryAttemptsUsed)
         deleting = try c.decodeIfPresent(DeletingMarker.self, forKey: .deleting)
     }
 
