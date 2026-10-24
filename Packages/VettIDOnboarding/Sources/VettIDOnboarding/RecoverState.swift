@@ -88,6 +88,10 @@ public struct RecoverState: Equatable, Sendable, CustomStringConvertible, Custom
     /// The account site's "Delete my vault and start over" page (MEMBER-API 2.1.0).
     public static let startOverPath = "/account/vault/deletion/"
 
+    /// The characters of one group of the typed code, and the groups of all of it (``RecoveryCodes``), for the screens.
+    public static let codeGroup = RecoveryCodes.group
+    public static let codeGroups = RecoveryCodes.typedGroups
+
     public var step: RecoverStep = .loading
     /// The account the vault belongs to, masked (`email_hint` from the claim, §11.11.7).
     public var emailHint = ""
