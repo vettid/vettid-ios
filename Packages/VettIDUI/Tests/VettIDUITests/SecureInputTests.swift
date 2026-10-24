@@ -22,18 +22,24 @@ import UIKit
         }
     }
 
-    /// A paste-only editor (a recovery code) offers no Copy or Cut and copies nothing; a paste stays possible.
+    /// A paste-only editor (a recovery code) offers no Copy, Cut, Share, Look Up or Translate and copies nothing; it has no drag
+    /// out. (The general pasteboard is not touched: `copy` and `cut` do nothing.)
     @Test func aPasteOnlyEditorNeverCopies() {
         let v = PasteOnlyTextView()
         v.text = "7ZK3"
         v.selectedRange = NSRange(location: 0, length: 4)
-        UIPasteboard.general.items = []
-        #expect(!v.canPerformAction(#selector(UIResponderStandardEditActions.copy(_:)), withSender: nil))
-        #expect(!v.canPerformAction(#selector(UIResponderStandardEditActions.cut(_:)), withSender: nil))
+        for action in [
+            #selector(UIResponderStandardEditActions.copy(_:)), #selector(UIResponderStandardEditActions.cut(_:)),
+            Selector(("_share:")), Selector(("_lookup:")), Selector(("_translate:")), Selector(("_define:")),
+            #selector(UIResponderStandardEditActions.toggleBoldface(_:)),
+        ] {
+            #expect(!v.canPerformAction(action, withSender: nil), "\(action)")
+        }
         v.copy(nil)
         v.cut(nil)
-        #expect(UIPasteboard.general.string == nil || UIPasteboard.general.string?.isEmpty == true)
         #expect(v.text == "7ZK3")
+        #expect(v.textDragInteraction?.isEnabled != true)
+        if #available(iOS 18.0, *) { #expect(v.writingToolsBehavior == .none) }
     }
 
     /// The undocumented layer exists on this iOS (the self-check); without it the container shows plain content.
