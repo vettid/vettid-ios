@@ -28,6 +28,9 @@ public enum AuditKinds {
     }
 
     public static let kindExported = "audit.exported"
+    public static let kindLocked = "vault.locked"
+    /// (Release L) `vault.locked`'s `ref` for the idle lock (VAULT-MESSAGING §3.6.8).
+    public static let refIdle = "idle"
 
     /// An `audit.exported` entry's format and count from its `ref` (0.22.0 §10.9: `format=<csv|json>;count=<n>;…`), or
     /// nil for another kind or a summary that does not read.
@@ -109,6 +112,9 @@ public enum AuditKinds {
                 ?? .known("history_kind_recovery_attempts_used_any")
         case kindClosed:
             return .known(closedTitle(RecoveryRefs.closure(ref)?.reason))
+        // (VAULT-MESSAGING §3.6.8, release L) The vault locked itself: `vault.locked` with `ref` `idle`.
+        case kindLocked where ref == refIdle:
+            return .known("history_kind_vault_locked_idle")
         default:
             break
         }

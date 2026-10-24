@@ -25,6 +25,7 @@ public enum HistoryKindTexts {
     public static let english: [String: String] = [
         "history_kind_vault_unlocked": "Vault unlocked",
         "history_kind_vault_locked": "Vault locked",
+        "history_kind_vault_locked_idle": "Vault locked itself (not checked in)",
         "history_kind_vault_pin_failed": "Wrong PIN entered",
         "history_kind_owner_check_passed": "Daily check passed",
         "history_kind_owner_check_held": "Vault held for the daily check",
