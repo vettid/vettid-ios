@@ -121,7 +121,9 @@ public final class MemberApiClient: Sendable {
     private func unauthorized(_ a: HTTPAnswer) -> MemberApiError {
         let e = Self.error(a)
         guard let date = a.header("Date").flatMap(Self.httpDate) else { return e }
-        guard abs(now().timeIntervalSince(date)) > MemberApiError.clockSkewSeconds else { return e }
+        guard abs(now().timeIntervalSince(date)) > MemberApiError.clockSkewSeconds else {
+            return MemberApiError(status: e.status, code: e.code, message: e.message, dateChecked: true)
+        }
         return MemberApiError(status: 401, code: MemberApiError.clockSkew)
     }
 

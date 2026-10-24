@@ -43,23 +43,50 @@ extension VaultManagerRecoveryTests {
         #expect(try await m.resumeLostOk(pin: pin).ok && !m.record.value.recoveryOpenUnanswered)
     }
 
-    /// The open's answer was lost and the vault did not complete; the recovery then ended at the member API (cancelled, replaced):
-    /// the unlock is unreadable, and the status is refused `401` (§11.11.7): not adopted, so the mark goes and a start over works.
+    /// The open's answer was lost and the vault did not complete. The member API refuses the recovering key's unlock `403` while
+    /// the recovery is active (the open can be tried again), and `401` once it ended (MEMBER-API 2.7.0); the status then says
+    /// the same with a `Date` that shows the clock right: not adopted, so the mark goes and a start over works.
     @Test func aRecoveryThatEndedWithoutThisPhoneClearsTheMark() async throws {
         defer { phone.close() }
-        let made = try await registered()
+        _ = try await registered()
         service.recoveryOpenAnswers(.unreadable)
         _ = await vaultFailure { _ = try await m.recoveryOpen(pin: "111111", password: password) }
+        #expect(m.record.value.recoveryOpenUnanswered)
+        // Active: the unlock is refused `403`.
+        let active = try await m.resumeLostOk(pin: pin)
+        #expect(active == RecoveryOpenOutcome(VaultManager.codeNoBundle, opened: true, attemptUsed: false))
         #expect(m.record.value.recoveryOpenUnanswered)
         service.cancelRecoveryAtApi()
         // Every new open is `no_recovery` and keeps the mark; the member API decides.
         #expect(try await m.recoveryOpen(pin: pin, password: password).code == "no_recovery" && m.record.value.recoveryOpenUnanswered)
+        // Ended: `401`, and the status says so.
         let outcome = try await m.resumeLostOk(pin: pin)
         #expect(outcome.code == "no_recovery" && !outcome.opened && !outcome.afterUnanswered)
         #expect(!m.record.value.recoveryOpenUnanswered)
         try await m.abandonRecovery()
         #expect(m.phase == .signedOut)
-        _ = made
+    }
+
+    /// A `401` whose `Date` was stripped, or shows the phone's clock off, decides nothing: the mark and the key stay.
+    @Test func aRefusalWithoutADateWithinTheLimitDecidesNothing() async throws {
+        for date in [FakeVaultService.UnauthorizedDate.missing, .skewed] {
+            let service = try FakeVaultService()
+            let p = try TestVaultPhone(service: service, requestTimeout: TestVaultPhone.shortRequestTimeout)
+            defer { p.close() }
+            let made = try service.armRecovery(pin: pin, password: password)
+            _ = try await p.manager.registerRecovery(try #require(RecoveryCode.parseScanned(made.qr)))
+            service.recoveryOpenAnswers(.unreadable)
+            _ = await vaultFailure { _ = try await p.manager.recoveryOpen(pin: "111111", password: password) }
+            service.recoveryUnauthorizedDate = date
+            service.cancelRecoveryAtApi()
+            _ = await vaultFailure { _ = try await p.manager.resumeLostOk(pin: pin) }
+            #expect(p.manager.record.value.recoveryOpenUnanswered, "\(date)")
+            let a = await vaultFailure { try await p.manager.abandonRecovery() }
+            #expect(a?.code == VaultManager.codeRecoveryOpenUnknown, "\(date)")
+            let r = await vaultFailure { _ = try await p.manager.registerRecovery(try #require(RecoveryCode.parseScanned(made.qr))) }
+            #expect(r?.code == VaultManager.codeRecoveryOpenUnknown, "\(date)")
+            #expect(((try? p.manager.phoneSecrets.hasPending()) ?? false) && p.manager.session?.device.recovering == true)
+        }
     }
 
     /// The start over and a new registration ask the member API themselves.
@@ -117,7 +144,10 @@ extension VaultManagerRecoveryTests {
         _ = await vaultFailure { _ = try await m.registerRecovery(try scanned(first)) }
         #expect(device?.recoveryID == first.recoveryID && m.record.value.recoveryRegistered)
         let second = try armed()
+        let claims = service.recoveryClaims.count
         let f = await vaultFailure { _ = try await m.registerRecovery(try scanned(second)) }
+        // Known from the scanned code: refused before the claim, which would use one of the API's claim keys.
+        #expect(service.recoveryClaims.count == claims)
         #expect(f?.code == VaultManager.codeRecoveryRegistered && device?.recoveryID == first.recoveryID)
         #expect(m.record.value.vaultID == first.vaultID)
         // The same recovery again is a retry.

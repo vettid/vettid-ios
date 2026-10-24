@@ -444,7 +444,7 @@ public final class FakeVaultService: @unchecked Sendable {
             case ("GET", "/api/vault/status"):
                 if statusUnauthorizedValue { return .json(401, #"{"error":"unauthorized"}"#) }
                 let rs = recoveryStatusField()
-                if rs.unauthorized { return .json(401, #"{"error":"unauthorized"}"#) }
+                if let refused = rs.unauthorized { return refused }
                 let a: FakeHTTPServer.Answer = if noVault || vaultDeletedValue && !statusLagsDeletionValue {
                     .json(200, #"{"vault":null}"#)
                 } else {

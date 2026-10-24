@@ -127,7 +127,11 @@ final class Box<T: Sendable>: @unchecked Sendable {
         await #expect(throws: MemberApiError(status: 401, code: MemberApiError.clockSkew)) { _ = try await skewed.vaultStatus() }
         let fine = api(appAuth(Box(Self.vid)), now: { apiTime.addingTimeInterval(60) })
         for _ in 0..<2 { server.enqueue(.json(401, #"{"error":"unauthorized"}"#, headers: ["Date": date])) }
-        await #expect(throws: MemberApiError(status: 401, code: MemberApiError.unauthorized)) { _ = try await fine.vaultStatus() }
+        // A `Date` within the limit is noted: the phone's clock does not explain the refusal.
+        await #expect(throws: MemberApiError(status: 401, code: MemberApiError.unauthorized, dateChecked: true)) { _ = try await fine.vaultStatus() }
+        // Without a `Date` (a proxy may strip it) nothing is checked.
+        for _ in 0..<2 { server.enqueue(.json(401, #"{"error":"unauthorized"}"#)) }
+        await #expect(throws: MemberApiError(status: 401, code: MemberApiError.unauthorized, dateChecked: false)) { _ = try await fine.vaultStatus() }
     }
 
     /// "No vault" is only the API's explicit `"vault": null`; an empty body or a missing or odd `vault` is malformed.

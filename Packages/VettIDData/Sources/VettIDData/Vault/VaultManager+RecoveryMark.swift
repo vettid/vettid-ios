@@ -6,8 +6,9 @@ enum OpenMarkVerdict: Equatable, Sendable {
     /// The status is accepted with this key and the recovery is gone (`recovery: null`): the key is the vault's app key
     /// (MEMBER-API "Completed"), so the open was adopted and the resume finishes it.
     case adopted
-    /// The status is refused `401`: the recovering key is taken only until the recovery ends or the vault reports the key as its
-    /// app key (VAULT-MESSAGING §11.11.7), and a key that is the app key is accepted. The recovery ended without this phone.
+    /// The status is refused `401` with a `Date` that shows the phone's clock right: the recovering key is taken only until the
+    /// recovery ends or the vault reports the key as its app key (VAULT-MESSAGING §11.11.7), and a key that is the app key is
+    /// accepted. The recovery ended without this phone (chosen reading; not in the spec).
     case notAdopted
     /// The status is accepted and still shows the recovery `registered`: the vault has not made this phone its app.
     case stillRegistered
@@ -30,10 +31,15 @@ extension VaultManager {
             guard let status = try await vaultStatus() else { return .undecided }
             switch status.recoveryState {
             case nil: return .adopted
+            // MEMBER-API "Completed": recorded at the adopted key's first status read.
+            case "completed"?: return .adopted
             case "registered"?: return .stillRegistered
             default: return .undecided
             }
-        } catch let e as MemberApiError where e.code == MemberApiError.unauthorized {
+        } catch let e as MemberApiError where e.code == MemberApiError.unauthorized && e.dateChecked {
+            // (chosen; not in the spec: it gives the recovering key no explicit "ended" signal.) Read as "the recovery ended
+            // without this phone" only for a `401` whose `Date` is within the skew limit: a phone whose clock is off, or a proxy
+            // that strips the header, decides nothing.
             return .notAdopted
         } catch {
             return .undecided

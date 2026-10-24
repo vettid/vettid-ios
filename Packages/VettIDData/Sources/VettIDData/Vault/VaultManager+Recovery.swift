@@ -86,6 +86,8 @@ extension VaultManager {
     public func registerRecovery(_ code: RecoveryCode) async throws -> RecoveryRegistration {
         try await guarded {
             let s = try await recoveryStart()
+            // Known beforehand for a scanned code: refused before the claim, which would use one of the API's claim keys.
+            try refuseOtherRecovery(s.device, code.recoveryID)
             let claimed: Claimed
             do {
                 // §11.11.7: the claim gives this phone's key the right to register, and names the member.
@@ -148,14 +150,19 @@ extension VaultManager {
         return s
     }
 
+    /// Refuses a register of a recovery other than the one this phone is registered for (a register of it may have been taken).
+    private func refuseOtherRecovery(_ d: VaultDevice, _ recoveryID: String) throws {
+        if d.recovering, record.value.recoveryRegistered, let known = d.recoveryID, known != recoveryID {
+            throw VaultFailure(.other, code: Self.codeRecoveryRegistered)
+        }
+    }
+
     /// After the claim, however the code was read: the sealed `vault.recovery.register` (§11.11.3). The record is the
     /// claim's own, made now; what the registration writes belongs to it.
     private func registerClaimed(_ s: VaultSession, _ code: RecoveryCode, _ claimed: Claimed) async throws -> RecoveryRegistration {
         // A register of another recovery may have been taken (its answer lost) and bound this phone's key: the registration it
         // would overwrite is ended by a start over first (chosen; not in the spec).
-        if s.device.recovering, record.value.recoveryRegistered, let known = s.device.recoveryID, known != code.recoveryID {
-            throw VaultFailure(.other, code: Self.codeRecoveryRegistered)
-        }
+        try refuseOtherRecovery(s.device, code.recoveryID)
         try resetRecord(LocalAccount(userGuid: claimed.userGuid, vaultID: code.vaultID, emailHint: claimed.emailHint))
         publishAccount()
         let rec = record.generation
@@ -334,8 +341,13 @@ extension VaultManager {
             } catch {
                 // A registered phone the vault did not adopt is not one of its unlock keys: it answers random bytes (§11.4,
                 // §11.14.6 "A lost ok"). The member API says whether it did (§11.11.7).
-                guard (VaultFailures.map(error) as? VaultFailure)?.code == "unreadable_result" else { throw error }
-                switch await openMarkVerdict() {
+                // The member API refuses the recovering key `403` while the recovery is active, `401` once it ended (MEMBER-API
+                // 2.7.0); the random bytes of an unreadable answer are the fallback.
+                let refused = error as? MemberApiError
+                let unreadable = (VaultFailures.map(error) as? VaultFailure)?.code == "unreadable_result"
+                guard refused?.status == 403 || refused?.code == MemberApiError.unauthorized || unreadable else { throw error }
+                let verdict: OpenMarkVerdict = refused?.status == 403 ? .stillRegistered : await openMarkVerdict()
+                switch verdict {
                 case .notAdopted:
                     clearOpenMark(since: rec)
                     return RecoveryOpenOutcome(Self.codeNoRecovery, used: used, attemptUsed: false)
