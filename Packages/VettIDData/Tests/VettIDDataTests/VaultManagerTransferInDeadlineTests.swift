@@ -186,3 +186,47 @@ extension VaultManagerTransferInTests {
         #expect(phone.attester.discarded == phone.attester.attested)
     }
 }
+
+/// A take-over that failed, and what a waiting move says to enrollment.
+extension VaultManagerTransferInTests {
+    /// A paired transfer whose take-over failed (the network): the retried wait does not wait for the consumed
+    /// `device.paired`; it takes over again and completes.
+    @Test func aFailedTakeOverIsRetriedWithoutWaitingForThePairedAgain() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        let d = try #require(m.session?.device)
+        service.refuse("credential.get", with: "forbidden", times: 1)
+        service.approveTransferIn()
+        #expect(await eventually { d.deviceID != nil })
+        _ = await vaultFailure { _ = try await m.awaitTransferIn() }
+        #expect(m.record.value.transferStartedMs != nil)
+        #expect(try await m.awaitTransferIn())
+        #expect(m.finishMovePending && m.record.value.transferStartedMs == nil && m.phase == .setup(.finishing))
+        #expect(phone.deadlinePauses.lengths.isEmpty || m.phase == .setup(.finishing))
+    }
+
+    /// ... and an evaluation of a paired transfer whose take-over is still to do retries it, never "create a credential".
+    @Test func aPairedTransferWithoutItsTakeOverIsNeverNeedsCredential() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        let d = try #require(m.session?.device)
+        service.refuse("credential.get", with: "forbidden", times: 1)
+        service.approveTransferIn()
+        #expect(await eventually { d.deviceID != nil })
+        try await phone.restart()
+        _ = try? await m.refresh()
+        #expect(m.phase != .setup(.needsCredential) && m.record.value.transferStartedMs != nil)
+        try await m.refresh()
+        #expect(m.phase == .setup(.finishing) && m.finishMovePending && m.record.value.transferStartedMs == nil)
+    }
+
+    /// Enrollment while a move is under way is refused with its own code.
+    @Test func enrollmentWhileAMoveWaitsIsRefusedAsAMoveUnderWay() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        try await phone.restart()
+        try await m.refresh()
+        let refusal = await vaultFailure { _ = try await m.redeemSetupCode(.secret(service.secret)) }
+        #expect(refusal?.kind == .enrollmentStarted && refusal?.code == VaultManager.codeTransferWaiting)
+    }
+}

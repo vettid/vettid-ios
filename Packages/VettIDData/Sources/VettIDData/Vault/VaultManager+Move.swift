@@ -148,9 +148,14 @@ extension VaultManager: MoveRepository {
             let s = try await openSession()
             let settled: TransferSettled
             do {
-                switch try await awaitPairedOrDeadline(s.device) {
-                case .paired(let guid): settled = await settleTransfer(s, collect: false, guid: guid)
-                case .deadline: settled = await settleTransfer(s, collect: true, guid: nil)
+                // Already paired (a take-over that failed is retried here): its `device.paired` is consumed, so nothing is waited for.
+                if s.device.deviceID != nil {
+                    settled = await settleTransfer(s, collect: false, guid: nil)
+                } else {
+                    switch try await awaitPairedOrDeadline(s.device) {
+                    case .paired(let guid): settled = await settleTransfer(s, collect: false, guid: guid)
+                    case .deadline: settled = await settleTransfer(s, collect: true, guid: nil)
+                    }
                 }
             } catch let rejected as PairingRejected {
                 // Rejected: nothing was approved, so nothing changes; the handshake state is dropped.
@@ -290,25 +295,42 @@ extension VaultManager: MoveRepository {
         }
     }
 
+    /// The code of the refusal of an enrollment (or another vault's code) while a move to this phone is under way, in the
+    /// kind ``FailureKind/enrollmentStarted``: "a move to this phone is still under way" (the wording is I3.3b's).
+    public nonisolated static let codeTransferWaiting = "transfer_waiting"
+
     /// Once per process, at the start (before anything else is decided about this phone; §11.14.10 rule 5): a transfer whose
     /// `device.paired` arrived is completed whatever its age; one still waiting past its deadline gets one collect, then is
     /// applied or dropped; one still before its deadline is waited for in the background until it (``awaitTransferIn()``),
     /// while the welcome screen is shown: a code can be scanned again, and no enrollment can start (the vault is pinned,
-    /// ``startOverRefusal(_:)``). Android shows the welcome screen too and does not wait (chosen; not in the spec).
-    func resumeTransferIn(_ s: VaultSession) async {
-        guard !moveFlags.book.transferResumed else { return }
+    /// ``startOverRefusal(_:)``). Waiting here is (chosen; not in the spec): Android shows the welcome screen and does not wait.
+    @discardableResult
+    func resumeTransferIn(_ s: VaultSession) async -> TransferSettled? {
+        guard !moveFlags.book.transferResumed else { return nil }
         moveFlags.book.transferResumed = true
-        guard record.value.transferStartedMs != nil else { return }
+        guard record.value.transferStartedMs != nil else { return nil }
         let d = s.device
         if d.deviceID != nil {
-            _ = await settleTransfer(s, collect: false, guid: nil)
+            return await settleTransfer(s, collect: false, guid: nil)
         } else if d.hasVault, let deadline = transferDeadline {
             if config.now() >= deadline {
-                _ = await settleTransfer(s, collect: true, guid: nil)
-            } else {
-                moveFlags.book.transferWaiter = Task { @MainActor [weak self] in _ = try? await self?.awaitTransferIn() }
+                return await settleTransfer(s, collect: true, guid: nil)
             }
+            moveFlags.book.transferWaiter = Task { @MainActor [weak self] in _ = try? await self?.awaitTransferIn() }
         }
+        return nil
+    }
+
+    /// The record after the start's resume. A **paired** transfer whose take-over has not completed (it failed: the network)
+    /// is taken over again here, at every evaluation, and its failure is thrown: such a phone is never shown "create a
+    /// credential" (the vault has one). [resumed]: what this start's resume settled, if it ran.
+    func recordAfterResume(_ s: VaultSession, resumed: TransferSettled?) async throws -> LocalAccount {
+        if case .failed(let error)? = resumed { throw error }
+        if resumed == nil, s.device.deviceID != nil, record.value.transferStartedMs != nil,
+           case .failed(let error) = await settleTransfer(s, collect: false, guid: nil) {
+            throw error
+        }
+        return record.value
     }
 
     /// Drops a transfer this phone started and has not completed: the handshake, the pinned vault, the attested key and the
@@ -321,6 +343,9 @@ extension VaultManager: MoveRepository {
             guard let s = session else { return }
             if s.device.deviceID != nil {
                 _ = await settleTransfer(s, collect: false, guid: nil)
+            } else if let running = moveFlags.book.settling {
+                // The deadline's settlement is running (its collect): it decides, and this joins it instead of dropping beside it.
+                _ = await running.value
             } else {
                 await dropTransfer(s.device)
             }
