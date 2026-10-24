@@ -23,11 +23,6 @@ extension FakeVaultRepository: VaultRepository {
         movedBack = false
     }
 
-    public func acknowledgeMoveNotDone() {
-        calls.append("acknowledgeMoveNotDone")
-        moveNotDone = false
-    }
-
     public func dismissRotateOffer() { rotateOffered = false }
 
     public func waitForChangeCheck(_ waiter: AnyObject?) { changeCheckWaiter = waiter }

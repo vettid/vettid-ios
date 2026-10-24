@@ -100,7 +100,13 @@ extension VaultDevice {
         switch inner.type {
         // §10.3 (0.10.3, 0.10.4): every device.paired carries the device's standing token; it replaces the token of
         // hs.resp before maintain() looks at it.
-        case "device.paired": storeVaultToken(body)
+        case "device.paired":
+            storeVaultToken(body)
+            // A transfer's `device.paired` is applied before the message is acked (VAULT-MESSAGING §11.14.10 rule 5: a paired
+            // transfer completes at any later start): the event in memory is lost with the process, the state is not.
+            if mem.withLock({ st.deviceID == nil && (VaultJSON.bool(body, "transfer") == true || alt().transferAttestKeyID != nil) }) {
+                applyPaired(body)
+            }
         // §6.7 (0.10.5): only a device still waiting for device.paired acts on it; a paired one drops it.
         case Self.typePairRejected:
             if mem.withLock({ isPaired }) { return }

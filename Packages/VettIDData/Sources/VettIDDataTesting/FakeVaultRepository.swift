@@ -115,7 +115,6 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var keptCheckPending = false
     public var finishMoveFailure: FailureKind?
     public var movedBack = false
-    public var moveNotDone = false
     public var rotateOffered = false
     public var movedAway = false
     /// (VAULT-MESSAGING §11.14.9 "A lost answer") Where the decision of a lost change stands, set by a test.

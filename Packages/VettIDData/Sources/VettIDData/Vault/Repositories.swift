@@ -232,10 +232,6 @@ public protocol VaultRepository: AnyObject, Observable, Sendable {
     /// the PIN is uncertain (the gate's text); nil when it can be finished. Default: nil.
     var finishMoveHold: FailureKind? { get }
 
-    /// (STAGING-TIME-SCALE, S10) How long this phone keeps its keys after a transfer's approval: 7 days divided by the time
-    /// scale. Default: from ``timeScale``.
-    var transferKeepSeconds: Int64 { get }
-
     /// (Release R) True while ``finishMove(pin:)`` runs: from the same synchronous step as the call, before its own lock
     /// makes the phase locked, to every exit (success, failure, wipe, deletion), so the screen that asked is held meanwhile.
     var finishingMove: Bool { get }
@@ -255,12 +251,6 @@ public protocol VaultRepository: AnyObject, Observable, Sendable {
     var movedBack: Bool { get }
 
     func acknowledgeMovedBack()
-
-    /// (Release R) At the end of the 7 days after approving a transfer, the vault confirmed that this phone is still its
-    /// app: the move did not happen and the phone keeps its keys. Told once.
-    var moveNotDone: Bool { get }
-
-    func acknowledgeMoveNotDone()
 
     /// (Release R, ANDROID-PLAN "Transfer") After a transfer, a PIN change or a password change the app offers to rotate
     /// the vault's keys (`credential.rotate`), until a rotation or ``dismissRotateOffer()``.
@@ -383,8 +373,6 @@ public extension VaultRepository {
     func acknowledgeFinishMoveFailure() {}
     var movedBack: Bool { false }
     func acknowledgeMovedBack() {}
-    var moveNotDone: Bool { false }
-    func acknowledgeMoveNotDone() {}
     var rotateOffered: Bool { false }
     func dismissRotateOffer() {}
     var movedAway: Bool { false }

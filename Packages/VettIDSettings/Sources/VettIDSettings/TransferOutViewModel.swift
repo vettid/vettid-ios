@@ -49,20 +49,15 @@ public struct TransferOutState: Equatable, Sendable, CustomStringConvertible, Cu
     public var busy = false
     public var error: FailureKind?
     public var errorCode: String?
-    /// (Release R, §11.14.10) After the approval this phone keeps its keys until the new phone has finished the move, for
-    /// at most 7 days (``TransferOutStep/moved`` says so); false: it erases itself once the vault confirms.
+    /// (Release R, §11.14.10) After the approval this phone keeps its keys until the new phone has finished the move and
+    /// the vault has confirmed it (``TransferOutStep/moved`` says so); false: it erases itself once the vault confirms.
     public var keptKeys = false
-    /// (STAGING-TIME-SCALE, S10) How long it keeps them at most (7 days, divided by the time scale at the approval).
-    public var keptForSeconds: Int64 = KeptTransfer.keepPeriodMs / 1000
     /// (STAGING-TIME-SCALE) A staging build adds its note to that text.
     public var stagingNote: String?
 
     public init() {}
 
     public var canApprove: Bool { pin.count >= Self.minPin && !password.isEmpty && waitSeconds == 0 && !busy }
-
-    /// How long this phone keeps its keys, as the text says it ("7 days", "7 hours" on staging).
-    public var keptForText: String { DurationText.of(TimeInterval(keptForSeconds)) }
 
     /// The confirmation's body when the signer changes (``TransferOutStep/signer``): the new phone's class named, and this
     /// phone's own when it has one.
@@ -336,7 +331,6 @@ public final class TransferOutViewModel: TransferOutActions {
                 self.state.password = ""
                 self.state.offer = nil
                 self.state.keptKeys = vault.transferKeptSince != nil
-                self.state.keptForSeconds = vault.transferKeepSeconds
                 self.state.stagingNote = TimeScales.stagingNote(vault.timeScale)
             } catch {
                 guard let self else { return }

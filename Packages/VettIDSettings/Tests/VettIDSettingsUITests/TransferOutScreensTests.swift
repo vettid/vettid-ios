@@ -89,8 +89,8 @@ import VettIDUI
             ("expired", state(.expired) { $0.offer = nil }),
             ("rejected", state(.rejected) { $0.offer = nil }),
             ("moved", state(.moved) { $0.offer = nil }),
-            ("moved, kept", state(.moved) { $0.keptKeys = true; $0.keptForSeconds = 604_800 }),
-            ("moved, kept on staging", state(.moved) { $0.keptKeys = true; $0.keptForSeconds = 25_200; $0.stagingNote = "Staging: 1 day = 1 hour" }),
+            ("moved, kept", state(.moved) { $0.keptKeys = true }),
+            ("moved, kept on staging", state(.moved) { $0.keptKeys = true; $0.stagingNote = "Staging: 1 day = 1 hour" }),
         ]
     }
 

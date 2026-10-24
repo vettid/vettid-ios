@@ -40,6 +40,10 @@ struct LocalAccount: Codable, Equatable, Sendable {
     /// (Unix ms, this phone's clock): the one deadline of 11 minutes counts from it, and survives a restart. Removed when the
     /// transfer is completed or dropped.
     var transferStartedMs: Int64?
+    /// The pending epoch-1 record the transfer to this phone made (key_vault ""), stored with ``transferStartedMs``: the one
+    /// a drop deletes, and no other (recovery makes records of the same kind). It is this phone's secret once the transfer is
+    /// paired (chosen; not in the spec).
+    var transferEpochID: String?
     /// The member left onboarding (``VaultManager/finishSetup()``).
     var setupComplete = false
     /// (§11.10.9) The capabilities of the vault's instance this phone last verified (`recovery_offered`).
@@ -93,6 +97,7 @@ struct LocalAccount: Codable, Equatable, Sendable {
         case transferKeepMs = "transfer_keep_ms"
         case transferGen = "transfer_gen"
         case transferStartedMs = "transfer_started_ms"
+        case transferEpochID = "transfer_epoch_id"
         case setupComplete = "setup_complete"
         case capabilities
         case timeScale = "time_scale"
@@ -129,6 +134,7 @@ struct LocalAccount: Codable, Equatable, Sendable {
         transferKeepMs = try c.decodeIfPresent(Int64.self, forKey: .transferKeepMs)
         transferGen = try c.decodeIfPresent(Int.self, forKey: .transferGen) ?? 0
         transferStartedMs = try c.decodeIfPresent(Int64.self, forKey: .transferStartedMs)
+        transferEpochID = try c.decodeIfPresent(String.self, forKey: .transferEpochID)
         setupComplete = try c.decodeIfPresent(Bool.self, forKey: .setupComplete) ?? false
         capabilities = try c.decodeIfPresent([String].self, forKey: .capabilities) ?? []
         // A scale of 0 is never stored; read as real time.

@@ -88,7 +88,7 @@ import VettIDDataTesting
         #expect(service.transferApprovals.map(\.pin) == [pin] && service.transferApprovals.first?.signer == nil)
         let at = try #require(m.record.value.transferApprovedAtMs)
         #expect(abs(Double(at) - Date().timeIntervalSince1970 * 1000) < 5_000)
-        #expect(m.record.value.transferKeepMs == nil && m.transferKeepSeconds == Int64(week))
+        #expect(m.record.value.transferKeepMs == nil)
         let since = try #require(m.transferKeptSince)
         #expect(abs(since.timeIntervalSince1970 - Double(at) / 1000) < 1)
         #expect(!m.movedAway)
@@ -182,7 +182,8 @@ import VettIDDataTesting
         #expect(await eventually { m.items.load == .loaded } && m.timeScale == 24)
         let offer = try await m.transferCreate()
         _ = try await m.transferApprove(transferID: offer.transferID, pin: pin, password: password, signer: nil)
-        #expect(m.record.value.transferKeepMs == 7 * 3_600_000 && m.transferKeepSeconds == 7 * 3_600)
+        let keep: Int64 = 7 * 3_600_000
+        #expect(m.record.value.transferKeepMs == keep)
         // 6 hours later: kept; the timer runs for the hour left.
         phone.clockAhead = 6 * 3_600
         await m.checkKeptTransfer()

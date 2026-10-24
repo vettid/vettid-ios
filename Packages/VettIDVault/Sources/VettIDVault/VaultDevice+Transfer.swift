@@ -129,10 +129,12 @@ extension VaultDevice {
     /// Drops a transfer this device started and has not completed (left the screen, timed out): the handshake, the pinned
     /// vault and the attested key's record. The key itself is the caller's to discard (``AltState/transferAttestKeyID``,
     /// read before this).
-    public func abandonTransfer() async throws {
+    /// False, and nothing dropped, when the transfer is paired: the pending epoch-1 secret is then this phone's.
+    @discardableResult
+    public func abandonTransfer() async throws -> Bool {
         try await lock.withLock {
             let changed: Bool = mem.withLock { st.deviceID == nil }
-            guard changed else { return }
+            guard changed else { return false }
             dropPairing()
             mem.withLock {
                 st.vault = nil
@@ -142,6 +144,7 @@ extension VaultDevice {
                 setAlt(a)
             }
             try save()
+            return true
         }
     }
 
@@ -152,8 +155,16 @@ extension VaultDevice {
     /// The previous token's `jti` is not denylisted. Throws when the renewal could not be deposited (the caller goes on).
     public func renewStandingToken() async throws {
         try await lock.withLock {
-            let tok = try mintForVault()
-            _ = try await sendLocked(id: nil, type: "relay.token.issued", body: Self.standing(tok), re: nil, status: nil, exp: nil)
+            let before = Set(mem.withLock { st.outbox.map(\.id) })
+            do {
+                let tok = try mintForVault()
+                _ = try await sendLocked(id: nil, type: "relay.token.issued", body: Self.standing(tok), re: nil, status: nil, exp: nil)
+            } catch {
+                // A renewal that failed is not kept for a later flush: it would go out after the approval, whose token it is not.
+                mem.withLock { st.outbox.removeAll { $0.type == "relay.token.issued" && !before.contains($0.id) } }
+                try? save()
+                throw error
+            }
         }
     }
 
@@ -163,12 +174,14 @@ extension VaultDevice {
     /// in all, its transport retries included: each message is handled as the collector handles it and acked. A
     /// `device.paired{transfer}` it brings is then found by ``awaitTransfer(timeout:)``. Throws when the collect fails or
     /// times out; a task that is cancelled stops it.
-    public func collectOnce(timeout: TimeInterval = 30) async throws {
+    public func collectOnce(
+        timeout: TimeInterval = 30, sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+    ) async throws {
         let own = own
         let messages: [RelayMessage] = try await withThrowingTaskGroup(of: [RelayMessage]?.self) { group in
             group.addTask { try await own.collect(wait: 0, max: RelayClient.maxCollect) }
             group.addTask {
-                try await Task.sleep(nanoseconds: UInt64(timeout * 1e9))
+                try await sleep(.seconds(timeout))
                 return nil
             }
             defer { group.cancelAll() }

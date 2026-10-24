@@ -7,15 +7,16 @@ import VettIDDataTesting
 
 /// The end of a kept transfer (VAULT-MESSAGING §11.14.10; owner decisions of 2026-10-16 and 2026-10-23): 7 days after the
 /// approval a check of the vault over this phone's own session decides whether the keys go. Only an answered list that does
-/// not name this phone as the vault's `app` erases (besides `device.unlinked{transferred}`); no answer (silence, the vault
-/// locked, `lock_pending`, a refusal or an error, a cancellation, the background, a halt) keeps the keys, says so
-/// (``VaultManager/keptCheckPending``) and is checked again. Each branch against ``FakeVaultService``, which answers nothing
-/// to an old phone whose approval took effect.
+/// not hold this phone's id erases (besides `device.unlinked{transferred}`); no answer (silence, the vault locked,
+/// `lock_pending`, a refusal or an error, the id with another kind, a cancellation, the background, a halt) keeps the keys,
+/// says so (``VaultManager/keptCheckPending``) and is checked again at the next start or foreground, and no sooner. Each
+/// branch against ``FakeVaultService``, which answers nothing to an old phone whose approval took effect. The limit of the
+/// check's wait is a pause the test releases (``TestVaultPhone/keptEndPauses``), and a test awaits the check's own end
+/// (``MoveBook/keptChecksFinished``), never a fixed time.
 @MainActor
 @Suite(.serialized) final class VaultManagerKeptEndTests {
     let service: FakeVaultService
-    /// The limit of the check is long; the tests of a vault's silence call ``shortLimit()`` first.
-    var phone: TestVaultPhone
+    let phone: TestVaultPhone
     let pin = "402817"
     let password = "correct horse battery"
     let week: TimeInterval = 7 * 86_400
@@ -24,9 +25,6 @@ import VettIDDataTesting
         service = try FakeVaultService()
         phone = try TestVaultPhone(service: service)
     }
-
-    /// This phone waits 800 ms for the list (instead of 20 s): for the tests in which the vault never answers.
-    func shortLimit() throws { phone = try TestVaultPhone(service: service, keptEndCheck: .milliseconds(800)) }
 
     var m: VaultManager { phone.manager }
 
@@ -45,6 +43,23 @@ import VettIDDataTesting
 
     func listRequests() -> Int { service.requestsSeen.filter { $0 == "device.list" }.count }
 
+    var finished: Int { m.moveFlags.book.keptChecksFinished }
+
+    /// A check the vault never answers: it runs until its limit's pause is released (the pause is waited for; a check that
+    /// ends without waiting, such as one refused for a lock pending, needs no release).
+    /// [listed]: the vault is asked, so the request must have reached it before the limit is released.
+    func silentCheck(listed: Bool = true) async {
+        let pauses = phone.keptEndPauses.lengths.count
+        let done = finished
+        let lists = service.deviceListsAfterTransfer
+        let check = Task { await m.checkKeptTransfer() }
+        _ = await eventually {
+            finished > done || (phone.keptEndPauses.lengths.count == pauses + 1 && (!listed || service.deviceListsAfterTransfer > lists))
+        }
+        phone.keptEndPauses.release()
+        await check.value
+    }
+
     func expectErased() async throws {
         #expect(await eventually { m.phase == .signedOut })
         #expect(m.movedAway)
@@ -55,20 +70,12 @@ import VettIDDataTesting
         #expect(m.phase != .signedOut && !m.movedAway && m.record.value.transferApprovedAtMs != nil)
     }
 
-    // MARK: - What erases
+    // MARK: - What erases: a definite answer that this phone is no longer the vault's app
 
     @Test func anAnsweredListWithoutThisPhoneErases() async throws {
         defer { phone.close() }
         try await aged()
         service.deviceListAnswer = .withoutThisPhone
-        await m.checkKeptTransfer()
-        try await expectErased()
-    }
-
-    @Test func anAnsweredListThatNamesThisPhoneAsADesktopErases() async throws {
-        defer { phone.close() }
-        try await aged()
-        service.deviceListAnswer = .thisPhoneAsDesktop
         await m.checkKeptTransfer()
         try await expectErased()
     }
@@ -81,7 +88,31 @@ import VettIDDataTesting
         try await expectErased()
     }
 
+    /// The notice is sealed by the vault at delivery, with its own clock: 20 days after the approval, past the 16-day rule for
+    /// a notice sealed at the approval, it still opens (§11.14.10, release L).
+    @Test func aNoticeSealedAtDeliveryTwentyDaysLaterIsAccepted() async throws {
+        defer { phone.close() }
+        service.stampsOnVaultClock = true
+        try await aged()
+        let twenty: TimeInterval = 20 * 86_400
+        service.advanceVaultClock(twenty)
+        phone.clockAhead = twenty
+        service.unlinkThisPhone(reason: "transferred")
+        try await expectErased()
+    }
+
     // MARK: - What does not: no definite answer (owner decision, 2026-10-23)
+
+    /// The id with another kind is not a definite answer (VAULT-MESSAGING §11.14.10: no longer the vault's app only if the list
+    /// does not hold that id).
+    @Test func aListThatHoldsThisPhonesIdAsADesktopIsNoDefiniteAnswer() async throws {
+        defer { phone.close() }
+        try await aged()
+        service.deviceListAnswer = .thisPhoneAsDesktop
+        await m.checkKeptTransfer()
+        expectKept()
+        #expect(m.keptCheckPending && !m.movedBack)
+    }
 
     /// A refusal is not the vault's list: kept, pending, checked again at the next foreground.
     @Test func aRefusalOfTheVaultKeepsTheKeysAndIsCheckedAgain() async throws {
@@ -91,7 +122,7 @@ import VettIDDataTesting
         await m.checkKeptTransfer()
         expectKept()
         #expect(m.keptCheckPending)
-        // The vault now gives a definite answer that does not name this phone: erased at the next foreground.
+        // The vault now gives a definite answer that does not hold this phone: erased at the next foreground.
         service.deviceListAnswer = .withoutThisPhone
         m.onForeground()
         try await expectErased()
@@ -100,18 +131,22 @@ import VettIDDataTesting
 
     /// No answer within the limit: kept, a plain notice, and checked again at each foreground until the vault answers.
     @Test func noAnswerKeepsTheKeysAndIsCheckedAgainAtTheNextForeground() async throws {
-        try shortLimit()
         defer { phone.close() }
         try await aged()
-        await m.checkKeptTransfer()
+        await silentCheck()
         expectKept()
-        #expect(m.keptCheckPending && m.phase == .unlocked && service.deviceListsAfterTransfer == 1)
+        #expect(m.keptCheckPending, "pending")
+        #expect(m.phase == .unlocked, "\(m.phase)")
+        #expect(service.deviceListsAfterTransfer == 1, "\(service.deviceListsAfterTransfer)")
+        // The next foreground asks again (one more list), and is silent again.
+        let done = finished
         m.onForeground()
         #expect(await eventually { service.deviceListsAfterTransfer == 2 })
-        // Still no answer: still kept. Then the vault lists this phone as its app.
-        try await Task.sleep(for: .milliseconds(1_200))
+        phone.keptEndPauses.release()
+        #expect(await eventually { finished == done + 1 })
         expectKept()
         #expect(m.keptCheckPending)
+        // Then the vault lists this phone as its app: the keep ends, as after "The move didn't finish".
         service.transferTookEffect = false
         m.onForeground()
         #expect(await eventually { m.movedBack })
@@ -120,41 +155,31 @@ import VettIDDataTesting
 
     /// The vault locked on day 7 never answers: kept (not erased), and pending.
     @Test func aLockedVaultKeepsTheKeys() async throws {
-        try shortLimit()
         defer { phone.close() }
         try await aged()
         try await m.lock()
-        await m.checkKeptTransfer()
-        try await Task.sleep(for: .milliseconds(1_200))
+        await silentCheck(listed: false)
         expectKept()
         #expect(m.keptCheckPending)
     }
 
-    // MARK: - What does not (F1, F2, F3, F4)
-
     /// The app went to the background during the wait: the wait's clock ran while it was suspended, so its limit proves
     /// nothing. Nothing is erased; the return to the foreground makes the check again.
     @Test func aCheckTheBackgroundInterruptedNeverErasesAndIsMadeAgainInTheForeground() async throws {
-        try shortLimit()
         defer { phone.close() }
         try await aged()
         let check = Task { await m.checkKeptTransfer() }
-        #expect(await eventually { service.deviceListsAfterTransfer == 1 })
+        #expect(await eventually { service.deviceListsAfterTransfer == 1 && phone.keptEndPauses.lengths.count == 1 })
         await m.onBackground(budget: .milliseconds(10))
+        // The limit passes while the app is away: it would have won.
+        phone.keptEndPauses.release()
         await check.value
-        // Longer than the limit (800 ms in the tests): the timer would have won.
-        try await Task.sleep(for: .milliseconds(1_200))
         expectKept()
         #expect(m.phase == .unlocked && !m.movedBack)
         // Back in the foreground the vault lists this phone (the approval never took effect): the check is made again.
         service.transferTookEffect = false
-        // The session was dropped with the background; on a loaded machine the 800 ms of the short limit may not be enough
-        // to open it again, in which case the next foreground makes the check again.
-        for _ in 0..<5 {
-            m.onForeground()
-            if await eventually(within: .seconds(8), { m.movedBack }) { break }
-        }
-        #expect(m.movedBack)
+        m.onForeground()
+        #expect(await eventually { m.movedBack })
         #expect(m.record.value.transferApprovedAtMs == nil && m.phase != .signedOut)
     }
 
@@ -165,35 +190,33 @@ import VettIDDataTesting
         await m.onBackground(budget: .milliseconds(10))
         let lists = listRequests()
         await m.checkKeptTransfer()
-        try await Task.sleep(for: .milliseconds(300))
         expectKept()
-        #expect(listRequests() == lists && service.deviceListsAfterTransfer == 0)
+        #expect(listRequests() == lists && service.deviceListsAfterTransfer == 0 && phone.keptEndPauses.lengths.isEmpty)
     }
 
     /// A halted manager (the process going away) never erases.
     @Test func aHaltedManagerNeverErases() async throws {
-        try shortLimit()
         defer { phone.close() }
         try await aged()
         let check = Task { await m.checkKeptTransfer() }
-        #expect(await eventually { service.deviceListsAfterTransfer == 1 })
+        #expect(await eventually { service.deviceListsAfterTransfer == 1 && phone.keptEndPauses.lengths.count == 1 })
         await m.halt()
+        phone.keptEndPauses.release()
         await check.value
-        try await Task.sleep(for: .milliseconds(1_200))
         expectKept()
         #expect(try phone.wipeTargets.keysLeft())
     }
 
     /// A cancelled task is not "no answer".
     @Test func aCancelledCheckNeverErases() async throws {
-        try shortLimit()
         defer { phone.close() }
         try await aged()
+        let done = finished
         let check = Task { await m.checkKeptTransfer() }
-        #expect(await eventually { service.deviceListsAfterTransfer == 1 })
+        #expect(await eventually { service.deviceListsAfterTransfer == 1 && phone.keptEndPauses.lengths.count == 1 })
         check.cancel()
         await check.value
-        try await Task.sleep(for: .milliseconds(1_200))
+        #expect(await eventually { finished == done + 1 })
         expectKept()
         #expect(m.phase == .unlocked && m.keptCheckPending)
     }
@@ -211,8 +234,7 @@ import VettIDDataTesting
         await m.checkKeptTransfer()
         expectKept()
         #expect(listRequests() == lists && service.deviceListsAfterTransfer == 0)
-        try await Task.sleep(for: .milliseconds(200))
-        #expect(phone.keepPauses.lengths.count == pauses, "no timer repeats the check")
+        #expect(phone.keepPauses.lengths.count == pauses, "\(phone.keepPauses.lengths)")
     }
 
     /// The record's generation is noted before the question and read again after it (VAULT-MESSAGING §11.14.10 "Recording the
@@ -281,65 +303,51 @@ import VettIDDataTesting
         await m.checkKeptTransfer()
         expectKept()
         #expect(m.keptCheckPending && service.revokedDeposits == before + 1)
+        let done = finished
         m.onForeground()
-        #expect(await eventually { service.revokedDeposits == before + 2 })
-        try await Task.sleep(for: .milliseconds(500))
+        #expect(await eventually { finished == done + 1 })
         #expect(service.revokedDeposits == before + 2 && m.phase != .signedOut && !m.movedAway)
     }
 
     /// A definite answer is only the response to this check's own request: another `re` is no answer, even a list that does
     /// not hold this phone.
     @Test func aResponseWithAnotherReIsNoAnswer() async throws {
-        try shortLimit()
         defer { phone.close() }
         try await aged()
         let check = Task { await m.checkKeptTransfer() }
-        #expect(await eventually { service.deviceListsAfterTransfer == 1 })
+        #expect(await eventually { service.deviceListsAfterTransfer == 1 && phone.keptEndPauses.lengths.count == 1 })
         service.sendStrayDeviceList()
+        phone.keptEndPauses.release()
         await check.value
-        try await Task.sleep(for: .milliseconds(500))
         expectKept()
         #expect(m.keptCheckPending && m.phase == .unlocked)
     }
 
-    /// The notice is sealed by the vault at delivery, with its own clock: 20 days after the approval, past the 16-day rule for
-    /// a notice sealed at the approval, it still opens (§11.14.10, release L).
-    @Test func aNoticeSealedAtDeliveryTwentyDaysLaterIsAccepted() async throws {
-        defer { phone.close() }
-        service.stampsOnVaultClock = true
-        try await aged()
-        let twenty: TimeInterval = 20 * 86_400
-        service.advanceVaultClock(twenty)
-        phone.clockAhead = twenty
-        service.unlinkThisPhone(reason: "transferred")
-        try await expectErased()
-    }
-
     /// No answer after this phone's own lock (it closed the vault): kept.
     @Test func noAnswerAfterThisPhonesOwnLockIsNotAnErasure() async throws {
-        try shortLimit()
         defer { phone.close() }
         try await aged()
         let check = Task { await m.checkKeptTransfer() }
-        #expect(await eventually { service.deviceListsAfterTransfer == 1 })
+        #expect(await eventually { service.deviceListsAfterTransfer == 1 && phone.keptEndPauses.lengths.count == 1 })
         try await m.lock()
+        phone.keptEndPauses.release()
         await check.value
-        try await Task.sleep(for: .milliseconds(1_200))
         expectKept()
     }
 
     /// The end of the keep is being decided: a second call while it runs does nothing (one request, one verdict).
     @Test func theCheckIsNotReenteredWhileItRuns() async throws {
-        try shortLimit()
         defer { phone.close() }
         try await aged()
+        let done = finished
         let first = Task { await m.endKeptTransfer() }
-        #expect(await eventually { service.deviceListsAfterTransfer == 1 })
+        #expect(await eventually { service.deviceListsAfterTransfer == 1 && phone.keptEndPauses.lengths.count == 1 })
         #expect(m.keptEnding)
         await m.endKeptTransfer()
-        #expect(service.deviceListsAfterTransfer == 1)
+        #expect(service.deviceListsAfterTransfer == 1 && finished == done)
+        phone.keptEndPauses.release()
         await first.value
-        #expect(!m.keptEnding)
+        #expect(!m.keptEnding && finished == done + 1)
         expectKept()
         #expect(service.deviceListsAfterTransfer == 1)
     }
@@ -353,7 +361,7 @@ import VettIDDataTesting
         #expect(await eventually { m.movedBack })
     }
 
-    // MARK: - F5
+    // MARK: - The moved-away mark
 
     private func unlinked(_ reason: String) -> VaultMessage {
         VaultMessage(inner: Inner(id: Ulid.new(), type: "device.unlinked", ts: Date(), body: Array(#"{"reason":"\#(reason)"}"#.utf8)))

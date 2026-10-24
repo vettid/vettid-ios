@@ -151,6 +151,12 @@ public struct VaultManagerConfig: Sendable {
     /// The new phone's wait for the vault's `hs.resp` after its transfer `hs.init` (``MoveCodes/hsRespWait``; a pause the tests
     /// release).
     public var transferSleep: LockSleep = realLockSleep
+    /// The new phone's wait for the deadline of its transfer (VAULT-MESSAGING §11.14.10 rule 5; a pause the tests release).
+    public var transferDeadlineSleep: LockSleep = realLockSleep
+    /// The bound of the one collect before the drop (30 s; a pause the tests release).
+    public var transferCollectSleep: LockSleep = realLockSleep
+    /// The limit of the day-7 check's wait for `device.list` (``keptEndCheck``; a pause the tests release).
+    public var keptEndSleep: LockSleep = realLockSleep
     /// The wait to the end of a kept transfer (``VaultManager/checkKeptTransfer()``; a pause the tests release).
     public var keepSleep: LockSleep = realLockSleep
     /// How long the end-of-keep check of a transfer's old phone waits for the vault's `device.list` (vettid-android

@@ -124,6 +124,20 @@ import VettIDRelay
         #expect(ops.base.relay.refused == 1)
     }
 
+    /// A renewal the relay refuses with a retryable error is not kept in the outbox: it would go out after the approval.
+    @Test func aRetryableRefusalOfTheRenewalLeavesNothingInTheOutbox() async throws {
+        let h = try await holder(2)
+        ops.base.relay.refuseStatus = 429
+        ops.base.relay.refuseDeposits = "rate_limited"
+        // Every attempt of the transport retry (three) is refused: the renewal fails, the approval's deposits are accepted.
+        ops.base.relay.refuseOnly = RelayClient.defaultAttempts
+        let approve = Task { try await h.api.transferApprove(transferID: "t-1", pin: "246802", password: "pw") }
+        try await ops.answer(h.v, h.d, "credential.utk.get", h.utks)
+        try await ops.answer(h.v, h.d, VaultApi.typeTransferApprove, #"{"unlink":"after_new_unlock"}"#)
+        #expect(try await approve.value.keepUntilNewUnlock)
+        #expect(h.d.st.outbox.filter { $0.type == "relay.token.issued" }.isEmpty)
+    }
+
     /// Again before the approval that follows `stale_credential`.
     @Test func theTokenIsRenewedAgainBeforeTheRetryAfterAStaleCredential() async throws {
         let h = try await holder(3)

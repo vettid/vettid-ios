@@ -892,17 +892,6 @@
         }
       }
     },
-    "root_move_not_done": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Your vault did not move to your new phone: it still works with this phone, which keeps its keys. Start the move again when you are ready."
-          }
-        }
-      }
-    },
     "root_moved_away": {
       "extractionState": "manual",
       "localizations": {

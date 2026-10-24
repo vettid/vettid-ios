@@ -124,6 +124,28 @@ final class RecordingAttester: Attester, @unchecked Sendable {
         await #expect(throws: CancellationError.self) { _ = try await wait.value }
     }
 
+    /// The `device.paired` of a transfer is applied when it is handled, before it is acked: the event in memory is lost with the
+    /// process, the state is not (VAULT-MESSAGING §11.14.10 rule 5: a paired transfer completes at any later start).
+    @Test func aPairedTransferIsAppliedWhenItIsHandled() async throws {
+        let store = InMemoryDeviceStateStore()
+        let secrets = DeviceSecrets(identity: Ed25519PrivateKey.generate(), kem: try KemPrivateKey.generate(), relay: Ed25519PrivateKey.generate(), apiKey: [UInt8](repeating: 0x30, count: 91))
+        let d = try await VaultDevice.create(base.config(store), secrets: secrets)
+        let v = try FakeVault(relayURL: base.relay.baseURL)
+        let (qr, inviteID) = try code(v, d)
+        try await d.startTransfer(link: try qr.link(), attester: TestIOSAttester()) { _, _ in nil }
+        let key = try #require(d.altState.transferAttestKeyID)
+        try await d.handle(try v.respond(try await base.relay.nextDeposit().payload, d, ctx: inviteID))
+        try v.fin(try await base.relay.nextDeposit().payload, d)
+        // Nothing awaits it.
+        try await d.handle(try v.seal("device.paired", #"{"device_id":"dev-2","role":"app","vault_id":"\#(v.vaultID)","transfer":true,"user_guid":"guid-1234"}"#))
+        #expect(d.deviceID == "dev-2" && d.transferUserGuid == "guid-1234" && d.altState.enrolledAttestKeyID == key)
+        #expect(d.altState.transferAttestKeyID == nil && d.paired)
+        // A device restored from the store (the next start) is paired all the same, and cannot be abandoned.
+        let again = try #require(try VaultDevice.load(base.config(store), secrets: secrets))
+        #expect(again.deviceID == "dev-2" && again.transferUserGuid == "guid-1234")
+        #expect(try await again.abandonTransfer() == false && again.hasVault)
+    }
+
     /// One collect, `wait=0` (VAULT-MESSAGING §11.14.10 rule 5): the `device.paired` that waits in the mailbox is applied; the
     /// message is acked.
     @Test func oneCollectAppliesAPairedTransferThatWaits() async throws {

@@ -77,7 +77,10 @@ extension VaultManager {
     func endKeptTransfer() async {
         guard !keptEnding else { return }
         keptEnding = true
-        defer { keptEnding = false }
+        defer {
+            keptEnding = false
+            moveFlags.book.keptChecksFinished += 1
+        }
         guard record.value.transferApprovedAtMs != nil else { return }
         let noted = (record: record.generation, transfer: record.value.transferGen)
         let result = await keptEndCheck()
@@ -113,7 +116,7 @@ extension VaultManager {
         guard !backgrounded, !halted else { return .notChecked }
         let began = moveFlags.book.lifecycle
         let limit = config.keptEndCheck
-        let sleep = config.lockTiming.sleep
+        let sleep = config.keptEndSleep
         let probe: KeptProbe
         do {
             probe = try await withThrowingTaskGroup(of: KeptProbe.self) { group in
@@ -149,7 +152,11 @@ extension VaultManager {
             // Without this phone's id the list cannot say it: not a definite answer (owner decision, 2026-10-23).
             guard let deviceID = s.device.deviceID else { return .notRun }
             let list = try await api.deviceList()
-            return KeptTransfer.stillTheApp(deviceList: list, deviceID: deviceID) ? .listed : .notListed
+            switch KeptTransfer.verdict(deviceList: list, deviceID: deviceID) {
+            case .stillTheApp: return .listed
+            case .removed: return .notListed
+            case .undecided: return .notRun
+            }
         } catch is CancellationError {
             return .notRun
         } catch let f as VaultFailure where f.kind == .phoneLocked || f.code == "halted" || f.code == "session_dropped" {
@@ -172,13 +179,7 @@ extension VaultManager {
         movedBack = true
     }
 
-    /// How long this phone keeps its keys after approving a transfer, for the texts: the period the approval started, stored
-    /// with it (``LocalAccount/transferKeepMs``: a scale learnt later does not change it), else 7 days.
-    public var transferKeepSeconds: Int64 { (record.value.transferKeepMs ?? KeptTransfer.keepPeriodMs) / 1000 }
-
     public func acknowledgeMovedBack() { movedBack = false }
-
-    public func acknowledgeMoveNotDone() { moveNotDone = false }
 
     public func acknowledgeMovedAway() {
         wiper?.acknowledgeMovedAway()
