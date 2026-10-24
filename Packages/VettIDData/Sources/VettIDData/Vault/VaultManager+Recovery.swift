@@ -9,7 +9,8 @@ private final class RegisterEpoch: @unchecked Sendable {
     private let lock = NSLock()
     private var id: String?
 
-    func set(_ value: String) { lock.withLock { id = value } }
+    /// [created]: this call made the record; only then is it dropped when the register is refused.
+    func set(_ value: String, created: Bool) { lock.withLock { id = created ? value : nil } }
     var value: String? { lock.withLock { id } }
 }
 
@@ -42,6 +43,8 @@ extension VaultManager {
     nonisolated static let codeNoRecovery = "no_recovery"
     /// (0.34.0) The resume of a lost `ok`: the unlock opened the vault but carried no `vault_bundle` for this phone.
     public nonisolated static let codeNoBundle = "no_bundle"
+    /// A registration or a start-over while an open went out (answered or not): the vault may hold this phone's secret.
+    public nonisolated static let codeRecoveryOpenSent = "recovery_open_sent"
     /// The requirements of the recovery of before release R (IOS-PLAN ID8).
     public nonisolated static let codeRecoveryBeforeR = "recovery_before_release_r"
     /// The recovered phone's handshake right after `ok` (§11.14.6), and, for a recovery whose `ok` came earlier, the wait
@@ -118,6 +121,11 @@ extension VaultManager {
         if d.recovering {
             // Opened by the vault's `ok` and not finished: that recovery is finished, not registered again.
             if d.hasVault || d.deviceID != nil { throw VaultFailure(.vaultExists) }
+            // An open went out (answered, or not: the vault may have adopted this phone's secret): its record is read here, before
+            // a registration resets it, and the pending key stays for the resume. A start over ends it (chosen; not in the spec).
+            if record.value.recoveryOpenUnanswered || record.value.recoveryAttemptsUsed != nil {
+                throw VaultFailure(.other, code: Self.codeRecoveryOpenSent)
+            }
         } else {
             if d.deviceID != nil { throw VaultFailure(.vaultExists) }
             if let refusal = startOverRefusal(d) { throw refusal }
@@ -147,9 +155,9 @@ extension VaultManager {
                     guard ReleasePath.recoveryOffered(caps) else { throw VaultFailure(.notSupported, code: Self.codeNotOffered) }
                     // The phone key and its epoch-1 record are made before the register (IOS-PLAN §6.3 item 7: a retry reuses
                     // them); the register carries no secret, the open does.
-                    var made = try secrets.reuseOrCreate(keyVault: code.vaultID)
+                    var (made, created) = try secrets.reuseOrCreateNoting(keyVault: code.vaultID)
                     Bytes.wipe(&made.secret)
-                    epoch.set(made.id)
+                    epoch.set(made.id, created: created)
                     await self?.noteRegistering(e, since: rec)
                     return try await s.device.prepareRecoveryRegister(userGuid: guid, code: code, enclave: e, attester: attester)
                 },
@@ -173,8 +181,6 @@ extension VaultManager {
             try await dropRegistration(s, epoch.value)
             return .refused(code: r.code ?? "retry")
         }
-        // Kept in the record: the vault holds the key this register attested, also once the recovery is finished.
-        _ = try record.update(since: rec) { $0.recoveryRegistered = true }
         usesPhoneSecret = phoneSecrets.inUse
         config.attestStartOver?.set(recovering: true)
         phase = .setup(.recovering)
@@ -184,7 +190,13 @@ extension VaultManager {
     /// What the instance the register is sealed to says: its capabilities and time scale, recorded with the claimed vault.
     private func noteRegistering(_ e: VerifiedEnclave, since rec: Int) {
         let caps = e.descriptor.capabilities
-        _ = try? record.update(since: rec) { $0.capabilities = caps }
+        // Before the register is sent: its answer may be lost, and the vault may bind this phone's key all the same (as
+        // `enrollStartedMs` is set before an enrollment's request).
+        _ = try? record.update(since: rec) {
+            $0.capabilities = caps
+            $0.recoveryRegistered = true
+        }
+        config.attestStartOver?.set(recovering: true)
         learnTimeScale(e.descriptor.timeScale, since: rec)
         recoveryOffered = ReleasePath.recoveryOffered(caps)
         usesPhoneSecret = phoneSecrets.inUse
@@ -195,6 +207,9 @@ extension VaultManager {
     /// keeps the phone key).
     private func dropRegistration(_ s: VaultSession, _ epochID: String?) async throws {
         try await s.device.dropRecoveryRegistration()
+        // Refused for certain: no vault holds the key this register attested.
+        _ = try? record.update(since: record.generation) { $0.recoveryRegistered = false }
+        config.attestStartOver?.set(recovering: false)
         if let epochID { _ = try? phoneSecrets.dropPending(id: epochID) }
         usesPhoneSecret = phoneSecrets.inUse
     }
@@ -217,7 +232,7 @@ extension VaultManager {
             guard d.recovering else { throw VaultFailure(.notSupported, code: Self.codeNoRecovery) }
             guard phoneSecrets.inUse else { throw VaultFailure(.notSupported, code: Self.codeNoPhoneSecret) }
             if d.recoveryOpenedNotFinished {
-                return try await finishOpened(s, pin: pin, used: record.value.recoveryAttemptsUsed, resuming: true)
+                return try await finishOpened(s, pin: pin, used: record.value.recoveryAttemptsUsed, resuming: true, since: rec)
             }
             let afterUnanswered = record.value.recoveryOpenUnanswered
             let (vaultID, guid) = (record.value.vaultID, record.value.userGuid)
@@ -242,6 +257,12 @@ extension VaultManager {
                 onSent: { [weak self] in await self?.noteRecoveryOpenSent(since: rec) }
             )
             let used = r.counted ? r.used : nil
+            // The vault holds this phone's secret once it answered `ok` (§11.14.6 step 6): its epoch-1 record is made current
+            // first, before anything that can fail.
+            if r.ok {
+                _ = try phoneSecrets.confirmCreate(id: epoch.id)
+                usesPhoneSecret = phoneSecrets.inUse
+            }
             _ = try record.update(since: rec) {
                 $0.recoveryOpenUnanswered = false
                 if let used { $0.recoveryAttemptsUsed = used }
@@ -251,10 +272,7 @@ extension VaultManager {
                     r.code, used: used, retryAt: r.retryAt, afterUnanswered: afterUnanswered, attemptUsed: r.attemptUsed
                 )
             }
-            // The vault holds this phone's secret now (§11.14.6 step 6): its epoch-1 record is current.
-            _ = try phoneSecrets.confirmCreate(id: epoch.id)
-            usesPhoneSecret = phoneSecrets.inUse
-            var out = try await finishOpened(s, pin: pin, used: used, resuming: false)
+            var out = try await finishOpened(s, pin: pin, used: used, resuming: false, since: rec)
             out.attemptUsed = r.attemptUsed
             return out
         }
@@ -278,14 +296,15 @@ extension VaultManager {
             let d = s.device
             guard phoneSecrets.inUse, d.recovering else { throw VaultFailure(.notSupported, code: Self.codeNoRecovery) }
             let used = record.value.recoveryAttemptsUsed
-            if d.recoveryOpenedNotFinished { return try await finishOpened(s, pin: pin, used: used, resuming: true) }
+            let rec = record.generation
+            if d.recoveryOpenedNotFinished { return try await finishOpened(s, pin: pin, used: used, resuming: true, since: rec) }
             let u = try await unlockWithSecret(s, pin: pin, options: UnlockOptions(), path: .current)
             if !u.ok { return RecoveryOpenOutcome(u.result.code ?? "retry", used: used, opened: true, attemptUsed: false) }
             // A result without `vault_bundle`: this phone is not the one a completed recovery made the app.
             guard d.recoveryOpenedNotFinished else {
                 return RecoveryOpenOutcome(Self.codeNoBundle, used: used, opened: true, attemptUsed: false)
             }
-            var out = try await finishOpened(s, pin: pin, used: used, resuming: false)
+            var out = try await finishOpened(s, pin: pin, used: used, resuming: false, since: rec)
             out.attemptUsed = false
             return out
         }
@@ -295,18 +314,31 @@ extension VaultManager {
     /// `credential.recover`). The app is opened by ``finishRecoveryOpen()``, after the member has read the result. When the
     /// handshake is not answered (the vault locked meanwhile, or the relay lost it), the phone unlocks the vault with its own
     /// key, which the vault made its app's, and runs the handshake again.
-    private func finishOpened(_ s: VaultSession, pin: String, used: Int?, resuming: Bool) async throws -> RecoveryOpenOutcome {
+    ///
+    /// [rec] is the record's generation when the open began: a wipe or a reset during the handshake drops what follows.
+    private func finishOpened(
+        _ s: VaultSession, pin: String, used: Int?, resuming: Bool, since rec: Int
+    ) async throws -> RecoveryOpenOutcome {
         let d = s.device
+        confirmRecoveredSecret()
         // The handshake only when it has not completed yet: a phone paired earlier fetches the credential straight away.
         var refused = d.deviceID == nil ? try await pairRecovered(s, pin: pin, resuming: resuming) : nil
         if refused == nil { refused = try await fetchRecovered(s, pin: pin, unlockFirst: resuming) }
         if let refused { return RecoveryOpenOutcome(refused, used: used, opened: true) }
         // Only now, with the credential on this phone, is the recovery over (until then the phone resumes it). The vault was
         // confirmed long ago (§3.5.7): this phone does not wait for `vault.enroll.confirm` (as after a transfer).
-        _ = try record.update(since: record.generation) { $0.enrollConfirmed = true }
+        _ = try record.update(since: rec) { $0.enrollConfirmed = true }
         try await d.finishRecoveryOpen()
         config.attestStartOver?.set(recovering: false)
         return RecoveryOpenOutcome("ok", used: used)
+    }
+
+    /// The vault made this phone its app, so the pending epoch-1 record of this vault is the secret it holds: made current when
+    /// an earlier run did not get to it (a write that failed, a restart). Nothing when none is pending, or when two are (an
+    /// unlock proves the right one).
+    func confirmRecoveredSecret() {
+        _ = try? phoneSecrets.confirmPending(keyVault: record.value.vaultID)
+        usesPhoneSecret = phoneSecrets.inUse
     }
 
     /// The recovered phone's handshake; unanswered, an unlock with its own key and the handshake again. The unlock's refusal
@@ -395,8 +427,12 @@ extension VaultManager {
         let abandoned: Bool = try await guarded {
             try prepared()
             guard let d = try await storedSession()?.device, d.recovering else { return false }
-            // Release R (§11.14.6): after `ok` the vault's only unlock key is this phone's; it is never deleted here.
-            if phoneSecrets.inUse, d.recoveryOpenedNotFinished { throw VaultFailure(.other, code: MoveCodes.recoveryOpened) }
+            // Release R (§11.14.6): after `ok` the vault's only unlock key is this phone's; it is never deleted here. Whatever the
+            // phone's records say (they may be unreadable now): a pinned or paired vault, or an open that may have succeeded.
+            if d.hasVault || d.deviceID != nil || d.recoveryOpenedNotFinished {
+                throw VaultFailure(.other, code: MoveCodes.recoveryOpened)
+            }
+            if record.value.recoveryOpenUnanswered { throw VaultFailure(.other, code: Self.codeRecoveryOpenSent) }
             try await dropSession(forget: true, registrationOnly: true)
             try resetRecord(LocalAccount())
             config.attestStartOver?.set(recovering: false)

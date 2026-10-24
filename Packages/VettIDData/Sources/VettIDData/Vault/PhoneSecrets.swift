@@ -121,24 +121,28 @@ public final class PhoneSecrets: @unchecked Sendable {
     /// vault): the pending record, or a current epoch-1 record, of the same `key_vault` whose key passes the "keys
     /// usable" check. A new pending record otherwise (IOS-PLAN §6.3 item 7). A locked iPhone is
     /// ``FailureKind/phoneLocked`` and makes nothing.
-    public func reuseOrCreate(keyVault: String) throws -> EpochOneSecret {
+    public func reuseOrCreate(keyVault: String) throws -> EpochOneSecret { try reuseOrCreateNoting(keyVault: keyVault).epoch }
+
+    /// ``reuseOrCreate(keyVault:)``, also saying whether the record was made by this call ([created]) or already existed: only
+    /// a record this call made can be dropped when its operation is refused (an earlier one may be the key a vault holds).
+    public func reuseOrCreateNoting(keyVault: String) throws -> (epoch: EpochOneSecret, created: Bool) {
         try store.exclusive {
             let recs: PhoneRecords
             do {
                 recs = try readRecords()
             } catch let f as VaultFailure where f.kind == .deviceSecret {
-                return try create(keyVault: keyVault)
+                return (try create(keyVault: keyVault), true)
             }
             let reusable = (recs.pendings.reversed() + [recs.current].compactMap { $0 })
                 .filter { $0.record.epoch == 1 && $0.record.keyVault == keyVault }
             for entry in reusable {
                 do {
-                    return EpochOneSecret(id: entry.keyID, secret: try secret(of: entry))
+                    return (EpochOneSecret(id: entry.keyID, secret: try secret(of: entry)), false)
                 } catch let f as VaultFailure where f.kind == .deviceSecret {
                     continue
                 }
             }
-            return try create(keyVault: keyVault)
+            return (try create(keyVault: keyVault), true)
         }
     }
 

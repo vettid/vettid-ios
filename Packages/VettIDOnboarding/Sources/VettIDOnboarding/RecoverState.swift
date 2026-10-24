@@ -8,6 +8,9 @@ import VettIDData
 /// "this recovery has ended" (`PIN`, `PASSWORD`, `ENDED`) are not on iOS (chosen; not in the spec).
 public enum RecoverStep: Equatable, Sendable, CaseIterable {
     case loading
+    /// Where the recovery stands could not be read (``RecoverState/error`` says why): nothing is offered but a retry, so that a
+    /// registered recovery is never taken for none.
+    case stageFailed
     /// What is needed, and where the code comes from (the account portal; the app never signs in).
     case intro
     case scan
@@ -117,6 +120,8 @@ public struct RecoverState: Equatable, Sendable, CustomStringConvertible, Custom
 @MainActor
 public protocol RecoverActions: AnyObject, Sendable {
     func scan()
+    /// Reads where the recovery stands again, after ``RecoverStep/stageFailed``.
+    func retryStage()
     /// Back within the flow; false when the member leaves it (the onboarding flow takes over).
     @discardableResult func back() -> Bool
     func scanned(_ text: String)
@@ -140,6 +145,7 @@ public final class NoRecoverActions: RecoverActions {
     public init() {}
 
     public func scan() {}
+    public func retryStage() {}
     public func back() -> Bool { false }
     public func scanned(_ text: String) {}
     public func type() {}

@@ -20,6 +20,7 @@ public final class RecoveryOpenViewModel {
     @ObservationIgnored private let move: any MoveRepository
     @ObservationIgnored private let account: any AccountRepository
     @ObservationIgnored private let work = Work()
+    @ObservationIgnored private var openingApp = false
 
     public init(move: any MoveRepository, account: any AccountRepository) {
         self.move = move
@@ -29,7 +30,8 @@ public final class RecoveryOpenViewModel {
         // again.
         work.launch { [weak self] in
             let opened = (try? await move.recoveryOpened()) ?? false
-            if opened { self?.state.step = .finish }
+            // Not over a step the member has moved to meanwhile.
+            if opened, self?.state.step == .enter { self?.state.step = .finish }
         }
     }
 
@@ -150,8 +152,10 @@ public final class RecoveryOpenViewModel {
     /// opens nothing twice. A failure never opens anything: a lock asked for meanwhile (``MoveCodes/lockPending``) keeps the
     /// phone locked and is said as the unlock screen says it.
     public func openApp() {
-        guard state.step == .done else { return }
+        guard state.step == .done, !openingApp else { return }
+        openingApp = true
         work.launch { [weak self, move] in
+            defer { self?.openingApp = false }
             var failure: VaultFailure?
             do {
                 try await move.finishRecoveryOpen()

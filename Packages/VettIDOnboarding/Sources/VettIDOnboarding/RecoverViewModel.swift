@@ -66,7 +66,19 @@ public final class RecoverViewModel: RecoverActions {
 
     /// Where a recovery on this phone stands: the code, or (registered) the open.
     private func resume() async {
-        let stage = (try? await move.recoveryStage()) ?? .code
+        let stage: RecoveryStage
+        do {
+            stage = try await move.recoveryStage()
+        } catch {
+            // Not "no recovery": a registered recovery must not be offered a new code by a read that failed.
+            let e = Self.failure(of: error)
+            state.step = .stageFailed
+            state.error = e.kind
+            state.errorCode = e.code
+            return
+        }
+        state.error = nil
+        state.errorCode = nil
         state.emailHint = account.account?.emailHint ?? ""
         switch stage {
         case .code: state.step = .intro
@@ -75,10 +87,21 @@ public final class RecoverViewModel: RecoverActions {
         }
     }
 
+    public func retryStage() {
+        guard state.step == .stageFailed else { return }
+        state.step = .loading
+        state.error = nil
+        state.errorCode = nil
+        work.launch { [weak self] in await self?.resume() }
+    }
+
     // MARK: - The code
 
+    /// The code's steps are entered from the intro and from each other, never over a failed or running read of the stage.
+    private var codeEntry: Bool { [.intro, .scan, .type].contains(state.step) }
+
     public func scan() {
-        if state.busy { return }
+        if state.busy || !codeEntry { return }
         state.step = .scan
         state.refusal = nil
         state.error = nil
@@ -86,7 +109,7 @@ public final class RecoverViewModel: RecoverActions {
     }
 
     public func type() {
-        if state.busy { return }
+        if state.busy || !codeEntry { return }
         state.step = .type
         state.refusal = nil
         state.error = nil

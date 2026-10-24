@@ -125,6 +125,20 @@ import VettIDDataTesting
         #expect(vm.state.startOverURL == "https://account.vettid.org/account/vault/deletion/")
     }
 
+    /// A read of the stage that failed is not "no recovery": a registered recovery is not offered a new code.
+    @Test func aStageThatCouldNotBeReadSaysSoAndOffersARetry() async throws {
+        vault.fail["recoveryStage"] = VaultFailure(.network)
+        vault.recoveryStageValue = .pin
+        let vm = await model()
+        #expect(vm.state.step == .stageFailed && vm.state.error == .network)
+        vm.scan()
+        vm.type()
+        #expect(vm.state.step == .stageFailed)
+        vm.retryStage()
+        await vm.settle()
+        #expect(vm.state.step == .open && vm.state.error == nil)
+    }
+
     @Test func noRecoveryShowsWhatToDo() async throws {
         let vm = await model()
         #expect(vm.state.step == .intro && !vm.back())

@@ -98,6 +98,28 @@ import VettIDDataTesting
         #expect(vm.state.opened && vm.state.failure == nil && vault.phase == .unlocked)
     }
 
+    @Test func aDoubleTapOnContinueOpensOnce() async throws {
+        vault.recoveryOpenOutcomes = [RecoveryOpenOutcome("ok", used: 1)]
+        let vm = await model()
+        await enterAndSend(vm)
+        vm.openApp()
+        vm.openApp()
+        await vm.settle()
+        #expect(vault.calls.filter { $0 == "finishRecoveryOpen" }.count == 1 && vm.state.opened)
+    }
+
+    /// The start-up read of an `ok` that was not finished does not overwrite a step the member has moved to.
+    @Test func theLateStartReadDoesNotOverwriteAStep() async throws {
+        vault.recoveryOpenedValue = true
+        let vm = RecoveryOpenViewModel(move: vault, account: vault)
+        vm.setPin("975310")
+        vm.setPassword("x")
+        vm.review()
+        #expect(vm.state.step == .check)
+        await vm.settle()
+        #expect(vm.state.step == .check)
+    }
+
     /// After ok the vault removed the recovery: a failure then, or a restart, finishes with the PIN, never a new open.
     @Test func anOkWhoseRestFailedIsFinishedWithThePin() async throws {
         vault.fail["recoveryOpen"] = VaultFailure(.noResponse)

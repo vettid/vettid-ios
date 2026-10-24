@@ -110,6 +110,8 @@ import VettIDDataTesting
         let (s, t) = (try #require(scanService.recoveryRegisters.first), try #require(service.recoveryRegisters.first))
         #expect(s.userGuid == t.userGuid && s.vaultID == t.vaultID && s.recoveryID == t.recoveryID && s.code == t.code)
         #expect(s.platform == t.platform && s.name == t.name && s.shape == t.shape)
+        // The decrypted bodies, but for the request id, the keys of the phone and its attestation.
+        #expect(s.normalized == t.normalized && !s.normalized.isEmpty)
         // The typed code claimed by its locator, which named the vault and the recovery.
         let claim = try #require(service.recoveryClaims.first)
         #expect(claim.kind == "locator" && claim.locator == locator && claim.vaultID == nil)
@@ -387,7 +389,7 @@ import VettIDDataTesting
         let f = await vaultFailure { _ = try await m.recoveryOpen(pin: pin, password: password) }
         #expect(f?.kind == .noResponse)
         let isOpened = try await m.recoveryOpened()
-        #expect(try await m.recoveryOpened() && device?.recovering == true && device?.deviceID != nil)
+        #expect(isOpened && device?.recovering == true && device?.deviceID != nil)
         // Not paired with a credential yet: another open is never sent; a restart keeps the state.
         try await phone.restart()
         #expect(try await m.recoveryOpened())
@@ -423,6 +425,102 @@ import VettIDDataTesting
         #expect(m.lockPending)
         let f = await vaultFailure { try await m.finishRecoveryOpen() }
         #expect(f?.kind == .noResponse && f?.code == MoveCodes.lockPending && m.phase == .locked && !m.record.value.setupComplete)
+    }
+
+    // MARK: - An open that may have succeeded is never registered over or abandoned
+
+    /// The open's answer was lost: the vault may hold this phone's secret, so a new registration (which a refusal would answer
+    /// by dropping the key) is refused before anything is claimed, and the resume still works.
+    @Test func registeringAgainAfterALostOkIsRefusedAndKeepsTheKey() async throws {
+        defer { phone.close() }
+        let made = try await registered()
+        service.recoveryOpenAnswers(.answerLost)
+        _ = await vaultFailure { _ = try await m.recoveryOpen(pin: pin, password: password) }
+        let claims = service.recoveryClaims.count
+        let f = await vaultFailure { _ = try await m.registerRecovery(try scanned(made)) }
+        #expect(f?.code == VaultManager.codeRecoveryOpenSent && service.recoveryClaims.count == claims)
+        let t = await vaultFailure { _ = try await m.registerTypedRecovery(try typed(made)) }
+        #expect(t?.code == VaultManager.codeRecoveryOpenSent && service.recoveryClaims.count == claims)
+        #expect(device?.recovering == true && pendingRecord && m.record.value.recoveryOpenUnanswered)
+        #expect(try await m.resumeLostOk(pin: pin).ok)
+    }
+
+    @Test func registeringAgainAfterAnAnsweredOpenIsRefusedToo() async throws {
+        defer { phone.close() }
+        let made = try await registered()
+        _ = try await m.recoveryOpen(pin: "111111", password: password)
+        let f = await vaultFailure { _ = try await m.registerRecovery(try scanned(made)) }
+        #expect(f?.code == VaultManager.codeRecoveryOpenSent && device?.recovering == true && pendingRecord)
+    }
+
+    /// A second registration reuses the first one's record; its refusal must not delete a record it did not make.
+    @Test func aRefusedRegisterDropsOnlyTheRecordItMade() async throws {
+        defer { phone.close() }
+        let made = try await registered()
+        let key = try m.phoneSecrets.records().pendings.map(\.keyID)
+        service.recoveryRegisterAnswers(.refused("no_recovery"))
+        #expect(try await m.registerRecovery(try scanned(made)) == .refused(code: "no_recovery"))
+        #expect(try m.phoneSecrets.records().pendings.map(\.keyID) == key && key.count == 1)
+    }
+
+    /// A register whose answer never came may have bound the key: the start-over gate and the record say so before it is sent.
+    @Test func aRegisterThatGotNoAnswerStillMarksTheAttestKey() async throws {
+        defer { phone.close() }
+        let code = try scanned(try armed())
+        service.recoveryRegisterAnswers(.offline)
+        _ = await vaultFailure { _ = try await m.registerRecovery(code) }
+        #expect(m.record.value.recoveryRegistered && !m.record.value.noVaultHoldsAttestKey && !phone.attestStartOver.value)
+        // A refusal for certain takes it back.
+        service.recoveryRegisterAnswers(.refused("used"))
+        #expect(try await m.registerRecovery(code) == .refused(code: "used"))
+        #expect(!m.record.value.recoveryRegistered)
+    }
+
+    @Test func startingOverIsRefusedWhateverTheRecordsSay() async throws {
+        defer { phone.close() }
+        _ = try await registered()
+        service.loseAnswers(["credential.get"])
+        _ = await vaultFailure { _ = try await m.recoveryOpen(pin: pin, password: password) }
+        // The phone's records cannot be read now: a pinned vault is still not abandoned.
+        phone.protectedData.set(false)
+        let f = await vaultFailure { try await m.abandonRecovery() }
+        phone.protectedData.set(true)
+        #expect(f?.code == MoveCodes.recoveryOpened && device?.hasVault == true && device?.recovering == true)
+        #expect(m.phase != .signedOut && hasCurrentRecord)
+    }
+
+    @Test func startingOverIsRefusedWhileAnOpenGotNoAnswer() async throws {
+        defer { phone.close() }
+        _ = try await registered()
+        service.recoveryOpenAnswers(.answerLost)
+        _ = await vaultFailure { _ = try await m.recoveryOpen(pin: pin, password: password) }
+        let f = await vaultFailure { try await m.abandonRecovery() }
+        #expect(f?.code == VaultManager.codeRecoveryOpenSent && device?.recovering == true && pendingRecord)
+    }
+
+    /// The pending epoch-1 record of the vault the phone recovered becomes current when an earlier run did not get to it.
+    @Test func theRecoveredSecretIsMadeCurrentAfterwards() async throws {
+        defer { phone.close() }
+        _ = try await registered()
+        #expect(pendingRecord && !hasCurrentRecord)
+        m.confirmRecoveredSecret()
+        #expect(!pendingRecord && hasCurrentRecord && m.usesPhoneSecret)
+        // Nothing pending: nothing changes.
+        m.confirmRecoveredSecret()
+        #expect(hasCurrentRecord)
+    }
+
+    /// A wipe or a reset during the handshake drops what follows: `enrollConfirmed` never lands in the fresh record.
+    @Test func aResetDuringTheHandshakeIsNotWrittenOver() async throws {
+        defer { phone.close() }
+        _ = try await registered()
+        service.holdMessages = true
+        let open = Task { try await m.recoveryOpen(pin: pin, password: password) }
+        #expect(await eventually { !service.recoveryHandshakeContexts.isEmpty })
+        m.record.bumpGeneration()
+        service.holdMessages = false
+        _ = try? await open.value
+        #expect(!m.record.value.enrollConfirmed)
     }
 
     // MARK: - Leaving a registration

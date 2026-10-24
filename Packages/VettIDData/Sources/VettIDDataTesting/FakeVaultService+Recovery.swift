@@ -90,6 +90,9 @@ extension FakeVaultService {
         public let apiKey: [UInt8]?
         public let name: String
         /// The member names of the request's body and of its `app`, sorted: what a typed and a scanned entry must agree on.
+        /// The body as `name=value` lines, sorted, without the request id, and with the phone's own keys and attestation
+        /// (`ik`, `kem`, `relay`, `api_key`, `device_attest`) named but not valued: what a scan and a typed entry must agree on.
+        public let normalized: String
         public let shape: [String]
     }
 
@@ -208,7 +211,7 @@ extension FakeVaultService {
             userGuid: (try? body.string("user_guid")) ?? "", vaultID: (try? body.string("vault_id")) ?? "",
             recoveryID: (try? body.string("recovery_id")) ?? "", code: (try? body.string("code")) ?? "",
             platform: da?.platform, keyID: da?.iosKeyID, apiKey: try? app.base64("api_key"), name: (try? app.string("name")) ?? "",
-            shape: body.members.map(\.name).sorted() + app.members.map { "app." + $0.name }.sorted()
+            normalized: Self.normalized(body, app), shape: body.members.map(\.name).sorted() + app.members.map { "app." + $0.name }.sorted()
         ))
         let result: String
         if case .refused(let code) = answer {
@@ -301,6 +304,13 @@ extension FakeVaultService {
         return JsonBuilder().bool("ok", true).uint("state_seq", stateSeq).uint("header_seq", headerSeq).string("token", token)
             .base64("vault_bundle", vaultBundle()).string("release", Self.pcr0(releases.serving)).uint("release_number", releases.serving)
             .bool("attempt_used", true).raw("attempts", #"{"used":\#(recovery.used),"of":10}"#).build()
+    }
+
+    static func normalized(_ body: JsonObject, _ app: JsonObject) -> String {
+        let own: Set = ["ik", "kem", "relay", "api_key", "device_attest"]
+        var lines = body.members.filter { $0.name != "request_id" && $0.name != "app" }.map { "\($0.name)=\($0.value)" }
+        lines += app.members.map { "app.\($0.name)=" + (own.contains($0.name) ? "<own>" : "\($0.value)") }
+        return lines.sorted().joined(separator: "\n")
     }
 
     /// The vault's bundle (§3.4): its identity, KEM and relay keys.
