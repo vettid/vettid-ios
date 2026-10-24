@@ -49,6 +49,8 @@ extension VaultManagerRecoveryTests {
         #expect(outcome.ok)
         #expect(service.recoveryOpens.last?.unlockSecret == firstSecret && service.recoveryOpens.last?.recoveryID == second.recoveryID)
         #expect(!m.record.value.recoveryOpenUnanswered && hasCurrentRecord && !pendingRecord)
+        // The first handshake names the recovery whose open was answered.
+        #expect(service.recoveryHandshakeContexts.last == second.recoveryID)
     }
 
     @Test func aTypedCodeForTheSameVaultRegistersToo() async throws {
@@ -111,13 +113,15 @@ extension VaultManagerRecoveryTests {
     /// The new registration is refused: it made no record, so it drops nothing, and the old open stays marked.
     @Test func aRefusedNewRegisterDropsNothing() async throws {
         defer { phone.close() }
-        _ = try await lostOpenThenUndecided()
+        let first = try await lostOpenThenUndecided()
         let pendings = try m.phoneSecrets.records().pendings.map(\.keyID)
         let second = try armed()
         service.recoveryRegisterAnswers(.refused("used"))
         #expect(try await m.registerRecovery(try scanned(second)) == .refused(code: "used"))
         #expect(try m.phoneSecrets.records().pendings.map(\.keyID) == pendings)
         #expect(m.record.value.recoveryOpenUnanswered && m.record.value.recoveryRegistered && device?.recovering == true)
+        // The earlier recovery is the registered one again.
+        #expect(device?.recoveryID == first.recoveryID)
         #expect(await vaultFailure { try await m.abandonRecovery() }?.code == VaultManager.codeRecoveryOpenUnknown)
     }
 
@@ -132,5 +136,55 @@ extension VaultManagerRecoveryTests {
         #expect(try await m.registerRecovery(try scanned(made)) == .refused(code: VaultManager.codeNoRecovery))
         #expect(m.record.value.recoveryOpenUnanswered && pendingRecord)
         #expect(try await m.resumeLostOk(pin: pin).ok && !m.record.value.recoveryOpenUnanswered)
+    }
+
+    /// The old open was in fact adopted (its `ok` lost) and the status is undecided. A new code is refused at the vault: the
+    /// earlier recovery is registered again and the lost-ok resume names its id in the first handshake, under which the vault
+    /// made the invitation.
+    @Test func theResumeAfterARefusedNewRegisterUsesTheEarlierRecoveryID() async throws {
+        defer { phone.close() }
+        let first = try await registered()
+        service.recoveryOpenAnswers(.answerLost)
+        _ = await vaultFailure { _ = try await m.recoveryOpen(pin: pin, password: password) }
+        service.statusUnauthorized = true
+        let second = try armed()
+        service.recoveryRegisterAnswers(.refused("used"))
+        #expect(try await m.registerRecovery(try scanned(second)) == .refused(code: "used"))
+        #expect(device?.recoveryID == first.recoveryID && m.record.value.recoveryOpenUnanswered && m.record.value.recoveryRegistered)
+        let out = try await m.resumeLostOk(pin: pin)
+        #expect(out.ok && service.recoveryHandshakeContexts.last == first.recoveryID)
+        #expect(!m.record.value.recoveryOpenUnanswered)
+    }
+
+    /// The new register succeeded and the member takes the lost-ok finish before any new open: the handshake still names the
+    /// earlier recovery, and the registered one is kept until a new open is answered.
+    @Test func theResumeAfterASuccessfulNewRegisterUsesTheEarlierRecoveryID() async throws {
+        defer { phone.close() }
+        let first = try await registered()
+        service.recoveryOpenAnswers(.answerLost)
+        _ = await vaultFailure { _ = try await m.recoveryOpen(pin: pin, password: password) }
+        service.statusUnauthorized = true
+        let second = try armed()
+        #expect(try await m.registerRecovery(try scanned(second)) == .registered(emailHint: service.emailHint))
+        #expect(device?.recoveryID == second.recoveryID)
+        let out = try await m.resumeLostOk(pin: pin)
+        #expect(out.ok && service.recoveryHandshakeContexts.last == first.recoveryID)
+    }
+
+    /// A 200 to the status read by the recovering key in a state besides `registered` means that the key is the vault's app key.
+    @Test func aStatusInAnyOtherStateIsAnAdoptedVerdict() async throws {
+        defer { phone.close() }
+        _ = try await registered()
+        service.recoveryOpenAnswers(.unreadable)
+        _ = await vaultFailure { _ = try await m.recoveryOpen(pin: "111111", password: password) }
+        for state in ["pending", "available", "none", "completed"] {
+            service.recoveryStatusShows(state)
+            #expect(await m.openMarkVerdict() == .adopted, "\(state)")
+            #expect(await vaultFailure { try await m.abandonRecovery() }?.code == VaultManager.codeRecoveryOpenSent)
+        }
+        service.recoveryStatusShows("registered")
+        #expect(await m.openMarkVerdict() == .stillRegistered)
+        service.recoveryStatusShows("something else")
+        #expect(await m.openMarkVerdict() == .undecided)
     }
 }

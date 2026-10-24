@@ -31,6 +31,11 @@ struct FakeRecoveryStore {
     /// without a bundle); otherwise a registered phone not adopted is answered random bytes, as a key the vault does not hold.
     var phoneHoldsUnlockKey = false
     var invitation = false
+    /// The state of the recovery the status shows to the recovering key instead of `registered` (a key that reads it is the app key).
+    var statusState: String?
+    /// The recovery id the first-handshake invitation was made under (`recovery_open.go` setRecoveredInvite): a handshake
+    /// naming another is dropped (`invite_invalid`).
+    var inviteID: String?
     var used = 0
     var lastWrong: String?
     // Scripted answers.
@@ -137,9 +142,9 @@ extension FakeVaultService {
             recovery.recoveryID = id
             recovery.code = code
             recovery.locator = locator
-            recovery.phone = nil
+            if !recovery.invitation { recovery.phone = nil }
             recovery.completed = false
-            recovery.invitation = false
+            // An adopted open's invitation stands beside a new recovery record until the phone pairs.
             recovery.used = 0
             hasCredential = true
             vaultMade = true
@@ -155,6 +160,7 @@ extension FakeVaultService {
     }
 
     /// The recovery ended for the member API (cancelled, replaced): the recovering key's `status` is `401`, a claim `404`.
+    public func recoveryStatusShows(_ state: String?) { locked { recovery.statusState = state } }
     public func cancelRecoveryAtApi() { locked { recovery.cancelled = true } }
 
     /// The registered phone is an unlock key of the vault though it was not adopted (an ok unlock without a bundle).
@@ -309,6 +315,7 @@ extension FakeVaultService {
         // The completion: the phone is the vault's app, the vault runs, and the phone's first handshake is invited.
         recovery.completed = true
         recovery.invitation = true
+        recovery.inviteID = recovery.recoveryID
         recovery.lastWrong = nil
         vaultSecret = secret
         device = (phone.kem, phone.relay)
@@ -334,7 +341,7 @@ extension FakeVaultService {
         guard recovery.phone != nil else { return (nil, "") }
         if recovery.completed { return (nil, "") }
         if recovery.cancelled { return (.json(401, #"{"error":"unauthorized"}"#), "") }
-        return (nil, #","recovery":{"state":"registered","available_at":""}"#)
+        return (nil, #","recovery":{"state":"\#(recovery.statusState ?? "registered")","available_at":""}"#)
     }
 
     /// The vault's bundle (§3.4): its identity, KEM and relay keys.

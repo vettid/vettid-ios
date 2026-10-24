@@ -14,7 +14,8 @@ extension VaultDevice {
     /// ``finishRecoveryOpen()``.
     public var recoveryOpenedNotFinished: Bool { mem.withLock { st.vault != nil && st.recovery != nil } }
 
-    /// The `recovery_id` this app is registered for, while recovering.
+    /// The `recovery_id` this app is registered for, while recovering (the one a registration on the same key refused for
+    /// certain restores).
     public var recoveryID: String? { mem.withLock { st.recovery?.recoveryID } }
 
     /// While recovering: the vault's `credential_backup` from this app's unlock result (§11.11.5 step 1, a vault before
@@ -78,7 +79,8 @@ extension VaultDevice {
                 guard !v.token.isEmpty else { throw VaultStateError(message: "no token for the vault") }
                 return (v, rec)
             }
-            try await startInit(purpose: .app, ctx: rec.recoveryID, depositToken: v.token)
+            // The vault made the invitation under the recovery id of the open it adopted (`earlierID` while a new open is unanswered).
+            try await startInit(purpose: .app, ctx: rec.earlierID ?? rec.recoveryID, depositToken: v.token)
             try save()
         }
         _ = try await awaitPaired(timeout: timeout)

@@ -188,10 +188,7 @@ extension VaultManager {
         // A register of another recovery may have been taken (its answer lost) and bound this phone's key: the registration it
         // would overwrite is ended by a start over first (chosen; not in the spec).
         try refuseOtherRecovery(s.device, code.recoveryID, sameKey: sameKey)
-        var account = LocalAccount(userGuid: claimed.userGuid, vaultID: code.vaultID, emailHint: claimed.emailHint)
-        // The old open is still unanswered: the mark stays until the new open's answer proves the record existed, or completes
-        // (a lost `ok` is then still resumed with the same key). The record's other marks are the new recovery's own.
-        account.recoveryOpenUnanswered = sameKey
+        let account = claimAccount(claimed, code.vaultID, sameKey: sameKey)
         try resetRecord(account)
         publishAccount()
         let rec = record.generation
@@ -215,7 +212,9 @@ extension VaultManager {
                     Bytes.wipe(&made.secret)
                     epoch.set(made.id, created: created)
                     await self?.noteRegistering(e, since: rec)
-                    return try await s.device.prepareRecoveryRegister(userGuid: guid, code: code, enclave: e, attester: attester)
+                    return try await s.device.prepareRecoveryRegister(
+                        userGuid: guid, code: code, enclave: e, attester: attester, keepingEarlier: sameKey
+                    )
                 },
                 open: { raw, rid in try s.device.openRecoveryResult(raw, requestID: rid) }
             )
@@ -223,24 +222,37 @@ extension VaultManager {
             return .refused(code: Self.codeNotOffered)
         } catch let e as MemberApiError where e.code == MemberApiError.recoveryUnavailable {
             // 2.1.0: a recovery the enclave refused (no backup copy) is `unavailable`: the register is refused too.
-            try await dropRegistration(s, epoch, since: rec)
+            try await dropRegistration(s, epoch, since: rec, sameKey: sameKey)
             return .refused(code: Self.codeNoBackup)
         } catch let e as MemberApiError where e.code == MemberApiError.recoveryNotAvailable {
             _ = e
             result = nil
         }
         guard let r = result else {
-            try await dropRegistration(s, epoch, since: rec)
+            try await dropRegistration(s, epoch, since: rec, sameKey: sameKey)
             return .refused(code: Self.codeNotAvailable)
         }
         guard r.ok else {
-            try await dropRegistration(s, epoch, since: rec)
+            try await dropRegistration(s, epoch, since: rec, sameKey: sameKey)
             return .refused(code: r.code ?? "retry")
         }
         usesPhoneSecret = phoneSecrets.inUse
         config.attestStartOver?.set(recovering: true)
         phase = .setup(.recovering)
         return .registered(emailHint: claimed.emailHint)
+    }
+
+    /// The record of a claimed recovery. The old open is still unanswered on the same key: the mark stays until the new open's
+    /// answer proves the record existed, or the recovery completes (a lost `ok` is then still resumed with the same key); the
+    /// earlier register is held by the vault until this one is answered, so the registered mark and its instance's
+    /// capabilities are carried. The record's other marks are the new recovery's own.
+    private func claimAccount(_ claimed: Claimed, _ vaultID: String, sameKey: Bool) -> LocalAccount {
+        var account = LocalAccount(userGuid: claimed.userGuid, vaultID: vaultID, emailHint: claimed.emailHint)
+        guard sameKey else { return account }
+        account.recoveryOpenUnanswered = true
+        account.recoveryRegistered = true
+        account.capabilities = record.value.capabilities
+        return account
     }
 
     /// What the instance the register is sealed to says: its capabilities and time scale, recorded with the claimed vault.
@@ -265,7 +277,10 @@ extension VaultManager {
     /// Only when this call made the epoch-1 record, so that no earlier register was built: an earlier one whose answer was lost
     /// may have succeeded and bound the App Attest key, and this one is refused (`used`, `no_recovery`) because it did. Then the
     /// registration, the marks and the record stay (chosen; not in the spec: vettid-android drops the registration).
-    private func dropRegistration(_ s: VaultSession, _ epoch: RegisterEpoch, since rec: Int) async throws {
+    private func dropRegistration(_ s: VaultSession, _ epoch: RegisterEpoch, since rec: Int, sameKey: Bool) async throws {
+        // On the same key the register was refused for certain: the earlier recovery is the registered one again, and the
+        // record and the key stay (they were not made by this call).
+        if sameKey { try await s.device.restoreEarlierRecovery() }
         guard epoch.created == true else { return }
         try await s.device.dropRecoveryRegistration()
         // Refused for certain: no vault holds the key this register attested.
@@ -324,6 +339,9 @@ extension VaultManager {
                 _ = try phoneSecrets.confirmCreate(id: epoch.id)
                 usesPhoneSecret = phoneSecrets.inUse
             }
+            // Settled before anything that can fail: an `ok` or an answer that proves the record existed ends the doubt about the
+            // earlier open, and the handshake names this recovery.
+            if r.ok || r.counted || Self.recordExistedCodes.contains(r.code) { try await d.settleRecoveryID() }
             _ = try record.update(since: rec) {
                 // Only an answer that proves the recovery record still existed says that no earlier open was adopted (§11.14.6
                 // steps 1 to 3): not `no_recovery` (the lost-ok signal), nor `attestation`, `manifest`, `wrong_release` or
@@ -385,7 +403,10 @@ extension VaultManager {
             }
             if !u.ok {
                 // The vault does not hold this phone's secret: no open of this phone was adopted.
-                if u.result.code == UnlockEpoch.deviceSecret { clearOpenMark(since: rec) }
+                if u.result.code == UnlockEpoch.deviceSecret {
+                    clearOpenMark(since: rec)
+                    try await d.settleRecoveryID()
+                }
                 return RecoveryOpenOutcome(u.result.code ?? "retry", used: used, opened: true, attemptUsed: false)
             }
             // A result without `vault_bundle` from an unlock that opened: the vault accepts this phone's key, so an open may

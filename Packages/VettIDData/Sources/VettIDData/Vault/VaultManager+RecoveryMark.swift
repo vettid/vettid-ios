@@ -33,6 +33,9 @@ extension VaultManager {
             // MEMBER-API "Completed": recorded at the adopted key's first status read.
             case "completed"?: return .adopted
             case "registered"?: return .stillRegistered
+            // Only the vault's app key, or a registered recovery's key, reads the status (MEMBER-API key table): a 200 in any other
+            // state of the recovery (a new one pending or available, or none) is the app key's. (Owner decision 2026-10-24.)
+            case "pending"?, "available"?, "none"?: return .adopted
             default: return .undecided
             }
         } catch {

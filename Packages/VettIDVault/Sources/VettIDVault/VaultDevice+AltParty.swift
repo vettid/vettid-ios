@@ -151,7 +151,7 @@ extension VaultDevice: AltParty {
 
     /// vault.recovery.register (§11.11.3): builds the request and records the recovery.
     public func prepareRecoveryRegister(
-        userGuid: String, code: RecoveryCode, enclave: VerifiedEnclave, attester: Attester
+        userGuid: String, code: RecoveryCode, enclave: VerifiedEnclave, attester: Attester, keepingEarlier: Bool = false
     ) async throws -> SealedRequest {
         try await lock.withLock {
             guard mem.withLock({ st.vault == nil }) else { throw VaultStateError(message: "already paired with a vault") }
@@ -161,7 +161,12 @@ extension VaultDevice: AltParty {
             mem.withLock {
                 st.signerSeen = false // a new attestation is a new key (§11.7.1)
                 st.vaultID = code.vaultID
-                st.recovery = RecoveryRecord(recoveryID: code.recoveryID, requestID: req.requestID)
+                // On the same key, the earlier recovery's id stays for the handshake of a lost-ok resume (see `earlierID`).
+                var earlier: String?
+                if keepingEarlier, let old = st.recovery {
+                    earlier = old.earlierID ?? (old.recoveryID == code.recoveryID ? nil : old.recoveryID)
+                }
+                st.recovery = RecoveryRecord(recoveryID: code.recoveryID, requestID: req.requestID, earlierID: earlier)
             }
             try save()
             return req
@@ -178,6 +183,31 @@ extension VaultDevice: AltParty {
                 return true
             }
             if dropped { try save() }
+        }
+    }
+
+    /// A registration on the same key was refused for certain: the earlier recovery is the registered one again.
+    public func restoreEarlierRecovery() async throws {
+        try await lock.withLock {
+            let restored: Bool = mem.withLock {
+                guard st.deviceID == nil, st.vault == nil, let old = st.recovery, let earlier = old.earlierID else { return false }
+                st.recovery = RecoveryRecord(recoveryID: earlier, credentialBackup: old.credentialBackup)
+                return true
+            }
+            if restored { try save() }
+        }
+    }
+
+    /// A new open was answered by a vault that still held its record, or answered `ok`: the earlier recovery's open was not
+    /// adopted (or is superseded), and the handshake names the registered recovery.
+    public func settleRecoveryID() async throws {
+        try await lock.withLock {
+            let settled: Bool = mem.withLock {
+                guard st.recovery?.earlierID != nil else { return false }
+                st.recovery?.earlierID = nil
+                return true
+            }
+            if settled { try save() }
         }
     }
 

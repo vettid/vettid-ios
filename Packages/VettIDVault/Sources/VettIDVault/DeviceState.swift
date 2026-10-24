@@ -81,6 +81,10 @@ struct RecoveryRecord: Codable, Sendable {
     let recoveryID: String
     var requestID = ""
     var credentialBackup: Bool?
+    /// The `recovery_id` of an earlier recovery whose open may have been adopted (an open registered again on the same key,
+    /// owner decision 2026-10-24; spec text to follow): the vault made the invitation of the first handshake under it, so the
+    /// handshake of a lost-ok resume names it until a new open is answered. Nil: the handshake names ``recoveryID``.
+    var earlierID: String?
 }
 
 /// A deposit not yet answered 201 by the relay (§8.3: the entry goes once the relay accepted it).
