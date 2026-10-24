@@ -30,7 +30,6 @@ struct FakeRecoveryStore {
     /// The registered phone is one of the vault's unlock keys though it was not adopted (a fixture for an unlock that opens
     /// without a bundle); otherwise a registered phone not adopted is answered random bytes, as a key the vault does not hold.
     var phoneHoldsUnlockKey = false
-    var unauthorizedDate = FakeVaultService.UnauthorizedDate.right
     var invitation = false
     var used = 0
     var lastWrong: String?
@@ -153,14 +152,6 @@ extension FakeVaultService {
                 qr: qr, typed: RecoveryCodes.grouped(locator + code + check), vaultID: vaultID, recoveryID: id, code: code, locator: locator
             )
         }
-    }
-
-    /// A `401` to the recovering key's `status` carries no `Date` (a proxy stripped it), or one far from the phone's clock.
-    public enum UnauthorizedDate: Sendable { case right, missing, skewed }
-
-    public var recoveryUnauthorizedDate: UnauthorizedDate {
-        get { locked { recovery.unauthorizedDate } }
-        set { locked { recovery.unauthorizedDate = newValue } }
     }
 
     /// The recovery ended for the member API (cancelled, replaced): the recovering key's `status` is `401`, a claim `404`.
@@ -336,28 +327,14 @@ extension FakeVaultService {
         return lines.sorted().joined(separator: "\n")
     }
 
-    /// `GET /api/vault/status` for the recovering phone's key: `401` once the recovery ended without it; `recovery: null` once the
+    /// `GET /api/vault/status` for the recovering phone's key: a bare `401` once the recovery ended without it (the API
+    /// answers the same for other causes); `recovery: null` once the
     /// vault made it the app key (MEMBER-API "Completed"); the recovery `registered` before. Callers hold ``cond``.
     func recoveryStatusField() -> (unauthorized: FakeHTTPServer.Answer?, member: String) {
         guard recovery.phone != nil else { return (nil, "") }
         if recovery.completed { return (nil, "") }
-        if recovery.cancelled {
-            switch recovery.unauthorizedDate {
-            case .right: return (unauthorizedWithDate(), "")
-            case .missing: return (.json(401, #"{"error":"unauthorized"}"#), "")
-            case .skewed: return (unauthorizedWithDate(date: Date().addingTimeInterval(3_600)), "")
-            }
-        }
+        if recovery.cancelled { return (.json(401, #"{"error":"unauthorized"}"#), "") }
         return (nil, #","recovery":{"state":"registered","available_at":""}"#)
-    }
-
-    /// `401 unauthorized` with the API's `Date` (the phone's clock is right), as the member API answers a key it does not take.
-    func unauthorizedWithDate(date: Date = Date()) -> FakeHTTPServer.Answer {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = TimeZone(identifier: "GMT")
-        f.dateFormat = "EEE, dd MMM yyyy HH:mm:ss 'GMT'"
-        return .json(401, #"{"error":"unauthorized"}"#, headers: ["Date": f.string(from: date)])
     }
 
     /// The vault's bundle (§3.4): its identity, KEM and relay keys.

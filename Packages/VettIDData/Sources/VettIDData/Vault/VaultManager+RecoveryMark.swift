@@ -6,13 +6,12 @@ enum OpenMarkVerdict: Equatable, Sendable {
     /// The status is accepted with this key and the recovery is gone (`recovery: null`): the key is the vault's app key
     /// (MEMBER-API "Completed"), so the open was adopted and the resume finishes it.
     case adopted
-    /// The status is refused `401` with a `Date` that shows the phone's clock right: the recovering key is taken only until the
-    /// recovery ends or the vault reports the key as its app key (VAULT-MESSAGING §11.11.7), and a key that is the app key is
-    /// accepted. The recovery ended without this phone (chosen reading; not in the spec).
-    case notAdopted
     /// The status is accepted and still shows the recovery `registered`: the vault has not made this phone its app.
     case stillRegistered
-    /// The member API could not say (the network, the service, an answer that decides nothing).
+    /// The member API could not say (the network, the service, an answer that decides nothing). A `401` is one: the member API
+    /// answers it for many causes besides a recovery that ended without this phone (a clock outside the window, a reused nonce, a
+    /// malformed header, a vault deleted or no longer the account's current one), so it proves nothing (MEMBER-API "Recovering
+    /// key", VAULT-MESSAGING §11.11.7).
     case undecided
 }
 
@@ -36,22 +35,16 @@ extension VaultManager {
             case "registered"?: return .stillRegistered
             default: return .undecided
             }
-        } catch let e as MemberApiError where e.code == MemberApiError.unauthorized && e.dateChecked {
-            // (chosen; not in the spec: it gives the recovering key no explicit "ended" signal.) Read as "the recovery ended
-            // without this phone" only for a `401` whose `Date` is within the skew limit: a phone whose clock is off, or a proxy
-            // that strips the header, decides nothing.
-            return .notAdopted
         } catch {
             return .undecided
         }
     }
 
     /// Refuses, while an open went out and got no answer, whatever could delete the key the vault may hold: a start over and a
-    /// new registration. The member API decides first: a recovery that ended without this phone clears the mark.
+    /// new registration. Only an answer that shows the vault adopted this phone, or still holds the recovery, changes the guidance; no answer clears the mark.
     func refuseWhileOpenMarked() async throws {
         guard record.value.recoveryOpenUnanswered else { return }
         switch await openMarkVerdict() {
-        case .notAdopted: clearOpenMark(since: record.generation)
         case .adopted: throw VaultFailure(.other, code: Self.codeRecoveryOpenSent)
         case .stillRegistered: throw VaultFailure(.other, code: Self.codeRecoveryOpenPending)
         case .undecided: throw VaultFailure(.other, code: Self.codeRecoveryOpenUnknown)

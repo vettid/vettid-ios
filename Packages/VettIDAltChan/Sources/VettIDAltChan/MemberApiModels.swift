@@ -37,15 +37,10 @@ public struct MemberApiError: Error, Equatable, Sendable, CustomStringConvertibl
     public let retryAfterSeconds: Int
     /// `vault_unavailable`: the body's `service` (1.2.0: `"paused"` while the operator paused the vault service).
     public let service: String?
-    /// A `401` whose answer carried a `Date` within ``clockSkewSeconds`` of the phone's clock: the phone's clock does not explain
-    /// it, and nothing stripped the header. False for any other error and for a `401` without a usable `Date`.
-    public let dateChecked: Bool
 
     public init(
-        status: Int, code: String, message: String = "", release: String? = nil, retryAfterSeconds: Int = 0, service: String? = nil,
-        dateChecked: Bool = false
+        status: Int, code: String, message: String = "", release: String? = nil, retryAfterSeconds: Int = 0, service: String? = nil
     ) {
-        self.dateChecked = dateChecked
         self.status = status
         self.code = code
         self.message = message

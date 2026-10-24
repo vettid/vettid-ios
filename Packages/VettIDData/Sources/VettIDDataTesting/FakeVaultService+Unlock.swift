@@ -153,10 +153,10 @@ extension FakeVaultService {
               let request = try? openRequest(env), let body = try? StrictJson.parseObject(request.body), let kem = device?.kem ?? recovery.phone?.kem
         else { return .json(400, #"{"error":"bad_request"}"#) }
         let pin = (try? body.string("pin")) ?? ""
-        // The member API never forwards the recovering key's unlock (MEMBER-API 2.7.0): `403` while the recovery is active, `401`
-        // once it ended.
+        // The member API never forwards the recovering key's unlock (MEMBER-API 2.7.0): `403` while the recovery is active, a bare
+        // `401` once it ended.
         if device == nil, recovery.phone != nil, !recovery.phoneHoldsUnlockKey {
-            return recovery.cancelled ? unauthorizedWithDate() : .json(403, #"{"error":"forbidden"}"#)
+            return recovery.cancelled ? .json(401, #"{"error":"unauthorized"}"#) : .json(403, #"{"error":"forbidden"}"#)
         }
         let secret = try? body.base64("unlock_secret")
         let cancel = body.has("cancel_recovery")

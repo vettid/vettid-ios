@@ -341,16 +341,14 @@ extension VaultManager {
             } catch {
                 // A registered phone the vault did not adopt is not one of its unlock keys: it answers random bytes (§11.4,
                 // §11.14.6 "A lost ok"). The member API says whether it did (§11.11.7).
-                // The member API refuses the recovering key `403` while the recovery is active, `401` once it ended (MEMBER-API
-                // 2.7.0); the random bytes of an unreadable answer are the fallback.
+                // The member API refuses the recovering key `403` while the recovery is active; the random bytes of an unreadable
+                // answer are the fallback. A `401` decides nothing (it has many causes): the status is asked, and without a clear
+                // answer the error stands, the key and the mark kept.
                 let refused = error as? MemberApiError
                 let unreadable = (VaultFailures.map(error) as? VaultFailure)?.code == "unreadable_result"
                 guard refused?.status == 403 || refused?.code == MemberApiError.unauthorized || unreadable else { throw error }
                 let verdict: OpenMarkVerdict = refused?.status == 403 ? .stillRegistered : await openMarkVerdict()
                 switch verdict {
-                case .notAdopted:
-                    clearOpenMark(since: rec)
-                    return RecoveryOpenOutcome(Self.codeNoRecovery, used: used, attemptUsed: false)
                 case .stillRegistered:
                     return RecoveryOpenOutcome(Self.codeNoBundle, used: used, opened: true, attemptUsed: false)
                 case .adopted, .undecided: throw error
