@@ -160,8 +160,10 @@ extension VaultManager {
             } catch let f as VaultFailure where f.code == Self.codeLockPending {
                 return .notRun
             }
+            // Without this phone's id the list cannot say it: not a definite answer (owner decision, 2026-10-23).
+            guard let deviceID = s.device.deviceID else { return .notRun }
             let list = try await api.deviceList()
-            return KeptTransfer.stillTheApp(deviceList: list, deviceID: s.device.deviceID) ? .listed : .notListed
+            return KeptTransfer.stillTheApp(deviceList: list, deviceID: deviceID) ? .listed : .notListed
         } catch is CancellationError {
             return .notRun
         } catch let f as VaultFailure where f.kind == .phoneLocked || f.code == "halted" || f.code == "session_dropped" {
