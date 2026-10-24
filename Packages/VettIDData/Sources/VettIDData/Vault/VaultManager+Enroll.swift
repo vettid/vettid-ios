@@ -233,7 +233,8 @@ extension VaultManager {
     /// or a wipe cannot come between them).
     func finishSetupGated() throws -> Bool {
         let rec = record.generation
-        guard FinishSetupGate.allows(phase, lockPending: lockGuard.holdsPhone, finishingMove: finishMoveRunner.finishing) else { return false }
+        let allowed = FinishSetupGate.allows(phase, lockPending: lockGuard.holdsPhone, finishingMove: finishMoveRunner.finishing)
+        guard allowed else { return false }
         guard record.value.enrollConfirmed else { throw VaultFailure(.other, code: Self.codeEnrollUnconfirmed) }
         try guardedSync { try record.update(since: rec) { $0.setupComplete = true; $0.movedIn = false } }
         phase = .unlocked
