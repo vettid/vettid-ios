@@ -22,6 +22,20 @@ import UIKit
         }
     }
 
+    /// A paste-only editor (a recovery code) offers no Copy or Cut and copies nothing; a paste stays possible.
+    @Test func aPasteOnlyEditorNeverCopies() {
+        let v = PasteOnlyTextView()
+        v.text = "7ZK3"
+        v.selectedRange = NSRange(location: 0, length: 4)
+        UIPasteboard.general.items = []
+        #expect(!v.canPerformAction(#selector(UIResponderStandardEditActions.copy(_:)), withSender: nil))
+        #expect(!v.canPerformAction(#selector(UIResponderStandardEditActions.cut(_:)), withSender: nil))
+        v.copy(nil)
+        v.cut(nil)
+        #expect(UIPasteboard.general.string == nil || UIPasteboard.general.string?.isEmpty == true)
+        #expect(v.text == "7ZK3")
+    }
+
     /// The undocumented layer exists on this iOS (the self-check); without it the container shows plain content.
     @Test func theSecureLayerSelfCheck() {
         #expect(SecureLayer.isAvailable)
