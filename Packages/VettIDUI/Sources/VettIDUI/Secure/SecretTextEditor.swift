@@ -11,19 +11,26 @@ public struct SecretTextEditor: View {
     private let placeholder: String?
     private let isError: Bool
     private let focus: Bool
+    private let pasteOnly: Bool
     @Environment(\.vettIDColors) private var colors
 
-    /// [focus]: the editor takes the keyboard (once, each time it turns true).
-    public init(_ label: String, text: Binding<String>, placeholder: String? = nil, isError: Bool = false, focus: Bool = false) {
+    /// [focus]: the editor takes the keyboard (once, each time it turns true). [pasteOnly]: the text menu offers no Copy or
+    /// Cut, so what is typed here never reaches the clipboard (a recovery code, VAULT-MESSAGING §11.11.10: "the code does
+    /// not go to a clipboard"); a paste is allowed.
+    public init(
+        _ label: String, text: Binding<String>, placeholder: String? = nil, isError: Bool = false, focus: Bool = false,
+        pasteOnly: Bool = false
+    ) {
         self.label = label
         _text = text
         self.placeholder = placeholder
         self.isError = isError
         self.focus = focus
+        self.pasteOnly = pasteOnly
     }
 
     public var body: some View {
-        SecretTextView(text: $text, focus: focus)
+        SecretTextView(text: $text, focus: focus, pasteOnly: pasteOnly)
             .frame(minHeight: Spacing.touchTarget * 2)
             .overlay(alignment: .topLeading) {
                 if text.isEmpty, let placeholder {
@@ -47,6 +54,7 @@ public struct SecretTextEditor: View {
 struct SecretTextView: UIViewRepresentable {
     @Binding var text: String
     var focus = false
+    var pasteOnly = false
 
     final class Coordinator: NSObject, UITextViewDelegate {
         var parent: SecretTextView
@@ -60,7 +68,7 @@ struct SecretTextView: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeUIView(context: Context) -> UITextView {
-        let v = UITextView()
+        let v = pasteOnly ? PasteOnlyTextView() : UITextView()
         v.textContentType = UITextContentType(rawValue: "")
         v.autocorrectionType = .no
         v.spellCheckingType = .no
@@ -95,4 +103,15 @@ struct SecretTextView: UIViewRepresentable {
 
     /// Leaves no text behind in a view that goes.
     static func dismantleUIView(_ v: UITextView, coordinator: Coordinator) { v.text = "" }
+}
+
+/// A text view whose menu and shortcuts never copy or cut its text (it may be pasted into).
+final class PasteOnlyTextView: UITextView {
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        if action == #selector(copy(_:)) || action == #selector(cut(_:)) { return false }
+        return super.canPerformAction(action, withSender: sender)
+    }
+
+    override func copy(_ sender: Any?) {}
+    override func cut(_ sender: Any?) {}
 }
