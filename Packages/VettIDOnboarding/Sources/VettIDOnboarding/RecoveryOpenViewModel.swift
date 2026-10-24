@@ -54,6 +54,18 @@ public final class RecoveryOpenViewModel {
 
     public func setPassword(_ v: String) { state.password = v }
 
+    /// The app left the foreground, or the iPhone locked (IOS-PLAN §6.3): the PIN and the password typed so far are dropped,
+    /// also those of the check ("This is what will be sent"), which goes back to the fields. Nothing under way is touched.
+    public func forgetSecrets() {
+        switch state.step {
+        case .sending, .done: return
+        case .check: state.step = .enter
+        default: break
+        }
+        state.pin = ""
+        state.password = ""
+    }
+
     public func toggleShowPin() { state.showPin.toggle() }
 
     public func toggleShowPassword() { state.showPassword.toggle() }
