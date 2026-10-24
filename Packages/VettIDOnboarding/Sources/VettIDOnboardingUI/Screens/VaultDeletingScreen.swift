@@ -19,7 +19,9 @@ public struct VaultDeletingFlow: View {
     public var body: some View {
         VaultDeletingScreen(
             state: model?.state ?? VaultDeletingState(slow: account.deletion?.slow ?? false),
-            onCheckAgain: { model?.checkAgain() }, onOpenAccountSite: onOpenAccountSite
+            onCheckAgain: { model?.checkAgain() }, onOpenAccountSite: onOpenAccountSite,
+            onAskRemove: { model?.askRemove() }, onDismissRemove: { model?.dismissRemove() },
+            onConfirmRemove: { model?.confirmRemove() }
         )
         .onAppear { if model == nil { model = VaultDeletingViewModel(account: account) } }
     }
@@ -32,15 +34,22 @@ public struct VaultDeletingScreen: View {
     let state: VaultDeletingState
     let onCheckAgain: @MainActor () -> Void
     let onOpenAccountSite: @MainActor () -> Void
+    let onAskRemove: @MainActor () -> Void
+    let onDismissRemove: @MainActor () -> Void
+    let onConfirmRemove: @MainActor () -> Void
     @Environment(\.vettIDColors) private var colors
 
     public init(
         state: VaultDeletingState, onCheckAgain: @escaping @MainActor () -> Void = {},
-        onOpenAccountSite: @escaping @MainActor () -> Void = {}
+        onOpenAccountSite: @escaping @MainActor () -> Void = {}, onAskRemove: @escaping @MainActor () -> Void = {},
+        onDismissRemove: @escaping @MainActor () -> Void = {}, onConfirmRemove: @escaping @MainActor () -> Void = {}
     ) {
         self.state = state
         self.onCheckAgain = onCheckAgain
         self.onOpenAccountSite = onOpenAccountSite
+        self.onAskRemove = onAskRemove
+        self.onDismissRemove = onDismissRemove
+        self.onConfirmRemove = onConfirmRemove
     }
 
     var title: String { state.slow ? OnboardingStrings.vaultDeletingSlowTitle : OnboardingStrings.vaultDeletingTitle }
@@ -60,17 +69,49 @@ public struct VaultDeletingScreen: View {
                 if !state.slow {
                     ProgressView().frame(maxWidth: .infinity).accessibilityIdentifier("vault_deleting_progress")
                 }
+                if state.slow && state.note == nil {
+                    Text(OnboardingStrings.vaultDeletingUnconfirmed)
+                        .vettIDFont(.bodyMedium)
+                        .foregroundStyle(colors.onSurfaceVariant)
+                        .accessibilityIdentifier("vault_deleting_unconfirmed")
+                }
                 if let note = state.note {
-                    Text(note == .still ? OnboardingStrings.vaultDeletingStill : OnboardingStrings.vaultDeletingUnreachable)
+                    Text(noteText(note))
                         .vettIDFont(.bodyMedium)
                         .foregroundStyle(colors.onSurfaceVariant)
                         .accessibilityIdentifier("vault_deleting_note")
+                    if note == .cannotConfirmClock {
+                        Text(OnboardingStrings.vaultDeletingClockHint)
+                            .vettIDFont(.bodyMedium)
+                            .foregroundStyle(colors.onSurfaceVariant)
+                            .accessibilityIdentifier("vault_deleting_clock_hint")
+                    }
+                }
+                if state.slow {
+                    TextLink(OnboardingStrings.vaultDeletingRemove) { onAskRemove() }
+                        .disabled(state.removing)
+                        .accessibilityIdentifier("vault_deleting_remove")
                 }
             }
         }
+        .confirmDialog(
+            isPresented: Binding(get: { state.removeConfirm }, set: { if !$0 { onDismissRemove() } }),
+            title: OnboardingStrings.vaultDeletingRemoveConfirmTitle,
+            message: OnboardingStrings.vaultDeletingRemoveConfirmBody,
+            confirmLabel: OnboardingStrings.vaultDeletingRemoveConfirm,
+            destructive: true
+        ) { onConfirmRemove() }
         .onAppear { announce() }
         .onChange(of: state.slow) { _, _ in announce() }
         .accessibilityIdentifier(state.slow ? "vault_deleting_slow" : "vault_deleting")
+    }
+
+    private func noteText(_ note: DeletionCheckNote) -> String {
+        switch note {
+        case .still: OnboardingStrings.vaultDeletingStill
+        case .unreachable: OnboardingStrings.vaultDeletingUnreachable
+        case .cannotConfirm, .cannotConfirmClock: OnboardingStrings.vaultDeletingCannotConfirm
+        }
     }
 
     private func announce() {

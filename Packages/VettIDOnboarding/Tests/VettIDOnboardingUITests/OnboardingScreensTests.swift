@@ -29,7 +29,7 @@ import VettIDUI
             .appendingPathComponent("Sources/VettIDOnboardingUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 395)
+        #expect(keys.count == 402)
         let missing = "\u{0}missing"
         // vettid-android's names: the onboarding feature's, its unlock, owner-check and app-lock screens', the app's root
         // screens', core/ui's erase text, the release update's and What's new's, a vault being deleted (`vault_delet`,
@@ -46,6 +46,22 @@ import VettIDUI
     }
 
     @Test func theTextsAreAndroids() {
+        // A vault being deleted: the texts of vettid-android's unmerged branch `fix/no-erase-on-401`.
+        #expect(OnboardingStrings.vaultDeletingUnconfirmed == "This phone can't confirm it yet.")
+        #expect(OnboardingStrings.vaultDeletingRemove == "Remove from this phone")
+        #expect(OnboardingStrings.vaultDeletingRemoveConfirmTitle == "Remove VettID from this phone?")
+        #expect(OnboardingStrings.vaultDeletingRemoveConfirm == "Remove")
+        #expect(OnboardingStrings.vaultDeletingClockHint == "Also check that the date and time on this phone are right.")
+        #expect(OnboardingStrings.vaultDeletingStill == "VettID has not finished yet. Tap Check again later, or check the account site.")
+        #expect(OnboardingStrings.vaultDeletingCannotConfirm == "VettID answered, but this phone cannot confirm that the deletion is "
+            + "finished. When you get the email that your vault was deleted, or the account site offers to set up a new vault, remove "
+            + "VettID from this phone.")
+        #expect(OnboardingStrings.vaultDeletingSlowBody == "Your vault can no longer be opened, but this phone cannot confirm that "
+            + "VettID has finished deleting it. When you get the email that your vault was deleted, or the account site offers to set up "
+            + "a new vault, remove VettID from this phone.")
+        #expect(OnboardingStrings.vaultDeletingRemoveConfirmBody == "Your vault can never be opened again, and nothing on this phone "
+            + "is needed to finish deleting it. This removes VettID's data on this phone only: its keys, your account details and the "
+            + "app's settings. It works without a connection and cannot be undone.")
         #expect(OnboardingStrings.welcomeTitle == "Your vault, only with you")
         #expect(OnboardingStrings.welcomePointKeys == "Your keys stay on this phone and in your vault's sealed enclave.")
         #expect(OnboardingStrings.setupOtherEnvironment("https://account.example.org") == "That code is from another VettID "
