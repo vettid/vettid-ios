@@ -54,17 +54,41 @@ public enum AltResults {
     }
 }
 
-/// `vault.enroll.result` (§11.3); success also arrives as vault.enrolled over the relay.
+/// The name of one opening of a vault (VAULT-MESSAGING 0.56.4 §10.2 "Locks", release L): 16 random bytes as 32 lowercase
+/// hex characters, made by the vault at every enroll, unlock and recovery open and kept in its memory only. It is not a
+/// secret. A vault from before release L sends none, and a release R enclave before L sends `""` in its recovery-open
+/// result: ``of(_:)`` reads both, and anything else that is not of the form, as **absent** (the app then locks as for a
+/// vault before L). Mirrors vettid-android `UnlockIds`.
+public enum UnlockIds {
+    /// [s] when it is an `unlock_id`; nil when absent, empty or of another form.
+    public static func of(_ s: String?) -> String? {
+        guard let s, s.utf8.count == 32, s.utf8.allSatisfy({ ($0 >= 0x30 && $0 <= 0x39) || ($0 >= 0x61 && $0 <= 0x66) }) else {
+            return nil
+        }
+        return s
+    }
+}
+
+/// `vault.enroll.result` (§11.3); success also arrives as vault.enrolled over the relay. [unlockID] (release L): the name
+/// of the opening the enrollment made (``UnlockIds``); nil from a vault before L.
 public struct EnrollResult: Equatable, Sendable {
     public let ok: Bool
     public let code: String?
     public let vaultID: String?
+    public let unlockID: String?
+
+    public init(ok: Bool, code: String?, vaultID: String?, unlockID: String? = nil) {
+        self.ok = ok
+        self.code = code
+        self.vaultID = vaultID
+        self.unlockID = unlockID
+    }
 
     public static func parse(_ body: [UInt8]) throws -> EnrollResult {
         try AltResults.wrap {
             let o = try AltResults.object(body)
             return try o.bool("ok")
-                ? EnrollResult(ok: true, code: nil, vaultID: try o.string("vault_id"))
+                ? EnrollResult(ok: true, code: nil, vaultID: try o.string("vault_id"), unlockID: UnlockIds.of(try o.optString("unlock_id")))
                 : EnrollResult(ok: false, code: try o.string("code"), vaultID: nil)
         }
     }
@@ -98,6 +122,10 @@ public struct UnlockResult: Equatable, Sendable {
     /// The result's inner `ts`: the enclave's clock when it answered (§11.4). A `vault.locking` not newer than this is
     /// from before the vault opened. Nil when not known.
     public var at: Date?
+    /// (Release L) `unlock_id`: the name of this unlock (§10.2 "Locks"), present whenever the vault resumed (with
+    /// ``token``); nil when absent or not of the form (``UnlockIds``). Its absence tells the app that the vault's release is
+    /// from before L and that its locks are not bound.
+    public var unlockID: String?
 
     public init(ok: Bool, code: String? = nil) {
         self.ok = ok
@@ -136,6 +164,7 @@ public struct UnlockResult: Equatable, Sendable {
             r.recoveryCancelled = o.has("recovery_cancelled") ? try o.bool("recovery_cancelled") : false
             r.vaultBundle = bundle
             r.credentialBackup = o.has("credential_backup") ? try o.bool("credential_backup") : nil
+            r.unlockID = UnlockIds.of(try o.optString("unlock_id"))
             return r
         }
     }

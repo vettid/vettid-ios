@@ -188,6 +188,22 @@ final class Box<T: Sendable>: @unchecked Sendable {
         for req in server.requests { _ = try verify(req) }
     }
 
+    /// MEMBER-API 2.10.1 "Locks" (release L): a bound lock names its unlock; without one the request has no such member.
+    @Test func aBoundLockNamesItsUnlockAndItsSlotsCodeIsRead() async throws {
+        let a = api(appAuth(Box(Self.vid)))
+        let id = "00112233445566778899aabbccddeeff"
+        server.enqueue(.json(202, "{}"), .json(202, "{}"))
+        try await a.lock(vaultID: Self.vid, requestID: "01JB2Z6V9K3M4N5P6Q7R8S9T31", unlockID: id)
+        try await a.lock(vaultID: Self.vid, requestID: "01JB2Z6V9K3M4N5P6Q7R8S9T32")
+        #expect(String(bytes: server.requests[0].body, encoding: .utf8) == #"{"vault_id":"\#(Self.vid)","request_id":"01JB2Z6V9K3M4N5P6Q7R8S9T31","unlock_id":"\#(id)"}"#)
+        #expect(String(bytes: server.requests[1].body, encoding: .utf8) == #"{"vault_id":"\#(Self.vid)","request_id":"01JB2Z6V9K3M4N5P6Q7R8S9T32"}"#)
+        server.enqueue(.json(200, #"{"status":"done","code":"stale"}"#), .json(200, #"{"status":"done"}"#))
+        let stale = try await a.poll("01JB2Z6V9K3M4N5P6Q7R8S9T31")
+        #expect(stale.status == Slot.done && stale.code == Slot.codeStale)
+        #expect(try await a.poll("01JB2Z6V9K3M4N5P6Q7R8S9T32").code == nil)
+        #expect(Slot.codeLocked == "locked" && Slot.codeNotRunning == "not_running")
+    }
+
     @Test func slotPollingAndABoundedPoll() async throws {
         let a = api(appAuth(Box(Self.vid)))
         server.enqueue(.json(200, #"{"status":"queued"}"#), .json(200, #"{"status":"queued"}"#), .json(200, #"{"status":"done","envelope":"AQID","code":"recovery_registered"}"#))

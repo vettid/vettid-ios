@@ -79,6 +79,12 @@ public struct Slot: Sendable {
     public static let etkUnknown = "etk_unknown"
     /// The host's clear marker on a successful `recovery_register` (0.10.6); the app ignores it.
     public static let recoveryRegistered = "recovery_registered"
+    /// A lock's codes beside `done` (MEMBER-API 2.10.1 "Locks", release L), the host's word: the vault was running and is
+    /// now locked; no instance was running it; it runs under a newer unlock and nothing was done. A `done` without a code
+    /// is from a release before L and says only that the request was read.
+    public static let codeLocked = "locked"
+    public static let codeNotRunning = "not_running"
+    public static let codeStale = "stale"
 
     public let status: String
     public let envelope: [UInt8]?

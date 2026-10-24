@@ -304,10 +304,12 @@ public final class MemberApiClient: Sendable {
         _ = try await call("POST", "/api/vault/unlock", body: body)
     }
 
-    /// Asks for a lock (no envelope).
-    public func lock(vaultID: String, requestID: String) async throws {
-        let body = JsonBuilder().string("vault_id", vaultID).string("request_id", requestID).build()
-        _ = try await call("POST", "/api/vault/lock", body: body)
+    /// Asks for a lock (no envelope). With [unlockID] (MEMBER-API 2.10.1, release L) a bound lock: the vault locks only if it
+    /// names its current unlock; without, an unconditional one.
+    public func lock(vaultID: String, requestID: String, unlockID: String? = nil) async throws {
+        let b = JsonBuilder().string("vault_id", vaultID).string("request_id", requestID)
+        if let unlockID { b.string("unlock_id", unlockID) }
+        _ = try await call("POST", "/api/vault/lock", body: b.build())
     }
 
     /// One look at a response slot.
