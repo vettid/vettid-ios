@@ -69,6 +69,7 @@ import VettIDDataTesting
         // the 25 s window is the test's, not the machine's.
         service.stampsOnVaultClock = true
         service.freezeVaultClock()
+        phone.freezeClocks()
         try await setUp()
         service.notHolder = true
         service.vaultPoolFull = true
