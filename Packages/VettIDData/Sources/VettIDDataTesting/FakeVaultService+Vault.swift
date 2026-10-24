@@ -47,7 +47,10 @@ extension FakeVaultService {
             if let gate = locked({ registerGateValue }) { return .held(gate, registerAnswer) }
             return registerAnswer
         }
-        if r.path == "/v1/mailbox", r.method == "GET" { return collect() }
+        if r.path == "/v1/mailbox", r.method == "GET" {
+            if locked({ transfer.collectRefused }) { return .json(403, #"{"code":"mailbox_unknown","message":""}"#) }
+            return collect()
+        }
         if r.path.hasPrefix("/v1/blob/") { return deviceBlob(r) }
         if r.path.hasPrefix("/v1/mailbox/"), r.method == "DELETE" { return .empty(204) }
         return .json(404, #"{"code":"not_found","message":""}"#)
@@ -88,6 +91,7 @@ extension FakeVaultService {
         if r.method == "PUT", r.path == "/v1/blob/\(vaultMailbox)" { return vaultBlobPut(r) }
         if r.method == "GET", r.path.hasPrefix("/v1/claim/") { return locked { transferClaim(r) } }
         guard r.method == "POST", r.path == "/v1/mailbox/\(vaultMailbox)" else { return .json(404, #"{"code":"not_found","message":""}"#) }
+        if locked({ refusesDeposit() }) { return .json(403, #"{"code":"token_revoked","message":""}"#) }
         // §12.5 step 2: a deleted vault's mailbox is gone, and every deposit is refused.
         if locked({ vaultDeletedValue }) { return .json(404, #"{"code":"mailbox_unknown","message":""}"#) }
         guard let payload = try? StrictJson.parseObject(r.body).base64("payload") else { return .json(400, #"{"code":"bad_request","message":""}"#) }

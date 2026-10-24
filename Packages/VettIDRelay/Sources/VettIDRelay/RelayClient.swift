@@ -129,7 +129,7 @@ public final class RelayClient: Sendable {
     public static let defaultWait: TimeInterval = 25
     public static let defaultMax = 32
     static let maxWait = 25
-    static let maxCollect = 100
+    public static let maxCollect = 100
     static let pollTimeout: TimeInterval = 60
     static let backoffBase: TimeInterval = 0.25
     static let backoffMaxShift = 6

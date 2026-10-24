@@ -32,6 +32,14 @@ struct LocalAccount: Codable, Equatable, Sendable {
     /// then, stored with the approval so that a scale learnt later does not change it (chosen; not in the spec). Nil: 7
     /// days.
     var transferKeepMs: Int64?
+    /// The generation of the old phone's transfer record (``transferApprovedAtMs``, ``transferKeepMs``): every change of
+    /// those fields raises it, and the day-7 check records its result only if it is unchanged after the wait (VAULT-MESSAGING
+    /// 0.55.10 §11.14.10 "Recording the check").
+    var transferGen = 0
+    /// (Release R, §11.14.10 rule 5; owner decision, 2026-10-23) When this new phone started the `hs.init` of a transfer
+    /// (Unix ms, this phone's clock): the one deadline of 11 minutes counts from it, and survives a restart. Removed when the
+    /// transfer is completed or dropped.
+    var transferStartedMs: Int64?
     /// The member left onboarding (``VaultManager/finishSetup()``).
     var setupComplete = false
     /// (§11.10.9) The capabilities of the vault's instance this phone last verified (`recovery_offered`).
@@ -83,6 +91,8 @@ struct LocalAccount: Codable, Equatable, Sendable {
         case finishMovePending = "finish_move_pending"
         case transferApprovedAtMs = "transfer_approved_at_ms"
         case transferKeepMs = "transfer_keep_ms"
+        case transferGen = "transfer_gen"
+        case transferStartedMs = "transfer_started_ms"
         case setupComplete = "setup_complete"
         case capabilities
         case timeScale = "time_scale"
@@ -117,6 +127,8 @@ struct LocalAccount: Codable, Equatable, Sendable {
         finishMovePending = try c.decodeIfPresent(Bool.self, forKey: .finishMovePending) ?? false
         transferApprovedAtMs = try c.decodeIfPresent(Int64.self, forKey: .transferApprovedAtMs)
         transferKeepMs = try c.decodeIfPresent(Int64.self, forKey: .transferKeepMs)
+        transferGen = try c.decodeIfPresent(Int.self, forKey: .transferGen) ?? 0
+        transferStartedMs = try c.decodeIfPresent(Int64.self, forKey: .transferStartedMs)
         setupComplete = try c.decodeIfPresent(Bool.self, forKey: .setupComplete) ?? false
         capabilities = try c.decodeIfPresent([String].self, forKey: .capabilities) ?? []
         // A scale of 0 is never stored; read as real time.
@@ -132,6 +144,14 @@ struct LocalAccount: Codable, Equatable, Sendable {
         lockFileInUse = try c.decodeIfPresent(Bool.self, forKey: .lockFileInUse) ?? false
         rotateOffer = try c.decodeIfPresent(Bool.self, forKey: .rotateOffer) ?? false
         deleting = try c.decodeIfPresent(DeletingMarker.self, forKey: .deleting)
+    }
+
+    /// The keep of a transfer ends (the vault's app again, or the notice's wipe): the stored time and period go, and the
+    /// generation of the transfer record moves.
+    mutating func endTransferKeep() {
+        transferApprovedAtMs = nil
+        transferKeepMs = nil
+        transferGen += 1
     }
 
     /// What the app shows of the account: the open vault's [snapshot] and [nameRequest] (``OwnAccount``, nil while the

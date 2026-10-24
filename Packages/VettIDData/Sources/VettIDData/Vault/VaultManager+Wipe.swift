@@ -150,7 +150,6 @@ extension VaultManager {
         keptCheckPending = false
         movedBack = false
         moveNotDone = false
-        transferStartedAt = nil
         openTransferID = nil
         transferEpochID = nil
         phase = p

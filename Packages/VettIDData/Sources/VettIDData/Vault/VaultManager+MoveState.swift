@@ -26,8 +26,6 @@ final class MoveFlags {
 /// The bookkeeping of a transfer, in memory only.
 @MainActor
 final class MoveBook {
-    /// When this (new) phone sent its transfer `hs.init`: it waits for the approval until 10 minutes after it.
-    var transferStartedAt: Date?
     /// The transfer this (old) phone opened last, to cancel it when a new one is asked for.
     var openTransferID: String?
     /// The pending epoch-1 record of the transfer to this phone (``PhoneSecrets/reuseOrCreate(keyVault:)``), dropped when
@@ -120,11 +118,6 @@ extension VaultManager {
     public internal(set) var finishMoveHold: FailureKind? {
         get { moveFlags.finishMoveHold }
         set { moveFlags.finishMoveHold = newValue }
-    }
-
-    var transferStartedAt: Date? {
-        get { moveFlags.book.transferStartedAt }
-        set { moveFlags.book.transferStartedAt = newValue }
     }
 
     var openTransferID: String? {

@@ -913,6 +913,17 @@
           }
         }
       }
+    },
+    "root_kept_check_waiting": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault has not confirmed the move to this phone. Once your new phone opens your vault, remove VettID from this phone."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

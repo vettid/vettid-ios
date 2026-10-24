@@ -144,12 +144,14 @@ struct CredentialOps: Sendable {
             try await gate(Self.carriesPin(fields))
             try noSecretSent(since, type)
             do {
+                await options.beforeSend?()
                 return try await sealedAt(type, utk: try await takeUTK(), fields: fields, options)
             } catch let e as VaultOpError where e.code == Self.codeStaleCredential {
                 try await fetch()
                 // Never resent with the typed secrets while a change may have moved them (§11.14.9 step 4).
                 try await gate(Self.carriesPin(fields))
                 try noSecretSent(since, type)
+                await options.beforeSend?()
                 return try await sealedAt(type, utk: try await takeUTK(), fields: fields, options)
             }
         }
@@ -531,6 +533,9 @@ struct CredOpOptions: Sendable {
     /// The member of the answer sealed to a one-time reply key (§3.5.4: a critical item's `values_sealed`), which the
     /// request then carries as `reply_key`.
     var replyMember: String?
+    /// Runs before each send of the operation (the first, and the one after `stale_credential`), outside the request: a
+    /// transfer's approval renews the standing token it issued to the vault there (VAULT-MESSAGING §11.14.10).
+    var beforeSend: (@Sendable () async -> Void)?
 }
 
 /// A credential operation whose answer did not arrive once its request may have gone out (no answer to the automatic

@@ -42,7 +42,7 @@ import VettIDUI
         #expect(TransferStrings.transferCompareBody("Pixel 10 Pro") == "Pixel 10 Pro wants to take over your vault. Continue only if it shows the same code.")
         #expect(TransferStrings.transferApproveConfirmTitle("Pixel 10 Pro") == "Move VettID to Pixel 10 Pro?")
         #expect(TransferStrings.transferWait("0:30") == "Too many wrong tries. Try again in 0:30.")
-        #expect(TransferStrings.transferMovedKeptBody("7 days") == "Finish the move on your new phone. This phone keeps your vault's keys until your new phone has finished the move, for at most 7 days. Before you give this phone away, remove VettID from it or reset it.")
+        #expect(TransferStrings.transferMovedKeptBody == "Finish the move on your new phone. This phone keeps your vault's keys until your new phone has finished the move, and until your vault has confirmed it. Once your new phone works, you can remove VettID from this phone. Before you give this phone away, remove VettID from it or reset it.")
         #expect(TransferStrings.transferSignerContinue == "Continue" && TransferStrings.transferSignerCancel == "Cancel")
         #expect(TransferStrings.transferSignerUnconfirmed == "Your vault asked you to confirm the new phone's version of VettID first. Nothing was counted; enter your PIN and password again.")
     }

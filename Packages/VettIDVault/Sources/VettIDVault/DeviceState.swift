@@ -29,6 +29,9 @@ final class DeviceState: Codable, @unchecked Sendable {
     /// id to `exp` (epoch ms), until answered or the vault's clock is past `exp` by more than a minute. Optional: a state
     /// written before it existed has none.
     var unsettled: [String: Int64]?
+    /// The member's `user_guid` from a transfer's `device.paired` (0.17.0, §6.7.1), kept until the move is completed: a start
+    /// after the app was killed between `device.paired` and the take-over still has it. Optional: older states have none.
+    var transferUserGuid: String?
 
     init(role: String, name: String, relayURL: String) {
         self.role = role

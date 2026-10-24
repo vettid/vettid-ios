@@ -17,7 +17,7 @@ extension VaultManager {
         guard let stored = record.value.transferApprovedAtMs else { return }
         let now = nowMs
         let at = KeptTransfer.start(approvedAtMs: stored, nowMs: now)
-        if at != stored { _ = try? record.update(since: rec) { $0.transferApprovedAtMs = at } }
+        if at != stored { _ = try? record.update(since: rec) { $0.transferApprovedAtMs = at; $0.transferGen += 1 } }
         switch KeptTransfer.decide(approvedAtMs: at, nowMs: now, keepMs: record.value.transferKeepMs ?? KeptTransfer.keepPeriodMs) {
         case .erase:
             keptTimer?.cancel()
@@ -64,56 +64,42 @@ extension VaultManager {
         case listed, notListed, timedOut, notRun
     }
 
-    /// How long a check that did not run waits before it is made again while the app is in the foreground (chosen; not
-    /// in the spec).
-    nonisolated static let keptRetryAfter: Duration = .seconds(300)
-
-    /// The 7 days are over (owner decisions of 2026-10-16 and 2026-10-23): a check with the vault over this phone's own
-    /// session (``keptEndCheck()``). Listed: the transfer never took effect, this phone keeps its keys, the kept state goes
-    /// and the member is told (``moveNotDone``), but only once the record has been written. Not listed (an answered list
-    /// without this phone as an `app`): this phone's keys are removed. Not checked: nothing is decided and nothing erased;
-    /// ``keptCheckPending`` stays true and the check is made again.
+    /// The day-7 check (VAULT-MESSAGING 0.55.10 §11.14.10 "The day-7 check", "Recording the check"; owner decision,
+    /// 2026-10-23): `device.list` over this phone's session. Result 1 (this phone is no longer the vault's app): erase as for
+    /// the notice. Result 2 (it still is): erase nothing, end the keep, and be the vault's app again, as after "The move
+    /// didn't finish" (``movedBack``). Result 3 (no definite answer): nothing is decided, ``keptCheckPending`` stays true, and
+    /// the check is made again at the next start and foreground, and no sooner.
+    ///
+    /// The record is read before the question and again after it: if the keep is gone or the transfer record's generation
+    /// moved meanwhile (the notice erased it, "The move didn't finish" ended the keep, a lock or another check changed it),
+    /// nothing is acted on and nothing recorded. Result 2 is recorded by a write conditional on the noted generation, and
+    /// acted on only if the write succeeds; a failed write records nothing, and the check runs again.
     func endKeptTransfer() async {
         guard !keptEnding else { return }
         keptEnding = true
         defer { keptEnding = false }
         guard record.value.transferApprovedAtMs != nil else { return }
-        switch await keptEndCheck() {
+        let noted = (record: record.generation, transfer: record.value.transferGen)
+        let result = await keptEndCheck()
+        guard result != .notChecked else { return }
+        guard record.generation == noted.record, record.value.transferGen == noted.transfer,
+              record.value.transferApprovedAtMs != nil else { return }
+        switch result {
         case .listed:
+            let wrote = (try? record.update(since: noted.record) { $0.endTransferKeep() }) == true
+            guard wrote else { return }
             keptCheckPending = false
             keptTimer?.cancel()
             keptTimer = nil
-            // The record is read again after the wait: a lock during it moved the generation, and a write for the record
-            // as it was before would be dropped. The member is told only when the write was made.
-            let wrote = (try? record.update(since: record.generation) { $0.transferApprovedAtMs = nil; $0.transferKeepMs = nil }) == true
-            guard wrote else { return scheduleKeptRetry() }
             transferKeptSince = nil
-            moveNotDone = true
+            movedBack = true
         case .notListed:
             guard !halted else { return }
             keptCheckPending = false
             wipeMovedAway = true
             try? await eraseThisPhone()
         case .notChecked:
-            scheduleKeptRetry()
-        }
-    }
-
-    /// The end of the keep is checked again after a pause, while the app is in the foreground; in the background the next
-    /// return to the foreground does it (``onForeground()``).
-    private func scheduleKeptRetry() {
-        guard !backgrounded, !halted, record.value.transferApprovedAtMs != nil else { return }
-        keptTimer?.cancel()
-        let sleep = config.keepSleep
-        keptTimer = Task { @MainActor [weak self] in
-            do {
-                try await sleep(Self.keptRetryAfter)
-            } catch {
-                return
-            }
-            guard !Task.isCancelled, let self else { return }
-            self.keptTimer = nil
-            await self.checkKeptTransfer()
+            return
         }
     }
 
@@ -180,7 +166,7 @@ extension VaultManager {
         guard record.value.transferApprovedAtMs != nil else { return }
         keptTimer?.cancel()
         keptTimer = nil
-        _ = try? record.update(since: rec) { $0.transferApprovedAtMs = nil; $0.transferKeepMs = nil }
+        _ = try? record.update(since: rec) { $0.endTransferKeep() }
         transferKeptSince = nil
         keptCheckPending = false
         movedBack = true

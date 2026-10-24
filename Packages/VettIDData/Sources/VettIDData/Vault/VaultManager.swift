@@ -550,6 +550,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         // vault.enrolled pinned the vault: the epoch-1 secret it holds is this phone's (a crash or a lost answer
         // before the enrollment's own answer confirmed it).
         try confirmEnrolledSecret(local, d)
+        await resumeTransferIn(s)
         if d.deviceID == nil {
             if d.recovering { return .setup(.recovering) }
             // Enrolled, the first handshake (or the credential) not finished.

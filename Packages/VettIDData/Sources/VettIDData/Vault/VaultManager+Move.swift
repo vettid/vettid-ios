@@ -34,9 +34,9 @@ extension VaultManager: MoveRepository {
     /// The code of a scanned or pasted text that is not a transfer code (vettid-android `CODE_NOT_TRANSFER`).
     public nonisolated static let codeNotTransfer = "not_transfer"
     /// How long the new phone waits for the old phone's approval after its `hs.init` (§6.7, 0.10.4).
-    nonisolated static let pairingWindow: TimeInterval = 600
-    /// The wait beyond ``pairingWindow`` (owner decision, 2026-10-23: 11 minutes on the new phone, on both apps).
-    nonisolated static let pairingGrace: TimeInterval = 60
+    nonisolated static let pairingWindow: TimeInterval = 660
+    /// The collect before the drop is bounded by this many seconds in all (VAULT-MESSAGING §11.14.10 rule 5).
+    nonisolated static let collectBound: TimeInterval = 30
 
     // MARK: - Recovery (I3.4)
 
@@ -67,7 +67,13 @@ extension VaultManager: MoveRepository {
             if d.deviceID != nil || d.vaultID != nil || d.recovering { throw VaultFailure(.vaultExists) }
             if let refusal = startOverRefusal(nil) { throw refusal }
             let rec = record.generation
-            if !record.value.transferIn { try record.update(since: rec) { $0.transferIn = true } }
+            // The one deadline of 11 minutes counts from here, the start of the `hs.init` (owner decision, 2026-10-23), and is
+            // stored: a restart keeps it, and nothing the member does extends it.
+            let started = nowMs
+            try record.update(since: rec) {
+                $0.transferIn = true
+                $0.transferStartedMs = started
+            }
             let path = TransferPath()
             let secrets = phoneSecrets
             let policy = config.trust.timeScales
@@ -93,7 +99,6 @@ extension VaultManager: MoveRepository {
             try record.update(since: rec) { $0.capabilities = capabilities }
             learnTimeScale(scale, since: rec)
             recoveryOffered = ReleasePath.recoveryOffered(capabilities)
-            transferStartedAt = config.now()
             // §6.7.1 step 2 (0.10.6): a dropped hs.init is never answered; stop after 60 s and say why it may be.
             guard let sas = try await sasWithinLimit(d) else {
                 await dropTransfer(d)
@@ -127,48 +132,104 @@ extension VaultManager: MoveRepository {
     }
 
     /// Waits for the old phone's approval, then takes the credential over (`credential.get`, `credential.ack`,
-    /// `credential.utk.get`, §6.7.1 step 5). ``FailureKind/rejected`` when the owner rejected it, ``FailureKind/noResponse``
-    /// after 10 minutes; then the transfer is dropped. True when the vault gave this phone the member's `user_guid`
-    /// (§6.7.1, 0.17.0), which its unlocks need.
+    /// `credential.utk.get`, §6.7.1 step 5). ``FailureKind/rejected`` when the owner rejected it; ``FailureKind/noResponse``
+    /// at the deadline, **11 minutes after the `hs.init` was started** (§11.14.10 rule 5, owner decision 2026-10-23: one
+    /// deadline, stored with the transfer, which no user action extends). At the deadline the mailbox is collected once
+    /// before anything is dropped: a `device.paired{transfer}` it brings is applied and the move completes instead; otherwise
+    /// the transfer is dropped. True when the vault gave this phone the member's `user_guid` (§6.7.1, 0.17.0), which its
+    /// unlocks need.
     public func awaitTransferIn() async throws -> Bool {
         try await guarded {
-            let rec = record.generation
             let s = try await openSession()
             let d = s.device
-            let started = transferStartedAt ?? config.now()
-            // 60 s beyond the 10 minutes before this phone drops its handshake, key and secret (owner decision, 2026-10-23): an
-            // approval that completes at the vault just after this phone's limit, which counts from its own (earlier) start,
-            // is not lost.
-            let left = max(started.addingTimeInterval(Self.pairingWindow + Self.pairingGrace).timeIntervalSince(config.now()), 1)
+            let left = max((transferDeadline ?? config.now().addingTimeInterval(Self.pairingWindow)).timeIntervalSince(config.now()), 1)
             let guid: String?
             do {
                 guid = try await d.awaitTransfer(timeout: left)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch let rejected as PairingRejected {
+                // Rejected: nothing was approved, so nothing changes; the handshake state is dropped.
+                await dropTransfer(d)
+                throw rejected
             } catch {
-                // Rejected or timed out: nothing was approved, so nothing changes; the handshake state is dropped.
-                if !(error is CancellationError) { await dropTransfer(d) }
-                throw error
+                // The deadline: one collect before the drop.
+                guard let paired = await collectBeforeDrop(d) else {
+                    await dropTransfer(d)
+                    throw error
+                }
+                guid = paired.guid
             }
-            transferStartedAt = nil
-            // This phone's attested App Attest key is the one the vault bound now (IOS-PLAN §6.2).
-            if let k = d.altState.enrolledAttestKeyID { try? config.attester.confirm(keyID: k) }
-            // §6.7.1 (0.17.0): the member's user_guid from device.paired, kept as an enrolled phone keeps the redeem's, so
-            // that this phone unlocks later (§11.4). A vault release before 0.17.0 sends none: the transfer is still
-            // complete, and the unlock screen says why this phone cannot unlock.
-            // Release R (§11.14.10): "Finish the move" is asked until an unlock from storage with this phone's secret.
-            try record.update(since: rec) {
-                if let guid { $0.userGuid = guid }
-                if let vid = d.vaultID { $0.vaultID = vid }
-                $0.finishMovePending = true
-                $0.movedIn = true
-                // The vault was confirmed long ago (§3.5.7): this phone does not wait for `vault.enroll.confirm`.
-                $0.enrollConfirmed = true
-            }
-            memberVault.set(recorded: record.value.vaultID)
-            usesPhoneSecret = phoneSecrets.inUse
-            // §6.7.1 step 5: the blob the vault kept, confirmed, and a UTK pool.
-            try await openApi(s).credentialTakeOver()
-            phase = .setup(.finishing)
+            try await completeTransferIn(s, guid: guid)
             return guid != nil
+        }
+    }
+
+    /// The `device.paired{transfer}` has arrived: this phone's key is the one the vault bound, the record keeps the member's
+    /// `user_guid` and the move to finish (§11.14.10: "Finish the move" is asked until an unlock from storage with this
+    /// phone's secret), and the credential is taken over (§6.7.1 step 5). The transfer's clock is removed only when the
+    /// take-over is done, so that a start after the app was killed meanwhile does it again (a paired transfer completes at any
+    /// later start, whatever its age).
+    private func completeTransferIn(_ s: VaultSession, guid: String?) async throws {
+        let d = s.device
+        let rec = record.generation
+        // This phone's attested App Attest key is the one the vault bound now (IOS-PLAN §6.2).
+        if let k = d.altState.enrolledAttestKeyID { try? config.attester.confirm(keyID: k) }
+        try record.update(since: rec) {
+            if let guid { $0.userGuid = guid }
+            if let vid = d.vaultID { $0.vaultID = vid }
+            $0.finishMovePending = true
+            $0.movedIn = true
+            // The vault was confirmed long ago (§3.5.7): this phone does not wait for `vault.enroll.confirm`.
+            $0.enrollConfirmed = true
+        }
+        memberVault.set(recorded: record.value.vaultID)
+        usesPhoneSecret = phoneSecrets.inUse
+        // The answers of the take-over come over the mailbox: it is collected (not in the background, where nothing starts it).
+        if !backgrounded { d.start() }
+        try await openApi(s).credentialTakeOver()
+        _ = try? record.update(since: record.generation) { $0.transferStartedMs = nil }
+        try? await d.transferCompleted()
+        phase = .setup(.finishing)
+    }
+
+    /// The new phone's deadline: 11 minutes after it started the `hs.init` (``LocalAccount/transferStartedMs``); nil without
+    /// a transfer waiting.
+    var transferDeadline: Date? {
+        record.value.transferStartedMs.map { Date(timeIntervalSince1970: Double($0) / 1000 + Self.pairingWindow) }
+    }
+
+    /// What a collect before the drop found: a `device.paired{transfer}` (its `user_guid` if the vault sent one).
+    private struct PairedTransfer {
+        let guid: String?
+    }
+
+    /// One collect (`wait=0`, bounded by ``collectBound`` seconds in all) of the mailbox, then the `device.paired{transfer}`
+    /// it may have brought, opened under the transfer's session. nil: nothing waits, the collect failed or timed out (the
+    /// relay cannot be reached: that is no reason to keep the keys longer), or the owner rejected it.
+    private func collectBeforeDrop(_ d: VaultDevice) async -> PairedTransfer? {
+        do {
+            try await d.collectOnce(timeout: Self.collectBound)
+            return PairedTransfer(guid: try await d.awaitTransfer(timeout: 0.05))
+        } catch {
+            return nil
+        }
+    }
+
+    /// At a start (before anything else is decided about this phone): a transfer whose `device.paired` arrived is completed
+    /// whatever its age; one still waiting past its deadline gets one collect, then is applied or dropped (§11.14.10 rule 5).
+    func resumeTransferIn(_ s: VaultSession) async {
+        guard record.value.transferStartedMs != nil else { return }
+        let d = s.device
+        if d.deviceID != nil {
+            // Paired; the take-over is not done. The vault sent the `user_guid` once: it was kept with the device state.
+            try? await completeTransferIn(s, guid: d.transferUserGuid ?? (record.value.userGuid.isEmpty ? nil : record.value.userGuid))
+        } else if let deadline = transferDeadline, config.now() >= deadline, d.hasVault {
+            if let paired = await collectBeforeDrop(d) {
+                try? await completeTransferIn(s, guid: paired.guid)
+            } else {
+                await dropTransfer(d)
+            }
         }
     }
 
@@ -176,7 +237,6 @@ extension VaultManager: MoveRepository {
     /// the pending epoch-1 record (the vault holds neither before the approval, §6.7.1: "Aborted. Nothing else changes").
     public func abandonTransferIn() async throws {
         try await guarded {
-            transferStartedAt = nil
             guard let d = session?.device else { return }
             await dropTransfer(d)
         }
@@ -186,13 +246,16 @@ extension VaultManager: MoveRepository {
     private func dropTransfer(_ d: VaultDevice) async {
         let key = d.altState.transferAttestKeyID
         try? await d.abandonTransfer()
-        transferStartedAt = nil
+        _ = try? record.update(since: record.generation) { $0.transferStartedMs = nil }
         if let key { try? config.attester.discard(keyID: key) }
-        if let id = transferEpochID {
-            try? phoneSecrets.dropPending(id: id)
-            transferEpochID = nil
-            usesPhoneSecret = phoneSecrets.inUse
+        // The epoch-1 record of the transfer (key_vault ""): the one this process made, or, after a restart, any that waits.
+        var ids = Set(transferEpochID.map { [$0] } ?? [])
+        if let pending = try? phoneSecrets.records().pendings {
+            for p in pending where p.record.keyVault.isEmpty && p.record.epoch == 1 { ids.insert(p.keyID) }
         }
+        for id in ids { _ = try? phoneSecrets.dropPending(id: id) }
+        transferEpochID = nil
+        usesPhoneSecret = phoneSecrets.inUse
     }
 
     // MARK: - The old phone (§6.7.1)
@@ -259,14 +322,17 @@ extension VaultManager: MoveRepository {
         let stored = keepMs == KeptTransfer.keepPeriodMs ? nil : keepMs
         let stamp = nowMs
         // Nothing is sent when the time cannot be stored: the keys' bound would be lost with it.
-        guard try record.update(since: rec, { $0.transferApprovedAtMs = stamp; $0.transferKeepMs = stored }) else {
+        guard try record.update(since: rec, { $0.transferApprovedAtMs = stamp; $0.transferKeepMs = stored; $0.transferGen += 1 }) else {
             throw VaultFailure(.other, code: "record_closed")
         }
         // Put back after the answer, for the record as it is then (a lock during the approval moved the generation, and a
         // write for the record as it was would be dropped), and only while the stored time is still this approval's.
         let restore: @MainActor () -> Void = { [self] in
             guard record.value.transferApprovedAtMs == stamp else { return }
-            _ = try? record.update(since: record.generation) { ($0.transferApprovedAtMs, $0.transferKeepMs) = before }
+            _ = try? record.update(since: record.generation) {
+                ($0.transferApprovedAtMs, $0.transferKeepMs) = before
+                $0.transferGen += 1
+            }
         }
         var keep = false
         let moved: Bool

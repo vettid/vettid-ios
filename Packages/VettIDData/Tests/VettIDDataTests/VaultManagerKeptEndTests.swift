@@ -114,7 +114,7 @@ import VettIDDataTesting
         #expect(m.keptCheckPending)
         service.transferTookEffect = false
         m.onForeground()
-        #expect(await eventually { m.moveNotDone })
+        #expect(await eventually { m.movedBack })
         #expect(!m.keptCheckPending && m.record.value.transferApprovedAtMs == nil)
     }
 
@@ -145,16 +145,16 @@ import VettIDDataTesting
         // Longer than the limit (800 ms in the tests): the timer would have won.
         try await Task.sleep(for: .milliseconds(1_200))
         expectKept()
-        #expect(m.phase == .unlocked && !m.moveNotDone)
+        #expect(m.phase == .unlocked && !m.movedBack)
         // Back in the foreground the vault lists this phone (the approval never took effect): the check is made again.
         service.transferTookEffect = false
         // The session was dropped with the background; on a loaded machine the 800 ms of the short limit may not be enough
         // to open it again, in which case the next foreground makes the check again.
         for _ in 0..<5 {
             m.onForeground()
-            if await eventually(within: .seconds(8), { m.moveNotDone }) { break }
+            if await eventually(within: .seconds(8), { m.movedBack }) { break }
         }
-        #expect(m.moveNotDone)
+        #expect(m.movedBack)
         #expect(m.record.value.transferApprovedAtMs == nil && m.phase != .signedOut)
     }
 
@@ -198,8 +198,8 @@ import VettIDDataTesting
         #expect(m.phase == .unlocked && m.keptCheckPending)
     }
 
-    /// `lock_pending` (a lock of this phone not confirmed yet) is "not checked": nothing is sent, nothing erased, and the
-    /// check is made again after a pause.
+    /// `lock_pending` (a lock of this phone not confirmed yet) is "not checked": nothing is sent, nothing erased, and no timer
+    /// repeats it: the check is made again at the next start and foreground (VAULT-MESSAGING §11.14.10).
     @Test func aLockPendingMeansTheCheckIsMadeLater() async throws {
         defer { phone.close() }
         try await aged()
@@ -207,15 +207,18 @@ import VettIDDataTesting
         service.memberLockAnswer = .queued
         try await m.lock()
         let lists = listRequests()
+        let pauses = phone.keepPauses.lengths.count
         await m.checkKeptTransfer()
         expectKept()
         #expect(listRequests() == lists && service.deviceListsAfterTransfer == 0)
-        #expect(await eventually { phone.keepPauses.lengths.last.map { abs($0 - 300) < 1 } == true })
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(phone.keepPauses.lengths.count == pauses, "no timer repeats the check")
     }
 
-    /// A lock during the check moves the record's generation: the answer is written for the record as it is then, and the
-    /// member is told only once it is written.
-    @Test func aLockDuringTheCheckDoesNotDropTheKeepWrite() async throws {
+    /// The record's generation is noted before the question and read again after it (VAULT-MESSAGING §11.14.10 "Recording the
+    /// check"): a lock during the check changed it, so nothing is acted on or recorded; the next foreground checks again and
+    /// records it.
+    @Test func aLockDuringTheCheckRecordsNothingAndTheNextCheckDoes() async throws {
         defer { phone.close() }
         try await aged()
         service.transferTookEffect = false
@@ -229,8 +232,87 @@ import VettIDDataTesting
         #expect(m.record.generation != generation)
         service.holdMessages = false
         await check.value
-        #expect(m.moveNotDone && m.transferKeptSince == nil)
-        #expect(m.record.value.transferApprovedAtMs == nil && m.record.value.transferKeepMs == nil && m.phase != .signedOut)
+        expectKept()
+        #expect(!m.movedBack && m.keptCheckPending && m.record.value.transferApprovedAtMs != nil)
+        m.onForeground()
+        #expect(await eventually { m.movedBack })
+        #expect(m.record.value.transferApprovedAtMs == nil && !m.keptCheckPending)
+    }
+
+    /// The transfer record's own generation: a change of the record during the check (here the keep ended meanwhile, as "The
+    /// move didn't finish" does) means nothing is recorded.
+    @Test func aChangeOfTheTransferRecordDuringTheCheckRecordsNothing() async throws {
+        defer { phone.close() }
+        try await aged()
+        service.transferTookEffect = false
+        service.holdMessages = true
+        let lists = listRequests()
+        let check = Task { await m.checkKeptTransfer() }
+        #expect(await eventually { listRequests() == lists + 1 })
+        _ = try m.record.update(since: m.record.generation) { $0.transferGen += 1 }
+        service.holdMessages = false
+        await check.value
+        expectKept()
+        #expect(!m.movedBack && m.record.value.transferApprovedAtMs != nil)
+    }
+
+    /// A conditional write that fails records nothing (the record is closed, its generation unchanged): the keep stays.
+    @Test func aFailedWriteRecordsNothing() async throws {
+        defer { phone.close() }
+        try await aged()
+        service.transferTookEffect = false
+        service.holdMessages = true
+        let lists = listRequests()
+        let check = Task { await m.checkKeptTransfer() }
+        #expect(await eventually { listRequests() == lists + 1 })
+        m.record.markEraseFailed() // closed: the conditional write fails, the generation is unchanged
+        service.holdMessages = false
+        await check.value
+        #expect(!m.movedBack && m.record.value.transferApprovedAtMs != nil)
+    }
+
+    /// `token_revoked` (the relay refuses a removed phone's deposits) is no answer: one `device.list` per start or
+    /// foreground, never an erasure.
+    @Test func aTokenRevokedIsNoAnswerAndGetsOneListPerForeground() async throws {
+        defer { phone.close() }
+        try await aged()
+        service.revokesVaultDeposits = true
+        let before = service.revokedDeposits
+        await m.checkKeptTransfer()
+        expectKept()
+        #expect(m.keptCheckPending && service.revokedDeposits == before + 1)
+        m.onForeground()
+        #expect(await eventually { service.revokedDeposits == before + 2 })
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(service.revokedDeposits == before + 2 && m.phase != .signedOut && !m.movedAway)
+    }
+
+    /// A definite answer is only the response to this check's own request: another `re` is no answer, even a list that does
+    /// not hold this phone.
+    @Test func aResponseWithAnotherReIsNoAnswer() async throws {
+        try shortLimit()
+        defer { phone.close() }
+        try await aged()
+        let check = Task { await m.checkKeptTransfer() }
+        #expect(await eventually { service.deviceListsAfterTransfer == 1 })
+        service.sendStrayDeviceList()
+        await check.value
+        try await Task.sleep(for: .milliseconds(500))
+        expectKept()
+        #expect(m.keptCheckPending && m.phase == .unlocked)
+    }
+
+    /// The notice is sealed by the vault at delivery, with its own clock: 20 days after the approval, past the 16-day rule for
+    /// a notice sealed at the approval, it still opens (§11.14.10, release L).
+    @Test func aNoticeSealedAtDeliveryTwentyDaysLaterIsAccepted() async throws {
+        defer { phone.close() }
+        service.stampsOnVaultClock = true
+        try await aged()
+        let twenty: TimeInterval = 20 * 86_400
+        service.advanceVaultClock(twenty)
+        phone.clockAhead = twenty
+        service.unlinkThisPhone(reason: "transferred")
+        try await expectErased()
     }
 
     /// No answer after this phone's own lock (it closed the vault): kept.
@@ -268,7 +350,7 @@ import VettIDDataTesting
         try await aged()
         service.transferTookEffect = false
         m.onForeground()
-        #expect(await eventually { m.moveNotDone })
+        #expect(await eventually { m.movedBack })
     }
 
     // MARK: - F5

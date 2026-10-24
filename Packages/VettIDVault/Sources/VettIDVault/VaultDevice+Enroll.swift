@@ -167,6 +167,7 @@ extension VaultDevice {
                     a.transferAttestKeyID = nil
                     setAlt(a)
                 }
+                if let g = Self.transferUserGuid(o) { st.transferUserGuid = g }
                 return Self.transferUserGuid(o)
             }
             try save()

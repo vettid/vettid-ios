@@ -152,9 +152,22 @@ import VettIDDataTesting
         #expect(service.transferPaired)
     }
 
-    /// (Owner decision, 2026-10-23.) This phone waits 60 s beyond the 10 minutes, counted from its own earlier start: an approval
-    /// that completes at the vault just after the phone's limit is not lost.
-    @Test func anApprovalJustAfterThePhonesTenMinutesIsNotLost() async throws {
+    // MARK: - The deadline (VAULT-MESSAGING §11.14.10 rule 5, owner decision 2026-10-23)
+
+    /// The 11 minutes are one deadline counted from the start of the `hs.init`, stored with the transfer.
+    @Test func theDeadlineIsStoredAndSurvivesARestart() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        let started = try #require(m.record.value.transferStartedMs)
+        #expect(abs(Double(started) - Date().timeIntervalSince1970 * 1000) < 10_000)
+        try await phone.restart()
+        #expect(m.record.value.transferStartedMs == nil || m.record.value.transferStartedMs == started)
+        try await m.refresh()
+        #expect(m.record.value.transferStartedMs == started)
+    }
+
+    /// A `device.paired` at 10 minutes 30 seconds is accepted.
+    @Test func anApprovalAtTenMinutesThirtyIsAccepted() async throws {
         defer { phone.close() }
         _ = try await scanned()
         phone.clockAhead = 630
@@ -162,7 +175,108 @@ import VettIDDataTesting
         try await Task.sleep(for: .milliseconds(300))
         service.approveTransferIn()
         #expect(try await waiting.value)
-        #expect(m.finishMovePending)
+        #expect(m.finishMovePending && m.record.value.transferStartedMs == nil)
+    }
+
+    /// Nothing is dropped before the 11 minutes.
+    @Test func nothingIsDroppedBeforeElevenMinutes() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        phone.clockAhead = 600
+        let waiting = Task { try await m.awaitTransferIn() }
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(deviceHoldsVault && pendingRecord && m.record.value.transferStartedMs != nil && phone.attester.discarded.isEmpty)
+        service.approveTransferIn()
+        #expect(try await waiting.value)
+    }
+
+    /// At the deadline a waiting `device.paired` is applied (the collector is not running: one collect finds it).
+    @Test func atTheDeadlineAWaitingPairedIsApplied() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        phone.clockAhead = 659
+        m.session?.device.stop()
+        try await Task.sleep(for: .milliseconds(300))
+        service.approveTransferIn()
+        #expect(try await m.awaitTransferIn())
+        #expect(m.finishMovePending && deviceHoldsVault && m.record.value.userGuid == service.userGuid)
+    }
+
+    /// Nothing waits at the deadline: dropped, the key discarded, the epoch-1 secret deleted, and a new code is offered.
+    @Test func atTheDeadlineNothingWaitsAndTheTransferIsDropped() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        phone.clockAhead = 659
+        let failure = await vaultFailure { _ = try await m.awaitTransferIn() }
+        #expect(failure?.kind == .noResponse)
+        #expect(!deviceHoldsVault && !pendingRecord && m.record.value.transferStartedMs == nil)
+        #expect(phone.attester.discarded == phone.attester.attested)
+    }
+
+    /// A collect that fails or times out drops at once: no reason to keep the keys longer.
+    @Test func aFailedCollectDropsEvenWithAnApprovalWaiting() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        phone.clockAhead = 659
+        m.session?.device.stop()
+        try await Task.sleep(for: .milliseconds(300))
+        service.approveTransferIn()
+        service.refusesCollect = true
+        let failure = await vaultFailure { _ = try await m.awaitTransferIn() }
+        #expect(failure?.kind == .noResponse && !deviceHoldsVault && !pendingRecord)
+    }
+
+    /// No user action extends the deadline: asking again, or leaving and coming back, keeps the stored moment.
+    @Test func noUserActionExtendsTheDeadline() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        let started = m.record.value.transferStartedMs
+        let first = Task { try await m.awaitTransferIn() }
+        try await Task.sleep(for: .milliseconds(200))
+        first.cancel()
+        _ = try? await first.value
+        phone.clockAhead = 659
+        let failure = await vaultFailure { _ = try await m.awaitTransferIn() }
+        #expect(failure?.kind == .noResponse && started != nil)
+    }
+
+    /// A paired transfer completes at any later start, whatever its age: the app was killed between `device.paired` and the
+    /// take-over.
+    @Test func aPairedTransferCompletesAtALaterStart() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        service.approveTransferIn()
+        let d = try #require(m.session?.device)
+        _ = try await d.awaitTransfer(timeout: 5)
+        #expect(d.deviceID != nil && !m.finishMovePending)
+        try await phone.restart()
+        phone.clockAhead = 86_400
+        try await m.refresh()
+        #expect(m.finishMovePending && m.movedIn && m.record.value.transferStartedMs == nil)
+        #expect(m.record.value.userGuid == service.userGuid && m.phase == .setup(.finishing))
+        #expect(m.session?.device.credentialVersion != nil && m.session?.device.transferUserGuid == nil)
+    }
+
+    /// Killed before the deadline, started after it: one collect at the start, then applied (a `device.paired` waits)...
+    @Test func killedBeforeTheDeadlineAndStartedAfterItAWaitingPairedIsApplied() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        try await phone.restart()
+        service.approveTransferIn()
+        phone.clockAhead = 700
+        try await m.refresh()
+        #expect(m.finishMovePending && m.record.value.transferStartedMs == nil && m.phase == .setup(.finishing))
+    }
+
+    /// ... or dropped, when nothing waits.
+    @Test func killedBeforeTheDeadlineAndStartedAfterItNothingWaitsDrops() async throws {
+        defer { phone.close() }
+        _ = try await scanned()
+        try await phone.restart()
+        phone.clockAhead = 700
+        try await m.refresh()
+        #expect(!deviceHoldsVault && !pendingRecord && m.record.value.transferStartedMs == nil)
+        #expect(phone.attester.discarded == phone.attester.attested && !m.finishMovePending)
     }
 
     @Test func aRejectionDropsTheTransferAndTheKey() async throws {

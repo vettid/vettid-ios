@@ -37,6 +37,18 @@ enum ShellMoveStrings {
         )
     }
 
+    /// The day-7 check has no definite answer (owner decision, 2026-10-23; VAULT-MESSAGING §11.14.10 "The day-7 check").
+    static var rootKeptCheckWaiting: String {
+        String(
+            localized: "root_kept_check_waiting",
+            defaultValue: """
+                Your vault has not confirmed the move to this phone. Once your new phone opens your vault, remove \
+                VettID from this phone.
+                """,
+            bundle: .module
+        )
+    }
+
     static var rootMovedAway: String {
         String(
             localized: "root_moved_away",

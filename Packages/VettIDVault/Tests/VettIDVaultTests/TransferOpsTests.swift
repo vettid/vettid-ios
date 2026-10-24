@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import VettIDVault
 import VettIDCrypto
+import VettIDRelay
 
 // Fixtures (JSON bodies of the fake vault) stay on one line each.
 // swiftlint:disable line_length
@@ -34,11 +35,20 @@ import VettIDCrypto
         return Holder(d: d, v: v, api: api, utks: utks, keys: keys)
     }
 
+    /// The renewal of the standing token that precedes an approval (VAULT-MESSAGING §11.14.10), deposited to the vault.
+    @discardableResult
+    func renewal(_ h: Holder) async throws -> Inner {
+        let r = try h.v.open(try await ops.base.relay.nextDeposit().payload)
+        #expect(r.type == "relay.token.issued")
+        return r
+    }
+
     /// Release R: the blob and the transfer id beside the sealed password and PIN, the answer `{"unlink":
     /// "after_new_unlock"}` keeps this phone's keys; the confirmed signer class goes beside the transfer id.
     @Test func theApprovalCarriesTheBlobTheTransferAndTheSignerAndSaysKeep() async throws {
         let h = try await holder(2)
         let approve = Task { try await h.api.transferApprove(transferID: "t-1", pin: "246802", password: "Cafe\u{301} pw", signer: "google_play") }
+        try await renewal(h)
         try await ops.answer(h.v, h.d, "credential.utk.get", h.utks)
         let req = try await ops.answer(h.v, h.d, VaultApi.typeTransferApprove, #"{"unlink":"after_new_unlock"}"#)
         let outer = try StrictJson.parseObject(req.body)
@@ -55,6 +65,7 @@ import VettIDCrypto
     @Test func anEarlierReleaseAnswersEmptyAndNoSignerIsSentUnconfirmed() async throws {
         let h = try await holder(2)
         let approve = Task { try await h.api.transferApprove(transferID: "t-1", pin: "246802", password: "pw") }
+        try await renewal(h)
         try await ops.answer(h.v, h.d, "credential.utk.get", h.utks)
         let req = try await ops.answer(h.v, h.d, VaultApi.typeTransferApprove, "{}")
         #expect(!(try StrictJson.parseObject(req.body)).has("signer"))
@@ -66,6 +77,7 @@ import VettIDCrypto
     @Test func aSignerUnconfirmedRefusalSpendsTheUTKAndTheNextApprovalUsesAFreshOne() async throws {
         let h = try await holder(3)
         let first = Task { try await h.api.transferApprove(transferID: "t-1", pin: "246802", password: "pw") }
+        try await renewal(h)
         try await ops.answer(h.v, h.d, "credential.utk.get", h.utks)
         let refused = try await ops.answer(h.v, h.d, VaultApi.typeTransferApprove, code: "signer_unconfirmed", errorBody: "{}")
         do {
@@ -75,10 +87,55 @@ import VettIDCrypto
             #expect(e.code == "signer_unconfirmed")
         }
         let second = Task { try await h.api.transferApprove(transferID: "t-1", pin: "246802", password: "pw", signer: "google_play") }
+        try await renewal(h)
         let again = try await ops.answer(h.v, h.d, VaultApi.typeTransferApprove, #"{"unlink":"after_new_unlock"}"#)
         #expect(try StrictJson.parseObject(refused.body).string("utk_id") != StrictJson.parseObject(again.body).string("utk_id"))
         #expect(try StrictJson.parseObject(again.body).string("signer") == "google_play")
         #expect(try await second.value.keepUntilNewUnlock)
+    }
+
+    /// The renewal is a standing token for the vault, valid 30 days from the approval, deposited and answered `201` before
+    /// the approval is deposited; the approval follows it in the vault's mailbox, never before.
+    @Test func theStandingTokenIsRenewedBeforeTheApprovalIsDeposited() async throws {
+        let h = try await holder(2)
+        let approve = Task { try await h.api.transferApprove(transferID: "t-1", pin: "246802", password: "pw") }
+        let renewal = try await renewal(h)
+        // `relay.token.issued{kind: "standing", token}`, a token of the vault's relay key as sub and 30 days to live.
+        let o = try StrictJson.parseObject(renewal.body)
+        #expect(try o.string("kind") == "standing")
+        let claims = try DepositTokens.verify(try o.string("token"), issuer: h.d.relayAddr.pk)
+        #expect(claims.sub == RelayAuth.encodeKey(h.v.relayKey.publicKey))
+        #expect(abs(claims.exp.timeIntervalSinceNow - 30 * 86_400) < 120)
+        // The approval is not deposited before it: the next deposit is the UTK fetch, then the approval.
+        try await ops.answer(h.v, h.d, "credential.utk.get", h.utks)
+        try await ops.answer(h.v, h.d, VaultApi.typeTransferApprove, #"{"unlink":"after_new_unlock"}"#)
+        #expect(try await approve.value.keepUntilNewUnlock)
+    }
+
+    /// A renewal the relay refuses does not stop the approval (0.56.1): it is sent all the same.
+    @Test func aRefusedRenewalStillSendsTheApproval() async throws {
+        let h = try await holder(2)
+        ops.base.relay.refuseDeposits = "token_revoked"
+        ops.base.relay.refuseOnly = 1
+        let approve = Task { try await h.api.transferApprove(transferID: "t-1", pin: "246802", password: "pw") }
+        try await ops.answer(h.v, h.d, "credential.utk.get", h.utks)
+        try await ops.answer(h.v, h.d, VaultApi.typeTransferApprove, #"{"unlink":"after_new_unlock"}"#)
+        #expect(try await approve.value.keepUntilNewUnlock)
+        #expect(ops.base.relay.refused == 1)
+    }
+
+    /// Again before the approval that follows `stale_credential`.
+    @Test func theTokenIsRenewedAgainBeforeTheRetryAfterAStaleCredential() async throws {
+        let h = try await holder(3)
+        let approve = Task { try await h.api.transferApprove(transferID: "t-1", pin: "246802", password: "pw") }
+        try await renewal(h)
+        try await ops.answer(h.v, h.d, "credential.utk.get", h.utks)
+        try await ops.answer(h.v, h.d, VaultApi.typeTransferApprove, code: "stale_credential", errorBody: "{}")
+        try await ops.answer(h.v, h.d, "credential.get", #"{"credential":"BAUG","version":2}"#)
+        try await ops.answer(h.v, h.d, "credential.ack")
+        try await renewal(h)
+        try await ops.answer(h.v, h.d, VaultApi.typeTransferApprove, #"{"unlink":"after_new_unlock"}"#)
+        #expect(try await approve.value.keepUntilNewUnlock)
     }
 
     /// Without the blob on this device nothing is sent.

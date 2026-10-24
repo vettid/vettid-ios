@@ -54,6 +54,12 @@ public struct MoveNotices: View {
                 )
                 .accessibilityIdentifier("move_not_done_banner")
             }
+            // 7 days or more after the approval and the vault has not answered the check: the keys are kept, and the member is told
+            // what to do (owner decision, 2026-10-23); the check is made again at each start and foreground.
+            if vault.keptCheckPending {
+                InfoBanner(ShellMoveStrings.rootKeptCheckWaiting)
+                    .accessibilityIdentifier("kept_check_waiting_banner")
+            }
             // The old phone removed its keys (the new phone finished the move, or 7 days passed): said once.
             if vault.movedAway {
                 InfoBanner(

@@ -33,7 +33,7 @@ import VettIDDataTesting
         vm.scanned(code)
         await clock.runCurrent()
         #expect(vault.lastTransferCode == code && vm.state.step == .compare && vm.state.sas == "042817")
-        #expect((590...600).contains(vm.state.secondsLeft) && !vm.state.busy)
+        #expect((650...660).contains(vm.state.secondsLeft) && !vm.state.busy)
         vault.transferApproval.complete()
         await clock.advance(seconds: 2)
         #expect(vm.state.step == .done && vm.state.sas == nil && vm.state.canUnlockLater)
@@ -49,9 +49,9 @@ import VettIDDataTesting
         vm.scan()
         vm.scanned(try qr())
         await clock.runCurrent()
-        #expect(vm.state.secondsLeft == 600)
+        #expect(vm.state.secondsLeft == 660)
         await clock.advance(seconds: 90)
-        #expect(vm.state.secondsLeft == 510 && vm.state.step == .compare)
+        #expect(vm.state.secondsLeft == 570 && vm.state.step == .compare)
     }
 
     /// Release R: the phone key made for the transfer is known to the screen ("Finish the move" follows).

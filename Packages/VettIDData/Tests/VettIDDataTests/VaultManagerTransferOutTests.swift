@@ -249,13 +249,13 @@ import VettIDDataTesting
         service.transferTookEffect = false
         phone.clockAhead = week + 60
         await m.checkKeptTransfer()
-        #expect(m.moveNotDone && m.transferKeptSince == nil && m.phase == .unlocked)
+        #expect(m.movedBack && m.transferKeptSince == nil && m.phase == .unlocked)
         #expect(m.record.value.transferApprovedAtMs == nil && !m.movedAway)
-        m.acknowledgeMoveNotDone()
-        #expect(!m.moveNotDone)
+        m.acknowledgeMovedBack()
+        #expect(!m.movedBack)
         // Not kept any more: another check does nothing.
         await m.checkKeptTransfer()
-        #expect(m.transferKeptSince == nil && !m.moveNotDone)
+        #expect(m.transferKeptSince == nil && !m.movedBack)
     }
 
     /// Exactly 7 days after the approval is the end (`elapsed >= keep`): the check is made and, the vault listing this phone

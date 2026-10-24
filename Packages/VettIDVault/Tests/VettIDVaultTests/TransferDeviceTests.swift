@@ -124,6 +124,34 @@ final class RecordingAttester: Attester, @unchecked Sendable {
         await #expect(throws: CancellationError.self) { _ = try await wait.value }
     }
 
+    /// One collect, `wait=0` (VAULT-MESSAGING §11.14.10 rule 5): the `device.paired` that waits in the mailbox is applied; the
+    /// message is acked.
+    @Test func oneCollectAppliesAPairedTransferThatWaits() async throws {
+        let p = try await newDevice()
+        let (d, v, attester) = (p.device, p.vault, p.attester)
+        let (qr, inviteID) = try code(v, d)
+        try await d.startTransfer(link: try qr.link(), attester: attester) { _, _ in nil }
+        try await d.handle(try v.respond(try await base.relay.nextDeposit().payload, d, ctx: inviteID))
+        try v.fin(try await base.relay.nextDeposit().payload, d)
+        let paired = try v.seal("device.paired", #"{"device_id":"dev-2","role":"app","vault_id":"\#(v.vaultID)","transfer":true,"user_guid":"guid-1234"}"#)
+        base.relay.queue(paired)
+        base.relay.serveMailbox = true
+        try await d.collectOnce(timeout: 5)
+        #expect(try await d.awaitTransfer(timeout: 1) == "guid-1234")
+        #expect(d.deviceID == "dev-2" && d.transferUserGuid == "guid-1234")
+        #expect(await base.relay.waitAcked(paired.msgID))
+        try await d.transferCompleted()
+        #expect(d.transferUserGuid == nil)
+    }
+
+    /// A collect that fails (the relay refuses, or cannot be reached) throws: the caller drops at once.
+    @Test func aFailedCollectThrows() async throws {
+        let p = try await newDevice()
+        base.relay.refuseCollect = "mailbox_unknown"
+        base.relay.serveMailbox = true
+        await #expect(throws: (any Error).self) { try await p.device.collectOnce(timeout: 5) }
+    }
+
     @Test func aRejectionEndsTheWait() async throws {
         let p = try await newDevice()
         let (d, v, attester) = (p.device, p.vault, p.attester)

@@ -22,6 +22,9 @@ final class FakeRelay: @unchecked Sendable {
     var onDeposit: (@Sendable () -> Void)? { get { lock.withLock { depositHook } } set { lock.withLock { depositHook = newValue } } }
     private var depositHook: (@Sendable () -> Void)?
     private var refuse: String?
+    /// The next [n] deposits are refused with [refuseDeposits]'s code, then the relay accepts again (0: all of them).
+    var refuseOnly: Int { get { lock.withLock { refuseCount } } set { lock.withLock { refuseCount = newValue } } }
+    private var refuseCount = 0
     private var status = 403
     private var collectRefusal: String?
     private var serve = false
@@ -58,10 +61,7 @@ final class FakeRelay: @unchecked Sendable {
                 return .json(201, #"{"mailbox_id":"x","limits":{"max_payload_bytes":262144,"message_ttl_seconds":1,"visibility_timeout_seconds":60,"max_token_lifetime_seconds":1,"open_token_max_lifetime_seconds":1,"max_claim_bytes":1,"claim_ttl_seconds":1}}"#)
             }
             if path.hasPrefix("/v1/mailbox/"), r.method == "POST" {
-                if let code = refuse {
-                    refused += 1
-                    return .json(status, #"{"code":"\#(code)","message":""}"#)
-                }
+                if let refusal = depositRefusal() { return refusal }
                 let payload = (try? StrictJson.parseObject(r.body).base64("payload")) ?? []
                 deposits.append((String(path.dropFirst("/v1/mailbox/".count)), payload))
                 depositHook?()
@@ -85,6 +85,17 @@ final class FakeRelay: @unchecked Sendable {
             }
             return .json(404, #"{"code":"not_found","message":""}"#)
         }
+    }
+
+    /// The refusal of a deposit, when one is set (the next ``refuseOnly`` of them, or all). Callers hold ``lock``.
+    private func depositRefusal() -> FakeHTTPServer.Answer? {
+        guard let code = refuse else { return nil }
+        refused += 1
+        if refuseCount > 0 {
+            refuseCount -= 1
+            if refuseCount == 0 { refuse = nil }
+        }
+        return .json(status, #"{"code":"\#(code)","message":""}"#)
     }
 
     /// `GET /v1/claim/{id}` (fetched once, then `claim_unknown`); nil for any other path. Callers hold ``lock``.

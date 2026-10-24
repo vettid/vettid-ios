@@ -15,6 +15,12 @@ extension VaultApi {
     ) async throws -> TransferApproved {
         var options = CredOpOptions()
         options.outer = [("transfer_id", transferID)] + (signer.map { [("signer", $0)] } ?? [])
+        // VAULT-MESSAGING §11.14.10 (0.56.1): before each approval it sends (the first, and after `busy`, `retry` and
+        // `stale_credential`) the old app renews the standing token it issued to the vault, and waits for the relay's `201`
+        // before it deposits the approval. If the renewal fails the approval is sent all the same, and the vault keeps the
+        // previous token.
+        let device = device
+        options.beforeSend = { _ = try? await device.renewStandingToken() }
         let body = try await credential.credOp(
             Self.typeTransferApprove, [.string("password", password), .string("pin", pin)], options
         )
