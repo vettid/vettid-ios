@@ -275,10 +275,10 @@ struct AppRoot: View {
     /// transfer is not offered. Read through the protocol, so that this compiles before and after.
     private var move: (any MoveRepository)? { (vault as any VaultRepository) as? any MoveRepository }
 
-    /// The onboarding flow's later screens: the transfer from the old phone and the move's last screen when the move
-    /// repository is there; the recovery waits for its own row.
+    /// The onboarding flow's later screens: the recovery, the transfer from the old phone and the move's last screen when the
+    /// move repository is there.
     private var onboardingRoutes: OnboardingRoutes {
-        move.map { OnboardingRoutes.moves(move: $0, vault: vault) } ?? .pending
+        move.map { OnboardingRoutes.moves(move: $0, vault: vault, account: vault) } ?? .pending
     }
 
     @ViewBuilder private var phaseContent: some View {
