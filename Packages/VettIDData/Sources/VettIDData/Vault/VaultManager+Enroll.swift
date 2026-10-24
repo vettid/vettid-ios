@@ -189,7 +189,7 @@ extension VaultManager {
             if s.device.credentialVersion == nil { try await createOrFetch(s, password: password, pin: pin) }
             try await confirmEnrollment(s, backup: backup, onStep: onStep)
             // A lock asked for meanwhile wins: the phone stays locked.
-            if locks == lockGeneration, !lockGuard.pending { phase = .setup(.finishing) }
+            if locks == lockGeneration, !lockGuard.holdsPhone { phase = .setup(.finishing) }
         }
     }
 
@@ -233,7 +233,7 @@ extension VaultManager {
     /// or a wipe cannot come between them).
     func finishSetupGated() throws -> Bool {
         let rec = record.generation
-        guard FinishSetupGate.allows(phase, lockPending: lockGuard.pending, finishingMove: finishMoveRunner.finishing) else { return false }
+        guard FinishSetupGate.allows(phase, lockPending: lockGuard.holdsPhone, finishingMove: finishMoveRunner.finishing) else { return false }
         guard record.value.enrollConfirmed else { throw VaultFailure(.other, code: Self.codeEnrollUnconfirmed) }
         try guardedSync { try record.update(since: rec) { $0.setupComplete = true; $0.movedIn = false } }
         phase = .unlocked

@@ -121,7 +121,8 @@ extension VaultManager {
     /// wait until the member API no longer sees it unlocked (the next unlock goes to the instance that holds it).
     func lockForUpdate() async throws {
         try await lock()
-        if lockGuard.pending { throw VaultFailure(.noResponse, code: Self.codeUpdateLockPending) }
+        // Not after a lock that ended because the vault was opened again since either (release L).
+        if lockGuard.pending || lockGuard.keeper.openedAgain { throw VaultFailure(.noResponse, code: Self.codeUpdateLockPending) }
         let sleep = config.releaseUpdateSleep
         for _ in 0..<Self.lockedPolls {
             guard (try? await vaultStatus())?.state == Self.stateUnlocked else { return }

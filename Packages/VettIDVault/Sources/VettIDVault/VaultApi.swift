@@ -110,7 +110,8 @@ public struct VaultApi: Sendable {
     public func lock(unlockID: String? = nil, timeout: TimeInterval = lockAnswer, validFor: TimeInterval = lockValid) async throws {
         let body = JsonBuilder()
         if let u = unlockID { body.string("unlock_id", u) }
-        _ = try await device.opOnce("vault.lock", body: body.bytes(), timeout: timeout, exp: device.now().addingTimeInterval(min(validFor, Self.lockValidMax)))
+        let exp = device.now().addingTimeInterval(min(validFor, Self.lockValidMax))
+        _ = try await device.opOnce("vault.lock", body: body.bytes(), timeout: timeout, exp: exp)
     }
 
     // MARK: - Devices (§10.3)

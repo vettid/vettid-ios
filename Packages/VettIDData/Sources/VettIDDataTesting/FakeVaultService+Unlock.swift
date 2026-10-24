@@ -51,6 +51,49 @@ extension FakeVaultService {
     /// stays `queued`; `done` but the vault does not lock; `429` with a `retry_after`.
     public enum MemberLockAnswer: Sendable { case lock, queued, doneNotLocked, limited(Int) }
 
+    // MARK: - Release L: the openings' names
+
+    /// (Release L, VAULT-MESSAGING 0.56.4 §10.2 "Locks") Whether this vault names its openings: every enroll, unlock and
+    /// `vault.status` carries an `unlock_id`, `vault.lock {unlock_id}` is carried out only for the current one (otherwise
+    /// `stale_lock`), the member API's lock slot says `locked`, `not_running` or `stale`, and `vault.locking` names the
+    /// unlock it ends. Off by default: the vault of a release before L.
+    public var announcesUnlockID: Bool {
+        get { locked { announcesUnlockIDValue } }
+        set {
+            locked {
+                announcesUnlockIDValue = newValue
+                if newValue, vaultOpen, unlockIDValue == nil { newOpening() }
+            }
+        }
+    }
+
+    /// The current opening's name (nil without one: the vault is before L, or not open).
+    public var currentUnlockID: String? { locked { unlockIDValue } }
+
+    /// Another device opens the vault (it locks a running one first): a new opening this phone has not been told of, so a
+    /// lock bound to the opening this phone knows is answered `stale_lock` (or the slot's `stale`).
+    /// [notifying]: whether this phone hears the `vault.locking` of the opening before (false: it was not connected).
+    public func openedByAnotherDevice(notifying: Bool = true) {
+        locked {
+            if vaultOpen {
+                if notifying { try? reply("vault.locking", #"{"reason":"unlock"\#(unlockMember)}"#) }
+                close()
+            }
+            vaultOpen = true
+            statusState = Self.unlocked
+            newOpening()
+            handleWhileLockedRequests()
+        }
+    }
+
+    /// A fresh name for an opening (16 random bytes as 32 lowercase hex), when this vault names them. Callers hold ``cond``.
+    func newOpening() {
+        unlockIDValue = announcesUnlockIDValue ? Randomness.bytes(16).map { String(format: "%02x", $0) }.joined() : nil
+    }
+
+    /// `,"unlock_id":"…"` while the vault runs under a named opening, else nothing. Callers hold ``cond``.
+    var unlockMember: String { unlockIDValue.map { #","unlock_id":"\#($0)""# } ?? "" }
+
     // MARK: - Switches and what was seen
 
     /// The next unlocks answer these, in order; then the vault's rules.
@@ -70,6 +113,9 @@ extension FakeVaultService {
     }
 
     public var relayLocks: Int { locked { relayLocksValue } }
+    /// The `unlock_id` each relay lock and each member API lock named, in order (nil: none).
+    public var relayLockNamed: [String?] { locked { relayLockNames } }
+    public var memberLockNamed: [String?] { locked { memberLockNames } }
     public var memberLocks: Int { locked { memberLocksValue } }
     public var pinFailureCount: Int { locked { pinFailures } }
     /// Whether the vault itself runs.
@@ -110,7 +156,7 @@ extension FakeVaultService {
     public func lockByItself(reason: String) {
         locked {
             guard vaultOpen else { return }
-            try? reply("vault.locking", #"{"reason":"\#(reason)"}"#)
+            try? reply("vault.locking", #"{"reason":"\#(reason)"\#(unlockMember)}"#)
             close()
         }
     }
@@ -168,7 +214,7 @@ extension FakeVaultService {
         let update = recordUpdate(body, requestID: rid)
         // procHost.Open: a running vault is locked first, as for an owner request, whatever the unlock is answered.
         if vaultOpen {
-            try? reply("vault.locking", #"{"reason":"unlock"}"#)
+            try? reply("vault.locking", #"{"reason":"unlock"\#(unlockMember)}"#)
             close()
         }
         switch answer {
@@ -209,43 +255,61 @@ extension FakeVaultService {
         if staysLocked { return ok }
         vaultOpen = true
         statusState = Self.unlocked
+        newOpening()
         handleWhileLockedRequests()
-        return ok
+        // The result names the opening it made (VAULT-MESSAGING 0.56.4 §10.2 "Locks").
+        return String(ok.dropLast()) + unlockMember + "}"
     }
 
     private func refused(_ code: String, retryAfter: TimeInterval = 0) -> String {
         #"{"ok":false,"code":"\#(code)","header_seq":\#(headerSeq),"retry_after":\#(Int(retryAfter.rounded(.up)))}"#
     }
 
-    /// `POST /api/vault/lock` (MEMBER-API "Vault"): before release L the slot's `done` proves nothing (VAULT-LOCK §2 F8).
-    /// Callers hold ``cond``.
+    /// `POST /api/vault/lock` (MEMBER-API "Vault"): before release L the slot's `done` proves nothing (VAULT-LOCK §2 F8). From
+    /// release L (2.10.1) the slot's `done` carries the host's word: `locked` (it was running and is locked now), `not_running`,
+    /// or `stale` (a bound lock whose unlock is not the current one: nothing was done). Callers hold ``cond``.
     func memberLock(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer {
         memberLocksValue += 1
         releases.busy = false
         let answer = memberLockAnswerValue
-        guard let rid = try? StrictJson.parseObject(r.body).string("request_id") else { return .json(400, #"{"error":"bad_request"}"#) }
+        guard let o = try? StrictJson.parseObject(r.body), let rid = try? o.string("request_id") else { return .json(400, #"{"error":"bad_request"}"#) }
+        let named = (try? o.optString("unlock_id")) ?? nil
+        memberLockNames.append(named)
         switch answer {
         case .limited(let seconds): return .json(429, #"{"error":"rate_limited","retry_after":\#(seconds)}"#)
         case .queued: break
         case .doneNotLocked: plainSlots[rid] = #"{"status":"done"}"#
         case .lock:
-            if vaultOpen {
-                try? reply("vault.locking", #"{"reason":"owner"}"#)
+            var code = ""
+            if announcesUnlockIDValue {
+                if vaultOpen, let named, named != unlockIDValue {
+                    code = #","code":"stale""#
+                } else {
+                    code = vaultOpen ? #","code":"locked""# : #","code":"not_running""#
+                }
+            }
+            if vaultOpen, code != #","code":"stale""# {
+                try? reply("vault.locking", #"{"reason":"owner"\#(unlockMember)}"#)
                 close()
             }
-            plainSlots[rid] = #"{"status":"done"}"#
+            plainSlots[rid] = #"{"status":"done"\#(code)}"#
         }
         return .json(202, "{}")
     }
 
-    /// `vault.lock` over the relay (§10.2): answered `{}`, then `vault.locking`, and the vault locks. Callers hold
-    /// ``cond``.
+    /// `vault.lock` over the relay (§10.2): answered `{}`, then `vault.locking`, and the vault locks. From release L a lock
+    /// naming an unlock that is not the current one is answered `stale_lock` and nothing is done. Callers hold ``cond``.
     func relayLock(_ m: Inner) throws {
         relayLocksValue += 1
         releases.busy = false
+        let named = (try? StrictJson.parseObject(m.body).optString("unlock_id")) ?? nil
+        relayLockNames.append(named)
         guard relayLockAnswerValue == .lock else { return }
+        if announcesUnlockIDValue, let named {
+            guard named == unlockIDValue else { return try reply(m.type, "{}", re: m.id, error: "stale_lock") }
+        }
         try reply(m.type, "{}", re: m.id)
-        try reply("vault.locking", #"{"reason":"owner"}"#)
+        try reply("vault.locking", #"{"reason":"owner"\#(unlockMember)}"#)
         close()
     }
 

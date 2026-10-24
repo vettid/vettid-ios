@@ -300,7 +300,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             moveFlags.book.lockResumed = true
             // A lock that was pending when the process ended: locked from the start, and tried again at once.
             lockGuard.keeper.resume()
-            lockNotices.opened(at: record.value.lastOpenedMs.map { Date(timeIntervalSince1970: Double($0) / 1000) })
+            resumeLockNotices()
         }
         resumeMoveState()
     }

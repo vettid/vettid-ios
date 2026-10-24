@@ -1,4 +1,5 @@
 import Foundation
+import VettIDAltChan
 import VettIDVault
 
 /// Drops `vault.locking` notices from before the vault last opened (VAULT-MESSAGING §11.4 "Unlock of a running vault").
@@ -10,9 +11,17 @@ import VettIDVault
 /// unlock result, which the enclave sets after any lock that unlock made, and a notice whose own `ts` is not later than
 /// it is stale. A later notice (the vault locked after this unlock) is kept, as is every notice before the first unlock
 /// known to this phone.
+///
+/// (VAULT-MESSAGING 0.56.4 §10.2 "Locks", release L) A notice that names the unlock it ends (`unlock_id`) is judged by that
+/// name instead, when this phone holds the vault's current one (``current``): another name is an older opening's notice,
+/// and is dropped; the same name is this opening's. A notice without the name (a release before L), or one that arrives
+/// while this phone holds no current name (a new process before its first status read), is judged by the time as above.
 @MainActor
 final class LockNotices {
     static let type = "vault.locking"
+
+    /// The vault's current `unlock_id` as this phone knows it, nil when it holds none.
+    var current: () -> String? = { nil }
 
     /// The last unlock's time; the one kept on the phone at a process start, so that a restart forgets nothing.
     private(set) var openedAt: Date?
@@ -28,7 +37,7 @@ final class LockNotices {
         openedAt = at
     }
 
-    /// Whether a message of [type] sent at [ts] is a `vault.locking` from before the vault last opened here.
+    /// Whether a message of [type] sent at [ts] is a `vault.locking` from before the vault last opened here. Without a name.
     func stale(type: String, ts: Date) -> Bool {
         guard type == Self.type, let at = openedAt else { return false }
         return ts <= at
@@ -41,7 +50,22 @@ final class LockNotices {
         return ts > at
     }
 
-    func stale(_ m: VaultMessage) -> Bool { stale(type: m.type, ts: m.ts) }
+    /// Whether [m] is a `vault.locking` from before the vault last opened here (or, by its name, of another opening).
+    func stale(_ m: VaultMessage) -> Bool {
+        guard m.type == Self.type else { return false }
+        if let named = named(m), let mine = current() { return named != mine }
+        return stale(type: m.type, ts: m.ts)
+    }
+
+    /// Whether [m] is evidence for the pending lock: a `vault.locking` naming the unlock that lock is bound to ([bound],
+    /// release L), or, when either has no name, one from after the vault last opened here (``sinceLastOpened(_:)``).
+    func confirms(_ m: VaultMessage, bound: String?) -> Bool {
+        guard m.type == Self.type else { return false }
+        if let named = named(m), let bound { return named == bound }
+        return sinceLastOpened(m)
+    }
 
     func sinceLastOpened(_ m: VaultMessage) -> Bool { sinceLastOpened(type: m.type, ts: m.ts) }
+
+    private func named(_ m: VaultMessage) -> String? { UnlockIds.of(VaultJSON.string(m.object, "unlock_id")) }
 }
