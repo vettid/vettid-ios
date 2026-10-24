@@ -82,7 +82,7 @@ extension StagingTests {
     static func entryNamed(_ text: String, _ name: String, kind: String = "grant") -> Bool {
         let t = plain(text)
         if named(t, name) { return true }
-        return kind == "grant" && (t.hasPrefix("Any \(name) item") || t == "\(name) (not in your vault)")
+        return kind == "grant" && (t == "Any \(name) item (you choose which)" || t == "\(name) (not in your vault)")
     }
 
     /// The identifier of the first element (`<idPrefix><…>`, not one of [excluding]) whose text satisfies [test], looking

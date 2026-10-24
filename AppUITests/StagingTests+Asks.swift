@@ -13,7 +13,8 @@ import XCTest
 /// `VETTID_STAGING_ASK_EXPECT` (`shared` or `not_accepted`), `VETTID_STAGING_APPROVAL` (`grant` or `share`),
 /// `VETTID_STAGING_DECISION` (`approve` or `decline`), `VETTID_STAGING_SHARE_INCLUDE` and `VETTID_STAGING_SHARE_DECLINE`
 /// (item names, `;`-separated), `VETTID_STAGING_GRANT_ITEM` (the item that answers a category entry),
-/// `VETTID_STAGING_EXPECT` (the text a fetch must hold), `VETTID_STAGING_FETCH_TIMES`, `VETTID_STAGING_REFUSED` (the refusal the last fetch must meet) and `VETTID_STAGING_WAIT` (seconds).
+/// `VETTID_STAGING_EXPECT` (the text a fetch must hold), `VETTID_STAGING_FETCH_TIMES`, `VETTID_STAGING_REFUSED` (the
+/// refusal the last fetch must meet) and `VETTID_STAGING_WAIT` (seconds).
 ///
 /// Like the other multi-step tests, each goes on to the lock after a failed step (``continueAfterFailure`` is on once the
 /// vault is open) and fails once the vault is locked.

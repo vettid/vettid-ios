@@ -119,10 +119,15 @@ extension StagingTests {
             let picker = anyElement(app, "grant_answer_" + entry.identifier.dropFirst("grant_entry_".count))
             guard picker.exists else { return false }
             tap(picker)
-            // The menu's entries carry no identifier: found by the item's name, else the first of the menu.
-            let choice = ask.answer.map { app.buttons[$0].firstMatch } ?? app.menus.firstMatch.buttons.firstMatch
-            guard choice.waitForExistence(timeout: 10) else {
+            // The menu's entries carry no identifier: found by the item's name, else the first one offered.
+            var choice: XCUIElement?
+            _ = waitUntil(timeout: 10) {
+                choice = menuChoice(app, named: ask.answer)
+                return choice != nil
+            }
+            guard let choice else {
                 fail(app, "The picker of a category entry offered no item to answer with.")
+                dismissMenu(app)
                 return false
             }
             choice.tap()
@@ -130,10 +135,34 @@ extension StagingTests {
             guard waitUntil(timeout: 10, {
                 snapshotElement(app, id: entry.identifier).map { texts(under: $0) }?.contains { $0.hasSuffix("(change)") } ?? false
             }) else {
+                dismissMenu(app)
                 return false
             }
         }
         return true
+    }
+
+    /// The open menu's selectable item, [name] when given, else the first: on iOS a SwiftUI menu is a context menu whose items
+    /// are buttons of a collection view, or of a menu. Only that container is searched (a button of the window, such as a
+    /// check box, may carry the same name); the menu's note for an empty vault is not an item.
+    @MainActor
+    private func menuChoice(_ app: XCUIApplication, named name: String?) -> XCUIElement? {
+        let none = "No standard or secret items in your vault"
+        for container in [app.collectionViews, app.menus] {
+            let buttons = container.buttons
+            guard buttons.count > 0 else { continue }
+            let found = name.map { buttons.matching(identifier: $0).firstMatch }
+                ?? buttons.allElementsBoundByIndex.first { $0.isEnabled && Self.plain($0.label) != none }
+            if let found, found.exists, found.isEnabled, Self.plain(found.label) != none { return found }
+        }
+        return nil
+    }
+
+    /// A menu left open put away: a tap beside it.
+    @MainActor
+    private func dismissMenu(_ app: XCUIApplication) {
+        guard !app.collectionViews.buttons.allElementsBoundByIndex.isEmpty || app.menus.firstMatch.exists else { return }
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.02, dy: 0.5)).tap()
     }
 
     /// Each of [names] ticked or unticked as [on] says; false when an item is not listed or the tick does not take.
