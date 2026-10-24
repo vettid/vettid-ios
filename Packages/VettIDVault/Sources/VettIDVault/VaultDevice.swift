@@ -184,6 +184,12 @@ public final class VaultDevice: @unchecked Sendable {
     /// The newest `ts` the vault stamped on an **answer** (in memory only): only answers settle a request (VAULT-MESSAGING
     /// 0.46.0 §11.14.9 step 1).
     var answerTs: Date?
+    /// (VAULT-MESSAGING 0.56.4 §10.2 "Locks", release L) The name of the vault's current opening as this device last
+    /// learned it, and the count of changes of opening (``VaultDevice/unlockID``). In memory only. Read and written
+    /// under ``openingLock``.
+    var openingID: String?
+    var openings = 0
+    let openingLock = NSLock()
 
     init(cfg: DeviceConfig, secrets: DeviceSecrets, st: DeviceState) throws {
         self.cfg = cfg
@@ -450,6 +456,7 @@ public final class VaultDevice: @unchecked Sendable {
                 st.utks.removeAll()
                 st.credential = nil
             }
+            opened(nil)
             try cfg.store.clear()
         }
     }

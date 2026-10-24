@@ -55,8 +55,12 @@ import VettIDRelay
         let result = #"{"ok":true,"state_seq":5,"header_seq":3,"token":"\#(fresh)","release":"\#(Self.pcr0)","release_number":3,"release_status":"active","manifest_serial":7}"#
         let inner = Inner(id: Ulid.new(), type: AltResults.typeUnlockResult, ts: Date(), re: built.request.requestID, status: Inner.statusOK, body: Array(result.utf8))
         let raw = try Envelope.sealSealed(d.kemKey, senderKid: Kid.anonymous, padded: try Padding.padFixed(try inner.marshal(.sealed), Padding.altChannel)).0
+        // (Release L) Building an unlock ends the opening it knew; its result names the new one (with the token).
+        let id = "00112233445566778899aabbccddeeff"
+        d.noteUnlockID(id, since: d.openingMark())
         let out = try await d.openUnlockResult(raw)
         #expect(out.ok && out.at != nil)
+        #expect(d.unlockID == nil, "a result without unlock_id (a vault before L) names no opening")
         #expect(d.altState.stateSeq == 5 && d.altState.headerSeq[Self.pcr0] == 3 && d.altState.manifestSerial == 7 && d.altState.releaseNumber == 3)
         // A second result for the same unlock finds nothing pending.
         await #expect(throws: VaultStateError.self) { _ = try await d.openUnlockResult(raw) }
@@ -76,6 +80,17 @@ import VettIDRelay
         await #expect(throws: AltResultFailure.self) { _ = try await d.openUnlockResult(wrongRaw) }
         await #expect(throws: VaultStateError.self) { _ = try await d.openUnlockResult(wrongRaw) }
         #expect(d.altState.stateSeq == 5)
+
+        // (Release L) The opening's name: kept from an ok result with a token, ended by building the next unlock, none from a
+        // refusal or from a result without the token (the vault did not resume).
+        let fourth = try await d.prepareUnlock(userGuid: "guid-1", pin: "246802", enclave: enclave, manifest: m, attester: Attest(), options: UnlockOptions())
+        d.noteUnlockID(id, since: d.openingMark())
+        let named = #"{"ok":true,"state_seq":6,"header_seq":3,"token":"\#(fresh)","release":"\#(Self.pcr0)","release_number":3,"release_status":"active","manifest_serial":7,"unlock_id":"\#(id)"}"#
+        let namedInner = Inner(id: Ulid.new(), type: AltResults.typeUnlockResult, ts: Date(), re: fourth.request.requestID, status: Inner.statusOK, body: Array(named.utf8))
+        let namedOut = try await d.openUnlockResult(try Envelope.sealSealed(d.kemKey, senderKid: Kid.anonymous, padded: try Padding.padFixed(try namedInner.marshal(.sealed), Padding.altChannel)).0)
+        #expect(namedOut.unlockID == id && d.unlockID == id)
+        _ = try await d.prepareUnlock(userGuid: "guid-1", pin: "246802", enclave: enclave, manifest: m, attester: Attest(), options: UnlockOptions())
+        #expect(d.unlockID == nil, "building an unlock ends the name it knew")
     }
 
     /// (VAULT-MESSAGING §11.14.9 step 2) An unlock built and then held back before its post leaves the device as before
