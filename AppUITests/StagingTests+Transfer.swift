@@ -222,11 +222,21 @@ extension StagingTests {
             row.tap()
             state = moveOut(app, TransferInputs(pin: pin, password: password, autoMatch: auto, limit: limit))
         }
-        Self.report(transferState: state)
-        guard state == "moved" else {
-            if settledOut(app) { lock(app) }
-            return fail(app, "The move did not happen: \(state).")
+        if state != "moved" {
+            // Settle first: an approval that was still running may have gone through since.
+            switch settledOut(app) {
+            case .moved:
+                state = afterApproval(app)
+            case .quiet:
+                Self.report(transferState: state)
+                lock(app)
+                return fail(app, "The move did not happen: \(state).")
+            case .stuck:
+                Self.report(transferState: state)
+                return fail(app, "The move did not happen: \(state).")
+            }
         }
+        Self.report(transferState: state)
     }
 
     /// The old phone's steps; the state to report.
@@ -314,15 +324,29 @@ extension StagingTests {
         }
     }
 
-    /// Before a cleanup lock: a confirmation left open is cancelled, and the approval is waited for if it is in flight (its
-    /// Reject is disabled while it runs; Back would send a reject that races it). False, with the failure, when it never
-    /// settles: nothing is locked then.
+    /// Where the old phone stands once nothing is in flight.
+    private enum Settled {
+        /// The moved screen or the welcome screen shows: the approval went through. Nothing is tapped, nothing is locked.
+        case moved
+        /// Neither moved screen shows and nothing is running: the vault can be locked.
+        case quiet
+        /// A confirmation could not be cancelled, or the approval never settled: nothing is locked (the failure is recorded).
+        case stuck
+    }
+
+    /// Before a cleanup lock: a confirmation left open is cancelled (by its "Cancel" label, never by position), and the
+    /// approval is waited for if it is in flight (its Reject is disabled while it runs; Back would send a reject that races
+    /// it). Then the screen is read again: a moved screen means the approval went through.
     @MainActor
-    private func settledOut(_ app: XCUIApplication) -> Bool {
+    private func settledOut(_ app: XCUIApplication) -> Settled {
         let alert = app.alerts.firstMatch
         if alert.exists {
             let cancel = alert.buttons["Cancel"]
-            (cancel.exists ? cancel : alert.buttons.element(boundBy: alert.buttons.count - 1)).tap()
+            guard cancel.exists else {
+                fail(app, "A confirmation is open and has no Cancel button: the vault was not locked.")
+                return .stuck
+            }
+            cancel.tap()
             _ = waitUntil(timeout: 10) { !alert.exists }
         }
         let reject = app.buttons["form_secondary"]
@@ -330,8 +354,12 @@ extension StagingTests {
             let screen = shown(app)
             return !screen.isEmpty && (screen["transfer_approve"] == nil || (reject.exists && reject.isEnabled))
         }
-        if !settled { fail(app, "The approval is still running: the vault was not locked.") }
-        return settled
+        guard settled else {
+            fail(app, "The approval is still running: the vault was not locked.")
+            return .stuck
+        }
+        let screen = shown(app)
+        return screen["transfer_moved"] != nil || screen["welcome_recover"] != nil ? .moved : .quiet
     }
 
     /// The approval went through and the app erased itself: where it ended is reported.
@@ -341,12 +369,21 @@ extension StagingTests {
         return "moved"
     }
 
+    /// Whether the moved screen says the keys are kept: the text is on an element under the screen's container, whose own
+    /// label is empty.
+    @MainActor
+    private func movedScreenKeepsKeys(_ app: XCUIApplication) -> Bool {
+        guard let root = try? app.snapshot() else { return false }
+        guard let screen = ordered(under: root).first(where: { $0.identifier == "transfer_moved" }) else { return false }
+        return ([screen] + ordered(under: screen)).contains { $0.label.contains("Finish the move on your new phone") }
+    }
+
     /// The moved screen. Nothing is tapped and nothing is locked: the new phone finishes the move, and a lock or a Back
     /// from here could race it. On release R the screen says the keys are kept (`TRANSFER_AFTER: kept`); otherwise the phone
     /// erases itself, which is waited for (`welcome`), or `none` is reported.
     @MainActor
     private func afterApproval(_ app: XCUIApplication) -> String {
-        if (shown(app)["transfer_moved"] ?? "").contains("Finish the move on your new phone") {
+        if movedScreenKeepsKeys(app) {
             Self.say("TRANSFER_AFTER: kept")
             return "moved"
         }

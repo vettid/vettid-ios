@@ -30,7 +30,8 @@
 #                     codes are NOT compared (a warning is printed first). Only this flag enables it.
 #   --keep-result     keep the result bundle (it holds what was typed) in the private cache directory
 #
-# The tests (each ends with the vault locked and the lock confirmed):
+# The tests (each ends with the vault locked and the lock confirmed, except testStagingTransferOut, which locks only when
+# the move did not happen and never after "moved", and testStagingTransferIn, which locks only after moved_unlocked):
 #   testStagingEnroll                    a fresh app enrolled with the code, the PIN and the password
 #   testStagingUnlockLock                unlock with the PIN (and the password when the daily check is due), then lock
 #   testStagingApproveUpdate             Settings -> "Update available", approved with the PIN; skipped without one
@@ -93,7 +94,9 @@
 #                                        there), waits up to VETTID_STAGING_TRANSFER_TIMEOUT (300 s) for the new phone,
 #                                        prints "SAFETY_CODE: <code>" and "TRANSFER_OPERATOR: ...", then WAITS (up to the
 #                                        same time) for a person to compare the codes on both phones and tap "The codes
-#                                        match" or "Reject" on this iPhone; it never approves by itself. After the match: the
+#                                        match" or "Reject" on this iPhone; it never approves by itself. After a person taps
+#                                        "The codes match" the test goes on BY ITSELF: it accepts the change of signer
+#                                        when shown and confirms "Move" (a person decides only the comparison). The
 #                                        change of signer when shown ("TRANSFER_SIGNER: shown", a move between platforms),
 #                                        PIN on the keypad (nothing is sent unless it holds every digit) and the password,
 #                                        "Move"; prints "TRANSFER_AFTER: kept|welcome_notice|welcome|none" (release R keeps the keys
@@ -142,7 +145,7 @@
 # them to the runner as <NAME>), never a command line or the build; xcodebuild's output is shown with them (the link
 # included, the connection's name, the message texts, and the keypad's digits) redacted, except the SAFETY_CODE,
 # CONNECT_STATE, MESSAGE_STATE, MESSAGE_RECEIVED, PHOTO_STATE, PHOTO_RECEIVED, PHOTO_VIEWER, INVITE_LINK,
-# TRANSFER_LINK, TRANSFER_STATE, TRANSFER_SIGNER, TRANSFER_AFTER, TRANSFER_OPERATOR, TRANSFER_SAS_UNCHECKED and ROTATE_STATE lines, which are printed with the code, the state or the answer alone; the result bundle is deleted, an interrupted run's too, unless --keep-result. The build
+# TRANSFER_LINK (its value is then redacted from every later line), TRANSFER_STATE, TRANSFER_SIGNER, TRANSFER_AFTER, TRANSFER_OPERATOR, TRANSFER_SAS_UNCHECKED and ROTATE_STATE lines, which are printed with the code, the state or the answer alone; the result bundle is deleted, an interrupted run's too, unless --keep-result. The build
 # and results live under ${XDG_CACHE_HOME:-~/Library/Caches}/vettid-ios/staging-ui-test (mode 700).
 #
 # Example (enrollment; the code was issued a minute ago and is in the private file):
@@ -357,7 +360,12 @@ xcodebuild test-without-building \
     if (/MESSAGE_STATE: (none|sent|delivered|read)\s*$/) { $_ = "MESSAGE_STATE: $1\n"; next }
     if (/MESSAGE_RECEIVED: (yes|no)\s*$/) { $_ = "MESSAGE_RECEIVED: $1\n"; next }
     if (/INVITE_LINK: (https:\/\/[A-Za-z0-9._~:\/?#\[\]@!\$\&()*+,;=%-]+|none)\s*$/) { $_ = "INVITE_LINK: $1\n"; next }
-    if (/TRANSFER_LINK: (https:\/\/[A-Za-z0-9._~:\/?#\[\]@!\$\&()*+,;=%-]+|none)\s*$/) { $_ = "TRANSFER_LINK: $1\n"; next }
+    if (/TRANSFER_LINK: (https:\/\/[A-Za-z0-9._~:\/?#\[\]@!\$\&()*+,;=%-]+|none)\s*$/) {
+      # Printed alone; the link is remembered, so that any later line that shows it is redacted.
+      my $l = $1; $_ = "TRANSFER_LINK: $l\n";
+      if ($l ne "none") { push @s, $l; @s = sort { length($b) <=> length($a) } @s }
+      next
+    }
     if (/TRANSFER_STATE: ([a-z_]+)\s*$/) { $_ = "TRANSFER_STATE: $1\n"; next }
     if (/TRANSFER_AFTER: (kept|welcome_notice|welcome|none)\s*$/) { $_ = "TRANSFER_AFTER: $1\n"; next }
     if (/TRANSFER_SAS_UNCHECKED\s*$/) { $_ = "TRANSFER_SAS_UNCHECKED\n"; next }
