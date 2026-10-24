@@ -287,6 +287,16 @@ public final class RecoverViewModel: RecoverActions {
         work.launch { [move] in try? await move.abandonRecovery() }
     }
 
+    /// From a code step whose refusal is guidance (``RecoverState/guidance``): to the open step, where the recovery goes on
+    /// ("finish with your PIN", another open) and where "Start over" is; the guidance stays for the open step to say. A refusal
+    /// that is not guidance stays where it is.
+    public func showOpen() {
+        guard !state.busy, codeEntry, state.guidance != nil else { return }
+        state.step = .open
+        state.refusal = nil
+        state.typedProblem = nil
+    }
+
     // MARK: - Leaving a registered recovery
 
     public func askStartOver() {

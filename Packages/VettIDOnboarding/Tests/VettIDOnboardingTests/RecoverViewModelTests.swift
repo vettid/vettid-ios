@@ -207,6 +207,21 @@ import VettIDDataTesting
         }
     }
 
+    /// Guidance on a code step leads to the open step; any other refusal does not.
+    @Test func guidanceOnACodeStepLeadsToTheOpen() async throws {
+        let plain = await model()
+        plain.showOpen()
+        #expect(plain.state.step == .intro)
+        vault.fail["registerRecovery"] = VaultFailure(.other, code: VaultManager.codeRecoveryOpenSent)
+        let vm = await model()
+        vm.scan()
+        vm.scanned(qr)
+        await vm.settle()
+        #expect(vm.state.guidance == .finishWithPin && vm.state.step == .scan)
+        vm.showOpen()
+        #expect(vm.state.step == .open && vm.state.guidance == .finishWithPin && vm.state.refusal == nil)
+    }
+
     @Test func startOverIsOfferedOnlyWhereARegistrationIsHeld() async throws {
         let fresh = await model()
         fresh.askStartOver() // the intro: nothing registered, nothing to forget
