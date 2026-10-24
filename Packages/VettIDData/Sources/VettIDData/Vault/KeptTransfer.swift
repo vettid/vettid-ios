@@ -23,12 +23,24 @@ public enum KeptTransfer {
     /// cannot extend them at every check).
     public static func start(approvedAtMs: Int64, nowMs: Int64) -> Int64 { min(approvedAtMs, nowMs) }
 
-    /// The end-of-keep check's verdict on the vault's `device.list` answer [deviceList] over this phone's session: this phone
-    /// is still the vault's app only when the list names it ([deviceID]) as an `app`. Only a definite answer is judged here:
-    /// no answer, a refusal or a missing id never erases, and the check is made again (owner decision, 2026-10-23).
-    public static func stillTheApp(deviceList: [DeviceEntry]?, deviceID: String?) -> Bool {
-        guard let deviceID, let deviceList else { return false }
-        return deviceList.contains { $0.id == deviceID && $0.kind == "app" }
+    /// What an answered `device.list` says of this phone (VAULT-MESSAGING §11.14.10 "The day-7 check").
+    public enum ListVerdict: Equatable, Sendable {
+        /// The list holds this phone's id with kind `app`: still the vault's app (result 2).
+        case stillTheApp
+        /// The list does not hold this phone's id: no longer the vault's app (result 1).
+        case removed
+        /// No answer, no id of this phone's own, or the id with another kind: not a definite answer (result 3).
+        case undecided
+    }
+
+    /// The verdict on the vault's `device.list` answer [deviceList] over this phone's session. The phone is still the vault's
+    /// app only if the list holds its own device id [deviceID] with kind `app`, and no longer only if the list does not hold
+    /// that id at all; the id with another kind is not a definite answer (owner decision, 2026-10-23).
+    public static func verdict(deviceList: [DeviceEntry]?, deviceID: String?) -> ListVerdict {
+        guard let deviceID, let deviceList else { return .undecided }
+        let mine = deviceList.filter { $0.id == deviceID }
+        if mine.isEmpty { return .removed }
+        return mine.contains { $0.kind == "app" } ? .stillTheApp : .undecided
     }
 
     /// Whether an approval that failed with [kind] may still have reached the vault: no answer came. Any other failure (a

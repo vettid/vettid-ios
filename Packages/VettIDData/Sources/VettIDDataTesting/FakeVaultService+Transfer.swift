@@ -32,6 +32,9 @@ struct FakeTransferStore {
     var tookEffect = true
     var listRequests = 0
     var listAnswer: FakeVaultService.DeviceListAnswer?
+    var revokesDeposits = false
+    var revokedDeposits = 0
+    var collectRefused = false
 }
 
 // TEST ONLY. A direct transfer in both directions, as vettid-vault answers it: as the new phone's target
@@ -202,6 +205,35 @@ extension FakeVaultService {
     public var deviceListAnswer: DeviceListAnswer? {
         get { locked { transfer.listAnswer } }
         set { locked { transfer.listAnswer = newValue } }
+    }
+
+    /// The relay refuses every deposit to the vault's mailbox with `token_revoked` (§7.4: a removed old phone's, RELAY-PROTOCOL
+    /// §5.3 step 6): its `device.list` and its messages never reach the vault.
+    public var revokesVaultDeposits: Bool {
+        get { locked { transfer.revokesDeposits } }
+        set { locked { transfer.revokesDeposits = newValue } }
+    }
+
+    /// How many deposits the relay refused for it.
+    public var revokedDeposits: Int { locked { transfer.revokedDeposits } }
+
+    /// This phone's own relay refuses its collects (the relay cannot be reached, or the mailbox is gone).
+    public var refusesCollect: Bool {
+        get { locked { transfer.collectRefused } }
+        set { locked { transfer.collectRefused = newValue } }
+    }
+
+    /// An answer to a `device.list` this phone did not ask just now: sealed under the session, with the `re` of another
+    /// request, and a list that does not hold this phone. It is no answer to the check's own request (§11.14.10).
+    public func sendStrayDeviceList() {
+        locked { try? reply("device.list", #"{"devices":[{"id":"dev-2","kind":"desktop","state":"active","name":"Work laptop"}]}"#, re: Ulid.new()) }
+    }
+
+    /// Called with the vault relay's deposit: true when it is refused as revoked. Callers hold ``cond``.
+    func refusesDeposit() -> Bool {
+        guard transfer.revokesDeposits else { return false }
+        transfer.revokedDeposits += 1
+        return true
     }
 
     /// How many `device.list` requests reached the vault after an approval that took effect (never answered).

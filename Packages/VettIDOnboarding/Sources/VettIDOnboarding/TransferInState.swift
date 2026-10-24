@@ -32,7 +32,7 @@ public struct TransferInState: Equatable, Sendable, CustomStringConvertible, Cus
     /// Why the scanned or pasted text is not used: ``FailureKind/inviteInvalid`` or ``FailureKind/inviteExpired``.
     public var inputProblem: FailureKind?
     public var sas: String?
-    /// 10 minutes after `hs.init` (§6.7, 0.10.4).
+    /// 11 minutes after the `hs.init` was started (VAULT-MESSAGING §11.14.10 rule 5).
     public var deadline: Date?
     public var secondsLeft: Int64 = 0
     public var busy = false

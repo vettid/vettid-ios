@@ -108,6 +108,17 @@ extension VaultDevice {
         throw CancellationError()
     }
 
+    /// The `user_guid` of a transfer's `device.paired` that was applied and whose take-over is not completed.
+    public var transferUserGuid: String? { mem.withLock { st.transferUserGuid } }
+
+    /// The take-over is completed: the kept `user_guid` goes.
+    public func transferCompleted() async throws {
+        try await lock.withLock {
+            mem.withLock { st.transferUserGuid = nil }
+            try save()
+        }
+    }
+
     /// Waits for the transfer's `device.paired` (the old app's approval completes the transfer, §6.7.1) or
     /// `device.pair.rejected` (``PairingRejected``). Returns the member's `user_guid` from it (0.17.0), which this phone's
     /// unlocks need, or nil when the vault sent none (a release before 0.17.0): the transfer is complete either way.
@@ -118,10 +129,12 @@ extension VaultDevice {
     /// Drops a transfer this device started and has not completed (left the screen, timed out): the handshake, the pinned
     /// vault and the attested key's record. The key itself is the caller's to discard (``AltState/transferAttestKeyID``,
     /// read before this).
-    public func abandonTransfer() async throws {
+    /// False, and nothing dropped, when the transfer is paired: the pending epoch-1 secret is then this phone's.
+    @discardableResult
+    public func abandonTransfer() async throws -> Bool {
         try await lock.withLock {
             let changed: Bool = mem.withLock { st.deviceID == nil }
-            guard changed else { return }
+            guard changed else { return false }
             dropPairing()
             mem.withLock {
                 st.vault = nil
@@ -131,6 +144,59 @@ extension VaultDevice {
                 setAlt(a)
             }
             try save()
+            return true
+        }
+    }
+
+    // MARK: - The old app: the renewal of its standing token (§11.14.10)
+
+    /// Renews the standing token this device issued to the vault for its own mailbox: a fresh 30-day token in
+    /// `relay.token.issued{kind: "standing"}`, deposited to the vault's mailbox, returning once the relay answered `201`.
+    /// The previous token's `jti` is not denylisted. Throws when the renewal could not be deposited (the caller goes on).
+    public func renewStandingToken() async throws {
+        try await lock.withLock {
+            let before = Set(mem.withLock { st.outbox.map(\.id) })
+            do {
+                let tok = try mintForVault()
+                _ = try await sendLocked(id: nil, type: "relay.token.issued", body: Self.standing(tok), re: nil, status: nil, exp: nil)
+            } catch {
+                // A renewal that failed is not kept for a later flush: it would go out after the approval, whose token it is not.
+                mem.withLock { st.outbox.removeAll { $0.type == "relay.token.issued" && !before.contains($0.id) } }
+                try? save()
+                throw error
+            }
+        }
+    }
+
+    // MARK: - The new app: one collect before the drop (§11.14.10 rule 5)
+
+    /// One collect of this device's mailbox (`wait=0`, `max` at its cap, RELAY-PROTOCOL §6.3), bounded by [timeout] seconds
+    /// in all, its transport retries included: each message is handled as the collector handles it and acked. A
+    /// `device.paired{transfer}` it brings is then found by ``awaitTransfer(timeout:)``. Throws when the collect fails or
+    /// times out; a task that is cancelled stops it.
+    public func collectOnce(
+        timeout: TimeInterval = 30, sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+    ) async throws {
+        let own = own
+        let messages: [RelayMessage] = try await withThrowingTaskGroup(of: [RelayMessage]?.self) { group in
+            group.addTask { try await own.collect(wait: 0, max: RelayClient.maxCollect) }
+            group.addTask {
+                try await sleep(.seconds(timeout))
+                return nil
+            }
+            defer { group.cancelAll() }
+            guard let first = try await group.next(), let found = first else {
+                throw VaultStateError(message: "no collect within \(Int(timeout)) s")
+            }
+            return found
+        }
+        for m in messages {
+            do {
+                try await handle(m)
+            } catch is LeaveUnacked {
+                continue
+            }
+            try? await own.ack(m.msgID)
         }
     }
 }

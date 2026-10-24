@@ -11,6 +11,5 @@ public extension VaultRepository {
 
     var pinGeneration: Int { 0 }
     var finishMoveHold: FailureKind? { nil }
-    var transferKeepSeconds: Int64 { KeptTransfer.keepMs(timeScale: timeScale) / 1000 }
     var keptCheckPending: Bool { false }
 }

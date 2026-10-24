@@ -286,13 +286,13 @@ enum TransferStrings {
         )
     }
 
-    static func transferMovedKeptBody(_ a: String) -> String {
+    static var transferMovedKeptBody: String {
         String(
             localized: "settings_transfer_moved_kept_body",
             defaultValue: """
                 Finish the move on your new phone. This phone keeps your vault's keys until your new phone has \
-                finished the move, for at most \(a). Before you give this phone away, remove VettID from it or reset \
-                it.
+                finished the move, and until your vault has confirmed it. Once your new phone works, you can remove \
+                VettID from this phone. Before you give this phone away, remove VettID from it or reset it.
                 """,
             bundle: .module
         )

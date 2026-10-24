@@ -26,12 +26,13 @@ enum ShellMoveStrings {
         )
     }
 
-    static var rootMoveNotDone: String {
+    /// The day-7 check has no definite answer (owner decision, 2026-10-23; VAULT-MESSAGING §11.14.10 "The day-7 check").
+    static var rootKeptCheckWaiting: String {
         String(
-            localized: "root_move_not_done",
+            localized: "root_kept_check_waiting",
             defaultValue: """
-                Your vault did not move to your new phone: it still works with this phone, which keeps its keys. \
-                Start the move again when you are ready.
+                Your vault has not confirmed the move to this phone. Once your new phone opens your vault, remove \
+                VettID from this phone.
                 """,
             bundle: .module
         )

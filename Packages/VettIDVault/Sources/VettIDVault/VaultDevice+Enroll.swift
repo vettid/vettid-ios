@@ -150,27 +150,35 @@ extension VaultDevice {
         if ev.type == Self.typePairRejected { throw PairingRejected() }
         let o = ev.object
         let guid: String? = try await lock.withLock {
-            let guid: String? = mem.withLock {
-                st.deviceID = VaultJSON.string(o, "device_id")
-                if let vid = VaultJSON.string(o, "vault_id") { st.vaultID = vid }
-                if let rel = VaultJSON.string(o, "release"), rel.utf8.count == Self.pcrHex,
-                   let num = VaultJSON.int(o, "release_number"), num > 0 {
-                    var a = alt()
-                    a.release = rel
-                    a.releaseNumber = UInt64(num)
-                    setAlt(a)
-                }
-                // A transfer's attested App Attest key is the one the vault bound now (IOS-PLAN §6.2).
-                var a = alt()
-                if let k = a.transferAttestKeyID {
-                    a.enrolledAttestKeyID = k
-                    a.transferAttestKeyID = nil
-                    setAlt(a)
-                }
-                return Self.transferUserGuid(o)
-            }
+            let guid = applyPaired(o)
             try save()
             return guid
+        }
+        return guid
+    }
+
+    /// Applies a `device.paired` to the state: the device and vault ids, the release, a transfer's attested App Attest key (the
+    /// one the vault bound now, IOS-PLAN §6.2) and its `user_guid`. Idempotent. Callers hold ``lock`` and save.
+    @discardableResult
+    func applyPaired(_ o: JsonObject) -> String? {
+        let guid: String? = mem.withLock {
+            st.deviceID = VaultJSON.string(o, "device_id")
+            if let vid = VaultJSON.string(o, "vault_id") { st.vaultID = vid }
+            if let rel = VaultJSON.string(o, "release"), rel.utf8.count == Self.pcrHex,
+               let num = VaultJSON.int(o, "release_number"), num > 0 {
+                var a = alt()
+                a.release = rel
+                a.releaseNumber = UInt64(num)
+                setAlt(a)
+            }
+            var a = alt()
+            if let k = a.transferAttestKeyID {
+                a.enrolledAttestKeyID = k
+                a.transferAttestKeyID = nil
+                setAlt(a)
+            }
+            if let g = Self.transferUserGuid(o) { st.transferUserGuid = g }
+            return Self.transferUserGuid(o)
         }
         mem.withLock { isPaired = true }
         return guid

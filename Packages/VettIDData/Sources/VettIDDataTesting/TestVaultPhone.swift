@@ -88,13 +88,19 @@ public final class TestVaultPhone {
     public let transferPauses = TestPauses()
     /// The old phone's wait to the end of a kept transfer (7 days, §11.14.10): lasts until the test releases it.
     public let keepPauses = TestPauses()
+    /// The limit of the day-7 check's wait for `device.list`: a test that holds the vault silent waits until it has a waiter
+    /// (``TestPauses/lengths``) and releases it; a test with an answer never does.
+    public let keptEndPauses = TestPauses()
+    /// The new phone's wait for the deadline of its transfer (11 minutes, §11.14.10 rule 5), released by the test.
+    public let deadlinePauses = TestPauses()
+    /// The bound of the one collect before the drop (30 s): never released unless a test wants a timed-out collect.
+    public let collectPauses = TestPauses()
     /// Whether a change's wait lasts until the test releases it (``changeWaits``).
     public var holdsChangeWaits: Bool {
         get { changeWaits.holding }
         set { changeWaits.holding = newValue }
     }
     private let requestTimeout: TimeInterval
-    private let keptEndCheck: Duration
     /// What this phone's wipe erases: its directory and its software keys.
     public let wipeTargets: TestWipeTargets
 
@@ -113,12 +119,9 @@ public final class TestVaultPhone {
     /// [requestTimeout]: how long a request waits for its answer before it is sent again (§8.6), for a request of a type
     /// whose answers the test makes go missing (``FakeVaultService/unanswered(_:)``); any other waits at least
     /// ``roomyRequestTimeout``. [wipes]: false for a build that cannot wipe.
-    public init(
-        service: FakeVaultService, requestTimeout: TimeInterval = 5, wipes: Bool = true, keptEndCheck: Duration = .seconds(20)
-    ) throws {
+    public init(service: FakeVaultService, requestTimeout: TimeInterval = 5, wipes: Bool = true) throws {
         self.service = service
         self.requestTimeout = requestTimeout
-        self.keptEndCheck = keptEndCheck
         self.wipes = wipes
         directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("vettid-manager-tests/\(UUID().uuidString)/VettID")
@@ -131,7 +134,8 @@ public final class TestVaultPhone {
         attestStartOver = startOver
         let waits = Waits(
             requestTimeout: requestTimeout, pauses: changePauses, changeWaits: changeWaits, deletion: deletionPauses,
-            transfer: transferPauses, keep: keepPauses, keptEndCheck: keptEndCheck
+            transfer: transferPauses, keep: keepPauses, keptEnd: keptEndPauses, deadline: deadlinePauses,
+            collect: collectPauses
         )
         manager = VaultManager(config: try Self.configured(
             service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock,
@@ -153,7 +157,8 @@ public final class TestVaultPhone {
     private var waits: Waits {
         Waits(
             requestTimeout: requestTimeout, pauses: changePauses, changeWaits: changeWaits, deletion: deletionPauses,
-            transfer: transferPauses, keep: keepPauses, keptEndCheck: keptEndCheck
+            transfer: transferPauses, keep: keepPauses, keptEnd: keptEndPauses, deadline: deadlinePauses,
+            collect: collectPauses
         )
     }
 
@@ -165,7 +170,9 @@ public final class TestVaultPhone {
         let deletion: TestPauses
         let transfer: TestPauses
         let keep: TestPauses
-        let keptEndCheck: Duration
+        let keptEnd: TestPauses
+        let deadline: TestPauses
+        let collect: TestPauses
     }
 
     // swiftlint:disable:next function_parameter_count
@@ -194,9 +201,11 @@ public final class TestVaultPhone {
         let transfer = waits.transfer, keep = waits.keep
         c.transferSleep = { d in try await transfer.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
         c.keepSleep = { d in try await keep.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
-        // The end-of-keep check's wait for `device.list`: long, so that a loaded machine still gets an answer; a test of
-        // the silence of a vault that removed this phone asks for a short one.
-        c.keptEndCheck = waits.keptEndCheck
+        // The waits that bound a check or a collect are pauses the test releases, never clocks that a loaded machine can win.
+        let keptEnd = waits.keptEnd, deadline = waits.deadline, collect = waits.collect
+        c.keptEndSleep = { d in try await keptEnd.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
+        c.transferDeadlineSleep = { d in try await deadline.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
+        c.transferCollectSleep = { d in try await collect.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
         c.uptime = { DeviceConfig.monotonicNow() + uptime.ahead }
         return c
     }

@@ -12,8 +12,9 @@ import VettIDData
 @MainActor
 @Observable
 public final class TransferInViewModel: TransferInActions {
-    /// The approval window: 10 minutes after `hs.init` (§6.7, 0.10.4).
-    static let window: TimeInterval = 600
+    /// The one deadline: 11 minutes after the `hs.init` was started (VAULT-MESSAGING §11.14.10 rule 5; owner decision,
+    /// 2026-10-23): the vault's 10 minutes (§6.7, 0.10.4) plus about a minute of grace.
+    static let window: TimeInterval = 660
 
     public private(set) var state = TransferInState()
 

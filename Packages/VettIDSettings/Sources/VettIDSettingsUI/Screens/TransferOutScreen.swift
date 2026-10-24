@@ -207,7 +207,7 @@ public struct TransferOutContent: View {
         FormScaffold(
             title: TransferStrings.transferMovedTitle,
             message: state.keptKeys
-                ? TransferStrings.transferMovedKeptBody(state.keptForText)
+                ? TransferStrings.transferMovedKeptBody
                 : TransferStrings.transferMovedBody(state.pending?.name ?? ""),
             primaryLabel: SettingsStrings.done, onPrimary: leave, onBack: leave
         ) {

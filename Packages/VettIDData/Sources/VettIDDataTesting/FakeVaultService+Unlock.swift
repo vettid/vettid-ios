@@ -119,7 +119,7 @@ extension FakeVaultService {
     public func unlinkThisPhone(reason: String, delivery: UnlinkDelivery = .asSent) {
         locked {
             guard let epoch = keyring.current() else { return }
-            let inner = Inner(id: Ulid.new(), type: "device.unlinked", ts: Date(), body: Array(#"{"reason":"\#(reason)"}"#.utf8))
+            let inner = Inner(id: Ulid.new(), type: "device.unlinked", ts: stampNow, body: Array(#"{"reason":"\#(reason)"}"#.utf8))
             guard var payload = try? epoch.seal(inner) else { return }
             switch delivery {
             case .asSent: queue(payload)

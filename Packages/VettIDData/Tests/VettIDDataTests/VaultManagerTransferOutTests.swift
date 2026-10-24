@@ -88,7 +88,7 @@ import VettIDDataTesting
         #expect(service.transferApprovals.map(\.pin) == [pin] && service.transferApprovals.first?.signer == nil)
         let at = try #require(m.record.value.transferApprovedAtMs)
         #expect(abs(Double(at) - Date().timeIntervalSince1970 * 1000) < 5_000)
-        #expect(m.record.value.transferKeepMs == nil && m.transferKeepSeconds == Int64(week))
+        #expect(m.record.value.transferKeepMs == nil)
         let since = try #require(m.transferKeptSince)
         #expect(abs(since.timeIntervalSince1970 - Double(at) / 1000) < 1)
         #expect(!m.movedAway)
@@ -182,7 +182,8 @@ import VettIDDataTesting
         #expect(await eventually { m.items.load == .loaded } && m.timeScale == 24)
         let offer = try await m.transferCreate()
         _ = try await m.transferApprove(transferID: offer.transferID, pin: pin, password: password, signer: nil)
-        #expect(m.record.value.transferKeepMs == 7 * 3_600_000 && m.transferKeepSeconds == 7 * 3_600)
+        let keep: Int64 = 7 * 3_600_000
+        #expect(m.record.value.transferKeepMs == keep)
         // 6 hours later: kept; the timer runs for the hour left.
         phone.clockAhead = 6 * 3_600
         await m.checkKeptTransfer()
@@ -249,13 +250,13 @@ import VettIDDataTesting
         service.transferTookEffect = false
         phone.clockAhead = week + 60
         await m.checkKeptTransfer()
-        #expect(m.moveNotDone && m.transferKeptSince == nil && m.phase == .unlocked)
+        #expect(m.movedBack && m.transferKeptSince == nil && m.phase == .unlocked)
         #expect(m.record.value.transferApprovedAtMs == nil && !m.movedAway)
-        m.acknowledgeMoveNotDone()
-        #expect(!m.moveNotDone)
+        m.acknowledgeMovedBack()
+        #expect(!m.movedBack)
         // Not kept any more: another check does nothing.
         await m.checkKeptTransfer()
-        #expect(m.transferKeptSince == nil && !m.moveNotDone)
+        #expect(m.transferKeptSince == nil && !m.movedBack)
     }
 
     /// Exactly 7 days after the approval is the end (`elapsed >= keep`): the check is made and, the vault listing this phone

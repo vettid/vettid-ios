@@ -18,21 +18,32 @@ final class MoveFlags {
     var transferKeptSince: Date?
     var keptCheckPending = false
     var movedBack = false
-    var moveNotDone = false
     var movedAway = false
     var finishMoveHold: FailureKind?
+}
+
+/// How the end of a transfer to this phone was settled (``VaultManager/settleTransfer(_:collect:guid:)``).
+enum TransferSettled {
+    /// The move is paired and the credential taken over; the member's `user_guid` if the vault sent one.
+    case completed(guid: String?)
+    /// Nothing was approved: the handshake, the attested key and the epoch-1 secret are dropped.
+    case dropped
+    /// Paired, but the take-over did not complete: nothing is dropped; the next start does it again.
+    case failed(any Error)
 }
 
 /// The bookkeeping of a transfer, in memory only.
 @MainActor
 final class MoveBook {
-    /// When this (new) phone sent its transfer `hs.init`: it waits for the approval until 10 minutes after it.
-    var transferStartedAt: Date?
     /// The transfer this (old) phone opened last, to cancel it when a new one is asked for.
     var openTransferID: String?
-    /// The pending epoch-1 record of the transfer to this phone (``PhoneSecrets/reuseOrCreate(keyVault:)``), dropped when
-    /// the transfer is abandoned.
-    var transferEpochID: String?
+    /// The one task that settles the end of a transfer to this phone (a take-over, or a drop): every caller joins it.
+    var settling: Task<TransferSettled, Never>?
+    /// The wait of a transfer found waiting at a start (before its deadline), and whether the start was looked at.
+    var transferWaiter: Task<Void, Never>?
+    var transferResumed = false
+    /// How many day-7 checks ended (any result): what a test awaits instead of a fixed time.
+    var keptChecksFinished = 0
     /// The timer to the end of a kept transfer, and whether its end is being decided now.
     var keptTimer: Task<Void, Never>?
     var keptEnding = false
@@ -102,12 +113,6 @@ extension VaultManager {
         set { moveFlags.movedBack = newValue }
     }
 
-    /// The 7 days of a kept transfer ended and the vault still has this phone as its app: the move did not happen.
-    public internal(set) var moveNotDone: Bool {
-        get { moveFlags.moveNotDone }
-        set { moveFlags.moveNotDone = newValue }
-    }
-
     /// This old phone removed its keys at the end of a kept transfer (``LocalWipe/movedAway``).
     public internal(set) var movedAway: Bool {
         get { moveFlags.movedAway }
@@ -122,19 +127,9 @@ extension VaultManager {
         set { moveFlags.finishMoveHold = newValue }
     }
 
-    var transferStartedAt: Date? {
-        get { moveFlags.book.transferStartedAt }
-        set { moveFlags.book.transferStartedAt = newValue }
-    }
-
     var openTransferID: String? {
         get { moveFlags.book.openTransferID }
         set { moveFlags.book.openTransferID = newValue }
-    }
-
-    var transferEpochID: String? {
-        get { moveFlags.book.transferEpochID }
-        set { moveFlags.book.transferEpochID = newValue }
     }
 
     var keptTimer: Task<Void, Never>? {

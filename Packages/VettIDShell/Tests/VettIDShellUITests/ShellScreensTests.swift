@@ -46,7 +46,8 @@ import VettIDVault
         let vault = FakeVaultRepository(.unlocked)
         #expect(height(MoveNotices(vault: vault, phase: .unlocked)) == 0)
         let flags: [(FakeVaultRepository) -> Void] = [
-            { $0.finishMovePending = true }, { $0.movedBack = true }, { $0.moveNotDone = true }, { $0.movedAway = true },
+            { $0.finishMovePending = true }, { $0.movedBack = true }, { $0.movedAway = true },
+            { $0.keptCheckPending = true },
         ]
         var heights: [CGFloat] = []
         for set in flags {
@@ -62,9 +63,13 @@ import VettIDVault
         #expect(!MoveNotices.showsSheet(pending: false, phase: .unlocked, finishingMove: false))
         #expect(ShellMoveStrings.rootFinishMove == "Finish moving your vault to this phone: enter your PIN on this phone.")
         #expect(ShellMoveStrings.rootFinishMoveAction == "Finish the move")
+        #expect(
+            ShellMoveStrings.rootKeptCheckWaiting
+                == "Your vault has not confirmed the move to this phone. Once your new phone opens your vault, "
+                + "remove VettID from this phone."
+        )
         #expect(ShellMoveStrings.rootMovedBack == "This phone is your vault's phone again. Start the move again when you are ready.")
         #expect(ShellMoveStrings.rootMovedAway == "Your vault has moved to your new phone. VettID has removed its keys from this phone.")
-        #expect(ShellMoveStrings.rootMoveNotDone.hasPrefix("Your vault did not move to your new phone: it still works with this phone"))
     }
 
     @Test func theTextsAreAndroids() {

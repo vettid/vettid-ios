@@ -412,7 +412,9 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// the start-over becomes possible.
     func startOverRefusal(_ d: VaultDevice?) -> VaultFailure? {
         if let d, d.deviceID != nil || d.hasVault || d.vaultID != nil {
-            return VaultFailure(.enrollmentStarted, code: Self.codeEnrollmentStarted)
+            // A move to this phone still under way has its own code, so the screens can say so.
+            let code = record.value.transferStartedMs != nil ? Self.codeTransferWaiting : Self.codeEnrollmentStarted
+            return VaultFailure(.enrollmentStarted, code: code)
         }
         guard let started = record.value.enrollStartedMs else { return nil }
         let left = Double(started) / 1000 + Self.unknownEnrollmentKept - config.now().timeIntervalSince1970
@@ -550,14 +552,15 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         // vault.enrolled pinned the vault: the epoch-1 secret it holds is this phone's (a crash or a lost answer
         // before the enrollment's own answer confirmed it).
         try confirmEnrolledSecret(local, d)
+        let current = try await recordAfterResume(s, resumed: await resumeTransferIn(s))
         if d.deviceID == nil {
             if d.recovering { return .setup(.recovering) }
             // Enrolled, the first handshake (or the credential) not finished.
             if d.vaultID != nil { return .setup(.needsCredential) }
             // A redeemed code: enroll. The enrollment itself answers vault_exists for a vault this phone does not hold.
-            return local.userGuid.isEmpty ? .signedOut : .setup(.newVault)
+            return current.userGuid.isEmpty ? .signedOut : .setup(.newVault)
         }
-        return try await pairedPhase(s, local)
+        return try await pairedPhase(s, current)
     }
 
     /// The phase of a paired phone: from the member API's status, unless a lock is pending.

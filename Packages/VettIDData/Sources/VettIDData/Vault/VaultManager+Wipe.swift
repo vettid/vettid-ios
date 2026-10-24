@@ -118,6 +118,7 @@ extension VaultManager {
     /// process death needs none of this. The manager is unusable after.
     package func halt() async {
         halted = true
+        moveFlags.book.transferWaiter?.cancel()
         keptTimer?.cancel()
         keptTimer = nil
         changeGeneration += 1
@@ -149,10 +150,9 @@ extension VaultManager {
         transferKeptSince = nil
         keptCheckPending = false
         movedBack = false
-        moveNotDone = false
-        transferStartedAt = nil
         openTransferID = nil
-        transferEpochID = nil
+        moveFlags.book.transferWaiter?.cancel()
+        moveFlags.book.transferWaiter = nil
         phase = p
         // A vault being deleted ends with the wipe (IOS-PLAN §4.2: the marker goes with the record).
         endDeletion()

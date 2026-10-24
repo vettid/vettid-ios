@@ -52,15 +52,17 @@ import VettIDVault
         return try decoder.decode(DeviceEntry.self, from: Data(json.utf8))
     }
 
-    /// The end-of-keep check: this phone is still the vault's app only when the list names it as an `app`.
-    @Test func aPhoneStillTheAppKeepsItsKeysAnythingElseErases() throws {
+    /// The day-7 check's verdict (VAULT-MESSAGING §11.14.10): still the vault's app only if the list holds this phone's id
+    /// with kind `app`; no longer only if it does not hold that id; the id with another kind, no list and no id are not a
+    /// definite answer.
+    @Test func theVerdictOnAnAnsweredList() throws {
         let list = [try device("d-1", "desktop"), try device("d-2", "app")]
-        #expect(KeptTransfer.stillTheApp(deviceList: list, deviceID: "d-2"))
-        #expect(!KeptTransfer.stillTheApp(deviceList: list, deviceID: "d-1"), "a desktop is not the app")
-        #expect(!KeptTransfer.stillTheApp(deviceList: list, deviceID: "d-9"), "not listed")
-        #expect(!KeptTransfer.stillTheApp(deviceList: [], deviceID: "d-2"))
-        #expect(!KeptTransfer.stillTheApp(deviceList: nil, deviceID: "d-2"), "no answer erases")
-        #expect(!KeptTransfer.stillTheApp(deviceList: list, deviceID: nil))
+        #expect(KeptTransfer.verdict(deviceList: list, deviceID: "d-2") == .stillTheApp)
+        #expect(KeptTransfer.verdict(deviceList: list, deviceID: "d-1") == .undecided, "the id with another kind")
+        #expect(KeptTransfer.verdict(deviceList: list, deviceID: "d-9") == .removed, "the id is not in the list")
+        #expect(KeptTransfer.verdict(deviceList: [], deviceID: "d-2") == .removed)
+        #expect(KeptTransfer.verdict(deviceList: nil, deviceID: "d-2") == .undecided, "no answer")
+        #expect(KeptTransfer.verdict(deviceList: list, deviceID: nil) == .undecided)
     }
 
     @Test func aSuccessOvertakenByALockOrAWipeProvesNothing() {
