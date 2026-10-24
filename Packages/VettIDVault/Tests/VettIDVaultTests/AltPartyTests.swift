@@ -84,7 +84,8 @@ import VettIDRelay
         // (Release L) The opening's name: kept from an ok result with a token, ended by building the next unlock, none from a
         // refusal or from a result without the token (the vault did not resume).
         let fourth = try await d.prepareUnlock(userGuid: "guid-1", pin: "246802", enclave: enclave, manifest: m, attester: Attest(), options: UnlockOptions())
-        d.noteUnlockID(id, since: d.openingMark())
+        // Seeded with another name than the result's: the result's, not the seed, is what the device holds after.
+        d.noteUnlockID("ffeeddccbbaa99887766554433221100", since: d.openingMark())
         let named = #"{"ok":true,"state_seq":6,"header_seq":3,"token":"\#(fresh)","release":"\#(Self.pcr0)","release_number":3,"release_status":"active","manifest_serial":7,"unlock_id":"\#(id)"}"#
         let namedInner = Inner(id: Ulid.new(), type: AltResults.typeUnlockResult, ts: Date(), re: fourth.request.requestID, status: Inner.statusOK, body: Array(named.utf8))
         let namedOut = try await d.openUnlockResult(try Envelope.sealSealed(d.kemKey, senderKid: Kid.anonymous, padded: try Padding.padFixed(try namedInner.marshal(.sealed), Padding.altChannel)).0)
