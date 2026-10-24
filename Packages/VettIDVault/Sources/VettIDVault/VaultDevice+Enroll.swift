@@ -116,7 +116,10 @@ extension VaultDevice {
         }
         try save()
         try await depositToVault(v, res.fin)
-        if let s = res.sas { mem.withLock { sas = s } }
+        if let s = res.sas {
+            mem.withLock { sas = s }
+            sasBroadcast.emit(s)
+        }
     }
 
     /// Waits for vault.enrolled (§11.3), which pins the vault and gives this device its first token.
@@ -157,6 +160,13 @@ extension VaultDevice {
                     a.releaseNumber = UInt64(num)
                     setAlt(a)
                 }
+                // A transfer's attested App Attest key is the one the vault bound now (IOS-PLAN §6.2).
+                var a = alt()
+                if let k = a.transferAttestKeyID {
+                    a.enrolledAttestKeyID = k
+                    a.transferAttestKeyID = nil
+                    setAlt(a)
+                }
                 return Self.transferUserGuid(o)
             }
             try save()
@@ -166,14 +176,18 @@ extension VaultDevice {
         return guid
     }
 
-    func startInit(purpose: Purpose, ctx: String, depositToken: String, profile: [UInt8]? = nil, at: Date? = nil) async throws {
+    func startInit(
+        purpose: Purpose, ctx: String, depositToken: String, profile: [UInt8]? = nil, at: Date? = nil,
+        deviceAttest: DeviceAttest? = nil, id: String? = nil, apiKey: [UInt8]? = nil, unlockSecret: [UInt8]? = nil
+    ) async throws {
         let v = try mem.withLock { try requireVault() }
         let tok = try mintForVault()
         let i = try Initiator.create(InitiatorConfig(
             purpose: purpose, ctx: ctx, identity: secrets.identity, staticKem: secrets.kem.publicKey, relay: relayAddr,
-            token: tok, profile: profile, responderIk: try Base64s.decodeStd(v.ik),
+            token: tok, profile: profile, deviceAttest: deviceAttest, apiKey: apiKey, unlockSecret: unlockSecret,
+            responderIk: try Base64s.decodeStd(v.ik),
             responderEk: try KemPublicKey.parse(try Base64s.decodeStd(v.kem)), responderRelayKey: try Base64s.decodeStd(v.relayPk),
-            policy: .vaultToDevice, now: at ?? now()
+            policy: .vaultToDevice, id: id, now: at ?? now()
         ))
         try refuseHalted()
         _ = try await relayFor(v.relayURL).deposit(mailboxID: v.mailbox, token: depositToken, payload: i.envelope)

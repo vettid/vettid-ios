@@ -23,9 +23,9 @@ public enum KeptTransfer {
     /// cannot extend them at every check).
     public static func start(approvedAtMs: Int64, nowMs: Int64) -> Int64 { min(approvedAtMs, nowMs) }
 
-    /// The end-of-keep check's verdict (owner decision 2026-10-16): [deviceList] is the vault's `device.list` answer over
-    /// this phone's session (nil: no answer, a refusal, any failure). This phone is still the vault's app only when the
-    /// list names it ([deviceID]) as an `app`; anything else erases.
+    /// The end-of-keep check's verdict on the vault's `device.list` answer [deviceList] over this phone's session: this phone
+    /// is still the vault's app only when the list names it ([deviceID]) as an `app`. Only a definite answer is judged here:
+    /// no answer, a refusal or a missing id never erases, and the check is made again (owner decision, 2026-10-23).
     public static func stillTheApp(deviceList: [DeviceEntry]?, deviceID: String?) -> Bool {
         guard let deviceID, let deviceList else { return false }
         return deviceList.contains { $0.id == deviceID && $0.kind == "app" }

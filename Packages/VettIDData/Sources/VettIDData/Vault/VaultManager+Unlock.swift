@@ -221,6 +221,14 @@ extension VaultManager {
         // attempt, which followed the unlock at once. This phone stays locked, nothing is opened or flushed.
         let lockedSince = lockGuard.lockedWhatever(unlocked: true)
         let overtaken = lockedSince || locks != lockGeneration || rec != record.generation
+        // "The move didn't finish" (release R, §11.14.10): this phone opened the vault with its own keys after it approved a
+        // transfer, so it is the vault's phone again.
+        if !overtaken { clearKeptTransfer(since: rec) }
+        // "Finish the move": this new phone opened the vault from storage with its own secret (every `ok` comes from
+        // reading the stored header and state), so both writes of the transfer are durable.
+        if record.value.finishMovePending, FinishMoveProof.provedBy(resultOk: true, overtaken: overtaken) {
+            _ = try? record.update(since: rec) { $0.finishMovePending = false }
+        }
         let guardRef = lockGuard
         Task {
             // No lock from before this unlock: none is ever left in the outbox (locks never go through it).

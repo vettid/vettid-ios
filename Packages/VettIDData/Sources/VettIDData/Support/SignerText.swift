@@ -8,8 +8,8 @@ public enum SignerText {
     /// VettID was installed from Google Play (signed by Google); this one is from F-Droid or direct (signed by VettID).
     /// Continue only if you installed it yourself." (or the reverse; a development build and an unknown signer have their
     /// own halves). [new]: the class the vault named for the new phone's app (nil: a class this app does not know);
-    /// [current]: this phone's own (nil: it has none, as an iPhone; the body then names only the new phone's, chosen; not
-    /// in the spec).
+    /// [current]: this phone's own (nil: it has none, as an iPhone; the body then names only the new phone's; owner
+    /// decision, 2026-10-23).
     public static func changeBody(new: SignerClass?, current: SignerClass?) -> String {
         guard let current else { return DataStrings.transferSignerBodyIPhone(newPhone(new)) }
         return DataStrings.transferSignerBody(newPhone(new), thisPhone(current))

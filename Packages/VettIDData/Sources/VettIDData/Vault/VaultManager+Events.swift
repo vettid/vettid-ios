@@ -44,6 +44,7 @@ extension VaultManager {
     public func onForeground() {
         // A background task that began before this does not stop the collection (``onBackground(budget:)``).
         foregrounds += 1
+        moveFlags.book.lifecycle += 1
         backgrounded = false
         guard phase != .signedOut else { return }
         // IOS-PLAN §4.2: a vault being deleted is read again, and nothing else runs.
@@ -51,6 +52,8 @@ extension VaultManager {
             Task { [weak self] in _ = await self?.checkDeletionAgain() }
             return
         }
+        // Release R (§11.14.10): the 7 days of a kept transfer are also checked on return, not only at a start.
+        resumeKeptTransfer()
         // A vault past its owner-check deadline, or near it, is read again: the check screen shows what is waiting.
         let t = config.now()
         if phase == .unlocked, let v = ownerChecks.ownerCheck, v.gated(t) || v.warning(t) { ownerChecks.onOpened() }
@@ -69,6 +72,7 @@ extension VaultManager {
     /// nothing assumes it ran longer. A pending lock's retries go on while the process runs and resume at the next start.
     public func onBackground(budget: Duration = .seconds(25)) async {
         let began = foregrounds
+        moveFlags.book.lifecycle += 1
         let work = Task { @MainActor [weak self] in
             guard let self else { return }
             await lockGuard.keeper.firstAttemptDone()
@@ -90,6 +94,7 @@ extension VaultManager {
         // Back in the foreground meanwhile: the collection runs on.
         guard began == foregrounds else { return }
         backgrounded = true
+        moveFlags.book.lifecycle += 1
         stopCollecting()
     }
 
@@ -131,6 +136,8 @@ extension VaultManager {
         case HolderPolicy.deviceUnlinked where VaultJSON.string(m.object, "reason") == Self.reasonVaultDeleted:
             onVaultDeletedEvent()
         case HolderPolicy.deviceUnlinked:
+            // Release R (§11.14.10): `transferred` on an old phone that kept its keys is the end of the kept transfer.
+            markMovedAway(m)
             if holder?.onVaultEvent(HolderPolicy.of(m)) != true {
                 rereads += 1
                 Task { [weak self] in try? await self?.refresh() }

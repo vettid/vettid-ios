@@ -167,6 +167,7 @@ public final class VaultDevice: @unchecked Sendable {
     let timeDropBroadcast = Broadcast<String>()
     let ownerCheckBroadcast = Broadcast<String>()
     let refusalBroadcast = Broadcast<Int>()
+    let sasBroadcast = Broadcast<String>()
     var isPaired: Bool
     var sas: String?
     var refusals = 0

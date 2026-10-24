@@ -41,7 +41,10 @@ extension VaultManager {
             abandonLock: { keeper.abandon() },
             detach: { [weak self] in await self?.detachForWipe() },
             // Crash-safe: a process that ends from here on finishes the wipe at its next start.
-            mark: { try wiper.begin() },
+            // An old phone that removes its keys at the end of a kept transfer says so on the welcome screen: the reason is in
+            // the wipe's marker, so that a wipe a crash interrupted still leaves the notice when it is finished (kept
+            // until a wipe completes: a retried wipe still says why it ran).
+            mark: { [weak self] in try wiper.begin(reason: self?.wipeMovedAway == true ? LocalWipe.reasonMovedAway : nil) },
             erase: { [weak self] in await self?.eraseAfterMark(wiper) ?? false },
             onEnd: { [weak self] phase in self?.wipeEnded(phase) },
             sleep: config.lockTiming.sleep
@@ -115,6 +118,8 @@ extension VaultManager {
     /// process death needs none of this. The manager is unusable after.
     package func halt() async {
         halted = true
+        keptTimer?.cancel()
+        keptTimer = nil
         changeGeneration += 1
         let tasks = [deciding, recheck].compactMap { $0 }
         deciding = nil
@@ -131,7 +136,23 @@ extension VaultManager {
     }
 
     private func wipeEnded(_ p: AppPhase) {
-        if p == .signedOut { account = nil }
+        if p == .signedOut {
+            account = nil
+            wipeMovedAway = false
+        }
+        // The move's state is the record's, which the wipe reset; the notice is the wipe's own (``LocalWipe/movedAway``).
+        movedAway = wiper?.movedAway ?? false
+        finishMoveRunner.clearFailure()
+        finishMoveRunner.release()
+        keptTimer?.cancel()
+        keptTimer = nil
+        transferKeptSince = nil
+        keptCheckPending = false
+        movedBack = false
+        moveNotDone = false
+        transferStartedAt = nil
+        openTransferID = nil
+        transferEpochID = nil
         phase = p
         // A vault being deleted ends with the wipe (IOS-PLAN §4.2: the marker goes with the record).
         endDeletion()

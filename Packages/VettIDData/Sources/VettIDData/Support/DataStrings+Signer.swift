@@ -12,7 +12,7 @@ extension DataStrings {
         )
     }
 
-    /// (chosen; not in the spec) The body when this phone has no signer to name (an iPhone, which App Attest reports none
+    /// (Owner decision, 2026-10-23.) The body when this phone has no signer to name (an iPhone, which App Attest reports none
     /// for): the vault compares the new Android app with the signer it kept for its last Android app (VAULT-MESSAGING
     /// §11.7.1 "Across an iOS app"), which this phone cannot see.
     static func transferSignerBodyIPhone(_ new: String) -> String {

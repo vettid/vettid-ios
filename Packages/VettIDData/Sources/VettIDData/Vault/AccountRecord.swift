@@ -18,6 +18,20 @@ struct LocalAccount: Codable, Equatable, Sendable {
     var emailHint = ""
     /// A direct transfer to this phone started (§6.7.1): it has a vault to come without a redeem (I3.3).
     var transferIn = false
+    /// This phone received its vault by a direct transfer and has not left onboarding yet (``VaultRepository/movedIn``).
+    var movedIn = false
+    /// (Release R, VAULT-MESSAGING §11.14.10) This new phone received a transfer and has not yet finished the move: an
+    /// unlock from storage with its own secret (``VaultRepository/finishMovePending``).
+    var finishMovePending = false
+    /// (Release R, §11.14.10; owner decision 2026-10-15) When this old phone approved a transfer (Unix ms, this phone's
+    /// clock): it keeps its keys until the vault's `device.unlinked{transferred}` or ``KeptTransfer/keepPeriodMs`` after
+    /// this. Written before the approval is sent, so that one whose answer is lost is bounded too; removed again when the
+    /// approval is refused (``KeptTransfer/mayHaveReached(_:)``).
+    var transferApprovedAtMs: Int64?
+    /// (STAGING-TIME-SCALE, S10) The keep period the approval started, in ms: 7 days divided by the vault's time scale
+    /// then, stored with the approval so that a scale learnt later does not change it (chosen; not in the spec). Nil: 7
+    /// days.
+    var transferKeepMs: Int64?
     /// The member left onboarding (``VaultManager/finishSetup()``).
     var setupComplete = false
     /// (§11.10.9) The capabilities of the vault's instance this phone last verified (`recovery_offered`).
@@ -65,6 +79,10 @@ struct LocalAccount: Codable, Equatable, Sendable {
         case vaultID = "vault_id"
         case emailHint = "email_hint"
         case transferIn = "transfer_in"
+        case movedIn = "moved_in"
+        case finishMovePending = "finish_move_pending"
+        case transferApprovedAtMs = "transfer_approved_at_ms"
+        case transferKeepMs = "transfer_keep_ms"
         case setupComplete = "setup_complete"
         case capabilities
         case timeScale = "time_scale"
@@ -95,6 +113,10 @@ struct LocalAccount: Codable, Equatable, Sendable {
         vaultID = try c.decodeIfPresent(String.self, forKey: .vaultID) ?? ""
         emailHint = try c.decodeIfPresent(String.self, forKey: .emailHint) ?? ""
         transferIn = try c.decodeIfPresent(Bool.self, forKey: .transferIn) ?? false
+        movedIn = try c.decodeIfPresent(Bool.self, forKey: .movedIn) ?? false
+        finishMovePending = try c.decodeIfPresent(Bool.self, forKey: .finishMovePending) ?? false
+        transferApprovedAtMs = try c.decodeIfPresent(Int64.self, forKey: .transferApprovedAtMs)
+        transferKeepMs = try c.decodeIfPresent(Int64.self, forKey: .transferKeepMs)
         setupComplete = try c.decodeIfPresent(Bool.self, forKey: .setupComplete) ?? false
         capabilities = try c.decodeIfPresent([String].self, forKey: .capabilities) ?? []
         // A scale of 0 is never stored; read as real time.

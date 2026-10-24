@@ -33,6 +33,11 @@ final class FakeRelay: @unchecked Sendable {
     var refuseBlobs: String? { get { lock.withLock { blobRefusal } } set { lock.withLock { blobRefusal = newValue } } }
     private var blobRefusal: String?
 
+    /// Claims by id (RELAY-PROTOCOL §6.9): fetched once, then gone (`claim_unknown`).
+    private var claims: [String: [UInt8]] = [:]
+
+    func putClaim(_ id: String, _ bytes: [UInt8]) { lock.withLock { claims[id] = bytes } }
+
     /// Puts a blob as another depositor would (the vault uploading to this device's mailbox).
     func putBlob(_ id: String, _ bytes: [UInt8], mailbox: String) { lock.withLock { blobs[id] = (mailbox, bytes) } }
 
@@ -73,13 +78,22 @@ final class FakeRelay: @unchecked Sendable {
                 let msg = JsonBuilder().string("msg_id", m.msgID).string("sender", m.sender).base64("payload", m.payload).build()
                 return .json(200, #"{"messages":[\#(msg)]}"#)
             }
-            if let b = blobAnswer(r) { return b }
+            if let b = claimAnswer(r) ?? blobAnswer(r) { return b }
             if path.hasPrefix("/v1/mailbox/"), r.method == "DELETE" {
                 acked.append(String(path.dropFirst("/v1/mailbox/".count)))
                 return .empty(204)
             }
             return .json(404, #"{"code":"not_found","message":""}"#)
         }
+    }
+
+    /// `GET /v1/claim/{id}` (fetched once, then `claim_unknown`); nil for any other path. Callers hold ``lock``.
+    private func claimAnswer(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer? {
+        guard r.path.hasPrefix("/v1/claim/"), r.method == "GET" else { return nil }
+        guard let c = claims.removeValue(forKey: String(r.path.dropFirst("/v1/claim/".count))) else {
+            return .json(404, #"{"code":"claim_unknown","message":""}"#)
+        }
+        return .bytes(200, c)
     }
 
     /// `PUT /v1/blob/{mailbox}`, `GET` and `DELETE /v1/blob/{id}`; nil for any other path. Callers hold ``lock``.
@@ -178,13 +192,18 @@ final class FakeVault: @unchecked Sendable {
     }
 
     /// Answers the device's hs.init (purpose app).
-    func respond(_ raw: [UInt8], _ d: VaultDevice) throws -> RelayMessage {
+    func respond(_ raw: [UInt8], _ d: VaultDevice, ctx: String? = nil) throws -> RelayMessage {
+        try respondOpening(raw, d, ctx: ctx).message
+    }
+
+    /// ``respond(_:_:ctx:)`` with the opened `hs.init` body, for the checks of a transfer's.
+    func respondOpening(_ raw: [UInt8], _ d: VaultDevice, ctx: String? = nil) throws -> (message: RelayMessage, body: HsInit) {
         let kem = kem
         let p = try PendingInit.open(raw, lookup: { k in k == kem.publicKey.kid ? kem : nil }, now: Date())
-        #expect(p.body.purpose == .app && p.body.ctx == vaultID)
+        #expect(p.body.purpose == .app && p.body.ctx == (ctx ?? vaultID))
         let (r, env) = try p.respond(ResponderConfig(identity: ik, token: try token(for: d), policy: .vaultToDevice, collectSender: d.relayAddr.pk))
         responder = r
-        return msg(env)
+        return (msg(env), p.body)
     }
 
     func fin(_ raw: [UInt8], _ d: VaultDevice) throws {

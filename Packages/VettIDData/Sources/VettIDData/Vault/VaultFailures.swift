@@ -35,6 +35,8 @@ enum VaultFailures {
         case let s as VaultStateError: VaultFailure(noResponse(s) ? .noResponse : .other, cause: s)
         case let u as CredentialUnsettled: VaultFailure(.credentialUnsettled, code: codeCredentialUnsettled, cause: u)
         case let u as RequestUnanswered: VaultFailure(.noResponse, cause: u)
+        case let n as NotATransferCode:
+            VaultFailure(n.expired ? .inviteExpired : .inviteInvalid, code: VaultManager.codeNotTransfer, cause: n)
         case let p as PairingRejected: VaultFailure(.rejected, code: "rejected", cause: p)
         case let r as RelayError: VaultFailure(.network, cause: r)
         case let u as URLError: VaultFailure(.network, cause: u)
@@ -80,7 +82,7 @@ enum VaultFailures {
     }
 
     /// The device client's waits that ran out (an answer, `vault.enrolled`, `device.paired`).
-    private static func noResponse(_ s: VaultStateError) -> Bool {
+    static func noResponse(_ s: VaultStateError) -> Bool {
         s.message.contains("no response") || s.message.hasPrefix("no ") && s.message.contains(" within ")
     }
 

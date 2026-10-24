@@ -34,6 +34,8 @@ public final class FinishMoveRunner {
     @ObservationIgnored private var current: Task<UnlockAttempt, any Error>?
     @ObservationIgnored private var running = false
     @ObservationIgnored private var bound: Task<Void, Never>?
+    /// The run that is current: a run ``release()`` let go of (a wipe, a deletion) no longer sets anything, and is not joined.
+    @ObservationIgnored private var runID = 0
 
     /// - Parameters:
     ///   - hold: how long ``finishing`` lasts at most (90 s in the app, as Android's `holdMs`).
@@ -67,14 +69,29 @@ public final class FinishMoveRunner {
     public func run(pin: String, taken: Int? = nil) async throws -> UnlockAttempt {
         if let current, running { return try await current.value }
         running = true
-        let task = Task { @MainActor [self] in try await body(pin: pin, taken: taken) }
+        // Before the task is made, in the same synchronous step as the call: the screen that asked is held from here, so
+        // that the run's own lock (which makes the phase ``AppPhase/locked``) never shows the unlock screen mid-finish.
+        failure = nil
+        finishing = true
+        runID += 1
+        let id = runID
+        let task = Task { @MainActor [self] in try await body(pin: pin, taken: taken, id: id) }
         current = task
         return try await task.value
     }
 
-    private func body(pin: String, taken: Int?) async throws -> UnlockAttempt {
-        failure = nil
-        finishing = true
+    /// The hold ends now (a wipe, a deletion): ``finishing`` is false whatever the run still does. The run itself goes on to
+    /// its own end, which finds it already clear.
+    public func release() {
+        runID += 1
+        bound?.cancel()
+        bound = nil
+        finishing = false
+        running = false
+        current = nil
+    }
+
+    private func body(pin: String, taken: Int?, id: Int) async throws -> UnlockAttempt {
         let hold = hold
         let sleep = sleep
         bound = Task { @MainActor [weak self] in
@@ -82,24 +99,29 @@ public final class FinishMoveRunner {
             if !Task.isCancelled { self?.finishing = false }
         }
         defer {
-            bound?.cancel()
-            bound = nil
-            finishing = false
-            running = false
+            if id == runID {
+                bound?.cancel()
+                bound = nil
+                finishing = false
+                running = false
+                current = nil
+            }
         }
         do {
             try await lock()
             // Read after the run's own lock, which bumps it: a later change is a lock or a wipe during the unlock.
             let gen = generation()
             let r = try await unlock(pin, taken)
-            failure = FinishSetupGate.failure(of: r)
+            if id == runID { failure = FinishSetupGate.failure(of: r) }
             await onOutcome(r)
             if r == .success, gen == generation(), !signedOut() { await onOpened(gen) }
             return r
         } catch {
             // Recorded for the unlock screen, then rethrown. A cancellation comes only from the process ending: nothing is
             // left to tell then.
-            if let e = error as? VaultFailure {
+            if id != runID {
+                // Let go of by release(): nothing of it is told.
+            } else if let e = error as? VaultFailure {
                 failure = e.kind
             } else if !(error is CancellationError) {
                 failure = .other

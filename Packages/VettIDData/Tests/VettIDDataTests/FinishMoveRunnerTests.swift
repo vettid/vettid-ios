@@ -142,6 +142,23 @@ import VettIDDataTesting
         #expect(f.locked == 2 && f.outcomes.count == 2)
     }
 
+    /// A run that release() let go of (a wipe, a deletion) is not joined: the next "Finish the move" is a run of its own, and
+    /// the old one, ending later, leaves the new one's hold alone.
+    @Test func aReleasedRunIsNotJoined() async throws {
+        let f = Fixture()
+        let stale = start(f, "975310")
+        await f.clock.runCurrent()
+        f.runner.release()
+        #expect(!f.runner.finishing)
+        let next = start(f, "111111")
+        await f.clock.runCurrent()
+        #expect(f.locked == 2 && f.unlocks == 2 && f.runner.finishing, "a run of its own, held")
+        f.answer.complete(.success)
+        _ = try await stale.value
+        _ = try await next.value
+        #expect(!f.runner.finishing && f.runner.failure == nil)
+    }
+
     @Test func aLockThatOvertookTheUnlockOffersNothing() async throws {
         let f = Fixture()
         let caller = start(f)

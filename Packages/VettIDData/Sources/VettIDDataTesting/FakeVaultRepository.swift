@@ -111,6 +111,8 @@ public final class FakeVaultRepository: CustomStringConvertible {
     /// The `taken` of every ``finishMove(pin:taken:)`` that was sent (nil: read now), in order.
     public var finishMoveTaken: [Int?] = []
     public var finishingMove = false
+    /// The end of a kept transfer is due and has no definite answer (``VaultRepository/keptCheckPending``).
+    public var keptCheckPending = false
     public var finishMoveFailure: FailureKind?
     public var movedBack = false
     public var moveNotDone = false

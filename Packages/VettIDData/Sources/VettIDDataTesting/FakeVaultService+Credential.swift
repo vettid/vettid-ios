@@ -188,7 +188,7 @@ extension FakeVaultService {
         case "credential.alarm.confirm": try alarmConfirm(m, body)
         case "credential.rotate": try rotate(m, body)
         case "credential.reset": try reset(m, body)
-        default: try connectionsRequest(m, body)
+        default: try transferRequest(m, body)
         }
     }
 
