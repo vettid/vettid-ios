@@ -12,14 +12,16 @@ public struct SecretTextEditor: View {
     private let isError: Bool
     private let focus: Bool
     private let pasteOnly: Bool
+    private let onSubmit: (() -> Void)?
     @Environment(\.vettIDColors) private var colors
 
     /// [focus]: the editor takes the keyboard (once, each time it turns true). [pasteOnly]: the text menu offers no Copy or
     /// Cut, so what is typed here never reaches the clipboard (a recovery code, VAULT-MESSAGING §11.11.10: "the code does
-    /// not go to a clipboard"); a paste is allowed.
+    /// not go to a clipboard"); a paste is allowed. A paste-only editor also shows the model's text again when the model refuses
+    /// what was typed. [onSubmit]: the Return key calls it instead of adding a line.
     public init(
         _ label: String, text: Binding<String>, placeholder: String? = nil, isError: Bool = false, focus: Bool = false,
-        pasteOnly: Bool = false
+        pasteOnly: Bool = false, onSubmit: (() -> Void)? = nil
     ) {
         self.label = label
         _text = text
@@ -27,10 +29,11 @@ public struct SecretTextEditor: View {
         self.isError = isError
         self.focus = focus
         self.pasteOnly = pasteOnly
+        self.onSubmit = onSubmit
     }
 
     public var body: some View {
-        SecretTextView(text: $text, focus: focus, pasteOnly: pasteOnly)
+        SecretTextView(text: $text, focus: focus, pasteOnly: pasteOnly, onSubmit: onSubmit)
             .frame(minHeight: Spacing.touchTarget * 2)
             .overlay(alignment: .topLeading) {
                 if text.isEmpty, let placeholder {
@@ -55,6 +58,7 @@ struct SecretTextView: UIViewRepresentable {
     @Binding var text: String
     var focus = false
     var pasteOnly = false
+    var onSubmit: (() -> Void)?
 
     final class Coordinator: NSObject, UITextViewDelegate {
         var parent: SecretTextView
@@ -62,7 +66,22 @@ struct SecretTextView: UIViewRepresentable {
 
         init(_ parent: SecretTextView) { self.parent = parent }
 
-        func textViewDidChange(_ view: UITextView) { parent.text = view.text ?? "" }
+        func textViewDidChange(_ view: UITextView) {
+            parent.text = view.text ?? ""
+            // A model that refused what was typed (and so did not change) is not redrawn by SwiftUI: the view shows the
+            // model's text again once the change is through.
+            guard parent.pasteOnly else { return }
+            DispatchQueue.main.async { [weak self, weak view] in
+                guard let self, let view, view.text != self.parent.text else { return }
+                SecretTextView.show(self.parent.text, in: view)
+            }
+        }
+
+        func textView(_ view: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
+            guard text == "\n", let submit = parent.onSubmit else { return true }
+            submit()
+            return false
+        }
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -90,8 +109,25 @@ struct SecretTextView: UIViewRepresentable {
 
     func updateUIView(_ v: UITextView, context: Context) {
         context.coordinator.parent = self
-        if v.text != text { v.text = text }
+        if v.text != text { Self.show(text, in: v) }
         SecretFocus.request(focus, v, &context.coordinator.focused)
+    }
+
+    /// [text] in [v], the cursor kept after the same number of characters that are not whitespace (a text that is redrawn in
+    /// groups keeps the member's place).
+    static func show(_ text: String, in v: UITextView) {
+        let before = v.text ?? ""
+        let cursor = min(v.selectedRange.location, (before as NSString).length)
+        let significant = (before as NSString).substring(to: cursor).filter { !$0.isWhitespace }.count
+        v.text = text
+        var seen = 0
+        var offset = 0
+        for character in text {
+            if seen == significant { break }
+            offset += character.utf16.count
+            if !character.isWhitespace { seen += 1 }
+        }
+        v.selectedRange = NSRange(location: offset, length: 0)
     }
 
     /// As wide as offered, as tall as its text.
@@ -105,11 +141,24 @@ struct SecretTextView: UIViewRepresentable {
     static func dismantleUIView(_ v: UITextView, coordinator: Coordinator) { v.text = "" }
 }
 
-/// A text view whose menu and shortcuts never copy or cut its text (it may be pasted into).
+/// A text view whose menu and shortcuts only paste into it, select and delete: no Copy, Cut, Share, Look Up, Translate or other
+/// action that would hand its text to another app or the clipboard, no drag out, no Writing Tools.
 final class PasteOnlyTextView: UITextView {
+    private static let allowed: [Selector] = [
+        #selector(UIResponderStandardEditActions.paste(_:)), #selector(UIResponderStandardEditActions.select(_:)),
+        #selector(UIResponderStandardEditActions.selectAll(_:)), #selector(UIResponderStandardEditActions.delete(_:)),
+    ]
+
+    override init(frame: CGRect, textContainer: NSTextContainer?) {
+        super.init(frame: frame, textContainer: textContainer)
+        textDragInteraction?.isEnabled = false
+        if #available(iOS 18.0, *) { writingToolsBehavior = .none }
+    }
+
+    required init?(coder: NSCoder) { fatalError("not from a nib") }
+
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
-        if action == #selector(copy(_:)) || action == #selector(cut(_:)) { return false }
-        return super.canPerformAction(action, withSender: sender)
+        Self.allowed.contains(action) && super.canPerformAction(action, withSender: sender)
     }
 
     override func copy(_ sender: Any?) {}
