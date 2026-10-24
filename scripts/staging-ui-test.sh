@@ -20,7 +20,7 @@
 #                     tests, VETTID_STAGING_PEER_NAME, VETTID_STAGING_MESSAGE and VETTID_STAGING_EXPECT, and for the
 #                     photo tests, VETTID_STAGING_PEER_NAME and optionally VETTID_STAGING_PHOTO_TIMEOUT (quotes around
 #                     a value and CRLF line ends are stripped), and for the transfer tests, VETTID_STAGING_TRANSFER_CODE
-#                     (testStagingTransferIn) and optionally VETTID_STAGING_TRANSFER_TIMEOUT and VETTID_STAGING_SAFETY_CODE; only the file is read then. Without it they are read from the
+#                     (testStagingTransferIn) and optionally VETTID_STAGING_TRANSFER_TIMEOUT and VETTID_STAGING_TRANSFER_AUTO_MATCH; only the file is read then. Without it they are read from the
 #                     environment of the same names. Prefer the file: nothing lands in the shell history.
 #   --fresh           remove VettID Staging from the iPhone first, and its vault keys with it: only for
 #                     testStagingEnroll with all four inputs set; asks y/N on a terminal
@@ -88,20 +88,26 @@
 #   testStagingTransferOut               the old phone, unlocked: Settings -> Security -> "Move to a new phone", start;
 #                                        prints "TRANSFER_LINK: <link>" for the new phone (VETTID_STAGING_TRANSFER_CODE
 #                                        there), waits up to VETTID_STAGING_TRANSFER_TIMEOUT (300 s) for the new phone,
-#                                        prints "SAFETY_CODE: <code>" (rejecting the transfer when VETTID_STAGING_SAFETY_CODE
-#                                        is set and differs; otherwise compare the two phones' lines by hand), confirms
-#                                        the match, accepts the change of signer when shown (a move between platforms:
-#                                        "TRANSFER_SIGNER: shown"), PIN on the keypad and the password, approves; prints
-#                                        "TRANSFER_STATE: moved|code_mismatch|expired|rejected|no_link|no_phone|
-#                                        no_safety_code|approve_failed|error|none". A vault still on the phone is locked.
+#                                        prints "SAFETY_CODE: <code>" and "TRANSFER_OPERATOR: ...", then WAITS (up to the
+#                                        same time) for a person to compare the codes on both phones and tap "The codes
+#                                        match" or "Reject" on this iPhone; it never approves by itself. After the match: the
+#                                        change of signer when shown ("TRANSFER_SIGNER: shown", a move between platforms),
+#                                        PIN on the keypad (nothing is sent unless it holds every digit) and the password,
+#                                        "Move"; prints "TRANSFER_AFTER: welcome_notice|welcome|unlock|app_shell|none" (what the
+#                                        app shows once the vault has left) and "TRANSFER_STATE: moved|rejected|expired|
+#                                        no_decision|no_link|no_phone|no_safety_code|approve_failed|moved_unconfirmed|
+#                                        moved_still_open|error|none". A vault still on the phone is locked. With
+#                                        VETTID_STAGING_TRANSFER_AUTO_MATCH=1 the test taps "The codes match" itself and prints
+#                                        "TRANSFER_SAS_UNCHECKED": the comparison is then not made by the test.
 #   testStagingTransferIn                the new phone, a fresh app (no --fresh: remove the app by hand): "Move from my
 #                                        old phone", the code pasted from VETTID_STAGING_TRANSFER_CODE, prints
-#                                        "SAFETY_CODE: <code>" (failing when VETTID_STAGING_SAFETY_CODE is set and differs),
-#                                        waits up to VETTID_STAGING_TRANSFER_TIMEOUT for the old phone's approval, "Finish
-#                                        the move" with the PIN; prints "TRANSFER_STATE: moved_unlocked|moved_locked|moved|
-#                                        code_refused|no_safety_code|code_mismatch|rejected|timed_out|not_answered|
-#                                        finish_held|finish_failed|owner_check|error|none". VETTID_STAGING_PASSWORD is used
-#                                        only if an owner check is due after the move.
+#                                        "SAFETY_CODE: <code>", waits up to VETTID_STAGING_TRANSFER_TIMEOUT for the old
+#                                        phone's approval (a handshake that will not finish is cancelled), "Finish the move"
+#                                        with the PIN (all digits or nothing is sent); prints "TRANSFER_STATE:
+#                                        moved_unlocked|moved_locked|moved|code_refused|no_safety_code|rejected|timed_out|
+#                                        not_answered|finish_held|finish_failed|owner_check|owner_check_failed|
+#                                        moved_unconfirmed|error|none". VETTID_STAGING_PASSWORD is used only if an owner check
+#                                        is due after the move.
 #   testStagingLook, testStagingCheck    screenshots only, nothing tapped beyond navigation: Connections and Approvals
 #                                        (Look); Connections, the conversation with VETTID_STAGING_PEER_NAME,
 #                                        Connections again and History (Check). Use --keep-result to read them.
@@ -119,16 +125,19 @@
 # testStagingWaitMessage (600), testStagingSendAll (300) and testStagingLook (10).
 #
 # Inputs of the transfer tests: testStagingTransferOut needs PIN and PASSWORD; testStagingTransferIn needs PIN and
-# VETTID_STAGING_TRANSFER_CODE. Two-phone run (both at once; the code lives about 5 minutes and works once): start
-# testStagingTransferOut on the old phone, copy its "TRANSFER_LINK:" line into the new phone's file as
-# VETTID_STAGING_TRANSFER_CODE, start testStagingTransferIn there, and compare the two "SAFETY_CODE:" lines. The new
-# phone can be an Android phone running vettid-android's counterpart.
+# VETTID_STAGING_TRANSFER_CODE. Two-phone run (both at once; the code window is about 5 minutes and the code works once):
+# start testStagingTransferOut on the old phone; copy its "TRANSFER_LINK:" line into the new phone's file as
+# VETTID_STAGING_TRANSFER_CODE (the link is not an input of the old phone: it is printed there, and nowhere else, to be
+# handed over); start testStagingTransferIn on the new phone; compare the two "SAFETY_CODE:" lines and tap "The codes
+# match" on the old phone. The safety codes are not shared through VETTID_STAGING_SAFETY_CODE. iPhone <-> iPhone: build once
+# (the first run), then give the second run --skip-build, so that the window is not spent building; an iPhone <-> Android
+# move has the other side run its own test. Use a separate private file for each phone.
 #
 # A test without its inputs is skipped. The inputs reach only the test step, as TEST_RUNNER_<NAME> (xcodebuild passes
 # them to the runner as <NAME>), never a command line or the build; xcodebuild's output is shown with them (the link
 # included, the connection's name, the message texts, and the keypad's digits) redacted, except the SAFETY_CODE,
 # CONNECT_STATE, MESSAGE_STATE, MESSAGE_RECEIVED, PHOTO_STATE, PHOTO_RECEIVED, PHOTO_VIEWER, INVITE_LINK,
-# TRANSFER_LINK, TRANSFER_STATE, TRANSFER_SIGNER and ROTATE_STATE lines, which are printed with the code, the state or the answer alone; the result bundle is deleted, an interrupted run's too, unless --keep-result. The build
+# TRANSFER_LINK, TRANSFER_STATE, TRANSFER_SIGNER, TRANSFER_AFTER, TRANSFER_OPERATOR, TRANSFER_SAS_UNCHECKED and ROTATE_STATE lines, which are printed with the code, the state or the answer alone; the result bundle is deleted, an interrupted run's too, unless --keep-result. The build
 # and results live under ${XDG_CACHE_HOME:-~/Library/Caches}/vettid-ios/staging-ui-test (mode 700).
 #
 # Example (enrollment; the code was issued a minute ago and is in the private file):
@@ -150,7 +159,7 @@ REPO=$(pwd -P)
 
 NAMES=(VETTID_STAGING_EMAIL VETTID_STAGING_CODE VETTID_STAGING_PIN VETTID_STAGING_PASSWORD)
 # The connect, message and photo tests' inputs: optional, never counted as missing for the others.
-OPTIONAL=(VETTID_STAGING_LINK VETTID_STAGING_TRANSFER_CODE VETTID_STAGING_TRANSFER_TIMEOUT VETTID_STAGING_SAFETY_CODE VETTID_STAGING_PEER_NAME VETTID_STAGING_MESSAGE VETTID_STAGING_EXPECT
+OPTIONAL=(VETTID_STAGING_LINK VETTID_STAGING_TRANSFER_CODE VETTID_STAGING_TRANSFER_TIMEOUT VETTID_STAGING_TRANSFER_AUTO_MATCH VETTID_STAGING_SAFETY_CODE VETTID_STAGING_PEER_NAME VETTID_STAGING_MESSAGE VETTID_STAGING_EXPECT
   VETTID_STAGING_PHOTO_TIMEOUT VETTID_STAGING_PHOTO_EXISTING VETTID_STAGING_WAIT)
 ALL=("${NAMES[@]}" "${OPTIONAL[@]}")
 BUNDLE_ID=com.vettid.app.staging
@@ -329,6 +338,11 @@ xcodebuild test-without-building \
     if (/INVITE_LINK: (https:\/\/[A-Za-z0-9._~:\/?#\[\]@!\$\&()*+,;=%-]+|none)\s*$/) { $_ = "INVITE_LINK: $1\n"; next }
     if (/TRANSFER_LINK: (https:\/\/[A-Za-z0-9._~:\/?#\[\]@!\$\&()*+,;=%-]+|none)\s*$/) { $_ = "TRANSFER_LINK: $1\n"; next }
     if (/TRANSFER_STATE: ([a-z_]+)\s*$/) { $_ = "TRANSFER_STATE: $1\n"; next }
+    if (/TRANSFER_AFTER: (welcome_notice|welcome|unlock|app_shell|none)\s*$/) { $_ = "TRANSFER_AFTER: $1\n"; next }
+    if (/TRANSFER_SAS_UNCHECKED\s*$/) { $_ = "TRANSFER_SAS_UNCHECKED\n"; next }
+    if (/TRANSFER_OPERATOR: compare the safety codes on both phones and tap on this iPhone\s*$/) {
+      $_ = "TRANSFER_OPERATOR: compare the safety codes on both phones and tap on this iPhone\n"; next
+    }
     if (/TRANSFER_SIGNER: shown\s*$/) { $_ = "TRANSFER_SIGNER: shown\n"; next }
     if (/ROTATE_STATE: (done|failed|none)\s*$/) { $_ = "ROTATE_STATE: $1\n"; next }
     if (/PHOTO_STATE: (none|sending|delivered|failed)\s*$/) { $_ = "PHOTO_STATE: $1\n"; next }

@@ -165,6 +165,7 @@ extension StagingTests {
         note.lifetime = .keepAlways
         add(note)
         print("SAFETY_CODE: \(code)")
+        fflush(stdout)
     }
 
     // MARK: - Reading the screen
