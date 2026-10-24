@@ -32,7 +32,13 @@ extension VaultDevice {
     /// the vault is no longer under it, and a later lock must not be bound to it. Nothing if the current name is another.
     public func forgetUnlockID(ifEqual dead: String?) {
         guard let dead else { return }
-        openingLock.withLock { if openingID == dead { openingID = nil } }
+        // A `vault.status` answer already on its way is dropped too (it may name the dead opening): the mark moves.
+        openingLock.withLock {
+            if openingID == dead {
+                openings += 1
+                openingID = nil
+            }
+        }
     }
 
     /// (0.56.1) A recovery open is an opening: the `unlock_id` of its result (`""` from a release before L: none).

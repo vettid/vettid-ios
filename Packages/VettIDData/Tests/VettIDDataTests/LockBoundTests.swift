@@ -59,7 +59,7 @@ import VettIDVault
         vault.outcomes = [.openedAgain]
         #expect(!(await k.ask(k.begin(unlockID: id))))
         #expect(k.notice == .openedAgain && !k.pending && k.holdsPhone)
-        #expect(store.record == LockRecord(held: true))
+        #expect(store.record == LockRecord(held: true, deadUnlockID: id))
         await clock.advance(by: 600_000)
         #expect(vault.attempts.count == 1)
         // Held across a process death: a new process starts with this phone locked, and says so again.
@@ -112,7 +112,7 @@ import VettIDVault
         let fresh = await LockAgain.unlockID { now }
         #expect(!(await k.ask(k.begin(unlockID: fresh))))
         #expect(k.pending && k.holdsPhone, "still held")
-        #expect(store.record == LockRecord(pendingSinceMs: t0.ms, unlockID: now, held: true))
+        #expect(store.record == LockRecord(pendingSinceMs: t0.ms, unlockID: now, held: true, deadUnlockID: old))
         vault.outcomes = [.locked]
         await clock.advance(by: 1_001)
         #expect(vault.bound == [old, now, now], "one try, then a retry, both named")
@@ -214,6 +214,19 @@ import VettIDVault
         #expect(k.deadUnlockID == nil)
     }
 
+    /// The dead name is kept with the hold: a new process still drops the dead opening's notice, and an unlock ends both.
+    @Test func theDeadNameSurvivesARestartWhileHeld() async {
+        let k = keeper(backoff: { _ in .seconds(3600) })
+        vault.outcomes = [.openedAgain]
+        _ = await k.ask(k.begin(unlockID: old))
+        #expect(store.record == LockRecord(held: true, deadUnlockID: old))
+        let next = keeper(MemoryLockStore(store.record))
+        next.resume()
+        #expect(next.holdsPhone && next.deadUnlockID == old && next.notice == .openedAgain)
+        _ = await next.unlocking(opened: { $0 }) { true }
+        #expect(next.deadUnlockID == nil)
+    }
+
     /// An abandoned vault leaves nothing held.
     @Test func abandoningTheVaultEndsTheHold() async {
         let k = keeper(backoff: { _ in .seconds(3600) })
@@ -249,6 +262,16 @@ import VettIDVault
         try LockRecordFile(file: store()).save(LockRecord(relayLockUntilMs: 9))
         #expect(try text() == "1 - 9", "the first version's form")
         #expect(LockRecordFile(file: store()).load() == LockRecord(relayLockUntilMs: 9))
+    }
+
+    @Test func theDeadNameIsKeptWithTheHoldAndAnOldRecordReadsAsNone() throws {
+        let dead = "ffeeddccbbaa99887766554433221100"
+        try LockRecordFile(file: store()).save(LockRecord(held: true, deadUnlockID: dead))
+        #expect(try text() == "2 - - - 1 \(dead)")
+        #expect(LockRecordFile(file: store()).load() == LockRecord(held: true, deadUnlockID: dead))
+        try store().save(Array("2 - - - 1".utf8))
+        #expect(LockRecordFile(file: store()).load() == LockRecord(held: true))
+        #expect(throws: LockRecordFile.NotSaved.self) { try LockRecordFile(file: store()).save(LockRecord(held: true, deadUnlockID: "x")) }
     }
 
     @Test func theHeldMarkerIsKeptAcrossARestart() throws {

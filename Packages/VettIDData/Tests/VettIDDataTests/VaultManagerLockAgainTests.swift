@@ -84,6 +84,21 @@ import VettIDVault
         #expect(await eventually { !m.lockHoldsPhone })
     }
 
+    /// The dead name is kept across a restart: a new process that starts held still drops a `vault.locking` naming it.
+    @Test func aRestartedHeldPhoneStillDropsTheDeadOpeningsNotice() async throws {
+        defer { phone.close() }
+        try await openVault()
+        let known = try #require(service.currentUnlockID)
+        service.openedByAnotherDevice(notifying: false)
+        try await m.lock()
+        #expect(await eventually { m.lockNotice == .openedAgain })
+        try await phone.restart()
+        try await m.refresh()
+        #expect(m.lockNotice == .openedAgain && m.lockHoldsPhone && m.session?.device.unlockID != known)
+        m.onEvent(locking(known, ts: Date().addingTimeInterval(3600)))
+        #expect(m.lockNotice == .openedAgain, "the dead opening's notice does not turn it into locked")
+    }
+
     /// The foreground retry skips an attempt that just began and leaves the member's "Try again" alone.
     @Test func theForegroundDoesNotUseUpTryAgain() async throws {
         defer { phone.close() }
@@ -94,7 +109,8 @@ import VettIDVault
         #expect(m.lockPending)
         m.onForeground()
         let asked = service.memberLocks
-        m.retryLock()
+        // The foreground's try did not use up the member's: it is started (false after a try within 10 s).
+        #expect(m.lockGuard.keeper.retryNow())
         #expect(await eventually { service.memberLocks > asked }, "Try again right after the foreground's still goes out")
         service.memberLockAnswer = .lock
         #expect(await eventually { !m.lockPending })

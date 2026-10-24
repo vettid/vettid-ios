@@ -326,7 +326,7 @@ final class ScriptedLockPorts: LockPorts {
         #expect(ports.asked == ["relay", "status"], "the status is read to say what is true now")
         #expect(g.keeper.notice == .openedAgain)
         #expect(!g.pending)
-        #expect(store.record == LockRecord(held: true), "nothing is tried again; the phone is held locked, on the phone too")
+        #expect(store.record == LockRecord(held: true, deadUnlockID: id), "nothing is tried again; held locked on the phone too")
         ports.asked = []
         await clock.advance(by: 3_600_001)
         #expect(ports.asked.isEmpty, "not repeated")

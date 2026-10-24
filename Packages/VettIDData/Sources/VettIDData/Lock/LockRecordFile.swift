@@ -23,6 +23,8 @@ final class LockRecordFile: LockRecordStore {
     private static let none = "-"
     private static let fields = 3
     private static let fieldsBound = 5
+    /// A held record may carry, as a sixth field, the name of the opening its lock ended on (``LockRecord/deadUnlockID``).
+    private static let fieldsDead = 6
     private static let held = "1"
     private static let notHeld = "0"
     private static let heldConfirmed = "2"
@@ -70,14 +72,19 @@ final class LockRecordFile: LockRecordStore {
 
     static func line(_ r: LockRecord) throws -> String {
         let times = "\(r.pendingSinceMs.map(String.init) ?? none) \(r.relayLockUntilMs.map(String.init) ?? none)"
-        if r.unlockID == nil && !r.held { return "\(version) \(times)\n" }
+        if r.unlockID == nil && !r.held && r.deadUnlockID == nil { return "\(version) \(times)\n" }
         var shown = none
         if let id = r.unlockID {
             guard UnlockIds.of(id) != nil else { throw NotSaved() }
             shown = id
         }
         let mark = !r.held ? notHeld : r.heldConfirmed ? heldConfirmed : held
-        return "\(versionBound) \(times) \(shown) \(mark)\n"
+        var dead = ""
+        if let d = r.deadUnlockID {
+            guard UnlockIds.of(d) != nil else { throw NotSaved() }
+            dead = " \(d)"
+        }
+        return "\(versionBound) \(times) \(shown) \(mark)\(dead)\n"
     }
 
     static func parse(_ bytes: [UInt8]) -> LockRecord? {
@@ -85,7 +92,8 @@ final class LockRecordFile: LockRecordStore {
         let parts = text.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: " ", omittingEmptySubsequences: false)
         guard let form = parts.first else { return nil }
         let bound = form == versionBound
-        guard bound || form == version, parts.count == (bound ? fieldsBound : fields) else { return nil }
+        let expected = bound ? [fieldsBound, fieldsDead] : [fields]
+        guard bound || form == version, expected.contains(parts.count) else { return nil }
         func time(_ s: Substring) -> Int64?? {
             if s == none { return .some(nil) }
             guard let v = Int64(s) else { return nil }
@@ -100,6 +108,13 @@ final class LockRecordFile: LockRecordStore {
         }
         let marks: [String: (Bool, Bool)] = [held: (true, false), heldConfirmed: (true, true), notHeld: (false, false)]
         guard let mark = marks[String(parts[4])] else { return nil }
-        return LockRecord(pendingSinceMs: pending, relayLockUntilMs: relay, unlockID: id, held: mark.0, heldConfirmed: mark.1)
+        var dead: String?
+        if parts.count == fieldsDead {
+            guard let valid = UnlockIds.of(String(parts[5])) else { return nil }
+            dead = valid
+        }
+        return LockRecord(
+            pendingSinceMs: pending, relayLockUntilMs: relay, unlockID: id, held: mark.0, heldConfirmed: mark.1, deadUnlockID: dead
+        )
     }
 }

@@ -48,8 +48,8 @@ extension VaultManager {
         backgrounded = false
         guard phase != .signedOut else { return }
         // A pending lock is tried again at once (the app's retry at every start and every return to the foreground), unless
-        // an attempt runs or just began, and without using up the member's "Try again" (``LockKeeper/retryOnForeground()``). There is no job that runs while the app is not (chosen; not
-        // in the spec).
+        // an attempt runs or just began, and without using up the member's "Try again" (``LockKeeper/retryOnForeground()``).
+        // There is no job that runs while the app is not (chosen; not in the spec).
         lockGuard.keeper.retryOnForeground()
         // IOS-PLAN §4.2: a vault being deleted is read again, and nothing else runs.
         if deletion != nil {

@@ -94,6 +94,21 @@ extension VaultDeviceTests {
         try await d.handle(try v.seal("vault.status", #"{"vault_id":"\#(v.vaultID)","unlock_id":"\#(older)"}"#, re: req2.id, status: Inner.statusOK))
         #expect(try await again.value == older)
     }
+
+    /// A lock that ended as "opened again" makes the device forget its name; a `vault.status` already on its way, naming it, is
+    /// not applied after that.
+    @Test func forgettingTheDeadNameDropsAStatusOnItsWay() async throws {
+        let (d, v) = try await pairedDevice()
+        let api = VaultApi(device: d)
+        let dead = "00112233445566778899aabbccddeeff"
+        d.noteUnlockID(dead, since: d.openingMark())
+        let status = Task { try await api.status() }
+        let req = try v.open(try await relay.nextDeposit().payload)
+        d.forgetUnlockID(ifEqual: dead)
+        try await d.handle(try v.seal("vault.status", #"{"vault_id":"\#(v.vaultID)","unlock_id":"\#(dead)"}"#, re: req.id, status: Inner.statusOK))
+        _ = try await status.value
+        #expect(d.unlockID == nil)
+    }
 }
 
 // swiftlint:enable line_length

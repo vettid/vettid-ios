@@ -16,7 +16,8 @@ import Observation
 ///   vault before L, or a phone that did not hold the value; the lock is then made as before L.
 /// - [held] (release L): the last lock ended because the vault was opened again since (``LockNotice/openedAgain``): the
 ///   phone stays locked, also in a later process, until an unlock on this phone succeeds (or the vault is no longer this
-///   phone's). [heldConfirmed]: held, and since confirmed locked after all (``LockNotice/confirmedLate``): a new process
+///   phone's). [deadUnlockID]: the name that lock was bound to (not a secret): a `vault.locking` naming it is an old
+///   opening's and is dropped, also by a later process. [heldConfirmed]: held, and since confirmed locked after all (``LockNotice/confirmedLate``): a new process
 ///   says nothing new.
 public struct LockRecord: Equatable, Sendable {
     public var pendingSinceMs: Int64?
@@ -24,11 +25,13 @@ public struct LockRecord: Equatable, Sendable {
     public var unlockID: String?
     public var held: Bool
     public var heldConfirmed: Bool
+    public var deadUnlockID: String?
 
     public init(
         pendingSinceMs: Int64? = nil, relayLockUntilMs: Int64? = nil, unlockID: String? = nil, held: Bool = false,
-        heldConfirmed: Bool = false
+        heldConfirmed: Bool = false, deadUnlockID: String? = nil
     ) {
+        self.deadUnlockID = deadUnlockID
         self.pendingSinceMs = pendingSinceMs
         self.relayLockUntilMs = relayLockUntilMs
         self.unlockID = unlockID
@@ -184,6 +187,7 @@ public final class LockKeeper {
         // member is told again (the unlock screen's card).
         if r.held {
             held = true
+            dead = r.deadUnlockID
             if !pending && !r.heldConfirmed { notice = .openedAgain }
         }
         guard let since = r.pendingSinceMs, !pending else { return }
@@ -398,6 +402,7 @@ public final class LockKeeper {
                         r.unlockID = id
                         r.held = false
                         r.heldConfirmed = false
+                        r.deadUnlockID = nil
                         return r
                     }
                 }
@@ -434,9 +439,8 @@ public final class LockKeeper {
             // Confirmed before anything failed: the member was never told otherwise.
             case .locked: confirm(late: n > 0)
             case .openedAgain:
-                end(.openedAgain)
+                end(.openedAgain, bound: bound)
                 // The opening this lock was bound to is over: forgotten by the device, and its late notices confirm nothing.
-                dead = bound
                 onOpenedAgain(bound)
             case .unconfirmed: notice = .unconfirmed(askedAt: at, attempts: n + 1)
             }
@@ -447,13 +451,16 @@ public final class LockKeeper {
     private func confirm(late: Bool) { end(late ? .confirmedLate : .none) }
 
     /// The pending lock is over with [notice]; nothing of it is tried again.
-    private func end(_ notice: LockNotice) {
+    private func end(_ notice: LockNotice, bound: String? = nil) {
         epoch += 1
         retries?.cancel()
         retries = nil
         boundTo = nil
         held = notice == .openedAgain
         let kept = held
+        // Kept on the phone with the hold (a new process drops the dead opening's notices too).
+        let deadNow = kept ? bound : nil
+        if kept { dead = deadNow }
         // The relay lock's time stays: its request may still be waiting for the vault. Held is kept on the phone too.
         write { r in
             var r = r
@@ -461,6 +468,7 @@ public final class LockKeeper {
             r.unlockID = nil
             r.held = kept
             r.heldConfirmed = false
+            r.deadUnlockID = deadNow
             return r
         }
         self.notice = notice
