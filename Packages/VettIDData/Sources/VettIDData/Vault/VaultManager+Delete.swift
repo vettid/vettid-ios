@@ -2,7 +2,7 @@ import Foundation
 import VettIDVault
 
 // Delete vault (VAULT-MESSAGING §12.5, `vault.delete` by the holder) and what follows it on this phone. Mirrors
-// vettid-android `VaultManager.deleteVault` (and its unmerged branch `fix/no-erase-on-401`).
+// vettid-android `VaultManager.deleteVault` (as of vettid-android #192).
 //
 // Owner decision, 2026-10-24: nothing here erases VettID's data on this phone by itself. The vault's answer to
 // `vault.delete` starts "being deleted" (IOS-PLAN §4.2, ``enterDeleting(expOnPhone:)``), as its sealed

@@ -39,7 +39,7 @@ public struct VaultDeletingState: Equatable, Sendable {
 /// A vault being deleted (IOS-PLAN §4.2): nothing that changes the vault or this phone's keys; after the bound, Check
 /// again (one read; a second tap waits for the first) and "Remove from this phone". Nothing here erases by itself: a vault
 /// is left only by a definite signal (none yet) or by the member's confirmed removal (owner decision, 2026-10-24; mirrors
-/// vettid-android's unmerged `fix/no-erase-on-401`). The vault gone, the root follows the phase to "no vault".
+/// vettid-android #192). The vault gone, the root follows the phase to "no vault".
 @MainActor
 @Observable
 public final class VaultDeletingViewModel {

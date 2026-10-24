@@ -16,8 +16,8 @@ struct OwnDelete {
 // no definite "deleted" answer yet (a deleted vault gets the same bare `401`), so `{vault: null}`, `401` (a clock's
 // included) and `403` never end this state and never erase; past the bound the member can confirm "Remove from this
 // phone" (``AccountRepository/eraseThisPhone()``), which shows the one-time notice on "no vault". A definite word (the
-// member API's future `410 vault_deleted`) ends it through ``deletionGone()``. Nothing is sent to the vault meanwhile:
-// no session opens.
+// `410 vault_deleted` of MEMBER-API "Vault deletion", not read yet) ends it through ``deletionGone()``. Nothing is
+// sent to the vault meanwhile: no session opens.
 //
 // A deletion this phone sent and the vault answered starts this state too (as vettid-android's `deleteVault` does), with
 // the request's `exp` in the bound. The event during this phone's own deletion is left to it: an answer starts this
@@ -102,7 +102,7 @@ extension VaultManager {
         return w
     }
 
-    /// One read of the member API's status for a vault being deleted (§4.2 point 3). No answer or failure is ``DeletionRead/gone``:
+    /// One read of the member API's status for a vault being deleted (§4.2 point 3). Never ``DeletionRead/gone``:
     /// neither `{vault: null}` nor a `401`, `403`, 5xx or timeout is a definite word, so nothing here erases this phone.
     private func readDeletionStatus() async -> DeletionRead {
         do {

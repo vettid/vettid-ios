@@ -1,9 +1,10 @@
 import Foundation
 import VettIDAltChan
 
-/// (IOS-PLAN §4.2) A vault being deleted, as the screens see it: since when (the `device.unlinked{vault_deleted}` that
-/// started it), the bound until which the app re-reads the member API's status on its own, and whether the bound has
-/// passed ("Still finishing", with Check again). Mirrors ANDROID-PLAN §4 "A vault being deleted".
+/// (IOS-PLAN §4.2) A vault being deleted, as the screens see it: since when (the `device.unlinked{vault_deleted}`, or
+/// the answer to this phone's own `vault.delete`, that started it), the bound until which the app re-reads the member
+/// API's status on its own, and whether the bound has passed ("Still finishing", with Check again). Mirrors
+/// ANDROID-PLAN §4 "A vault being deleted".
 public struct VaultDeletion: Equatable, Sendable {
     public var since: Date
     public var until: Date
@@ -21,7 +22,7 @@ public struct VaultDeletion: Equatable, Sendable {
 public enum DeletionRead: Equatable, Sendable {
     /// A definite word that the vault is gone. Nothing reads it yet (owner decision, 2026-10-24): neither `{vault: null}`
     /// (advisory) nor a bare `401` (the member API gives the same one for the timestamp, nonce, signature and other
-    /// faults) is definite. The member API's future `410 vault_deleted` is the signal meant for this.
+    /// faults) is definite. The `410 vault_deleted` of MEMBER-API "Vault deletion" is meant for this; it is not read yet.
     case gone
     /// The vault is still listed, whatever its `state`.
     case listed

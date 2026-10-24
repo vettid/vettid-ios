@@ -41,8 +41,9 @@ public struct DeleteVaultState: Equatable, Sendable, CustomStringConvertible, Cu
 }
 
 /// `vault.delete` (VAULT-MESSAGING §12.5) by the holder: the exact phrase, the PIN and the credential password, an
-/// acknowledgement, then a final confirmation. After the vault's answer "being deleted" follows (the phase). A lost answer is checked with the account service (``VaultRepository/checkVaultDeleted()``), never by
-/// sending the PIN again on its own. Mirrors vettid-android `DeleteVaultViewModel`.
+/// acknowledgement, then a final confirmation. After the vault's answer "being deleted" follows (the phase). A lost
+/// answer is checked with the account service (``VaultRepository/checkVaultDeleted()``), never by sending the PIN again
+/// on its own. Mirrors vettid-android `DeleteVaultViewModel`.
 @MainActor
 @Observable
 public final class DeleteVaultViewModel {
@@ -124,7 +125,8 @@ public final class DeleteVaultViewModel {
         }
     }
 
-    /// After a lost answer: asks the account service whether the vault is gone (nothing is sent to the vault). Nothing is erased; not deleted (and never to be): said so; otherwise the notice stays.
+    /// After a lost answer: asks the account service whether the vault is gone (nothing is sent to the vault).
+    /// Nothing is erased; not deleted (and never to be): said so; otherwise the notice stays.
     public func checkAgain() {
         guard state.unconfirmed, !state.busy else { return }
         state.busy = true
