@@ -203,6 +203,80 @@ import VettIDDataTesting
         window.isHidden = true
     }
 
+    // MARK: - The notices on every open step
+
+    /// A refused or failed start over is told on the answer, the check and the finish as well as on the fields.
+    @Test func theStartOverNoticeShowsOnEveryOpenStep() {
+        var answered = RecoveryOpenState(step: .answered)
+        answered.outcome = RecoveryOpenOutcome("wrong", used: 1)
+        var unanswered = RecoveryOpenState(step: .answered)
+        unanswered.failure = .network
+        var check = RecoveryOpenState(step: .check)
+        check.pin = "975310"
+        check.password = "pw"
+        let steps: [(String, RecoveryOpenState)] = [
+            ("enter", RecoveryOpenState()), ("answered", answered), ("unanswered", unanswered), ("check", check),
+            ("finish", RecoveryOpenState(step: .finish)),
+        ]
+        for (name, s) in steps {
+            for (problem, expected) in [(OpenSideNotice.guidance(.tryOpenAgain), "guidance"), (.failure(.network), "error")] {
+                let seen = ActionLog()
+                let window = host(
+                    RecoveryOpenContent(state: s, problem: problem, noticeProbe: { seen.items.append($0) }, onStartOver: {})
+                )
+                #expect(seen.items == [expected], "\(name), \(expected)")
+                window.isHidden = true
+            }
+            let busy = host(RecoveryOpenContent(state: s, problem: nil, busy: true, onStartOver: {}))
+            busy.isHidden = true
+        }
+    }
+
+    /// After a recovery that already succeeded on this phone the PIN finishes it, and nothing is started over.
+    @Test func anAlreadyRecoveredPhoneFinishesWithThePin() {
+        // The guidance has an action (the finish) and hides "Start over": the text link stands in its card.
+        #expect(GuidanceNotice.offersFinish(.alreadyRecovered) && GuidanceNotice.offersFinish(.finishWithPin))
+        #expect(GuidanceNotice.offersFinish(.tryOpenAgain) && !GuidanceNotice.offersFinish(.retry) && !GuidanceNotice.offersFinish(.startOverFirst))
+    }
+
+    // MARK: - The code editor
+
+    /// What the model refuses does not stay in the view, also when the model did not change; Return continues only when Continue
+    /// is enabled; the cursor keeps its place when the text is drawn again in groups.
+    @Test func theEditorShowsTheModelsTextReturnSubmitsAndTheCursorStays() async throws {
+        let vault = FakeVaultRepository(.setup(.vaultElsewhere))
+        let model = RecoverViewModel(move: vault, vault: vault, account: vault)
+        await model.settle()
+        model.type()
+        let window = host(
+            RecoverRoute(move: vault, vault: vault, account: vault, onLeave: {}, onNewVault: {}, onOpenAccountSite: {}, camera: nil, model: model)
+        )
+        let editor = try #require(views(in: window).compactMap { $0 as? UITextView }.first)
+        for _ in 0..<2 {
+            editor.text = "7ZK3U"
+            editor.delegate?.textViewDidChange?(editor)
+            let shown = await eventually { editor.text == "7ZK3" && model.state.typed == "7ZK3" }
+            #expect(shown, "the refused U does not stay, the second time either")
+        }
+        let range = NSRange(location: 0, length: 0)
+        let incomplete = editor.delegate?.textView?(editor, shouldChangeTextIn: range, replacementText: "\n")
+        #expect(incomplete == false && vault.calls.filter { $0 == "registerTypedRecovery" }.isEmpty)
+        window.isHidden = true
+        // The cursor: after the same characters, not at the end.
+        let v = UITextView()
+        v.text = "7ZK3M9"
+        v.selectedRange = NSRange(location: 3, length: 0)
+        SecretTextView.show("7ZK3 M9", in: v)
+        #expect(v.text == "7ZK3 M9" && v.selectedRange.location == 3)
+        v.selectedRange = NSRange(location: 4, length: 0)
+        SecretTextView.show("7ZK3 M9QX", in: v)
+        #expect(v.selectedRange.location == 4)
+        v.text = "7ZK3M9"
+        v.selectedRange = NSRange(location: 6, length: 0)
+        SecretTextView.show("7ZK3 M9", in: v)
+        #expect(v.selectedRange.location == 7)
+    }
+
     // MARK: - The routes
 
     /// The back arrow leaves the recovery only where nothing is registered or under way.
