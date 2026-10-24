@@ -92,6 +92,10 @@ public struct RecoverState: Equatable, Sendable, CustomStringConvertible, Custom
     public static let codeGroup = RecoveryCodes.group
     public static let codeGroups = RecoveryCodes.typedGroups
 
+    /// Whether the typed field keeps [character] (a digit or letter of the code, also after I, L and O are read as 1 and 0); a
+    /// separator or a refused character is not kept.
+    public static func keepsTyped(_ character: Character) -> Bool { !RecoveryCodes.typedInput(String(character)).text.isEmpty }
+
     public var step: RecoverStep = .loading
     /// The account the vault belongs to, masked (`email_hint` from the claim, §11.11.7).
     public var emailHint = ""

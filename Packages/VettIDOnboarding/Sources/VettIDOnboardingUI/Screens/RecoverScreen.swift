@@ -117,9 +117,13 @@ public struct RecoverContent: View {
     }
 
     private var scan: some View {
-        FormScaffold(
-            title: RecoveryScreenStrings.recoverScanTitle, message: RecoveryScreenStrings.recoverScanBody, primaryLabel: nil,
-            secondaryLabel: RecoveryScreenStrings.recoverType, onPrimary: {}, onSecondary: actions.type, onBack: back
+        // After a refusal or a failure the camera reads the same QR again at once and it is not sent again: "Try again" scans
+        // anew (the model forgets the refused text).
+        let retry = state.refusal != nil || state.error != nil
+        return FormScaffold(
+            title: RecoveryScreenStrings.recoverScanTitle, message: RecoveryScreenStrings.recoverScanBody,
+            primaryLabel: retry ? RecoveryScreenStrings.onboardingOpenTryAgain : nil, busy: state.busy,
+            secondaryLabel: RecoveryScreenStrings.recoverType, onPrimary: actions.scan, onSecondary: actions.type, onBack: back
         ) {
             VStack(alignment: .leading, spacing: Spacing.l) {
                 ScannerBox(
@@ -151,7 +155,8 @@ public struct RecoverContent: View {
                         text: Binding(get: { TypedCodeFormat.grouped(state.typed) }, set: { actions.setTyped($0) }),
                         placeholder: RecoveryScreenStrings.recoverTypeLabel, isError: problem != nil, pasteOnly: true,
                         // Return is Done (as on Android): it continues when Continue is enabled.
-                        onSubmit: { if state.typedComplete && !state.busy { actions.submitTyped() } }
+                        onSubmit: { if state.typedComplete && !state.busy { actions.submitTyped() } },
+                        keeps: RecoverState.keepsTyped
                     )
                     .disabled(state.busy)
                 }

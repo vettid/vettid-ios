@@ -224,16 +224,32 @@ import VettIDDataTesting
                 let window = host(
                     RecoveryOpenContent(state: s, problem: problem, noticeProbe: { seen.items.append($0) }, onStartOver: {})
                 )
-                #expect(seen.items == [expected], "\(name), \(expected)")
+                #expect(seen.items.filter { $0 == "guidance" || $0 == "error" } == [expected], "\(name), \(expected)")
                 window.isHidden = true
             }
-            let busy = host(RecoveryOpenContent(state: s, problem: nil, busy: true, onStartOver: {}))
-            busy.isHidden = true
+            // While the abandon runs the steps with a Send or Continue take no input.
+            if s.step == .check || s.step == .enter {
+                let seen = ActionLog()
+                let busy = host(RecoveryOpenContent(state: s, problem: nil, busy: true, noticeProbe: { seen.items.append($0) }, onStartOver: {}))
+                #expect(seen.items.contains("busy"), "\(name)")
+                busy.isHidden = true
+                let idle = ActionLog()
+                let free = host(RecoveryOpenContent(state: s, problem: nil, noticeProbe: { idle.items.append($0) }, onStartOver: {}))
+                #expect(!idle.items.contains("busy"), "\(name)")
+                free.isHidden = true
+            }
         }
     }
 
     /// After a recovery that already succeeded on this phone the PIN finishes it, and nothing is started over.
     @Test func anAlreadyRecoveredPhoneFinishesWithThePin() {
+        // "Start over" is on the fields, and gone while the recovery already succeeded on this phone.
+        for (problem, shown) in [(nil, true), (OpenSideNotice.guidance(.alreadyRecovered), false), (.guidance(.tryOpenAgain), true)] {
+            let seen = ActionLog()
+            let window = host(RecoveryOpenContent(state: RecoveryOpenState(), problem: problem, noticeProbe: { seen.items.append($0) }, onStartOver: {}))
+            #expect(seen.items.contains("start_over") == shown, "\(String(describing: problem))")
+            window.isHidden = true
+        }
         // The guidance has an action (the finish) and hides "Start over": the text link stands in its card.
         #expect(GuidanceNotice.offersFinish(.alreadyRecovered) && GuidanceNotice.offersFinish(.finishWithPin))
         #expect(GuidanceNotice.offersFinish(.tryOpenAgain) && !GuidanceNotice.offersFinish(.retry) && !GuidanceNotice.offersFinish(.startOverFirst))
@@ -275,6 +291,12 @@ import VettIDDataTesting
         v.selectedRange = NSRange(location: 6, length: 0)
         SecretTextView.show("7ZK3 M9", in: v)
         #expect(v.selectedRange.location == 7)
+    }
+
+    /// The code keyboard's own characters.
+    @Test func theTypedFieldKeepsDigitsAndLettersOnly() {
+        for kept in ["7", "Z", "z", "I", "l", "O", "0"] { #expect(RecoverState.keepsTyped(Character(kept)), "\(kept)") }
+        for dropped in ["U", "u", "-", " ", "\n", "."] { #expect(!RecoverState.keepsTyped(Character(dropped)), "\(dropped)") }
     }
 
     // MARK: - The routes
