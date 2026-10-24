@@ -131,6 +131,9 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var notices: [OwnerCheckNotice] = []
     public var presenceUnrecorded = false
     public var checkAfterCancel = false
+    /// (Release L) The vault locked itself; the idle-lock setting (nil: a vault before L).
+    public var idleLocked: IdleLocked?
+    public var idleLockSetting: IdleLockSetting?
     /// Scripted answers to ``check(pin:password:holdOff:)`` (default: passed).
     public var checkResults: [OwnerCheckOutcome] = []
     public var lastHoldOff: HoldOff?
@@ -350,6 +353,23 @@ extension FakeVaultRepository: OwnerCheckRepository {
         ownerCheck?.hold = true
         ownerCheck?.holdOffUntil = nil
     }
+
+    public func refreshIdleLockSetting() async throws { try call("refreshIdleLockSetting") }
+
+    /// As the vault: a shorter value at once, a longer one after the next check (the lowest since then in force).
+    public func setIdleLockAfter(seconds: Int64) async throws {
+        try call("setIdleLockAfter")
+        guard let before = idleLockSetting else { return }
+        idleLockSetting = IdleLockSetting(seconds: seconds, inForceSeconds: min(before.inForceSeconds, seconds))
+    }
+
+    public func idleLockedNow(_ now: Date) -> IdleLocked? {
+        idleLocked ?? ownerCheck.flatMap { v in
+            v.idleLockAt.flatMap { $0 <= now ? IdleLocked(afterSeconds: v.idleAfterSeconds) : nil }
+        }
+    }
+
+    public func onLockedHere() {}
 
     public func consumeUnlockCheckOutcome() { unlockCheckOutcome = nil }
 

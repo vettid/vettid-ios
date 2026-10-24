@@ -165,6 +165,11 @@ public final class FakeVaultService: @unchecked Sendable {
     var checkLastAt: Date?
     var checkDeadline: Date?
     var checkInterval: TimeInterval = 86_400
+    /// (Release L, §3.6.8) `idle_lock.after_seconds` as set, the lowest value since the last passed check (the one the
+    /// vault uses until then), and whether the vault has the idle lock at all (a vault before L does not).
+    var idleAfterValue: TimeInterval = 604_800
+    var idleInForceValue: TimeInterval = 604_800
+    var idleSupportedValue = true
     var checkFailures = 0
     /// The state the vault last acted on ("", "due" or "held"), as vettid-vault's `OwnerCheck.Gate`.
     var checkGate = ""

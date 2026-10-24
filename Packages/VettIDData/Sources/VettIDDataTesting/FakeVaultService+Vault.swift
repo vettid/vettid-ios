@@ -196,7 +196,7 @@ extension FakeVaultService {
         case "vault.status": try status(m)
         case Self.typeOwnerCheck: try ownerCheck(m, body)
         case "credential.ack": try credentialAck(m, body)
-        case "settings.get": try reply(m.type, #"{"version":\#(settingsVersion),"settings":{"credential.backup":\#(backup),"credential.unlock_ttl_seconds":\#(unlockTtl),"owner_check.interval_seconds":\#(Int(checkInterval)),"owner_check.hold":\#(!holdOffValue)}}"#, re: m.id)
+        case "settings.get": try reply(m.type, #"{"version":\#(settingsVersion),"settings":{"credential.backup":\#(backup),"credential.unlock_ttl_seconds":\#(unlockTtl),"owner_check.interval_seconds":\#(Int(checkInterval)),"owner_check.hold":\#(!holdOffValue)\#(idleSupportedValue ? #","idle_lock.after_seconds":\#(Int(idleAfterValue))"# : "")}}"#, re: m.id)
         case "settings.set": try settingsSet(m, body)
         case "vault.lock": try relayLock(m)
         case "vault.enroll.confirm":
