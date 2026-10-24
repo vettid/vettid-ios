@@ -85,7 +85,8 @@ import VettIDVault
 
     /// The answer lost while the member API still lists the vault: the vault's `device.unlinked{vault_deleted}` says
     /// that the deletion applied, so the phone shows "being deleted" (IOS-PLAN §4.2) rather than "not confirmed"; nothing
-    /// more goes to the vault, and once the API no longer lists the vault, Check again erases VettID's data.
+    /// more goes to the vault, and once the API no longer lists the vault, Check again still erases nothing (`{vault: null}` is
+    /// advisory); the member's confirmed removal erases VettID's data.
     @Test func aLostAnswerTheApiStillListsIsBeingDeleted() async throws {
         defer { phone.close() }
         try await setUp()
@@ -97,8 +98,9 @@ import VettIDVault
         let seen = service.requestsSeen.count
         #expect(await m.checkDeletionAgain() == .listed)
         service.statusLagsDeletion = false
-        #expect(await m.checkDeletionAgain() == .gone)
+        #expect(await m.checkDeletionAgain() == .unconfirmed && m.phase == .deleting)
         #expect(service.requestsSeen.count == seen && service.deletes.count == 1, "nothing sent to the vault")
+        try await m.eraseThisPhone()
         try expectWiped()
         #expect(m.vaultDeletedNotice)
     }
@@ -185,7 +187,8 @@ import VettIDVault
         let d = try #require(m.deletion)
         #expect(d.until.timeIntervalSince(d.since) > VaultManager.deletingBound)
         m.onForeground()
-        #expect(await eventually { m.phase == .signedOut })
+        #expect(await m.checkDeletionAgain() == .unconfirmed && m.phase == .deleting)
+        try await m.eraseThisPhone()
         try expectWiped()
     }
 
@@ -208,7 +211,8 @@ import VettIDVault
         service.deliverDeletionUnlink()
         #expect(await eventually { m.phase == .deleting })
         m.onForeground()
-        #expect(await eventually { m.phase == .signedOut })
+        #expect(await eventually { m.phase == .deleting })
+        try await m.eraseThisPhone()
         try expectWiped()
         _ = try? await device.send("message.attachment.get")
         try expectWiped()
@@ -244,7 +248,8 @@ import VettIDVault
         _ = try? await unlock.value
         #expect(m.phase == .deleting && m.session == nil)
         service.statusLagsDeletion = false
-        #expect(await m.checkDeletionAgain() == .gone)
+        #expect(await m.checkDeletionAgain() == .unconfirmed && m.phase == .deleting)
+        try await m.eraseThisPhone()
         try expectWiped()
     }
 

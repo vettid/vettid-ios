@@ -12,9 +12,12 @@ struct OwnDelete {
 // A vault being deleted (IOS-PLAN §4.2, ANDROID-PLAN §4 "A vault being deleted"; VAULT-MESSAGING §12.5 "Order"). The
 // vault's `device.unlinked{vault_deleted}` arrives in step 1, but the member API lists the vault until step 5: the app
 // closes the open vault at once, keeps a non-secret marker (``DeletingMarker``) so that a restart reopens in this state,
-// re-reads the status on a schedule up to a bound (``DeletionWatch``) and, once the vault is no longer listed (`{vault:
-// null}`, or `401` to the app key), erases VettID's data on this phone as after a deletion (``afterVaultDeleted()``)
-// and shows the one-time notice on "no vault". Nothing is sent to the vault meanwhile: no session opens.
+// re-reads the status on a schedule up to a bound (``DeletionWatch``). Owner decision, 2026-10-24: the member API has
+// no definite "deleted" answer yet (a deleted vault gets the same bare `401`), so `{vault: null}`, `401` (a clock's
+// included) and `403` never end this state and never erase; past the bound the member can confirm "Remove from this
+// phone" (``AccountRepository/eraseThisPhone()``), which shows the one-time notice on "no vault". A definite word (the
+// member API's future `410 vault_deleted`) ends it through ``deletionGone()``. Nothing is sent to the vault meanwhile:
+// no session opens.
 //
 // (Chosen; not in the spec) A deletion this phone sent and the vault answered erases this phone at once, as before: the
 // answer says that it applied. The event during this phone's own deletion is left to it: an answer erases, a lost answer
@@ -49,7 +52,7 @@ extension VaultManager {
         _ = try? record.update(since: record.generation) { $0.deleting = marker }
         closeForDeleting()
         deletion = VaultDeletion(since: marker.since, until: marker.until)
-        deletionReads.start(until: marker.until, readFirst: false)
+        deletionReads.start(since: marker.since, until: marker.until, readFirst: false)
     }
 
     /// A start that found the marker: "being deleted" before anything else, and a read at once; past the bound, the
@@ -57,8 +60,9 @@ extension VaultManager {
     func resumeDeleting(_ m: DeletingMarker) -> AppPhase {
         guard deletion == nil else { return .deleting }
         closeForDeleting()
-        deletion = VaultDeletion(since: m.since, until: m.until, slow: config.now() >= m.until)
-        deletionReads.start(until: m.until, readFirst: true)
+        let slow = VaultDeletion.pastBound(since: m.since, until: m.until, now: config.now())
+        deletion = VaultDeletion(since: m.since, until: m.until, slow: slow)
+        deletionReads.start(since: m.since, until: m.until, readFirst: true)
         return .deleting
     }
 
@@ -97,15 +101,14 @@ extension VaultManager {
         return w
     }
 
-    /// One read of the member API's status for a vault being deleted (§4.2 point 3).
+    /// One read of the member API's status for a vault being deleted (§4.2 point 3). No answer or failure is ``DeletionRead/gone``:
+    /// neither `{vault: null}` nor a `401`, `403`, 5xx or timeout is a definite word, so nothing here erases this phone.
     private func readDeletionStatus() async -> DeletionRead {
         do {
-            return try await vaultStatus() == nil ? .gone : .listed
-        } catch let e as MemberApiError where e.code == MemberApiError.unauthorized {
-            // The row, and with it the app key, was removed.
-            return .gone
+            let vault = try await vaultStatus()
+            return .of(vaultListed: vault != nil, servicePaused: servicePaused)
         } catch {
-            return .unreachable
+            return .of(failure: error)
         }
     }
 

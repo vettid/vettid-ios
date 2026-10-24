@@ -216,6 +216,8 @@ public final class FakeVaultService: @unchecked Sendable {
     var statusLagsDeletionValue = false
     /// `GET /api/vault/status` answers `401 unauthorized` (the row, and with it the app key, removed).
     var statusUnauthorizedValue = false
+    /// `GET /api/vault/status` answers `403 forbidden`.
+    var statusForbiddenValue = false
     var holdsDeletionUnlinkValue = false
     var slotQueuedAfterDeletionValue = 0
     var statusGateValue: FakeHTTPServer.Gate?
@@ -366,6 +368,12 @@ public final class FakeVaultService: @unchecked Sendable {
         set { locked { statusUnauthorizedValue = newValue } }
     }
 
+    /// `GET /api/vault/status` answers `403 forbidden`.
+    public var statusForbidden: Bool {
+        get { locked { statusForbiddenValue } }
+        set { locked { statusForbiddenValue = newValue } }
+    }
+
     /// The enclave route cannot be reached: an enrollment fails before any request is posted.
     public var enclaveOffline: Bool {
         get { locked { enclaveOfflineValue } }
@@ -449,6 +457,7 @@ public final class FakeVaultService: @unchecked Sendable {
             case ("POST", "/api/vault/recovery/open"): return recoveryOpen(r)
             case ("GET", "/api/vault/status"):
                 if statusUnauthorizedValue { return .json(401, #"{"error":"unauthorized"}"#) }
+                if statusForbiddenValue { return .json(403, #"{"error":"forbidden"}"#) }
                 let rs = recoveryStatusField()
                 if let refused = rs.unauthorized { return refused }
                 let a: FakeHTTPServer.Answer = if noVault || vaultDeletedValue && !statusLagsDeletionValue {

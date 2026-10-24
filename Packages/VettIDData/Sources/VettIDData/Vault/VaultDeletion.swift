@@ -1,4 +1,5 @@
 import Foundation
+import VettIDAltChan
 
 /// (IOS-PLAN §4.2) A vault being deleted, as the screens see it: since when (the `device.unlinked{vault_deleted}` that
 /// started it), the bound until which the app re-reads the member API's status on its own, and whether the bound has
@@ -18,12 +19,48 @@ public struct VaultDeletion: Equatable, Sendable {
 
 /// What one read of `GET /api/vault/status` says of a vault being deleted (IOS-PLAN §4.2 point 3).
 public enum DeletionRead: Equatable, Sendable {
-    /// `{vault: null}`, or `401 unauthorized` to the app key: the vault is gone.
+    /// A definite word that the vault is gone. Nothing reads it yet (owner decision, 2026-10-24): neither `{vault: null}`
+    /// (advisory) nor a bare `401` (the member API gives the same one for the timestamp, nonce, signature and other
+    /// faults) is definite. The member API's future `410 vault_deleted` is the signal meant for this.
     case gone
     /// The vault is still listed, whatever its `state`.
     case listed
-    /// The member API could not be reached (or answered anything else).
+    /// The member API answered, but not definitely: `{vault: null}` (advisory), a `401` of any kind or a `403`. This
+    /// phone cannot tell a deleted vault from a clock, nonce, signature or key fault, so nothing is erased.
+    case unconfirmed
+    /// As ``unconfirmed``, and the `401` was for the phone's clock (a date and time hint is shown). Never erases.
+    case unconfirmedClock
+    /// The member API could not be reached (network, timeout, 5xx, paused, or anything else): nothing is concluded.
     case unreachable
+
+    /// What an answer of the status says: a listed vault is listed, `{vault: null}` is unconfirmed, and a paused
+    /// service concludes nothing. Never ``gone``.
+    static func of(vaultListed: Bool, servicePaused: Bool) -> DeletionRead {
+        if servicePaused { return .unreachable }
+        return vaultListed ? .listed : .unconfirmed
+    }
+
+    /// What a failed read says: nothing definite. A `401` of any kind (``MemberApiError/unauthorized``, and
+    /// ``MemberApiError/clockSkew``, a `401` for the clock) and a `403` are unconfirmed; the rest (network, timeout, 5xx,
+    /// 429) is unreachable. Never ``gone``.
+    static func of(failure error: Error) -> DeletionRead {
+        guard let e = error as? MemberApiError else { return .unreachable }
+        if e.code == MemberApiError.clockSkew { return .unconfirmedClock }
+        if e.status == 401 || e.status == 403 || e.code == MemberApiError.unauthorized { return .unconfirmed }
+        return .unreachable
+    }
+}
+
+extension VaultDeletion {
+    /// A step back of the clock up to this (an NTP correction) does not count.
+    static let clockTolerance: TimeInterval = 60
+
+    /// Whether a deletion begun at [since] is past its bound at [now]. A clock that went back before [since] is past it
+    /// too (the wall clock cannot be trusted to count down), so Check again and "Remove from this phone" are never hidden
+    /// by it.
+    static func pastBound(since: Date, until: Date, now: Date) -> Bool {
+        now >= until || now < since.addingTimeInterval(-clockTolerance)
+    }
 }
 
 /// The non-secret marker of a vault being deleted (IOS-PLAN §4.2 point 2): kept with the account record, so that a new
@@ -87,18 +124,20 @@ final class DeletionWatch {
 
     /// Starts the schedule towards [until] (an earlier one stops). [readFirst]: a start of the process, which reads at
     /// once.
-    func start(until: Date, readFirst: Bool) {
+    func start(since: Date, until: Date, readFirst: Bool) {
         loop?.cancel()
         goneSeen = false
         loop = Task { @MainActor [weak self] in
             if readFirst, await self?.readOnce() == .gone { return }
             var i = 0
             while !Task.isCancelled, let self {
-                let left = until.timeIntervalSince(now())
-                guard left > 0 else {
+                let at = now()
+                guard !VaultDeletion.pastBound(since: since, until: until, now: at) else {
                     onSlow()
                     return
                 }
+                // Capped: a clock that moved back must not make the wait as long as the move.
+                let left = min(max(until.timeIntervalSince(at), 0), Self.schedule.then)
                 do {
                     try await sleep(.milliseconds(Int64((min(Self.wait(i), left) * 1000).rounded(.up))))
                 } catch {
