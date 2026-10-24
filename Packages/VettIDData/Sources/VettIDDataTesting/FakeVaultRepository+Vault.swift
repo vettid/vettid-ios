@@ -255,7 +255,12 @@ extension FakeVaultRepository: MoveRepository {
 
     public func finishRecoveryOpen() async throws {
         try call("finishRecoveryOpen")
-        phase = .unlocked
+        if let recoveryFinishError { throw recoveryFinishError }
+        if recoveryLockPending {
+            phase = .locked
+            throw VaultFailure(.noResponse, code: MoveCodes.lockPending)
+        }
+        phase = recoveryOpenLeavesFinishing ? .setup(.finishing) : .unlocked
     }
 
     public func transferIn(code: String) async throws -> String {

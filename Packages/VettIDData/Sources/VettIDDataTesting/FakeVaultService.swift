@@ -244,6 +244,8 @@ public final class FakeVaultService: @unchecked Sendable {
     var tagStore = FakeTagStore()
     /// The direct transfer, in both directions (FakeVaultService+Transfer.swift), under ``cond``.
     var transfer = FakeTransferStore()
+    /// The recovery on a new phone (FakeVaultService+Recovery.swift), under ``cond``.
+    var recovery = FakeRecoveryStore()
     /// The grants given and received and the requests made (FakeVaultService+Sharing.swift), under ``cond``.
     var grants = FakeGrantStore()
 
@@ -434,6 +436,9 @@ public final class FakeVaultService: @unchecked Sendable {
             case ("POST", "/api/vault/enroll"): return enroll(r)
             case ("POST", "/api/vault/unlock"): return unlock(r)
             case ("POST", "/api/vault/lock"): return memberLock(r)
+            case ("POST", "/api/vault/recovery/claim"): return recoveryClaim(r)
+            case ("POST", "/api/vault/recovery/register"): return recoveryRegister(r)
+            case ("POST", "/api/vault/recovery/open"): return recoveryOpen(r)
             case ("GET", "/api/vault/status"):
                 if statusUnauthorizedValue { return .json(401, #"{"error":"unauthorized"}"#) }
                 let a: FakeHTTPServer.Answer = if noVault || vaultDeletedValue && !statusLagsDeletionValue {

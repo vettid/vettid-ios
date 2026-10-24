@@ -559,6 +559,10 @@ public enum MoveCodes {
     /// (Release R) ``MoveRepository/abandonRecovery()`` after the vault made this phone its app: never; the phone key
     /// stays.
     public static let recoveryOpened = "recovery_opened"
+    /// ``MoveRepository/finishRecoveryOpen()``: a lock is pending, so the app did not open (as a release update's lock).
+    public static let lockPending = "lock_pending"
+    /// ``MoveRepository/finishRecoveryOpen()``: the app did not open (a lock or a wipe meanwhile, or setup could not finish).
+    public static let notOpened = "not_opened"
 
     /// How long the new phone waits for the vault's `hs.resp` after its transfer `hs.init` (VAULT-MESSAGING §6.7.1 step
     /// 2, a SHOULD): the vault answers at once, but never a dropped `hs.init` (a spent or expired code, a failed

@@ -435,8 +435,11 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// Drops the session. [forget]: the device state goes, with fresh device keys and a new app key for the next setup
     /// (the app key is per vault, §11.12.2), and every phone key and record. Refused while the phone may hold a vault
     /// (``mayHoldVault(_:)``) unless [vaultGone]: the member API, asked again, said explicitly that it has none.
-    func dropSession(forget: Bool, vaultGone: Bool = false) async throws {
-        if forget, !vaultGone, let refusal = startOverRefusal(session?.device) { throw refusal }
+    ///
+    /// [registrationOnly]: the device holds no vault, only a recovery's registration (``abandonRecovery()``), which
+    /// ``startOverRefusal(_:)`` would take for a vault: that start-over is refused only by its caller.
+    func dropSession(forget: Bool, vaultGone: Bool = false, registrationOnly: Bool = false) async throws {
+        if forget, !vaultGone, !registrationOnly, let refusal = startOverRefusal(session?.device) { throw refusal }
         // A session still being opened is stopped and waited for, as at a wipe: no device made or written after the forget.
         if forget { _ = await cancelOpening() }
         let s = session

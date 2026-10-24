@@ -146,7 +146,7 @@ extension FakeVaultService {
         if case .offline = answer { return .failure(.notConnectedToInternet) }
         if case .unavailable = answer { return .json(503, #"{"error":"vault_unavailable"}"#) }
         guard let o = try? StrictJson.parseObject(r.body), let rid = try? o.string("request_id"), let env = try? o.base64("envelope"),
-              let request = try? openRequest(env), let body = try? StrictJson.parseObject(request.body), let kem = device?.kem
+              let request = try? openRequest(env), let body = try? StrictJson.parseObject(request.body), let kem = device?.kem ?? recovery.phone?.kem
         else { return .json(400, #"{"error":"bad_request"}"#) }
         let pin = (try? body.string("pin")) ?? ""
         let secret = try? body.base64("unlock_secret")
@@ -195,7 +195,7 @@ extension FakeVaultService {
         let token = device.flatMap { try? self.token($0.relay) } ?? ""
         let serving = releases.serving
         let (member, staysLocked) = releaseRules(update)
-        let ok = #"{"ok":true,"state_seq":\#(stateSeq),"header_seq":\#(headerSeq),"token":"\#(token)","release":"\#(Self.pcr0(serving))","release_number":\#(serving),"release_status":"active","manifest_serial":\#(vaultManifestSerial)\#(member)}"#
+        let ok = #"{"ok":true,"state_seq":\#(stateSeq),"header_seq":\#(headerSeq),"token":"\#(token)","release":"\#(Self.pcr0(serving))","release_number":\#(serving),"release_status":"active","manifest_serial":\#(vaultManifestSerial)\#(member)\#(recoveryBundleMember())}"#
         // A move (§11.10.4 step 8) locks without opening.
         if staysLocked { return ok }
         vaultOpen = true
