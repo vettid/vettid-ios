@@ -40,7 +40,9 @@ extension VaultDevice: AltParty {
     }
 
     public func openEnrollResult(_ raw: [UInt8], requestID: String) async throws -> EnrollResult {
-        try EnrollResult.parse(try AltResults.open(raw, kem: secrets.kem, type: AltResults.typeEnrollResult, requestID: requestID))
+        let r = try EnrollResult.parse(try AltResults.open(raw, kem: secrets.kem, type: AltResults.typeEnrollResult, requestID: requestID))
+        if r.ok { opened(r.unlockID) }
+        return r
     }
 
     public func prepareUnlock( // swiftlint:disable:this function_parameter_count
@@ -62,6 +64,9 @@ extension VaultDevice: AltParty {
             // Android key; an iOS attester has no chain, so nothing is added).
             var opts = options
             opts.sendChain = !signerSeen
+            // (Release L) Whatever opening was known is over or about to be: a lock asked for meanwhile names none (the
+            // unlock's result names the new one); a status answer in flight no longer applies.
+            opened(nil)
             let b = try AltRequests.buildUnlock(
                 userGuid: userGuid, vaultID: vid, pin: pin, enclave: enclave, manifest: manifest, attester: attester,
                 ik: secrets.identity, token: tok, state: state, options: opts, now: now()
@@ -110,6 +115,9 @@ extension VaultDevice: AltParty {
                 // §11.7.1: a refusal for the signer: the next unlock carries the chain again, until device.list shows one.
                 st.signerSeen = st.signerSeen && r.code != Self.codeSignerRefused
                 guard r.ok else { return }
+                // The name of the opening: none when the vault did not resume (a move, §11.10.6) or is from before L. A
+                // failed unlock sets none: building it cleared the name, and the next vault.status says what runs.
+                opened(r.token == nil ? nil : r.unlockID)
                 if let bundle = r.vaultBundle, st.vault == nil, st.recovery != nil { try adoptBundle(bundle) }
                 // §11.11.5 step 1 (0.10.6): whether the password can recover the credential; kept across a restart.
                 if st.recovery != nil, let backup = r.credentialBackup { st.recovery?.credentialBackup = backup }

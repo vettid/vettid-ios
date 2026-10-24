@@ -215,7 +215,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         lockGuard = LockGuard(ports: lockPorts, now: config.now, sleep: timing.sleep) { attempt in
             LockKeeper(
                 store: lockFile, attempt: attempt, now: config.now, backoff: timing.backoff, relayMargin: timing.relayMargin,
-                sleep: timing.sleep
+                sleep: timing.sleep, onOpenedAgain: { ref.manager?.forgetUnlockID($0) }
             )
         }
         locking = LockSequence(sleep: timing.sleep)
@@ -300,7 +300,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             moveFlags.book.lockResumed = true
             // A lock that was pending when the process ended: locked from the start, and tried again at once.
             lockGuard.keeper.resume()
-            lockNotices.opened(at: record.value.lastOpenedMs.map { Date(timeIntervalSince1970: Double($0) / 1000) })
+            resumeLockNotices()
         }
         resumeMoveState()
     }

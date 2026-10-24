@@ -350,10 +350,12 @@ public struct AltChannelFlow: Sendable {
     }
 
     /// Asks the leaseholder to lock the vault and waits for the slot: until it is no longer queued, or for [atMost]. An
-    /// answered slot says that the request was handled, **not** that the vault locked; only the vault's status says.
-    public func lock(vaultID: String, atMost: TimeInterval? = nil) async throws -> Slot {
+    /// answered slot from a release before L says that the request was handled, **not** that the vault locked; from release
+    /// L a `done` carries a code (``Slot/codeLocked``, ``Slot/codeNotRunning``, ``Slot/codeStale``), the host's word.
+    /// [unlockID]: a bound lock (MEMBER-API 2.10.1).
+    public func lock(vaultID: String, atMost: TimeInterval? = nil, unlockID: String? = nil) async throws -> Slot {
         let rid = Ulid.new(now())
-        try await api.lock(vaultID: vaultID, requestID: rid)
+        try await api.lock(vaultID: vaultID, requestID: rid, unlockID: unlockID)
         return try await api.poll(rid, atMost: atMost)
     }
 

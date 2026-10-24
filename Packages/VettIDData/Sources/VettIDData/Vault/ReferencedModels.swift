@@ -86,6 +86,11 @@ public enum LockNotice: Equatable, Sendable {
     case unconfirmed(askedAt: Date, attempts: Int)
     /// The vault has now confirmed a lock that was in doubt: said once, until dismissed or the next unlock.
     case confirmedLate
+    /// (Release L) The vault said that the unlock this lock was for is over: it was opened again since (`stale_lock`, or the
+    /// slot's `stale`), and the status did not say it is locked now. The lock is finished and not repeated (VAULT-MESSAGING
+    /// §10.2 "Locks"), but the vault is **not** known to be locked: it may be open. This phone stays locked until the member
+    /// unlocks it here (``LockKeeper/holdsPhone``). Said until dismissed or the next unlock.
+    case openedAgain
 
     /// At least one try failed: the vault may still be open.
     public var inDoubt: Bool {

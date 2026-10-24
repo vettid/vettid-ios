@@ -146,11 +146,17 @@ public final class FakeVaultService: @unchecked Sendable {
     var unlocksValue: [UnlockSeen] = []
     /// The releases the fake runs and the release updates it was sent (``FakeVaultService+Release.swift``).
     var releases = FakeReleases()
+    /// (Release L) Whether this vault names its openings (`unlock_id`) and binds locks to them; the vault of a release before
+    /// L (the default here, as the older tests expect) does not. The current opening's name, set by every opening.
+    var announcesUnlockIDValue = false
+    var unlockIDValue: String?
     var relayLockAnswerValue: RelayLockAnswer = .lock
     var memberLockAnswerValue: MemberLockAnswer = .lock
     var heldSlots: [String: [UInt8]] = [:]
     var holdMessagesValue = false
     var relayLocksValue = 0
+    var relayLockNames: [String?] = []
+    var memberLockNames: [String?] = []
     var memberLocksValue = 0
 
     // The owner check (FakeVaultService+OwnerCheck.swift), under ``cond``, on the vault's clock.
@@ -520,13 +526,14 @@ public final class FakeVaultService: @unchecked Sendable {
             vaultMade = true
             vaultPin = enrollsValue.last?.pin
             vaultSecret = enrollsValue.last?.unlockSecret
+            newOpening()
             do {
                 if case .answerLostEnrolledLate = answer {
                     lateEnrolled = LateEnrolled(kem: appKem, relay: addr, nonce: nonce)
                     return .failure(.networkConnectionLost)
                 }
                 try queueEnrolled(appKem, addr, nonce: nonce)
-                slots[rid] = try Self.sealResult(appKem, "vault.enroll.result", rid, #"{"ok":true,"vault_id":"\#(vaultID)"}"#)
+                slots[rid] = try Self.sealResult(appKem, "vault.enroll.result", rid, #"{"ok":true,"vault_id":"\#(vaultID)"\#(unlockMember)}"#)
             } catch {
                 return .empty(500)
             }

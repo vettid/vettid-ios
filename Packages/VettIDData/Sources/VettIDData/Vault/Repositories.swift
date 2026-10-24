@@ -147,8 +147,13 @@ public protocol VaultRepository: AnyObject, Observable, Sendable {
     /// Tries the pending lock again now.
     func retryLock()
 
-    /// The member has read that the vault confirmed a lock that was in doubt.
+    /// The member has read that the vault confirmed a lock that was in doubt, or that it was opened again.
     func dismissLockNotice()
+
+    /// (Release L, owner decision 2026-10-24) "Lock it now" after ``LockNotice/openedAgain``: a fresh lock of the vault as it
+    /// is now, bound to its current opening when the vault's status names it, unconditional otherwise; made and retried as
+    /// any lock. Returns once it is asked for. Default: nothing.
+    func lockAgain() async
 
     /// Enrolls a vault with [pin] (VAULT-MESSAGING §11.3) and runs the first handshake.
     func enroll(pin: String, onStep: @MainActor (EnrollStep) -> Void) async throws
@@ -335,6 +340,7 @@ public extension VaultRepository {
     var lockNotice: LockNotice { .none }
     func retryLock() {}
     func dismissLockNotice() {}
+    func lockAgain() async {}
     var earlierSecretOffered: Bool { false }
     var releaseUpdateHeld: Bool { false }
     var unconfirmedMove: UnconfirmedMove? { nil }

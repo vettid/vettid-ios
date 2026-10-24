@@ -315,6 +315,23 @@ extension OnboardingStrings {
     static var unlockLockConfirmed: String {
         String(localized: "unlock_lock_confirmed", defaultValue: "Your vault is locked.", bundle: .module)
     }
+    // Release L (VAULT-MESSAGING 0.56.4 §10.2 "Locks"): the vault answered that the unlock this lock was for is over
+    // (stale_lock / stale). The texts are vettid-android's (approved by the owner 2026-10-24).
+    static var unlockLockOpenedAgainTitle: String {
+        String(localized: "unlock_lock_opened_again_title", defaultValue: "Your vault was opened again", bundle: .module)
+    }
+    static var unlockLockOpenedAgainBody: String {
+        String(
+            localized: "unlock_lock_opened_again_body",
+            defaultValue: """
+                Your vault was unlocked again after you locked it, so it did not lock and may be open now. This phone is locked.
+                """,
+            bundle: .module
+        )
+    }
+    static var unlockLockAgain: String {
+        String(localized: "unlock_lock_again", defaultValue: "Lock it now", bundle: .module)
+    }
     static var unlockLockOk: String {
         String(localized: "unlock_lock_ok", defaultValue: "OK", bundle: .module)
     }

@@ -68,6 +68,9 @@ public struct LockTiming: Sendable {
     public var memberWait: TimeInterval
     /// Added to a relay lock's validity before an unlock may follow it.
     public var relayMargin: Duration
+    /// "Lock it now" (release L): how long the status read that names the opening running now may take; then the lock goes
+    /// out unconditional.
+    public var lockStatusWait: TimeInterval
     /// The wait before each retry of a pending lock.
     public var backoff: @Sendable (Int) -> Duration
     /// How the lock waits (``realLockSleep`` in the app).
@@ -77,6 +80,7 @@ public struct LockTiming: Sendable {
         relayAnswer: TimeInterval = VaultApi.lockAnswer,
         relayValid: TimeInterval = VaultApi.lockValid,
         memberWait: TimeInterval = 12,
+        lockStatusWait: TimeInterval = 5,
         relayMargin: Duration = LockKeeper.relayMargin,
         backoff: @escaping @Sendable (Int) -> Duration = LockKeeper.defaultBackoff,
         sleep: @escaping LockSleep = realLockSleep
@@ -84,6 +88,7 @@ public struct LockTiming: Sendable {
         self.relayAnswer = relayAnswer
         self.relayValid = relayValid
         self.memberWait = memberWait
+        self.lockStatusWait = lockStatusWait
         self.relayMargin = relayMargin
         self.backoff = backoff
         self.sleep = sleep

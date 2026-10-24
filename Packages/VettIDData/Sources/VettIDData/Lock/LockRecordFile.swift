@@ -1,11 +1,14 @@
 import Foundation
+import VettIDAltChan
 import VettIDKeys
 
 /// The lock's record (``LockRecord``, ``LockKeeper``) in a file of its own in the encrypted file store, beside the account
 /// record and not in it, written whole by atomic replace: a lock the member asked for is kept across a process death
-/// whatever the state of the account record. Two times and nothing else (when a lock was asked for, and until when an
-/// unanswered relay lock may still be acted on). Mirrors vettid-android `LockRecordFile` (a plain-text file there; no
-/// older record to migrate here).
+/// whatever the state of the account record. Two times (when a lock was asked for, and until when an unanswered relay lock
+/// may still be acted on) and, from release L, the `unlock_id` a pending lock is bound to (a name, not a secret) and whether
+/// this phone is held locked after a lock that ended because the vault was opened again. A record with neither is written
+/// in the first version's form; a record of a form this app does not know says a lock is pending (fail secure). Mirrors
+/// vettid-android `LockRecordFile` (a plain-text file there; no older record to migrate here).
 ///
 /// Fail secure: a file that cannot be read now (the iPhone locked), read at all, or understood says a lock is pending,
 /// and so does a missing file once one was written ([inUse], kept in the account record). A fresh install (no account
@@ -14,8 +17,20 @@ import VettIDKeys
 @MainActor
 final class LockRecordFile: LockRecordStore {
     private static let version = "1"
+    /// (Release L) With the `unlock_id` the pending lock is bound to (or `-`) and the held marker (`0`, `1`, or `2`: held and
+    /// since confirmed locked).
+    private static let versionBound = "2"
     private static let none = "-"
     private static let fields = 3
+    private static let fieldsBound = 5
+    /// A held record may carry, as a sixth field, the name of the opening its lock ended on (``LockRecord/deadUnlockID``).
+    private static let fieldsDead = 6
+    private static let held = "1"
+    private static let notHeld = "0"
+    private static let heldConfirmed = "2"
+
+    /// A record that cannot be written in a form the next process reads (an `unlock_id` not of the form).
+    struct NotSaved: Error {}
 
     private let file: EncryptedFileStore
     private let inUse: @MainActor () -> Bool
@@ -51,22 +66,55 @@ final class LockRecordFile: LockRecordStore {
     }
 
     func save(_ record: LockRecord) throws {
-        let line = "\(Self.version) \(record.pendingSinceMs.map(String.init) ?? Self.none) "
-            + "\(record.relayLockUntilMs.map(String.init) ?? Self.none)\n"
-        try file.save(Array(line.utf8))
+        try file.save(Array(Self.line(record).utf8))
         if !inUse() { onFirstSave() }
+    }
+
+    static func line(_ r: LockRecord) throws -> String {
+        let times = "\(r.pendingSinceMs.map(String.init) ?? none) \(r.relayLockUntilMs.map(String.init) ?? none)"
+        if r.unlockID == nil && !r.held && r.deadUnlockID == nil { return "\(version) \(times)\n" }
+        var shown = none
+        if let id = r.unlockID {
+            guard UnlockIds.of(id) != nil else { throw NotSaved() }
+            shown = id
+        }
+        let mark = !r.held ? notHeld : r.heldConfirmed ? heldConfirmed : held
+        var dead = ""
+        if let d = r.deadUnlockID {
+            guard UnlockIds.of(d) != nil else { throw NotSaved() }
+            dead = " \(d)"
+        }
+        return "\(versionBound) \(times) \(shown) \(mark)\(dead)\n"
     }
 
     static func parse(_ bytes: [UInt8]) -> LockRecord? {
         guard let text = String(bytes: bytes, encoding: .utf8) else { return nil }
         let parts = text.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: " ", omittingEmptySubsequences: false)
-        guard parts.count == fields, parts[0] == version else { return nil }
+        guard let form = parts.first else { return nil }
+        let bound = form == versionBound
+        let expected = bound ? [fieldsBound, fieldsDead] : [fields]
+        guard bound || form == version, expected.contains(parts.count) else { return nil }
         func time(_ s: Substring) -> Int64?? {
             if s == none { return .some(nil) }
             guard let v = Int64(s) else { return nil }
             return .some(v)
         }
         guard let pending = time(parts[1]), let relay = time(parts[2]) else { return nil }
-        return LockRecord(pendingSinceMs: pending, relayLockUntilMs: relay)
+        guard bound else { return LockRecord(pendingSinceMs: pending, relayLockUntilMs: relay) }
+        var id: String?
+        if parts[3] != none {
+            guard let valid = UnlockIds.of(String(parts[3])) else { return nil }
+            id = valid
+        }
+        let marks: [String: (Bool, Bool)] = [held: (true, false), heldConfirmed: (true, true), notHeld: (false, false)]
+        guard let mark = marks[String(parts[4])] else { return nil }
+        var dead: String?
+        if parts.count == fieldsDead {
+            guard let valid = UnlockIds.of(String(parts[5])) else { return nil }
+            dead = valid
+        }
+        return LockRecord(
+            pendingSinceMs: pending, relayLockUntilMs: relay, unlockID: id, held: mark.0, heldConfirmed: mark.1, deadUnlockID: dead
+        )
     }
 }

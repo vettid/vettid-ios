@@ -1321,6 +1321,17 @@
         }
       }
     },
+    "unlock_lock_again": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lock it now"
+          }
+        }
+      }
+    },
     "unlock_lock_confirmed": {
       "extractionState": "manual",
       "localizations": {
@@ -1350,6 +1361,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "OK"
+          }
+        }
+      }
+    },
+    "unlock_lock_opened_again_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault was unlocked again after you locked it, so it did not lock and may be open now. This phone is locked."
+          }
+        }
+      }
+    },
+    "unlock_lock_opened_again_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault was opened again"
           }
         }
       }

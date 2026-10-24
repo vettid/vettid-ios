@@ -11,6 +11,10 @@ public struct VaultApi: Sendable {
     public static let lockAnswer: TimeInterval = 10
     /// How long after it was asked a `vault.lock` may still be acted on.
     public static let lockValid: TimeInterval = 30
+    /// The longest `exp` a `vault.lock` may have (§8.6, 0.29.0): it must not wait at the relay for long.
+    public static let lockValidMax: TimeInterval = 60
+    /// (0.29.0, release L) `vault.lock {unlock_id}` named an unlock that is not the vault's current one.
+    public static let codeStaleLock = "stale_lock"
     /// The approvals the app shows (ANDROID-PLAN §4 Approvals).
     public static let approvalTypes: Set<String> = [
         "connection.request.pending", "connection.request.outgoing", "grant.pending", "critical-secret-use.pending",
@@ -86,7 +90,23 @@ public struct VaultApi: Sendable {
 
     public func enrollConfirm() async throws { _ = try await op("vault.enroll.confirm") }
 
-    public func status() async throws -> VaultStatusInfo { try VaultJSON.decode(VaultStatusInfo.self, try await op("vault.status")) }
+    /// `vault.status`. Its `unlock_id` (release L) becomes this device's current one (``VaultDevice/unlockID``), unless the
+    /// device learned of another opening while the answer was on its way.
+    public func status() async throws -> VaultStatusInfo {
+        // Applied only if no opening came between the request and its answer (``VaultDevice/openingMark()``).
+        let mark = device.openingMark()
+        let info = try VaultJSON.decode(VaultStatusInfo.self, try await op("vault.status"))
+        device.noteUnlockID(info.unlockId, since: mark)
+        return info
+    }
+
+    /// A `vault.status`'s `unlock_id` for a lock to be bound to ("Lock it now"): nil when this device learned of an opening
+    /// (an unlock, an enroll, a recovery open) while the answer was on its way, as the answer may name the one before.
+    public func statusUnlockID() async throws -> String? {
+        let mark = device.openingMark()
+        let info = try await status()
+        return device.openingMark() == mark ? info.unlockId : nil
+    }
 
     /// `account.get` (§10.2, §11.13, 0.15.0): the member's account snapshot from the member API, display only.
     public func accountGet() async throws -> AccountView { try VaultJSON.decode(AccountView.self, try await op("account.get")) }
@@ -98,7 +118,8 @@ public struct VaultApi: Sendable {
     public func lock(unlockID: String? = nil, timeout: TimeInterval = lockAnswer, validFor: TimeInterval = lockValid) async throws {
         let body = JsonBuilder()
         if let u = unlockID { body.string("unlock_id", u) }
-        _ = try await device.opOnce("vault.lock", body: body.bytes(), timeout: timeout, exp: device.now().addingTimeInterval(validFor))
+        let exp = device.now().addingTimeInterval(min(validFor, Self.lockValidMax))
+        _ = try await device.opOnce("vault.lock", body: body.bytes(), timeout: timeout, exp: exp)
     }
 
     // MARK: - Devices (§10.3)

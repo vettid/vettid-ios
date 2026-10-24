@@ -91,6 +91,7 @@ enum UnlockCatalog {
             $0.lock = .unconfirmed(askedAt: Date(timeIntervalSince1970: 1_791_000_000), attempts: 3)
         }
         add("lock_confirmed", "Your vault is locked") { $0.lock = .confirmedLate }
+        add("lock_opened_again", "Your vault was opened again") { $0.lock = .openedAgain }
         add("refused", "The vault refuses this phone") { $0.refused = true }
         add("check_due", "PIN and password (check due)") { s in
             s.checkDue = true

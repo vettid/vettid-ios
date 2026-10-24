@@ -167,7 +167,11 @@ extension VaultManager {
         let marks = OpenMarks(locks: lockGeneration, record: record.generation, rereads: rereads)
         let opened: UnlockOpened
         do {
-            opened = try await lockGuard.keeper.unlocking(opened: { $0.outcome.ok }) {
+            opened = try await lockGuard.keeper.unlocking(
+                opened: { $0.outcome.ok },
+                // (Release L) A lock asked for during this unlock is bound to the opening it makes (none: as before L).
+                unlockIDOf: { $0.outcome.result.token == nil ? nil : $0.outcome.result.unlockID }
+            ) {
                 try await guarded { try await unlockFollowing(pin: pin, options: options, route: route, tries: tries(step)) }
             }
         } catch let f as VaultFailure {

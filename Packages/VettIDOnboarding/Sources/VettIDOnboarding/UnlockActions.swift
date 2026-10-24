@@ -25,8 +25,10 @@ public protocol UnlockActions: AnyObject, Sendable {
     func confirmErase()
     /// Tries the unconfirmed lock again now.
     func retryLock()
-    /// The member has read that the vault confirmed the lock.
+    /// The member has read that the vault confirmed the lock, or that it was opened again.
     func dismissLockNotice()
+    /// (Release L) "Lock it now" on "Your vault was opened again".
+    func lockAgain()
     /// The member has read why "Finish the move" did not finish.
     func dismissMoveFailure()
     /// (iPhone, IOS-PLAN §6.3) The app left the foreground or the iPhone is locking: typed secrets are dropped.
@@ -61,6 +63,7 @@ public final class NoUnlockActions: UnlockActions {
     public func confirmErase() {}
     public func retryLock() {}
     public func dismissLockNotice() {}
+    public func lockAgain() {}
     public func dismissMoveFailure() {}
     public func forgetSecrets() {}
     public func askReturn() {}

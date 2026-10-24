@@ -9,13 +9,34 @@ import Observation
 /// - [relayLockUntilMs]: a `vault.lock` was sent over the relay, got no answer, and may be acted on by the vault until
 ///   then (its `exp`, plus a margin). It outlives the confirmation of the lock: the request may still be waiting in the
 ///   mailbox of the vault, which collects again at the next unlock. No unlock is sent before it.
+///   (Release L) Only for a lock not bound to its unlock: a bound one that arrives late is answered `stale_lock`.
+/// - [unlockID] (VAULT-MESSAGING 0.56.4 §10.2 "Locks", release L): the unlock the pending lock ends, from the vault's own
+///   word (the enroll, unlock or recovery-open result, or `vault.status`). With it the lock is **bound**: every attempt names
+///   it, over the relay and through the member API, and a process started later goes on with the same bound lock. Nil: a
+///   vault before L, or a phone that did not hold the value; the lock is then made as before L.
+/// - [held] (release L): the last lock ended because the vault was opened again since (``LockNotice/openedAgain``): the
+///   phone stays locked, also in a later process, until an unlock on this phone succeeds (or the vault is no longer this
+///   phone's). [deadUnlockID]: the name that lock was bound to (not a secret): a `vault.locking` naming it is an old
+///   opening's and is dropped, also by a later process. [heldConfirmed]: held, and since confirmed locked after all (``LockNotice/confirmedLate``): a new process
+///   says nothing new.
 public struct LockRecord: Equatable, Sendable {
     public var pendingSinceMs: Int64?
     public var relayLockUntilMs: Int64?
+    public var unlockID: String?
+    public var held: Bool
+    public var heldConfirmed: Bool
+    public var deadUnlockID: String?
 
-    public init(pendingSinceMs: Int64? = nil, relayLockUntilMs: Int64? = nil) {
+    public init(
+        pendingSinceMs: Int64? = nil, relayLockUntilMs: Int64? = nil, unlockID: String? = nil, held: Bool = false,
+        heldConfirmed: Bool = false, deadUnlockID: String? = nil
+    ) {
+        self.deadUnlockID = deadUnlockID
         self.pendingSinceMs = pendingSinceMs
         self.relayLockUntilMs = relayLockUntilMs
+        self.unlockID = unlockID
+        self.held = held
+        self.heldConfirmed = heldConfirmed
     }
 }
 
@@ -28,9 +49,20 @@ public protocol LockRecordStore: AnyObject {
     func save(_ record: LockRecord) throws
 }
 
-/// One try to lock the vault: tells the vault to lock and says whether it is **known** to be locked now. [first] is the
-/// attempt made at once when the member asked; later ones are retries. A throw is an attempt that did not confirm.
-public typealias LockAttempt = @MainActor (_ first: Bool) async throws -> Bool
+/// What one try to lock the vault found out.
+public enum LockOutcome: Equatable, Sendable {
+    /// The vault is known to be locked: the lock is confirmed.
+    case locked
+    /// (Release L) The vault runs under a newer unlock than the one the lock was for: the lock is over, not confirmed.
+    case openedAgain
+    /// Nothing that decides: the lock stays pending and is tried again.
+    case unconfirmed
+}
+
+/// One try to lock the vault: tells the vault to lock and says what is **known** now. [first] is the attempt made at once
+/// when the member asked; later ones are retries. [unlockID]: the unlock the lock is bound to (``LockRecord/unlockID``), nil
+/// for a lock made as before release L. A throw is an attempt that did not confirm.
+public typealias LockAttempt = @MainActor (_ first: Bool, _ unlockID: String?) async throws -> LockOutcome
 
 /// The member's lock, made to **fail secure** (owner decision 2026-10-12, VAULT-LOCK §2 F13): the phone is locked from
 /// the moment the member asks, in every outcome; the vault is *known* locked only on evidence; until then the lock is
@@ -48,7 +80,8 @@ public typealias LockAttempt = @MainActor (_ first: Bool) async throws -> Bool
 ///
 /// Retries: [backoff] after each failed attempt, and at once on ``retryNow()`` (the member's "Try again"), honoured once
 /// in [retryNowEvery] at most. **A record that cannot be saved never stops a lock**: the failure is only reported
-/// ([onSaveFailed]). **Retries live in this process**; ``resume()`` goes on after a restart.
+/// ([onSaveFailed]). **Retries live in this process**; ``resume()`` goes on after a restart, bound to the same unlock as before
+/// (``LockRecord/unlockID``).
 @MainActor
 @Observable
 public final class LockKeeper {
@@ -70,6 +103,7 @@ public final class LockKeeper {
     @ObservationIgnored private let margin: Duration
     @ObservationIgnored private let sleep: LockSleep
     @ObservationIgnored private let onSaveFailed: @MainActor (any Error) -> Void
+    @ObservationIgnored private let onOpenedAgain: @MainActor (String?) -> Void
     @ObservationIgnored private let gate = AsyncGate()
     @ObservationIgnored private let kick = KickableWait()
     @ObservationIgnored private var retries: Task<Void, Never>?
@@ -80,6 +114,16 @@ public final class LockKeeper {
     @ObservationIgnored private var relayUntilMs: Int64?
     /// How many locks were asked for: an unlock supersedes only those asked for before it began.
     @ObservationIgnored private var asks = 0
+    /// The unlock the pending lock is bound to (``LockRecord/unlockID``); kept here too, beside the record.
+    @ObservationIgnored private var boundTo: String?
+    /// (Release L) The lock ended as ``LockNotice/openedAgain``: this phone stays locked until an unlock here.
+    @ObservationIgnored private var held = false
+    /// (Release L) The opening the last lock was bound to when the vault said it was over (`stale_lock`, slot `stale`): a
+    /// `vault.locking` naming it is an old opening's and confirms nothing (``deadUnlockID``). Ends with the next unlock here.
+    @ObservationIgnored private var dead: String?
+    /// When an attempt (or the retries' first one) last began, and whether one runs: the foreground does not start a second.
+    @ObservationIgnored private var attemptRunning = false
+    @ObservationIgnored private var attemptBeganAt: Date?
     /// While an unlock runs: ``asks`` when it began. Evidence from elsewhere does not confirm a lock asked after that:
     /// every unlock first locks a running vault (VAULT-MESSAGING §11.4), so its `vault.locking` and a status read during
     /// it say "locked" about the lock the unlock itself makes, which the unlock then opens again.
@@ -98,8 +142,10 @@ public final class LockKeeper {
         retryNowEvery: Duration = LockKeeper.retryNowEvery,
         relayMargin: Duration = LockKeeper.relayMargin,
         sleep: @escaping LockSleep = realLockSleep,
-        onSaveFailed: @escaping @MainActor (any Error) -> Void = { _ in }
+        onSaveFailed: @escaping @MainActor (any Error) -> Void = { _ in },
+        onOpenedAgain: @escaping @MainActor (String?) -> Void = { _ in }
     ) {
+        self.onOpenedAgain = onOpenedAgain
         self.store = store
         self.attempt = attempt
         self.now = now
@@ -116,25 +162,53 @@ public final class LockKeeper {
         return false
     }
 
+    /// This phone is to stay locked whatever the vault's status says: a lock is ``pending``, or (release L) one ended because
+    /// the vault was opened again since (``LockNotice/openedAgain``; until an unlock on this phone succeeds, whether or not
+    /// the member dismissed the notice). Kept on the phone (``LockRecord/held``): a new process starts held too.
+    public var holdsPhone: Bool { pending || held }
+
+    /// The unlock the pending lock is bound to; nil without a pending lock, or for one made as before release L.
+    public var boundUnlockID: String? { pending ? boundTo : nil }
+
+    /// (Release L) The unlock the last lock was bound to when it ended as ``LockNotice/openedAgain``, until an unlock here
+    /// succeeds: the vault is no longer under it.
+    public var deadUnlockID: String? { dead }
+
+    /// (Release L) The last lock ended as ``LockNotice/openedAgain``, and no unlock here followed: not known locked.
+    public var openedAgain: Bool { held }
+
     private var nowMs: Int64 { Int64((now().timeIntervalSince1970 * 1000).rounded(.down)) }
 
     /// At a process start: a lock that was pending when the process ended is pending now, and is tried again at once. It
     /// is shown as in doubt from the start: it was not confirmed for as long as the process was gone.
     public func resume() {
-        guard let since = store.load().pendingSinceMs, !pending else { return }
+        let r = store.load()
+        // (Release L) A lock that ended as "opened again": this phone is still locked, whatever the status says, and the
+        // member is told again (the unlock screen's card).
+        if r.held {
+            held = true
+            dead = r.deadUnlockID
+            if !pending && !r.heldConfirmed { notice = .openedAgain }
+        }
+        guard let since = r.pendingSinceMs, !pending else { return }
         epoch += 1
         asks += 1
+        // The retries' first attempt starts at once: the foreground return of the same start does not make another.
+        attemptBeganAt = now()
+        boundTo = r.unlockID
         notice = .unconfirmed(askedAt: Date(timeIntervalSince1970: Double(since) / 1000), attempts: 1)
         startRetries(epoch, atOnce: true)
     }
 
     /// The member asks for a lock: pending from here on, in this process and then durably, before anything is sent and
-    /// before anything else is done for the lock. Returns the lock's number, for ``ask(_:)``.
+    /// before anything else is done for the lock. Returns the lock's number, for ``ask(_:)``. [unlockID] (release L): the
+    /// vault's current unlock as this phone knows it, to which the lock is bound; nil makes the lock as before L.
     @discardableResult
-    public func begin() -> Int {
+    public func begin(unlockID: String? = nil) -> Int {
         retries?.cancel()
         retries = nil
         let t = now()
+        boundTo = unlockID
         notice = .unconfirmed(askedAt: t, attempts: 0)
         asks += 1
         epoch += 1
@@ -143,9 +217,26 @@ public final class LockKeeper {
         write { r in
             var r = r
             r.pendingSinceMs = ms
+            r.unlockID = unlockID
             return r
         }
         return epoch
+    }
+
+    /// (Release L, "Lock it now") Binds the lock [mine], begun unbound, to [unlockID] before its first attempt; nothing if
+    /// another lock or an unlock took its place meanwhile. Nil leaves it unbound (as before L). [since]: the ``evidenceMark``
+    /// taken before the opening was read; an unlock that began or ended since, or is running, names the opening itself
+    /// (``unlocking(opened:unlockIDOf:_:)`` binds a lock asked meanwhile to it), and a value read before it is not used.
+    public func rebind(_ mine: Int, to unlockID: String?, since: Int? = nil) {
+        guard epoch == mine, pending, let unlockID else { return }
+        if let since, since != unlockChanges { return }
+        if unlockBeganAt != nil { return }
+        boundTo = unlockID
+        write { r in
+            var r = r
+            r.unlockID = unlockID
+            return r
+        }
     }
 
     /// The first attempt of the lock [mine] that ``begin()`` made pending (nil: begins now), in a task of its own. True
@@ -154,9 +245,10 @@ public final class LockKeeper {
     public func ask(_ mine: Int? = nil) async -> Bool {
         let m = mine ?? begin()
         let task = Task { @MainActor [self] in
-            let ok = await tryOnce(m, first: true)
-            if !ok, epoch == m, pending { startRetries(m, atOnce: false) }
-            return ok
+            let over = await tryOnce(m, first: true)
+            if !over, epoch == m, pending { startRetries(m, atOnce: false) }
+            // Over because the vault was opened again since: not locked.
+            return over && !held
         }
         let ok = await task.value
         firstAttemptEnded()
@@ -188,17 +280,41 @@ public final class LockKeeper {
         if let since, since != unlockChanges { return }
         // A lock asked while an unlock runs: what says "locked" now is that unlock's own lock (see ``unlockBeganAt``).
         if let began = unlockBeganAt, asks > began { return }
-        if case .unconfirmed(_, let n) = notice { confirm(late: n > 0) }
+        if case .unconfirmed(_, let n) = notice {
+            confirm(late: n > 0)
+        } else if held, notice == .openedAgain {
+            // (Release L) Held after "opened again", and now locked after all: said so. The phone stays held (an unlock here
+            // ends that), and the record keeps it.
+            notice = .confirmedLate
+            write { r in
+                var r = r
+                r.heldConfirmed = true
+                return r
+            }
+        }
     }
 
     /// Tries again now (the member's "Try again"). Nothing happens without a pending lock, and nothing more than once in
     /// [retryNowEvery]. Returns whether a try was started.
     @discardableResult
     public func retryNow() -> Bool {
+        retry(consuming: true)
+    }
+
+    /// The return to the foreground (and the start of the process): a pending lock is tried at once, unless an attempt runs or
+    /// began less than [retryNowEvery] ago, and without using up the member's "Try again" (``retryNow()``).
+    @discardableResult
+    public func retryOnForeground() -> Bool {
+        if attemptRunning { return false }
+        if let began = attemptBeganAt, now().timeIntervalSince(began) < Double(retryEvery.milliseconds) / 1000 { return false }
+        return retry(consuming: false)
+    }
+
+    private func retry(consuming: Bool) -> Bool {
         let t = now()
         if !pending { return false }
         if let last = kickedAt, t.timeIntervalSince(last) < Double(retryEvery.milliseconds) / 1000 { return false }
-        kickedAt = t
+        if consuming { kickedAt = t }
         kick.kick()
         return true
     }
@@ -231,20 +347,29 @@ public final class LockKeeper {
         epoch += 1
         retries?.cancel()
         retries = nil
+        boundTo = nil
+        held = false
+        dead = nil
         relayUntilMs = nil
         write { $0 != LockRecord() ? LockRecord() : nil }
         notice = .none
     }
 
-    /// The member has read ``LockNotice/confirmedLate``.
+    /// The member has read ``LockNotice/confirmedLate`` or ``LockNotice/openedAgain``. The phone stays locked after the
+    /// second all the same (``holdsPhone``): only an unlock here ends that.
     public func dismissConfirmed() {
-        if notice == .confirmedLate { notice = .none }
+        if notice == .confirmedLate || notice == .openedAgain { notice = .none }
     }
 
     /// Runs an unlock. No lock attempt runs beside it. Before it, an unanswered relay lock is waited out, pending or not.
     /// If [opened] says the unlock succeeded, a lock asked for before it began is over and none of its attempts will
     /// ever be made.
-    public func unlocking<T>(opened: (T) -> Bool, _ unlock: @MainActor () async throws -> T) async rethrows -> T {
+    /// [unlockIDOf] (release L) names the opening a successful unlock made: a lock asked for while it was on its way is bound
+    /// to that one, never to the one the unlock ended (a lock bound to it would be answered `stale_lock` and leave this
+    /// opening open).
+    public func unlocking<T>(
+        opened: (T) -> Bool, unlockIDOf: (T) -> String? = { _ in nil }, _ unlock: @MainActor () async throws -> T
+    ) async rethrows -> T {
         try await gate.withLock {
             let before = asks
             unlockBeganAt = before
@@ -257,13 +382,30 @@ public final class LockKeeper {
             if wait > 0 { try? await sleep(.milliseconds(wait)) }
             let result = try await unlock()
             // A lock asked for while this unlock was on its way is newer than it: it stays, and is tried next.
-            if opened(result), asks == before {
-                epoch += 1
-                retries?.cancel()
-                retries = nil
-                relayUntilMs = nil
-                write { $0 != LockRecord() ? LockRecord() : nil }
-                notice = .none
+            if opened(result) {
+                dead = nil
+                if asks == before {
+                    epoch += 1
+                    retries?.cancel()
+                    retries = nil
+                    boundTo = nil
+                    held = false
+                    relayUntilMs = nil
+                    write { $0 != LockRecord() ? LockRecord() : nil }
+                    notice = .none
+                } else if pending {
+                    let id = unlockIDOf(result)
+                    boundTo = id
+                    held = false
+                    write { r in
+                        var r = r
+                        r.unlockID = id
+                        r.held = false
+                        r.heldConfirmed = false
+                        r.deadUnlockID = nil
+                        return r
+                    }
+                }
             }
             return result
         }
@@ -276,39 +418,60 @@ public final class LockKeeper {
         return min(max(until - nowMs, 0), Self.settleMax.milliseconds)
     }
 
-    /// One attempt of lock [mine], unless it is no longer the pending one. True when the lock is confirmed.
+    /// One attempt of lock [mine], unless it is no longer the pending one. True when the lock is over: confirmed, or (release
+    /// L) ended because the vault was opened again since (``LockNotice/openedAgain``).
     private func tryOnce(_ mine: Int, first: Bool) async -> Bool {
         await gate.withLock {
             if epoch != mine || !pending { return !pending }
-            let ok: Bool
+            let bound = boundTo
+            attemptRunning = true
+            attemptBeganAt = now()
+            defer { attemptRunning = false }
+            let outcome: LockOutcome
             do {
-                ok = try await attempt(first)
+                outcome = try await attempt(first, bound)
             } catch {
-                ok = false
+                outcome = .unconfirmed
             }
-            if Task.isCancelled && !ok { return !pending }
+            if Task.isCancelled && outcome == .unconfirmed { return !pending }
             guard epoch == mine, case .unconfirmed(let at, let n) = notice else { return !pending }
-            if ok {
-                // Confirmed before anything failed: the member was never told otherwise.
-                confirm(late: n > 0)
-            } else {
-                notice = .unconfirmed(askedAt: at, attempts: n + 1)
+            switch outcome {
+            // Confirmed before anything failed: the member was never told otherwise.
+            case .locked: confirm(late: n > 0)
+            case .openedAgain:
+                end(.openedAgain, bound: bound)
+                // The opening this lock was bound to is over: forgotten by the device, and its late notices confirm nothing.
+                onOpenedAgain(bound)
+            case .unconfirmed: notice = .unconfirmed(askedAt: at, attempts: n + 1)
             }
-            return ok
+            return outcome != .unconfirmed
         }
     }
 
-    private func confirm(late: Bool) {
+    private func confirm(late: Bool) { end(late ? .confirmedLate : .none) }
+
+    /// The pending lock is over with [notice]; nothing of it is tried again.
+    private func end(_ notice: LockNotice, bound: String? = nil) {
         epoch += 1
         retries?.cancel()
         retries = nil
-        // The relay lock's time stays: its request may still be waiting for the vault.
+        boundTo = nil
+        held = notice == .openedAgain
+        let kept = held
+        // Kept on the phone with the hold (a new process drops the dead opening's notices too).
+        let deadNow = kept ? bound : nil
+        if kept { dead = deadNow }
+        // The relay lock's time stays: its request may still be waiting for the vault. Held is kept on the phone too.
         write { r in
             var r = r
             r.pendingSinceMs = nil
+            r.unlockID = nil
+            r.held = kept
+            r.heldConfirmed = false
+            r.deadUnlockID = deadNow
             return r
         }
-        notice = late ? .confirmedLate : .none
+        self.notice = notice
     }
 
     /// Saves [change] of the record (nil: nothing to save); a failure is reported, never thrown: the lock goes on.

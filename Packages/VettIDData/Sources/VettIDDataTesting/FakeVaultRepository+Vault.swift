@@ -11,6 +11,11 @@ extension FakeVaultRepository: VaultRepository {
 
     public func retryLock() { calls.append("retryLock") }
 
+    public func lockAgain() async {
+        calls.append("lockAgain")
+        lockNotice = .unconfirmed(askedAt: Date(timeIntervalSince1970: 0), attempts: 0)
+    }
+
     public func dismissLockNotice() {
         calls.append("dismissLockNotice")
         lockNotice = .none

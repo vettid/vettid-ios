@@ -3,11 +3,16 @@ import Testing
 @testable import VettIDData
 import VettIDDataTesting
 
-/// The vault as the keeper reaches it: each attempt recorded with its time, answered from [answers] (false when empty).
+/// The vault as the keeper reaches it: each attempt recorded with its time and the unlock it named, answered from [outcomes],
+/// then from [answers] (false when empty).
 @MainActor
 final class ScriptedLockVault {
     var attempts: [(at: Int64, first: Bool)] = []
     var answers: [Bool] = []
+    /// (Release L) Answers that take the place of [answers], in order.
+    var outcomes: [LockOutcome] = []
+    /// The unlock each attempt named (nil: made as before L).
+    var bound: [String?] = []
     var onAttempt: @MainActor () async throws -> Void = {}
     var throwsError = false
     let clock: VirtualClock
@@ -16,11 +21,13 @@ final class ScriptedLockVault {
 
     init(clock: VirtualClock) { self.clock = clock }
 
-    func tryLock(_ first: Bool) async throws -> Bool {
+    func tryLock(_ first: Bool, _ unlockID: String? = nil) async throws -> LockOutcome {
         attempts.append((clock.nowMs, first))
+        bound.append(unlockID)
         try await onAttempt()
         if throwsError { throw Unreachable() }
-        return answers.isEmpty ? false : answers.removeFirst()
+        if !outcomes.isEmpty { return outcomes.removeFirst() }
+        return !answers.isEmpty && answers.removeFirst() ? .locked : .unconfirmed
     }
 
     var times: [Int64] { attempts.map(\.at) }
@@ -50,7 +57,7 @@ final class ScriptedLockVault {
     ) -> LockKeeper {
         let v = vault
         return LockKeeper(
-            store: s ?? store, attempt: attempt ?? { try await v.tryLock($0) }, now: clock.now, backoff: backoff, sleep: clock.sleep,
+            store: s ?? store, attempt: attempt ?? { try await v.tryLock($0, $1) }, now: clock.now, backoff: backoff, sleep: clock.sleep,
             onSaveFailed: onSaveFailed
         )
     }
@@ -208,10 +215,10 @@ final class ScriptedLockVault {
     @Test func anUnlockWaitsOutAnUnansweredRelayLockAlsoWhenTheLockWasConfirmedAnotherWay() async {
         var k: LockKeeper?
         let clock = clock
-        k = keeper(attempt: { _ in
+        k = keeper(attempt: { _, _ in
             k?.relayLockSent(validFor: .seconds(30))
             try await clock.sleep(.seconds(10)) // no answer over the relay; then the status says it is locked
-            return true
+            return .locked
         })
         let keeper = k!
         let asking = Task { @MainActor in await keeper.ask() }
