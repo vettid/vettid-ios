@@ -33,6 +33,7 @@
 		2DB59791D7D6903F1DE6E8CB /* VettIDAltChan in Frameworks */ = {isa = PBXBuildFile; productRef = 2022889C73B639A3FEDD0CBE /* VettIDAltChan */; };
 		2ED9F7D436AE5EBE6EC6A918 /* VettIDCrypto in Frameworks */ = {isa = PBXBuildFile; productRef = 2628100D3340AAA9869F33DF /* VettIDCrypto */; };
 		34D5AD803AA496D57470232B /* VaultUITestCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 461CF475BEF16D6D464D6ECE /* VaultUITestCase.swift */; };
+		3596ECA9B4343687C1EC4284 /* StagingTests+Asks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60779442B58D03EC06D8A42F /* StagingTests+Asks.swift */; };
 		3BDC50D1B60B3C9D8BFF60CF /* OnboardingCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F75EB86F0AEDA6ABA253BBC1 /* OnboardingCatalog.swift */; };
 		3DA939459B79AF971E911C98 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18D27D877D6472CB1E622763 /* AppDelegate.swift */; };
 		4458E614973C93BE7AB0089C /* AppLockGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CBB4C9A8E482B333CED7362 /* AppLockGate.swift */; };
@@ -92,12 +93,14 @@
 		BE1A5C782200D278726FE11A /* OnboardingCatalogScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA04E2F7EF12B3C666A4CDC7 /* OnboardingCatalogScreen.swift */; };
 		C0637A00FD1447A4A4C583B6 /* ShellCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2C4EF17933B13C37D62C1ED /* ShellCatalog.swift */; };
 		C08AE4F5C6230F3C38A555DD /* VettIDKeysTesting in Frameworks */ = {isa = PBXBuildFile; productRef = 3A78AA1376A65038AD0045E2 /* VettIDKeysTesting */; };
+		C524816C39BDE95FA7DBD544 /* StagingTests+AsksDecisions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F66727D855C952C35BF4F73 /* StagingTests+AsksDecisions.swift */; };
 		C5D7F03C08449B0C0839B40D /* VettIDKeys in Frameworks */ = {isa = PBXBuildFile; productRef = 7F7CDB0CA3D4891C7BC81EED /* VettIDKeys */; };
 		C6FDE6FB207680D30A950256 /* NoSecureHardware.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DAFB636C365A57D892BA212 /* NoSecureHardware.swift */; };
 		CA07610D628893FD4E928A2C /* VettIDAltChanTesting in Frameworks */ = {isa = PBXBuildFile; productRef = 5A3EEF226DB58AF9D30CC799 /* VettIDAltChanTesting */; };
 		CAA0E28A24397037F4AD5CB6 /* ItemsCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDD69AF1283FBA35B9C2E65B /* ItemsCatalog.swift */; };
 		CC9EEF03E7D81A1EEBAA10C2 /* VettIDApprovals in Frameworks */ = {isa = PBXBuildFile; productRef = 7878205240D15E4858E8CD77 /* VettIDApprovals */; };
 		CFBE64FEEE60DFB5A0D4D48D /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 412ACBC39A6E3761D83FDE48 /* AppEnvironment.swift */; };
+		D36893CFBBEBBF9E3FD61D08 /* StagingTests+AsksSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ECD7C7538185CBF9E602472 /* StagingTests+AsksSteps.swift */; };
 		D39F8F4D752750849F93CF4F /* OpenedLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 651F1FB251573B18571FE4F0 /* OpenedLinks.swift */; };
 		D4845078E7AA2C525E8E979A /* VettIDMedia in Frameworks */ = {isa = PBXBuildFile; productRef = 175F65451CA4BCACD57D04D5 /* VettIDMedia */; };
 		DBACC8BECCC6A93B92DD9D69 /* ShellCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99011BCFDF16002458067C88 /* ShellCatalogTests.swift */; };
@@ -151,6 +154,7 @@
 		2D4DA90211D97D9417FAC02C /* StagingTests+Messages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StagingTests+Messages.swift"; sourceTree = "<group>"; };
 		2EAA1051D68BE8B6888B7634 /* VettIDVault */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDVault; path = Packages/VettIDVault; sourceTree = SOURCE_ROOT; };
 		39A6F272A462838C1C0D7D29 /* VettIDHistory */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDHistory; path = Packages/VettIDHistory; sourceTree = SOURCE_ROOT; };
+		3F66727D855C952C35BF4F73 /* StagingTests+AsksDecisions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StagingTests+AsksDecisions.swift"; sourceTree = "<group>"; };
 		412ACBC39A6E3761D83FDE48 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		413317A388BA8F9F2776CB1B /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 		461CF475BEF16D6D464D6ECE /* VaultUITestCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultUITestCase.swift; sourceTree = "<group>"; };
@@ -163,6 +167,7 @@
 		5EBB51B3CAEFFF548475E972 /* CompositionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompositionTests.swift; sourceTree = "<group>"; };
 		5ED10BF94762CACAFBE88704 /* VettIDAltChan */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDAltChan; path = Packages/VettIDAltChan; sourceTree = SOURCE_ROOT; };
 		6026316F2864710BB7DFBBCB /* CanaryManifestFilesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanaryManifestFilesTests.swift; sourceTree = "<group>"; };
+		60779442B58D03EC06D8A42F /* StagingTests+Asks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StagingTests+Asks.swift"; sourceTree = "<group>"; };
 		6267FF9D6FABF958007A6A90 /* VettIDItems */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDItems; path = Packages/VettIDItems; sourceTree = SOURCE_ROOT; };
 		651F1FB251573B18571FE4F0 /* OpenedLinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenedLinks.swift; sourceTree = "<group>"; };
 		6811EFFD31D5D0CCE485BD70 /* VettIDShell */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDShell; path = Packages/VettIDShell; sourceTree = SOURCE_ROOT; };
@@ -186,6 +191,7 @@
 		99011BCFDF16002458067C88 /* ShellCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellCatalogTests.swift; sourceTree = "<group>"; };
 		9B4477541F907F6E92A131BB /* KeychainTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainTests.swift; sourceTree = "<group>"; };
 		9D2B5CA030BC6FA62B3EEF7D /* AppAttestDeviceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAttestDeviceTests.swift; sourceTree = "<group>"; };
+		9ECD7C7538185CBF9E602472 /* StagingTests+AsksSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StagingTests+AsksSteps.swift"; sourceTree = "<group>"; };
 		A34C0ED8CB57521C8F3EF6D6 /* StagingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StagingTests.swift; sourceTree = "<group>"; };
 		A84B69E505CEC2E1129233E9 /* StagingTests+Connect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StagingTests+Connect.swift"; sourceTree = "<group>"; };
 		A95A3D47EF72656899839626 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
@@ -306,6 +312,9 @@
 			children = (
 				CEAFD630960C3CA7D7885DEB /* GalleryScreenshots.swift */,
 				A34C0ED8CB57521C8F3EF6D6 /* StagingTests.swift */,
+				60779442B58D03EC06D8A42F /* StagingTests+Asks.swift */,
+				3F66727D855C952C35BF4F73 /* StagingTests+AsksDecisions.swift */,
+				9ECD7C7538185CBF9E602472 /* StagingTests+AsksSteps.swift */,
 				A84B69E505CEC2E1129233E9 /* StagingTests+Connect.swift */,
 				9506AF3AA287477B16E8612D /* StagingTests+Mesh.swift */,
 				2D4DA90211D97D9417FAC02C /* StagingTests+Messages.swift */,
@@ -731,6 +740,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				91EB5DA7D60B53E6CE50FCE0 /* GalleryScreenshots.swift in Sources */,
+				3596ECA9B4343687C1EC4284 /* StagingTests+Asks.swift in Sources */,
+				C524816C39BDE95FA7DBD544 /* StagingTests+AsksDecisions.swift in Sources */,
+				D36893CFBBEBBF9E3FD61D08 /* StagingTests+AsksSteps.swift in Sources */,
 				27B46D91B919FFCEA4228483 /* StagingTests+Connect.swift in Sources */,
 				EB2DE1A4E67EB0C6E529D097 /* StagingTests+Mesh.swift in Sources */,
 				0E4BA253AB8E8655B797C7F6 /* StagingTests+Messages.swift in Sources */,

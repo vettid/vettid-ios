@@ -13,7 +13,9 @@
 #                     testStagingConnectAccept, testStagingConnectApprove, testStagingMessageSend,
 #                     testStagingMessageReceive, testStagingPhotoSend, testStagingPhotoReceive, testStagingInvite,
 #                     testStagingApproveRequest, testStagingRotate, testStagingSendAll, testStagingWaitMessage,
-#                     testStagingLook or testStagingCheck
+#                     testStagingLook, testStagingCheck, testStagingItemCreate, testStagingItemDelete,
+#                     testStagingRuleCreate, testStagingRuleDelete, testStagingAsk, testStagingAskStatus,
+#                     testStagingDecide, testStagingFetch or testStagingRevoke
 #   --inputs <file>   a private file outside the repository (chmod 600) with lines NAME=value for
 #                     VETTID_STAGING_EMAIL, VETTID_STAGING_CODE, VETTID_STAGING_PIN, VETTID_STAGING_PASSWORD and, for
 #                     the connect tests, VETTID_STAGING_LINK and VETTID_STAGING_SAFETY_CODE, and for the message
@@ -87,6 +89,40 @@
 #   testStagingLook, testStagingCheck    screenshots only, nothing tapped beyond navigation: Connections and Approvals
 #                                        (Look); Connections, the conversation with VETTID_STAGING_PEER_NAME,
 #                                        Connections again and History (Check). Use --keep-result to read them.
+#   testStagingItemCreate                Vault -> Add -> a blank item (category Other, protection Data) named
+#                                        VETTID_STAGING_ITEM_LABEL, with one field holding VETTID_STAGING_ITEM_VALUE and
+#                                        the tag VETTID_STAGING_TAG, saved; prints "ITEM_STATE: created|altered|failed|none"
+#                                        (altered: the keyboard capitalizes each word, so give the value so).
+#   testStagingItemDelete                every item of the Vault whose name starts with VETTID_STAGING_ITEM_LABEL, opened
+#                                        and deleted; prints "ITEM_COUNT: <n>" and "ITEM_STATE: deleted|none|failed".
+#   testStagingRuleCreate                the connection's page (VETTID_STAGING_PEER_NAME) -> "Share" (a new rule): the tag
+#                                        VETTID_STAGING_TAG, the mode VETTID_STAGING_RULE_MODE (ask or auto; ask), the
+#                                        optional VETTID_STAGING_RULE_PER_DAY, "Save rule"; prints
+#                                        "RULE_STATE: saved|failed|none".
+#   testStagingRuleDelete                the connection's page -> the bin of its rule for VETTID_STAGING_TAG, confirmed;
+#                                        prints "RULE_STATE: deleted|missing|failed".
+#   testStagingAsk                       the connection's page -> "Ask for something": VETTID_STAGING_ASK_CATEGORY
+#                                        (optional; Other), the label VETTID_STAGING_ITEM_LABEL and the reason
+#                                        VETTID_STAGING_ASK_REASON; prints "ASK_STATE: sent|failed|none".
+#   testStagingAskStatus                 the connection's "Shared by" screen, read until the ask for
+#                                        VETTID_STAGING_ITEM_LABEL is answered (VETTID_STAGING_WAIT seconds, 60); prints
+#                                        "ASK_STATE: waiting|shared|not_accepted|missing"; fails when
+#                                        VETTID_STAGING_ASK_EXPECT (shared or not_accepted) is set and differs.
+#   testStagingDecide                    Approvals -> the request from VETTID_STAGING_PEER_NAME of the kind
+#                                        VETTID_STAGING_APPROVAL (grant or share; grant), waited for (VETTID_STAGING_WAIT
+#                                        seconds, 120) and, with VETTID_STAGING_ITEM_LABEL set, the one that names that
+#                                        item; to approve, the items of VETTID_STAGING_SHARE_INCLUDE ticked and those of
+#                                        VETTID_STAGING_SHARE_DECLINE unticked first (";"-separated names); then
+#                                        VETTID_STAGING_DECISION (approve or decline); prints
+#                                        "SHARE_STATE: approved|declined|not_decided|not_opened|missing".
+#   testStagingFetch                     the connection's "Shared by" screen (VETTID_STAGING_WAIT seconds, 120, for the
+#                                        item VETTID_STAGING_ITEM_LABEL to be listed), "Show", VETTID_STAGING_FETCH_TIMES
+#                                        times (1); each prints "FETCH_MATCH: yes|no" (only with VETTID_STAGING_EXPECT
+#                                        set: does what is shown hold it) and "FETCH_REFUSED: none|revoked|expired|
+#                                        exhausted|rate_limited|unavailable|ended", never the text. Every fetch must show
+#                                        the item; with VETTID_STAGING_REFUSED set, the last must be refused so instead.
+#   testStagingRevoke                    the connection's page -> "Manage" -> the grant of VETTID_STAGING_ITEM_LABEL,
+#                                        "Revoke", confirmed; prints "GRANT_STATE: revoked|missing|failed".
 #
 # Inputs per test: testStagingEnroll needs all four of EMAIL, CODE, PIN and PASSWORD; every other test PIN and PASSWORD;
 # testStagingConnectAccept also VETTID_STAGING_LINK; VETTID_STAGING_SAFETY_CODE is optional (testStagingConnectApprove);
@@ -98,13 +134,22 @@
 # testStagingApproveRequest also VETTID_STAGING_SAFETY_CODE; testStagingSendAll VETTID_STAGING_PEER_NAME,
 # VETTID_STAGING_MESSAGE and VETTID_STAGING_EXPECT; testStagingWaitMessage VETTID_STAGING_PEER_NAME and
 # VETTID_STAGING_EXPECT; testStagingCheck VETTID_STAGING_PEER_NAME. VETTID_STAGING_WAIT (seconds) is optional for
-# testStagingWaitMessage (600), testStagingSendAll (300) and testStagingLook (10).
+# testStagingWaitMessage (600), testStagingSendAll (300) and testStagingLook (10). The sharing tests also need:
+# testStagingItemCreate VETTID_STAGING_ITEM_LABEL, VETTID_STAGING_ITEM_VALUE and VETTID_STAGING_TAG;
+# testStagingItemDelete VETTID_STAGING_ITEM_LABEL; testStagingRuleCreate and testStagingRuleDelete
+# VETTID_STAGING_PEER_NAME and VETTID_STAGING_TAG (optional VETTID_STAGING_RULE_MODE, VETTID_STAGING_RULE_PER_DAY);
+# testStagingAsk VETTID_STAGING_PEER_NAME, VETTID_STAGING_ITEM_LABEL and VETTID_STAGING_ASK_REASON (optional
+# VETTID_STAGING_ASK_CATEGORY); testStagingAskStatus, testStagingFetch and testStagingRevoke VETTID_STAGING_PEER_NAME and
+# VETTID_STAGING_ITEM_LABEL (optional VETTID_STAGING_ASK_EXPECT, VETTID_STAGING_EXPECT, VETTID_STAGING_FETCH_TIMES,
+# VETTID_STAGING_REFUSED); testStagingDecide VETTID_STAGING_PEER_NAME and VETTID_STAGING_DECISION (optional
+# VETTID_STAGING_APPROVAL, VETTID_STAGING_ITEM_LABEL, VETTID_STAGING_SHARE_INCLUDE, VETTID_STAGING_SHARE_DECLINE).
 #
 # A test without its inputs is skipped. The inputs reach only the test step, as TEST_RUNNER_<NAME> (xcodebuild passes
 # them to the runner as <NAME>), never a command line or the build; xcodebuild's output is shown with them (the link
-# included, the connection's name, the message texts, and the keypad's digits) redacted, except the SAFETY_CODE,
-# CONNECT_STATE, MESSAGE_STATE, MESSAGE_RECEIVED, PHOTO_STATE, PHOTO_RECEIVED, PHOTO_VIEWER, INVITE_LINK and
-# ROTATE_STATE lines, which are printed with the code, the state or the answer alone; the result bundle is deleted, an interrupted run's too, unless --keep-result. The build
+# included, the connection's name, the message texts, the items' names, values, tags and reasons, and the keypad's
+# digits) redacted, except the SAFETY_CODE, CONNECT_STATE, MESSAGE_STATE, MESSAGE_RECEIVED, PHOTO_STATE, PHOTO_RECEIVED,
+# PHOTO_VIEWER, INVITE_LINK, ROTATE_STATE, ITEM_STATE, ITEM_COUNT, RULE_STATE, ASK_STATE, SHARE_STATE, FETCH_MATCH,
+# FETCH_REFUSED and GRANT_STATE lines, which are printed with the code, the state or the answer alone; the result bundle is deleted, an interrupted run's too, unless --keep-result. The build
 # and results live under ${XDG_CACHE_HOME:-~/Library/Caches}/vettid-ios/staging-ui-test (mode 700).
 #
 # Example (enrollment; the code was issued a minute ago and is in the private file):
@@ -128,6 +173,11 @@ NAMES=(VETTID_STAGING_EMAIL VETTID_STAGING_CODE VETTID_STAGING_PIN VETTID_STAGIN
 # The connect, message and photo tests' inputs: optional, never counted as missing for the others.
 OPTIONAL=(VETTID_STAGING_LINK VETTID_STAGING_SAFETY_CODE VETTID_STAGING_PEER_NAME VETTID_STAGING_MESSAGE VETTID_STAGING_EXPECT
   VETTID_STAGING_PHOTO_TIMEOUT VETTID_STAGING_PHOTO_EXISTING VETTID_STAGING_WAIT)
+# The sharing tests' inputs: items, tags, rules, asks, decisions, fetches.
+OPTIONAL+=(VETTID_STAGING_ITEM_LABEL VETTID_STAGING_ITEM_VALUE VETTID_STAGING_TAG VETTID_STAGING_RULE_MODE
+  VETTID_STAGING_RULE_PER_DAY VETTID_STAGING_ASK_REASON VETTID_STAGING_ASK_CATEGORY VETTID_STAGING_ASK_EXPECT
+  VETTID_STAGING_APPROVAL VETTID_STAGING_DECISION VETTID_STAGING_SHARE_INCLUDE VETTID_STAGING_SHARE_DECLINE
+  VETTID_STAGING_FETCH_TIMES VETTID_STAGING_REFUSED)
 ALL=("${NAMES[@]}" "${OPTIONAL[@]}")
 BUNDLE_ID=com.vettid.app.staging
 
@@ -153,11 +203,15 @@ case "${TEST}" in
   testStagingMessageSend|testStagingMessageReceive|testStagingPhotoSend|testStagingPhotoReceive) ;;
   testStagingInvite|testStagingApproveRequest|testStagingRotate|testStagingSendAll|testStagingWaitMessage) ;;
   testStagingLook|testStagingCheck) ;;
+  testStagingItemCreate|testStagingItemDelete|testStagingRuleCreate|testStagingRuleDelete|testStagingAsk) ;;
+  testStagingAskStatus|testStagingDecide|testStagingFetch|testStagingRevoke) ;;
   *) echo "--test must be testStagingEnroll, testStagingUnlockLock, testStagingApproveUpdate," \
        "testStagingApproveUpdateAtUnlock, testStagingCheckNow, testStagingWrongPinInPasswordChange," \
        "testStagingConnectAccept, testStagingConnectApprove, testStagingMessageSend, testStagingMessageReceive," \
        "testStagingPhotoSend, testStagingPhotoReceive, testStagingInvite, testStagingApproveRequest," \
-       "testStagingRotate, testStagingSendAll, testStagingWaitMessage, testStagingLook or testStagingCheck" >&2
+       "testStagingRotate, testStagingSendAll, testStagingWaitMessage, testStagingLook, testStagingCheck," \
+       "testStagingItemCreate, testStagingItemDelete, testStagingRuleCreate, testStagingRuleDelete, testStagingAsk," \
+       "testStagingAskStatus, testStagingDecide, testStagingFetch or testStagingRevoke" >&2
      usage ;;
 esac
 
@@ -175,6 +229,17 @@ case "${TEST}" in
   testStagingCheck) NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_PEER_NAME) ;;
   testStagingPhotoSend|testStagingPhotoReceive)
     NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_PEER_NAME) ;;
+  testStagingItemCreate)
+    NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_ITEM_LABEL VETTID_STAGING_ITEM_VALUE VETTID_STAGING_TAG) ;;
+  testStagingItemDelete) NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_ITEM_LABEL) ;;
+  testStagingRuleCreate|testStagingRuleDelete)
+    NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_PEER_NAME VETTID_STAGING_TAG) ;;
+  testStagingAsk)
+    NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_PEER_NAME VETTID_STAGING_ITEM_LABEL VETTID_STAGING_ASK_REASON) ;;
+  testStagingAskStatus|testStagingFetch|testStagingRevoke)
+    NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_PEER_NAME VETTID_STAGING_ITEM_LABEL) ;;
+  testStagingDecide)
+    NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_PEER_NAME VETTID_STAGING_DECISION) ;;
   *) NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD) ;;
 esac
 
@@ -286,11 +351,15 @@ xcodebuild test-without-building \
   perl -pe '
     BEGIN {
       # Longest first, so that a value holding another (a message holding the name) goes whole.
-      # A list of connections ("Name=label;Name=label") is redacted whole and name by name (not the labels).
+      # A list ("Name=label;Name=label" of connections, "Item;Item" of items) is redacted whole and part by part (a
+      # connection list by its names, not the labels).
+      %lists = (VETTID_STAGING_PEER_NAME => 1, VETTID_STAGING_SHARE_INCLUDE => 1, VETTID_STAGING_SHARE_DECLINE => 1);
       @s = sort { length($b) <=> length($a) } grep { length }
-        map { my $v = $ENV{"TEST_RUNNER_$_"} // ""; ($v, ($_ eq "VETTID_STAGING_PEER_NAME" ? map { my $n = (split /=/, $_, 2)[0]; $n =~ s/^\s+|\s+$//g; $n } split(/;/, $v) : ())) }
+        map { my $k = $_; my $v = $ENV{"TEST_RUNNER_$k"} // ""; ($v, ($lists{$k} ? map { my $n = ($k eq "VETTID_STAGING_PEER_NAME" ? (split /=/, $_, 2)[0] : $_); $n =~ s/^\s+|\s+$//g; $n } split(/;/, $v) : ())) }
         qw(VETTID_STAGING_EMAIL VETTID_STAGING_CODE VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_LINK
-           VETTID_STAGING_PEER_NAME VETTID_STAGING_MESSAGE VETTID_STAGING_EXPECT)
+           VETTID_STAGING_PEER_NAME VETTID_STAGING_MESSAGE VETTID_STAGING_EXPECT VETTID_STAGING_ITEM_LABEL
+           VETTID_STAGING_ITEM_VALUE VETTID_STAGING_TAG VETTID_STAGING_ASK_REASON
+           VETTID_STAGING_SHARE_INCLUDE VETTID_STAGING_SHARE_DECLINE)
     }
     # The connect, message and photo tests report lines: the code, the state or the answer alone, never anything else of the
     # line.
@@ -303,6 +372,14 @@ xcodebuild test-without-building \
     if (/PHOTO_STATE: (none|sending|delivered|failed)\s*$/) { $_ = "PHOTO_STATE: $1\n"; next }
     if (/PHOTO_RECEIVED: (yes|no)\s*$/) { $_ = "PHOTO_RECEIVED: $1\n"; next }
     if (/PHOTO_VIEWER: (shown|failed|loading)\s*$/) { $_ = "PHOTO_VIEWER: $1\n"; next }
+    if (/ITEM_STATE: (created|altered|deleted|failed|none)\s*$/) { $_ = "ITEM_STATE: $1\n"; next }
+    if (/ITEM_COUNT: ([0-9]+)\s*$/) { $_ = "ITEM_COUNT: $1\n"; next }
+    if (/RULE_STATE: (saved|deleted|missing|failed|none)\s*$/) { $_ = "RULE_STATE: $1\n"; next }
+    if (/ASK_STATE: (sent|failed|none|waiting|shared|not_accepted|missing)\s*$/) { $_ = "ASK_STATE: $1\n"; next }
+    if (/SHARE_STATE: (approved|declined|not_decided|not_opened|missing)\s*$/) { $_ = "SHARE_STATE: $1\n"; next }
+    if (/FETCH_MATCH: (yes|no)\s*$/) { $_ = "FETCH_MATCH: $1\n"; next }
+    if (/FETCH_REFUSED: (none|revoked|expired|exhausted|rate_limited|unavailable|ended)\s*$/) { $_ = "FETCH_REFUSED: $1\n"; next }
+    if (/GRANT_STATE: (revoked|missing|failed)\s*$/) { $_ = "GRANT_STATE: $1\n"; next }
     for my $v (@s) { s/\Q$v\E/<redacted>/g }
     s/Type .*? into/Type <redacted> into/g;
     s/pin_[0-9]/pin_#/g;
