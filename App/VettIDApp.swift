@@ -112,6 +112,8 @@ struct AppRoot: View {
     let inviteInbox: InviteLinkInbox
     /// Where the member is in the open app, kept while the check past the deadline takes the shell's place.
     @State private var shell: ShellModel
+    /// The last phase shown before "Finish the move" began (``RootHold``).
+    @State private var held: AppPhase
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     /// "Allow screenshots" (IOS-PLAN §4): it ends when the vault is no longer open, and after its hour.
@@ -129,6 +131,7 @@ struct AppRoot: View {
         self.releaseNotes = releaseNotes
         self.releaseInbox = releaseInbox
         self.inviteInbox = inviteInbox
+        _held = State(initialValue: vault.phase)
         _shell = State(initialValue: ShellModel(account: vault, vault: vault, ownerChecks: vault.ownerChecks))
     }
 
@@ -137,9 +140,14 @@ struct AppRoot: View {
         CanaryManifestHost(inbox: canaryInbox, repo: vault.canary) {
             // IOS-PLAN §4.4 (1): the vault does not count this phone as its credential's holder; over whatever sent the
             // request, which stays. Nothing is erased.
-            content.credentialRequiredCover(
-                vault.credentialRequired, onRetry: { vault.credentialRequiredTryAgain() }, onLock: { Task { try? await vault.lock() } }
-            )
+            // The notices of a move are the root's, above every phase (vettid-android `VettIdApp`).
+            VStack(spacing: 0) {
+                MoveNotices(vault: vault, phase: vault.phase)
+                content.credentialRequiredCover(
+                    vault.credentialRequired, onRetry: { vault.credentialRequiredTryAgain() },
+                    onLock: { Task { try? await vault.lock() } }
+                )
+            }
         }
             // The vault's time scale for every failure text below (STAGING-TIME-SCALE §5.2).
             .environment(\.vettIDTimeScale, vault.timeScale)
@@ -166,10 +174,15 @@ struct AppRoot: View {
             }
             // A lock (or anything that leaves the open app) starts the next open afresh, as vettid-android's new shell does.
             .onChange(of: vault.phase) { _, now in
-                guard now != .unlocked else { return }
-                shell.reset()
-                // The vault is no longer open (locked, signed out, unreachable): the allowance ends.
-                screenshots.vaultClosed()
+                // "Finish the move" locks and unlocks the vault under the screen that asked: the root stays as it was until
+                // the outcome (vettid-android `holdsRoot`).
+                if !vault.finishingMove { held = now }
+                closeIfNotOpen()
+            }
+            .onChange(of: vault.finishingMove) { _, finishing in
+                guard !finishing else { return }
+                held = vault.phase
+                closeIfNotOpen()
             }
             // SwiftUI hands Universal Links (`applinks:`) here too, as well as the `vettid` scheme and opened files.
             .onOpenURL { url in
@@ -180,6 +193,20 @@ struct AppRoot: View {
                 case .other: openFile(url)
                 }
             }
+    }
+
+    /// The phase the root shows: the vault's, or while the move finishes the one before it.
+    private var shownPhase: AppPhase {
+        RootHold.shown(phase: vault.phase, held: held, finishingMove: vault.finishingMove)
+    }
+
+    /// A lock (or anything that leaves the open app) starts the next open afresh and ends the screenshot allowance, unless
+    /// the root is held.
+    private func closeIfNotOpen() {
+        guard vault.phase != .unlocked, !RootHold.holds(phase: vault.phase, finishingMove: vault.finishingMove) else { return }
+        shell.reset()
+        // The vault is no longer open (locked, signed out, unreachable): the allowance ends.
+        screenshots.vaultClosed()
     }
 
     private func openFile(_ url: URL) {
@@ -244,10 +271,20 @@ struct AppRoot: View {
         }
     }
 
+    /// The move's repository, once `VaultManager` adopts ``MoveRepository`` (IOS-PLAN §8 I3.3a): until then none, and the
+    /// transfer is not offered. Read through the protocol, so that this compiles before and after.
+    private var move: (any MoveRepository)? { (vault as any VaultRepository) as? any MoveRepository }
+
+    /// The onboarding flow's later screens: the transfer from the old phone and the move's last screen when the move
+    /// repository is there; the recovery waits for its own row.
+    private var onboardingRoutes: OnboardingRoutes {
+        move.map { OnboardingRoutes.moves(move: $0, vault: vault) } ?? .pending
+    }
+
     @ViewBuilder private var phaseContent: some View {
-        switch vault.phase {
+        switch shownPhase {
         case .signedOut, .setup:
-            OnboardingFlow(account: vault, vault: vault, inbox: inbox, routes: .pending) { openPortal() }
+            OnboardingFlow(account: vault, vault: vault, inbox: inbox, routes: onboardingRoutes) { openPortal() }
         case .starting:
             StartingScreen()
         case .unreachable:
@@ -268,7 +305,8 @@ struct AppRoot: View {
                     releaseUpdates: vault.releaseUpdate, releaseNotes: releaseNotes, releaseInbox: releaseInbox,
                     connections: vault.connections, connectionRequests: vault.connections, inviteInbox: inviteInbox,
                     messages: vault.messages, attachments: vault.attachments, feed: vault.feed, approvals: vault.approvals,
-                    history: vault.history, historyExport: vault.historyExport, items: vault.items, sharing: vault.sharing
+                    history: vault.history, historyExport: vault.historyExport, items: vault.items, sharing: vault.sharing,
+                    move: move
                 ) { openPortal() }
             }
         }

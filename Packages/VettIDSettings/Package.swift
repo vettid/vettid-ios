@@ -62,6 +62,7 @@ let package = Package(
                 "VettIDSettings",
                 "VettIDSettingsUI",
                 .product(name: "VettIDData", package: "VettIDData"),
+                .product(name: "VettIDDataTesting", package: "VettIDData"),
                 .product(name: "VettIDMedia", package: "VettIDMedia"),
                 .product(name: "VettIDUI", package: "VettIDUI", condition: .when(platforms: [.iOS])),
             ]

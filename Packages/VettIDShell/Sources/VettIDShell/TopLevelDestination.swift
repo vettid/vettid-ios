@@ -64,6 +64,8 @@ public enum ShellRoute: Hashable, Sendable {
     case newPhoneSecret
     /// Settings → Account → Delete vault (VAULT-MESSAGING §12.5).
     case deleteVault
+    /// Settings → Security → Move to a new phone, the old phone's side (VAULT-MESSAGING §6.7.1).
+    case transferOut
     /// Settings → Vault → "Update available" (RELEASE-UPDATES §2).
     case releaseUpdate
     /// Inviting, scanning an invitation or accepting one (VAULT-MESSAGING §6.4): from Connections' add button, or an

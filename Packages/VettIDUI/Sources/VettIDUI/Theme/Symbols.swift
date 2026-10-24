@@ -67,6 +67,7 @@ public enum VettIDSymbol: String, CaseIterable, Sendable {
     case restore = "arrow.counterclockwise" // Restore
     case restartAlt = "arrow.counterclockwise.circle" // RestartAlt (a new credential)
     case devices = "laptopcomputer.and.iphone" // Devices
+    case phonelinkSetup = "iphone.and.arrow.forward" // PhonelinkSetup (move to a new phone)
     case person = "person" // Person
     case badge = "person.text.rectangle" // Badge (the shared profile: an ID card)
     case email = "envelope" // Email

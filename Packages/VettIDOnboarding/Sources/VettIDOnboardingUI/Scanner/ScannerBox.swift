@@ -15,6 +15,9 @@ struct ScannerBox: View {
     let onText: @MainActor (String) -> Void
     let onTypeInstead: @MainActor () -> Void
     let camera: AnyView?
+    /// What the way to typing is called when the camera cannot be used ("Type the code instead"; the transfer says "Paste the
+    /// code instead").
+    let typeLabel: String
     /// nil until the view appears and asks iOS (once, not at every redraw).
     @State private var access: CameraAccess?
 
@@ -23,11 +26,13 @@ struct ScannerBox: View {
         onText: @escaping @MainActor (String) -> Void,
         onTypeInstead: @escaping @MainActor () -> Void,
         camera: AnyView?,
+        typeLabel: String = OnboardingStrings.setupType,
         access: CameraAccess? = nil
     ) {
         self.onText = onText
         self.onTypeInstead = onTypeInstead
         self.camera = camera
+        self.typeLabel = typeLabel
         _access = State(initialValue: access)
     }
 
@@ -48,14 +53,14 @@ struct ScannerBox: View {
                         TextLink(OnboardingStrings.recoverScanAllow, identifier: "scan_allow") {
                             if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
                         }
-                        TextLink(OnboardingStrings.setupType, action: onTypeInstead)
+                        TextLink(typeLabel, action: onTypeInstead)
                     }
                     .accessibilityIdentifier("scan_permission")
                 case .restricted, .unavailable:
                     NoticeCard(
                         .info, title: OnboardingStrings.recoverScanNoCameraTitle, message: OnboardingStrings.recoverScanNoCameraBody
                     ) {
-                        TextLink(OnboardingStrings.setupType, action: onTypeInstead)
+                        TextLink(typeLabel, action: onTypeInstead)
                     }
                     .accessibilityIdentifier("scan_no_camera")
                 }

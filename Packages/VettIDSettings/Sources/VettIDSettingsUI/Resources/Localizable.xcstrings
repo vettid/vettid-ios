@@ -4380,6 +4380,556 @@
           }
         }
       }
+    },
+    "settings_transfer_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move to a new phone"
+          }
+        }
+      }
+    },
+    "settings_transfer_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move VettID to a new phone: your credential moves there, and your vault and your connections then work with the new phone. This phone then erases VettID and keeps nothing of it."
+          }
+        }
+      }
+    },
+    "settings_transfer_steps_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How it works"
+          }
+        }
+      }
+    },
+    "settings_transfer_steps_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1. On the new phone, install VettID, choose Move from my old phone and sign in to your account.\n2. Show the code here and scan it with the new phone.\n3. Check that both phones show the same 6 digits, then approve here with your vault PIN and credential password."
+          }
+        }
+      }
+    },
+    "settings_transfer_lost": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lost your old phone instead? Start a recovery on the account site."
+          }
+        }
+      }
+    },
+    "settings_transfer_start": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show the code"
+          }
+        }
+      }
+    },
+    "settings_transfer_show_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan this code with your new phone"
+          }
+        }
+      }
+    },
+    "settings_transfer_show_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On the new phone, choose Move from my old phone, then scan. Only your new phone should see this code."
+          }
+        }
+      }
+    },
+    "settings_transfer_qr_cd": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transfer code for your new phone"
+          }
+        }
+      }
+    },
+    "settings_transfer_expires": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Valid for %@ more"
+          }
+        }
+      }
+    },
+    "settings_transfer_link_label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Or paste this code on the new phone"
+          }
+        }
+      }
+    },
+    "settings_transfer_copy": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy"
+          }
+        }
+      }
+    },
+    "settings_transfer_copied": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copied"
+          }
+        }
+      }
+    },
+    "settings_transfer_waiting": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for your new phone"
+          }
+        }
+      }
+    },
+    "settings_transfer_cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel the transfer"
+          }
+        }
+      }
+    },
+    "settings_transfer_compare_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compare the code"
+          }
+        }
+      }
+    },
+    "settings_transfer_compare_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ wants to take over your vault. Continue only if it shows the same code."
+          }
+        }
+      }
+    },
+    "settings_transfer_match": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The codes match"
+          }
+        }
+      }
+    },
+    "settings_transfer_reject": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reject"
+          }
+        }
+      }
+    },
+    "settings_transfer_reject_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reject the transfer?"
+          }
+        }
+      }
+    },
+    "settings_transfer_reject_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing changes: your vault stays with this phone. The new phone is told it was rejected."
+          }
+        }
+      }
+    },
+    "settings_transfer_signer_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The new phone has another version of VettID"
+          }
+        }
+      }
+    },
+    "settings_transfer_signer_continue": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue"
+          }
+        }
+      }
+    },
+    "settings_transfer_signer_cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        }
+      }
+    },
+    "settings_transfer_signer_unconfirmed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault asked you to confirm the new phone's version of VettID first. Nothing was counted; enter your PIN and password again."
+          }
+        }
+      }
+    },
+    "settings_transfer_approve_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approve the move"
+          }
+        }
+      }
+    },
+    "settings_transfer_approve_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault checks your PIN and your credential password, then moves your credential to %@. This phone then erases VettID and returns to the welcome screen, as if freshly installed."
+          }
+        }
+      }
+    },
+    "settings_transfer_pin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault PIN"
+          }
+        }
+      }
+    },
+    "settings_transfer_password": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credential password"
+          }
+        }
+      }
+    },
+    "settings_transfer_approve": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move to the new phone"
+          }
+        }
+      }
+    },
+    "settings_transfer_approve_confirm_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move VettID to %@?"
+          }
+        }
+      }
+    },
+    "settings_transfer_approve_confirm_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This phone will no longer hold your credential or open your vault, and VettID erases everything it kept here. You cannot undo this from here."
+          }
+        }
+      }
+    },
+    "settings_transfer_approve_confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move"
+          }
+        }
+      }
+    },
+    "settings_transfer_window": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ left to approve"
+          }
+        }
+      }
+    },
+    "settings_transfer_bad_pin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That PIN is not correct."
+          }
+        }
+      }
+    },
+    "settings_transfer_bad_password": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That password is not correct."
+          }
+        }
+      }
+    },
+    "settings_transfer_wait": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too many wrong tries. Try again in %@."
+          }
+        }
+      }
+    },
+    "settings_transfer_expired_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The code expired"
+          }
+        }
+      }
+    },
+    "settings_transfer_expired_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing changed: your vault stays with this phone. Show a new code to try again."
+          }
+        }
+      }
+    },
+    "settings_transfer_again": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show a new code"
+          }
+        }
+      }
+    },
+    "settings_transfer_rejected_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transfer rejected"
+          }
+        }
+      }
+    },
+    "settings_transfer_rejected_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing changed: your vault stays with this phone."
+          }
+        }
+      }
+    },
+    "settings_transfer_moved_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID has moved"
+          }
+        }
+      }
+    },
+    "settings_transfer_moved_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault works with %@ now. This phone erases VettID as soon as your vault confirms the move; keep it online for a moment."
+          }
+        }
+      }
+    },
+    "settings_transfer_exists": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Another transfer is already open. It ends within 10 minutes; try again then."
+          }
+        }
+      }
+    },
+    "settings_transfer_alarm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your credential has an open clone alarm. Resolve it in Credential before moving to a new phone."
+          }
+        }
+      }
+    },
+    "settings_transfer_moved_kept_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finish the move on your new phone. This phone keeps your vault's keys until your new phone has finished the move, for at most %@. Before you give this phone away, remove VettID from it or reset it."
+          }
+        }
+      }
+    },
+    "settings_security_transfer": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move to a new phone"
+          }
+        }
+      }
+    },
+    "settings_security_transfer_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Direct transfer: no waiting, with your PIN and password"
+          }
+        }
+      }
+    },
+    "settings_security_recovery": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recovery"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

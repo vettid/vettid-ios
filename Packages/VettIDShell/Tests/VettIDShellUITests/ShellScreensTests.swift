@@ -28,17 +28,43 @@ import VettIDVault
             .appendingPathComponent("Sources/VettIDShellUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 78)
+        #expect(keys.count == 83)
         let missing = "\u{0}missing"
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)
             #expect(!text.isEmpty && text != key && text != missing, "\(key)")
             let prefixes = [
                 "nav_", "drawer_", "account_", "owner_check_", "ownercheck_", "settings_", "ios_", "release_banner_", "credential_alarm_",
-                "rotate_offer",
+                "rotate_offer", "root_",
             ]
             #expect(prefixes.contains { key.hasPrefix($0) }, "\(key)")
         }
+    }
+
+    /// The notices of a move (release R, §11.14.10): the old phone's three are each told once; none shows nothing.
+    @Test func theMoveNoticesShowWhatIsSet() {
+        let vault = FakeVaultRepository(.unlocked)
+        #expect(height(MoveNotices(vault: vault, phase: .unlocked)) == 0)
+        let flags: [(FakeVaultRepository) -> Void] = [
+            { $0.finishMovePending = true }, { $0.movedBack = true }, { $0.moveNotDone = true }, { $0.movedAway = true },
+        ]
+        var heights: [CGFloat] = []
+        for set in flags {
+            let v = FakeVaultRepository(.unlocked)
+            set(v)
+            heights.append(height(MoveNotices(vault: v, phase: .unlocked)))
+        }
+        #expect(heights.allSatisfy { $0 > 0 })
+        // The sheet is offered while the vault is open and kept through the move's own lock; never without a move to finish.
+        #expect(MoveNotices.showsSheet(pending: true, phase: .unlocked, finishingMove: false))
+        #expect(MoveNotices.showsSheet(pending: true, phase: .locked, finishingMove: true))
+        #expect(!MoveNotices.showsSheet(pending: true, phase: .locked, finishingMove: false))
+        #expect(!MoveNotices.showsSheet(pending: false, phase: .unlocked, finishingMove: false))
+        #expect(ShellMoveStrings.rootFinishMove == "Finish moving your vault to this phone: enter your PIN on this phone.")
+        #expect(ShellMoveStrings.rootFinishMoveAction == "Finish the move")
+        #expect(ShellMoveStrings.rootMovedBack == "This phone is your vault's phone again. Start the move again when you are ready.")
+        #expect(ShellMoveStrings.rootMovedAway == "Your vault has moved to your new phone. VettID has removed its keys from this phone.")
+        #expect(ShellMoveStrings.rootMoveNotDone.hasPrefix("Your vault did not move to your new phone: it still works with this phone"))
     }
 
     @Test func theTextsAreAndroids() {

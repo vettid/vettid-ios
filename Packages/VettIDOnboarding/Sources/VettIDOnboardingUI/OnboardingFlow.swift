@@ -43,6 +43,37 @@ public struct OnboardingRoutes: Sendable {
     )
 }
 
+public extension OnboardingRoutes {
+    /// The transfer from the old phone and the move's last screen wired over [move] and [vault]; the recovery is still
+    /// ``pending`` (its row of IOS-PLAN §8 brings it). Mirrors the defaults of vettid-android `OnboardingContent`.
+    static func moves(move: any MoveRepository, vault: any VaultRepository) -> OnboardingRoutes {
+        OnboardingRoutes(
+            recover: pending.recover,
+            transferIn: { onLeave in AnyView(TransferInRoute(move: move, vault: vault, onLeave: onLeave)) },
+            movedIn: { state, finish in AnyView(MovedInScreen(state: state, vault: vault, finish: finish)) }
+        )
+    }
+}
+
+/// The last screen after a direct transfer (also after a restart): "Finish the move" while it is pending, otherwise the
+/// move's own "done" screen, never the enrollment's. Mirrors the `DONE` step of vettid-android `OnboardingContent`.
+struct MovedInScreen: View {
+    let state: OnboardingState
+    let vault: any VaultRepository
+    let finish: @MainActor () -> Void
+
+    var body: some View {
+        if state.finishMovePending {
+            FinishMoveRoute(vault: vault, onDone: finish)
+        } else {
+            MovedScreen(
+                body: state.phoneSecret ? MoveStrings.onboardingFinishMoveDone : MoveStrings.onboardingMovedTransferredBody,
+                onGo: finish
+            )
+        }
+    }
+}
+
 /// The onboarding flow, driven by an ``OnboardingViewModel`` over the app's repositories. [onOpenAccountSite] opens the
 /// account portal. The model is made once, when the flow first appears, and lives as long as the flow.
 public struct OnboardingFlow: View {

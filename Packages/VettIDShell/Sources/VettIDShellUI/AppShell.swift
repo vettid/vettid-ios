@@ -55,6 +55,7 @@ public struct AppShell: View {
     let historyExport: (any HistoryExportRepository)?
     let items: (any ItemsRepository)?
     let sharing: (any SharingRepository)?
+    private let move: (any MoveRepository)?
     private let onOpenPortal: @MainActor () -> Void
     /// The member's own profile photo (VAULT-MESSAGING §10.8), decoded once per photo, for the top bar's avatar, the avatar
     /// sheet and the account card (vettid-android `rememberProfilePhoto(ownPhoto)`).
@@ -101,6 +102,7 @@ public struct AppShell: View {
         historyExport: (any HistoryExportRepository)? = nil,
         items: (any ItemsRepository)? = nil,
         sharing: (any SharingRepository)? = nil,
+        move: (any MoveRepository)? = nil,
         onOpenPortal: @escaping @MainActor () -> Void
     ) {
         self.account = account
@@ -131,6 +133,7 @@ public struct AppShell: View {
         self.historyExport = historyExport
         self.items = items
         self.sharing = sharing
+        self.move = move
         self.onOpenPortal = onOpenPortal
     }
 
@@ -363,7 +366,7 @@ public struct AppShell: View {
             AttestationRoute(vault: vault, canary: canary, canaryInbox: canaryInbox) { model.pop() }
         case .changeName, .sharedProfile:
             profileDetail(route)
-        case .changePin, .newPhoneSecret, .deleteVault:
+        case .changePin, .newPhoneSecret, .deleteVault, .transferOut:
             securityDetail(route)
         case .credential, .changePassword, .rotate, .alarm, .newCredential:
             credentialDetail(route)
@@ -385,6 +388,8 @@ public struct AppShell: View {
             ChangePinRoute(vault: vault, fromAttempts: fromAttempts) { model.pop() }
         case .newPhoneSecret:
             NewPhoneSecretRoute(vault: vault) { model.pop() }
+        case .transferOut:
+            if let move { TransferOutRoute(move: move, vault: vault) { model.pop() } }
         default:
             DeleteVaultRoute(vault: vault) { model.pop() }
         }
@@ -517,6 +522,7 @@ public struct AppShell: View {
         h.onChangePin = { model.push(.changePin(fromAttempts: false)) }
         h.onCredential = { model.push(.credential) }
         h.onNewPhoneSecret = { model.push(.newPhoneSecret) }
+        if move != nil { h.onTransferOut = { model.push(.transferOut) } }
         h.onDeleteVault = { model.push(.deleteVault) }
         h.onSharedProfile = { model.push(.sharedProfile) }
         h.onOwnerCheck = { holdOff in model.ownerCheck(holdOff: holdOff) }
