@@ -21,7 +21,7 @@ extension VaultManagerRecoveryTests {
         _ = await vaultFailure { _ = try await m.recoveryOpen(pin: "222222", password: password) }
         #expect(device?.recoveryOpenEverUnanswered == true)
         #expect(try await m.recoveryOpen(pin: "333333", password: password).code == "wrong")
-        #expect(!m.record.value.recoveryOpenUnanswered && device?.recoveryOpenEverUnanswered == true)
+        #expect(m.record.value.recoveryOpenUnanswered && device?.recoveryOpenEverUnanswered == true)
         // So a start over is still refused (the key may be the vault's), and it survives a restart.
         #expect(await vaultFailure { try await m.abandonRecovery() } != nil)
         try await phone.restart()
@@ -37,7 +37,7 @@ extension VaultManagerRecoveryTests {
         service.recoveryOpenAnswers(.neverProcessed)
         _ = await vaultFailure { _ = try await m.recoveryOpen(pin: pin, password: password) }
         #expect(try await m.recoveryOpen(pin: "111111", password: password).code == "wrong")
-        #expect(!m.record.value.recoveryOpenUnanswered)
+        #expect(m.record.value.recoveryOpenUnanswered)
         service.cancelRecoveryAtApi()
         // Entered by the sticky mark. The second identity may hold an invitation under its `recovery_id`: it is not dropped, and
         // the new code makes a third identity (no dead end).

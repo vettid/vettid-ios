@@ -187,7 +187,7 @@ extension VaultManager {
                 let r = try await s.device.openRecoveryOpenResult(envelope, requestID: rid)
                 await noteOpenAnswer(r, device: s.device, id: rid)
                 if r.ok { return .ok }
-                noteEarlierAnswer(r)
+                noteEarlierAnswer(r, none: !s.device.recoveryOpenEverUnanswered)
                 found = .answered(r)
             } catch {
                 continue
@@ -196,10 +196,10 @@ extension VaultManager {
         return found
     }
 
-    /// An answer to an earlier open that was readable after all: as at the time, it says whether the record existed.
-    private func noteEarlierAnswer(_ r: RecoveryOpen.Result) {
+    /// An answer to an earlier open that was readable after all: the mark goes only when no open is left unanswered ([none]).
+    private func noteEarlierAnswer(_ r: RecoveryOpen.Result, none: Bool) {
         _ = try? record.update(since: record.generation) {
-            if r.counted || Self.recordExistedCodes.contains(r.code) { $0.recoveryOpenUnanswered = false }
+            if none { $0.recoveryOpenUnanswered = false }
             if r.counted { $0.recoveryAttemptsUsed = r.used }
         }
     }

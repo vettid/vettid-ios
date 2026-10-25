@@ -337,11 +337,11 @@ extension VaultManager {
                 _ = try phoneSecrets.confirmCreate(id: epoch.id)
                 usesPhoneSecret = phoneSecrets.inUse
             }
+            // The mark goes only when the history of the opens leaves none unanswered (IOS-PLAN 0.1.34 §4.10): a `wrong`, a `retry`,
+            // `not_armed`, `stored_mismatch` or any code outside the list proves nothing after an unanswered open.
+            let none = r.ok || !d.recoveryOpenEverUnanswered
             _ = try record.update(since: rec) {
-                // Only an answer that proves the recovery record still existed says that no earlier open was adopted (§11.14.6
-                // steps 1 to 3): not `no_recovery` (the lost-ok signal), nor `attestation`, `manifest`, `wrong_release` or
-                // `bad_request`, which may be decided before the record is read (chosen; not in the spec).
-                if r.ok || r.counted || Self.recordExistedCodes.contains(r.code) { $0.recoveryOpenUnanswered = false }
+                if none { $0.recoveryOpenUnanswered = false }
                 if let used { $0.recoveryAttemptsUsed = used }
             }
             guard r.ok else {

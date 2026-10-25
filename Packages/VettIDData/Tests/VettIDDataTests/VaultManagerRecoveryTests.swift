@@ -323,9 +323,10 @@ import VettIDDataTesting
         // It survives a restart, and the next answer carries it.
         try await phone.restart()
         let next = try await m.recoveryOpen(pin: "111111", password: password)
-        #expect(next.code == "wrong" && next.afterUnanswered && !m.record.value.recoveryOpenUnanswered)
-        // The answer after that does not.
-        #expect(try await m.recoveryOpen(pin: "222222", password: password).afterUnanswered == false)
+        // The `wrong` after an unanswered open proves nothing about it: the mark stays (IOS-PLAN 0.1.34 §4.10).
+        #expect(next.code == "wrong" && next.afterUnanswered && m.record.value.recoveryOpenUnanswered)
+        // So the answer after that says it too.
+        #expect(try await m.recoveryOpen(pin: "222222", password: password).afterUnanswered)
     }
 
     @Test func aLostOkIsResumedByAnUnlockAndNoAttemptIsUsed() async throws {
