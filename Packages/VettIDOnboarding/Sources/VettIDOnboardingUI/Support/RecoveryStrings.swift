@@ -147,6 +147,28 @@ enum RecoveryStrings {
         )
     }
 
+    // (IOS-PLAN 0.1.33 §4.9, "A phone that could not tell"; approved by the owner on 2026-10-24.) vettid-android has no text for
+    // these: the keys are the iPhone's own.
+
+    static var iosRecoverCouldNotTell: String {
+        String(
+            localized: "ios_recover_could_not_tell",
+            defaultValue: """
+                We could not tell whether your last attempt recovered the vault. You can start a new recovery on the account \
+                site and use this phone for it; nothing on this phone is deleted.
+                """,
+            bundle: .module
+        )
+    }
+
+    static var iosRecoverTookThisPhone: String {
+        String(
+            localized: "ios_recover_took_this_phone",
+            defaultValue: "Your vault took this phone, but it cannot be unlocked right now. Contact VettID.",
+            bundle: .module
+        )
+    }
+
     static func recoverRateLimitedWait(_ wait: String) -> String {
         String(localized: "recover_rate_limited_wait", defaultValue: "Too many attempts. Try again in \(wait).", bundle: .module)
     }

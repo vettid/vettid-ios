@@ -57,6 +57,12 @@ public struct RecoveryOpenState: Equatable, Sendable, CustomStringConvertible, C
     /// The member continued after `ok` and the vault opened on this phone (``RecoveryOpenViewModel/openApp()``): the
     /// recovery's own screen hands over to the end of setup.
     public var opened = false
+    /// (IOS-PLAN 0.1.33 §4.9, "A phone that could not tell") ``CouldNotTellStage/finishWithPin`` puts this screen at the PIN of
+    /// ``OpenStep/finish`` (the unlock with this phone's secret, the new identity first if it registered, then the earlier one);
+    /// ``CouldNotTellStage/contact`` adds the second text, "Your vault took this phone, but it cannot be unlocked right now.
+    /// Contact VettID.". ``CouldNotTellStage/newCode`` after an answer is the step ``RecoverStep/couldNotTell``
+    /// (``RecoverViewModel/checkEnded()``).
+    public var couldNotTell = CouldNotTellStage.none
 
     public init(step: OpenStep = .enter, used: Int? = nil) {
         self.step = step
@@ -64,6 +70,9 @@ public struct RecoveryOpenState: Equatable, Sendable, CustomStringConvertible, C
     }
 
     public var pinValid: Bool { (Self.minPin...Self.maxPin).contains(pin.count) && pin.allSatisfy { $0.isASCII && $0.isNumber } }
+
+    /// The second text of the rule is shown (a day of refusals to the unlock).
+    public var contactVettID: Bool { couldNotTell == .contact }
 
     public var canContinue: Bool { pinValid && !password.isEmpty }
 

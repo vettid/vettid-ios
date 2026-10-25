@@ -12,6 +12,28 @@
         }
       }
     },
+    "ios_recover_could_not_tell": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "We could not tell whether your last attempt recovered the vault. You can start a new recovery on the account site and use this phone for it; nothing on this phone is deleted."
+          }
+        }
+      }
+    },
+    "ios_recover_took_this_phone": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault took this phone, but it cannot be unlocked right now. Contact VettID."
+          }
+        }
+      }
+    },
     "ios_unlock_earlier_secret": {
       "extractionState": "manual",
       "localizations": {

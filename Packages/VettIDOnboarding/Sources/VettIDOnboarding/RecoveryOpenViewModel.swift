@@ -32,7 +32,16 @@ public final class RecoveryOpenViewModel {
             let opened = (try? await move.recoveryOpened()) ?? false
             // Not over a step the member has moved to meanwhile.
             if opened, self?.state.step == .enter { self?.state.step = .finish }
+            await self?.refreshStage(startFinish: true)
         }
+    }
+
+    /// IOS-PLAN 0.1.33 §4.9: where the rule for a phone that could not tell stands. [startFinish]: at the start, a phone for
+    /// which the unlock is what is left is at the PIN of the lost-ok finish.
+    private func refreshStage(startFinish: Bool = false) async {
+        let stage = (try? await move.couldNotTellStage()) ?? .none
+        state.couldNotTell = stage
+        if startFinish, stage == .finishWithPin || stage == .contact, state.step == .enter { finishLostOk() }
     }
 
     deinit { work.cancelAll() }
@@ -80,14 +89,27 @@ public final class RecoveryOpenViewModel {
                 state.failure = e.kind
                 state.failureCode = e.code
                 state.outcome = nil
+                await self.refreshStage()
                 return
             }
             self?.answered(out)
+            await self?.refreshStage()
         }
     }
 
     /// The vault's answer (or this phone's own unlock while finishing an `ok` recovery).
     private func answered(_ out: RecoveryOpenOutcome) {
+        if out.code == UnlockEpoch.transferIncomplete {
+            // IOS-PLAN 0.1.33 §4.9: the state is still under `DEK_0`; only an open repeats the recovery. While its recovery shows
+            // `registered` the phone opens again (the fields come back); otherwise the rule applies (``refreshStage()``).
+            state.step = .enter
+            state.outcome = nil
+            state.failure = nil
+            state.failureCode = nil
+            state.lostOk = false
+            state.pin = ""
+            return
+        }
         if out.ok {
             var s = RecoveryOpenState(step: .done, used: out.used ?? state.used)
             s.outcome = out
