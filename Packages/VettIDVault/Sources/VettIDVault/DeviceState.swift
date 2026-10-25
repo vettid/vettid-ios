@@ -81,6 +81,10 @@ struct RecoveryRecord: Codable, Sendable {
     let recoveryID: String
     var requestID = ""
     var credentialBackup: Bool?
+    /// (IOS-PLAN 0.1.33 §4.9) The `request_id` of every `vault.recovery.open` this identity built, kept before the request is
+    /// posted: a phone that could not tell whether an open recovered the vault reads the slot of the earlier one once.
+    /// Optional: a state written before it existed has none.
+    var openRequestIDs: [String]?
 }
 
 /// A deposit not yet answered 201 by the relay (§8.3: the entry goes once the relay accepted it).

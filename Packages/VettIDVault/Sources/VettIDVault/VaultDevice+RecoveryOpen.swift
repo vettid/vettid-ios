@@ -34,13 +34,24 @@ extension VaultDevice {
                 return (vid, rec)
             }
             let tok = try own.mintOpenToken(audience: cfg.relayURL, ttl: Self.openTokenTTL)
-            return try AltRequests.buildRecoveryOpen(
+            let req = try AltRequests.buildRecoveryOpen(
                 userGuid: userGuid, vaultID: vid, recoveryID: rec.recoveryID, pin: pin, password: password,
                 unlockSecret: unlockSecret, enclave: enclave, manifest: manifest, attester: attester, ik: secrets.identity,
                 token: tok, now: now()
             )
+            // Kept before the request is posted (a kill between the two must not lose the id of an open that went out).
+            mem.withLock {
+                guard var record = st.recovery else { return }
+                record.openRequestIDs = (record.openRequestIDs ?? []) + [req.requestID]
+                st.recovery = record
+            }
+            try save()
+            return req
         }
     }
+
+    /// The `request_id`s of the opens this identity built, newest first (IOS-PLAN 0.1.33 §4.9).
+    public var recoveryOpenRequestIDs: [String] { mem.withLock { (st.recovery?.openRequestIDs ?? []).reversed() } }
 
     /// Opens `vault.recovery.open.result`; on `ok` pins the vault from the bundle and keeps the token, so that the phone's
     /// first handshake follows (`hs.init` with `ctx` = `recovery_id`, then `credential.get`).

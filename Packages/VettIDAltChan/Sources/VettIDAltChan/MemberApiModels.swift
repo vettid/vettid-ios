@@ -23,6 +23,10 @@ public struct MemberApiError: Error, Equatable, Sendable, CustomStringConvertibl
     public static let recoveryNotAvailable = "recovery_not_available"
     /// 2.1.0: the vault keeps no backup copy of its credential and cannot be recovered.
     public static let recoveryUnavailable = "recovery_unavailable"
+    /// 2.12.0: the claim's key is a key in use (normally the vault's `app_key`): nothing was written.
+    public static let keyInUse = "key_in_use"
+    /// The status read of a recovering key whose recovery ended (once the member API gives it, vettid.org #415).
+    public static let recoveryEnded = "recovery_ended"
     public static let rateLimited = "rate_limited"
     public static let manifestUnavailable = "manifest_unavailable"
     /// `service` of `vault_unavailable` and of `GET /api/vault/status` while the vault service is paused.
