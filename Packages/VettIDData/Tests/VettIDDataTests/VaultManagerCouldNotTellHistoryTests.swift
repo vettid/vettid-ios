@@ -161,3 +161,134 @@ extension VaultManagerRecoveryTests {
         #expect(try await m.storedSession() == nil)
     }
 }
+
+/// The bound, the nested switches, the pairing that wins, and the record that cannot be read (continues
+/// ``VaultManagerRecoveryTests``).
+extension VaultManagerRecoveryTests {
+    @Test func aRefusalBeforeTheOpenIsBuiltNeverTouchesAnEarlierOpensEntry() async throws {
+        defer { phone.close() }
+        _ = try await registered()
+        // The first open is answered `503` by the member API: unanswered.
+        service.recoveryOpenAnswers(.apiRefused(503))
+        _ = await vaultFailure { _ = try await m.recoveryOpen(pin: pin, password: password) }
+        let first = try #require(device?.recoveryOpens.first)
+        #expect(first.state == .unanswered)
+        // The next open's descriptor fetch is refused with a `4xx` before the request is built: it has no entry, and the first
+        // one is unchanged (so a start over is still refused).
+        service.enclaveRefusals(429)
+        _ = await vaultFailure { _ = try await m.recoveryOpen(pin: pin, password: password) }
+        #expect(device?.recoveryOpens == [first] && device?.recoveryOpenEverUnanswered == true)
+        #expect(await vaultFailure { try await m.abandonRecovery() } != nil)
+    }
+
+    @Test func aWrongAnswerOnALaterIdentityIsNotAProofWhileAnEarlierIdentitysOpenIsUnanswered() async throws {
+        defer { phone.close() }
+        try await endedForGood()
+        _ = try await m.registerRecovery(try scanned(try secondRecovery()))
+        #expect(try await m.recoveryOpen(pin: "111111", password: password).code == "wrong")
+        // The first identity's open is unanswered: per phone, `wrong` proves nothing.
+        #expect(device?.recoveryOpenEverUnanswered == true)
+    }
+
+    @Test func theBoundOffersTheUnlockAndThenCountsFreeIndexes() async throws {
+        defer { phone.close() }
+        let k = try phone.appKeys.getOrCreate().spki()
+        try await endedForGood()
+        for _ in 1..<IdentitySet.limit {
+            _ = try await m.registerRecovery(try scanned(try secondRecovery()))
+            service.recoveryOpenAnswers(.neverProcessed)
+            _ = await vaultFailure { _ = try await m.recoveryOpen(pin: pin, password: password) }
+            service.cancelRecoveryAtApi()
+            #expect(try await twoReads() == .newCode)
+        }
+        #expect(m.record.value.couldNotTell?.identities.count == IdentitySet.limit)
+        // Every index is in use, the newest identity may hold an invitation: no code is registered, the PIN is offered (no second
+        // text), and nothing is dropped.
+        let registers = service.recoveryRegisters.count
+        let r = try await m.registerRecovery(try scanned(try secondRecovery()))
+        #expect(r == .refused(code: VaultManager.codeRecoveryOpenSent) && service.recoveryRegisters.count == registers)
+        #expect(try await m.couldNotTellStage() == .finishWithPin)
+        let ct = try #require(m.record.value.couldNotTell)
+        #expect(ct.unlock && ct.unlockByReads && !ct.ended && ct.identities.count == IdentitySet.limit)
+        for set in IdentitySet.all { for slot in KeySlot.slots(of: set) { #expect(try phone.wrapped.get(slot) != nil) } }
+        #expect(try phone.appKeys.getOrCreate().spki() == k)
+        // The unlock tries all of them, newest first, and refuses (nothing opened): all kept, the identity in use as it was.
+        let start = m.record.value.activeIdentity
+        _ = await vaultFailure { _ = try await m.resumeLostOk(pin: pin) }
+        #expect(m.record.value.activeIdentity == start && m.record.value.couldNotTell?.returnTo == nil)
+        #expect(try await m.couldNotTellStage() == .finishWithPin)
+    }
+
+    @Test func aNestedSwitchPutsTheOuterReturnMarkerBackNotNil() async throws {
+        defer { phone.close() }
+        try await endedForGood()
+        _ = try await m.registerRecovery(try scanned(try secondRecovery()))
+        // The unlock with each identity is at its first identity; inside it the fallback tries the older identities and finds none.
+        try m.persistRecord(m.record.generation) { $0.couldNotTell?.returnTo = .first }
+        m.moveFlags.book.trialDepth = 1
+        let none = try await m.pairEarlierIdentity(pin: pin)
+        m.moveFlags.book.trialDepth = 0
+        #expect(none == nil && m.record.value.activeIdentity == .second)
+        #expect(m.record.value.couldNotTell?.returnTo == .first)
+        // A kill with both markers goes back to the outer one (the loop's), and a read waits while a switch is running.
+        m.moveFlags.book.trialDepth = 1
+        let reads = service.statusReads
+        _ = try await m.checkCouldNotTell()
+        #expect(service.statusReads == reads)
+        m.moveFlags.book.trialDepth = 0
+    }
+
+    @Test func aPairingThatCompletedWinsOverAStaleMarker() async throws {
+        defer { phone.close() }
+        let k = try phone.appKeys.getOrCreate().spki()
+        try await endedForGood()
+        _ = try await m.registerRecovery(try scanned(try secondRecovery()))
+        #expect(try await m.recoveryOpen(pin: pin, password: password).ok)
+        #expect(m.record.value.couldNotTell == nil && m.record.value.activeIdentity == .second)
+        // A write that failed after the pairing would have left the rule with a marker that points at an identity that is gone:
+        // brought back here by hand, with the keys and files of the winner only.
+        try m.persistRecord(m.record.generation) {
+            var ct = CouldNotTell(earlier: .first)
+            ct.identities = [.first, .second]
+            ct.returnTo = .first
+            $0.couldNotTell = ct
+            $0.activeIdentity = .first
+        }
+        try await phone.restart()
+        _ = try await m.couldNotTellStage()
+        #expect(m.record.value.couldNotTell == nil && m.record.value.activeIdentity == .second)
+        for slot in KeySlot.slots(of: .second) { #expect(try phone.wrapped.get(slot) != nil) }
+        #expect(try phone.appKeys.getOrCreate().spki() == k)
+        #expect(try await m.openSession().device.deviceID != nil)
+    }
+
+    @Test func aRecordThatCannotBeReadNeverReplacesKWhenAnIdentityOtherThanTheFirstHoldsTheDevice() async throws {
+        defer { phone.close() }
+        let k = try phone.appKeys.getOrCreate().spki()
+        try await endedForGood()
+        _ = try await m.registerRecovery(try scanned(try secondRecovery()))
+        #expect(try await m.recoveryOpen(pin: pin, password: password).ok)
+        // The winner is the second identity: `vault-device` is gone.
+        #expect(!FileManager.default.fileExists(atPath: phone.directory.appendingPathComponent(VaultFiles.device).path))
+        phone.close()
+        try Data("not a record".utf8).write(to: phone.directory.appendingPathComponent(VaultFiles.account))
+        try await phone.restart()
+        var threw = false
+        do { try await m.forgetSetupCode() } catch { threw = true }
+        let kept = try phone.appKeys.getOrCreate().spki()
+        #expect(threw && kept == k)
+        for slot in KeySlot.slots(of: .second) { #expect(try phone.wrapped.get(slot) != nil) }
+    }
+
+    @Test func theFloorsAreWrittenWithTheSwitchToANewIdentity() async throws {
+        defer { phone.close() }
+        try await endedForGood()
+        var floors = AltState()
+        floors.stateSeq = 9
+        floors.manifestSerial = 4
+        try await m.openSession().device.seedFloors(from: floors)
+        _ = try await m.registerRecovery(try scanned(try secondRecovery()))
+        #expect(m.record.value.couldNotTell?.floors?.stateSeq == 9 && m.record.value.couldNotTell?.floors?.manifestSerial == 4)
+        #expect(try await m.openSession().device.altState.stateSeq >= 9)
+    }
+}

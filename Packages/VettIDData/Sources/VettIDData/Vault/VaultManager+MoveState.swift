@@ -50,7 +50,7 @@ final class MoveBook {
     /// The pending lock found at the start was taken up (once, after the first-run cleanup and the record).
     var lockResumed = false
     /// The earlier identity's unlock is being tried now (``VaultManager/pairEarlierIdentity(pin:)``): not a trial to settle.
-    var trialRunning = false
+    var trialDepth = 0
     /// Identities are being switched for the rule now (a status read of the rule waits).
     var ruleSwitching = 0
     /// The kept transfer of the record was looked at (once per process, at the start; then at each return to the foreground).

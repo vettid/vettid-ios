@@ -51,7 +51,12 @@ extension VaultManager {
                 }
                 return .refused(code: Self.codeRecoveryOpenSent)
             }
-            let fresh = try await identityForNewCode(ct)
+            let fresh: VaultSession
+            do {
+                fresh = try await identityForNewCode(ct)
+            } catch let f as VaultFailure where f.code == Self.codeIdentitiesFull {
+                return try offerTheUnlockInstead()
+            }
             // The identity's own recovery ended with no unanswered open: it registers the new code, with the same keys.
             if let known = fresh.device.recoveryID, known != code.recoveryID {
                 // Never a `recovery_id` the vault may hold an invitation under.
@@ -82,21 +87,39 @@ extension VaultManager {
     /// else the next one, which starts from the floors the newest has seen. The identity in use is the one returned.
     private func identityForNewCode(_ ct: CouldNotTell) async throws -> VaultSession {
         let current = try await openSession()
-        if ct.identities.count > 1, !current.device.recoveryOpenEverUnanswered { return current }
-        guard let n = ct.newest.next else { throw VaultFailure(.other, code: Self.codeIdentitiesFull) }
-        let floors = current.device.altState
+        if ct.identities.count > 1, !current.device.recoveryOpenEverUnanswered {
+            try await current.device.seedFloors(from: (ct.floors ?? AltFloors(current.device.altState)).altState)
+            return current
+        }
+        // The next index that is free, not the next after the newest: an episode that starts from a later identity has as many.
+        guard let n = ct.nextFree else { throw VaultFailure(.other, code: Self.codeIdentitiesFull) }
+        // The floors the newest identity has seen are written with the switch, and applied to the new identity whenever it is used.
+        let floors = (ct.floors ?? AltFloors(current.device.altState)).merged(with: AltFloors(current.device.altState))
         _ = await cancelOpening() // a session being opened for another identity must not interleave
         // Keys the App Attest record may still hold for this number (an earlier episode) are not the new identity's.
         try config.attester.forget(identity: n.rawValue)
         try Self.makeIdentity(config, n)
         try persistRecord(record.generation) {
             $0.couldNotTell?.identities.append(n)
+            $0.couldNotTell?.floors = floors
             $0.activeIdentity = n
         }
         try await dropSession(forget: false)
         let fresh = try await openSession()
-        try await fresh.device.seedFloors(from: floors)
+        try await fresh.device.seedFloors(from: floors.altState)
         return fresh
+    }
+
+    /// There is no free identity for another code: nothing is registered, and the unlock with each identity that is kept is what is
+    /// left (the stage offers the PIN; no second text, which is for a vault that took this phone).
+    private func offerTheUnlockInstead() throws -> RecoveryRegistration {
+        try persistRecord(record.generation) {
+            $0.couldNotTell?.unlock = true
+            $0.couldNotTell?.unlockByReads = true
+            $0.couldNotTell?.ended = false
+            $0.couldNotTellRead = nil
+        }
+        return .refused(code: Self.codeRecoveryOpenSent)
     }
 
     /// The claim answered `409 key_in_use`: the phone is the vault's app. The lost-ok unlock decides, newest identity first
@@ -184,9 +207,9 @@ extension VaultManager {
 
     /// The vault answered `ok` and the pairing completed: every identity that did not pair, its device state and the rule's record
     /// go. Nothing before (IOS-PLAN 0.1.33 §4.9 "What it keeps"); a failure keeps all, and the next look tries again.
-    func settleCouldNotTell() {
+    func settleCouldNotTell(winner: IdentitySet? = nil) {
         guard record.value.couldNotTell != nil else { return }
-        let winner = record.value.activeIdentity
+        let winner = winner ?? record.value.activeIdentity
         do {
             for loser in IdentitySet.all where loser != winner {
                 for slot in KeySlot.slots(of: loser) { try config.keys.wrapped.remove(slot) }
@@ -194,6 +217,7 @@ extension VaultManager {
                 try config.attester.forget(identity: loser.rawValue)
             }
             try persistRecord(record.generation) {
+                $0.activeIdentity = winner
                 $0.couldNotTell = nil
                 $0.couldNotTellRead = nil
             }
@@ -202,13 +226,27 @@ extension VaultManager {
         }
     }
 
+    /// The identity of the rule whose device state shows the pairing completed (it paired and has no recovery left), read from the
+    /// stored state without any key. It is the winner whatever the record says of the identity in use.
+    func pairedIdentity(_ ct: CouldNotTell) -> IdentitySet? {
+        ct.identities.first { id in
+            guard let bytes = try? config.file(VaultFiles.device(of: id)).load() else { return false }
+            return VaultDevice.pairedAfterRecovery(state: bytes)
+        }
+    }
+
     /// A start with a switch of identity that did not end (the app was killed during the unlock of another identity): the identity
     /// to go back to is the one in use again (IOS-PLAN 0.1.33 §4.9, "never forget": nothing else changes). True when it changed.
     @discardableResult
     func settleTrial() -> Bool {
-        guard !moveFlags.book.trialRunning, moveFlags.book.ruleSwitching == 0, let ct = record.value.couldNotTell,
-              let back = ct.returnTo else { return false }
+        guard moveFlags.book.trialDepth == 0, moveFlags.book.ruleSwitching == 0, let ct = record.value.couldNotTell else { return false }
         let before = record.value.activeIdentity
+        // A pairing that completed wins over any marker a write left behind: that identity is the one, and the rest go.
+        if let winner = pairedIdentity(ct) {
+            settleCouldNotTell(winner: winner)
+            return record.value.activeIdentity != before
+        }
+        guard let back = ct.returnTo else { return false }
         _ = try? record.update(since: record.generation) {
             $0.couldNotTell?.returnTo = nil
             $0.activeIdentity = back
@@ -224,9 +262,10 @@ extension VaultManager {
     /// a day of refusals to a vault that took this phone the second text is shown.
     func resumeLostOkEither(_ ct: CouldNotTell, pin: String) async throws -> RecoveryOpenOutcome {
         let start = record.value.activeIdentity
-        moveFlags.book.trialRunning = true
-        defer { moveFlags.book.trialRunning = false }
+        moveFlags.book.trialDepth += 1
+        defer { moveFlags.book.trialDepth -= 1 }
         // The identity to go back to is written down first: a kill or an error meanwhile goes back to it (``settleTrial()``).
+        let outer = record.value.couldNotTell?.returnTo
         try persistRecord(record.generation) { $0.couldNotTell?.returnTo = start }
         var last: RecoveryOpenOutcome?
         var failure: (any Error)?
@@ -249,7 +288,7 @@ extension VaultManager {
                         }
                     }
                     if out.ok || Self.knowsThisPhone(out) {
-                        _ = try? record.update(since: record.generation) { $0.couldNotTell?.returnTo = nil }
+                        _ = try? record.update(since: record.generation) { $0.couldNotTell?.returnTo = outer }
                         return out
                     }
                     last = out
@@ -263,12 +302,12 @@ extension VaultManager {
             if let now = record.value.couldNotTell, now.unlock, !now.unlockByReads, tried, !transient { try noteRefusals() }
         } catch {
             try? await selectIdentity(start)
-            _ = try? record.update(since: record.generation) { $0.couldNotTell?.returnTo = nil }
+            _ = try? record.update(since: record.generation) { $0.couldNotTell?.returnTo = outer }
             throw error
         }
         // The identity the screens find: the one it was.
         try await selectIdentity(start)
-        _ = try? record.update(since: record.generation) { $0.couldNotTell?.returnTo = nil }
+        _ = try? record.update(since: record.generation) { $0.couldNotTell?.returnTo = outer }
         if let last { return last }
         throw failure ?? VaultFailure(.other, code: Self.codeNoBundle)
     }
@@ -280,11 +319,19 @@ extension VaultManager {
     func pairEarlierIdentity(pin: String) async throws -> (String?, VaultSession)? {
         guard let ct = record.value.couldNotTell, ct.identities.count > 1 else { return nil }
         let back = record.value.activeIdentity
-        moveFlags.book.trialRunning = true
-        defer { moveFlags.book.trialRunning = false }
-        // The identity that has the vault's `ok` is written down with the trial: a kill meanwhile goes back to it.
+        moveFlags.book.trialDepth += 1
+        defer { moveFlags.book.trialDepth -= 1 }
+        // The identity that has the vault's `ok` is written down with the trial: a kill meanwhile goes back to it. Inside the
+        // unlock with each identity the marker of that loop is put back at the end, not cleared (a stack of two).
+        let outer = ct.returnTo
         try persistRecord(record.generation) { $0.couldNotTell?.returnTo = back }
-        func end() { _ = try? record.update(since: record.generation) { $0.couldNotTell?.returnTo = nil } }
+        func end(strict: Bool = false) throws {
+            if strict {
+                try persistRecord(record.generation) { $0.couldNotTell?.returnTo = outer }
+            } else {
+                _ = try? record.update(since: record.generation) { $0.couldNotTell?.returnTo = outer }
+            }
+        }
         for id in ct.identities.reversed() where id != back {
             let other: VaultSession
             let u: UnlockOutcome
@@ -296,7 +343,7 @@ extension VaultManager {
                 // The unlock did not answer, or was cancelled.
                 if error is CancellationError {
                     try? await selectIdentity(back)
-                    end()
+                    try? end()
                     throw error
                 }
                 continue
@@ -306,14 +353,14 @@ extension VaultManager {
                 // identity's: it stays the one in use (a restart finds it), and the code is said.
                 if let code = u.result.code, code == "bad_pin" || code == "backoff" {
                     try await selectIdentity(back)
-                    end()
+                    try end(strict: true)
                     return (code, try await openSession())
                 }
                 continue
             }
             // No bundle: the vault does not hold this identity as the one a completed recovery made its app.
             guard other.device.recoveryOpenedNotFinished else { continue }
-            end()
+            try end(strict: true)
             do {
                 try await other.device.completeRecoveryOpen(timeout: handshakeWait(resuming: false))
             } catch let e as VaultStateError where VaultFailures.noResponse(e) {
@@ -323,7 +370,7 @@ extension VaultManager {
             return (nil, other)
         }
         try await selectIdentity(back)
-        end()
+        try end(strict: true)
         return nil
     }
 

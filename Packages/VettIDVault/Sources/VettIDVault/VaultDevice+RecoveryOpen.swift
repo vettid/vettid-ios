@@ -60,6 +60,13 @@ extension VaultDevice {
         }
     }
 
+    /// Whether a stored device state (its decrypted bytes) is of a device that paired and has no recovery left: the pairing of a
+    /// recovery completed there (IOS-PLAN 0.1.33 §4.9). Reads no keys.
+    public static func pairedAfterRecovery(state bytes: [UInt8]) -> Bool {
+        guard let st = try? JSONDecoder().decode(DeviceState.self, from: Data(bytes)) else { return false }
+        return st.deviceID != nil && st.recovery == nil
+    }
+
     /// What is known of each open this identity built, oldest first (IOS-PLAN 0.1.34 §4.10).
     public var recoveryOpens: [RecoveryOpenEntry] { mem.withLock { st.recovery?.opens ?? [] } }
 
@@ -76,12 +83,12 @@ extension VaultDevice {
         return opens.contains { $0.state == .unanswered } && !opens.contains { $0.state == .ok }
     }
 
-    /// Writes what became known of the open [id], durably (the newest when nil).
-    public func markRecoveryOpen(_ id: String? = nil, _ state: RecoveryOpenEntry.State) async throws {
+    /// Writes what became known of the open [id], durably. Never "the newest": an id this device did not build changes nothing.
+    public func markRecoveryOpen(_ id: String, _ state: RecoveryOpenEntry.State) async throws {
         try await lock.withLock {
             let changed: Bool = mem.withLock {
                 guard var record = st.recovery, var opens = record.opens,
-                      let i = id.flatMap({ id in opens.firstIndex { $0.id == id } }) ?? (opens.isEmpty ? nil : opens.count - 1),
+                      let i = opens.firstIndex(where: { $0.id == id }),
                       opens[i].state != state else { return false }
                 opens[i].state = state
                 record.opens = opens

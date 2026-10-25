@@ -1,4 +1,5 @@
 import Foundation
+import VettIDAltChan
 import VettIDKeys
 
 /// Where a phone that could not tell whether an open recovered the vault stands (IOS-PLAN 0.1.33 §4.9; VAULT-MESSAGING 0.59.0
@@ -61,6 +62,9 @@ struct CouldNotTell: Codable, Equatable, Sendable {
     /// While the unlock of other identities is tried (a trial, the unlock with each), the identity to go back to when it does not
     /// end: a kill meanwhile goes back to it (``VaultManager/settleTrial()``).
     var returnTo: IdentitySet?
+    /// The floors the identities before the newest have seen (`min_state_seq`, `min_header_seq`, the release, the manifest serial),
+    /// written with the switch to a new identity and applied to it whenever it is used (never below them).
+    var floors: AltFloors?
     /// The first refusal of the unlock since the last that did not refuse (Unix ms, this phone's clock), and the period after
     /// which it is told as the second text (a day, divided by the vault's time scale then). A network error neither counts nor
     /// ends the run; an answer only a key the vault holds gets (`bad_pin`) ends it.
@@ -72,9 +76,12 @@ struct CouldNotTell: Codable, Equatable, Sendable {
     /// The newest identity, when there is one beside the first.
     var new: IdentitySet? { identities.count > 1 ? identities.last : nil }
     var newest: IdentitySet { identities[identities.count - 1] }
+    /// The lowest index no identity of the rule uses (nil when all ``IdentitySet/limit`` are in use).
+    var nextFree: IdentitySet? { IdentitySet.all.first { !identities.contains($0) } }
 
     enum CodingKeys: String, CodingKey {
         case identities, ended, unlock
+        case floors
         case returnTo = "return_to"
         case unlockByReads = "unlock_by_reads"
         case transferIncomplete = "transfer_incomplete"
@@ -93,7 +100,45 @@ struct CouldNotTell: Codable, Equatable, Sendable {
         unlockByReads = try c.decodeIfPresent(Bool.self, forKey: .unlockByReads) ?? false
         transferIncomplete = try c.decodeIfPresent(Bool.self, forKey: .transferIncomplete) ?? false
         returnTo = try c.decodeIfPresent(IdentitySet.self, forKey: .returnTo)
+        floors = try c.decodeIfPresent(AltFloors.self, forKey: .floors)
         refusalsSinceMs = try c.decodeIfPresent(Int64.self, forKey: .refusalsSinceMs)
         refusalsForMs = try c.decodeIfPresent(Int64.self, forKey: .refusalsForMs)
+    }
+}
+
+/// What an identity has seen of the vault's state, kept for the identities made after it (see ``CouldNotTell/floors``).
+struct AltFloors: Codable, Equatable, Sendable {
+    var stateSeq: UInt64
+    var manifestSerial: UInt64
+    var headerSeq: [String: UInt64]
+    var release: String
+    var releaseNumber: UInt64
+
+    init(_ a: AltState) {
+        stateSeq = a.stateSeq
+        manifestSerial = a.manifestSerial
+        headerSeq = a.headerSeq
+        release = a.release
+        releaseNumber = a.releaseNumber
+    }
+
+    /// The larger of the two, per floor.
+    func merged(with other: AltFloors) -> AltFloors {
+        var out = self
+        out.stateSeq = max(stateSeq, other.stateSeq)
+        out.manifestSerial = max(manifestSerial, other.manifestSerial)
+        for (k, v) in other.headerSeq { out.headerSeq[k] = max(out.headerSeq[k] ?? 0, v) }
+        if other.releaseNumber > releaseNumber { (out.release, out.releaseNumber) = (other.release, other.releaseNumber) }
+        return out
+    }
+
+    var altState: AltState {
+        var a = AltState()
+        a.stateSeq = stateSeq
+        a.manifestSerial = manifestSerial
+        a.headerSeq = headerSeq
+        a.release = release
+        a.releaseNumber = releaseNumber
+        return a
     }
 }

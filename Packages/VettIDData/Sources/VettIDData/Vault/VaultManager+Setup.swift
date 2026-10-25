@@ -48,7 +48,8 @@ extension VaultManager {
     public func forgetSetupCode() async throws {
         try await guarded {
             // The same: K is not replaced, whether or not a device state is stored yet (``dropSession(forget:vaultGone:registrationOnly:)``).
-            // (A record that cannot be read now is not a reason to refuse: nothing of the rule is known, as before.)
+            // K is replaced only when nothing is stored: a record that cannot be read, with a device state on the phone, refuses
+            // (``storedSession()`` throws), as the rule does when the record says so.
             if (try? prepared()) != nil, record.value.couldNotTell != nil { throw VaultFailure(.other, code: Self.codeRecoveryOpenSent) }
             if try await storedSession() != nil {
                 try await dropSession(forget: true)

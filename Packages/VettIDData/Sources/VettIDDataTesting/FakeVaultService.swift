@@ -123,6 +123,8 @@ public final class FakeVaultService: @unchecked Sendable {
     var unauthorizedSlots: Set<String> = []
     var plainSlots: [String: String] = [:]
     var enclaveOfflineValue = false
+    /// The next descriptor fetches are refused with these statuses.
+    var enclaveRefusals: [Int] = []
     var redeemVaultID: String?
     var holdLateValue = false
     var settingsVersion: UInt64 = 1
@@ -372,6 +374,8 @@ public final class FakeVaultService: @unchecked Sendable {
 
     /// `GET /api/vault/status` answers `401 unauthorized` to the app key.
     /// How many `GET /api/vault/status` the service received.
+    /// The next descriptor fetches (`GET /api/vault/enclave`) are refused with these statuses, in order.
+    public func enclaveRefusals(_ statuses: Int...) { locked { enclaveRefusals += statuses } }
     public var statusReads: Int { locked { statusReadsValue } }
     public var statusUnauthorized: Bool {
         get { locked { statusUnauthorizedValue } }
@@ -500,6 +504,7 @@ public final class FakeVaultService: @unchecked Sendable {
 
     private func enclave(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer {
         if enclaveOfflineValue { return .failure(.notConnectedToInternet) }
+        if !enclaveRefusals.isEmpty { return .json(enclaveRefusals.removeFirst(), #"{"error":"refused"}"#) }
         if releases.askedUnavailable, Self.askedRelease(r) != nil { return .json(410, #"{"error":"release_unavailable"}"#) }
         guard let n = route(asked: Self.askedRelease(r)) else { return .json(409, #"{"error":"vault_busy","retry_after":1}"#) }
         let release = Self.pcr0(n)

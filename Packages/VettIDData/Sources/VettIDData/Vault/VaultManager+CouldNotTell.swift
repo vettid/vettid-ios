@@ -71,11 +71,16 @@ extension VaultManager {
     /// while the recovery shows `registered` (the phone opens again); a decision needs two reads of the same kind at least 5
     /// minutes apart, on this phone's clock and its monotonic clock agreeing. A call made too soon sends nothing, and none is made
     /// while identities are being switched.
-    public func checkCouldNotTell() async throws -> CouldNotTellStage {
+    public func checkCouldNotTell() async throws -> CouldNotTellStage { try await checkRule(duringSwitch: false) }
+
+    /// [duringSwitch]: the read of the identity in use that an unlock with it asks for (`transfer_incomplete`), made while the
+    /// identities are switched.
+    func checkRule(duringSwitch: Bool) async throws -> CouldNotTellStage {
         try await guarded {
             let here = try await currentCouldNotTell()
             let ct = record.value.couldNotTell
-            if ct?.ended == true || moveFlags.book.ruleSwitching > 0 { return here }
+            let switching = moveFlags.book.ruleSwitching > 0 || moveFlags.book.trialDepth > 0
+            if ct?.ended == true || (switching && !duringSwitch) { return here }
             guard let device = try await storedSession()?.device, device.recovering else { return here }
             // The rule is entered by an open that is, or ever was, unanswered; once entered, the status is read for as long as the
             // decision is open (also after a key in use, §4.9: "read the status again later").
@@ -172,7 +177,17 @@ extension VaultManager {
             $0.couldNotTell = ct
             $0.couldNotTellRead = nil
         }
-        _ = try? await checkCouldNotTell()
+        _ = try? await checkRule(duringSwitch: true)
+    }
+
+    /// Whether an open before [id] is unanswered, on any identity of this phone (§4.10: "a phone with no earlier unanswered open").
+    /// An identity after the first of a phone that could not tell exists because an earlier one's open is, so for it the answer is
+    /// yes; for the first identity it is its own history.
+    func earlierUnanswered(before id: String, device: VaultDevice) -> Bool {
+        let opens = device.recoveryOpens
+        if let i = opens.firstIndex(where: { $0.id == id }), opens[..<i].contains(where: { $0.state == .unanswered }) { return true }
+        guard let ct = record.value.couldNotTell else { return false }
+        return record.value.activeIdentity != ct.earlier
     }
 
     /// An answer that proves no step 1 was stored (IOS-PLAN 0.1.34 §4.10): only a code from the vault's readable answer, and only
@@ -186,9 +201,8 @@ extension VaultManager {
 
     /// What became known of the open [id] with the answer [r] (or the newest open when nil), written to its entry of the history:
     /// `ok` decides; a refusal that proves no step 1 marks this entry only, and never changes an earlier open's.
-    func noteOpenAnswer(_ r: RecoveryOpen.Result, device: VaultDevice, id: String?) async {
-        let id = id ?? device.recoveryOpens.last?.id
-        let earlier = device.recoveryOpens.contains { $0.id != id && $0.state == .unanswered }
+    func noteOpenAnswer(_ r: RecoveryOpen.Result, device: VaultDevice, id: String) async {
+        let earlier = earlierUnanswered(before: id, device: device)
         if r.ok {
             try? await device.markRecoveryOpen(id, .ok)
         } else if Self.refusalProves(r.code, earlierUnanswered: earlier) {
