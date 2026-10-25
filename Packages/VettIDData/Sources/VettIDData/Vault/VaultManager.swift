@@ -353,8 +353,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         }
         let identity = record.value.activeIdentity
         // Only a phone with two identities (or the second) asks the App Attest record which keys are in use.
-        let twoIdentities = identity != .first || record.value.couldNotTell != nil
-        let task = Task { try await Self.makeSession(c, member, source, gate: gate, identity: identity, twoIdentities: twoIdentities) }
+        let two = identity != .first || record.value.couldNotTell != nil
+        let task = Task { try await Self.makeSession(c, member, source, gate: gate, identity: (identity, two)) }
         opening = task
         defer { opening = nil }
         let s = try await task.value
@@ -378,18 +378,16 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     private nonisolated static func makeSession(
         _ c: VaultManagerConfig, _ member: MemberApiClient, _ canary: CanaryManifestStore,
         gate: @escaping @Sendable (Bool) async throws -> Void,
-        identity: IdentitySet,
-        twoIdentities: Bool
+        identity: (set: IdentitySet, twoIdentities: Bool)
     ) async throws -> VaultSession {
-        // A wipe cancels an opening: nothing more is made or written from here.
-        try Task.checkCancellation()
+        let (identity, twoIdentities) = identity
+        try Task.checkCancellation() // a wipe cancels an opening: nothing more is made or written
         let keys = DeviceKeys(wrapper: SeedWrapper(source: c.keys.seedWrap), store: c.keys.wrapped)
         for slot in KeySlot.slots(of: identity) where try !keys.has(slot) {
             try Task.checkCancellation()
             try keys.generate(slot)
         }
-        // The App Attest keys the vault bound to this identity are the ones in use (IOS-PLAN 0.1.33 §4.9); the second identity has
-        // keys of its own and the same app key K.
+        // The App Attest keys the vault bound to this identity are in use (IOS-PLAN 0.1.33 §4.9); the app key K is the same.
         if twoIdentities { try c.attester.use(identity: identity.rawValue) }
         let secrets = DeviceSecrets(
             identity: try keys.ed25519(KeySlot.identity.of(identity)), kem: try keys.kem(KeySlot.kem.of(identity)),

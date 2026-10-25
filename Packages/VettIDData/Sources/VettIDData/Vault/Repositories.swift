@@ -542,12 +542,10 @@ public protocol MoveRepository: AnyObject, Sendable {
     /// (Release R) After an `ok` ``recoveryOpen(pin:password:)`` the member has read: the app opens.
     func finishRecoveryOpen() async throws
 
-    /// (IOS-PLAN 0.1.33 §4.9, "A phone that could not tell") Where the rule stands for this phone, from what it keeps: nothing is
-    /// sent. Default: ``CouldNotTellStage/none``.
+    /// (IOS-PLAN 0.1.33 §4.9) Where the rule for a phone that could not tell stands, from what it keeps. Default: none.
     func couldNotTellStage() async throws -> CouldNotTellStage
 
-    /// (§4.9) One status read signed with K when the rule's second read is due, then the same as ``couldNotTellStage()``. A call
-    /// made less than 5 minutes after the first read sends nothing. Default: ``CouldNotTellStage/none``.
+    /// (§4.9) One status read signed with K when due (never within 5 minutes of the first), then ``couldNotTellStage()``.
     func checkCouldNotTell() async throws -> CouldNotTellStage
 }
 
