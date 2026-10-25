@@ -20,6 +20,10 @@ public enum CouldNotTellStage: Equatable, Sendable {
     /// A day of refusals to the unlock: the text "Your vault took this phone, but it cannot be unlocked right now. Contact
     /// VettID."
     case contact
+    /// Both identities' recoveries ended and the unlock with each of them was refused for a day (owner decision of 2026-10-25): the
+    /// phone keeps both, and says VettID could not finish recovering the vault on this phone (`ios_recover_could_not_finish`; the
+    /// text awaits the owner's).
+    case couldNotFinish
 }
 
 /// (§4.9) A status read of the rule: what it said, and when (this phone's clock and its monotonic clock, which keeps
@@ -43,8 +47,7 @@ struct CouldNotTellRead: Codable, Equatable, Sendable {
 ///
 /// Persisted as `could_not_tell` in the account record: `identities` (oldest first, indexes into the keys `relay`, `relay2`, …
 /// and the device state files `vault-device`, `vault-device-2`, …; the first is the identity of the open that could not be told),
-/// the flags below, and the run of refusals. Chosen; not in the spec: a new code makes a new identity whenever the newest one
-/// may hold an invitation (an unanswered open), up to ``IdentitySet/limit``.
+/// the flags below, and the run of refusals. Two identities at most (owner decision of 2026-10-25).
 struct CouldNotTell: Codable, Equatable, Sendable {
     /// The identities, oldest first.
     var identities: [IdentitySet]
@@ -56,9 +59,10 @@ struct CouldNotTell: Codable, Equatable, Sendable {
     /// is read again, and two reads of `401`/`410` make it ``ended``. It never leads to the second text (that is for a vault that
     /// took this phone, §4.9).
     var unlockByReads = false
-    /// No identity is free for another code and the newest may hold an invitation (chosen; not in the spec): the unlock with each
-    /// identity is what is left, for good. Not a vault that took this phone (no second text), and never a new code again.
-    var exhausted = false
+    /// The second identity's recovery ended too (owner decision of 2026-10-25: two identities, no third, no registering the second
+    /// again): the unlock with each identity, newest first, is what is left, for good. After a day of refusals the text is
+    /// ``CouldNotTellStage/couldNotFinish``, not the one of a vault that took this phone.
+    var couldNotFinish = false
     /// The unlock answered `transfer_incomplete`: only an open repeats the recovery. Both kinds of read then mean "ended" unless
     /// the recovery shows `registered`.
     var transferIncomplete = false
@@ -85,7 +89,8 @@ struct CouldNotTell: Codable, Equatable, Sendable {
     var nextFree: IdentitySet? { IdentitySet.all.first { !identities.contains($0) } }
 
     enum CodingKeys: String, CodingKey {
-        case identities, ended, unlock, exhausted
+        case identities, ended, unlock
+        case couldNotFinish = "could_not_finish"
         case floors
         case returnTo = "return_to"
         case unlockByReads = "unlock_by_reads"
@@ -102,7 +107,7 @@ struct CouldNotTell: Codable, Equatable, Sendable {
         identities = all.isEmpty ? [.first] : all
         ended = try c.decodeIfPresent(Bool.self, forKey: .ended) ?? false
         unlock = try c.decodeIfPresent(Bool.self, forKey: .unlock) ?? false
-        exhausted = try c.decodeIfPresent(Bool.self, forKey: .exhausted) ?? false
+        couldNotFinish = try c.decodeIfPresent(Bool.self, forKey: .couldNotFinish) ?? false
         unlockByReads = try c.decodeIfPresent(Bool.self, forKey: .unlockByReads) ?? false
         transferIncomplete = try c.decodeIfPresent(Bool.self, forKey: .transferIncomplete) ?? false
         returnTo = try c.decodeIfPresent(IdentitySet.self, forKey: .returnTo)

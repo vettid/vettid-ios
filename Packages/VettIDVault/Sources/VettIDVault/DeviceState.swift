@@ -101,10 +101,6 @@ public struct RecoveryOpenEntry: Codable, Sendable, Equatable {
 
     public let id: String
     public var state: State
-    /// The code of the vault's sealed answer to this open when one was read (whatever it proved for §4.10): an open whose answer is
-    /// sealed and is not `ok` or `retry` stored no invitation under this identity's `recovery_id` (the vault writes it only after
-    /// the wrap opens, vettid-vault `recovery_open.go`). Nil: no answer was read.
-    public var answer: String?
 }
 
 /// A deposit not yet answered 201 by the relay (§8.3: the entry goes once the relay accepted it).

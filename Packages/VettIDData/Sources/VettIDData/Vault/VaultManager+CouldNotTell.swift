@@ -56,11 +56,13 @@ extension VaultManager {
             settleCouldNotTell()
             return .none
         }
+        // An identity holds an `ok` that is not finished: the PIN finishes it, whatever else the reads said.
+        if identityHoldingOk(ct) != nil { return .finishWithPin }
         if ct.unlock {
-            // The second text is for a vault that took this phone (a key in use), not for a `200` that may be an orphaned key.
-            let notBlamed = ct.unlockByReads || ct.exhausted
-            if !notBlamed, let since = ct.refusalsSinceMs, let period = ct.refusalsForMs, nowMs >= since, nowMs - since >= period {
-                return .contact
+            // A text after a day of refusals is for a vault that took this phone (a key in use), or for both recoveries having ended;
+            // not for a `200` that may be an orphaned key.
+            if !ct.unlockByReads, let since = ct.refusalsSinceMs, let period = ct.refusalsForMs, nowMs >= since, nowMs - since >= period {
+                return ct.couldNotFinish ? .couldNotFinish : .contact
             }
             return .finishWithPin
         }
@@ -111,6 +113,8 @@ extension VaultManager {
     /// them), and either the rule is entered or an open of it is, or ever was, unanswered. Once entered, the status is read for as
     /// long as the decision is open (also after a key in use, §4.9: "read the status again later").
     private func hasSomethingToRead(_ ct: CouldNotTell?) async throws -> Bool {
+        // Any identity with an `ok` still to be finished: the screens finish it, and no decision contradicts them.
+        if let ct, identityHoldingOk(ct) != nil { return false }
         guard let device = try await storedSession()?.device, device.recovering else { return false }
         if device.recoveryOpenedNotFinished || device.recoveryOpens.contains(where: { $0.state == .ok }) { return false }
         await convertLegacyUnanswered(device)
@@ -126,10 +130,13 @@ extension VaultManager {
             try persistRecord(rec) {
                 var ct = $0.couldNotTell ?? CouldNotTell(earlier: $0.activeIdentity)
                 if ended {
-                    // Two reads of `401`/`410`: a new code (a new identity unless the newest never had an unanswered open), also
-                    // after two reads of `200` and a refused unlock. An unlock that a key in use led to stays.
+                    // Two reads of `401`/`410`: a new code with a second identity, also after two reads of `200` and a refused
+                    // unlock; with the second identity already there, both recoveries ended and the unlock with each identity is
+                    // what is left, for good. An unlock that a key in use led to stays.
                     if !ct.unlock || ct.unlockByReads {
-                        (ct.ended, ct.unlock, ct.unlockByReads, ct.transferIncomplete) = (true, false, false, false)
+                        let both = ct.identities.count > 1
+                        (ct.ended, ct.unlock, ct.unlockByReads, ct.transferIncomplete) = (!both, both, false, false)
+                        ct.couldNotFinish = both
                         (ct.refusalsSinceMs, ct.refusalsForMs) = (nil, nil)
                     }
                 } else if !ct.unlock {
@@ -158,6 +165,8 @@ extension VaultManager {
     func ruleRead() async -> RuleRead {
         do {
             guard let status = try await vaultStatus() else { return .undecided }
+            // A status of another vault than the one of this recovery (a code of another vault was claimed with K) drives nothing.
+            guard status.vaultID == record.value.vaultID else { return .undecided }
             return status.recoveryState == "registered" ? .registered : .notRegistered
         } catch let e as MemberApiError {
             if e.status == 401, e.code == MemberApiError.unauthorized { return .ended }
@@ -207,17 +216,32 @@ extension VaultManager {
         return alone.contains(code) || (!earlierUnanswered && (code == "wrong" || code == "expired"))
     }
 
-    /// What became known of the open [id] with the answer [r] (or the newest open when nil), written to its entry of the history:
-    /// `ok` decides; a refusal that proves no step 1 marks this entry only, and never changes an earlier open's.
+    /// What became known of the open [id] with the answer [r], written to its entry of the history: `ok` decides; a refusal that
+    /// proves no step 1 marks this entry only, and never changes an earlier open's.
     func noteOpenAnswer(_ r: RecoveryOpen.Result, device: VaultDevice, id: String) async {
-        let earlier = earlierUnanswered(before: id, device: device)
-        // The code of a sealed answer is kept whatever it proves for §4.10 (see ``VaultDevice/recoveryInvitationPossible``).
         if r.ok {
-            try? await device.markRecoveryOpen(id, .ok, answer: r.code)
-        } else if Self.refusalProves(r.code, earlierUnanswered: earlier) {
-            try? await device.markRecoveryOpen(id, .refused(r.code), answer: r.code)
-        } else {
-            try? await device.markRecoveryOpen(id, .unanswered, answer: r.code)
+            try? await device.markRecoveryOpen(id, .ok)
+        } else if Self.refusalProves(r.code, earlierUnanswered: earlierUnanswered(before: id, device: device)) {
+            try? await device.markRecoveryOpen(id, .refused(r.code))
+        }
+    }
+
+    /// The identity of the rule whose stored state holds an `ok` that is not finished (read without keys), if any.
+    func identityHoldingOk(_ ct: CouldNotTell) -> IdentitySet? {
+        ct.identities.first { id in
+            guard let bytes = try? config.file(VaultFiles.device(of: id)).load() else { return false }
+            return VaultDevice.okToFinish(state: bytes)
+        }
+    }
+
+    /// Whether any open of this phone is unanswered: the identity in use (live) or, for a phone that could not tell, any identity
+    /// of the rule (stored state, no keys). §4.10 counts the phone, not the identity.
+    func phoneHasUnansweredOpen(_ device: VaultDevice) -> Bool {
+        if device.recoveryOpenEverUnanswered { return true }
+        guard let ct = record.value.couldNotTell else { return false }
+        return ct.identities.contains { id in
+            guard let bytes = try? config.file(VaultFiles.device(of: id)).load() else { return false }
+            return VaultDevice.hasUnansweredOpen(state: bytes)
         }
     }
 

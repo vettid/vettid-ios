@@ -78,6 +78,8 @@ extension FakeVaultService {
         case keyInUse
         /// The recovery's own rules decide (a place in the queue that scripts nothing).
         case vault
+        /// A claim that names another vault than the service's own (a typed code of another vault).
+        case otherVault
     }
 
     /// How the register answers: done (the default), refused by the enclave with a code, refused by the member API
@@ -250,7 +252,7 @@ extension FakeVaultService {
     // MARK: - The member API's routes
 
     /// `POST /api/vault/recovery/claim`: by `vault_id` and `recovery_id`, or by a typed code's `locator`. Callers hold ``cond``.
-    func recoveryClaim(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer {
+    func recoveryClaim(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer { // swiftlint:disable:this cyclomatic_complexity
         let answer = recovery.claimAnswers.isEmpty ? nil : recovery.claimAnswers.removeFirst()
         switch answer {
         case .offline?: return .failure(.notConnectedToInternet)
@@ -259,6 +261,8 @@ extension FakeVaultService {
         case .notFound?: return .json(404, #"{"error":"not_found"}"#)
         case .limited(let seconds)?: return .json(429, #"{"error":"rate_limited","retry_after":\#(seconds)}"#)
         case .keyInUse?: return .json(409, #"{"error":"key_in_use"}"#)
+        case .otherVault?:
+            return .json(200, #"{"user_guid":"\#(userGuid)","email_hint":"\#(emailHint)","vault_id":"someone-elses-vault","recovery_id":"\#(recovery.recoveryID ?? "")"}"#)
         case .vault?, nil: break
         }
         guard let o = try? StrictJson.parseObject(r.body), let appKey = try? o.base64("app_key") else { return .json(400, #"{"error":"bad_request"}"#) }

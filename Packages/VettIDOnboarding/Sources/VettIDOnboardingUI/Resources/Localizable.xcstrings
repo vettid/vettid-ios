@@ -34,6 +34,17 @@
         }
       }
     },
+    "ios_recover_could_not_finish": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID could not finish recovering your vault on this phone. Contact VettID."
+          }
+        }
+      }
+    },
     "ios_unlock_earlier_secret": {
       "extractionState": "manual",
       "localizations": {

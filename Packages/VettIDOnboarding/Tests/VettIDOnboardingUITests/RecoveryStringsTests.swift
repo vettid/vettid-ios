@@ -41,6 +41,7 @@ import Testing
         Row("recover_type_short_code", RecoveryStrings.recoverTypeShortCode, "That is the short code of an older page. Reload the recovery page on the account site: it shows 12 groups."),
         Row("recover_type_incomplete", RecoveryStrings.recoverTypeIncomplete, "The code has 12 groups of four characters. Type them all."),
         Row("recover_could_not_tell", RecoveryStrings.recoverCouldNotTell, "We could not tell whether your last attempt recovered the vault. You can start a new recovery on the account site and use this phone for it; nothing on this phone is deleted."),
+        Row("ios_recover_could_not_finish", RecoveryStrings.iosRecoverCouldNotFinish, "VettID could not finish recovering your vault on this phone. Contact VettID."),
         Row("onboarding_open_took_phone", RecoveryStrings.onboardingOpenTookPhone, "Your vault took this phone, but it cannot be unlocked right now. Contact VettID."),
         Row("recover_rate_limited_wait", RecoveryStrings.recoverRateLimitedWait("S1"), "Too many attempts. Try again in S1."),
         Row("onboarding_open_answer_title", RecoveryOpenStrings.onboardingOpenAnswerTitle, "Recovery"),
@@ -88,7 +89,7 @@ import Testing
     ]
 
     @Test func theTextsAreAndroids() {
-        #expect(Self.table.count == 63)
+        #expect(Self.table.count == 64)
         for row in Self.table { #expect(row.actual == row.expected, "\(row.key)") }
     }
 

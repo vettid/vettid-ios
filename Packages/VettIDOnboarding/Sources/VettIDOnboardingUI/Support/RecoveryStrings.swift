@@ -160,6 +160,16 @@ enum RecoveryStrings {
         )
     }
 
+    /// (Owner decision of 2026-10-25) After both recoveries ended and a day of refusals to the unlock. An interim wording: the text
+    /// awaits the owner's; an iPhone-only key until then.
+    static var iosRecoverCouldNotFinish: String {
+        String(
+            localized: "ios_recover_could_not_finish",
+            defaultValue: "VettID could not finish recovering your vault on this phone. Contact VettID.",
+            bundle: .module
+        )
+    }
+
     static var onboardingOpenTookPhone: String {
         String(
             localized: "onboarding_open_took_phone",

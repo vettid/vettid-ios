@@ -190,41 +190,6 @@ extension VaultManagerRecoveryTests {
         #expect(device?.recoveryOpenEverUnanswered == true)
     }
 
-    @Test func theBoundOffersTheUnlockAndThenCountsFreeIndexes() async throws {
-        defer { phone.close() }
-        let k = try phone.appKeys.getOrCreate().spki()
-        try await endedForGood()
-        for _ in 1..<IdentitySet.limit {
-            _ = try await m.registerRecovery(try scanned(try secondRecovery()))
-            service.recoveryOpenAnswers(.neverProcessed)
-            _ = await vaultFailure { _ = try await m.recoveryOpen(pin: pin, password: password) }
-            service.cancelRecoveryAtApi()
-            #expect(try await twoReads() == .newCode)
-        }
-        #expect(m.record.value.couldNotTell?.identities.count == IdentitySet.limit)
-        // Every index is in use, the newest identity may hold an invitation: no code is claimed or registered, the PIN is offered
-        // (no second text), and nothing is dropped.
-        let (registers, claims) = (service.recoveryRegisters.count, service.recoveryClaims.count)
-        let r = try await m.registerRecovery(try scanned(try secondRecovery()))
-        #expect(r == .refused(code: VaultManager.codeRecoveryOpenSent))
-        #expect(service.recoveryRegisters.count == registers && service.recoveryClaims.count == claims)
-        #expect(try await m.couldNotTellStage() == .finishWithPin)
-        let ct = try #require(m.record.value.couldNotTell)
-        #expect(ct.unlock && ct.exhausted && !ct.unlockByReads && !ct.ended && ct.identities.count == IdentitySet.limit)
-        for set in IdentitySet.all { for slot in KeySlot.slots(of: set) { #expect(try phone.wrapped.get(slot) != nil) } }
-        #expect(try phone.appKeys.getOrCreate().spki() == k)
-        // The unlock tries all of them, newest first, and refuses (nothing opened): all kept, the identity in use as it was.
-        let start = m.record.value.activeIdentity
-        _ = await vaultFailure { _ = try await m.resumeLostOk(pin: pin) }
-        #expect(m.record.value.activeIdentity == start && m.record.value.couldNotTell?.returnTo == nil)
-        #expect(try await m.couldNotTellStage() == .finishWithPin)
-        // Stable: two reads of `401` do not turn it back into a new code, and refusals never lead to the second text.
-        service.cancelRecoveryAtApi()
-        #expect(try await twoReads() == .finishWithPin)
-        later(200_000)
-        #expect(try await m.couldNotTellStage() == .finishWithPin)
-    }
-
     @Test func aNestedSwitchPutsTheOuterReturnMarkerBackNotNil() async throws {
         defer { phone.close() }
         try await endedForGood()
@@ -302,38 +267,6 @@ extension VaultManagerRecoveryTests {
 /// The identity that registers again, the identities that cannot be opened, the rule of a vault that is gone, the stale session,
 /// and a state from a build before the history (continues ``VaultManagerRecoveryTests``).
 extension VaultManagerRecoveryTests {
-    @Test func anIdentityWhoseOpensWereAllAnsweredWrongRegistersAgainNoLoopToTheBound() async throws {
-        defer { phone.close() }
-        try await endedForGood()
-        // Every later identity's open is answered `wrong`: no invitation can be under its `recovery_id` (the vault writes it only
-        // after the wrap opens), so the newest identity registers each new code again, and the bound is never reached.
-        for round in 0..<(IdentitySet.limit + 1) {
-            let made = try secondRecovery()
-            #expect(try await m.registerRecovery(try scanned(made)) == .registered(emailHint: service.emailHint))
-            do {
-                let wrong = try await m.recoveryOpen(pin: "11111\(round)", password: password)
-                #expect(wrong.code == "wrong")
-            } catch {
-                Issue.record("round \(round): \(error)")
-            }
-            #expect(try await m.openSession().device.recoveryInvitationPossible == false)
-            service.cancelRecoveryAtApi()
-            #expect(try await twoReads() == .newCode, "round \(round)")
-            #expect(m.record.value.couldNotTell?.identities.count == 2)
-        }
-        // The phone-wide test for forgetting K is still the strict one: the first identity's open is unanswered.
-        #expect(await vaultFailure { try await m.abandonRecovery() } != nil)
-    }
-
-    @Test func anIdentityWithAnUnansweredOpenOrARetryMayHoldAnInvitation() async throws {
-        defer { phone.close() }
-        _ = try await registered()
-        #expect(device?.recoveryInvitationPossible == false)
-        service.recoveryOpenAnswers(.refused("retry", attemptUsed: nil))
-        _ = try await m.recoveryOpen(pin: pin, password: password)
-        #expect(device?.recoveryInvitationPossible == true)
-    }
-
     @Test func oneIdentityThatCannotBeOpenedDoesNotStopTheUnlockOfTheOlderOne() async throws {
         defer { phone.close() }
         service.nextOpenStopsAfterStep2()

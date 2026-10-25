@@ -104,7 +104,6 @@ extension VaultManager {
             let rule = registersAsNewRecovery
             if rule {
                 try requireEarlierVault(code.vaultID)
-                if try await !ruleHasRoom() { return try offerTheUnlockInstead() }
             } else {
                 // Known beforehand for a scanned code: refused before the claim, which would use one of the API's claim keys.
                 try refuseOtherRecovery(s.device, code.recoveryID)
@@ -133,7 +132,6 @@ extension VaultManager {
         try await guarded {
             let s = try await recoveryStart()
             let rule = registersAsNewRecovery
-            if rule, try await !ruleHasRoom() { return try offerTheUnlockInstead() }
             // (A typed code is claimed with K before its vault is known; one of another vault is refused after the claim: the owner
             // knows, IOS-PLAN 0.1.33 §4.9.)
             let claim: @Sendable () async throws -> Claimed = { [self] in
@@ -339,7 +337,7 @@ extension VaultManager {
             }
             // The mark goes only when the history of the opens leaves none unanswered (IOS-PLAN 0.1.34 §4.10): a `wrong`, a `retry`,
             // `not_armed`, `stored_mismatch` or any code outside the list proves nothing after an unanswered open.
-            let none = r.ok || !d.recoveryOpenEverUnanswered
+            let none = r.ok || !phoneHasUnansweredOpen(d)
             _ = try record.update(since: rec) {
                 if none { $0.recoveryOpenUnanswered = false }
                 if let used { $0.recoveryAttemptsUsed = used }
@@ -383,6 +381,7 @@ extension VaultManager {
             try prepared()
             let s = try await openSession()
             let d = s.device
+            await convertLegacyUnanswered(d) // before a `device_secret` answer clears the record's mark
             guard phoneSecrets.inUse, d.recovering else { throw VaultFailure(.notSupported, code: Self.codeNoRecovery) }
             let used = record.value.recoveryAttemptsUsed
             let rec = record.generation

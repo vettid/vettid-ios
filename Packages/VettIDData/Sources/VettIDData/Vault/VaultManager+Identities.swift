@@ -4,25 +4,23 @@ import VettIDCrypto
 import VettIDKeys
 import VettIDVault
 
-// The identities of a phone that could not tell (IOS-PLAN 0.1.33 §4.9; chosen; not in the spec: as many as ``IdentitySet/limit``).
-// Each new code makes a new device identity (its keys, its device state with its own `recovery_id` and the history of its opens,
-// and the App Attest keys the vault bound to it) unless the newest one never had an unanswered open; nothing is deleted until the
-// vault answered `ok` and the pairing completed. The lost-ok unlock tries the newest identity first, and each pairs only with its
-// own `recovery_id` as `ctx`.
+// The identities of a phone that could not tell (IOS-PLAN 0.1.33 §4.9; owner decision of 2026-10-25: two, no third). The new code
+// is registered with a second identity (its keys, its device state with its own `recovery_id` and the history of its opens, and
+// the App Attest keys the vault bound to it); nothing is deleted until the vault answered `ok` and the pairing completed. If the
+// second identity's recovery ends too, the phone keeps both and goes on with the lost-ok unlock, newest first; each identity pairs
+// only with its own `recovery_id` as `ctx`.
 extension VaultManager {
-    /// A new code would need more identities than ``IdentitySet/limit``: nothing is registered, and the unlock with each of
-    /// the identities that are kept stays possible.
-    public nonisolated static let codeIdentitiesFull = "identities_full"
-
     // MARK: - The new recovery with the same K
 
-    /// Whether a code is registered as the rule's new recovery: the rule decided that the recovery ended.
+    /// Whether a code is registered as the rule's new recovery: the rule decided that the recovery ended (no second identity yet,
+    /// or one that never registered).
     var registersAsNewRecovery: Bool {
         guard let ct = record.value.couldNotTell else { return false }
         return ct.ended && !ct.unlock
     }
 
-    /// A vault other than the earlier open's is no use for the rule: its code is refused before anything is claimed.
+    /// A vault other than the earlier open's is no use for the rule: its code is refused as soon as its vault is known, before the
+    /// register, and no status read of it drives the rule (``ruleRead()``).
     func requireEarlierVault(_ vaultID: String) throws {
         if vaultID != record.value.vaultID { throw VaultFailure(.other, code: Self.codeRecoveryOpenUnknown) }
     }
@@ -34,15 +32,16 @@ extension VaultManager {
         return try await body()
     }
 
-    /// After the claim with K: the unanswered opens of the newest identity are read once each (a readable answer decides), then an
-    /// identity registers the code with K, and the open that follows carries the earlier opens' unlock secret (the phone-secret
-    /// record is the same). [claimAgain] is the same claim, made again after a `401` at the register.
+    /// After the claim with K: the unanswered opens of the newest identity are read once each (a readable answer decides), then the
+    /// second identity registers the code with K, and the open that follows carries the earlier opens' unlock secret (the
+    /// phone-secret record is the same). [claimAgain] is the same claim, made again after a `401` at the register.
     func registerAsNewIdentity(
         _ code: RecoveryCode, _ claimed: Claimed, claimAgain: @Sendable () async throws -> Claimed
     ) async throws -> RecoveryRegistration {
         try await withRuleSwitch {
             guard let ct = record.value.couldNotTell else { throw VaultFailure(.other, code: "no_rule") }
             try await selectIdentity(ct.newest)
+            await convertLegacyUnanswered(try await openSession().device)
             if case .ok = await readUnansweredOpens(try await openSession()) {
                 // A readable `ok` decides it: the vault adopted that open, and the PIN finishes it (kept, so that the stage says so).
                 try persistRecord(record.generation) {
@@ -51,16 +50,10 @@ extension VaultManager {
                 }
                 return .refused(code: Self.codeRecoveryOpenSent)
             }
-            let fresh: VaultSession
-            do {
-                fresh = try await identityForNewCode(ct)
-            } catch let f as VaultFailure where f.code == Self.codeIdentitiesFull {
-                return try offerTheUnlockInstead()
-            }
-            // The identity's own recovery ended with no unanswered open: it registers the new code, with the same keys.
-            if let known = fresh.device.recoveryID, known != code.recoveryID {
-                try await fresh.device.dropRecoveryRegistration() // (no invitation can be under it: see identityForNewCode)
-            }
+            let fresh = try await identityForNewCode(ct)
+            // The second identity is registered once: for another recovery than this code's it has ended, and the phone goes on
+            // with the unlock with each identity.
+            if let known = fresh.device.recoveryID, known != code.recoveryID { return try bothRecoveriesEnded() }
             do {
                 let registered = try await registerClaimed(fresh, code, claimed)
                 if case .registered = registered { try persistRecord(record.generation) { $0.couldNotTell?.ended = false } }
@@ -81,25 +74,21 @@ extension VaultManager {
         }
     }
 
-    /// The identity that registers the new code: the newest again when it never had an unanswered open (more than one identity),
-    /// else the next one, which starts from the floors the newest has seen. The identity in use is the one returned.
+    /// The identity that registers the new code: the second one, made here from the floors the first has seen, or the one made
+    /// before when its registration did not complete. The identity in use is the one returned.
     private func identityForNewCode(_ ct: CouldNotTell) async throws -> VaultSession {
         let current = try await openSession()
-        // The newest identity registers again when every one of its own opens has a sealed answer other than `ok` or `retry`: no
-        // invitation can be under its `recovery_id` (the vault writes it only after the wrap opens; chosen; not in the spec, and
-        // not §4.10's test for forgetting K, which is phone-wide and stricter).
-        if ct.identities.count > 1, !current.device.recoveryInvitationPossible {
-            try await current.device.seedFloors(from: (ct.floors ?? AltFloors(current.device.altState)).altState)
+        let floors = (ct.floors ?? AltFloors(current.device.altState)).merged(with: AltFloors(current.device.altState))
+        if ct.identities.count > 1 {
+            try await current.device.seedFloors(from: floors.altState)
             return current
         }
-        // The next index that is free, not the next after the newest: an episode that starts from a later identity has as many.
-        guard let n = ct.nextFree else { throw VaultFailure(.other, code: Self.codeIdentitiesFull) }
-        // The floors the newest identity has seen are written with the switch, and applied to the new identity whenever it is used.
-        let floors = (ct.floors ?? AltFloors(current.device.altState)).merged(with: AltFloors(current.device.altState))
+        guard let n = ct.nextFree else { throw VaultFailure(.other, code: Self.codeRecoveryOpenSent) }
         _ = await cancelOpening() // a session being opened for another identity must not interleave
         // Keys the App Attest record may still hold for this number (an earlier episode) are not the new identity's.
         try config.attester.forget(identity: n.rawValue)
         try Self.makeIdentity(config, n)
+        // The floors are written with the switch, and applied to the new identity whenever it is used.
         try persistRecord(record.generation) {
             $0.couldNotTell?.identities.append(n)
             $0.couldNotTell?.floors = floors
@@ -111,24 +100,13 @@ extension VaultManager {
         return fresh
     }
 
-    /// Whether a code can be registered: an identity is free, or the newest may register again. Asked before the claim, so that a
-    /// code is not claimed only to be refused.
-    func ruleHasRoom() async throws -> Bool {
-        guard let ct = record.value.couldNotTell else { return true }
-        return try await withRuleSwitch {
-            try await selectIdentity(ct.newest)
-            let device = try await openSession().device
-            return ct.nextFree != nil || (ct.identities.count > 1 && !device.recoveryInvitationPossible)
-        }
-    }
-
-    /// There is no free identity for another code and the newest may hold an invitation: nothing is registered, and the unlock with
-    /// each identity that is kept is what is left, for good (the stage offers the PIN; no second text, which is for a vault that
-    /// took this phone; no return to a new code). Chosen; not in the spec.
-    func offerTheUnlockInstead() throws -> RecoveryRegistration {
+    /// The second identity's recovery ended too: nothing more is registered, no third identity is made, and the unlock with each
+    /// identity is what is left, for good (owner decision of 2026-10-25). The text after a day of refusals is the stage
+    /// ``CouldNotTellStage/couldNotFinish``.
+    func bothRecoveriesEnded() throws -> RecoveryRegistration {
         try persistRecord(record.generation) {
             $0.couldNotTell?.unlock = true
-            $0.couldNotTell?.exhausted = true
+            $0.couldNotTell?.couldNotFinish = true
             $0.couldNotTell?.ended = false
             $0.couldNotTellRead = nil
         }
@@ -163,7 +141,7 @@ extension VaultManager {
                     if try await openSession().device.recovering { return }
                 } catch {
                     if error is CancellationError { throw error }
-                    continue // an identity that cannot be opened is no reason to stop (S2)
+                    continue // an identity that cannot be opened is no reason to stop
                 }
             }
             try await selectIdentity(ct.earlier)
@@ -187,7 +165,7 @@ extension VaultManager {
                 let r = try await s.device.openRecoveryOpenResult(envelope, requestID: rid)
                 await noteOpenAnswer(r, device: s.device, id: rid)
                 if r.ok { return .ok }
-                noteEarlierAnswer(r, none: !s.device.recoveryOpenEverUnanswered)
+                noteEarlierAnswer(r, none: !phoneHasUnansweredOpen(s.device))
                 found = .answered(r)
             } catch {
                 continue
@@ -357,7 +335,7 @@ extension VaultManager {
                     if !wasTried || !Self.isRefusal(error) { transient = true }
                 }
             }
-            if let now = record.value.couldNotTell, now.unlock, !now.unlockByReads, !now.exhausted, tried, !transient {
+            if let now = record.value.couldNotTell, now.unlock, !now.unlockByReads, tried, !transient {
                 try noteRefusals()
             }
         } catch {
@@ -450,7 +428,7 @@ extension VaultManager {
     private func noteRefusals() throws {
         let (now, scale) = (nowMs, record.value.timeScale)
         try persistRecord(record.generation) {
-            guard var ct = $0.couldNotTell, ct.unlock, !ct.exhausted else { return }
+            guard var ct = $0.couldNotTell, ct.unlock else { return }
             if let since = ct.refusalsSinceMs, since <= now { return }
             ct.refusalsSinceMs = now
             ct.refusalsForMs = TimeScale.scaledMs(Self.refusalDayMs, by: scale)

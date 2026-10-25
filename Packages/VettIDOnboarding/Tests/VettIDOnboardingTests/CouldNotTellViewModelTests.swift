@@ -189,3 +189,11 @@ extension CouldNotTellViewModelTests {
         #expect(again.state.step == .couldNotTell)
     }
 }
+
+extension CouldNotTellViewModelTests {
+    @Test func theTextOfBothRecoveriesEndedStartsAtThePinWithItsOwnState() async throws {
+        vault.couldNotTellValue = .couldNotFinish
+        let open = await open()
+        #expect(open.state.couldNotFinishRecovery && !open.state.contactVettID && open.state.step == .finish && open.state.lostOk)
+    }
+}

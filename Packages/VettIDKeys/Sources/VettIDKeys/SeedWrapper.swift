@@ -105,12 +105,12 @@ public final class SeedWrapper: Sendable {
     static func aad(_ slot: KeySlot) -> [UInt8] { Array(aadLabel.utf8) + [0] + Array(slot.rawValue.utf8) }
 }
 
-/// One of the device identities a phone holds (IOS-PLAN 0.1.33 §4.9): a phone that could not tell whether an open recovered the
-/// vault registers a new identity for each new recovery and keeps every earlier one until the pairing completed. Its relay,
+/// One of the two device identities a phone holds (IOS-PLAN 0.1.33 §4.9): a phone that could not tell whether an open recovered
+/// the vault registers a new identity for its new recovery and keeps the earlier one until the pairing completed. Its relay,
 /// identity and KEM keys (``KeySlot/slots(of:)``) and its device state file are its own; the app key K is shared.
 public struct IdentitySet: RawRepresentable, Codable, Hashable, Sendable, CustomStringConvertible {
-    /// The most identities a phone holds at once (chosen; not in the spec: a bound for storage).
-    public static let limit = 8
+    /// The most identities a phone holds at once: two (owner decision of 2026-10-25).
+    public static let limit = 2
     public static let first = IdentitySet(rawValue: 0)
     public static let second = IdentitySet(rawValue: 1)
     public static var all: [IdentitySet] { (0..<limit).map { IdentitySet(rawValue: $0) } }

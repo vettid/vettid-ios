@@ -60,6 +60,19 @@ extension VaultDevice {
         }
     }
 
+    /// Whether a stored device state (its decrypted bytes) holds an open the vault answered `ok` that is not finished (the vault is
+    /// pinned and the recovery record is still there, or an entry of the history is `ok`). Reads no keys.
+    public static func okToFinish(state bytes: [UInt8]) -> Bool {
+        guard let st = try? JSONDecoder().decode(DeviceState.self, from: Data(bytes)), let recovery = st.recovery else { return false }
+        return st.vault != nil || (recovery.opens ?? []).contains { $0.state == .ok }
+    }
+
+    /// Whether a stored device state has an open that is unanswered (and none `ok`). Reads no keys.
+    public static func hasUnansweredOpen(state bytes: [UInt8]) -> Bool {
+        guard let opens = (try? JSONDecoder().decode(DeviceState.self, from: Data(bytes)))?.recovery?.opens else { return false }
+        return opens.contains { $0.state == .unanswered } && !opens.contains { $0.state == .ok }
+    }
+
     /// Whether a stored device state (its decrypted bytes) is of a device that paired and has no recovery left: the pairing of a
     /// recovery completed there (IOS-PLAN 0.1.33 §4.9). Reads no keys.
     public static func pairedAfterRecovery(state bytes: [UInt8]) -> Bool {
@@ -83,20 +96,9 @@ extension VaultDevice {
         return opens.contains { $0.state == .unanswered } && !opens.contains { $0.state == .ok }
     }
 
-    /// Whether an open of this identity may have left an invitation under its `recovery_id`: every open that is not refused for
-    /// certain and has no sealed answer other than `ok` or `retry` may have (chosen; not in the spec: this is not §4.10's test for
-    /// forgetting K, which is stricter). An identity with no open has none.
-    public var recoveryInvitationPossible: Bool {
-        recoveryOpens.contains { entry in
-            if case .refused = entry.state { return false }
-            guard let answer = entry.answer else { return true }
-            return answer == "ok" || answer == "retry"
-        }
-    }
-
-    /// Writes what became known of the open [id], durably: its state and, when given, the code of the sealed answer. Never "the
-    /// newest": an id this device did not build changes nothing. A save that fails leaves nothing changed in memory either.
-    public func markRecoveryOpen(_ id: String, _ state: RecoveryOpenEntry.State, answer: String? = nil) async throws {
+    /// Writes what became known of the open [id], durably. Never "the newest": an id this device did not build changes nothing. A
+    /// save that fails leaves nothing changed in memory either.
+    public func markRecoveryOpen(_ id: String, _ state: RecoveryOpenEntry.State) async throws {
         try await lock.withLock {
             let before: RecoveryRecord? = mem.withLock { st.recovery }
             let changed: Bool = mem.withLock {
@@ -104,7 +106,6 @@ extension VaultDevice {
                       let i = opens.firstIndex(where: { $0.id == id }) else { return false }
                 var entry = opens[i]
                 entry.state = state
-                if let answer { entry.answer = answer }
                 guard entry != opens[i] else { return false }
                 opens[i] = entry
                 record.opens = opens

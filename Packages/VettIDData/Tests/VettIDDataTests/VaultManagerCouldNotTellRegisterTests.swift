@@ -357,38 +357,6 @@ extension VaultManagerRecoveryTests {
 extension VaultManagerRecoveryTests {
     // MARK: - The new identity's recovery ended
 
-    @Test func theNewIdentitysRecoveryEndedWithNoOpenIsRegisteredAgainWithTheSameIdentity() async throws {
-        defer { phone.close() }
-        let k = try phone.appKeys.getOrCreate().spki()
-        try await endedForGood()
-        _ = try await m.registerRecovery(try scanned(try secondRecovery()))
-        // The second recovery ended too, before any open went out.
-        service.cancelRecoveryAtApi()
-        #expect(try await twoReads() == .newCode)
-        try expectKept(k, secondToo: true)
-        let made = try secondRecovery()
-        #expect(try await m.registerRecovery(try scanned(made)) == .registered(emailHint: service.emailHint))
-        // The same identity (no third), claimed and registered with K, and the stage is the open again.
-        let (a, b) = (service.recoveryRegisters[1], service.recoveryRegisters[2])
-        #expect(service.recoveryRegisters.count == 3 && a.ik == b.ik && a.kem == b.kem && b.apiKey == k && b.recoveryID == made.recoveryID)
-        #expect(service.recoveryClaims.last?.appKey == k && m.record.value.couldNotTell?.new == .second)
-        #expect(try await m.couldNotTellStage() == .none && m.record.value.activeIdentity == .second)
-        try expectKept(k, secondToo: true)
-    }
-
-    @Test func theNewIdentitysRecoveryEndedAfterOnlyRefusedOpensIsRegisteredAgainToo() async throws {
-        defer { phone.close() }
-        try await endedForGood()
-        _ = try await m.registerRecovery(try scanned(try secondRecovery()))
-        #expect(try await m.recoveryOpen(pin: "111111", password: password).code == "wrong")
-        service.cancelRecoveryAtApi()
-        #expect(try await twoReads() == .newCode)
-        #expect(try await m.registerRecovery(try scanned(try secondRecovery())) == .registered(emailHint: service.emailHint))
-        #expect(try await m.recoveryOpen(pin: pin, password: password).ok)
-    }
-
-    // MARK: - Decided states
-
     @Test func aReadableOkForTheEarlierOpenIsTheStageOfThePin() async throws {
         defer { phone.close() }
         service.nextOpenStopsAfterStep2()

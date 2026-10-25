@@ -228,6 +228,8 @@ public final class FakeVaultService: @unchecked Sendable {
     /// `GET /api/vault/status` answers `403 forbidden`.
     var statusForbiddenValue = false
     var statusReadsValue = 0
+    /// The vault id `GET /api/vault/status` shows (another vault's, as when a code of another vault was claimed with the app key).
+    var statusVaultValue: String?
     var holdsDeletionUnlinkValue = false
     var slotQueuedAfterDeletionValue = 0
     var statusGateValue: FakeHTTPServer.Gate?
@@ -376,6 +378,8 @@ public final class FakeVaultService: @unchecked Sendable {
     /// How many `GET /api/vault/status` the service received.
     /// The next descriptor fetches (`GET /api/vault/enclave`) are refused with these statuses, in order.
     public func enclaveRefusals(_ statuses: Int...) { locked { enclaveRefusals += statuses } }
+    /// The status shows this vault's id instead of the service's own (nil: the own).
+    public func statusShowsVault(_ id: String?) { locked { statusVaultValue = id } }
     public var statusReads: Int { locked { statusReadsValue } }
     public var statusUnauthorized: Bool {
         get { locked { statusUnauthorizedValue } }
@@ -478,7 +482,7 @@ public final class FakeVaultService: @unchecked Sendable {
                 let a: FakeHTTPServer.Answer = if noVault || vaultDeletedValue && !statusLagsDeletionValue {
                     .json(200, #"{"vault":null}"#)
                 } else {
-                    .json(200, #"{"vault":{"vault_id":"\#(vaultID)","state":"\#(statusState)","release":{"number":\#(releases.routed),"status":"active"}\#(rs.member)}}"#)
+                    .json(200, #"{"vault":{"vault_id":"\#(statusVaultValue ?? vaultID)","state":"\#(statusState)","release":{"number":\#(releases.routed),"status":"active"}\#(rs.member)}}"#)
                 }
                 return statusGateValue.map { .held($0, a) } ?? a
             default:

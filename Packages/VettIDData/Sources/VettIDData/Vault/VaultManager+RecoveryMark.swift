@@ -44,7 +44,9 @@ extension VaultManager {
     /// new registration. Only an answer that shows the vault adopted this phone, or still holds the recovery, changes the guidance; no answer clears the mark.
     func refuseWhileOpenMarked() async throws {
         // The sticky mark of the device counts too: a refusal after an unanswered open proves nothing (IOS-PLAN 0.1.34 §4.10).
-        let sticky = (try await storedSession()?.device.recoveryOpenEverUnanswered) ?? false
+        let device = try await storedSession()?.device
+        if let device { await convertLegacyUnanswered(device) }
+        let sticky = device?.recoveryOpenEverUnanswered ?? false
         guard record.value.recoveryOpenUnanswered || sticky else { return }
         switch await openMarkVerdict() {
         case .adopted: throw VaultFailure(.other, code: Self.codeRecoveryOpenSent)

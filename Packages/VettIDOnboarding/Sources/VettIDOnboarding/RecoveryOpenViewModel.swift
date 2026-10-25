@@ -41,7 +41,7 @@ public final class RecoveryOpenViewModel {
     private func refreshStage(startFinish: Bool = false) async {
         let stage = (try? await move.couldNotTellStage()) ?? .none
         state.couldNotTell = stage
-        if startFinish, stage == .finishWithPin || stage == .contact, state.step == .enter { finishLostOk() }
+        if startFinish, stage == .finishWithPin || stage == .contact || stage == .couldNotFinish, state.step == .enter { finishLostOk() }
     }
 
     deinit { work.cancelAll() }

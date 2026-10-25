@@ -74,6 +74,11 @@ public struct RecoveryOpenState: Equatable, Sendable, CustomStringConvertible, C
     /// The second text of the rule is shown (a day of refusals to the unlock).
     public var contactVettID: Bool { couldNotTell == .contact }
 
+    /// The third text of the rule (owner decision of 2026-10-25), after both recoveries ended and a day of refusals to the unlock:
+    /// "VettID could not finish recovering your vault on this phone. Contact VettID." (`ios_recover_could_not_finish`, an interim
+    /// wording that awaits the owner's text).
+    public var couldNotFinishRecovery: Bool { couldNotTell == .couldNotFinish }
+
     public var canContinue: Bool { pinValid && !password.isEmpty }
 
     /// While finishing an `ok` recovery, the enclave itself answered that this phone's key no longer opens the vault
