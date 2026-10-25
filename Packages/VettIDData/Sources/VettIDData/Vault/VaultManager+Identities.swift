@@ -59,9 +59,7 @@ extension VaultManager {
             }
             // The identity's own recovery ended with no unanswered open: it registers the new code, with the same keys.
             if let known = fresh.device.recoveryID, known != code.recoveryID {
-                // Never a `recovery_id` the vault may hold an invitation under.
-                if fresh.device.recoveryOpenEverUnanswered { throw VaultFailure(.other, code: Self.codeRecoveryOpenSent) }
-                try await fresh.device.dropRecoveryRegistration()
+                try await fresh.device.dropRecoveryRegistration() // (no invitation can be under it: see identityForNewCode)
             }
             do {
                 let registered = try await registerClaimed(fresh, code, claimed)
@@ -87,7 +85,10 @@ extension VaultManager {
     /// else the next one, which starts from the floors the newest has seen. The identity in use is the one returned.
     private func identityForNewCode(_ ct: CouldNotTell) async throws -> VaultSession {
         let current = try await openSession()
-        if ct.identities.count > 1, !current.device.recoveryOpenEverUnanswered {
+        // The newest identity registers again when every one of its own opens has a sealed answer other than `ok` or `retry`: no
+        // invitation can be under its `recovery_id` (the vault writes it only after the wrap opens; chosen; not in the spec, and
+        // not §4.10's test for forgetting K, which is phone-wide and stricter).
+        if ct.identities.count > 1, !current.device.recoveryInvitationPossible {
             try await current.device.seedFloors(from: (ct.floors ?? AltFloors(current.device.altState)).altState)
             return current
         }
@@ -110,16 +111,39 @@ extension VaultManager {
         return fresh
     }
 
-    /// There is no free identity for another code: nothing is registered, and the unlock with each identity that is kept is what is
-    /// left (the stage offers the PIN; no second text, which is for a vault that took this phone).
-    private func offerTheUnlockInstead() throws -> RecoveryRegistration {
+    /// Whether a code can be registered: an identity is free, or the newest may register again. Asked before the claim, so that a
+    /// code is not claimed only to be refused.
+    func ruleHasRoom() async throws -> Bool {
+        guard let ct = record.value.couldNotTell else { return true }
+        return try await withRuleSwitch {
+            try await selectIdentity(ct.newest)
+            let device = try await openSession().device
+            return ct.nextFree != nil || (ct.identities.count > 1 && !device.recoveryInvitationPossible)
+        }
+    }
+
+    /// There is no free identity for another code and the newest may hold an invitation: nothing is registered, and the unlock with
+    /// each identity that is kept is what is left, for good (the stage offers the PIN; no second text, which is for a vault that
+    /// took this phone; no return to a new code). Chosen; not in the spec.
+    func offerTheUnlockInstead() throws -> RecoveryRegistration {
         try persistRecord(record.generation) {
             $0.couldNotTell?.unlock = true
-            $0.couldNotTell?.unlockByReads = true
+            $0.couldNotTell?.exhausted = true
             $0.couldNotTell?.ended = false
             $0.couldNotTellRead = nil
         }
         return .refused(code: Self.codeRecoveryOpenSent)
+    }
+
+    /// A forget: refused while the phone could not tell, unless the vault is gone, when the rule is cleared first, in a save of its
+    /// own, so that a failure or a kill later in the forget leaves no rule that outlives its keys.
+    func guardRule(vaultGone: Bool) throws {
+        guard record.value.couldNotTell != nil else { return }
+        guard vaultGone else { throw VaultFailure(.other, code: Self.codeRecoveryOpenSent) }
+        try persistRecord(record.generation) {
+            $0.couldNotTell = nil
+            $0.couldNotTellRead = nil
+        }
     }
 
     /// The claim answered `409 key_in_use`: the phone is the vault's app. The lost-ok unlock decides, newest identity first
@@ -134,8 +158,13 @@ extension VaultManager {
         // An identity that did not register is no unlock key: the PIN screen is on the newest that did (else the first).
         try await withRuleSwitch {
             for id in ct.identities.reversed() {
-                try await selectIdentity(id)
-                if try await openSession().device.recovering { return }
+                do {
+                    try await selectIdentity(id)
+                    if try await openSession().device.recovering { return }
+                } catch {
+                    if error is CancellationError { throw error }
+                    continue // an identity that cannot be opened is no reason to stop (S2)
+                }
             }
             try await selectIdentity(ct.earlier)
         }
@@ -151,7 +180,7 @@ extension VaultManager {
 
     func readUnansweredOpens(_ s: VaultSession) async -> EarlierOpen {
         var found = EarlierOpen.unreadable
-        for rid in s.device.unansweredOpenRequestIDs {
+        for rid in s.device.unansweredOpenRequestIDs.reversed() { // oldest first
             do {
                 let slot = try await member.slot(rid)
                 guard slot.status == Slot.done, let envelope = slot.envelope else { continue }
@@ -179,9 +208,11 @@ extension VaultManager {
 
     /// Uses [set]'s identity from the next session on: one write of the record, then the session of the other is dropped.
     func selectIdentity(_ set: IdentitySet) async throws {
-        guard record.value.activeIdentity != set else { return }
+        // The record and the session in use must both be [set]'s: a session of another identity is dropped even when the record matches.
+        let stale = session.map { $0.identity != set } ?? false
+        guard record.value.activeIdentity != set || stale else { return }
         _ = await cancelOpening()
-        try persistRecord(record.generation) { $0.activeIdentity = set }
+        if record.value.activeIdentity != set { try persistRecord(record.generation) { $0.activeIdentity = set } }
         try await dropSession(forget: false)
     }
 
@@ -256,6 +287,43 @@ extension VaultManager {
 
     // MARK: - The unlock with each identity
 
+    /// One identity's turn in the unlock with each identity.
+    private enum UnlockStep {
+        /// Not an unlock key (it did not register).
+        case skip
+        /// The vault opened, or answered a PIN wrong (an answer only a key it holds gets).
+        case done(RecoveryOpenOutcome)
+        case refused(RecoveryOpenOutcome)
+        /// Its state could not be opened, or the unlock got no answer ([tried]: the request was made).
+        case failed(any Error, tried: Bool)
+    }
+
+    private func unlockStep(_ id: IdentitySet, pin: String) async throws -> UnlockStep {
+        // An identity whose state cannot be opened is skipped, as one that failed to answer: the others still try.
+        let d: VaultDevice
+        do {
+            try await selectIdentity(id)
+            d = try await openSession().device
+        } catch {
+            if error is CancellationError { throw error }
+            return .failed(error, tried: false)
+        }
+        guard d.recovering || d.recoveryOpenedNotFinished else { return .skip }
+        do {
+            let out = try await lostOkOnce(pin: pin)
+            guard Self.knowsThisPhone(out) else { return out.ok ? .done(out) : .refused(out) }
+            // An answer only a key the vault holds ends the run of refusals.
+            try persistRecord(record.generation) {
+                $0.couldNotTell?.refusalsSinceMs = nil
+                $0.couldNotTell?.refusalsForMs = nil
+            }
+            return .done(out)
+        } catch {
+            if error is CancellationError { throw error }
+            return .failed(error, tried: true)
+        }
+    }
+
     /// ``resumeLostOk(pin:)`` while the phone could not tell: the unlock with each identity that may hold the vault's key, newest
     /// first. The first that opens finishes the recovery (its handshake names its own `recovery_id`); a PIN answered wrong is an
     /// answer too (the vault knows this identity). Otherwise everything is kept, the identity in use is the one it was, and after
@@ -267,47 +335,37 @@ extension VaultManager {
         // The identity to go back to is written down first: a kill or an error meanwhile goes back to it (``settleTrial()``).
         let outer = record.value.couldNotTell?.returnTo
         try persistRecord(record.generation) { $0.couldNotTell?.returnTo = start }
-        var last: RecoveryOpenOutcome?
-        var failure: (any Error)?
-        var transient = false
-        var tried = false
-        do {
-            for id in ct.identities.reversed() {
-                try await selectIdentity(id)
-                // An identity that did not register is no unlock key.
-                let d = try await openSession().device
-                guard d.recovering || d.recoveryOpenedNotFinished else { continue }
-                tried = true
-                do {
-                    let out = try await lostOkOnce(pin: pin)
-                    if Self.knowsThisPhone(out) {
-                        // An answer only a key the vault holds gets ends the run of refusals.
-                        try persistRecord(record.generation) {
-                            $0.couldNotTell?.refusalsSinceMs = nil
-                            $0.couldNotTell?.refusalsForMs = nil
-                        }
-                    }
-                    if out.ok || Self.knowsThisPhone(out) {
-                        _ = try? record.update(since: record.generation) { $0.couldNotTell?.returnTo = outer }
-                        return out
-                    }
-                    last = out
-                } catch {
-                    if error is CancellationError { throw error }
-                    failure = failure ?? error
-                    // The network or the service not answering is no refusal.
-                    if !Self.isRefusal(error) { transient = true }
-                }
-            }
-            if let now = record.value.couldNotTell, now.unlock, !now.unlockByReads, tried, !transient { try noteRefusals() }
-        } catch {
+        func back() async {
             try? await selectIdentity(start)
             _ = try? record.update(since: record.generation) { $0.couldNotTell?.returnTo = outer }
+        }
+        var last: RecoveryOpenOutcome?
+        var failure: (any Error)?
+        var (transient, tried) = (false, false)
+        do {
+            for id in ct.identities.reversed() {
+                switch try await unlockStep(id, pin: pin) {
+                case .skip: continue
+                case .done(let out):
+                    _ = try? record.update(since: record.generation) { $0.couldNotTell?.returnTo = outer }
+                    return out
+                case .refused(let out): (last, tried) = (out, true)
+                case .failed(let error, let wasTried):
+                    failure = failure ?? error
+                    tried = tried || wasTried
+                    // The network or the service not answering, or a state that cannot be opened, is no refusal.
+                    if !wasTried || !Self.isRefusal(error) { transient = true }
+                }
+            }
+            if let now = record.value.couldNotTell, now.unlock, !now.unlockByReads, !now.exhausted, tried, !transient {
+                try noteRefusals()
+            }
+        } catch {
+            await back()
             throw error
         }
         // The identity the screens find: the one it was.
-        try await selectIdentity(start)
-        _ = try? record.update(since: record.generation) { $0.couldNotTell?.returnTo = outer }
+        await back()
         if let last { return last }
         throw failure ?? VaultFailure(.other, code: Self.codeNoBundle)
     }
@@ -338,6 +396,8 @@ extension VaultManager {
             do {
                 try await selectIdentity(id)
                 other = try await openSession()
+                // An identity that never registered is no key.
+                guard other.device.recovering || other.device.recoveryOpenedNotFinished else { continue }
                 u = try await unlockWithSecret(other, pin: pin, options: UnlockOptions(), path: .current)
             } catch {
                 // The unlock did not answer, or was cancelled.
@@ -390,7 +450,7 @@ extension VaultManager {
     private func noteRefusals() throws {
         let (now, scale) = (nowMs, record.value.timeScale)
         try persistRecord(record.generation) {
-            guard var ct = $0.couldNotTell, ct.unlock else { return }
+            guard var ct = $0.couldNotTell, ct.unlock, !ct.exhausted else { return }
             if let since = ct.refusalsSinceMs, since <= now { return }
             ct.refusalsSinceMs = now
             ct.refusalsForMs = TimeScale.scaledMs(Self.refusalDayMs, by: scale)

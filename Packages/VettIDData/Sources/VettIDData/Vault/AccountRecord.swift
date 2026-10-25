@@ -99,7 +99,7 @@ struct LocalAccount: Codable, Equatable, Sendable {
     var activeIdentity = IdentitySet.first
     /// (§4.9) The first of the two status reads of the rule, kept until the second ≥ 5 minutes later decides.
     var couldNotTellRead: CouldNotTellRead?
-    /// (§4.9) A phone that could not tell: kept (with the key K and both identities) until the vault answered `ok` and the
+    /// (§4.9) A phone that could not tell: kept (with the key K and every identity) until the vault answered `ok` and the
     /// pairing completed.
     var couldNotTell: CouldNotTell?
 

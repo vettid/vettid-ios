@@ -35,7 +35,7 @@ public protocol Attester: Sendable {
     /// unconfirmed key, newest first, is used instead. False when none is left.
     func nextCandidate() throws -> Bool
 
-    /// (IOS-PLAN 0.1.33 §4.9) The phone's device identity [identity] (0 or 1) is the one in use: the vault bound each identity's
+    /// (IOS-PLAN 0.1.33 §4.9) The phone's device identity [identity] (an index of ``IdentitySet``) is the one in use: the vault bound each identity's
     /// own key at its register, so this identity's keys are the current and pending ones from now on and the other's are kept
     /// as they are. Called before a session of the identity is used; the same identity again changes nothing.
     func use(identity: Int) throws
@@ -45,7 +45,7 @@ public protocol Attester: Sendable {
     func forget(identity: Int) throws
 
     /// (§4.9) A forget (a start over, a deleted vault): the bookkeeping of identities is reset, so that the first identity is in use
-    /// and the second's keys are gone. Never a key of the identity in use is made the other's.
+    /// and the keys of the other identities are gone. Never a key of the identity in use is made the other's.
     func resetIdentities() throws
 }
 

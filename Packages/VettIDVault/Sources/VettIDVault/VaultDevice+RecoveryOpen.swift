@@ -83,19 +83,55 @@ extension VaultDevice {
         return opens.contains { $0.state == .unanswered } && !opens.contains { $0.state == .ok }
     }
 
-    /// Writes what became known of the open [id], durably. Never "the newest": an id this device did not build changes nothing.
-    public func markRecoveryOpen(_ id: String, _ state: RecoveryOpenEntry.State) async throws {
+    /// Whether an open of this identity may have left an invitation under its `recovery_id`: every open that is not refused for
+    /// certain and has no sealed answer other than `ok` or `retry` may have (chosen; not in the spec: this is not §4.10's test for
+    /// forgetting K, which is stricter). An identity with no open has none.
+    public var recoveryInvitationPossible: Bool {
+        recoveryOpens.contains { entry in
+            if case .refused = entry.state { return false }
+            guard let answer = entry.answer else { return true }
+            return answer == "ok" || answer == "retry"
+        }
+    }
+
+    /// Writes what became known of the open [id], durably: its state and, when given, the code of the sealed answer. Never "the
+    /// newest": an id this device did not build changes nothing. A save that fails leaves nothing changed in memory either.
+    public func markRecoveryOpen(_ id: String, _ state: RecoveryOpenEntry.State, answer: String? = nil) async throws {
         try await lock.withLock {
+            let before: RecoveryRecord? = mem.withLock { st.recovery }
             let changed: Bool = mem.withLock {
                 guard var record = st.recovery, var opens = record.opens,
-                      let i = opens.firstIndex(where: { $0.id == id }),
-                      opens[i].state != state else { return false }
-                opens[i].state = state
+                      let i = opens.firstIndex(where: { $0.id == id }) else { return false }
+                var entry = opens[i]
+                entry.state = state
+                if let answer { entry.answer = answer }
+                guard entry != opens[i] else { return false }
+                opens[i] = entry
                 record.opens = opens
                 st.recovery = record
                 return true
             }
-            if changed { try save() }
+            guard changed else { return }
+            do {
+                try save()
+            } catch {
+                mem.withLock { st.recovery = before }
+                throw error
+            }
+        }
+    }
+
+    /// An open that went out in a build before the history existed (the account record said so) is one unanswered entry, written
+    /// once: a later refusal never clears it (IOS-PLAN 0.1.34 §4.10).
+    public func addLegacyUnansweredOpen() async throws {
+        try await lock.withLock {
+            let added: Bool = mem.withLock {
+                guard var record = st.recovery, (record.opens ?? []).isEmpty else { return false }
+                record.opens = [RecoveryOpenEntry(id: "legacy", state: .unanswered)]
+                st.recovery = record
+                return true
+            }
+            if added { try save() }
         }
     }
 

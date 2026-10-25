@@ -56,6 +56,9 @@ struct CouldNotTell: Codable, Equatable, Sendable {
     /// is read again, and two reads of `401`/`410` make it ``ended``. It never leads to the second text (that is for a vault that
     /// took this phone, §4.9).
     var unlockByReads = false
+    /// No identity is free for another code and the newest may hold an invitation (chosen; not in the spec): the unlock with each
+    /// identity is what is left, for good. Not a vault that took this phone (no second text), and never a new code again.
+    var exhausted = false
     /// The unlock answered `transfer_incomplete`: only an open repeats the recovery. Both kinds of read then mean "ended" unless
     /// the recovery shows `registered`.
     var transferIncomplete = false
@@ -63,7 +66,9 @@ struct CouldNotTell: Codable, Equatable, Sendable {
     /// end: a kill meanwhile goes back to it (``VaultManager/settleTrial()``).
     var returnTo: IdentitySet?
     /// The floors the identities before the newest have seen (`min_state_seq`, `min_header_seq`, the release, the manifest serial),
-    /// written with the switch to a new identity and applied to it whenever it is used (never below them).
+    /// written in the same save that makes a new identity and applied to it when it is made and whenever it is used again (never
+    /// below them). The device's own copy is a later save: a kill between the two is made good by the next use, which always
+    /// comes before anything is registered or opened with the identity.
     var floors: AltFloors?
     /// The first refusal of the unlock since the last that did not refuse (Unix ms, this phone's clock), and the period after
     /// which it is told as the second text (a day, divided by the vault's time scale then). A network error neither counts nor
@@ -80,7 +85,7 @@ struct CouldNotTell: Codable, Equatable, Sendable {
     var nextFree: IdentitySet? { IdentitySet.all.first { !identities.contains($0) } }
 
     enum CodingKeys: String, CodingKey {
-        case identities, ended, unlock
+        case identities, ended, unlock, exhausted
         case floors
         case returnTo = "return_to"
         case unlockByReads = "unlock_by_reads"
@@ -97,6 +102,7 @@ struct CouldNotTell: Codable, Equatable, Sendable {
         identities = all.isEmpty ? [.first] : all
         ended = try c.decodeIfPresent(Bool.self, forKey: .ended) ?? false
         unlock = try c.decodeIfPresent(Bool.self, forKey: .unlock) ?? false
+        exhausted = try c.decodeIfPresent(Bool.self, forKey: .exhausted) ?? false
         unlockByReads = try c.decodeIfPresent(Bool.self, forKey: .unlockByReads) ?? false
         transferIncomplete = try c.decodeIfPresent(Bool.self, forKey: .transferIncomplete) ?? false
         returnTo = try c.decodeIfPresent(IdentitySet.self, forKey: .returnTo)

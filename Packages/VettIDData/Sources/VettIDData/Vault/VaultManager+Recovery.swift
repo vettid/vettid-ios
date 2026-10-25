@@ -104,6 +104,7 @@ extension VaultManager {
             let rule = registersAsNewRecovery
             if rule {
                 try requireEarlierVault(code.vaultID)
+                if try await !ruleHasRoom() { return try offerTheUnlockInstead() }
             } else {
                 // Known beforehand for a scanned code: refused before the claim, which would use one of the API's claim keys.
                 try refuseOtherRecovery(s.device, code.recoveryID)
@@ -132,6 +133,9 @@ extension VaultManager {
         try await guarded {
             let s = try await recoveryStart()
             let rule = registersAsNewRecovery
+            if rule, try await !ruleHasRoom() { return try offerTheUnlockInstead() }
+            // (A typed code is claimed with K before its vault is known; one of another vault is refused after the claim: the owner
+            // knows, IOS-PLAN 0.1.33 §4.9.)
             let claim: @Sendable () async throws -> Claimed = { [self] in
                 try await member.recoveryClaim(locator: typed.locator, appKey: try config.keys.appKeys.getOrCreate().spki())
             }
@@ -210,7 +214,9 @@ extension VaultManager {
         let fresh = beside && s.device.recoveryID == nil
         var account = LocalAccount(userGuid: claimed.userGuid, vaultID: code.vaultID, emailHint: claimed.emailHint)
         account.recoveryRegistered = beside
-        try resetRecord(account)
+        // The earlier open's mark in the record is about to go: the history of its device keeps it (a build before the history).
+        await convertLegacyUnanswered(s.device)
+        try resetRecord(account, carryRule: true)
         publishAccount()
         let rec = record.generation
         let secrets = phoneSecrets
@@ -443,7 +449,7 @@ extension VaultManager {
         try await s.device.finishRecoveryOpen()
         config.attestStartOver?.set(recovering: false)
         // IOS-PLAN 0.1.33 §4.9: the vault answered `ok` and the pairing completed; the identity that did not pair goes now.
-        settleCouldNotTell()
+        settleCouldNotTell(winner: s.identity)
         return RecoveryOpenOutcome("ok", used: used)
     }
 
@@ -552,7 +558,7 @@ extension VaultManager {
         let abandoned: Bool = try await guarded {
             try prepared()
             guard let d = try await storedSession()?.device, d.recovering else { return false }
-            // IOS-PLAN 0.1.33 §4.9: never while the phone could not tell (K and both identities stay).
+            // IOS-PLAN 0.1.33 §4.9: never while the phone could not tell (K and every identity stay).
             if record.value.couldNotTell != nil { throw VaultFailure(.other, code: Self.codeRecoveryOpenSent) }
             // Release R (§11.14.6): after `ok` the vault's only unlock key is this phone's; it is never deleted here. Whatever the
             // phone's records say (they may be unreadable now): a pinned or paired vault, or an open that may have succeeded.

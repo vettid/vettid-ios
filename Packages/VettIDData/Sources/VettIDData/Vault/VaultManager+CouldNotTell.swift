@@ -58,7 +58,8 @@ extension VaultManager {
         }
         if ct.unlock {
             // The second text is for a vault that took this phone (a key in use), not for a `200` that may be an orphaned key.
-            if !ct.unlockByReads, let since = ct.refusalsSinceMs, let period = ct.refusalsForMs, nowMs >= since, nowMs - since >= period {
+            let notBlamed = ct.unlockByReads || ct.exhausted
+            if !notBlamed, let since = ct.refusalsSinceMs, let period = ct.refusalsForMs, nowMs >= since, nowMs - since >= period {
                 return .contact
             }
             return .finishWithPin
@@ -81,10 +82,7 @@ extension VaultManager {
             let ct = record.value.couldNotTell
             let switching = moveFlags.book.ruleSwitching > 0 || moveFlags.book.trialDepth > 0
             if ct?.ended == true || (switching && !duringSwitch) { return here }
-            guard let device = try await storedSession()?.device, device.recovering else { return here }
-            // The rule is entered by an open that is, or ever was, unanswered; once entered, the status is read for as long as the
-            // decision is open (also after a key in use, §4.9: "read the status again later").
-            guard ct != nil || record.value.recoveryOpenUnanswered || device.recoveryOpenEverUnanswered else { return here }
+            guard try await hasSomethingToRead(ct) else { return here }
             let rec = record.generation
             let (now, up) = (nowMs, config.uptime())
             if let m = record.value.couldNotTellRead, let due = Self.readsAgree(m, nowMs: now, uptime: up), due < Self.readGap {
@@ -107,6 +105,16 @@ extension VaultManager {
             case .notRegistered: return try await noteRead(ended: false, since: rec, nowMs: now, uptime: up)
             }
         }
+    }
+
+    /// Whether the identity in use is registered, has no `ok` still to finish (the screens finish it, and no decision contradicts
+    /// them), and either the rule is entered or an open of it is, or ever was, unanswered. Once entered, the status is read for as
+    /// long as the decision is open (also after a key in use, §4.9: "read the status again later").
+    private func hasSomethingToRead(_ ct: CouldNotTell?) async throws -> Bool {
+        guard let device = try await storedSession()?.device, device.recovering else { return false }
+        if device.recoveryOpenedNotFinished || device.recoveryOpens.contains(where: { $0.state == .ok }) { return false }
+        await convertLegacyUnanswered(device)
+        return ct != nil || record.value.recoveryOpenUnanswered || device.recoveryOpenEverUnanswered
     }
 
     /// The second read of a kind, at least the gap after the first, decides; any other read is the first of the next pair. After a
@@ -203,10 +211,20 @@ extension VaultManager {
     /// `ok` decides; a refusal that proves no step 1 marks this entry only, and never changes an earlier open's.
     func noteOpenAnswer(_ r: RecoveryOpen.Result, device: VaultDevice, id: String) async {
         let earlier = earlierUnanswered(before: id, device: device)
+        // The code of a sealed answer is kept whatever it proves for §4.10 (see ``VaultDevice/recoveryInvitationPossible``).
         if r.ok {
-            try? await device.markRecoveryOpen(id, .ok)
+            try? await device.markRecoveryOpen(id, .ok, answer: r.code)
         } else if Self.refusalProves(r.code, earlierUnanswered: earlier) {
-            try? await device.markRecoveryOpen(id, .refused(r.code))
+            try? await device.markRecoveryOpen(id, .refused(r.code), answer: r.code)
+        } else {
+            try? await device.markRecoveryOpen(id, .unanswered, answer: r.code)
         }
+    }
+
+    /// An open that went out in a build before the history existed is one unanswered entry (the record's mark says so), written
+    /// once and before the mark can be cleared: a later refusal never clears it.
+    func convertLegacyUnanswered(_ device: VaultDevice) async {
+        guard record.value.recoveryOpenUnanswered, device.recovering, device.recoveryOpens.isEmpty else { return }
+        try? await device.addLegacyUnansweredOpen()
     }
 }

@@ -12,6 +12,7 @@ extension VaultManager {
     func postRecoveryOpen(
         _ s: VaultSession, pin: String, password: String, secret: SecretBox, rec: Int
     ) async throws -> RecoveryOpen.Result {
+        await convertLegacyUnanswered(s.device)
         let (vaultID, guid) = (record.value.vaultID, record.value.userGuid)
         let attester = config.attester
         let sent = SentFlag()
