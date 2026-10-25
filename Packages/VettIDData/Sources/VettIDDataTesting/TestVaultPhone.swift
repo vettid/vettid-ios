@@ -19,6 +19,7 @@ public final class TestAttester: Attester, @unchecked Sendable {
     private var identity = 0
     private var assertedBy: [Int] = []
     private var forgottenIdentities: [Int] = []
+    private var resetCount = 0
 
     public init() {}
 
@@ -26,6 +27,8 @@ public final class TestAttester: Attester, @unchecked Sendable {
     public var identityInUse: Int { lock.withLock { identity } }
     public var assertionIdentities: [Int] { lock.withLock { assertedBy } }
     public var forgotten: [Int] { lock.withLock { forgottenIdentities } }
+    /// How many times a forget reset the identities.
+    public var resets: Int { lock.withLock { resetCount } }
 
     /// The key ids attested, in order.
     public var attested: [[UInt8]] { lock.withLock { attestedKeys } }
@@ -47,6 +50,7 @@ public final class TestAttester: Attester, @unchecked Sendable {
     public func discard(keyID: [UInt8]) throws { lock.withLock { discardedKeys.append(keyID) } }
     public func use(identity n: Int) throws { lock.withLock { identity = n } }
     public func forget(identity n: Int) throws { lock.withLock { forgottenIdentities.append(n) } }
+    public func resetIdentities() throws { lock.withLock { (identity, resetCount) = (0, resetCount + 1) } }
 }
 
 /// TEST ONLY. One iPhone running the app against a ``FakeVaultService``: software keys behind the Secure Enclave's
@@ -165,15 +169,21 @@ public final class TestVaultPhone {
         ))
     }
 
+    /// How long a recovered phone waits for the vault's `hs.resp` (90 s, or 30 s when resuming, when nil): a test of the handshake
+    /// the vault does not answer sets it, then ``restart()``s.
+    public var pairingWait: TimeInterval?
+
     /// The app killed and started again: a new manager over the same keys and files. The old manager is halted first
     /// (``VaultManager/halt()``): a process death ends what it had on the way, so nothing of it may send or write once the
     /// new one runs.
     public func restart() async throws {
         await manager.halt()
-        manager = VaultManager(config: try Self.configured(
+        var config = try Self.configured(
             service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock,
             wipes ? wipeTargets : nil, attester, attestStartOver, waits, uptime
-        ))
+        )
+        config.pairingWait = pairingWait
+        manager = VaultManager(config: config)
     }
 
     private var waits: Waits {
@@ -231,8 +241,6 @@ public final class TestVaultPhone {
         c.transferDeadlineSleep = { d in try await deadline.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
         c.transferCollectSleep = { d in try await collect.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
         c.uptime = { uptime.monotonic }
-        // A handshake the vault does not answer is seen within seconds (it is 90 s after `ok`, and 30 s when resuming).
-        c.pairingWait = 4
         return c
     }
 

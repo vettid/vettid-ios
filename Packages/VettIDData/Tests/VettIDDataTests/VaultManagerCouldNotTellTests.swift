@@ -219,7 +219,7 @@ extension VaultManagerRecoveryTests {
         try await openGotNoAnswer()
         service.recoveryStatusShows("available")
         #expect(try await twoReads() == .finishWithPin)
-        #expect(m.record.value.couldNotTell == CouldNotTell(earlier: .first, unlock: true) && m.record.value.recoveryOpenUnanswered)
+        #expect(m.record.value.couldNotTell == CouldNotTell(earlier: .first, unlock: true, byReads: true) && m.record.value.recoveryOpenUnanswered)
         // The unlock is refused: everything is kept and the stage stays.
         let out = try await m.resumeLostOk(pin: pin)
         #expect(out.code == VaultManager.codeNoBundle && out.opened)
@@ -261,14 +261,58 @@ extension VaultManagerRecoveryTests {
     @Test func aTransferIncompleteWithoutARegisteredRecoveryIsTheRule() async throws {
         defer { phone.close() }
         let k = try phone.appKeys.getOrCreate().spki()
+        // From an active rule state: two reads of `200` made the unlock what is left.
         try await openGotNoAnswer(.answerLost)
+        #expect(try await twoReads() == .finishWithPin && m.record.value.couldNotTell?.unlockByReads == true)
         // The vault completed the recovery, so the status shows none; the state is still under DEK_0.
         service.unlockAnswers(.sealed("transfer_incomplete"))
         let out = try await m.resumeLostOk(pin: pin)
         #expect(out.code == "transfer_incomplete")
-        #expect(m.record.value.couldNotTell?.ended == true && m.record.value.couldNotTell?.unlock == false)
-        #expect(try await m.couldNotTellStage() == .newCode)
+        // The unlock is given up for the rule, which is decided by two reads as any other.
+        let ct = try #require(m.record.value.couldNotTell)
+        #expect(ct.transferIncomplete && !ct.unlock && !ct.ended && ct.refusalsSinceMs == nil)
+        // (The first read was made with the answer.)
+        #expect(m.record.value.couldNotTellRead?.ended == true)
+        let (wall, up) = (phone.clockAhead, phone.uptimeAhead)
+        later(301)
+        #expect(try await m.checkCouldNotTell() == .newCode)
+        (phone.clockAhead, phone.uptimeAhead) = (wall, up)
+        #expect(m.record.value.couldNotTell?.ended == true && m.record.value.couldNotTell?.transferIncomplete == false)
         try expectKept(k)
+    }
+
+    @Test func aTwoHundredUnlockThatIsRefusedReadsTheStatusAgainAndAnEndedRecoveryIsANewCode() async throws {
+        defer { phone.close() }
+        let k = try phone.appKeys.getOrCreate().spki()
+        // K was only the vault's orphaned pending key: two reads of `200`, the unlock refused.
+        try await openGotNoAnswer()
+        service.recoveryStatusShows("available")
+        #expect(try await twoReads() == .finishWithPin)
+        #expect(try await m.resumeLostOk(pin: pin).opened)
+        #expect(m.record.value.couldNotTell?.refusalsSinceMs != nil)
+        // The host clears the orphan: the status is `401`. The phone reads it again, on the same two reads.
+        service.cancelRecoveryAtApi()
+        let reads = service.statusReads
+        #expect(try await twoReads() == .newCode)
+        #expect(service.statusReads > reads)
+        let ct = try #require(m.record.value.couldNotTell)
+        #expect(ct.ended && !ct.unlock && !ct.unlockByReads && ct.refusalsSinceMs == nil)
+        try expectKept(k)
+        // And the day of refusals no longer applies.
+        later(90_000)
+        #expect(try await m.couldNotTellStage() == .newCode)
+    }
+
+    @Test func anUnlockThatAKeyInUseLedToIsNotReadAgain() async throws {
+        defer { phone.close() }
+        try await openGotNoAnswer(.answerLost)
+        service.statusUnauthorized = true
+        #expect(try await twoReads() == .newCode)
+        service.statusUnauthorized = false
+        _ = try? await m.registerRecovery(try scanned(try secondRecovery()))
+        #expect(m.record.value.couldNotTell?.unlock == true && m.record.value.couldNotTell?.unlockByReads == false)
+        let reads = service.statusReads
+        #expect(try await m.checkCouldNotTell() == .finishWithPin && service.statusReads == reads)
     }
 
     @Test func anyOtherRefusalKeepsEverythingAndReadsAgainLater() async throws {
@@ -281,6 +325,13 @@ extension VaultManagerRecoveryTests {
         #expect(out.code == "unknown_device" && out.opened)
         try expectKept(k)
         #expect(device?.recovering == true && m.record.value.recoveryOpenUnanswered)
+        // The status is read again (the unlock came from reads), not given up.
+        let reads = service.statusReads
+        let (wall, up) = (phone.clockAhead, phone.uptimeAhead)
+        later(301)
+        _ = try await m.checkCouldNotTell()
+        #expect(service.statusReads > reads)
+        (phone.clockAhead, phone.uptimeAhead) = (wall, up)
         // Later it opens.
         #expect(try await m.resumeLostOk(pin: pin).ok)
     }
@@ -327,10 +378,11 @@ extension VaultManagerRecoveryTests {
 }
 
 extension CouldNotTell {
-    init(earlier: IdentitySet, ended: Bool = false, unlock: Bool = false) {
+    init(earlier: IdentitySet, ended: Bool = false, unlock: Bool = false, byReads: Bool = false) {
         self.init(earlier: earlier)
         self.ended = ended
         self.unlock = unlock
+        unlockByReads = byReads
     }
 }
 

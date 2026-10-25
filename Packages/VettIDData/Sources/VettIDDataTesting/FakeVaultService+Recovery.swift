@@ -87,6 +87,8 @@ extension FakeVaultService {
         case answerLostAfterRegistering
         /// `401`: the claim key has since become a key in use (MEMBER-API 2.12.0).
         case unauthorized
+        /// The register is queued (`202`) and taken, and the poll of its slot is answered `401`.
+        case slotUnauthorized
     }
 
     /// How the open answers besides the vault's own rules.
@@ -264,14 +266,14 @@ extension FakeVaultService {
 
     /// `POST /api/vault/recovery/register`: the sealed `vault.recovery.register` (§11.11.3), answered in its slot. Callers
     /// hold ``cond``.
-    func recoveryRegister(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer {
+    func recoveryRegister(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer { // swiftlint:disable:this cyclomatic_complexity
         let answer = recovery.registerAnswers.isEmpty ? RecoveryRegisterAnswer.ok : recovery.registerAnswers.removeFirst()
         switch answer {
         case .offline: return .failure(.notConnectedToInternet)
         case .apiNotAvailable: return .json(409, #"{"error":"recovery_not_available"}"#)
         case .apiNoBackup: return .json(409, #"{"error":"recovery_unavailable"}"#)
         case .unauthorized: return .json(401, #"{"error":"unauthorized"}"#)
-        case .ok, .refused, .answerLostAfterRegistering: break
+        case .ok, .refused, .answerLostAfterRegistering, .slotUnauthorized: break
         }
         guard let o = try? StrictJson.parseObject(r.body), let rid = try? o.string("request_id"), let env = try? o.base64("envelope"),
               let request = try? openRequest(env), let body = try? StrictJson.parseObject(request.body), let app = try? body.obj("app"),
@@ -299,6 +301,7 @@ extension FakeVaultService {
         }
         slots[rid] = try? Self.sealResult(kem, "vault.recovery.result", rid, result)
         if case .answerLostAfterRegistering = answer { lostSlots.insert(rid) }
+        if case .slotUnauthorized = answer { unauthorizedSlots.insert(rid) }
         return .json(202, #"{"vault_id":"\#(vaultID)"}"#)
     }
 

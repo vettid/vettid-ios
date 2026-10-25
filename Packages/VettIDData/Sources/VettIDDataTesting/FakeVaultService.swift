@@ -119,6 +119,8 @@ public final class FakeVaultService: @unchecked Sendable {
 
     var lateEnrolled: LateEnrolled?
     var lostSlots: Set<String> = []
+    /// Slots whose poll is answered `401`.
+    var unauthorizedSlots: Set<String> = []
     var plainSlots: [String: String] = [:]
     var enclaveOfflineValue = false
     var redeemVaultID: String?
@@ -507,6 +509,7 @@ public final class FakeVaultService: @unchecked Sendable {
 
     private func slot(_ requestID: String) -> FakeHTTPServer.Answer {
         if lostSlots.contains(requestID) { return .failure(.timedOut) }
+        if unauthorizedSlots.contains(requestID) { return .json(401, #"{"error":"unauthorized"}"#) }
         if let plain = plainSlots[requestID] { return .json(200, plain) }
         guard let env = slots[requestID] else { return .json(200, #"{"status":"queued"}"#) }
         if vaultDeletedValue, slotQueuedAfterDeletionValue > 0 {

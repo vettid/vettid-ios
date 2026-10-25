@@ -48,13 +48,25 @@ struct CouldNotTell: Codable, Equatable, Sendable {
     var ended = false
     /// What is left is the lost-ok unlock (``CouldNotTellStage/finishWithPin``).
     var unlock = false
+    /// ``unlock`` came from two reads of `200` (K may be only the vault's orphaned pending key), not from a key in use: the status
+    /// is read again, and two reads of `401`/`410` make it ``ended`` (IOS-PLAN 0.1.33 §4.9: "reads the status again later").
+    var unlockByReads = false
+    /// The unlock answered `transfer_incomplete`: only an open repeats the recovery. Both kinds of read then mean "ended" unless
+    /// the recovery shows `registered`.
+    var transferIncomplete = false
+    /// The identity whose open the vault answered `ok` (set when the pairing begins), and whether the earlier identity's unlock is
+    /// being tried meanwhile (``trial``): a kill during the trial goes back to ``opened``.
+    var opened: IdentitySet?
+    var trial = false
     /// The first refusal of the unlock since the last that did not refuse (Unix ms, this phone's clock), and the period after
     /// which it is told as the second text (a day, divided by the vault's time scale then).
     var refusalsSinceMs: Int64?
     var refusalsForMs: Int64?
 
     enum CodingKeys: String, CodingKey {
-        case earlier, new, ended, unlock
+        case earlier, new, ended, unlock, opened, trial
+        case unlockByReads = "unlock_by_reads"
+        case transferIncomplete = "transfer_incomplete"
         case refusalsSinceMs = "refusals_since_ms"
         case refusalsForMs = "refusals_for_ms"
     }
@@ -67,6 +79,10 @@ struct CouldNotTell: Codable, Equatable, Sendable {
         new = try c.decodeIfPresent(IdentitySet.self, forKey: .new)
         ended = try c.decodeIfPresent(Bool.self, forKey: .ended) ?? false
         unlock = try c.decodeIfPresent(Bool.self, forKey: .unlock) ?? false
+        unlockByReads = try c.decodeIfPresent(Bool.self, forKey: .unlockByReads) ?? false
+        transferIncomplete = try c.decodeIfPresent(Bool.self, forKey: .transferIncomplete) ?? false
+        opened = try c.decodeIfPresent(IdentitySet.self, forKey: .opened)
+        trial = try c.decodeIfPresent(Bool.self, forKey: .trial) ?? false
         refusalsSinceMs = try c.decodeIfPresent(Int64.self, forKey: .refusalsSinceMs)
         refusalsForMs = try c.decodeIfPresent(Int64.self, forKey: .refusalsForMs)
     }

@@ -434,6 +434,8 @@ extension VaultManager {
     ) async throws -> RecoveryOpenOutcome {
         var s = s
         confirmRecoveredSecret()
+        // IOS-PLAN 0.1.33 §4.9: the identity that has the vault's `ok` is written down before the pairing.
+        if record.value.couldNotTell != nil { try persistRecord(rec) { $0.couldNotTell?.opened = $0.activeIdentity } }
         // The handshake only when it has not completed yet: a phone paired earlier fetches the credential straight away.
         var refused: String?
         if s.device.deviceID == nil { (refused, s) = try await pairRecovered(s, pin: pin, resuming: resuming) }

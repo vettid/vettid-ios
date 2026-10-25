@@ -388,7 +388,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             try keys.generate(slot)
         }
         // The App Attest keys the vault bound to this identity are in use (IOS-PLAN 0.1.33 §4.9); the app key K is the same.
-        if twoIdentities { try c.attester.use(identity: identity.rawValue) }
+        if twoIdentities { try c.attester.use(identity: identity.rawValue) } else { try? c.attester.use(identity: 0) }
         let secrets = DeviceSecrets(
             identity: try keys.ed25519(KeySlot.identity.of(identity)), kem: try keys.kem(KeySlot.kem.of(identity)),
             relay: try keys.ed25519(KeySlot.relay.of(identity)), apiKey: try c.keys.appKeys.getOrCreate().spki()

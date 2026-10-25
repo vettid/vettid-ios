@@ -160,6 +160,7 @@ extension VaultManager {
         guard !moveFlags.book.keptResumed else { return }
         moveFlags.book.keptResumed = true
         movedAway = wiper?.movedAway ?? false
+        settleTrial()
         resumeKeptTransfer()
     }
 
