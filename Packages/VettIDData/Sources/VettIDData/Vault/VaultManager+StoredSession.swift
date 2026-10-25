@@ -11,8 +11,10 @@ extension VaultManager {
     /// none (nothing to protect, and no mailbox registered for nothing).
     func storedSession() async throws -> VaultSession? {
         if let session { return session }
-        try prepared()
-        guard try config.file(VaultFiles.device(of: record.value.activeIdentity)).load() != nil else { return nil }
+        // The identity in use is in the record; a record that cannot be read now leaves the first (as before it was asked), and
+        // opening the session then fails as it did.
+        let identity = (try? prepared()) != nil ? record.value.activeIdentity : .first
+        guard try config.file(VaultFiles.device(of: identity)).load() != nil else { return nil }
         return try await openSession()
     }
 }

@@ -48,6 +48,7 @@ struct FakeRecoveryStore {
     var stoppedAfterStep2 = false
     /// The recovering key's status when the recovery ended: `410 recovery_ended` instead of the bare `401`.
     var endedStatus410 = false
+    var droppedHandshakes = 0
     var endedHeaders: [String: String] = [:]
     /// The state the status shows to the recovering key instead of `registered`.
     var statusState: String?
@@ -104,6 +105,11 @@ extension FakeVaultService {
         case neverProcessed
         /// A counted refusal (a wrong entry, one attempt used) whose answer is lost.
         case wrongAnswerLost
+        /// The member API takes the request and the vault never processes it, but the response to the POST is lost: the phone
+        /// never sees the `202`.
+        case acceptedResponseLost
+        /// The member API refuses the POST itself with this status (nothing was taken).
+        case apiRefused(Int)
         /// The slot holds bytes the phone cannot open.
         case unreadable
         /// The member API cannot be reached.
@@ -203,6 +209,8 @@ extension FakeVaultService {
     }
     /// The recovery is current again for the member API.
     public func uncancelRecoveryAtApi() { locked { recovery.cancelled = false } }
+    /// The next [n] first handshakes of the recovered phone, with the right `ctx`, are never answered.
+    public func dropNextRecoveryHandshakes(_ n: Int) { locked { recovery.droppedHandshakes = n } }
     /// The status shows the recovering key this state of the recovery instead of `registered` (`pending`, `available`, …).
     public func recoveryStatusShows(_ state: String?) { locked { recovery.statusState = state } }
     /// The next open stops after step 2 (see ``FakeRecoveryStore/stopsAfterStep2``).
@@ -311,9 +319,17 @@ extension FakeVaultService {
     func recoveryOpen(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer {
         let answer = recovery.openAnswers.isEmpty ? RecoveryOpenAnswer.vault : recovery.openAnswers.removeFirst()
         if case .offline = answer { return .failure(.notConnectedToInternet) }
+        if case .apiRefused(let status) = answer { return .json(status, #"{"error":"refused"}"#) }
         guard let o = try? StrictJson.parseObject(r.body), let rid = try? o.string("request_id"), let env = try? o.base64("envelope"),
               let request = try? openRequest(env), let body = try? StrictJson.parseObject(request.body)
         else { return .json(400, #"{"error":"bad_request"}"#) }
+        if case .acceptedResponseLost = answer {
+            lostSlots.insert(rid)
+            recovery.opens.append(RecoveryOpenSeen(
+                requestID: rid, recoveryID: (try? body.string("recovery_id")) ?? "", pin: "", password: "", unlockSecret: [], manifestSerial: 0
+            ))
+            return .failure(.timedOut)
+        }
         let pin = (try? body.string("pin")) ?? "", password = (try? body.string("password")) ?? ""
         let secret = (try? body.base64("unlock_secret")) ?? []
         let recoveryID = (try? body.string("recovery_id")) ?? ""

@@ -39,26 +39,52 @@ extension VaultDevice {
                 unlockSecret: unlockSecret, enclave: enclave, manifest: manifest, attester: attester, ik: secrets.identity,
                 token: tok, now: now()
             )
-            // Kept before the request is posted (a kill between the two must not lose the id of an open that went out).
+            // Kept, unanswered, before the request is posted, in one save: a kill between the two, or a response that is lost after
+            // the member API took the request, must not lose an open that went out. A save that fails posts nothing.
             mem.withLock {
                 guard var record = st.recovery else { return }
-                record.openRequestIDs = (record.openRequestIDs ?? []) + [req.requestID]
+                record.opens = (record.opens ?? []) + [RecoveryOpenEntry(id: req.requestID, state: .unanswered)]
                 st.recovery = record
             }
-            try save()
+            do {
+                try save()
+            } catch {
+                mem.withLock {
+                    guard var record = st.recovery else { return }
+                    record.opens?.removeAll { $0.id == req.requestID }
+                    st.recovery = record
+                }
+                throw error
+            }
             return req
         }
     }
 
-    /// Whether an open of this identity is, or ever was, unanswered (sticky; ``setRecoveryOpenUnanswered(_:)``).
-    public var recoveryOpenEverUnanswered: Bool { mem.withLock { st.recovery?.openUnanswered ?? false } }
+    /// What is known of each open this identity built, oldest first (IOS-PLAN 0.1.34 §4.10).
+    public var recoveryOpens: [RecoveryOpenEntry] { mem.withLock { st.recovery?.opens ?? [] } }
 
-    /// Writes the sticky mark of an unanswered open (durably, before anything depends on it).
-    public func setRecoveryOpenUnanswered(_ value: Bool) async throws {
+    /// The `request_id`s of the opens this identity built, newest first (IOS-PLAN 0.1.33 §4.9).
+    public var recoveryOpenRequestIDs: [String] { recoveryOpens.reversed().map(\.id) }
+
+    /// The `request_id`s of the opens that are unanswered, newest first.
+    public var unansweredOpenRequestIDs: [String] { recoveryOpens.reversed().filter { $0.state == .unanswered }.map(\.id) }
+
+    /// Whether an open of this identity is unanswered (sticky: an open stays so until its own answer proves otherwise, and a
+    /// later refusal never changes an earlier open's entry), unless one was answered `ok`.
+    public var recoveryOpenEverUnanswered: Bool {
+        let opens = recoveryOpens
+        return opens.contains { $0.state == .unanswered } && !opens.contains { $0.state == .ok }
+    }
+
+    /// Writes what became known of the open [id], durably (the newest when nil).
+    public func markRecoveryOpen(_ id: String? = nil, _ state: RecoveryOpenEntry.State) async throws {
         try await lock.withLock {
             let changed: Bool = mem.withLock {
-                guard var record = st.recovery, (record.openUnanswered ?? false) != value else { return false }
-                record.openUnanswered = value
+                guard var record = st.recovery, var opens = record.opens,
+                      let i = id.flatMap({ id in opens.firstIndex { $0.id == id } }) ?? (opens.isEmpty ? nil : opens.count - 1),
+                      opens[i].state != state else { return false }
+                opens[i].state = state
+                record.opens = opens
                 st.recovery = record
                 return true
             }
@@ -66,8 +92,24 @@ extension VaultDevice {
         }
     }
 
-    /// The `request_id`s of the opens this identity built, newest first (IOS-PLAN 0.1.33 §4.9).
-    public var recoveryOpenRequestIDs: [String] { mem.withLock { (st.recovery?.openRequestIDs ?? []).reversed() } }
+    /// A new identity starts from the floors the earlier one has seen (`min_state_seq`, `min_header_seq`, the release and the
+    /// manifest serial), never below them (IOS-PLAN 0.1.33 §4.9; chosen; not in the spec).
+    public func seedFloors(from other: AltState) async throws {
+        try await lock.withLock {
+            mem.withLock {
+                var a = alt()
+                a.stateSeq = max(a.stateSeq, other.stateSeq)
+                a.manifestSerial = max(a.manifestSerial, other.manifestSerial)
+                for (k, v) in other.headerSeq { a.headerSeq[k] = max(a.headerSeq[k] ?? 0, v) }
+                if other.releaseNumber > a.releaseNumber {
+                    a.release = other.release
+                    a.releaseNumber = other.releaseNumber
+                }
+                setAlt(a)
+            }
+            try save()
+        }
+    }
 
     /// Opens `vault.recovery.open.result`; on `ok` pins the vault from the bundle and keeps the token, so that the phone's
     /// first handshake follows (`hs.init` with `ctx` = `recovery_id`, then `credential.get`).

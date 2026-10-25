@@ -28,7 +28,7 @@ extension VaultManagerRecoveryTests {
         #expect(try await m.openSession().device.recoveryOpenEverUnanswered)
     }
 
-    @Test func anUnansweredOpenThenAReadableWrongThenTheRecoveryEndingIsTheUnlockNotAReRegister() async throws {
+    @Test func anUnansweredOpenThenAReadableWrongThenTheRecoveryEndingIsANewIdentityNotAReRegister() async throws {
         defer { phone.close() }
         let k = try phone.appKeys.getOrCreate().spki()
         try await endedForGood()
@@ -39,15 +39,72 @@ extension VaultManagerRecoveryTests {
         #expect(try await m.recoveryOpen(pin: "111111", password: password).code == "wrong")
         #expect(!m.record.value.recoveryOpenUnanswered)
         service.cancelRecoveryAtApi()
-        // Entered by the sticky mark: the unlock with either identity, no re-register, no `recovery_id` dropped.
-        #expect(try await twoReads() == .finishWithPin)
+        // Entered by the sticky mark. The second identity may hold an invitation under its `recovery_id`: it is not dropped, and
+        // the new code makes a third identity (no dead end).
+        #expect(try await twoReads() == .newCode)
+        let third = try secondRecovery()
+        #expect(try await m.registerRecovery(try scanned(third)) == .registered(emailHint: service.emailHint))
         let ct = try #require(m.record.value.couldNotTell)
-        #expect(ct.unlock && !ct.ended)
-        let registers = service.recoveryRegisters.count
-        let f = await vaultFailure { _ = try await m.registerRecovery(try scanned(try secondRecovery())) }
-        #expect(f?.code == VaultManager.codeRecoveryOpenSent && service.recoveryRegisters.count == registers)
+        #expect(ct.identities == [.first, .second, IdentitySet(rawValue: 2)] && m.record.value.activeIdentity.rawValue == 2)
+        #expect(service.recoveryRegisters.count == 3 && service.recoveryRegisters[2].apiKey == k)
+        #expect(service.recoveryClaims.last?.appKey == k)
+        let (a, b, c) = (service.recoveryRegisters[0], service.recoveryRegisters[1], service.recoveryRegisters[2])
+        #expect(Set([a.ik, b.ik, c.ik]).count == 3 && Set([a.kem, b.kem, c.kem]).count == 3)
+        // Every identity keeps its own `recovery_id`.
+        try await m.selectIdentity(.second)
         #expect(try await m.openSession().device.recoveryID == second.recoveryID)
+        try await m.selectIdentity(IdentitySet(rawValue: 2))
+        #expect(try await m.openSession().device.recoveryID == third.recoveryID)
         try expectKept(k, secondToo: true)
+        for slot in KeySlot.slots(of: IdentitySet(rawValue: 2)) { #expect(try phone.wrapped.get(slot) != nil) }
+    }
+
+    @Test func theHandshakeFallsBackThroughTheOlderIdentitiesNewestFirst() async throws {
+        defer { phone.close() }
+        phone.pairingWait = 3
+        try await phone.restart()
+        // The first identity's open stopped after step 2 (its invitation, under R1, stands); the second's was never processed.
+        service.nextOpenStopsAfterStep2()
+        let first = try await openGotNoAnswer(.answerLost)
+        service.statusUnauthorized = true
+        #expect(try await twoReads() == .newCode)
+        service.statusUnauthorized = false
+        _ = try await m.registerRecovery(try scanned(try secondRecovery()))
+        service.recoveryOpenAnswers(.neverProcessed)
+        _ = await vaultFailure { _ = try await m.recoveryOpen(pin: pin, password: password) }
+        service.statusUnauthorized = true
+        #expect(try await twoReads() == .newCode)
+        service.statusUnauthorized = false
+        let third = try secondRecovery()
+        #expect(try await m.registerRecovery(try scanned(third)) == .registered(emailHint: service.emailHint))
+        #expect(m.record.value.couldNotTell?.identities.count == 3)
+        // The third identity's open answers `ok` (the vault repeats the stopped recovery) but its handshake gets nothing; the
+        // second identity's unlock is not the vault's, the first's is.
+        let out = try await m.recoveryOpen(pin: pin, password: password)
+        #expect(out.ok)
+        #expect(service.recoveryHandshakeContexts == [third.recoveryID, first.recoveryID])
+        #expect(phone.attester.assertionIdentities.suffix(2) == [1, 0])
+        #expect(m.record.value.activeIdentity == .first && m.record.value.couldNotTell == nil)
+        for set in IdentitySet.all.dropFirst() { for slot in KeySlot.slots(of: set) { #expect(try phone.wrapped.get(slot) == nil) } }
+        try await m.finishRecoveryOpen()
+    }
+
+    @Test func theNewIdentityKeepsGoingWhenNoOlderIdentityIsTheVaultsAndItsHandshakeWasLostOnce() async throws {
+        defer { phone.close() }
+        phone.pairingWait = 3
+        try await phone.restart()
+        try await endedForGood()
+        let second = try secondRecovery()
+        _ = try await m.registerRecovery(try scanned(second))
+        // The vault takes the new identity, its first handshake is lost on the way, and the earlier identity's unlock is refused:
+        // the new identity's own unlock and handshake then succeed in the same call.
+        service.dropNextRecoveryHandshakes(1)
+        let out = try await m.recoveryOpen(pin: pin, password: password)
+        #expect(out.ok)
+        #expect(service.recoveryHandshakeContexts == [second.recoveryID, second.recoveryID])
+        #expect(m.record.value.activeIdentity == .second && m.record.value.couldNotTell == nil && device?.deviceID != nil)
+        try await m.finishRecoveryOpen()
+        #expect(m.phase == .unlocked)
     }
 
     @Test func aWrongPinInTheEarlierIdentitysFallbackKeepsTheIdentityThatHasTheOk() async throws {
@@ -65,7 +122,7 @@ extension VaultManagerRecoveryTests {
         let out = try await m.recoveryOpen(pin: pin, password: password)
         #expect(out.code == "bad_pin" && out.opened)
         let ct = try #require(m.record.value.couldNotTell)
-        #expect(ct.opened == .second && !ct.trial && m.record.value.activeIdentity == .second)
+        #expect(ct.returnTo == nil && m.record.value.activeIdentity == .second)
         // After a restart the identity with the `ok` is still the one that finishes.
         try await phone.restart()
         #expect(try await m.recoveryOpened())
@@ -79,12 +136,12 @@ extension VaultManagerRecoveryTests {
         service.loseAnswers(["credential.get"])
         _ = await vaultFailure { _ = try await m.recoveryOpen(pin: pin, password: password) }
         try m.persistRecord(m.record.generation) {
-            $0.couldNotTell?.trial = true
+            $0.couldNotTell?.returnTo = .second
             $0.activeIdentity = .first
         }
         _ = try await m.openSession()
         #expect(try await m.couldNotTellStage() == .none)
-        #expect(m.record.value.activeIdentity == .second && m.record.value.couldNotTell?.trial == false)
+        #expect(m.record.value.activeIdentity == .second && m.record.value.couldNotTell?.returnTo == nil)
     }
 
     @Test func theStatusIsReadAgainEvenAfterTheOpenMarkWasClearedByADeviceSecretAnswer() async throws {

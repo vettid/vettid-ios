@@ -27,8 +27,17 @@ private final class RegisterEpoch: @unchecked Sendable {
     var freshIdentity: Bool { lock.withLock { fresh } }
 }
 
+/// Whether the member API took the request (its `202` was read).
+final class SentFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var done = false
+
+    func set() { lock.withLock { done = true } }
+    var value: Bool { lock.withLock { done } }
+}
+
 /// A secret kept in one buffer, so that wiping it wipes what was sent.
-private final class SecretBox: @unchecked Sendable {
+final class SecretBox: @unchecked Sendable {
     private let lock = NSLock()
     private var bytes: [UInt8]
 
@@ -112,7 +121,7 @@ extension VaultManager {
                 if rule, e.code == MemberApiError.keyInUse { return try await claimKeyInUse() }
                 return try Self.claimRefusal(e)
             }
-            if rule { return try await registerAsNewIdentity(s, code, claimed, claimAgain: claim) }
+            if rule { return try await registerAsNewIdentity(code, claimed, claimAgain: claim) }
             return try await registerClaimed(s, code, claimed)
         }
     }
@@ -138,7 +147,7 @@ extension VaultManager {
             if rule {
                 // The vault is known only from the claim: another vault's code is no use for the rule.
                 try requireEarlierVault(code.vaultID)
-                r = try await registerAsNewIdentity(s, code, claimed, claimAgain: claim)
+                r = try await registerAsNewIdentity(code, claimed, claimAgain: claim)
             } else {
                 r = try await registerClaimed(s, code, claimed)
             }
@@ -308,29 +317,13 @@ extension VaultManager {
                 return try await finishOpened(s, pin: pin, used: record.value.recoveryAttemptsUsed, resuming: true, since: rec)
             }
             let afterUnanswered = record.value.recoveryOpenUnanswered
-            let unansweredBefore = d.recoveryOpenEverUnanswered
-            let (vaultID, guid) = (record.value.vaultID, record.value.userGuid)
+            let vaultID = record.value.vaultID
             // The epoch-1 record the register made (a pending one until this open succeeds): its secret goes in the open.
             var epoch = try phoneSecrets.reuseOrCreate(keyVault: vaultID)
             let secret = SecretBox(epoch.secret)
             epoch.secret = []
             defer { secret.wipe() }
-            let attester = config.attester
-            let r = try await s.alt.recoveryOpen(
-                vaultID: vaultID,
-                build: { [weak self] e, m in
-                    // IOS-PLAN ID8: this phone registered with release R; an instance without it is refused, nothing sent.
-                    try ReleasePath.requireR(e.descriptor.capabilities)
-                    await self?.learnTimeScale(e.descriptor.timeScale, since: rec)
-                    return try await s.device.prepareRecoveryOpen(
-                        userGuid: guid, pin: pin, password: password, unlockSecret: secret.value, enclave: e, manifest: m,
-                        attester: attester
-                    )
-                },
-                open: { raw, rid in try await s.device.openRecoveryOpenResult(raw, requestID: rid) },
-                onSent: { [weak self] in await self?.noteRecoveryOpenSent(since: rec, device: s.device) }
-            )
-            await noteOpenAnswer(r, device: d, earlierUnanswered: unansweredBefore)
+            let r = try await postRecoveryOpen(s, pin: pin, password: password, secret: secret, rec: rec)
             let used = r.counted ? r.used : nil
             // The vault holds this phone's secret once it answered `ok` (§11.14.6 step 6): its epoch-1 record is made current
             // first, before anything that can fail.
@@ -359,9 +352,7 @@ extension VaultManager {
     func clearOpenMark(since rec: Int) { _ = try? record.update(since: rec) { $0.recoveryOpenUnanswered = false } }
 
     /// The member API took an open: until its answer is read, the next answer says that this one may have been right.
-    private func noteRecoveryOpenSent(since rec: Int, device: VaultDevice) async {
-        // Sticky (IOS-PLAN 0.1.34 §4.10): written before the answer is waited for.
-        try? await device.setRecoveryOpenUnanswered(true)
+    func noteRecoveryOpenSent(since rec: Int) {
         guard !record.value.recoveryOpenUnanswered else { return }
         _ = try? record.update(since: rec) { $0.recoveryOpenUnanswered = true }
     }
@@ -438,8 +429,6 @@ extension VaultManager {
     ) async throws -> RecoveryOpenOutcome {
         var s = s
         confirmRecoveredSecret()
-        // IOS-PLAN 0.1.33 §4.9: the identity that has the vault's `ok` is written down before the pairing.
-        if record.value.couldNotTell != nil { try persistRecord(rec) { $0.couldNotTell?.opened = $0.activeIdentity } }
         // The handshake only when it has not completed yet: a phone paired earlier fetches the credential straight away.
         var refused: String?
         if s.device.deviceID == nil { (refused, s) = try await pairRecovered(s, pin: pin, resuming: resuming) }
@@ -481,9 +470,11 @@ extension VaultManager {
             // IOS-PLAN 0.1.33 §4.9: the vault answers a handshake it does not accept with nothing. After the new open's `ok` the
             // invitation may be the earlier identity's, under the earlier `recovery_id`.
             if let earlier = try await pairEarlierIdentity(pin: pin) { return earlier }
-            if let refusal = try await unlockOwn(s, pin: pin, cause: e) { return (refusal, s) }
-            try await s.device.completeRecoveryOpen()
-            return (nil, s)
+            // (A switch of identity stopped this session's device: the identity with the `ok` is opened again.)
+            let own = record.value.couldNotTell == nil ? s : try await openSession()
+            if let refusal = try await unlockOwn(own, pin: pin, cause: e) { return (refusal, own) }
+            try await own.device.completeRecoveryOpen()
+            return (nil, own)
         }
     }
 

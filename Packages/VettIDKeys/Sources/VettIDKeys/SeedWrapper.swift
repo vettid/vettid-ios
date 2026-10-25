@@ -105,49 +105,72 @@ public final class SeedWrapper: Sendable {
     static func aad(_ slot: KeySlot) -> [UInt8] { Array(aadLabel.utf8) + [0] + Array(slot.rawValue.utf8) }
 }
 
-/// The device keys the app wraps (VAULT-MESSAGING §3.2). Mirrors vettid-android `KeySlot`.
-public enum KeySlot: String, CaseIterable, Sendable {
-    /// The relay key (Ed25519): signs relay requests, mints tokens.
-    case relay
-    /// The identity key `ik` (Ed25519): signs handshakes and unlocks.
-    case identity
-    /// The static KEM key (MLKEM768X25519 seed): receives sealed messages.
-    case kem
-    /// (IOS-PLAN 0.1.33 §4.9) The same three keys of the phone's second device identity: a phone that could not tell whether
-    /// an open recovered the vault registers a new identity and keeps the earlier one until the pairing completed.
-    case relay2
-    case identity2
-    case kem2
+/// One of the device identities a phone holds (IOS-PLAN 0.1.33 §4.9): a phone that could not tell whether an open recovered the
+/// vault registers a new identity for each new recovery and keeps every earlier one until the pairing completed. Its relay,
+/// identity and KEM keys (``KeySlot/slots(of:)``) and its device state file are its own; the app key K is shared.
+public struct IdentitySet: RawRepresentable, Codable, Hashable, Sendable, CustomStringConvertible {
+    /// The most identities a phone holds at once (chosen; not in the spec: a bound for storage).
+    public static let limit = 8
+    public static let first = IdentitySet(rawValue: 0)
+    public static let second = IdentitySet(rawValue: 1)
+    public static var all: [IdentitySet] { (0..<limit).map { IdentitySet(rawValue: $0) } }
 
-    /// The keys of one identity.
-    public static func slots(of set: IdentitySet) -> [KeySlot] {
-        switch set {
-        case .first: [.relay, .identity, .kem]
-        case .second: [.relay2, .identity2, .kem2]
-        }
+    public let rawValue: Int
+
+    public init(rawValue: Int) { self.rawValue = rawValue }
+
+    public init(from decoder: any Decoder) throws { rawValue = try decoder.singleValueContainer().decode(Int.self) }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.singleValueContainer()
+        try c.encode(rawValue)
     }
 
-    /// This slot's key in [set]'s identity (`.relay` is `.relay2` in the second).
-    public func of(_ set: IdentitySet) -> KeySlot {
-        switch (self, set) {
-        case (.relay, .second), (.relay2, .second): .relay2
-        case (.identity, .second), (.identity2, .second): .identity2
-        case (.kem, .second), (.kem2, .second): .kem2
-        case (.relay2, .first): .relay
-        case (.identity2, .first): .identity
-        case (.kem2, .first): .kem
-        default: self
-        }
-    }
+    /// The identity after this one (nil past ``limit``).
+    public var next: IdentitySet? { rawValue + 1 < Self.limit ? IdentitySet(rawValue: rawValue + 1) : nil }
+
+    public var description: String { "identity \(rawValue)" }
 }
 
-/// One of the two device identities a phone may hold at once (IOS-PLAN 0.1.33 §4.9): its relay, identity and KEM keys
-/// (``KeySlot/slots(of:)``) and its device state file.
-public enum IdentitySet: Int, Codable, CaseIterable, Sendable {
-    case first = 0
-    case second = 1
+/// The device keys the app wraps (VAULT-MESSAGING §3.2), of one identity (``IdentitySet``). Mirrors vettid-android `KeySlot`.
+public struct KeySlot: Hashable, Sendable, CustomStringConvertible {
+    public enum Role: String, CaseIterable, Sendable {
+        /// The relay key (Ed25519): signs relay requests, mints tokens.
+        case relay
+        /// The identity key `ik` (Ed25519): signs handshakes and unlocks.
+        case identity
+        /// The static KEM key (MLKEM768X25519 seed): receives sealed messages.
+        case kem
+    }
 
-    public var other: IdentitySet { self == .first ? .second : .first }
+    public let role: Role
+    public let index: Int
+
+    public static let relay = KeySlot(.relay, 0)
+    public static let identity = KeySlot(.identity, 0)
+    public static let kem = KeySlot(.kem, 0)
+    public static let relay2 = KeySlot(.relay, 1)
+    public static let identity2 = KeySlot(.identity, 1)
+    public static let kem2 = KeySlot(.kem, 1)
+
+    public init(_ role: Role, _ index: Int) {
+        self.role = role
+        self.index = index
+    }
+
+    /// The name of the key (`relay`, `relay2`, …): also its keychain item and the AAD of its wrapped seed.
+    public var rawValue: String { index == 0 ? role.rawValue : "\(role.rawValue)\(index + 1)" }
+
+    public var description: String { rawValue }
+
+    /// Every slot of every identity (a wipe removes them all).
+    public static var allCases: [KeySlot] { IdentitySet.all.flatMap { slots(of: $0) } }
+
+    /// The keys of one identity.
+    public static func slots(of set: IdentitySet) -> [KeySlot] { Role.allCases.map { KeySlot($0, set.rawValue) } }
+
+    /// This slot's key in [set]'s identity (`.relay` is `.relay2` in the second).
+    public func of(_ set: IdentitySet) -> KeySlot { KeySlot(role, set.rawValue) }
 }
 
 /// Where wrapped seeds are kept (ciphertext only). On the iPhone the keychain (``KeychainWrappedKeyStore``). Mirrors
@@ -179,12 +202,12 @@ public final class DeviceKeys: Sendable {
     /// Generates and stores a new seed for [slot], replacing any existing one.
     public func generate(_ slot: KeySlot) throws {
         var seed: [UInt8]
-        switch slot {
-        case .kem, .kem2:
+        switch slot.role {
+        case .kem:
             let k = try KemPrivateKey.generate()
             seed = try k.seed()
             k.destroy()
-        case .relay, .identity, .relay2, .identity2:
+        case .relay, .identity:
             let k = Ed25519PrivateKey.generate()
             seed = try k.seed()
             k.destroy()
@@ -197,14 +220,14 @@ public final class DeviceKeys: Sendable {
 
     /// The relay or identity key. The caller destroys it when done.
     public func ed25519(_ slot: KeySlot) throws -> Ed25519PrivateKey {
-        precondition(slot != .kem && slot != .kem2)
+        precondition(slot.role != .kem)
         guard let blob = try store.get(slot) else { throw KeysError.missing("\(slot.rawValue) key") }
         return try wrapper.unwrapEd25519(slot, blob)
     }
 
     /// The static KEM key. The caller destroys it when done.
     public func kem(_ slot: KeySlot = .kem) throws -> KemPrivateKey {
-        precondition(slot == .kem || slot == .kem2)
+        precondition(slot.role == .kem)
         guard let blob = try store.get(slot) else { throw KeysError.missing("kem key") }
         return try wrapper.unwrapKem(slot, blob)
     }

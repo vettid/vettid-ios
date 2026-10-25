@@ -262,7 +262,7 @@ extension VaultManagerRecoveryTests {
         #expect(m.record.value.activeIdentity == .first && device?.recoveryID == nil && device?.deviceID != nil)
         #expect(m.record.value.couldNotTell == nil && service.unlocks.count == 1)
         // The unlock asserted with the earlier identity's key; the new identity went.
-        #expect(phone.attester.assertionIdentities.last == 0 && phone.attester.forgotten.last == 1)
+        #expect(phone.attester.assertionIdentities.last == 0 && phone.attester.forgotten.contains(1))
         for slot in KeySlot.slots(of: .second) { #expect(try phone.wrapped.get(slot) == nil) }
         #expect(try phone.appKeys.getOrCreate().spki() == k)
         try await m.finishRecoveryOpen()
@@ -281,10 +281,8 @@ extension VaultManagerRecoveryTests {
         // The new open's answer is lost too; the vault repeated the recovery, and its device is still the earlier identity.
         service.recoveryOpenAnswers(.answerLost)
         _ = await vaultFailure { _ = try await m.recoveryOpen(pin: pin, password: password) }
-        service.statusUnauthorized = true
-        // A new identity exists: what is left is the unlock with either.
+        // Two reads of `200`: what is left is the unlock with either.
         #expect(try await twoReads() == .finishWithPin)
-        service.statusUnauthorized = false
         #expect(m.record.value.couldNotTell?.unlock == true)
         let out = try await m.resumeLostOk(pin: pin)
         #expect(out.ok)
@@ -302,9 +300,8 @@ extension VaultManagerRecoveryTests {
         // The new open completed at the vault but its answer was lost; two reads of `401` then the unlock with the new identity.
         service.recoveryOpenAnswers(.answerLost)
         _ = await vaultFailure { _ = try await m.recoveryOpen(pin: pin, password: password) }
-        service.statusUnauthorized = true
+        // The vault took the new identity: the status reads `200` with no recovery.
         #expect(try await twoReads() == .finishWithPin)
-        service.statusUnauthorized = false
         #expect(try await m.resumeLostOk(pin: pin).ok)
         // The new identity's unlock opened first; its handshake names the new recovery; the earlier identity went.
         #expect(service.unlocks.count == 1 && service.recoveryHandshakeContexts == [made.recoveryID])
@@ -390,24 +387,6 @@ extension VaultManagerRecoveryTests {
         #expect(try await m.recoveryOpen(pin: pin, password: password).ok)
     }
 
-    @Test func theNewIdentitysRecoveryEndedAfterAnOpenGotNoAnswerIsTheUnlockWithEither() async throws {
-        defer { phone.close() }
-        let k = try phone.appKeys.getOrCreate().spki()
-        try await endedForGood()
-        _ = try await m.registerRecovery(try scanned(try secondRecovery()))
-        service.recoveryOpenAnswers(.neverProcessed)
-        _ = await vaultFailure { _ = try await m.recoveryOpen(pin: pin, password: password) }
-        service.cancelRecoveryAtApi()
-        #expect(try await twoReads() == .finishWithPin)
-        // Both identities are refused (the recovering keys' unlock is `401` once the recoveries ended): a refusal, and all is kept.
-        let refused = await vaultFailure { _ = try await m.resumeLostOk(pin: pin) }
-        #expect(refused?.kind == .unauthorized && m.record.value.couldNotTell?.refusalsSinceMs != nil)
-        try expectKept(k, secondToo: true)
-        // No code is registered over it, and a start over is refused.
-        let f = await vaultFailure { _ = try await m.registerRecovery(try scanned(try secondRecovery())) }
-        #expect(f?.code == VaultManager.codeRecoveryOpenSent)
-    }
-
     // MARK: - Decided states
 
     @Test func aReadableOkForTheEarlierOpenIsTheStageOfThePin() async throws {
@@ -433,15 +412,15 @@ extension VaultManagerRecoveryTests {
         service.loseAnswers(["credential.get"])
         _ = await vaultFailure { _ = try await m.recoveryOpen(pin: pin, password: password) }
         // The pairing began: the identity that has the `ok` is written down.
-        #expect(m.record.value.couldNotTell?.opened == .second)
+        #expect(m.record.value.activeIdentity == .second)
         // A kill in the middle of the earlier identity's trial leaves it active, with the trial marked.
         try m.persistRecord(m.record.generation) {
-            $0.couldNotTell?.trial = true
+            $0.couldNotTell?.returnTo = .second
             $0.activeIdentity = .first
         }
         try await phone.restart()
         service.loseAnswers([])
-        #expect(try await m.recoveryOpened() && m.record.value.activeIdentity == .second && m.record.value.couldNotTell?.trial == false)
+        #expect(try await m.recoveryOpened() && m.record.value.activeIdentity == .second && m.record.value.couldNotTell?.returnTo == nil)
         try expectKept(k, secondToo: true)
         #expect(try await m.recoveryOpen(pin: pin, password: password).ok)
     }
@@ -512,8 +491,7 @@ extension VaultManagerRecoveryTests {
 
     @Test func aPinAnsweredWrongEndsTheRunOfRefusals() async throws {
         defer { phone.close() }
-        try await openGotNoAnswer(.answerLost)
-        #expect(try await twoReads() == .finishWithPin)
+        try await keyInUseUnlock()
         service.unlockAnswers(.sealed("unknown_device"))
         _ = try await m.resumeLostOk(pin: pin)
         #expect(m.record.value.couldNotTell?.refusalsSinceMs != nil)

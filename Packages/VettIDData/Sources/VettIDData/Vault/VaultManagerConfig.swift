@@ -39,9 +39,6 @@ public struct VaultKeys: Sendable {
 public enum VaultFiles {
     public static let account = "account"
     public static let device = "vault-device"
-    /// (IOS-PLAN 0.1.33 §4.9) The device state of the phone's second identity, which exists only while a phone that could not
-    /// tell whether an open recovered the vault holds two (``CouldNotTell``).
-    public static let device2 = "vault-device-2"
     public static let phoneSecrets = "phone-secrets"
     public static let lock = "lock-record"
     /// The owner check as this phone last learnt it (``OwnerCheckManager``).
@@ -56,11 +53,13 @@ public enum VaultFiles {
 
     /// Every data file of the vault manager in [directory].
     public static func all(in directory: URL) -> [URL] {
-        [account, device, device2, phoneSecrets, lock, ownerCheck, connections, approvals].map { directory.appendingPathComponent($0) }
+        ([account] + IdentitySet.all.map(device(of:)) + [phoneSecrets, lock, ownerCheck, connections, approvals])
+            .map { directory.appendingPathComponent($0) }
     }
 
-    /// The device state file of [set]'s identity.
-    public static func device(of set: IdentitySet) -> String { set == .first ? device : device2 }
+    /// (IOS-PLAN 0.1.33 §4.9) The device state of identity [set]: the first is `vault-device`, the others (a phone that could not
+    /// tell) `vault-device-2`, `vault-device-3`, …
+    public static func device(of set: IdentitySet) -> String { set.rawValue == 0 ? device : "\(device)-\(set.rawValue + 1)" }
 }
 
 /// How the member's lock waits (VAULT-LOCK as vettid-android implements it): the app's values by default; the tests

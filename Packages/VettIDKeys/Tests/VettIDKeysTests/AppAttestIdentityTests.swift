@@ -146,18 +146,18 @@ import VettIDKeysTesting
     @Test func theSlotsOfTheTwoIdentitiesAreDistinct() {
         let first = KeySlot.slots(of: .first), second = KeySlot.slots(of: .second)
         #expect(Set(first).isDisjoint(with: second) && first.count == 3 && second.count == 3)
-        #expect(Set(first + second).count == KeySlot.allCases.count)
+        #expect(Set(KeySlot.allCases).count == IdentitySet.limit * 3 && Set(first + second).isSubset(of: Set(KeySlot.allCases)))
         for slot in KeySlot.allCases {
             #expect(slot.of(.second).of(.first) == slot.of(.first) && slot.of(.first).of(.second) == slot.of(.second))
             #expect(first.contains(slot.of(.first)) && second.contains(slot.of(.second)))
         }
         #expect(KeySlot.identity.of(.second) == .identity2 && KeySlot.kem2.of(.first) == .kem && KeySlot.relay.of(.first) == .relay)
-        #expect(IdentitySet.first.other == .second && IdentitySet.second.other == .first)
+        #expect(IdentitySet.first.next == .second && IdentitySet(rawValue: IdentitySet.limit - 1).next == nil)
     }
 
     @Test func eachIdentityHasKeysOfItsOwn() throws {
         let keys = DeviceKeys(wrapper: SeedWrapper(source: SoftwareSeedWrapKeySource()), store: InMemoryWrappedKeyStore())
-        for set in IdentitySet.allCases { for slot in KeySlot.slots(of: set) { try keys.generate(slot) } }
+        for set in IdentitySet.all { for slot in KeySlot.slots(of: set) { try keys.generate(slot) } }
         let a = try keys.ed25519(.identity), b = try keys.ed25519(.identity2)
         #expect(a.publicKey != b.publicKey)
         #expect(try keys.kem(.kem).publicKey.bytes != keys.kem(.kem2).publicKey.bytes)

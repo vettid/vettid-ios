@@ -129,6 +129,11 @@ extension FakeVaultService {
                 recovery.handshakeContexts.append(p.body.ctx)
                 // The vault looks the invitation up by `ctx` (handshakes.go): another id is `invite_invalid`, never answered.
                 guard p.body.ctx == recovery.inviteID else { return }
+                // A handshake the relay lost on its way to the vault's answer: the first ones are never answered.
+                if recovery.droppedHandshakes > 0 {
+                    recovery.droppedHandshakes -= 1
+                    return
+                }
             }
             deviceIk = p.body.from.ik
             let (resp, env) = try p.respond(ResponderConfig(identity: ik, token: try token(device.relay), policy: .vaultToDevice, collectSender: device.relay.pk))

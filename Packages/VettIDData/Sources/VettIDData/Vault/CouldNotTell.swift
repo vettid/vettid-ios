@@ -36,53 +36,63 @@ struct CouldNotTellRead: Codable, Equatable, Sendable {
     }
 }
 
-/// (§4.9) What a phone that could not tell keeps, until the vault answered `ok` and the pairing completed: the earlier
-/// identity (its keys, its device state with the earlier `recovery_id` and the `request_id`s of its opens, and the phone-secret
-/// record) and, once made, the new one. K, the app key, is the phone's own and is never replaced meanwhile.
+/// (§4.9) What a phone that could not tell keeps, until the vault answered `ok` and the pairing completed: every identity it made
+/// (its keys, its device state with its `recovery_id` and the history of its opens) and the phone-secret record. K, the app key,
+/// is the phone's own and is never replaced meanwhile.
+///
+/// Persisted as `could_not_tell` in the account record: `identities` (oldest first, indexes into the keys `relay`, `relay2`, …
+/// and the device state files `vault-device`, `vault-device-2`, …; the first is the identity of the open that could not be told),
+/// the flags below, and the run of refusals. Chosen; not in the spec: a new code makes a new identity whenever the newest one
+/// may hold an invitation (an unanswered open), up to ``IdentitySet/limit``.
 struct CouldNotTell: Codable, Equatable, Sendable {
-    /// The identity that sent the open whose answer was never readable.
-    var earlier: IdentitySet
-    /// The new identity, once made (always the other one).
-    var new: IdentitySet?
+    /// The identities, oldest first.
+    var identities: [IdentitySet]
     /// Two reads said the recovery ended: a new recovery may be started with this phone.
     var ended = false
     /// What is left is the lost-ok unlock (``CouldNotTellStage/finishWithPin``).
     var unlock = false
     /// ``unlock`` came from two reads of `200` (K may be only the vault's orphaned pending key), not from a key in use: the status
-    /// is read again, and two reads of `401`/`410` make it ``ended`` (IOS-PLAN 0.1.33 §4.9: "reads the status again later").
+    /// is read again, and two reads of `401`/`410` make it ``ended``. It never leads to the second text (that is for a vault that
+    /// took this phone, §4.9).
     var unlockByReads = false
     /// The unlock answered `transfer_incomplete`: only an open repeats the recovery. Both kinds of read then mean "ended" unless
     /// the recovery shows `registered`.
     var transferIncomplete = false
-    /// The identity whose open the vault answered `ok` (set when the pairing begins), and whether the earlier identity's unlock is
-    /// being tried meanwhile (``trial``): a kill during the trial goes back to ``opened``.
-    var opened: IdentitySet?
-    var trial = false
+    /// While the unlock of other identities is tried (a trial, the unlock with each), the identity to go back to when it does not
+    /// end: a kill meanwhile goes back to it (``VaultManager/settleTrial()``).
+    var returnTo: IdentitySet?
     /// The first refusal of the unlock since the last that did not refuse (Unix ms, this phone's clock), and the period after
-    /// which it is told as the second text (a day, divided by the vault's time scale then).
+    /// which it is told as the second text (a day, divided by the vault's time scale then). A network error neither counts nor
+    /// ends the run; an answer only a key the vault holds gets (`bad_pin`) ends it.
     var refusalsSinceMs: Int64?
     var refusalsForMs: Int64?
 
+    /// The identity of the open that could not be told.
+    var earlier: IdentitySet { identities[0] }
+    /// The newest identity, when there is one beside the first.
+    var new: IdentitySet? { identities.count > 1 ? identities.last : nil }
+    var newest: IdentitySet { identities[identities.count - 1] }
+
     enum CodingKeys: String, CodingKey {
-        case earlier, new, ended, unlock, opened, trial
+        case identities, ended, unlock
+        case returnTo = "return_to"
         case unlockByReads = "unlock_by_reads"
         case transferIncomplete = "transfer_incomplete"
         case refusalsSinceMs = "refusals_since_ms"
         case refusalsForMs = "refusals_for_ms"
     }
 
-    init(earlier: IdentitySet) { self.earlier = earlier }
+    init(earlier: IdentitySet) { identities = [earlier] }
 
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        earlier = try c.decodeIfPresent(IdentitySet.self, forKey: .earlier) ?? .first
-        new = try c.decodeIfPresent(IdentitySet.self, forKey: .new)
+        let all = try c.decodeIfPresent([IdentitySet].self, forKey: .identities) ?? []
+        identities = all.isEmpty ? [.first] : all
         ended = try c.decodeIfPresent(Bool.self, forKey: .ended) ?? false
         unlock = try c.decodeIfPresent(Bool.self, forKey: .unlock) ?? false
         unlockByReads = try c.decodeIfPresent(Bool.self, forKey: .unlockByReads) ?? false
         transferIncomplete = try c.decodeIfPresent(Bool.self, forKey: .transferIncomplete) ?? false
-        opened = try c.decodeIfPresent(IdentitySet.self, forKey: .opened)
-        trial = try c.decodeIfPresent(Bool.self, forKey: .trial) ?? false
+        returnTo = try c.decodeIfPresent(IdentitySet.self, forKey: .returnTo)
         refusalsSinceMs = try c.decodeIfPresent(Int64.self, forKey: .refusalsSinceMs)
         refusalsForMs = try c.decodeIfPresent(Int64.self, forKey: .refusalsForMs)
     }
