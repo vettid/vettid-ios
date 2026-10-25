@@ -205,6 +205,20 @@ public final class AppAttestKey: KeyEraser, @unchecked Sendable {
         }
     }
 
+    /// (§4.9) A forget: the first identity is in use, with its own keys (the second's are gone).
+    public func resetIdentities() throws {
+        try update { record in
+            guard record.active != 0 || !record.parked.isEmpty else { return }
+            let first = record.active == 0 ? nil : record.parked[0]
+            if record.active != 0 {
+                record.current = first?.current
+                record.pending = first?.pending ?? []
+            }
+            record.active = 0
+            record.parked = [:]
+        }
+    }
+
     /// Whether a key id is kept, classified by IOS-PLAN §6.3.
     public func lookup() -> ItemLookup<Void> {
         store.lookup().map { _ in () }

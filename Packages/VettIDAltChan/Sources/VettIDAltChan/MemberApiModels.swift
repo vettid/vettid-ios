@@ -25,7 +25,7 @@ public struct MemberApiError: Error, Equatable, Sendable, CustomStringConvertibl
     public static let recoveryUnavailable = "recovery_unavailable"
     /// 2.12.0: the claim's key is a key in use (normally the vault's `app_key`): nothing was written.
     public static let keyInUse = "key_in_use"
-    /// The status read of a recovering key whose recovery ended (once the member API gives it, vettid.org #415).
+    /// The status read of a recovering key whose recovery ended (MEMBER-API 2.13.0).
     public static let recoveryEnded = "recovery_ended"
     public static let rateLimited = "rate_limited"
     public static let manifestUnavailable = "manifest_unavailable"
@@ -41,6 +41,9 @@ public struct MemberApiError: Error, Equatable, Sendable, CustomStringConvertibl
     public let retryAfterSeconds: Int
     /// `vault_unavailable`: the body's `service` (1.2.0: `"paused"` while the operator paused the vault service).
     public let service: String?
+    /// Made by the client: the error was the answer to the poll of a slot after the request was queued, not to the request
+    /// itself (a `401` of the register POST queued nothing; one of the poll did).
+    public var queued = false
 
     public init(
         status: Int, code: String, message: String = "", release: String? = nil, retryAfterSeconds: Int = 0, service: String? = nil

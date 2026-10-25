@@ -79,4 +79,6 @@ struct AppAttestAttester: Attester {
     func use(identity: Int) throws { try key.use(identity: identity) }
 
     func forget(identity: Int) throws { try key.forget(identity: identity) }
+
+    func resetIdentities() throws { try key.resetIdentities() }
 }

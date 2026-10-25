@@ -191,8 +191,13 @@ public struct AltChannelFlow: Sendable {
     private func postAndPoll(_ post: () async throws -> Void, _ requestID: String) async throws -> (Error?, Slot?) {
         do {
             try await post()
-            return (nil, try await api.poll(requestID))
         } catch let e as MemberApiError {
+            return (e, nil)
+        }
+        do {
+            return (nil, try await api.poll(requestID))
+        } catch var e as MemberApiError {
+            e.queued = true
             return (e, nil)
         }
     }

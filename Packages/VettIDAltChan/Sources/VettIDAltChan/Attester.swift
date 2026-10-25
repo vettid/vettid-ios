@@ -43,6 +43,10 @@ public protocol Attester: Sendable {
     /// (§4.9) The identity's keys are forgotten: the vault answered `ok` and the other identity's pairing completed. Never the
     /// identity in use.
     func forget(identity: Int) throws
+
+    /// (§4.9) A forget (a start over, a deleted vault): the bookkeeping of identities is reset, so that the first identity is in use
+    /// and the second's keys are gone. Never a key of the identity in use is made the other's.
+    func resetIdentities() throws
 }
 
 /// What the device key signs (VAULT-MESSAGING §11.7, §11.10.3), as vettid-vault `devattest.Signed` carries it
@@ -82,4 +86,5 @@ extension Attester {
     public func nextCandidate() throws -> Bool { false }
     public func use(identity: Int) throws {}
     public func forget(identity: Int) throws {}
+    public func resetIdentities() throws {}
 }

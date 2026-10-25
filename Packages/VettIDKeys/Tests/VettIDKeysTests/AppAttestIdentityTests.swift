@@ -110,6 +110,39 @@ import VettIDKeysTesting
         #expect(try asserted(key) == fake.keyID(9))
     }
 
+    @Test func aForgetResetsTheIdentitiesAndTheFirstOneHasItsOwnKeys() throws {
+        let fake = FakeAppAttest()
+        let key = make(fake)
+        try key.confirm(keyID: try attested(key))
+        try key.use(identity: 1)
+        try key.confirm(keyID: try attested(key))
+        // After a forget the first identity is in use again, with its own key, and the second's are gone.
+        try key.resetIdentities()
+        #expect(try asserted(key) == fake.keyID(1))
+        try key.use(identity: 1)
+        #expect(throws: KeysError.self) { try key.assert(clientDataHash: challenge) }
+        // Resetting a record that is in order changes nothing.
+        try key.use(identity: 0)
+        try key.resetIdentities()
+        #expect(try asserted(key) == fake.keyID(1))
+    }
+
+    @Test func aStaleCurrentKeyIsNotTheNewIdentitysWhenItsKeysAreForgottenBeforeItsFirstUse() throws {
+        let fake = FakeAppAttest()
+        let key = make(fake)
+        try key.confirm(keyID: try attested(key))
+        // An earlier episode left keys parked under 1.
+        try key.use(identity: 1)
+        try key.confirm(keyID: try attested(key))
+        try key.use(identity: 0)
+        // A new episode: the identity 1 has none of them.
+        try key.forget(identity: 1)
+        try key.use(identity: 1)
+        #expect(throws: KeysError.self) { try key.assert(clientDataHash: challenge) }
+        try key.confirm(keyID: try attested(key))
+        #expect(try asserted(key) == fake.keyID(3))
+    }
+
     @Test func theSlotsOfTheTwoIdentitiesAreDistinct() {
         let first = KeySlot.slots(of: .first), second = KeySlot.slots(of: .second)
         #expect(Set(first).isDisjoint(with: second) && first.count == 3 && second.count == 3)
