@@ -102,8 +102,9 @@
 #                                        "Move"; prints "TRANSFER_AFTER: kept|welcome_notice|welcome|none" (release R keeps the keys
 #                                        until the new phone has finished: nothing more is tapped and nothing is locked;
 #                                        or the app erased itself) and "TRANSFER_STATE: moved|rejected|expired|no_decision|
-#                                        no_link|no_phone|no_safety_code|approve_failed|error|none". After a state other
-#                                        than moved the vault is locked, once no approval is in flight. With --auto-match
+#                                        no_link|no_phone|no_safety_code|approve_failed|approve_unknown|error|none". After a state other
+#                                        than moved the vault is locked only from a screen before the approval and never
+#                                        once "Move" was tapped; a stuck confirmation or a running approval leaves it unlocked. With --auto-match
 #                                        (this test only) the test taps "The codes match" itself and prints
 #                                        "TRANSFER_SAS_UNCHECKED": the comparison is then NOT made. It cannot be set by the
 #                                        inputs file or the environment.

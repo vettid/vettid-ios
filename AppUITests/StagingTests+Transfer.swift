@@ -202,8 +202,10 @@ extension StagingTests {
     /// approval. Reported on a `TRANSFER_STATE:` line: `moved` (the approval went through; `TRANSFER_AFTER:` then says
     /// what this phone shows: `kept` when the moved screen says the keys stay until the new phone has finished (release R:
     /// the test taps nothing more and never locks, the vault is the new phone's to finish), `welcome` or `welcome_notice`
-    /// when the app erased itself, `none`), `rejected`, `expired`, `no_decision`, `no_link`, `no_phone`, `no_safety_code`, `approve_failed`, `error`, `none`. After any
-    /// other state the vault is locked once no approval is in flight (a lock is never sent after a successful approval).
+    /// when the app erased itself, `none`), `rejected`, `expired`, `no_decision`, `no_link`, `no_phone`, `no_safety_code`, `approve_failed`, `approve_unknown` (after the tap on "Move"), `error`, `none`. After any
+    /// other state the vault is locked only when a screen from before the approval shows and "Move" was never confirmed: a
+    /// stuck confirmation, an approval still running or one of unknown outcome leaves the vault unlocked (a lock is never
+    /// sent after a successful or possible approval).
     @MainActor
     func testStagingTransferOut() throws {
         let pin = try Self.pin()
@@ -224,7 +226,8 @@ extension StagingTests {
         }
         if state != "moved" {
             // Settle first: an approval that was still running may have gone through since.
-            switch settledOut(app) {
+            // After "Move" was confirmed, whatever the outcome, nothing is locked.
+            switch settledOut(app, mayLock: state != "approve_unknown") {
             case .moved:
                 state = afterApproval(app)
             case .quiet:
@@ -310,7 +313,8 @@ extension StagingTests {
         field.typeText(inputs.password ?? "")
         dismissKeyboard(app)
         tapPrimary(app)
-        guard confirmAlert(app, label: "Move") else { return "approve_failed" }
+        // From the tap on "Move" the approval may be on its way: any outcome but the end screens is unknown.
+        guard confirmAlert(app, label: "Move") else { return "approve_unknown" }
         failOnSavePassword(app)
 
         // A wiped phone erases itself to the welcome screen and never shows the moved screen.
@@ -320,7 +324,7 @@ extension StagingTests {
         case "transfer_moved": return afterApproval(app)
         case "transfer_rejected": return "rejected"
         case "transfer_expired": return "expired"
-        default: return "approve_failed"
+        default: return "approve_unknown"
         }
     }
 
@@ -328,7 +332,7 @@ extension StagingTests {
     private enum Settled {
         /// The moved screen or the welcome screen shows: the approval went through. Nothing is tapped, nothing is locked.
         case moved
-        /// Neither moved screen shows and nothing is running: the vault can be locked.
+        /// A screen from before the approval shows and "Move" was never confirmed: the vault can be locked.
         case quiet
         /// A confirmation could not be cancelled, or the approval never settled: nothing is locked (the failure is recorded).
         case stuck
@@ -338,7 +342,7 @@ extension StagingTests {
     /// approval is waited for if it is in flight (its Reject is disabled while it runs; Back would send a reject that races
     /// it). Then the screen is read again: a moved screen means the approval went through.
     @MainActor
-    private func settledOut(_ app: XCUIApplication) -> Settled {
+    private func settledOut(_ app: XCUIApplication, mayLock: Bool) -> Settled {
         let alert = app.alerts.firstMatch
         if alert.exists {
             let cancel = alert.buttons["Cancel"]
@@ -358,8 +362,18 @@ extension StagingTests {
             fail(app, "The approval is still running: the vault was not locked.")
             return .stuck
         }
-        let screen = shown(app)
-        return screen["transfer_moved"] != nil || screen["welcome_recover"] != nil ? .moved : .quiet
+        // A screen between two others (the moved screen erasing itself) shows neither: read again once.
+        for attempt in 0..<2 {
+            let screen = shown(app)
+            if screen["transfer_moved"] != nil || screen["welcome_recover"] != nil { return .moved }
+            let before = ["transfer_intro", "transfer_showing", "transfer_compare", "transfer_signer", "transfer_rejected",
+                          "transfer_expired"].contains { screen[$0] != nil }
+            let approveIdle = screen["transfer_approve"] != nil && reject.exists && reject.isEnabled
+            if mayLock && (before || approveIdle) { return .quiet }
+            if attempt == 0 { Thread.sleep(forTimeInterval: 2) }
+        }
+        fail(app, "The screen is not one before the approval: the vault was not locked.")
+        return .stuck
     }
 
     /// The approval went through and the app erased itself: where it ended is reported.
