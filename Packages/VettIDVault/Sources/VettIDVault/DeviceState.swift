@@ -85,6 +85,10 @@ struct RecoveryRecord: Codable, Sendable {
     /// posted: a phone that could not tell whether an open recovered the vault reads the slot of the earlier one once.
     /// Optional: a state written before it existed has none.
     var openRequestIDs: [String]?
+    /// (IOS-PLAN 0.1.34 §4.10, 0.1.33 §4.9) Sticky: an open of this identity was accepted by the member API and its answer was not a
+    /// proof that no step 1 was stored. Set when the open is posted; cleared by `ok`, or by a refusal that proves it only when no
+    /// earlier open was unanswered. A later refusal never clears it.
+    var openUnanswered: Bool?
 }
 
 /// A deposit not yet answered 201 by the relay (§8.3: the entry goes once the relay accepted it).

@@ -308,6 +308,7 @@ extension VaultManager {
                 return try await finishOpened(s, pin: pin, used: record.value.recoveryAttemptsUsed, resuming: true, since: rec)
             }
             let afterUnanswered = record.value.recoveryOpenUnanswered
+            let unansweredBefore = d.recoveryOpenEverUnanswered
             let (vaultID, guid) = (record.value.vaultID, record.value.userGuid)
             // The epoch-1 record the register made (a pending one until this open succeeds): its secret goes in the open.
             var epoch = try phoneSecrets.reuseOrCreate(keyVault: vaultID)
@@ -327,8 +328,9 @@ extension VaultManager {
                     )
                 },
                 open: { raw, rid in try await s.device.openRecoveryOpenResult(raw, requestID: rid) },
-                onSent: { [weak self] in await self?.noteRecoveryOpenSent(since: rec) }
+                onSent: { [weak self] in await self?.noteRecoveryOpenSent(since: rec, device: s.device) }
             )
+            await noteOpenAnswer(r, device: d, earlierUnanswered: unansweredBefore)
             let used = r.counted ? r.used : nil
             // The vault holds this phone's secret once it answered `ok` (§11.14.6 step 6): its epoch-1 record is made current
             // first, before anything that can fail.
@@ -357,7 +359,9 @@ extension VaultManager {
     func clearOpenMark(since rec: Int) { _ = try? record.update(since: rec) { $0.recoveryOpenUnanswered = false } }
 
     /// The member API took an open: until its answer is read, the next answer says that this one may have been right.
-    private func noteRecoveryOpenSent(since rec: Int) {
+    private func noteRecoveryOpenSent(since rec: Int, device: VaultDevice) async {
+        // Sticky (IOS-PLAN 0.1.34 §4.10): written before the answer is waited for.
+        try? await device.setRecoveryOpenUnanswered(true)
         guard !record.value.recoveryOpenUnanswered else { return }
         _ = try? record.update(since: rec) { $0.recoveryOpenUnanswered = true }
     }
@@ -507,6 +511,7 @@ extension VaultManager {
     public func recoveryOpened() async throws -> Bool {
         try await guarded {
             try prepared()
+            if settleTrial(), session != nil { try await dropSession(forget: false) }
             let d = try await openSession().device
             return phoneSecrets.inUse && d.recoveryOpenedNotFinished
         }

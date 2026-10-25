@@ -45,6 +45,8 @@ extension VaultManager {
 
     func currentCouldNotTell() async throws -> CouldNotTellStage {
         try prepared()
+        // A trial a kill interrupted that was not settled at the start (``settleTrial()``) is settled now.
+        if settleTrial(), session != nil { try await dropSession(forget: false) }
         guard let ct = record.value.couldNotTell else { return .none }
         let device = try await storedSession()?.device
         // The vault answered `ok` and the pairing completed (the recovery record is gone): the earlier identity and its records
@@ -75,9 +77,9 @@ extension VaultManager {
             // again (K may be only the vault's orphaned pending key, and the host may clear it).
             if let ct, ct.ended || (ct.unlock && (!ct.unlockByReads || ct.new != nil)) { return here }
             guard let device = try await storedSession()?.device, device.recovering else { return here }
-            // An open of this identity has no readable answer; or this is the new identity, registered, whose recovery may end.
-            let newRegistered = ct?.new != nil && record.value.activeIdentity == ct?.new
-            guard record.value.recoveryOpenUnanswered || newRegistered || ct?.transferIncomplete == true else { return here }
+            // The rule is entered by an open that is, or ever was, unanswered (the sticky mark, not the hint that a later answer
+            // clears); once entered, the status is read for as long as the decision is open.
+            guard ct != nil || record.value.recoveryOpenUnanswered || device.recoveryOpenEverUnanswered else { return here }
             let rec = record.generation
             let (now, up) = (nowMs, config.uptime())
             if let m = record.value.couldNotTellRead, let due = Self.readsAgree(m, nowMs: now, uptime: up), due < Self.readGap {
@@ -108,13 +110,16 @@ extension VaultManager {
         let ended = read || record.value.couldNotTell?.transferIncomplete == true
         if let m = record.value.couldNotTellRead, m.ended == ended, let due = Self.readsAgree(m, nowMs: now, uptime: up),
            due >= Self.readGap {
+            // The new identity's recovery ended: re-registering it drops its `recovery_id`, which the vault may hold an invitation
+            // under if any of its opens is, or ever was, unanswered (IOS-PLAN 0.1.34 §4.10, "sticky").
+            let sticky = (try await storedSession()?.device.recoveryOpenEverUnanswered) ?? true
             try persistRecord(rec) {
                 var ct = $0.couldNotTell ?? CouldNotTell(earlier: $0.activeIdentity)
                 if ended, ct.new == nil {
                     // Two reads of `401`/`410`: a new code, also after two reads of `200` and a refused unlock.
                     (ct.ended, ct.unlock, ct.unlockByReads, ct.transferIncomplete) = (true, false, false, false)
                     (ct.refusalsSinceMs, ct.refusalsForMs) = (nil, nil)
-                } else if ended, !$0.recoveryOpenUnanswered {
+                } else if ended, !$0.recoveryOpenUnanswered, !sticky {
                     // The new identity's recovery ended and none of its opens went unanswered: a new code re-registers it.
                     ct.ended = true
                 } else if !ended || ct.new != nil {
@@ -195,7 +200,11 @@ extension VaultManager {
         try await switchToNewIdentity()
         let fresh = try await openSession()
         // The new identity's own recovery ended (none of its opens went unanswered): it registers the new code, with the same keys.
-        if let known = fresh.device.recoveryID, known != code.recoveryID { try await fresh.device.dropRecoveryRegistration() }
+        if let known = fresh.device.recoveryID, known != code.recoveryID {
+            // Never a `recovery_id` the vault may hold an invitation under.
+            if fresh.device.recoveryOpenEverUnanswered { throw VaultFailure(.other, code: Self.codeRecoveryOpenSent) }
+            try await fresh.device.dropRecoveryRegistration()
+        }
         do {
             let registered = try await registerClaimed(fresh, code, claimed)
             if case .registered = registered { try persistRecord(record.generation) { $0.couldNotTell?.ended = false } }
@@ -378,6 +387,8 @@ extension VaultManager {
     func pairEarlierIdentity(pin: String) async throws -> (String?, VaultSession)? {
         guard let ct = record.value.couldNotTell, ct.earlier != record.value.activeIdentity else { return nil }
         let back = record.value.activeIdentity
+        moveFlags.book.trialRunning = true
+        defer { moveFlags.book.trialRunning = false }
         // The identity that has the vault's `ok` is written down with the trial: a kill meanwhile goes back to it (``settleTrial()``).
         try persistRecord(record.generation) { $0.couldNotTell?.opened = back; $0.couldNotTell?.trial = true }
         func end(opened: IdentitySet) throws {
@@ -399,8 +410,10 @@ extension VaultManager {
         guard u.ok else {
             // A PIN answered wrong is the answer of a vault that knows this identity: it is said, and the identity stays.
             if let code = u.result.code, code == "bad_pin" || code == "backoff" {
-                try end(opened: ct.earlier)
-                return (code, earlier)
+                // The `ok` and the token are the other identity's: it stays the one in use (a restart finds it), and the code is said.
+                try await selectIdentity(back)
+                try end(opened: back)
+                return (code, try await openSession())
             }
             try await selectIdentity(back)
             try end(opened: back)
@@ -424,12 +437,32 @@ extension VaultManager {
 
     /// A start with a trial of the earlier identity's unlock that did not end (the app was killed): the identity that has the vault's
     /// `ok` is the one in use (IOS-PLAN 0.1.33 §4.9, "never forget": nothing else changes).
-    func settleTrial() {
-        guard let ct = record.value.couldNotTell, ct.trial else { return }
+    /// The sticky mark after an open's answer: cleared by `ok`, or by an answer that proves no step 1 was stored when no earlier
+    /// open was unanswered; a later refusal never clears it.
+    func noteOpenAnswer(_ r: RecoveryOpen.Result, device: VaultDevice, earlierUnanswered: Bool) async {
+        if r.ok || Self.refusalProves(r.code, earlierUnanswered: earlierUnanswered) {
+            try? await device.setRecoveryOpenUnanswered(false)
+        }
+    }
+
+    @discardableResult
+    func settleTrial() -> Bool {
+        guard !moveFlags.book.trialRunning, let ct = record.value.couldNotTell, ct.trial else { return false }
+        let before = record.value.activeIdentity
         _ = try? record.update(since: record.generation) {
             $0.couldNotTell?.trial = false
             if let opened = ct.opened { $0.activeIdentity = opened }
         }
+        return record.value.activeIdentity != before
+    }
+
+    /// An answer that proves no step 1 was stored (IOS-PLAN 0.1.34 §4.10): only a code from the vault's readable answer, and only
+    /// `busy`, `wrong_again`, `attempt_lost`, `closed`, the counter-down answer and the wait verdicts on their own; `wrong` and
+    /// `expired` only for a phone with no earlier unanswered open. `retry`, `transfer_incomplete`, anything unreadable and any
+    /// error are unanswered.
+    nonisolated static func refusalProves(_ code: String, earlierUnanswered: Bool) -> Bool {
+        let alone: Set = ["busy", "wrong_again", "attempt_lost", "closed", "counter_unavailable", "wait", "quiet"]
+        return alone.contains(code) || (!earlierUnanswered && (code == "wrong" || code == "expired"))
     }
 
     /// A refusal to the unlock, as it is thrown (mapped): the member API's `401` or `403`, or an answer that cannot be read.

@@ -83,7 +83,9 @@ public final class RecoverViewModel: RecoverActions {
         state.errorCode = nil
         state.emailHint = account.account?.emailHint ?? ""
         // IOS-PLAN 0.1.33 §4.9: a phone that could not tell is told (a read that fails decides nothing).
-        let rule = (try? await move.checkCouldNotTell()) ?? .none
+        // A read that fails or is cancelled falls back to what the phone keeps, and that to nothing.
+        let kept = try? await move.couldNotTellStage()
+        let rule = (try? await move.checkCouldNotTell()) ?? kept ?? .none
         state.couldNotTell = rule
         if rule == .newCode {
             state.step = .couldNotTell
@@ -99,7 +101,8 @@ public final class RecoverViewModel: RecoverActions {
     public func checkEnded() {
         guard !state.busy, [.open, .couldNotTell].contains(state.step) else { return }
         work.launch { [weak self, move] in
-            let rule = (try? await move.checkCouldNotTell()) ?? .none
+            // An error (a cancellation included) is no answer: nothing changes.
+            guard let rule = try? await move.checkCouldNotTell() else { return }
             guard let self, !state.busy else { return }
             state.couldNotTell = rule
             if rule == .newCode, state.step == .open {

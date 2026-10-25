@@ -172,3 +172,20 @@ import VettIDDataTesting
         #expect(!vault.calls.contains("abandonRecovery"))
     }
 }
+
+extension CouldNotTellViewModelTests {
+    @Test func aCheckThatFailsChangesNothing() async throws {
+        vault.recoveryStageValue = .pin
+        vault.couldNotTellChecks = [.newCode]
+        let vm = await recover()
+        #expect(vm.state.step == .couldNotTell)
+        vault.fail["checkCouldNotTell"] = VaultFailure(.network)
+        vm.checkEnded()
+        await vm.settle()
+        #expect(vm.state.step == .couldNotTell && vm.state.couldNotTell == .newCode)
+        // The same at the start: what the phone keeps decides when the read fails.
+        vault.fail["checkCouldNotTell"] = VaultFailure(.network)
+        let again = await recover()
+        #expect(again.state.step == .couldNotTell)
+    }
+}

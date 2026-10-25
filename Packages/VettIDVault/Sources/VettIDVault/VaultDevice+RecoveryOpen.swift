@@ -50,6 +50,22 @@ extension VaultDevice {
         }
     }
 
+    /// Whether an open of this identity is, or ever was, unanswered (sticky; ``setRecoveryOpenUnanswered(_:)``).
+    public var recoveryOpenEverUnanswered: Bool { mem.withLock { st.recovery?.openUnanswered ?? false } }
+
+    /// Writes the sticky mark of an unanswered open (durably, before anything depends on it).
+    public func setRecoveryOpenUnanswered(_ value: Bool) async throws {
+        try await lock.withLock {
+            let changed: Bool = mem.withLock {
+                guard var record = st.recovery, (record.openUnanswered ?? false) != value else { return false }
+                record.openUnanswered = value
+                st.recovery = record
+                return true
+            }
+            if changed { try save() }
+        }
+    }
+
     /// The `request_id`s of the opens this identity built, newest first (IOS-PLAN 0.1.33 §4.9).
     public var recoveryOpenRequestIDs: [String] { mem.withLock { (st.recovery?.openRequestIDs ?? []).reversed() } }
 
