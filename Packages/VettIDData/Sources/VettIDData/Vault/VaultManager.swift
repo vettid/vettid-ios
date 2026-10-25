@@ -136,8 +136,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// The `vault.secret.renew` the member started and whose answer has not confirmed it: a retry reuses its next-epoch
     /// record (IOS-PLAN §6.3 item 2). In memory only.
     @ObservationIgnored var renewOperation: String?
-    /// A `vault.delete` of this process that got no answer, in memory only: the member API's explicit "no vault" then
-    /// means the vault deleted itself, and a vault listed after its deadline that it never will (``checkVaultDeleted()``).
+    /// A `vault.delete` of this process that got no answer, in memory only: a vault listed after its deadline means that it
+    /// never will delete itself (``checkVaultDeleted()``); `{vault: null}` decides nothing.
     @ObservationIgnored var deleteUnanswered: UnansweredDelete?
     /// TEST ONLY: replaces making the record of a confirmed `pin.change` current (a write that fails).
     @ObservationIgnored var confirmPinChangeOverride: (@MainActor (String) throws -> Void)?

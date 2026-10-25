@@ -44,7 +44,7 @@ import Testing
     @Test func theScheduleUpToTheBound() async {
         let s = Script()
         let w = watch(s)
-        w.start(until: s.now.addingTimeInterval(600), readFirst: false)
+        w.start(since: s.now, until: s.now.addingTimeInterval(600), readFirst: false)
         await w.settle()
         #expect(s.waits == [5, 10, 30, 60, 60, 60, 60, 60, 60, 60, 60, 60, 15])
         #expect(s.reads == 13 && s.slow == 1 && s.gone == 0)
@@ -54,7 +54,7 @@ import Testing
     @Test func aLaterBound() async {
         let s = Script()
         let w = watch(s)
-        w.start(until: s.now.addingTimeInterval(700), readFirst: false)
+        w.start(since: s.now, until: s.now.addingTimeInterval(700), readFirst: false)
         await w.settle()
         #expect(s.waits.reduce(0, +) == 700 && s.slow == 1)
     }
@@ -64,7 +64,7 @@ import Testing
         let s = Script()
         s.answers = [.listed, .unreachable, .listed, .gone]
         let w = watch(s)
-        w.start(until: s.now.addingTimeInterval(600), readFirst: false)
+        w.start(since: s.now, until: s.now.addingTimeInterval(600), readFirst: false)
         await w.settle()
         #expect(s.waits == [5, 10, 30, 60] && s.reads == 4 && s.gone == 1 && s.slow == 0)
         #expect(await w.readOnce() == .listed && s.gone == 1, "said once")
@@ -74,9 +74,33 @@ import Testing
     @Test func aStartPastTheBound() async {
         let s = Script()
         let w = watch(s)
-        w.start(until: s.now.addingTimeInterval(-1), readFirst: true)
+        w.start(since: s.now, until: s.now.addingTimeInterval(-1), readFirst: true)
         await w.settle()
         #expect(s.reads == 1 && s.waits.isEmpty && s.slow == 1)
+    }
+
+    /// A clock a day behind the start is past the bound at once (it cannot be trusted to count down): "still finishing"
+    /// with no sleep and no read.
+    @Test func aClockMovedBackDoesNotStretchTheWait() async {
+        let s = Script()
+        let since = s.now
+        let w = DeletionWatch(
+            now: { s.now.addingTimeInterval(-86_400) }, sleep: { d in s.sleep(d) },
+            read: { s.reads += 1; return .unconfirmed }, onGone: { s.gone += 1 }, onSlow: { s.slow += 1 }
+        )
+        w.start(since: since, until: since.addingTimeInterval(600), readFirst: false)
+        await w.settle()
+        #expect(s.waits.isEmpty && s.slow == 1 && s.gone == 0 && s.reads == 0)
+    }
+
+    /// Unconfirmed answers never end the schedule: it runs to the bound, then "still finishing".
+    @Test func unconfirmedAnswersRunToTheBound() async {
+        let s = Script()
+        s.answers = Array(repeating: .unconfirmed, count: 20)
+        let w = watch(s)
+        w.start(since: s.now, until: s.now.addingTimeInterval(600), readFirst: false)
+        await w.settle()
+        #expect(s.reads == 13 && s.slow == 1 && s.gone == 0)
     }
 
     /// Check again twice at once: one read, the second tap waits for the first.
@@ -94,7 +118,7 @@ import Testing
         )
         async let a = w.readOnce()
         async let b = w.readOnce()
-        for _ in 0..<50 where release == nil { await Task.yield() }
+        #expect(await eventually { release != nil }, "the read started")
         release?.resume()
         let ra = await a
         let rb = await b

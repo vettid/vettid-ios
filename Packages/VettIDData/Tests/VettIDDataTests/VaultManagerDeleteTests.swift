@@ -6,9 +6,9 @@ import VettIDVault
 
 /// Delete vault (`vault.delete`, VAULT-MESSAGING §12.5) end to end against ``FakeVaultService``, which answers it as
 /// vettid-vault does and then deletes itself (its mailbox refuses every deposit, `device.unlinked{vault_deleted}`, and
-/// the member API's "no vault"). After the vault's answer VettID's data on this phone is erased (``WipeRun``). A lost answer (chosen; not
-/// in the spec): the member API's explicit "no vault" means it applied; otherwise it is undecided, said so, checked again
-/// without sending anything, or tried again. Mirrors vettid-android's `deleteVault` tests.
+/// the member API's "no vault"). After the vault's answer "being deleted" starts and the member's confirmed removal erases VettID's data on this phone
+/// (``WipeRun``). A lost answer (chosen; not in the spec): the vault's own `device.unlinked{vault_deleted}` starts "being deleted";
+/// otherwise it is undecided (`{vault: null}` is advisory), said so, checked again without sending anything, or tried again. Mirrors vettid-android's `deleteVault` tests.
 @MainActor
 @Suite(.serialized) struct VaultManagerDeleteTests {
     let service: FakeVaultService
@@ -49,15 +49,19 @@ import VettIDVault
         #expect(m.account == nil && !m.usesPhoneSecret)
     }
 
-    /// The phrase beside the blob, the PIN and the password: the vault deletes itself and VettID's data on this phone is erased; the welcome
-    /// screen follows, and a new setup code can be redeemed.
-    @Test func aDeletionWipesThisPhone() async throws {
+    /// The phrase beside the blob, the PIN and the password: the vault deletes itself and "being deleted" follows; nothing is erased until
+    /// the member confirms "Remove from this phone", and then a new setup code can be redeemed.
+    @Test func aDeletionStartsBeingDeletedAndAConfirmedRemovalWipes() async throws {
         defer { phone.close() }
         try await setUp()
         #expect(await delete() == nil)
         let sent = try #require(service.deletes.first)
         #expect(sent.confirm == "delete my vault" && sent.pin == pin && sent.password == password)
         #expect(service.vaultDeleted)
+        #expect(m.phase == .deleting && m.record.value.deleting != nil && !files.isEmpty && !m.vaultDeletedNotice)
+        let d = try #require(m.deletion)
+        #expect(d.until.timeIntervalSince(d.since) >= VaultManager.deletingBound)
+        try await m.eraseThisPhone()
         try expectWiped()
         _ = try await m.redeemSetupCode(.secret(service.secret))
         #expect(m.phase == .setup(.newVault))
@@ -72,20 +76,41 @@ import VettIDVault
         #expect(!service.vaultDeleted && m.phase == .unlocked && m.usesPhoneSecret && !files.isEmpty)
     }
 
-    /// The answer lost after the vault deleted itself: nothing answers any more, the member API says there is no vault,
-    /// and VettID's data on this phone is erased as after the answer.
-    @Test func aLostAnswerWithTheVaultGoneWipes() async throws {
+    /// The answer lost after the vault deleted itself: nothing answers any more and the member API says there is no
+    /// vault (advisory). The vault's own `device.unlinked{vault_deleted}` starts "being deleted"; nothing is erased until
+    /// the member confirms.
+    @Test func aLostAnswerWithTheVaultGoneIsBeingDeleted() async throws {
         defer { phone.close() }
         try await setUp()
         service.loseAnswers([VaultApi.typeVaultDelete])
         #expect(await delete() == nil)
         #expect(service.vaultDeleted && service.deletes.count == 1)
+        #expect(m.phase == .deleting && m.record.value.deleting != nil && !files.isEmpty)
+        #expect(await m.checkDeletionAgain() == .unconfirmed && m.phase == .deleting)
+        try await m.eraseThisPhone()
         try expectWiped()
+    }
+
+    /// The answer lost and the vault's event held back: the member API's `{vault: null}` is advisory, so the deletion is
+    /// undecided and nothing is erased, however often "Check again" asks.
+    @Test func aLostAnswerWithNoVaultIsUndecidedAndNeverErases() async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.loseAnswers([VaultApi.typeVaultDelete])
+        service.holdsDeletionUnlink = true
+        let f = await delete()
+        #expect(f?.code == VaultManager.codeDeleteUnconfirmed && m.phase == .unlocked && !files.isEmpty)
+        #expect(service.vaultDeleted)
+        for _ in 0..<2 {
+            #expect(try await m.checkVaultDeleted() == .undecided)
+            #expect(m.phase == .unlocked && m.usesPhoneSecret && !files.isEmpty)
+        }
     }
 
     /// The answer lost while the member API still lists the vault: the vault's `device.unlinked{vault_deleted}` says
     /// that the deletion applied, so the phone shows "being deleted" (IOS-PLAN §4.2) rather than "not confirmed"; nothing
-    /// more goes to the vault, and once the API no longer lists the vault, Check again erases VettID's data.
+    /// more goes to the vault, and once the API no longer lists the vault, Check again still erases nothing (`{vault: null}` is
+    /// advisory); the member's confirmed removal erases VettID's data.
     @Test func aLostAnswerTheApiStillListsIsBeingDeleted() async throws {
         defer { phone.close() }
         try await setUp()
@@ -97,15 +122,16 @@ import VettIDVault
         let seen = service.requestsSeen.count
         #expect(await m.checkDeletionAgain() == .listed)
         service.statusLagsDeletion = false
-        #expect(await m.checkDeletionAgain() == .gone)
+        #expect(await m.checkDeletionAgain() == .unconfirmed && m.phase == .deleting)
         #expect(service.requestsSeen.count == seen && service.deletes.count == 1, "nothing sent to the vault")
+        try await m.eraseThisPhone()
         try expectWiped()
         #expect(m.vaultDeletedNotice)
     }
 
     /// The answer lost while the member API still lists the vault, and no `device.unlinked{vault_deleted}` reaches this
     /// phone: undecided (`delete_unconfirmed`), nothing wiped. A check sends nothing to the vault and finds it still
-    /// listed; once the API says there is no vault, the check erases VettID's data.
+    /// listed; once the API says there is no vault, the check is still undecided and erases nothing.
     @Test func aLostAnswerTheApiStillListsIsUnconfirmedUntilChecked() async throws {
         defer { phone.close() }
         try await setUp()
@@ -118,9 +144,9 @@ import VettIDVault
         let seen = service.requestsSeen.count
         #expect(try await m.checkVaultDeleted() == .undecided)
         service.statusLagsDeletion = false
-        #expect(try await m.checkVaultDeleted() == .deleted)
+        #expect(try await m.checkVaultDeleted() == .undecided, "{vault: null} is advisory")
         #expect(service.requestsSeen.count == seen && service.deletes.count == 1, "nothing sent to the vault")
-        try expectWiped()
+        #expect(m.phase == .unlocked && m.usesPhoneSecret && !files.isEmpty)
     }
 
     /// The request lost on its way: undecided, the vault still there; the member's new try deletes it.
@@ -133,7 +159,8 @@ import VettIDVault
         #expect(try await m.checkVaultDeleted() == .undecided)
         service.loseRequests([])
         #expect(await delete() == nil)
-        #expect(service.vaultDeleted)
+        #expect(service.vaultDeleted && m.phase == .deleting)
+        try await m.eraseThisPhone()
         try expectWiped()
     }
 
@@ -185,7 +212,8 @@ import VettIDVault
         let d = try #require(m.deletion)
         #expect(d.until.timeIntervalSince(d.since) > VaultManager.deletingBound)
         m.onForeground()
-        #expect(await eventually { m.phase == .signedOut })
+        #expect(await m.checkDeletionAgain() == .unconfirmed && m.phase == .deleting)
+        try await m.eraseThisPhone()
         try expectWiped()
     }
 
@@ -208,7 +236,8 @@ import VettIDVault
         service.deliverDeletionUnlink()
         #expect(await eventually { m.phase == .deleting })
         m.onForeground()
-        #expect(await eventually { m.phase == .signedOut })
+        #expect(await eventually { m.phase == .deleting })
+        try await m.eraseThisPhone()
         try expectWiped()
         _ = try? await device.send("message.attachment.get")
         try expectWiped()
@@ -244,7 +273,8 @@ import VettIDVault
         _ = try? await unlock.value
         #expect(m.phase == .deleting && m.session == nil)
         service.statusLagsDeletion = false
-        #expect(await m.checkDeletionAgain() == .gone)
+        #expect(await m.checkDeletionAgain() == .unconfirmed && m.phase == .deleting)
+        try await m.eraseThisPhone()
         try expectWiped()
     }
 
@@ -331,9 +361,9 @@ import VettIDVault
         #expect(try await m.checkVaultDeleted() == .undecided && m.usesPhoneSecret)
     }
 
-    /// A build that cannot wipe: the vault's keys are forgotten and the record reset, as vettid-android does; the welcome
-    /// screen follows and a new setup code can be redeemed.
-    @Test func aDeletionWithoutAWiperForgetsTheVault() async throws {
+    /// A build that cannot wipe: "being deleted" starts as in any build, and the confirmed removal is refused (nothing is
+    /// erased).
+    @Test func aDeletionWithoutAWiperStartsBeingDeleted() async throws {
         let service = try FakeVaultService()
         let phone = try TestVaultPhone(service: service, requestTimeout: TestVaultPhone.shortRequestTimeout, wipes: false)
         defer { phone.close() }
@@ -343,8 +373,8 @@ import VettIDVault
         try await m.createCredential(password: password, backup: true, pin: pin) { _ in }
         try await m.finishSetup()
         try await m.deleteVault(pin: pin, password: password)
-        #expect(service.vaultDeleted && m.phase == .signedOut && !m.usesPhoneSecret && m.record.value.vaultID.isEmpty)
-        _ = try await m.redeemSetupCode(.secret(service.secret))
-        #expect(m.phase == .setup(.newVault))
+        #expect(service.vaultDeleted && m.phase == .deleting && m.usesPhoneSecret)
+        await #expect(throws: VaultFailure.self) { try await m.eraseThisPhone() }
+        #expect(m.phase == .deleting && m.usesPhoneSecret)
     }
 }

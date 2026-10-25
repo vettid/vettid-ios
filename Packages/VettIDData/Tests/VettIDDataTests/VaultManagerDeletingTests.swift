@@ -1,13 +1,14 @@
 import Foundation
 import Testing
+import VettIDAltChan
 @testable import VettIDData
 import VettIDDataTesting
 
 /// A vault being deleted (IOS-PLAN §4.2) end to end against ``FakeVaultService``: the vault's
 /// `device.unlinked{vault_deleted}` closes the open vault at once and stores the marker; the member API's status is read
 /// on the schedule (held here by ``TestVaultPhone/deletionPauses``), at a start, at a return to the foreground and on
-/// Check again; only `{vault: null}` or a `401` to the app key ends it, with VettID's data on this phone erased and the
-/// one-time notice. The member API's status alone never opens this state.
+/// Check again; `{vault: null}`, a `401` or a `403` never ends it nor erases (owner decision, 2026-10-24); the member's confirmed
+/// removal does, with the one-time notice. The member API's status alone never opens this state.
 @MainActor
 @Suite(.serialized) struct VaultManagerDeletingTests {
     let service: FakeVaultService
@@ -39,6 +40,13 @@ import VettIDDataTesting
         #expect(await eventually { m.phase == .deleting })
     }
 
+    /// Nothing erased: still being deleted, the marker and the files stay, no notice.
+    func expectKept() throws {
+        #expect(m.phase == .deleting && m.deletion != nil && m.record.value.deleting != nil && !m.vaultDeletedNotice)
+        #expect(!files.isEmpty)
+        #expect(try phone.wipeTargets.keysLeft())
+    }
+
     func expectGone() throws {
         #expect(m.phase == .signedOut && m.deletion == nil && m.vaultDeletedNotice)
         #expect(files.isEmpty, "files left: \(files)")
@@ -65,8 +73,9 @@ import VettIDDataTesting
         #expect(m.phase == .deleting)
     }
 
-    /// The status still listing the vault as unlocked, then locked: still being deleted; `{vault: null}` ends it.
-    @Test func onlyNoVaultEndsIt() async throws {
+    /// The status still listing the vault as unlocked, then locked: still being deleted. `{vault: null}` is advisory
+    /// (owner decision, 2026-10-24): it never ends this state and never erases.
+    @Test func noVaultNeverErases() async throws {
         defer { phone.close() }
         try await deleting()
         service.status("unlocked")
@@ -74,19 +83,78 @@ import VettIDDataTesting
         service.status("locked")
         #expect(await m.checkDeletionAgain() == .listed && m.phase == .deleting)
         service.status("locked", noVault: true)
-        #expect(await m.checkDeletionAgain() == .gone)
-        try expectGone()
-        m.dismissVaultDeletedNotice()
-        #expect(!m.vaultDeletedNotice)
+        #expect(await m.checkDeletionAgain() == .unconfirmed)
+        try expectKept()
     }
 
-    /// A `401` to the app key (the row and the key removed) ends it too.
-    @Test func unauthorizedEndsIt() async throws {
+    /// A `401` to the app key (the same bare answer for a deleted vault and for a clock, nonce, signature or key fault)
+    /// and a `403` conclude nothing: the data stays.
+    @Test func unauthorizedAndForbiddenNeverErase() async throws {
         defer { phone.close() }
         try await deleting()
         service.statusUnauthorized = true
-        #expect(await m.checkDeletionAgain() == .gone)
+        #expect(await m.checkDeletionAgain() == .unconfirmed)
+        try expectKept()
+        service.statusUnauthorized = false
+        service.statusForbidden = true
+        #expect(await m.checkDeletionAgain() == .unconfirmed)
+        try expectKept()
+    }
+
+    /// The reads' mapping: no answer or failure is `gone`; a `401` for the clock keeps its hint; 5xx, 429 and the rest are
+    /// unreachable; a paused service concludes nothing.
+    @Test func noReadSaysGone() {
+        func fail(_ status: Int, _ code: String) -> DeletionRead { .of(failure: MemberApiError(status: status, code: code)) }
+        #expect(fail(401, MemberApiError.unauthorized) == .unconfirmed)
+        #expect(fail(401, MemberApiError.clockSkew) == .unconfirmedClock)
+        #expect(fail(403, "forbidden") == .unconfirmed)
+        #expect(fail(503, MemberApiError.vaultUnavailable) == .unreachable)
+        #expect(fail(500, "internal") == .unreachable)
+        #expect(fail(429, MemberApiError.rateLimited) == .unreachable)
+        #expect(DeletionRead.of(failure: URLError(.timedOut)) == .unreachable)
+        #expect(DeletionRead.of(vaultListed: false, servicePaused: false) == .unconfirmed)
+        #expect(DeletionRead.of(vaultListed: true, servicePaused: false) == .listed)
+        #expect(DeletionRead.of(vaultListed: false, servicePaused: true) == .unreachable)
+        #expect(DeletionRead.of(vaultListed: true, servicePaused: true) == .unreachable)
+    }
+
+    /// Past the bound the member's confirmed removal erases (the existing erase of this phone), with the notice.
+    @Test func aConfirmedRemovalPastTheBoundErases() async throws {
+        defer { phone.close() }
+        try await deleting()
+        phone.clockAhead = VaultManager.deletingBound + 1
+        service.statusUnauthorized = true
+        #expect(await eventually { phone.deletionPauses.lengths.count == 1 })
+        phone.deletionPauses.release()
+        #expect(await eventually { m.deletion?.slow == true })
+        #expect(await m.checkDeletionAgain() == .unconfirmed && m.phase == .deleting)
+        try await m.eraseThisPhone()
         try expectGone()
+    }
+
+    /// A clock moved back is past the bound (within a minute of tolerance), and its wait is never as long as the move.
+    @Test func aClockMovedBackDoesNotShortenOrStretchTheBound() {
+        let since = Date(timeIntervalSince1970: 1_000_000), until = since.addingTimeInterval(600)
+        #expect(!VaultDeletion.pastBound(since: since, until: until, now: since.addingTimeInterval(300)))
+        #expect(VaultDeletion.pastBound(since: since, until: until, now: until))
+        #expect(!VaultDeletion.pastBound(since: since, until: until, now: since.addingTimeInterval(-59)))
+        #expect(VaultDeletion.pastBound(since: since, until: until, now: since.addingTimeInterval(-61)))
+        #expect(VaultDeletion.pastBound(since: since, until: until, now: since.addingTimeInterval(-86400)))
+    }
+
+    /// A start with the clock a day behind the marker is "still finishing" at once, with no long wait.
+    @Test func aClockBehindTheMarkerIsStillFinishingAtOnce() async throws {
+        defer { phone.close() }
+        try await deleting()
+        #expect(await eventually { !phone.deletionPauses.lengths.isEmpty }, "the first manager's schedule slept")
+        let before = phone.deletionPauses.lengths
+        phone.clockAhead = -86400
+        try await phone.restart()
+        try await m.refresh()
+        #expect(await eventually { m.deletion?.slow == true })
+        let waits = phone.deletionPauses.lengths
+        #expect(!waits.isEmpty && waits.allSatisfy { $0 <= 60 })
+        #expect(waits == before, "no new timer: still finishing at once")
     }
 
     /// The schedule's first read comes after its first pause (5 s); still listed, the state stays.
@@ -96,8 +164,9 @@ import VettIDDataTesting
         #expect(await eventually { phone.deletionPauses.lengths == [5] })
         service.status("locked", noVault: true)
         phone.deletionPauses.release()
-        #expect(await eventually { m.phase == .signedOut })
-        try expectGone()
+        #expect(await eventually { phone.deletionPauses.lengths.count == 2 })
+        #expect(m.phase == .deleting && m.deletion != nil, "the read found nothing definite")
+        try expectKept()
     }
 
     /// At the bound with the vault still listed: "still finishing"; nothing then reads on its own, Check again does,
@@ -113,8 +182,9 @@ import VettIDDataTesting
         #expect(await m.checkDeletionAgain() == .listed && m.phase == .deleting)
         service.status("locked", noVault: true)
         m.onForeground()
-        #expect(await eventually { m.phase == .signedOut })
-        try expectGone()
+        #expect(await eventually { m.phase == .deleting })
+        #expect(await m.checkDeletionAgain() == .unconfirmed)
+        try expectKept()
     }
 
     /// A process killed while the vault is being deleted starts again in "being deleted", never on the unlock screen,
@@ -134,7 +204,10 @@ import VettIDDataTesting
         service.status("locked", noVault: true)
         try await phone.restart()
         try await m.refresh()
-        #expect(await eventually { m.phase == .signedOut })
+        #expect(m.phase == .deleting)
+        #expect(await m.checkDeletionAgain() == .unconfirmed, "the start's read has ended")
+        try expectKept()
+        try await m.eraseThisPhone()
         try expectGone()
         try await phone.restart()
         try await m.refresh()

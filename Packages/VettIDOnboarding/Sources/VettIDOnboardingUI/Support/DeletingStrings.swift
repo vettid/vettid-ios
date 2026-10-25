@@ -24,7 +24,11 @@ extension OnboardingStrings {
     static var vaultDeletingSlowBody: String {
         String(
             localized: "vault_deleting_slow_body",
-            defaultValue: "Your vault can no longer be opened, but VettID has not finished deleting it yet. Check back later.",
+            defaultValue: """
+                Your vault can no longer be opened, but this phone cannot confirm that VettID has finished deleting it. When \
+                you get the email that your vault was deleted, or the account site offers to set up a new vault, remove VettID from \
+                this phone.
+                """,
             bundle: .module
         )
     }
@@ -32,13 +36,56 @@ extension OnboardingStrings {
         String(localized: "vault_deleting_check_again", defaultValue: "Check again", bundle: .module)
     }
     static var vaultDeletingStill: String {
-        String(localized: "vault_deleting_still", defaultValue: "Not finished yet. Try again later.", bundle: .module)
+        String(
+            localized: "vault_deleting_still",
+            defaultValue: "VettID has not finished yet. Tap Check again later, or check the account site.", bundle: .module
+        )
     }
     static var vaultDeletingUnreachable: String {
         String(
             localized: "vault_deleting_unreachable", defaultValue: "VettID couldn't be reached. Check your connection and try again.",
             bundle: .module
         )
+    }
+    // The texts of vettid-android #192 (drafts for the owner's approval).
+    static var vaultDeletingUnconfirmed: String {
+        String(localized: "vault_deleting_unconfirmed", defaultValue: "This phone can't confirm the deletion.", bundle: .module)
+    }
+    static var vaultDeletingCannotConfirm: String {
+        String(
+            localized: "vault_deleting_cannot_confirm",
+            defaultValue: """
+                VettID answered, but this phone cannot confirm that the deletion is finished. When you get the \
+                email that your vault was deleted, or the account site offers to set up a new vault, remove VettID from this phone.
+                """,
+            bundle: .module
+        )
+    }
+    static var vaultDeletingClockHint: String {
+        String(
+            localized: "vault_deleting_clock_hint",
+            defaultValue: "Also check that the date and time on this phone are right.", bundle: .module
+        )
+    }
+    static var vaultDeletingRemove: String {
+        String(localized: "vault_deleting_remove", defaultValue: "Remove from this phone", bundle: .module)
+    }
+    static var vaultDeletingRemoveConfirmTitle: String {
+        String(localized: "vault_deleting_remove_confirm_title", defaultValue: "Remove VettID from this phone?", bundle: .module)
+    }
+    static var vaultDeletingRemoveConfirmBody: String {
+        String(
+            localized: "vault_deleting_remove_confirm_body",
+            defaultValue: """
+                Your vault can never be opened again, and nothing on this phone is needed to finish deleting it. \
+                This removes VettID's data on this phone only: its keys, your account details and the app's settings. It works without a \
+                connection and cannot be undone.
+                """,
+            bundle: .module
+        )
+    }
+    static var vaultDeletingRemoveConfirm: String {
+        String(localized: "vault_deleting_remove_confirm", defaultValue: "Remove", bundle: .module)
     }
     static var vaultDeletingAccountSite: String {
         String(localized: "vault_deleting_account_site", defaultValue: "Open the account site", bundle: .module)

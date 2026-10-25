@@ -76,8 +76,7 @@ import VettIDDataTesting
         let vm = VaultDeletingViewModel(account: vault)
         #expect(!vm.state.slow)
         vault.deletion?.slow = true
-        await Task.yield()
-        for _ in 0..<20 where !vm.state.slow { await Task.yield() }
+        #expect(await eventually { vm.state.slow }, "the bound is reached")
         #expect(vm.state.slow)
         vm.checkAgain()
         vm.checkAgain()
@@ -91,13 +90,47 @@ import VettIDDataTesting
         #expect(vm.state.note == nil && !vm.state.checking)
     }
 
+    /// Nothing unconfirmed or unreachable erases; the clock's note adds its hint; the texts are Android's.
+    @Test func anUnconfirmedAnswerNeverErases() async {
+        vault.deletion = VaultDeletion(since: Date(), until: Date(), slow: true)
+        vault.deletionReads = [.unreachable, .unconfirmed, .unconfirmedClock]
+        let vm = VaultDeletingViewModel(account: vault)
+        #expect(await eventually { vm.state.slow }, "the bound is reached")
+        for note in [DeletionCheckNote.unreachable, .cannotConfirm, .cannotConfirmClock] {
+            vm.checkAgain()
+            await vm.settle()
+            #expect(vm.state.note == note)
+        }
+        #expect(vault.calls.allSatisfy { $0 != "eraseThisPhone" })
+    }
+
+    /// "Remove from this phone": not before the bound; asked, dismissed (no erase), then confirmed (one erase).
+    @Test func aConfirmedRemovalAfterTheBoundErases() async {
+        vault.deletion = VaultDeletion(since: Date(), until: Date())
+        let vm = VaultDeletingViewModel(account: vault)
+        vm.askRemove()
+        vm.confirmRemove()
+        await vm.settleRemoval()
+        #expect(!vm.state.removeConfirm && vault.calls.allSatisfy { $0 != "eraseThisPhone" }, "not offered before the bound")
+        vault.deletion?.slow = true
+        #expect(await eventually { vm.state.slow }, "the bound is reached")
+        vm.askRemove()
+        #expect(vm.state.removeConfirm)
+        vm.dismissRemove()
+        await vm.settleRemoval()
+        #expect(!vm.state.removeConfirm && vault.calls.allSatisfy { $0 != "eraseThisPhone" })
+        vm.askRemove()
+        vm.confirmRemove()
+        await vm.settleRemoval()
+        #expect(vault.calls.filter { $0 == "eraseThisPhone" }.count == 1 && !vm.state.removing && !vm.state.removeConfirm)
+    }
+
     /// The notice on the welcome screen, once: kept through the welcome's reset, gone when seen.
     @Test func theDeletedNoticeShowsOnce() async {
         let account = FakeVaultRepository(.signedOut)
         account.vaultDeletedNotice = true
         let vm = OnboardingViewModel(account: account, vault: account, inbox: SetupLinkInbox())
-        for _ in 0..<5 { await Task.yield() }
-        #expect(vm.state.deletedNotice)
+        #expect(await eventually { vm.state.deletedNotice })
         vm.dismissDeletedNotice()
         #expect(!vm.state.deletedNotice && !account.vaultDeletedNotice)
     }

@@ -27,9 +27,9 @@ public struct DeleteVaultActions {
 }
 
 /// Settings → Account → Delete vault (VAULT-MESSAGING §12.5): the phrase, the PIN on the in-app keypad (IOS-PLAN §6.5), the
-/// credential password, the acknowledgement, then a final confirmation. After the vault's answer VettID's data on this phone is erased and
-/// the welcome screen follows. A lost answer is said, with a check that sends nothing to the vault (chosen; not in the
-/// spec). Mirrors vettid-android `DeleteVaultContent`.
+/// credential password, the acknowledgement, then a final confirmation. After the vault's answer "Your vault is being deleted" follows (the
+/// phase); VettID's data on this phone is erased only when the member confirms the removal there. A lost answer is said,
+/// with a check that sends nothing to the vault and erases nothing (chosen; not in the spec). Mirrors vettid-android `DeleteVaultContent`.
 public struct DeleteVaultContent: View {
     @Environment(\.vettIDTimeScale) private var timeScale
     @Environment(\.vettIDCovered) private var covered
