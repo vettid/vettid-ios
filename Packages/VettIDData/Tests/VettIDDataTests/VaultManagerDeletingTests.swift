@@ -122,9 +122,11 @@ import VettIDDataTesting
     @Test func aConfirmedRemovalPastTheBoundErases() async throws {
         defer { phone.close() }
         try await deleting()
+        // The schedule's task checks the bound before its first sleep: the clock moves only once it sleeps, else it ends
+        // as "still finishing" without ever sleeping.
+        #expect(await eventually { phone.deletionPauses.lengths.count == 1 })
         phone.clockAhead = VaultManager.deletingBound + 1
         service.statusUnauthorized = true
-        #expect(await eventually { phone.deletionPauses.lengths.count == 1 })
         phone.deletionPauses.release()
         #expect(await eventually { m.deletion?.slow == true })
         #expect(await m.checkDeletionAgain() == .unconfirmed && m.phase == .deleting)
