@@ -147,12 +147,11 @@ enum RecoveryStrings {
         )
     }
 
-    // (IOS-PLAN 0.1.33 §4.9, "A phone that could not tell"; approved by the owner on 2026-10-24.) vettid-android has no text for
-    // these: the keys are the iPhone's own.
+    // (IOS-PLAN 0.1.33 §4.9, "A phone that could not tell"; approved by the owner on 2026-10-24.) The keys are the spec's.
 
-    static var iosRecoverCouldNotTell: String {
+    static var recoverCouldNotTell: String {
         String(
-            localized: "ios_recover_could_not_tell",
+            localized: "recover_could_not_tell",
             defaultValue: """
                 We could not tell whether your last attempt recovered the vault. You can start a new recovery on the account \
                 site and use this phone for it; nothing on this phone is deleted.
@@ -161,9 +160,9 @@ enum RecoveryStrings {
         )
     }
 
-    static var iosRecoverTookThisPhone: String {
+    static var onboardingOpenTookPhone: String {
         String(
-            localized: "ios_recover_took_this_phone",
+            localized: "onboarding_open_took_phone",
             defaultValue: "Your vault took this phone, but it cannot be unlocked right now. Contact VettID.",
             bundle: .module
         )

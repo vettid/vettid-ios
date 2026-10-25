@@ -12,7 +12,7 @@
         }
       }
     },
-    "ios_recover_could_not_tell": {
+    "recover_could_not_tell": {
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -23,7 +23,7 @@
         }
       }
     },
-    "ios_recover_took_this_phone": {
+    "onboarding_open_took_phone": {
       "extractionState": "manual",
       "localizations": {
         "en": {
