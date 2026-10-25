@@ -35,6 +35,21 @@ import VettIDUI
         window.isHidden = true
     }
 
+    /// Release L (§3.6.8): the held and daily-check screens say when the vault locks itself, while that time is ahead.
+    @Test func theIdleLockTimeIsSaidOnTheGatedCheckOnly() {
+        let at = now.addingTimeInterval(3_600)
+        let v = OwnerCheckView(state: .held, deadline: now.addingTimeInterval(-60), idleLockAt: at)
+        #expect(idleLockAtOf(.gated, v, now: now) == at)
+        #expect(idleLockAtOf(.voluntary, v, now: now) == nil && idleLockAtOf(.holdOff, v, now: now) == nil)
+        // Once that time has passed (a call in progress delays the lock): nothing; a vault before L: nothing.
+        #expect(idleLockAtOf(.gated, v, now: at) == nil && idleLockAtOf(.gated, v, now: at.addingTimeInterval(1)) == nil)
+        #expect(idleLockAtOf(.gated, OwnerCheckView(state: .held, deadline: nil), now: now) == nil)
+        #expect(idleLockAtOf(.gated, nil, now: now) == nil)
+        var s = held
+        s.view = v
+        #expect(height(OwnerCheckScreen(state: s, actions: NoOwnerCheckActions(), now: now)) > 0)
+    }
+
     @Test func everyStateRenders() {
         var states: [OwnerCheckScreenState] = [held, OwnerCheckScreenState(mode: .voluntary), OwnerCheckScreenState(mode: .holdOff)]
         for m in [OwnerCheckMessage.badPin(checksLeft: 2), .badPassword(checksLeft: 8), .backoff, .failed(.network, code: nil)] {

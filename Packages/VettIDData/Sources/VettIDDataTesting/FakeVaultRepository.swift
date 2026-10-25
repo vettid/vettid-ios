@@ -131,6 +131,12 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var notices: [OwnerCheckNotice] = []
     public var presenceUnrecorded = false
     public var checkAfterCancel = false
+    /// (Release L) The vault locked itself; the idle-lock setting (nil: a vault before L).
+    public var idleLocked: IdleLocked?
+    /// How long past the deadline the vault locks itself as last read before the deadline; locked for another reason.
+    public var idleAfterKnown: Int64?
+    public var lockedHere = false
+    public var idleLockSetting: IdleLockSetting?
     /// Scripted answers to ``check(pin:password:holdOff:)`` (default: passed).
     public var checkResults: [OwnerCheckOutcome] = []
     public var lastHoldOff: HoldOff?
@@ -350,6 +356,25 @@ extension FakeVaultRepository: OwnerCheckRepository {
         ownerCheck?.hold = true
         ownerCheck?.holdOffUntil = nil
     }
+
+    public func refreshIdleLockSetting() async throws { try call("refreshIdleLockSetting") }
+
+    /// As the vault: a shorter value at once, a longer one after the next check (the lowest since then in force).
+    public func setIdleLockAfter(seconds: Int64) async throws {
+        try call("setIdleLockAfter")
+        guard let before = idleLockSetting else { return }
+        idleLockSetting = IdleLockSetting(seconds: seconds, inForceSeconds: min(before.inForceSeconds, seconds))
+    }
+
+    /// As the manager: the notice, else past `idle_lock_at` unless locked here, with the time as last read before the deadline
+    /// (``idleAfterKnown``), not `idle_lock_at` less the deadline.
+    public func idleLockedNow(_ now: Date) -> IdleLocked? {
+        if let idleLocked { return idleLocked }
+        guard !lockedHere, let at = ownerCheck?.idleLockAt, now >= at else { return nil }
+        return IdleLocked(afterSeconds: idleAfterKnown)
+    }
+
+    public func onLockedHere() { lockedHere = true }
 
     public func consumeUnlockCheckOutcome() { unlockCheckOutcome = nil }
 

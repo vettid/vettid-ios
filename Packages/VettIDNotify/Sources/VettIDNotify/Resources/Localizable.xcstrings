@@ -1,0 +1,72 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "notify_idle_locked_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You hadn’t checked in for %@, so your vault locked. Unlock it with your PIN to carry on. New messages wait for up to 14 days."
+          }
+        }
+      }
+    },
+    "notify_idle_locked_body_unknown": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You hadn’t checked in, so your vault locked. Unlock it with your PIN to carry on. New messages wait for up to 14 days."
+          }
+        }
+      }
+    },
+    "notify_idle_locked_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault locked itself"
+          }
+        }
+      }
+    },
+    "notify_locked_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You won’t be notified until you unlock it"
+          }
+        }
+      }
+    },
+    "notify_locked_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault is locked"
+          }
+        }
+      }
+    },
+    "notify_public_attention": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID needs your attention"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

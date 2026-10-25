@@ -28,6 +28,10 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     public nonisolated static let reasonOwnerCheck = "owner_check"
     public nonisolated static let keyInterval = "owner_check.interval_seconds"
     public nonisolated static let keyHold = "owner_check.hold"
+    /// (Release L, §3.6.8) `vault.locking`'s reason for the idle lock.
+    public nonisolated static let reasonIdle = "idle"
+    /// (Release L, §10.8) The idle lock's setting.
+    public nonisolated static let keyIdle = "idle_lock.after_seconds"
     nonisolated static let codeBadPin = "bad_pin"
     nonisolated static let codeBadPassword = "bad_password"
     nonisolated static let codeBackoff = "backoff"
@@ -50,6 +54,10 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     public private(set) var notices: [OwnerCheckNotice] = []
     public private(set) var presenceUnrecorded = false
     public private(set) var checkAfterCancel = false
+    /// (Release L) The vault locked itself (kept on the phone until it opens again); the idle-lock setting (nil before it was
+    /// read, and for a vault that does not list it).
+    public private(set) var idleLocked: IdleLocked?
+    public private(set) var idleLockSetting: IdleLockSetting?
 
     @ObservationIgnored private let ops: @MainActor () async throws -> any OwnerCheckOps
     @ObservationIgnored private let load: @MainActor () throws -> [UInt8]?
@@ -73,6 +81,15 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     @ObservationIgnored private var presenceCheckAt: Date?
     /// The `ts` of the newest `vault.held` applied (an older one never overwrites newer counts).
     @ObservationIgnored private(set) var heldTs: Date?
+    /// (Release L) The lowest idle-lock value set since the last check, when one was set; nil: the set value is in force.
+    @ObservationIgnored private var idleInForce: Int64?
+    /// (Release L) How long past the deadline the vault locks itself, as read while the check was not yet due (then
+    /// `idle_lock_at` less `deadline` is the value in force; past the deadline an unlock's extra hour or a call can move
+    /// `idle_lock_at`, and the difference no longer says how long the member was away). Nil: never read.
+    @ObservationIgnored private var idleAfterKnown: Int64?
+    /// (Release L) The vault locked for a reason other than the idle lock since it last opened (the member locked it on this
+    /// phone, or a notice named another reason): the time of `idle_lock_at` does not say why it is locked then.
+    @ObservationIgnored private var lockedHere = false
 
     /// [ops] the vault's operations, opened when needed; [load] and [persist] the kept state, read by ``loadIfNeeded()``
     /// (never before the first-run cleanup and a pending wipe); [onPassed] the catch-up after a passed check (§3.6.3);
@@ -118,10 +135,14 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         }
         loaded = true
         guard let b = bytes, !b.isEmpty, let saved = try? JSONDecoder().decode(Saved.self, from: Data(b)) else { return }
-        ownerCheck = saved.view
+        if saved.viewless != true { ownerCheck = saved.view }
         presenceUnrecorded = saved.presenceUnrecorded
         presenceCheckAt = saved.presenceCheckAt
         heldTs = saved.heldTs
+        idleLocked = saved.idleLocked == true ? IdleLocked(afterSeconds: saved.idleAfter) : nil
+        idleInForce = saved.idleInForce
+        idleAfterKnown = saved.idleAfterKnown
+        lockedHere = saved.lockedHere == true
     }
 
     public func consumeCheckAfterCancel() { checkAfterCancel = false }
@@ -140,18 +161,42 @@ public final class OwnerCheckManager: OwnerCheckRepository {
             switch VaultJSON.string(m.object, "kind") {
             // Another device saw a check pass (§3.6.3); the holder learns it from its own answer.
             case "owner_check":
+                // A passed check: the idle lock's time moved with the deadline (the vault says it again), and a longer
+                // idle-lock value set before it is in force now (§3.6.8).
+                checkPassedForIdleLock()
                 update { v in
                     v.state = .ok
                     v.deadline = Self.instant(VaultJSON.string(m.object, "deadline")) ?? v.deadline
                     v.failures = 0
                     v.waiting = nil
+                    v.idleLockAt = nil
                 }
             case "settings.changed": refreshQuietly()
             default: break
             }
-        case "vault.locking":
-            if VaultJSON.string(m.object, "reason") == Self.reasonOwnerCheck { lockedByOwnerCheck = true }
+        case "vault.locking": locking(reason: VaultJSON.string(m.object, "reason"))
         default: break
+        }
+    }
+
+    private func locking(reason: String?) {
+        // What was kept is read first: it must not replace what is changed here.
+        loadIfNeeded()
+        switch reason {
+        case Self.reasonOwnerCheck:
+            lockedByOwnerCheck = true
+            lockedHere = true
+            saveFlags()
+        // (Release L, §3.6.8) It locked itself: said on the unlock screen, with how long past the deadline that was, as the
+        // vault last said.
+        case Self.reasonIdle:
+            idleLocked = IdleLocked(afterSeconds: idleAfterKnown)
+            saveFlags()
+        // Locked for another reason (the member's own lock, a recovery, a vault that names none): the time of `idle_lock_at`
+        // is no reason to say it locked itself.
+        default:
+            lockedHere = true
+            saveFlags()
         }
     }
 
@@ -165,6 +210,8 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         v.state = base.holdOff(now()) ? .due : .held
         v.deadline = Self.instant(n.deadline) ?? base.deadline
         v.waiting = Self.counts(n.waiting) ?? WaitingCounts()
+        // (Release L) A `vault.held` from a release before L says nothing of the idle lock: what was read stays.
+        v.idleLockAt = Self.instant(n.idleLockAt) ?? base.idleLockAt
         set(v)
     }
 
@@ -179,12 +226,25 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     }
 
     /// The vault opened (an unlock, or the app started with it unlocked): the check is read again.
-    func onOpened() { refreshQuietly() }
+    func onOpened() {
+        endIdleLocked()
+        refreshQuietly()
+    }
+
+    /// The vault is open again: it no longer is locked by itself.
+    private func endIdleLocked() {
+        loadIfNeeded()
+        if idleLocked == nil, !lockedHere { return }
+        idleLocked = nil
+        lockedHere = false
+        saveFlags()
+    }
 
     /// The unlock of a vault that may be past its deadline (§3.6.5): reads `vault.status` and, if the vault is held or
     /// due, sends the check with the same entries; the answer waits in ``unlockCheckOutcome``.
     func afterUnlock(pin: String, password: String) async {
         lockedByOwnerCheck = false
+        endIdleLocked()
         let v = try? await readStatus().view
         if let v, v.gated(now()) { unlockCheckOutcome = await checkOutcome(pin: pin, password: password, holdOff: nil) }
     }
@@ -232,7 +292,9 @@ public final class OwnerCheckManager: OwnerCheckRepository {
             hold: st.hold ?? true,
             holdOffUntil: Self.instant(st.holdOffUntil),
             // 0.19.0: the status says what is waiting; from an older vault only `vault.held` does.
-            waiting: state == .ok ? nil : Self.counts(st.waiting) ?? ownerCheck?.waiting
+            waiting: state == .ok ? nil : Self.counts(st.waiting) ?? ownerCheck?.waiting,
+            // (Release L) As the vault computes it now; absent before L.
+            idleLockAt: Self.instant(st.idleLockAt)
         )
         set(v)
         return (v, true)
@@ -254,6 +316,9 @@ public final class OwnerCheckManager: OwnerCheckRepository {
             guard cleared == clears else { return .failed(.other, code: nil) }
             lockedByOwnerCheck = false
             heldTs = nil
+            idleLocked = nil
+            lockedHere = false
+            checkPassedForIdleLock()
             presenceFromCheck(r)
             set(OwnerCheckView(
                 state: .ok,
@@ -314,6 +379,58 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         try await setSetting(Self.keyInterval, String(seconds))
         // Shortening may move the deadline at once, and may hold the vault (§3.6.2).
         _ = try? await readStatus()
+    }
+
+    // MARK: - The idle lock (release L, §3.6.8)
+
+    public func idleLockedNow(_ now: Date) -> IdleLocked? {
+        if let idleLocked { return idleLocked }
+        guard !lockedHere, let at = ownerCheck?.idleLockAt, now >= at else { return nil }
+        return IdleLocked(afterSeconds: idleAfterKnown)
+    }
+
+    public func onLockedHere() {
+        loadIfNeeded()
+        lockedHere = true
+        saveFlags()
+    }
+
+    public func refreshIdleLockSetting() async throws {
+        let st = try await vault { try await self.ops().settingsGet() }
+        idleLockSetting = st.values[Self.keyIdle].flatMap { Int64($0) }.map(settingOf)
+    }
+
+    public func setIdleLockAfter(seconds: Int64) async throws {
+        guard IdleLockSetting.choices.contains(seconds) else { throw VaultFailure(.other, code: "bad_request") }
+        if idleLockSetting == nil { try? await refreshIdleLockSetting() }
+        guard let before = idleLockSetting else { throw VaultFailure(.notSupported) }
+        try await setSetting(Self.keyIdle, String(seconds))
+        // The vault keeps the lowest value since the last check (owner decision 2026-10-23): a longer one waits for it.
+        let inForce = min(before.inForceSeconds, seconds)
+        idleInForce = inForce < seconds ? inForce : nil
+        idleLockSetting = IdleLockSetting(seconds: seconds, inForceSeconds: inForce)
+        if let v = ownerCheck { set(v) }
+        // A shorter value moves the idle lock's time at once.
+        _ = try? await readStatus()
+    }
+
+    private func settingOf(_ seconds: Int64) -> IdleLockSetting {
+        IdleLockSetting(seconds: seconds, inForceSeconds: min(seconds, idleInForce ?? seconds))
+    }
+
+    /// A check passed: the value set is the one in force from now on.
+    private func checkPassedForIdleLock() {
+        // The value set is in force from now on (a longer one set before the check included): the time said at an idle lock
+        // is that value as it runs on this vault.
+        if let setting = idleLockSetting {
+            idleAfterKnown = Int64(TimeScale.scaled(TimeInterval(setting.seconds), by: max(scaleNow(), 1)))
+        } else if idleInForce != nil {
+            // A longer value waited for this check, but its value is not loaded (a new process that has not read the
+            // setting): the time is not known, so the notice says so rather than the shorter value read before.
+            idleAfterKnown = nil
+        }
+        idleInForce = nil
+        if let setting = idleLockSetting { idleLockSetting = IdleLockSetting(seconds: setting.seconds) }
     }
 
     public func turnHoldOn() async throws {
@@ -378,6 +495,11 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         presenceUnrecorded = false
         presenceCheckAt = nil
         checkAfterCancel = false
+        idleLocked = nil
+        idleInForce = nil
+        idleAfterKnown = nil
+        lockedHere = false
+        idleLockSetting = nil
         try? persist([])
     }
 
@@ -391,6 +513,28 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         set(v)
     }
 
+    /// Keeps the idle-lock flags on the phone, with or without a view of the check: a restart before any view was read must
+    /// not forget that the vault locked for another reason or by itself.
+    private func saveFlags() {
+        if let v = ownerCheck { set(v); return }
+        loadIfNeeded()
+        // A file that cannot be read yet (the iPhone is locked) is not written over.
+        guard loaded else { return }
+        if let v = ownerCheck { set(v); return }
+        persistSaved(Self.unknownHeld(), viewless: true)
+    }
+
+    private func persistSaved(_ v: OwnerCheckView, viewless: Bool = false) {
+        var saved = Saved(view: v, heldTs: heldTs, presenceUnrecorded: presenceUnrecorded, presenceCheckAt: presenceCheckAt)
+        saved.viewless = viewless ? true : nil
+        saved.idleLocked = idleLocked != nil
+        saved.idleAfter = idleLocked?.afterSeconds
+        saved.idleInForce = idleInForce
+        saved.idleAfterKnown = idleAfterKnown
+        saved.lockedHere = lockedHere
+        if let b = try? JSONEncoder().encode(saved) { try? persist(Array(b)) }
+    }
+
     private func set(_ view: OwnerCheckView) {
         var v = view
         // STAGING-TIME-SCALE §5.2: a new deadline's early warning takes the scale known now; the same deadline keeps the
@@ -400,8 +544,9 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         // Newer than what the file held: the file is not read over it.
         loaded = true
         ownerCheck = v
-        let saved = Saved(view: v, heldTs: heldTs, presenceUnrecorded: presenceUnrecorded, presenceCheckAt: presenceCheckAt)
-        if let b = try? JSONEncoder().encode(saved) { try? persist(Array(b)) }
+        // Before the deadline the idle lock's time is the deadline plus the value in force (§3.6.8).
+        if v.state == .ok, let d = v.deadline, now() < d, let after = v.idleAfterSeconds { idleAfterKnown = after }
+        persistSaved(v)
     }
 
     /// Runs [body] and turns every failure into a ``VaultFailure``.
@@ -427,76 +572,5 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime]
         return f.string(from: d)
-    }
-
-    /// What is kept on the phone. `waiting` nil: the vault has not said what is waiting (never zero for unknown);
-    /// `heldTs`: the `ts` of the `vault.held` the counts came from.
-    private struct Saved: Codable {
-        var state: OwnerCheckState
-        var deadline: Date?
-        var interval: Int64
-        var failures: Int
-        var hold: Bool
-        var holdOffUntil: Date?
-        var waiting: WaitingCounts?
-        var heldTs: Date?
-        var presenceUnrecorded: Bool
-        var presenceCheckAt: Date?
-        /// The deadline's time scale; absent in a file written before it (1).
-        var timeScale: UInt64?
-
-        init(view v: OwnerCheckView, heldTs: Date?, presenceUnrecorded: Bool, presenceCheckAt: Date?) {
-            state = v.state
-            deadline = v.deadline
-            interval = v.intervalSeconds
-            failures = v.failures
-            hold = v.hold
-            holdOffUntil = v.holdOffUntil
-            waiting = v.waiting
-            self.heldTs = heldTs
-            self.presenceUnrecorded = presenceUnrecorded
-            self.presenceCheckAt = presenceCheckAt
-            timeScale = v.timeScale
-        }
-
-        var view: OwnerCheckView {
-            OwnerCheckView(
-                state: state, deadline: deadline, intervalSeconds: interval, failures: failures, hold: hold,
-                holdOffUntil: holdOffUntil, waiting: waiting, timeScale: max(timeScale ?? 1, 1)
-            )
-        }
-    }
-}
-
-/// A status read that may finish after its wait ended (it is then not used).
-@MainActor
-private final class FreshStatus {
-    var view: OwnerCheckView?
-}
-
-/// ``OwnerCheckOps`` over the vault client. Mirrors vettid-android `VaultOwnerCheckOps`.
-struct VaultOwnerCheckOps: OwnerCheckOps {
-    let api: VaultApi
-    /// Runs before the check is sent: refuses it while a change of PIN or password is unresolved (VAULT-MESSAGING
-    /// §11.14.9 "A lost answer").
-    var gate: @Sendable () async throws -> Void = {}
-    /// Hears each `vault.status` (its `time_scale`, STAGING-TIME-SCALE §5.2).
-    var onStatus: @Sendable (VaultStatusInfo) async -> Void = { _ in }
-
-    func statusAndRecovery() async throws -> (OwnerCheckStatus?, RecoveryStatus?) {
-        let s = try await api.status()
-        await onStatus(s)
-        return (s.ownerCheck, s.recovery)
-    }
-
-    func check(pin: String, password: String, hold: Bool?, holdOffUntil: String?) async throws -> OwnerCheckPassed {
-        try await gate()
-        return try await api.ownerCheck(pin: pin, password: password, hold: hold, holdOffUntil: holdOffUntil)
-    }
-
-    func settingsGet() async throws -> VaultSettings { try await api.settingsGet() }
-
-    func settingsSet(version: UInt64, set: [(key: String, json: String)]) async throws {
-        _ = try await api.settingsSet(version: version, set: set)
     }
 }

@@ -151,6 +151,12 @@ public struct OwnerCheckScreen: View {
                 SmallNote(state.stagingNote)
                 if state.presenceUnrecorded { PresenceNotice(scaledQuiet: state.scaledQuietText) }
                 if let card = WaitingCardModel.of(state.mode, state.view, now: now) { WaitingCard(model: card) }
+                // (Release L, §3.6.8) The held and daily-check screens say when the vault locks itself.
+                if let at = idleLockAtOf(state.mode, state.view, now: now) {
+                    Text(OnboardingStrings.ownerCheckIdleLockAt(at.formatted(date: .abbreviated, time: .shortened)))
+                        .vettIDFont(.bodyMedium)
+                        .accessibilityIdentifier("owner_check_idle_lock_at")
+                }
                 if state.mode == .holdOff {
                     NoticeCard(
                         .warning,

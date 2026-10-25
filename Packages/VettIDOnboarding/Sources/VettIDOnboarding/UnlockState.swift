@@ -81,6 +81,9 @@ public struct UnlockState: Equatable, Sendable, CustomStringConvertible, CustomD
     public var password = ""
     /// The vault locked after ten failed checks (§3.6.4; from the owner check).
     public var lockedByOwnerCheck = false
+    /// (Release L, VAULT-MESSAGING §3.6.8) The vault locked itself because no check was passed in time: said here, with the
+    /// unlock and the check on the same screen.
+    public var idleLocked: IdleLocked?
     /// (Release R) The vault has a phone secret: cancelling a recovery from here sends the owner check at once.
     public var phoneSecret = false
     /// (Release R, §11.14.10) Why the last "Finish the move" did not open the vault.

@@ -275,6 +275,34 @@ enum SettingsStrings {
         String(localized: "settings_owner_check_hold_off_until", defaultValue: "Off until \(s)", bundle: .module)
     }
 
+    /// Release L (VAULT-MESSAGING §3.6.8): the idle lock's setting. Label, note and body as ANDROID-PLAN §4 "Locking the
+    /// vault" part 2 (approved by the owner 2026-10-24), under vettid-android's keys.
+    static var idleLock: String {
+        String(localized: "settings_idle_lock", defaultValue: "Lock my vault by itself after", bundle: .module)
+    }
+
+    static var idleLockNextCheck: String {
+        String(localized: "settings_idle_lock_next_check", defaultValue: "This takes effect after your next check.", bundle: .module)
+    }
+
+    static var idleLockBody: String {
+        String(
+            localized: "settings_idle_lock_body",
+            defaultValue: """
+                If you don't pass the daily check for this long, your vault locks itself and stops receiving until you unlock it.
+                """,
+            bundle: .module
+        )
+    }
+
+    static func idleLockHours(_ n: Int) -> String {
+        String(localized: "settings_idle_lock_hours", defaultValue: "\(n) hours", bundle: .module)
+    }
+
+    static func idleLockDays(_ n: Int) -> String {
+        String(localized: "settings_idle_lock_days", defaultValue: "\(n) days", bundle: .module)
+    }
+
     static var ownerCheckOfferTitle: String {
         String(localized: "settings_owner_check_offer_title", defaultValue: "Check now?", bundle: .module)
     }

@@ -117,6 +117,28 @@ import VettIDUI
         window.isHidden = true
     }
 
+    /// Release L (VAULT-MESSAGING §3.6.8): the vault locked itself; the unlock and the check on one screen; the texts as
+    /// ANDROID-PLAN §4 "Locking the vault" part 2 words them; a day is "1 day"; staging adds its note.
+    @Test func anIdleLockIsSaidAndItsTextsAreAndroids() {
+        #expect(OnboardingStrings.unlockIdleLockedTitle == "Your vault locked itself")
+        #expect(OnboardingStrings.unlockIdleLocked(604_800)
+            == "You hadn't checked in for 7 days, so your vault locked. Unlock it with your PIN to carry on. "
+            + "New messages wait for up to 14 days.")
+        #expect(OnboardingStrings.unlockIdleLocked(86_400).hasPrefix("You hadn't checked in for 1 day, so"))
+        #expect(OnboardingStrings.unlockIdleLocked(25_200).hasPrefix("You hadn't checked in for 7 hours, so"))
+        #expect(OnboardingStrings.unlockIdleLocked(nil)
+            == "You hadn't checked in, so your vault locked. Unlock it with your PIN to carry on. New messages wait for up to 14 days.")
+        #expect(OnboardingStrings.ownerCheckIdleLockAt("Oct 13, 2026 at 11:00 AM")
+            == "Your vault locks itself on Oct 13, 2026 at 11:00 AM if you don't check in.")
+        for (after, scale) in [(Int64?.some(604_800), UInt64(1)), (25_200, 24), (nil, 1)] {
+            var s = ok
+            s.checkDue = true
+            s.idleLocked = IdleLocked(afterSeconds: after)
+            s.timeScale = scale
+            #expect(height(UnlockScreen(state: s, actions: NoUnlockActions())) > 0)
+        }
+    }
+
     @Test func theTextsAreAndroids() {
         #expect(OnboardingStrings.unlockTitle == "Unlock your vault")
         #expect(OnboardingStrings.unlockBodyAccount("m***@example.com") == "Enter the vault PIN for m***@example.com.")

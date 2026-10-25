@@ -57,6 +57,9 @@ public struct OwnerCheckView: Equatable, Sendable {
     /// (STAGING-TIME-SCALE §5.2) The vault's time scale when this deadline was learnt: the early warning starts
     /// ``warningAhead`` divided by it before the deadline, and keeps that time if the scale changes later.
     public var timeScale: UInt64
+    /// (VAULT-MESSAGING §3.6.8, release L) When the vault locks itself if no check is passed, as it last said
+    /// (`vault.status`, `vault.held`); nil from a vault before L, and until it said again after a check moved the deadline.
+    public var idleLockAt: Date?
 
     public init(
         state: OwnerCheckState,
@@ -66,7 +69,8 @@ public struct OwnerCheckView: Equatable, Sendable {
         hold: Bool = true,
         holdOffUntil: Date? = nil,
         waiting: WaitingCounts? = nil,
-        timeScale: UInt64 = TimeScale.real
+        timeScale: UInt64 = TimeScale.real,
+        idleLockAt: Date? = nil
     ) {
         self.state = state
         self.deadline = deadline
@@ -76,6 +80,15 @@ public struct OwnerCheckView: Equatable, Sendable {
         self.holdOffUntil = holdOffUntil
         self.waiting = waiting
         self.timeScale = timeScale
+        self.idleLockAt = idleLockAt
+    }
+
+    /// How long past the deadline the vault locks itself, as it last said (``idleLockAt`` less ``deadline``, on the vault's
+    /// clock and in its time); nil when either is not known.
+    public var idleAfterSeconds: Int64? {
+        guard let idleLockAt, let deadline else { return nil }
+        let s = Int64(idleLockAt.timeIntervalSince(deadline).rounded())
+        return s > 0 ? s : nil
     }
 
     /// Past the deadline: the app may send only the check (§3.6.3), whether or not the hold is on.
@@ -96,6 +109,39 @@ public struct OwnerCheckView: Equatable, Sendable {
 
     /// Failed checks left before the vault locks (10 − `failures`, §3.6.5).
     public var checksLeft: Int { max(Self.maxFailures - failures, 0) }
+}
+
+/// (VAULT-MESSAGING §3.6.8, release L) The vault locked itself because no check was passed in time
+/// (`vault.locking{reason: "idle"}`, or, without the notice, a locked vault past the ``OwnerCheckView/idleLockAt`` the app
+/// last read). ``afterSeconds``: how long past the deadline that was, when known ("You hadn't checked in for 7 days").
+/// Mirrors vettid-android `IdleLocked`.
+public struct IdleLocked: Equatable, Sendable, Codable {
+    public let afterSeconds: Int64?
+
+    public init(afterSeconds: Int64?) { self.afterSeconds = afterSeconds }
+}
+
+/// (Release L) `idle_lock.after_seconds` (§10.8), as the app knows it: ``seconds`` is what is set; ``inForceSeconds`` what
+/// the vault uses until the next successful check when a longer value was set since the last one (the vault keeps the
+/// lowest value since then; owner decision 2026-10-23), else ``seconds``. Mirrors vettid-android `IdleLockSetting`.
+public struct IdleLockSetting: Equatable, Sendable {
+    public let seconds: Int64
+    public let inForceSeconds: Int64
+
+    public init(seconds: Int64, inForceSeconds: Int64? = nil) {
+        self.seconds = seconds
+        self.inForceSeconds = inForceSeconds ?? seconds
+    }
+
+    /// A longer value than the one in force was set: it takes effect after the next check.
+    public var afterNextCheck: Bool { seconds > inForceSeconds }
+
+    /// 1 hour to 30 days, default 7 days, no "never" (§3.6.8, VAULT-LOCK L11, L12).
+    public static let minSeconds: Int64 = 3_600
+    public static let maxSeconds: Int64 = 2_592_000
+    public static let defaultSeconds: Int64 = 604_800
+    /// The choices (ANDROID-PLAN §4 "Locking the vault" part 2): 1 hour, 1 day, 7 days, 14 days, 30 days.
+    public static let choices: [Int64] = [3_600, 86_400, 604_800, 1_209_600, 2_592_000]
 }
 
 /// The answer to a check (§3.6.1). Mirrors vettid-android `OwnerCheckOutcome`.
@@ -147,6 +193,30 @@ public protocol OwnerCheckRepository: AnyObject, Observable, Sendable {
     /// The vault locked after ten consecutive failed checks (`vault.locking{reason: "owner_check"}`, §3.6.4).
     var lockedByOwnerCheck: Bool { get }
 
+    /// (Release L, §3.6.8) The vault locked itself (`vault.locking{reason: "idle"}`); nil otherwise. Kept on the phone until
+    /// the next unlock. Without the notice, see ``idleLockedNow(_:)``. Default: nil.
+    var idleLocked: IdleLocked? { get }
+
+    /// (Release L) The idle-lock setting; nil for a vault that does not have it (before L) or before it was read
+    /// (``refreshIdleLockSetting()``). Default: nil.
+    var idleLockSetting: IdleLockSetting? { get }
+
+    /// (Release L) Why the locked vault is locked, if it locked itself: the notice (``idleLocked``), or, lacking it (the
+    /// phone was off), a time past the ``OwnerCheckView/idleLockAt`` the app last read ("the app says why from the notice
+    /// or, lacking it, from `idle_lock_at` as it last read it", §3.6.8), unless the member locked the vault on this phone
+    /// since or it locked for another reason (``onLockedHere()``).
+    func idleLockedNow(_ now: Date) -> IdleLocked?
+
+    /// (Release L) The member locked the vault on this phone: a later unlock screen does not say it locked itself.
+    func onLockedHere()
+
+    /// Reads `idle_lock.after_seconds` (`settings.get`); quiet for a vault before L, which does not list it.
+    func refreshIdleLockSetting() async throws
+
+    /// Sets `idle_lock.after_seconds` (one of ``IdleLockSetting/choices``): a shorter value applies at once, a longer one
+    /// from the next successful check (§3.6.8).
+    func setIdleLockAfter(seconds: Int64) async throws
+
     /// The answer to the check sent right after an unlock past the deadline, for the check screen to show.
     var unlockCheckOutcome: OwnerCheckOutcome? { get }
 
@@ -188,6 +258,12 @@ public protocol OwnerCheckRepository: AnyObject, Observable, Sendable {
 }
 
 public extension OwnerCheckRepository {
+    var idleLocked: IdleLocked? { nil }
+    var idleLockSetting: IdleLockSetting? { nil }
+    func onLockedHere() {}
+    func refreshIdleLockSetting() async throws {}
+    func setIdleLockAfter(seconds: Int64) async throws {}
+
     var notices: [OwnerCheckNotice] { [] }
     var presenceUnrecorded: Bool { false }
     var checkAfterCancel: Bool { false }

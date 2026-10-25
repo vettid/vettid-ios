@@ -62,6 +62,14 @@ public struct WaitingCardModel: Equatable, Sendable {
     }
 }
 
+/// (Release L, VAULT-MESSAGING §3.6.8) When the vault locks itself if no check is passed, as it last said: on the gated check
+/// (held, or due with the hold off) only; nil for a vault before L, and once that time has passed (a call in progress delays
+/// the lock; the line would name a time gone by). Mirrors vettid-android `idleLockAtOf`.
+public func idleLockAtOf(_ mode: OwnerCheckMode, _ v: OwnerCheckView?, now: Date) -> Date? {
+    guard mode == .gated, let at = v?.idleLockAt, now < at else { return nil }
+    return at
+}
+
 /// The owner-check screen's state. The PIN is here only from the member's "Check" until the answer; the password only
 /// until the answer (§3.6.5: neither entry is kept beyond it). Never printed: the description names no secret. Mirrors
 /// vettid-android `OwnerCheckUiState`.

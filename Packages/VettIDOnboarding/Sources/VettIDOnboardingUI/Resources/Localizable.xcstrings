@@ -1497,6 +1497,50 @@
         }
       }
     },
+    "unlock_idle_locked_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault locked itself"
+          }
+        }
+      }
+    },
+    "unlock_idle_locked_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You hadn't checked in for %@, so your vault locked. Unlock it with your PIN to carry on. New messages wait for up to 14 days."
+          }
+        }
+      }
+    },
+    "unlock_idle_locked_body_unknown": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You hadn't checked in, so your vault locked. Unlock it with your PIN to carry on. New messages wait for up to 14 days."
+          }
+        }
+      }
+    },
+    "ownercheck_idle_lock_at": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault locks itself on %@ if you don't check in."
+          }
+        }
+      }
+    },
     "unlock_owner_check_locked_body": {
       "extractionState": "manual",
       "localizations": {

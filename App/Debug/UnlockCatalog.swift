@@ -101,6 +101,14 @@ enum UnlockCatalog {
             s.checkDue = true
             s.lockedByOwnerCheck = true
         }
+        add("idle_locked", "Locked itself (7 days)") { s in
+            s.checkDue = true
+            s.idleLocked = IdleLocked(afterSeconds: 604_800)
+        }
+        add("idle_locked_unknown", "Locked itself (time not known)") { s in
+            s.checkDue = true
+            s.idleLocked = IdleLocked(afterSeconds: nil)
+        }
         add("recovery", "A recovery is in progress") { s in
             s.recoveryPending = true
             s.pin = "402817"

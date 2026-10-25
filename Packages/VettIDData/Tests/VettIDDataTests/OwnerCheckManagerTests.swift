@@ -19,6 +19,7 @@ final class FakeOwnerCheckOps: OwnerCheckOps, @unchecked Sendable {
     private var answerDeadlineValue: String? = "2026-10-07T12:00:00Z"
     private var checksValue: [[String?]] = []
     private var setsValue: [[String: String]] = []
+    private var settingsValue: [String: String] = [:]
 
     /// `vault.status`'s `owner_check` as its JSON text, or nil (a vault that sends none).
     var status: String? {
@@ -76,10 +77,19 @@ final class FakeOwnerCheckOps: OwnerCheckOps, @unchecked Sendable {
         return try VaultJSON.decode(OwnerCheckPassed.self, Array((o + "}").utf8))
     }
 
-    func settingsGet() async throws -> VaultSettings { VaultSettings(version: 7, values: [:]) }
+    /// What `settings.get` lists (a vault before L lists no `idle_lock.after_seconds`).
+    var settings: [String: String] {
+        get { lock.withLock { settingsValue } }
+        set { lock.withLock { settingsValue = newValue } }
+    }
+
+    func settingsGet() async throws -> VaultSettings { VaultSettings(version: 7, values: settings) }
 
     func settingsSet(version: UInt64, set: [(key: String, json: String)]) async throws {
-        lock.withLock { setsValue.append(Dictionary(uniqueKeysWithValues: set.map { ($0.key, $0.json) })) }
+        lock.withLock {
+            setsValue.append(Dictionary(uniqueKeysWithValues: set.map { ($0.key, $0.json) }))
+            for (k, v) in set { settingsValue[k] = v }
+        }
     }
 }
 

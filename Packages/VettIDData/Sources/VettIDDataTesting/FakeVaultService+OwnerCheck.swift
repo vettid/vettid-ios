@@ -49,6 +49,20 @@ extension FakeVaultService {
     public var ownerCheckDeadline: Date? { locked { checkDeadline } }
     /// The credential version the vault holds (it rotates at each passed check).
     public var vaultCredentialVersion: Int64 { locked { credentialVersion } }
+    /// (Release L, §3.6.8) `idle_lock.after_seconds` as the vault holds it; the one in force until the next passed check
+    /// (the lowest set since the last one); and whether it has the idle lock (false: a vault before L, which lists neither
+    /// the setting nor `idle_lock_at`).
+    public var idleLockAfter: TimeInterval { locked { idleAfterValue } }
+    public var idleLockInForce: TimeInterval { locked { idleInForceValue } }
+    public var idleLockSupported: Bool {
+        get { locked { idleSupportedValue } }
+        set { locked { idleSupportedValue = newValue } }
+    }
+
+    /// When the vault locks itself if no check is passed: the deadline plus the value in force; nil without a credential
+    /// or for a vault before L.
+    public var idleLockAt: Date? { locked { idleAt() } }
+
     /// Whether the hold is off (§3.6.7).
     public var holdIsOff: Bool { locked { holdOffValue } }
 
@@ -76,8 +90,18 @@ extension FakeVaultService {
     /// `HoldOn`: the hold, back on by itself at `hold_off_until`. Callers hold ``cond``.
     private func holdOn() -> Bool { !holdOffValue || holdOffUntilValue.map { vaultNow >= $0 } == true }
 
-    /// The clock starts, or starts again (a passed check). Callers hold ``cond``.
+    /// `idle_lock_at` (§3.6.8). Callers hold ``cond``.
+    func idleAt() -> Date? {
+        guard idleSupportedValue, hasCredential, let d = checkDeadline else { return nil }
+        return d.addingTimeInterval(idleInForceValue)
+    }
+
+    /// `,"idle_lock_at":"…"` or nothing. Callers hold ``cond``.
+    func idleMember() -> String { idleAt().map { #","idle_lock_at":"\#(Timestamps.formatMillis($0))""# } ?? "" }
+
+    /// The clock starts, or starts again (a passed check; the value set is then the one in force). Callers hold ``cond``.
     func startCheckClock() {
+        idleInForceValue = idleAfterValue
         let now = vaultNow
         checkLastAt = now
         checkDeadline = now.addingTimeInterval(checkInterval)
@@ -104,7 +128,7 @@ extension FakeVaultService {
 
     private func sendHeld() throws {
         let w = waitingCounts
-        try reply("vault.held", #"{"deadline":"\#(checkDeadline.map(Timestamps.formatMillis) ?? "")","waiting":{"messages":\#(w[0]),"requests":\#(w[1]),"calls":\#(w[2]),"other":\#(w[3])}}"#)
+        try reply("vault.held", #"{"deadline":"\#(checkDeadline.map(Timestamps.formatMillis) ?? "")","waiting":{"messages":\#(w[0]),"requests":\#(w[1]),"calls":\#(w[2]),"other":\#(w[3])}\#(idleMember())}"#)
     }
 
     /// The credential blob of [version] of the credential of [generation] (a reset makes a new one; opaque to the app).
@@ -126,7 +150,7 @@ extension FakeVaultService {
             let w = waitingCounts
             oc += #","waiting":{"messages":\#(w[0]),"requests":\#(w[1]),"calls":\#(w[2]),"other":\#(w[3])}"#
         }
-        oc += "}"
+        oc += idleMember() + "}"
         let scale = timeScaleValue.map { ",\"time_scale\":\($0)" } ?? ""
         try reply(m.type, #"{"vault_id":"\#(vaultID)","state_seq":\#(stateSeq),"header_seq":\#(headerSeq),"provisional":\#(!confirmedValue),"devices":1,"connections":0,"owner_check":\#(oc),"recovery":{"state":"armed","attempts":{"used":0,"of":10},"counter":"\#(recoveryCounterValue)"}\#(scale)\#(unlockMember)}"#, re: m.id)
     }
@@ -140,6 +164,12 @@ extension FakeVaultService {
                 checkDeadline = last.addingTimeInterval(interval)
             }
             checkInterval = interval
+        }
+        // (Release L) A shorter idle-lock value applies at once; a longer one from the next passed check, the lowest since
+        // the last one staying in force. A vault before L ignores the key.
+        if idleSupportedValue, let secs = try set.optUint("idle_lock.after_seconds", min: 3600, max: 2_592_000) {
+            idleAfterValue = TimeInterval(secs)
+            idleInForceValue = min(idleInForceValue, idleAfterValue)
         }
         if case .bool(_, true)? = set["owner_check.hold"] {
             holdOffValue = false

@@ -12,6 +12,9 @@ public struct OwnerCheckSettingsActions {
     public var checkNow: @MainActor () -> Void = {}
     public var dismissOffer: @MainActor () -> Void = {}
     public var dismissError: @MainActor () -> Void = {}
+    /// (Release L) `idle_lock.after_seconds`, one of ``IdleLockSetting/choices``.
+    public var setIdleLock: @MainActor (Int64) -> Void = { _ in }
+    public var dismissIdleNote: @MainActor () -> Void = {}
 
     public init() {}
 }
@@ -24,6 +27,7 @@ struct OwnerCheckSettingsRows: View {
     let actions: OwnerCheckSettingsActions
     let now: Date
     @State private var picker: IntervalPicker?
+    @State private var idlePicker: IdlePicker?
     @Environment(\.vettIDCovered) private var covered
 
     var body: some View {
@@ -41,6 +45,27 @@ struct OwnerCheckSettingsRows: View {
                         },
                         onDismiss: { picker = nil }
                     )
+                }
+                .choiceSheet(item: $idlePicker) { _ in
+                    ChoiceSheet(
+                        title: SettingsStrings.idleLock,
+                        options: IdleLockSetting.choices.map { ChoiceOption(value: $0, label: idleText($0)) },
+                        selected: state.idleLock?.seconds ?? IdleLockSetting.defaultSeconds,
+                        onPick: { seconds in
+                            idlePicker = nil
+                            actions.setIdleLock(seconds)
+                        },
+                        onDismiss: { idlePicker = nil }
+                    )
+                }
+                // A longer value was chosen: it takes effect after the next check (said once).
+                .alert(
+                    SettingsStrings.idleLock,
+                    isPresented: Binding(get: { state.idleLongerNote && !covered }, set: { if !$0 { actions.dismissIdleNote() } })
+                ) {
+                    Button(SettingsStrings.done, action: actions.dismissIdleNote)
+                } message: {
+                    Text(SettingsStrings.idleLockNextCheck)
                 }
                 .confirmDialog(
                     isPresented: Binding(get: { state.offerCheck }, set: { if !$0 { actions.dismissOffer() } }),
@@ -72,6 +97,8 @@ struct OwnerCheckSettingsRows: View {
         if let note = state.stagingNote {
             SmallNote(note).padding(.horizontal, Spacing.l).padding(.bottom, Spacing.s)
         }
+        // (Release L) Beside the interval: the idle lock, for a vault that has it.
+        if let idle = state.idleLock { idleRow(idle) }
         SettingsDivider()
         SettingsRow(
             SettingsStrings.ownerCheckNow, icon: .verifiedUser, supporting: SettingsStrings.ownerCheckNowBody, showChevron: false,
@@ -88,6 +115,33 @@ struct OwnerCheckSettingsRows: View {
         .accessibilityIdentifier("owner_check_hold")
     }
 
+    /// (Release L, VAULT-MESSAGING §3.6.8; ANDROID-PLAN §4 "Locking the vault" part 2) "Lock my vault by itself after", beside
+    /// the check's interval: 1 hour to 30 days, no "never"; in real units, and as it runs on a staging vault.
+    @ViewBuilder private func idleRow(_ idle: IdleLockSetting) -> some View {
+        let lines = [
+            idleText(idle.seconds),
+            idle.afterNextCheck ? SettingsStrings.idleLockNextCheck : nil,
+            SettingsStrings.idleLockBody,
+        ].compactMap { $0 }
+        SettingsDivider()
+        SettingsRow(
+            SettingsStrings.idleLock, icon: .lockClock, supporting: lines.joined(separator: "\n")
+        ) { idlePicker = .idleLock }
+        .accessibilityIdentifier("idle_lock")
+    }
+
+    /// A choice in its real units: "1 hour", "1 day", "7 days" (ANDROID-PLAN's names; the setting is whole hours or days),
+    /// with the scaled value on a staging vault.
+    private func idleText(_ seconds: Int64) -> String {
+        state.idleLockText(Self.idleLockUnits(seconds), seconds: seconds)
+    }
+
+    static func idleLockUnits(_ seconds: Int64) -> String {
+        seconds % IdleLockText.secondsPerDay == 0
+            ? SettingsStrings.idleLockDays(Int(seconds / IdleLockText.secondsPerDay))
+            : SettingsStrings.idleLockHours(Int(seconds / OwnerCheckSettingsViewModel.secondsPerHour))
+    }
+
     /// "Every hour", "Every 4 hours" (the catalog's plural); on a staging vault with its scaled value ("Every 24 hours
     /// (staging: 1 hour)").
     static func every(_ hours: Int) -> String { SettingsStrings.ownerCheckEvery(hours) }
@@ -99,6 +153,13 @@ struct OwnerCheckSettingsRows: View {
         if let until = v.holdOffUntil { return SettingsStrings.ownerCheckHoldOffUntil(SettingsTimes.full(until)) }
         return SettingsStrings.ownerCheckHoldOffBody
     }
+}
+
+/// The idle lock's choice is open.
+enum IdlePicker: String, Identifiable {
+    case idleLock
+
+    var id: String { rawValue }
 }
 
 /// The interval's choice is open.

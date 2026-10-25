@@ -55,6 +55,14 @@ import VettIDVault
         return nil
     }
 
+    /// Release L (VAULT-MESSAGING §3.6.8): `vault.locked` with `ref` `idle` reads "Vault locked itself (not checked in)".
+    @Test func anIdleLockHasItsOwnTitle() {
+        #expect(AuditKinds.title("vault.locked", "idle") == .known("history_kind_vault_locked_idle"))
+        #expect(HistoryKindTexts.text("history_kind_vault_locked_idle") == "Vault locked itself (not checked in)")
+        #expect(AuditKinds.title("vault.locked", "owner_check") == .known("history_kind_vault_locked"))
+        #expect(AuditKinds.title("vault.locked") == .known("history_kind_vault_locked"))
+    }
+
     /// IOS-PLAN 0.1.18: the one-time keys' resync is a Security entry with its own title.
     @Test func aUtkResyncIsUnderSecurity() {
         #expect(AuditCategory.of("credential.utk_resync") == .security)
@@ -171,7 +179,7 @@ import VettIDVault
             .appendingPathComponent("Sources/VettIDHistory/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 345)
+        #expect(keys.count == 346)
         let missing = "\u{0}missing"
         for key in keys {
             let text = HistoryKindTexts.bundle.localizedString(forKey: key, value: missing, table: nil)
@@ -179,7 +187,7 @@ import VettIDVault
             #expect(key.hasPrefix("history_"), "\(key)")
         }
         // The kinds' table in the code is the same as the bundle's.
-        #expect(Set(HistoryKindTexts.english.keys).isSubset(of: Set(keys)) && HistoryKindTexts.english.count == 232)
+        #expect(Set(HistoryKindTexts.english.keys).isSubset(of: Set(keys)) && HistoryKindTexts.english.count == 233)
         let named = AuditKinds.named.values.flatMap { t -> [String] in if case .named(let a, let b, _) = t { [a, b] } else { [] } }
         for key in Array(AuditKinds.titles.values) + named {
             #expect(HistoryKindTexts.english[key] != nil, "\(key)")
