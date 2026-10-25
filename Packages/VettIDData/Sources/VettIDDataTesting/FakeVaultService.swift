@@ -223,6 +223,7 @@ public final class FakeVaultService: @unchecked Sendable {
     var statusUnauthorizedValue = false
     /// `GET /api/vault/status` answers `403 forbidden`.
     var statusForbiddenValue = false
+    var statusReadsValue = 0
     var holdsDeletionUnlinkValue = false
     var slotQueuedAfterDeletionValue = 0
     var statusGateValue: FakeHTTPServer.Gate?
@@ -368,6 +369,8 @@ public final class FakeVaultService: @unchecked Sendable {
     }
 
     /// `GET /api/vault/status` answers `401 unauthorized` to the app key.
+    /// How many `GET /api/vault/status` the service received.
+    public var statusReads: Int { locked { statusReadsValue } }
     public var statusUnauthorized: Bool {
         get { locked { statusUnauthorizedValue } }
         set { locked { statusUnauthorizedValue = newValue } }
@@ -461,6 +464,7 @@ public final class FakeVaultService: @unchecked Sendable {
             case ("POST", "/api/vault/recovery/register"): return recoveryRegister(r)
             case ("POST", "/api/vault/recovery/open"): return recoveryOpen(r)
             case ("GET", "/api/vault/status"):
+                statusReadsValue += 1
                 if statusUnauthorizedValue { return .json(401, #"{"error":"unauthorized"}"#) }
                 if statusForbiddenValue { return .json(403, #"{"error":"forbidden"}"#) }
                 let rs = recoveryStatusField()

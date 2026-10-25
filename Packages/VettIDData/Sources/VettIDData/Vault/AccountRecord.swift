@@ -94,6 +94,14 @@ struct LocalAccount: Codable, Equatable, Sendable {
     /// (IOS-PLAN §4.2) The vault said it is being deleted: a start opens on "being deleted" until the member API no longer
     /// lists it. Non-secret; erased with the record.
     var deleting: DeletingMarker?
+    /// (IOS-PLAN 0.1.33 §4.9) Which of the phone's two device identities (keys and device state file) is in use. The first
+    /// unless a phone that could not tell whether an open recovered the vault registered a new identity.
+    var activeIdentity = IdentitySet.first
+    /// (§4.9) The first of the two status reads of the rule, kept until the second ≥ 5 minutes later decides.
+    var couldNotTellRead: CouldNotTellRead?
+    /// (§4.9) A phone that could not tell: kept (with the key K and both identities) until the vault answered `ok` and the
+    /// pairing completed.
+    var couldNotTell: CouldNotTell?
 
     enum CodingKeys: String, CodingKey {
         case userGuid = "user_guid"
@@ -124,6 +132,9 @@ struct LocalAccount: Codable, Equatable, Sendable {
         case recoveryOpenUnanswered = "recovery_open_unanswered"
         case recoveryAttemptsUsed = "recovery_attempts_used"
         case deleting
+        case activeIdentity = "active_identity"
+        case couldNotTellRead = "could_not_tell_read"
+        case couldNotTell = "could_not_tell"
     }
 
     init() {}
@@ -165,6 +176,9 @@ struct LocalAccount: Codable, Equatable, Sendable {
         recoveryOpenUnanswered = try c.decodeIfPresent(Bool.self, forKey: .recoveryOpenUnanswered) ?? false
         recoveryAttemptsUsed = try c.decodeIfPresent(Int.self, forKey: .recoveryAttemptsUsed)
         deleting = try c.decodeIfPresent(DeletingMarker.self, forKey: .deleting)
+        activeIdentity = try c.decodeIfPresent(IdentitySet.self, forKey: .activeIdentity) ?? .first
+        couldNotTellRead = try c.decodeIfPresent(CouldNotTellRead.self, forKey: .couldNotTellRead)
+        couldNotTell = try c.decodeIfPresent(CouldNotTell.self, forKey: .couldNotTell)
     }
 
     /// The keep of a transfer ends (the vault's app again, or the notice's wipe): the stored time and period go, and the

@@ -253,6 +253,17 @@ extension FakeVaultRepository: MoveRepository {
 
     public func recoveryOpened() async throws -> Bool { recoveryOpenedValue }
 
+    public func couldNotTellStage() async throws -> CouldNotTellStage {
+        try call("couldNotTellStage")
+        return couldNotTellValue
+    }
+
+    public func checkCouldNotTell() async throws -> CouldNotTellStage {
+        try call("checkCouldNotTell")
+        if !couldNotTellChecks.isEmpty { couldNotTellValue = couldNotTellChecks.removeFirst() }
+        return couldNotTellValue
+    }
+
     public func resumeLostOk(pin: String) async throws -> RecoveryOpenOutcome {
         try call("resumeLostOk")
         lastPin = pin

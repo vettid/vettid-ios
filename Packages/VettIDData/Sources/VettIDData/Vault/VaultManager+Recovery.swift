@@ -9,18 +9,22 @@ private final class RegisterEpoch: @unchecked Sendable {
     private let lock = NSLock()
     private var id: String?
     private var madeHere: Bool?
+    private var fresh = false
 
     /// [created]: this call made the record; only then is it dropped when the register is refused.
-    func set(_ value: String, created: Bool) {
+    func set(_ value: String, created: Bool, freshIdentity: Bool = false) {
         lock.withLock {
             id = created ? value : nil
             madeHere = created
+            fresh = freshIdentity
         }
     }
 
     var value: String? { lock.withLock { id } }
     /// Whether no earlier register was built (nil: none was built by this call at all).
     var created: Bool? { lock.withLock { madeHere } }
+    /// (IOS-PLAN 0.1.33 §4.9) The register is the first of a new identity, which holds no earlier register of its own.
+    var freshIdentity: Bool { lock.withLock { fresh } }
 }
 
 /// A secret kept in one buffer, so that wiping it wipes what was sent.
@@ -86,17 +90,29 @@ extension VaultManager {
     public func registerRecovery(_ code: RecoveryCode) async throws -> RecoveryRegistration {
         try await guarded {
             let s = try await recoveryStart()
-            // Known beforehand for a scanned code: refused before the claim, which would use one of the API's claim keys.
-            try refuseOtherRecovery(s.device, code.recoveryID)
-            let claimed: Claimed
-            do {
+            // IOS-PLAN 0.1.33 §4.9: a phone that could not tell registers the new recovery with a new identity and the same K, and
+            // keeps the earlier registration; known beforehand for a scanned code, so that another vault's code is not claimed.
+            let rule = registersAsNewRecovery
+            if rule {
+                try requireEarlierVault(code.vaultID)
+            } else {
+                // Known beforehand for a scanned code: refused before the claim, which would use one of the API's claim keys.
+                try refuseOtherRecovery(s.device, code.recoveryID)
+            }
+            let claim: @Sendable () async throws -> Claimed = { [self] in
                 // §11.11.7: the claim gives this phone's key the right to register, and names the member.
-                claimed = try await member.recoveryClaim(
+                try await member.recoveryClaim(
                     vaultID: code.vaultID, recoveryID: code.recoveryID, appKey: try config.keys.appKeys.getOrCreate().spki()
                 )
+            }
+            let claimed: Claimed
+            do {
+                claimed = try await claim()
             } catch let e as MemberApiError {
+                if rule, e.code == MemberApiError.keyInUse { return try await claimKeyInUse() }
                 return try Self.claimRefusal(e)
             }
+            if rule { return try await registerAsNewIdentity(s, code, claimed, claimAgain: claim) }
             return try await registerClaimed(s, code, claimed)
         }
     }
@@ -106,14 +122,26 @@ extension VaultManager {
     public func registerTypedRecovery(_ typed: TypedRecoveryCode) async throws -> RecoveryRegistration {
         try await guarded {
             let s = try await recoveryStart()
+            let rule = registersAsNewRecovery
+            let claim: @Sendable () async throws -> Claimed = { [self] in
+                try await member.recoveryClaim(locator: typed.locator, appKey: try config.keys.appKeys.getOrCreate().spki())
+            }
             let claimed: Claimed
             do {
-                claimed = try await member.recoveryClaim(locator: typed.locator, appKey: try config.keys.appKeys.getOrCreate().spki())
+                claimed = try await claim()
             } catch let e as MemberApiError {
+                if rule, e.code == MemberApiError.keyInUse { return try await claimKeyInUse() }
                 return try Self.claimRefusal(e)
             }
             let code = try typed.recoveryCode(claimed: claimed, api: apiOrigin)
-            let r = try await registerClaimed(s, code, claimed)
+            let r: RecoveryRegistration
+            if rule {
+                // The vault is known only from the claim: another vault's code is no use for the rule.
+                try requireEarlierVault(code.vaultID)
+                r = try await registerAsNewIdentity(s, code, claimed, claimAgain: claim)
+            } else {
+                r = try await registerClaimed(s, code, claimed)
+            }
             // A refusal after the claim names the recovery, so that wrong codes are counted per recovery however they were read.
             if case .refused(let refusal, _) = r { return .refused(code: refusal, recoveryID: code.recoveryID) }
             return r
@@ -136,6 +164,11 @@ extension VaultManager {
         try prepared()
         let s = try await openSession()
         let d = s.device
+        if registersAsNewRecovery {
+            // IOS-PLAN 0.1.33 §4.9: two reads said the recovery ended; the phone keeps everything and registers the new one.
+            if d.hasVault || d.deviceID != nil { throw VaultFailure(.vaultExists) }
+            return s
+        }
         if d.recovering {
             // Opened by the vault's `ok` and not finished: that recovery is finished, not registered again.
             if d.hasVault || d.deviceID != nil { throw VaultFailure(.vaultExists) }
@@ -159,11 +192,16 @@ extension VaultManager {
 
     /// After the claim, however the code was read: the sealed `vault.recovery.register` (§11.11.3). The record is the
     /// claim's own, made now; what the registration writes belongs to it.
-    private func registerClaimed(_ s: VaultSession, _ code: RecoveryCode, _ claimed: Claimed) async throws -> RecoveryRegistration {
+    func registerClaimed(_ s: VaultSession, _ code: RecoveryCode, _ claimed: Claimed) async throws -> RecoveryRegistration {
         // A register of another recovery may have been taken (its answer lost) and bound this phone's key: the registration it
         // would overwrite is ended by a start over first (chosen; not in the spec).
         try refuseOtherRecovery(s.device, code.recoveryID)
-        try resetRecord(LocalAccount(userGuid: claimed.userGuid, vaultID: code.vaultID, emailHint: claimed.emailHint))
+        // IOS-PLAN 0.1.33 §4.9: the new identity is registered beside the earlier one, whose registration stands.
+        let beside = record.value.couldNotTell != nil
+        let fresh = beside && s.device.recoveryID == nil
+        var account = LocalAccount(userGuid: claimed.userGuid, vaultID: code.vaultID, emailHint: claimed.emailHint)
+        account.recoveryRegistered = beside
+        try resetRecord(account)
         publishAccount()
         let rec = record.generation
         let secrets = phoneSecrets
@@ -184,7 +222,7 @@ extension VaultManager {
                     // them); the register carries no secret, the open does.
                     var (made, created) = try secrets.reuseOrCreateNoting(keyVault: code.vaultID)
                     Bytes.wipe(&made.secret)
-                    epoch.set(made.id, created: created)
+                    epoch.set(made.id, created: created, freshIdentity: fresh)
                     await self?.noteRegistering(e, since: rec)
                     return try await s.device.prepareRecoveryRegister(userGuid: guid, code: code, enclave: e, attester: attester)
                 },
@@ -237,8 +275,11 @@ extension VaultManager {
     /// may have succeeded and bound the App Attest key, and this one is refused (`used`, `no_recovery`) because it did. Then the
     /// registration, the marks and the record stay (chosen; not in the spec: vettid-android drops the registration).
     private func dropRegistration(_ s: VaultSession, _ epoch: RegisterEpoch, since rec: Int) async throws {
-        guard epoch.created == true else { return }
+        guard epoch.created == true || epoch.freshIdentity else { return }
         try await s.device.dropRecoveryRegistration()
+        // A phone that could not tell keeps the earlier identity's registration, its marks and its phone-secret record: the new
+        // identity alone is forgotten (§4.9 "What it keeps").
+        guard record.value.couldNotTell == nil else { return }
         // Refused for certain: no vault holds the key this register attested.
         _ = try? record.update(since: rec) { $0.recoveryRegistered = false }
         config.attestStartOver?.set(recovering: false)
@@ -329,6 +370,16 @@ extension VaultManager {
     public func resumeLostOk(pin: String) async throws -> RecoveryOpenOutcome {
         try await guarded {
             try prepared()
+            // IOS-PLAN 0.1.33 §4.9: a phone that could not tell unlocks with each identity that may hold the vault's key.
+            if let ct = record.value.couldNotTell { return try await resumeLostOkEither(ct, pin: pin) }
+            return try await lostOkOnce(pin: pin)
+        }
+    }
+
+    /// The unlock of ``resumeLostOk(pin:)`` with the identity in use.
+    func lostOkOnce(pin: String) async throws -> RecoveryOpenOutcome {
+        try await guarded {
+            try prepared()
             let s = try await openSession()
             let d = s.device
             guard phoneSecrets.inUse, d.recovering else { throw VaultFailure(.notSupported, code: Self.codeNoRecovery) }
@@ -357,6 +408,8 @@ extension VaultManager {
             if !u.ok {
                 // The vault does not hold this phone's secret: no open of this phone was adopted.
                 if u.result.code == UnlockEpoch.deviceSecret { clearOpenMark(since: rec) }
+                // IOS-PLAN 0.1.33 §4.9: the open continues while the recovery shows `registered`; otherwise the rule applies.
+                if u.result.code == Self.transferIncomplete { try await noteTransferIncomplete() }
                 return RecoveryOpenOutcome(u.result.code ?? "retry", used: used, opened: true, attemptUsed: false)
             }
             // A result without `vault_bundle` from an unlock that opened: the vault accepts this phone's key, so an open may
@@ -379,10 +432,11 @@ extension VaultManager {
     private func finishOpened(
         _ s: VaultSession, pin: String, used: Int?, resuming: Bool, since rec: Int
     ) async throws -> RecoveryOpenOutcome {
-        let d = s.device
+        var s = s
         confirmRecoveredSecret()
         // The handshake only when it has not completed yet: a phone paired earlier fetches the credential straight away.
-        var refused = d.deviceID == nil ? try await pairRecovered(s, pin: pin, resuming: resuming) : nil
+        var refused: String?
+        if s.device.deviceID == nil { (refused, s) = try await pairRecovered(s, pin: pin, resuming: resuming) }
         if refused == nil { refused = try await fetchRecovered(s, pin: pin, unlockFirst: resuming) }
         if let refused { return RecoveryOpenOutcome(refused, used: used, opened: true) }
         // Only now, with the credential on this phone, is the recovery over (until then the phone resumes it). The vault was
@@ -391,8 +445,10 @@ extension VaultManager {
             $0.enrollConfirmed = true
             $0.recoveryOpenUnanswered = false
         }
-        try await d.finishRecoveryOpen()
+        try await s.device.finishRecoveryOpen()
         config.attestStartOver?.set(recovering: false)
+        // IOS-PLAN 0.1.33 §4.9: the vault answered `ok` and the pairing completed; the identity that did not pair goes now.
+        settleCouldNotTell()
         return RecoveryOpenOutcome("ok", used: used)
     }
 
@@ -404,16 +460,24 @@ extension VaultManager {
         usesPhoneSecret = phoneSecrets.inUse
     }
 
+    /// How long the recovered phone waits for the vault's `hs.resp`.
+    func handshakeWait(resuming: Bool) -> TimeInterval {
+        config.pairingWait ?? (resuming ? Self.resumeHandshakeWait : Self.openedHandshakeWait)
+    }
+
     /// The recovered phone's handshake; unanswered, an unlock with its own key and the handshake again. The unlock's refusal
-    /// code.
-    private func pairRecovered(_ s: VaultSession, pin: String, resuming: Bool) async throws -> String? {
+    /// code, and the session that paired (the earlier identity's, for a phone that could not tell whose invitation it was).
+    private func pairRecovered(_ s: VaultSession, pin: String, resuming: Bool) async throws -> (String?, VaultSession) {
         do {
-            try await s.device.completeRecoveryOpen(timeout: resuming ? Self.resumeHandshakeWait : Self.openedHandshakeWait)
-            return nil
+            try await s.device.completeRecoveryOpen(timeout: handshakeWait(resuming: resuming))
+            return (nil, s)
         } catch let e as VaultStateError where VaultFailures.noResponse(e) {
-            if let refusal = try await unlockOwn(s, pin: pin, cause: e) { return refusal }
+            // IOS-PLAN 0.1.33 §4.9: the vault answers a handshake it does not accept with nothing. After the new open's `ok` the
+            // invitation may be the earlier identity's, under the earlier `recovery_id`.
+            if let earlier = try await pairEarlierIdentity(pin: pin) { return earlier }
+            if let refusal = try await unlockOwn(s, pin: pin, cause: e) { return (refusal, s) }
             try await s.device.completeRecoveryOpen()
-            return nil
+            return (nil, s)
         }
     }
 
@@ -431,7 +495,7 @@ extension VaultManager {
     }
 
     /// An unlock with this phone's own key (the vault made it its app): nil when it opened, else the vault's code.
-    private func unlockOwn(_ s: VaultSession, pin: String, cause: any Error) async throws -> String? {
+    func unlockOwn(_ s: VaultSession, pin: String, cause: any Error) async throws -> String? {
         let u = try await unlockWithSecret(s, pin: pin, options: UnlockOptions(), path: .current)
         if u.ok { return nil }
         guard let code = u.result.code else { throw VaultFailure(.noResponse, code: "recovery_unlock", cause: cause) }
@@ -490,6 +554,8 @@ extension VaultManager {
         let abandoned: Bool = try await guarded {
             try prepared()
             guard let d = try await storedSession()?.device, d.recovering else { return false }
+            // IOS-PLAN 0.1.33 §4.9: never while the phone could not tell (K and both identities stay).
+            if record.value.couldNotTell != nil { throw VaultFailure(.other, code: Self.codeRecoveryOpenSent) }
             // Release R (§11.14.6): after `ok` the vault's only unlock key is this phone's; it is never deleted here. Whatever the
             // phone's records say (they may be unreadable now): a pinned or paired vault, or an open that may have succeeded.
             if d.hasVault || d.deviceID != nil || d.recoveryOpenedNotFinished {

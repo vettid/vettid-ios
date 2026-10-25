@@ -196,12 +196,13 @@ extension FakeVaultService {
         if case .offline = answer { return .failure(.notConnectedToInternet) }
         if case .unavailable = answer { return .json(503, #"{"error":"vault_unavailable"}"#) }
         guard let o = try? StrictJson.parseObject(r.body), let rid = try? o.string("request_id"), let env = try? o.base64("envelope"),
-              let request = try? openRequest(env), let body = try? StrictJson.parseObject(request.body), let kem = device?.kem ?? recovery.phone?.kem
+              let request = try? openRequest(env), let body = try? StrictJson.parseObject(request.body),
+              let kem = device?.kem ?? recovery.phone?.kem ?? recovery.earlierPhone?.kem
         else { return .json(400, #"{"error":"bad_request"}"#) }
         let pin = (try? body.string("pin")) ?? ""
         // The member API never forwards the recovering key's unlock (MEMBER-API 2.7.0): `403` while the recovery is active, a bare
         // `401` once it ended.
-        if device == nil, recovery.phone != nil, !recovery.phoneHoldsUnlockKey {
+        if device == nil, recovery.phone != nil || recovery.earlierPhone != nil, !recovery.phoneHoldsUnlockKey {
             return recovery.cancelled ? .json(401, #"{"error":"unauthorized"}"#) : .json(403, #"{"error":"forbidden"}"#)
         }
         let secret = try? body.base64("unlock_secret")

@@ -16,8 +16,16 @@ public final class TestAttester: Attester, @unchecked Sendable {
     private var attestedKeys: [[UInt8]] = []
     private var confirmedKeys: [[UInt8]] = []
     private var discardedKeys: [[UInt8]] = []
+    private var identity = 0
+    private var assertedBy: [Int] = []
+    private var forgottenIdentities: [Int] = []
 
     public init() {}
+
+    /// The device identity (IOS-PLAN 0.1.33 §4.9) in use now, and the one in use at each assertion, in order.
+    public var identityInUse: Int { lock.withLock { identity } }
+    public var assertionIdentities: [Int] { lock.withLock { assertedBy } }
+    public var forgotten: [Int] { lock.withLock { forgottenIdentities } }
 
     /// The key ids attested, in order.
     public var attested: [[UInt8]] { lock.withLock { attestedKeys } }
@@ -31,11 +39,14 @@ public final class TestAttester: Attester, @unchecked Sendable {
     }
 
     public func assert(_ signed: AttestSigned) throws -> DeviceAssertion {
-        try DeviceAssertion.iosAssertion(Bytes.sha256(signed.clientDataHash))
+        lock.withLock { assertedBy.append(identity) }
+        return try DeviceAssertion.iosAssertion(Bytes.sha256(signed.clientDataHash))
     }
 
     public func confirm(keyID: [UInt8]) throws { lock.withLock { confirmedKeys.append(keyID) } }
     public func discard(keyID: [UInt8]) throws { lock.withLock { discardedKeys.append(keyID) } }
+    public func use(identity n: Int) throws { lock.withLock { identity = n } }
+    public func forget(identity n: Int) throws { lock.withLock { forgottenIdentities.append(n) } }
 }
 
 /// TEST ONLY. One iPhone running the app against a ``FakeVaultService``: software keys behind the Secure Enclave's
@@ -220,6 +231,8 @@ public final class TestVaultPhone {
         c.transferDeadlineSleep = { d in try await deadline.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
         c.transferCollectSleep = { d in try await collect.sleep(Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18) }
         c.uptime = { uptime.monotonic }
+        // A handshake the vault does not answer is seen within seconds (it is 90 s after `ok`, and 30 s when resuming).
+        c.pairingWait = 4
         return c
     }
 
