@@ -21,7 +21,7 @@ import VettIDVault
         var value: UInt64 = 1
     }
 
-    func manager(_ ops: FakeOwnerCheckOps) -> OwnerCheckManager {
+    func manager(_ ops: FakeOwnerCheckOps, loaded: Bool = true) -> OwnerCheckManager {
         let stored = stored
         let now = now
         let scale = scale
@@ -29,7 +29,7 @@ import VettIDVault
             ops: { ops }, load: { stored.bytes }, persist: { stored.bytes = $0 }, now: { now }, sleep: { _ in },
             timeScale: { scale.value }
         )
-        m.loadIfNeeded()
+        if loaded { m.loadIfNeeded() }
         return m
     }
 
@@ -166,6 +166,25 @@ import VettIDVault
         try await readBeforeTheDeadline(ops, again)
         #expect(again.idleLockedNow(at(idleAt).addingTimeInterval(60)) == nil)
         #expect(manager(FakeOwnerCheckOps()).idleLockedNow(at(idleAt).addingTimeInterval(60)) == nil)
+    }
+
+    /// A notice, a lock or an opening that arrives before the kept state was read changes it, and does not lose what was kept.
+    @Test func whatIsKeptIsReadBeforeAFlagChanges() async throws {
+        let ops = FakeOwnerCheckOps()
+        let later = at(idleAt).addingTimeInterval(60)
+        try await readBeforeTheDeadline(ops, manager(ops))
+        // A lock before the file was read: kept, with the view.
+        manager(ops, loaded: false).onLockedHere()
+        #expect(manager(ops).idleLockedNow(later) == nil)
+        manager(ops, loaded: false).onOpened()
+        #expect(manager(ops).idleLockedNow(later) == IdleLocked(afterSeconds: 604_800))
+        // A notice before the file was read, then an opening before it was read: nothing stale stays.
+        manager(ops, loaded: false).onEvent(event("vault.locking", #"{"reason":"idle"}"#))
+        #expect(manager(ops).idleLocked == IdleLocked(afterSeconds: 604_800))
+        manager(ops, loaded: false).onOpened()
+        let restarted = manager(ops)
+        #expect(restarted.idleLocked == nil)
+        #expect(restarted.ownerCheck?.idleLockAt == at(idleAt))
     }
 
     /// The setting: none for a vault before L; a shorter value in force at once, a longer one after the next check, and the

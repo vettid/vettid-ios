@@ -180,6 +180,8 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     }
 
     private func locking(reason: String?) {
+        // What was kept is read first: it must not replace what is changed here.
+        loadIfNeeded()
         switch reason {
         case Self.reasonOwnerCheck:
             lockedByOwnerCheck = true
@@ -231,6 +233,7 @@ public final class OwnerCheckManager: OwnerCheckRepository {
 
     /// The vault is open again: it no longer is locked by itself.
     private func endIdleLocked() {
+        loadIfNeeded()
         if idleLocked == nil, !lockedHere { return }
         idleLocked = nil
         lockedHere = false
@@ -387,6 +390,7 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     }
 
     public func onLockedHere() {
+        loadIfNeeded()
         lockedHere = true
         saveFlags()
     }

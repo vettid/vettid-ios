@@ -72,6 +72,9 @@ import VettIDDataTesting
         let later = idleAt.addingTimeInterval(60)
         try await m.lock()
         #expect(checks.idleLockedNow(later) == nil)
+        // Opened again, the flag is reset: the time passed says it locked itself; a lock again then does not.
+        #expect(try await m.unlockWithCheck(pin: pin, password: password) == .success)
+        #expect(checks.idleLockedNow(later) != nil)
         await m.lockAgain()
         #expect(checks.idleLockedNow(later) == nil)
     }
