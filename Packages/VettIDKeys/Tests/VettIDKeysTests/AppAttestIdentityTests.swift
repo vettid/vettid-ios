@@ -1,0 +1,133 @@
+import Foundation
+import Testing
+import VettIDCrypto
+@testable import VettIDKeys
+import VettIDKeysTesting
+
+/// A phone that could not tell holds two device identities (IOS-PLAN 0.1.33 §4.9), and the vault bound each one's own App Attest
+/// key at its register: the keys of the identity in use are the current and pending ones, the other's wait untouched.
+@Suite struct AppAttestIdentityTests {
+    let challenge = [UInt8](repeating: 7, count: 32)
+
+    func make(_ fake: FakeAppAttest, _ store: MemoryKeyIDStore = MemoryKeyIDStore()) -> AppAttestKey {
+        AppAttestKey(
+            service: fake, keyID: store, aside: MemoryKeyIDStore(), mayStartOver: { false }, backoff: [], sleep: { _ in },
+            checkThread: false
+        )
+    }
+
+    func asserted(_ key: AppAttestKey) throws -> String {
+        guard case .ios(let assertion) = try key.assert(clientDataHash: challenge) else { throw TestFailure("not iOS") }
+        return String(bytes: assertion.dropLast(32), encoding: .utf8) ?? ""
+    }
+
+    func attested(_ key: AppAttestKey) throws -> [UInt8] {
+        guard case .ios(let id, _) = try key.attest(clientDataHash: challenge) else { throw TestFailure("not iOS") }
+        return id
+    }
+
+    @Test func theEarlierIdentitysKeyIsKeptWhileTheNewIdentityIsConfirmed() throws {
+        let fake = FakeAppAttest()
+        let store = MemoryKeyIDStore()
+        let key = make(fake, store)
+        // The earlier identity's register was answered `ok`: its key is the current one.
+        try key.confirm(keyID: try attested(key))
+        #expect(try asserted(key) == fake.keyID(1))
+        // The new identity: its keys are its own.
+        try key.use(identity: 1)
+        #expect(throws: KeysError.self) { try key.assert(clientDataHash: challenge) }
+        let new = try attested(key)
+        #expect(try asserted(key) == fake.keyID(2))
+        try key.confirm(keyID: new)
+        #expect(try asserted(key) == fake.keyID(2))
+        // Back to the earlier identity: its key asserts, and the new one's waits.
+        try key.use(identity: 0)
+        #expect(try asserted(key) == fake.keyID(1))
+        // A later process reads the same record, and the same identity in use.
+        let later = make(fake, store)
+        #expect(try asserted(later) == fake.keyID(1))
+        try later.use(identity: 1)
+        #expect(try asserted(later) == fake.keyID(2))
+    }
+
+    @Test func aConfirmationOfTheNewIdentityNeverForgetsTheEarlierOnes() throws {
+        let fake = FakeAppAttest()
+        let key = make(fake)
+        let a = try attested(key)
+        let b = try attested(key)
+        try key.use(identity: 1)
+        let c = try attested(key)
+        try key.confirm(keyID: c)
+        // The earlier identity still has both of its pending keys, and the confirm of one of them is its own.
+        try key.use(identity: 0)
+        #expect(try asserted(key) == fake.keyID(2))
+        try key.confirm(keyID: a)
+        #expect(try asserted(key) == fake.keyID(1))
+        _ = b
+        try key.use(identity: 1)
+        #expect(try asserted(key) == fake.keyID(3))
+    }
+
+    @Test func theLimitOnPendingKeysIsPerIdentityRecordInUse() throws {
+        let fake = FakeAppAttest()
+        let key = make(fake)
+        for _ in 0..<AppAttestKey.maxPending { _ = try attested(key) }
+        #expect(throws: AppAttestError.pendingFull) { try key.attest(clientDataHash: challenge) }
+        // The other identity has none pending: it can attest, and the first's keys are not dropped.
+        try key.use(identity: 1)
+        _ = try attested(key)
+        try key.use(identity: 0)
+        #expect(try asserted(key) == fake.keyID(UInt8(AppAttestKey.maxPending)))
+    }
+
+    @Test func aForgottenIdentityIsGoneAndTheOneInUseIsNeverForgotten() throws {
+        let fake = FakeAppAttest()
+        let store = MemoryKeyIDStore()
+        let key = make(fake, store)
+        try key.confirm(keyID: try attested(key))
+        try key.use(identity: 1)
+        try key.confirm(keyID: try attested(key))
+        // The identity in use stays.
+        try key.forget(identity: 1)
+        #expect(try asserted(key) == fake.keyID(2))
+        // The other one goes, with the pairing complete.
+        try key.forget(identity: 0)
+        try key.use(identity: 0)
+        #expect(throws: KeysError.self) { try key.assert(clientDataHash: challenge) }
+        // The identity that stayed has its key.
+        try key.use(identity: 1)
+        #expect(try asserted(key) == fake.keyID(2))
+    }
+
+    @Test func aRecordOfTheEarlierFormatIsTheFirstIdentitys() throws {
+        let fake = FakeAppAttest()
+        let store = MemoryKeyIDStore()
+        try store.write(Array(fake.keyID(9).utf8))
+        let key = make(fake, store)
+        #expect(try asserted(key) == fake.keyID(9))
+        try key.use(identity: 1)
+        try key.use(identity: 0)
+        #expect(try asserted(key) == fake.keyID(9))
+    }
+
+    @Test func theSlotsOfTheTwoIdentitiesAreDistinct() {
+        let first = KeySlot.slots(of: .first), second = KeySlot.slots(of: .second)
+        #expect(Set(first).isDisjoint(with: second) && first.count == 3 && second.count == 3)
+        #expect(Set(first + second).count == KeySlot.allCases.count)
+        for slot in KeySlot.allCases {
+            #expect(slot.of(.second).of(.first) == slot.of(.first) && slot.of(.first).of(.second) == slot.of(.second))
+            #expect(first.contains(slot.of(.first)) && second.contains(slot.of(.second)))
+        }
+        #expect(KeySlot.identity.of(.second) == .identity2 && KeySlot.kem2.of(.first) == .kem && KeySlot.relay.of(.first) == .relay)
+        #expect(IdentitySet.first.other == .second && IdentitySet.second.other == .first)
+    }
+
+    @Test func eachIdentityHasKeysOfItsOwn() throws {
+        let keys = DeviceKeys(wrapper: SeedWrapper(source: SoftwareSeedWrapKeySource()), store: InMemoryWrappedKeyStore())
+        for set in IdentitySet.allCases { for slot in KeySlot.slots(of: set) { try keys.generate(slot) } }
+        let a = try keys.ed25519(.identity), b = try keys.ed25519(.identity2)
+        #expect(a.publicKey != b.publicKey)
+        #expect(try keys.kem(.kem).publicKey.bytes != keys.kem(.kem2).publicKey.bytes)
+        #expect(try keys.ed25519(.relay).publicKey != keys.ed25519(.relay2).publicKey)
+    }
+}

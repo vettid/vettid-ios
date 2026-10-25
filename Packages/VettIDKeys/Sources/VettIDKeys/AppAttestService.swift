@@ -28,9 +28,22 @@ public protocol AppAttestService: Sendable {
 
 /// The kept key ids: the current one (the vault accepted its attestation) and the pending ones (sent, not yet
 /// confirmed), oldest first. Stored as JSON; a bare key id (an earlier format) reads as the current one.
+///
+/// (IOS-PLAN 0.1.33 §4.9) A phone that could not tell whether an open recovered the vault holds two device identities for a
+/// while, and the vault bound each identity's own App Attest key at its register: `current` and `pending` are those of the
+/// identity in use ([active]), and the other identity's are [parked] under its number, untouched, until it is used again or
+/// forgotten.
 struct KeyIDRecord: Equatable {
+    /// The keys of an identity that is not in use.
+    struct Parked: Equatable {
+        var current: String?
+        var pending: [String]
+    }
+
     var current: String?
     var pending: [String]
+    var active = 0
+    var parked: [Int: Parked] = [:]
 
     /// The key an assertion uses.
     var inUse: String? { current ?? pending.last }
@@ -44,19 +57,51 @@ struct KeyIDRecord: Equatable {
         if let object = try? JSONSerialization.jsonObject(with: Data(bytes)) as? [String: Any] {
             guard object["v"] as? Int == 1, let pending = object["pending"] as? [String] else { return nil }
             let current = object["current"] as? String
-            guard (pending + [current].compactMap { $0 }).allSatisfy({ AppAttestKey.raw($0)?.isEmpty == false }) else {
-                return nil
-            }
+            guard Self.valid(pending, current) else { return nil }
             self.init(current: current, pending: pending)
+            if let a = object["active"] as? Int { active = a }
+            if let others = object["parked"] as? [String: [String: Any]] {
+                for (key, value) in others {
+                    guard let n = Int(key), let p = value["pending"] as? [String] else { return nil }
+                    let c = value["current"] as? String
+                    guard Self.valid(p, c) else { return nil }
+                    parked[n] = Parked(current: c, pending: p)
+                }
+            }
             return
         }
         guard let id = String(bytes: bytes, encoding: .utf8), AppAttestKey.raw(id)?.isEmpty == false else { return nil }
         self.init(current: id, pending: [])
     }
 
+    private static func valid(_ pending: [String], _ current: String?) -> Bool {
+        (pending + [current].compactMap { $0 }).allSatisfy { AppAttestKey.raw($0)?.isEmpty == false }
+    }
+
+    /// The keys of identity [n] in use from now on; the ones in use are parked under their number. Nothing for the identity in use.
+    mutating func use(_ n: Int) {
+        guard n != active else { return }
+        parked[active] = Parked(current: current, pending: pending)
+        let next = parked.removeValue(forKey: n)
+        current = next?.current
+        pending = next?.pending ?? []
+        active = n
+    }
+
     func encoded() throws -> [UInt8] {
         var object: [String: Any] = ["v": 1, "pending": pending]
         if let current { object["current"] = current }
+        if active != 0 { object["active"] = active }
+        let others = parked.filter { $0.value.current != nil || !$0.value.pending.isEmpty }
+        if !others.isEmpty {
+            var map: [String: Any] = [:]
+            for (n, p) in others {
+                var entry: [String: Any] = ["pending": p.pending]
+                if let c = p.current { entry["current"] = c }
+                map[String(n)] = entry
+            }
+            object["parked"] = map
+        }
         return Array(try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]))
     }
 }

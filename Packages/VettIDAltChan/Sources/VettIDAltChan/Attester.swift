@@ -34,6 +34,15 @@ public protocol Attester: Sendable {
     /// The vault refused an assertion of the key in use (`attestation`) while no key is confirmed: the next untried
     /// unconfirmed key, newest first, is used instead. False when none is left.
     func nextCandidate() throws -> Bool
+
+    /// (IOS-PLAN 0.1.33 §4.9) The phone's device identity [identity] (0 or 1) is the one in use: the vault bound each identity's
+    /// own key at its register, so this identity's keys are the current and pending ones from now on and the other's are kept
+    /// as they are. Called before a session of the identity is used; the same identity again changes nothing.
+    func use(identity: Int) throws
+
+    /// (§4.9) The identity's keys are forgotten: the vault answered `ok` and the other identity's pairing completed. Never the
+    /// identity in use.
+    func forget(identity: Int) throws
 }
 
 /// What the device key signs (VAULT-MESSAGING §11.7, §11.10.3), as vettid-vault `devattest.Signed` carries it
@@ -71,4 +80,6 @@ extension Attester {
     public func prune(keeping keyIDs: [[UInt8]]) throws {}
     public func confirmInUse() throws {}
     public func nextCandidate() throws -> Bool { false }
+    public func use(identity: Int) throws {}
+    public func forget(identity: Int) throws {}
 }

@@ -149,7 +149,8 @@ public final class AppAttestKey: KeyEraser, @unchecked Sendable {
     public func confirm(keyID: [UInt8]) throws {
         try update { record in
             guard let id = record.pending.first(where: { Self.raw($0) == keyID }) else { return }
-            record = KeyIDRecord(current: id, pending: [])
+            record.current = id
+            record.pending = []
         }
     }
 
@@ -173,7 +174,8 @@ public final class AppAttestKey: KeyEraser, @unchecked Sendable {
     public func confirmInUse() throws {
         try update { record in
             guard record.current == nil, let id = inUse(record) else { return }
-            record = KeyIDRecord(current: id, pending: [])
+            record.current = id
+            record.pending = []
         }
     }
 
@@ -186,6 +188,21 @@ public final class AppAttestKey: KeyEraser, @unchecked Sendable {
         if let used = inUse(record) { tried.insert(used) }
         override = record.pending.reversed().first { !tried.contains($0) }
         return override != nil
+    }
+
+    /// (IOS-PLAN 0.1.33 §4.9) The device identity [n] is in use: its keys are the current and pending ones from now on, those of
+    /// the identity that was in use are kept as they are.
+    public func use(identity n: Int) throws {
+        try update { $0.use(n) }
+    }
+
+    /// (§4.9) The identity [n]'s keys are forgotten (App Attest keys cannot be deleted; a forgotten one is never used again):
+    /// once the vault answered `ok` and the other identity's pairing completed. The identity in use is never forgotten here.
+    public func forget(identity n: Int) throws {
+        try update { record in
+            guard n != record.active else { return }
+            record.parked.removeValue(forKey: n)
+        }
     }
 
     /// Whether a key id is kept, classified by IOS-PLAN §6.3.
@@ -216,7 +233,7 @@ public final class AppAttestKey: KeyEraser, @unchecked Sendable {
         let before = record
         change(&record)
         guard record != before else { return }
-        if record.current != before.current {
+        if record.current != before.current || record.active != before.active {
             override = nil
             tried = []
         }

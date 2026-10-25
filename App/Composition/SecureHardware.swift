@@ -75,4 +75,8 @@ struct AppAttestAttester: Attester {
     func confirmInUse() throws { try key.confirmInUse() }
 
     func nextCandidate() throws -> Bool { try key.nextCandidate() }
+
+    func use(identity: Int) throws { try key.use(identity: identity) }
+
+    func forget(identity: Int) throws { try key.forget(identity: identity) }
 }
