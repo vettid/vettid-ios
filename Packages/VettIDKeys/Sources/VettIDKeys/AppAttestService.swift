@@ -6,8 +6,8 @@ import DeviceCheck
 /// What App Attest answered, as ``AppAttestService`` reports it (`DCError.Code`).
 public enum AppAttestServiceError: Error, Equatable, Sendable {
     case featureUnsupported
-    /// Bad input, also App Attest's answer for a key id it does not know and for a second attestation of one key (seen
-    /// on iOS 27).
+    /// Bad input, also App Attest's answer for a key id it does not know (seen on iOS 27). A second attestation of one
+    /// key is not refused on iOS 27.0.1 (`AppAttestDeviceTests.testAKeyAttestedAgain`).
     case invalidInput
     /// The key is gone or unusable (a reinstall, a restore).
     case invalidKey
