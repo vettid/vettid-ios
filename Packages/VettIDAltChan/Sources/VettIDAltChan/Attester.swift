@@ -50,11 +50,12 @@ public protocol Attester: Sendable {
     func resetIdentities() throws
 
     /// (IOS-PLAN 0.1.35 §4.9) The identity in use registers again, with a new key: the keys its earlier registrations attested
-    /// are kept beside it (the vault's binding may still be one of them) until ``settle(identity:)``.
+    /// are kept beside it (the vault's binding may still be one of them), also after ``settle(identity:)``.
     func keepReplacedKeys() throws
 
-    /// (§4.9) The handshake completed with the identity [identity]: it is in use, and the keys of the other identities and of
-    /// its own earlier registrations are forgotten.
+    /// (§4.9) The handshake completed with the identity [identity]: it is in use, and the keys of the other identities are
+    /// forgotten; those of its own earlier registrations stay candidates of its unlock (chosen; not in the spec: kept until the
+    /// vault's binding at the handshake is confirmed).
     func settle(identity: Int) throws
 }
 

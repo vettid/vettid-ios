@@ -35,7 +35,9 @@ public protocol AppAttestService: Sendable {
 /// forgotten. The new identity is registered again for each new recovery, each time with a new key; while [keepsReplaced] (an
 /// identity's own mark), its new attestation puts the current key among the [earlier] ones, so that the newest registration's key
 /// is the one in use, and a confirmation keeps the keys it replaces there too (an earlier registration's binding may still be the
-/// vault's), until the handshake completes (``AppAttestKey/settle(identity:)``).
+/// vault's). The handshake (``AppAttestKey/settle(identity:)``) forgets the other identities' keys and ends the mark; the
+/// earlier keys of the identity that paired stay candidates (chosen; not in the spec: kept until the vault's binding at the
+/// handshake is confirmed).
 struct KeyIDRecord: Equatable {
     /// The keys of an identity that is not in use.
     struct Parked: Equatable {

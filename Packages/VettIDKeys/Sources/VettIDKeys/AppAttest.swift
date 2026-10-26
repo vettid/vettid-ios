@@ -218,13 +218,13 @@ public final class AppAttestKey: KeyEraser, @unchecked Sendable {
         try update { $0.keepsReplaced = true }
     }
 
-    /// (§4.9) The handshake completed with the identity [n]: it is in use, and the keys of every other identity and of its own
-    /// earlier registrations are forgotten.
+    /// (§4.9) The handshake completed with the identity [n]: it is in use, and the keys of every other identity are forgotten. The
+    /// keys of its own earlier registrations stay candidates of its unlock (chosen; not in the spec: kept until the vault's binding
+    /// at the handshake is confirmed).
     public func settle(identity n: Int) throws {
         try update { record in
             record.use(n)
             record.parked = [:]
-            record.earlier = []
             record.keepsReplaced = false
         }
     }
