@@ -30,7 +30,7 @@ public enum AppAttestError: Error, Equatable, Sendable, CustomStringConvertible 
 /// `KeystoreAttester` and `DeviceAttestationKey`, except for the old key (below; chosen; not in the spec: Android
 /// replaces its key at once).
 ///
-/// - ``attest(clientDataHash:)`` makes a fresh key (App Attest attests a key only once), attests it with the challenge
+/// - ``attest(clientDataHash:)`` makes a fresh key (one key per request, so pending, confirmed and discarded keys stay apart), attests it with the challenge
 ///   as clientDataHash, and keeps its key id in the keychain (`AfterFirstUnlockThisDeviceOnly`, never synchronizable)
 ///   as **pending**, before the request that carries it is sent. The **current** key, the one the vault bound, stays.
 ///   The request that carried it records the key id with itself (an enrollment's in its kept request,
