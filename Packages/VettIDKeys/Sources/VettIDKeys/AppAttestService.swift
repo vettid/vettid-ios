@@ -35,7 +35,12 @@ public protocol AppAttestService: Sendable {
 /// forgotten. The new identity is registered again for each new recovery, each time with a new key; while [keepsReplaced] (an
 /// identity's own mark), its new attestation puts the current key among the [earlier] ones, so that the newest registration's key
 /// is the one in use, and a confirmation keeps the keys it replaces there too (an earlier registration's binding may still be the
-/// vault's). The handshake (``AppAttestKey/settle(identity:)``) forgets them, the other identities' keys too, and ends the mark.
+/// vault's). The handshake (``AppAttestKey/settle(identity:registration:)``) forgets them, the other identities' keys too, and ends the
+/// mark.
+///
+/// (IOS-PLAN 0.1.39 §4.9) [registrations] names the `recovery_id` each key of a registration of N was attested for, written before its
+/// register is posted: after the handshake the vault's binding is the attested key of the registration whose `recovery_id` was the
+/// `ctx` of the handshake that completed, so that key is the one kept.
 struct KeyIDRecord: Equatable {
     /// The keys of an identity that is not in use.
     struct Parked: Equatable {
@@ -52,6 +57,8 @@ struct KeyIDRecord: Equatable {
     var keepsReplaced = false
     var active = 0
     var parked: [Int: Parked] = [:]
+    /// Key id to the `recovery_id` of the registration that attested it (any identity's keys).
+    var registrations: [String: String] = [:]
 
     /// The key an assertion uses.
     var inUse: String? { current ?? pending.last }
@@ -72,18 +79,30 @@ struct KeyIDRecord: Equatable {
             keepsReplaced = object["keeps_replaced"] as? Bool ?? false
             if let a = object["active"] as? Int { active = a }
             if let others = object["parked"] as? [String: [String: Any]] {
-                for (key, value) in others {
-                    guard let n = Int(key), let p = value["pending"] as? [String] else { return nil }
-                    let c = value["current"] as? String
-                    let e = value["earlier"] as? [String] ?? []
-                    guard Self.valid(p + e, c) else { return nil }
-                    parked[n] = Parked(current: c, pending: p, earlier: e, keepsReplaced: value["keeps_replaced"] as? Bool ?? false)
-                }
+                guard let p = Self.parked(others) else { return nil }
+                parked = p
+            }
+            if let tags = object["registrations"] {
+                guard let map = tags as? [String: String], Self.valid(Array(map.keys), nil) else { return nil }
+                registrations = map
             }
             return
         }
         guard let id = String(bytes: bytes, encoding: .utf8), AppAttestKey.raw(id)?.isEmpty == false else { return nil }
         self.init(current: id, pending: [])
+    }
+
+    /// The parked identities' keys as stored, nil when one does not parse.
+    private static func parked(_ others: [String: [String: Any]]) -> [Int: Parked]? {
+        var parked: [Int: Parked] = [:]
+        for (key, value) in others {
+            guard let n = Int(key), let p = value["pending"] as? [String] else { return nil }
+            let c = value["current"] as? String
+            let e = value["earlier"] as? [String] ?? []
+            guard valid(p + e, c) else { return nil }
+            parked[n] = Parked(current: c, pending: p, earlier: e, keepsReplaced: value["keeps_replaced"] as? Bool ?? false)
+        }
+        return parked
     }
 
     private static func valid(_ pending: [String], _ current: String?) -> Bool {
@@ -108,6 +127,36 @@ struct KeyIDRecord: Equatable {
         guard keepsReplaced, let c = current else { return }
         if !earlier.contains(c) { earlier.append(c) }
         current = nil
+    }
+
+    /// Every key id kept, of every identity.
+    var allKeys: Set<String> {
+        var all = Set([current].compactMap { $0 } + pending + earlier)
+        for p in parked.values { all.formUnion([p.current].compactMap { $0 } + p.pending + p.earlier) }
+        return all
+    }
+
+    /// (IOS-PLAN 0.1.39 §4.9) The handshake completed with the identity [n] and `ctx` [ctx]: it is in use, the other identities' keys
+    /// are forgotten, and of its own keys those of the registration [ctx] names are kept (the vault's binding is that registration's
+    /// attested key): the current one when it is one of them, else the only one, else all of them as pending keys, newest last, so
+    /// that an unlock tries them newest first and its `ok` confirms one. A `ctx` no key was registered for (none, the earlier
+    /// identity's own, a handshake of a build before the tags) forgets none of [n]'s keys (chosen; not in the spec: as vettid-android).
+    mutating func settle(on n: Int, registration ctx: String?) {
+        use(n)
+        parked = [:]
+        keepsReplaced = false
+        let ordered = earlier + [current].compactMap { $0 } + pending
+        if let ctx, case let mine = ordered.filter({ registrations[$0] == ctx }), !mine.isEmpty {
+            if let c = current, mine.contains(c) {
+                pending = []
+            } else if mine.count == 1 {
+                (current, pending) = (mine[0], [])
+            } else {
+                (current, pending) = (nil, mine)
+            }
+            earlier = []
+        }
+        registrations = [:]
     }
 
     /// [id] is the bound key: the current one, the pending ones forgotten, or, while [keepsReplaced], kept as earlier ones with
@@ -143,6 +192,10 @@ struct KeyIDRecord: Equatable {
             }
             object["parked"] = map
         }
+        // A tag outlives no key.
+        let keys = allKeys
+        let tags = registrations.filter { keys.contains($0.key) }
+        if !tags.isEmpty { object["registrations"] = tags }
         return Array(try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]))
     }
 }

@@ -50,12 +50,19 @@ public protocol Attester: Sendable {
     func resetIdentities() throws
 
     /// (IOS-PLAN 0.1.38 §4.9) The identity in use registers again, with a new key: the keys its earlier registrations attested
-    /// are kept beside it (the vault's binding may still be one of them) until ``settle(identity:)``.
+    /// are kept beside it (the vault's binding may still be one of them) until ``settle(identity:registration:)``.
     func keepReplacedKeys() throws
 
-    /// (§4.9) The handshake completed with the identity [identity]: it is in use, and the keys of the other identities and of
-    /// its own earlier registrations are forgotten.
-    func settle(identity: Int) throws
+    /// (IOS-PLAN 0.1.39 §4.9) The unconfirmed key [keyID] (iOS: the App Attest key id) was attested by the register of the recovery
+    /// [registration] (its `recovery_id`). Recorded before that register is posted; a failure to record it is thrown, and nothing is
+    /// posted.
+    func tag(keyID: [UInt8], registration: String) throws
+
+    /// (IOS-PLAN 0.1.39 §4.9) The handshake completed with the identity [identity] and `ctx` [registration]: it is in use, the keys of
+    /// the other identities are forgotten, and of its own keys those of the registration whose `recovery_id` was that `ctx` are
+    /// kept (the vault's binding is that registration's attested key); its other keys are forgotten. A `ctx` no key was registered
+    /// for (nil: not known) forgets none of its keys.
+    func settle(identity: Int, registration: String?) throws
 
     /// An unlock with the key in use was accepted: as ``confirmInUse()``, except that for an identity registered again an earlier
     /// key that was accepted does not become the one in use (IOS-PLAN 0.1.38 §4.9: later unlocks use the newest key).
@@ -101,6 +108,7 @@ extension Attester {
     public func forget(identity: Int) throws {}
     public func resetIdentities() throws {}
     public func keepReplacedKeys() throws {}
-    public func settle(identity: Int) throws {}
+    public func tag(keyID: [UInt8], registration: String) throws {}
+    public func settle(identity: Int, registration: String?) throws {}
     public func confirmUnlocked() throws { try confirmInUse() }
 }

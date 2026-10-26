@@ -41,6 +41,12 @@ struct FakeRecoveryStore {
     /// The recovery id the first-handshake invitation was made under: a handshake naming another is dropped and never answered
     /// (VAULT-MESSAGING §11.14.6 "A phone that could not tell").
     var inviteID: String?
+    /// The identity key the invitation is for, and the attested key of the registration it was set from (vettid-vault #150).
+    var invitedIK: [UInt8]?
+    var inviteKey: [UInt8]?
+    /// The next repeated open (of a new recovery, while an earlier open's step 2 is stored) stores its state and its header write
+    /// then fails: answered `retry`, nothing used; the header's binding stays the one of the run that stored step 1.
+    var repeatHeaderWriteFails = false
     /// The vault's `app_key` (VAULT-MESSAGING §11.14.2 step 3): a claim with it is `409 key_in_use` (MEMBER-API 2.12.0).
     var vaultAppKey: [UInt8]?
     /// The next open stops after step 2 (the invitation is stored, `app_key_next` is K and `app_key` is not): K reads the status
@@ -229,6 +235,10 @@ extension FakeVaultService {
     public func recoveryStatusShows(_ state: String?) { locked { recovery.statusState = state } }
     /// The next open stops after step 2 (see ``FakeRecoveryStore/stopsAfterStep2``).
     public func nextOpenStopsAfterStep2() { locked { recovery.stopsAfterStep2 = true } }
+    /// The next repeated open stores its state, and its header write fails (see ``FakeRecoveryStore/repeatHeaderWriteFails``).
+    public func nextRepeatHeaderWriteFails() { locked { recovery.repeatHeaderWriteFails = true } }
+    /// The App Attest key the vault's header binds for the recovered phone's unlock (with ``checkAttestationKeys()``).
+    public var recoveryBoundKey: [UInt8]? { locked { recovery.boundKey } }
     /// The slot of [requestID] answers again (a lost answer that can be read after all).
     public func answerReadable(_ requestID: String) { locked { lostSlots.remove(requestID) } }
     /// The vault's `app_key` is [key] (K), as after an open that completed.
@@ -263,8 +273,24 @@ extension FakeVaultService {
     /// The recovered phone's first handshake did not complete yet: it is one of the vault's unlock keys, and an unlock
     /// carries the vault's bundle (§11.14.6 "A lost ok").
     public var recoveryInvitation: Bool { locked { recovery.invitation } }
-    /// The vault restored the phone's first-handshake state: the invitation is gone, as after the pairing.
-    func recoveryPaired() { recovery.invitation = false }
+    /// The vault restored the phone's first-handshake state: the invitation is gone, as after the pairing, and the binding is the
+    /// attested key of the invitation's registration (VAULT-MESSAGING 0.63.2 §11.14.6 "Pairing").
+    func recoveryPaired() {
+        guard recovery.invitation else { return }
+        recovery.invitation = false
+        recovery.boundKey = recovery.inviteKey ?? recovery.boundKey
+    }
+
+    /// (vettid-vault #151, VAULT-MESSAGING 0.63.2 §11.14.2) An unlock that opened while an open's step 2 is stored and its step 3
+    /// is not finishes step 3: the recovery record goes (whichever is current), K becomes the `app_key`, and the header write binds
+    /// the invitation's attested key. A later open of that recovery is answered `no_recovery`, nothing used. Callers hold ``cond``.
+    func unlockFinishesRecovery() {
+        guard recovery.stoppedAfterStep2 else { return }
+        recovery.stoppedAfterStep2 = false
+        recovery.completed = true
+        recovery.vaultAppKey = recovery.phone?.apiKey ?? recovery.earlierPhone?.apiKey ?? recovery.vaultAppKey
+        recovery.boundKey = recovery.inviteKey ?? recovery.boundKey
+    }
 
     // MARK: - The member API's routes
 
@@ -433,22 +459,26 @@ extension FakeVaultService {
             if recovery.used >= 2 { b = b.string("retry_at", Timestamps.formatMillis(Date().addingTimeInterval(3600))) }
             return b.build()
         }
+        if recovery.stoppedAfterStep2, !repeatStoresInvitation(phone, recoveryID: recoveryID) {
+            return refused("retry", used: false, counted: false)
+        }
         recovery.used += 1
         // The completion: the phone is the vault's app, the vault runs, and the phone's first handshake is invited.
         recovery.completed = true
         recovery.lastWrong = nil
         if recovery.stoppedAfterStep2 {
-            // The repeat keeps the earlier invitation and the earlier phone as the vault's device; K becomes the `app_key`.
+            // The repeat keeps the earlier invitation and the earlier phone as the vault's device; K becomes the `app_key`. The
+            // header's binding is the invitation's (vettid-vault #150).
             recovery.vaultAppKey = phone.apiKey
             recovery.stoppedAfterStep2 = false
+            recovery.boundKey = recovery.inviteKey ?? recovery.boundKey
             vaultOpen = true
             return JsonBuilder().bool("ok", true).uint("state_seq", stateSeq).uint("header_seq", headerSeq)
                 .string("token", (try? self.token(phone.relay)) ?? "").base64("vault_bundle", vaultBundle())
                 .string("release", Self.pcr0(releases.serving)).uint("release_number", releases.serving)
                 .bool("attempt_used", true).raw("attempts", #"{"used":\#(recovery.used),"of":10}"#).build()
         }
-        recovery.invitation = true
-        recovery.inviteID = recoveryID
+        invite(phone, recoveryID: recoveryID)
         if recovery.stopsAfterStep2 {
             recovery.stopsAfterStep2 = false
             recovery.stoppedAfterStep2 = true
@@ -464,6 +494,25 @@ extension FakeVaultService {
         return JsonBuilder().bool("ok", true).uint("state_seq", stateSeq).uint("header_seq", headerSeq).string("token", token)
             .base64("vault_bundle", vaultBundle()).string("release", Self.pcr0(releases.serving)).uint("release_number", releases.serving)
             .bool("attempt_used", true).raw("attempts", #"{"used":\#(recovery.used),"of":10}"#).build()
+    }
+
+    /// A repeat of an open whose step 2 is stored: vettid-vault #150 sets a stored invitation of the same identity again from the
+    /// current registration (its `recovery_id` as `ctx`, its attested key, renewed); another identity's is kept. False when its
+    /// header write then fails (``FakeRecoveryStore/repeatHeaderWriteFails``): the state is stored, the record stays, and the
+    /// header's `next` binding is the run's that stored step 1 ("Accepted gap"). Callers hold ``cond``.
+    private func repeatStoresInvitation(_ phone: FakeRecoveryPhone, recoveryID: String) -> Bool {
+        if recovery.invitedIK == phone.ik { invite(phone, recoveryID: recoveryID) }
+        guard recovery.repeatHeaderWriteFails else { return true }
+        recovery.repeatHeaderWriteFails = false
+        return false
+    }
+
+    /// The first-handshake invitation is [phone]'s, from its registration for [recoveryID]. Callers hold ``cond``.
+    private func invite(_ phone: FakeRecoveryPhone, recoveryID: String) {
+        recovery.invitation = true
+        recovery.inviteID = recoveryID
+        recovery.invitedIK = phone.ik
+        recovery.inviteKey = phone.attestKey
     }
 
     /// Whether the request [body]'s assertion was made with the App Attest key [key] (the test App Attest begins each assertion with

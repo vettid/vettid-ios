@@ -253,6 +253,7 @@ extension FakeVaultService {
         }
         pinFailures = 0
         backoffUntil = nil
+        unlockFinishesRecovery()
         let token = device.flatMap { try? self.token($0.relay) } ?? ""
         let serving = releases.serving
         let (member, staysLocked) = releaseRules(update)

@@ -106,6 +106,9 @@ extension VaultDevice {
                 throw e
             }
             ini = nil
+            // (IOS-PLAN 0.1.39 §4.9) The recovered phone's handshake the vault answered: its `ctx` names the registration whose
+            // attested key the vault binds. Saved with the epoch.
+            if let ctx = st.recovery?.pairing { st.recoveryPairedCtx = ctx }
             if let tok = res.resp.token, let exp = heldFromVault(tok) {
                 st.vault?.token = tok
                 st.vault?.tokenExpMs = Self.ms(exp)

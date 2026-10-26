@@ -23,6 +23,8 @@ public final class TestAttester: Attester, @unchecked Sendable {
     private var attestedBy: [Int] = []
     private var keptReplaced: [Int] = []
     private var settledIdentities: [Int] = []
+    private var settledContexts: [String?] = []
+    private var taggedKeys: [([UInt8], String)] = []
 
     /// The App Attest key record of the iPhone (``AppAttestKey``) over a fake App Attest, once ``modelKeys()`` installed it.
     private var model: AppAttestKey?
@@ -72,6 +74,10 @@ public final class TestAttester: Attester, @unchecked Sendable {
     public var keptReplacedKeys: [Int] { lock.withLock { keptReplaced } }
     /// The identities a completed handshake settled on, in order.
     public var settled: [Int] { lock.withLock { settledIdentities } }
+    /// (IOS-PLAN 0.1.39 §4.9) The `ctx` of the completed handshake each settle named, in order.
+    public var settledRegistrations: [String?] { lock.withLock { settledContexts } }
+    /// (IOS-PLAN 0.1.39 §4.9) Each key a register attested, with the `recovery_id` it was tagged with, in order.
+    public var tagged: [(keyID: [UInt8], registration: String)] { lock.withLock { taggedKeys.map { (keyID: $0.0, registration: $0.1) } } }
 
     /// The key ids attested, in order.
     public var attested: [[UInt8]] { lock.withLock { attestedKeys } }
@@ -133,12 +139,18 @@ public final class TestAttester: Attester, @unchecked Sendable {
         try modelled?.keepReplacedKeys()
     }
 
-    public func settle(identity n: Int) throws {
+    public func tag(keyID: [UInt8], registration: String) throws {
+        lock.withLock { taggedKeys.append((keyID, registration)) }
+        try modelled?.tag(keyID: keyID, registration: registration)
+    }
+
+    public func settle(identity n: Int, registration: String?) throws {
         lock.withLock {
             identity = n
             settledIdentities.append(n)
+            settledContexts.append(registration)
         }
-        try modelled?.settle(identity: n)
+        try modelled?.settle(identity: n, registration: registration)
     }
 }
 

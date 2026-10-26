@@ -32,6 +32,9 @@ final class DeviceState: Codable, @unchecked Sendable {
     /// The member's `user_guid` from a transfer's `device.paired` (0.17.0, §6.7.1), kept until the move is completed: a start
     /// after the app was killed between `device.paired` and the take-over still has it. Optional: older states have none.
     var transferUserGuid: String?
+    /// (IOS-PLAN 0.1.39 §4.9) The `ctx` of the recovered phone's first handshake that the vault answered (`hs.resp`), kept after the
+    /// recovery record goes: the vault's binding is the attested key of the registration it names. Optional: older states have none.
+    var recoveryPairedCtx: String?
 
     init(role: String, name: String, relayURL: String) {
         self.role = role
@@ -88,6 +91,15 @@ struct RecoveryRecord: Codable, Sendable {
     /// (IOS-PLAN 0.1.38 §4.9) The registration this one replaced (an identity registered again for a new recovery): a register
     /// that did not reach the vault puts it back (``VaultDevice/restoreRecoveryRegistration()``).
     var replaced: ReplacedRecovery?
+    /// (IOS-PLAN 0.1.39 §4.9) The `recovery_id`s this identity registered for before this one, oldest first (an identity registered
+    /// again for each new recovery): after an `ok` to an unlock the vault's invitation may be one of theirs. Optional: a state
+    /// written before it existed has none.
+    var earlier: [String]?
+    /// (IOS-PLAN 0.1.39 §4.9) The vault's bundle came with an unlock's `ok` (a lost ok), not with this registration's open: the
+    /// handshake tries each `recovery_id` this identity registered for, newest first. Written in the save that keeps the bundle.
+    var lostOk: Bool?
+    /// The `ctx` of the last `hs.init` sent after the `ok`, saved with it.
+    var pairing: String?
 }
 
 /// The `recovery_id` and register `request_id` of a registration a later register replaced.
