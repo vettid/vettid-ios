@@ -191,7 +191,7 @@ public final class FakeVaultRepository: CustomStringConvertible {
     /// What ``recoveryOpen(pin:password:)`` answers, in order; an empty queue answers `ok`.
     public var recoveryOpenOutcomes: [RecoveryOpenOutcome] = []
     public var recoveryOpenedValue = false
-    /// What ``couldNotTellStage()`` answers (IOS-PLAN 0.1.33 §4.9), and what ``checkCouldNotTell()`` answers, in order; an empty
+    /// What ``couldNotTellStage()`` answers (IOS-PLAN 0.1.38 §4.9), and what ``checkCouldNotTell()`` answers, in order; an empty
     /// queue answers ``couldNotTellValue``, and the answer stays as the stage after it.
     public var couldNotTellValue = CouldNotTellStage.none
     public var couldNotTellChecks: [CouldNotTellStage] = []

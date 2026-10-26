@@ -4,7 +4,7 @@ import VettIDCrypto
 @testable import VettIDKeys
 import VettIDKeysTesting
 
-/// A phone that could not tell holds two device identities (IOS-PLAN 0.1.35 §4.9), and the vault bound each one's own App Attest
+/// A phone that could not tell holds two device identities (IOS-PLAN 0.1.38 §4.9), and the vault bound each one's own App Attest
 /// key at its register: the keys of the identity in use are the current and pending ones, the other's wait untouched. N is
 /// registered again with a new key for each further recovery, and its earlier keys are kept until the handshake completes.
 @Suite struct AppAttestIdentityTests {
@@ -144,7 +144,7 @@ import VettIDKeysTesting
         #expect(try asserted(key) == fake.keyID(3))
     }
 
-    // MARK: - N registered again (IOS-PLAN 0.1.35 §4.9)
+    // MARK: - N registered again (IOS-PLAN 0.1.38 §4.9)
 
     func stored(_ store: MemoryKeyIDStore) throws -> KeyIDRecord {
         guard let r = KeyIDRecord(try store.lookup().get("record")) else { throw TestFailure("unreadable record") }
@@ -226,10 +226,22 @@ import VettIDKeysTesting
         #expect(try key.nextCandidate())
         #expect(try asserted(key) == fake.keyID(2))
         try key.confirmUnlocked()
-        // IOS-PLAN 0.1.37 §4.9: that unlock binds the newest key in the vault's header; later unlocks use the newest again.
+        // IOS-PLAN 0.1.38 §4.9: that unlock binds the newest key in the vault's header; later unlocks use the newest again.
         let record = try stored(store)
         #expect(record.current == fake.keyID(3) && record.earlier == [fake.keyID(2)])
         #expect(try asserted(key) == fake.keyID(3))
+        // A pending key of the current registration that opens (the applied copy's) is the bound one: it is confirmed.
+        let copies = make(FakeAppAttest(), MemoryKeyIDStore())
+        try copies.confirm(keyID: try attested(copies))
+        try copies.use(identity: 1)
+        try copies.keepReplacedKeys()
+        _ = try attested(copies)
+        _ = try attested(copies)
+        #expect(try asserted(copies) == fake.keyID(3))
+        #expect(try copies.nextCandidate())
+        #expect(try asserted(copies) == fake.keyID(2))
+        try copies.confirmUnlocked()
+        #expect(try asserted(copies) == fake.keyID(2))
         // Without a register again, an unlock that opens with a pending key confirms it, as before.
         let other = make(FakeAppAttest(), MemoryKeyIDStore())
         _ = try attested(other)

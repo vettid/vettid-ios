@@ -32,11 +32,11 @@ public protocol Attester: Sendable {
     func confirmInUse() throws
 
     /// The vault refused an assertion of the key in use (`attestation`) while no key is confirmed: the next untried
-    /// unconfirmed key, newest first, is used instead; then the keys of the identity's earlier registrations (IOS-PLAN 0.1.35
+    /// unconfirmed key, newest first, is used instead; then the keys of the identity's earlier registrations (IOS-PLAN 0.1.38
     /// §4.9). False when none is left.
     func nextCandidate() throws -> Bool
 
-    /// (IOS-PLAN 0.1.33 §4.9) The phone's device identity [identity] (an index of ``IdentitySet``) is the one in use: the vault bound each identity's
+    /// (IOS-PLAN 0.1.38 §4.9) The phone's device identity [identity] (an index of ``IdentitySet``) is the one in use: the vault bound each identity's
     /// own key at its register, so this identity's keys are the current and pending ones from now on and the other's are kept
     /// as they are. Called before a session of the identity is used; the same identity again changes nothing.
     func use(identity: Int) throws
@@ -49,7 +49,7 @@ public protocol Attester: Sendable {
     /// and the keys of the other identities are gone. Never a key of the identity in use is made the other's.
     func resetIdentities() throws
 
-    /// (IOS-PLAN 0.1.35 §4.9) The identity in use registers again, with a new key: the keys its earlier registrations attested
+    /// (IOS-PLAN 0.1.38 §4.9) The identity in use registers again, with a new key: the keys its earlier registrations attested
     /// are kept beside it (the vault's binding may still be one of them) until ``settle(identity:)``.
     func keepReplacedKeys() throws
 
@@ -58,7 +58,7 @@ public protocol Attester: Sendable {
     func settle(identity: Int) throws
 
     /// An unlock with the key in use was accepted: as ``confirmInUse()``, except that for an identity registered again an earlier
-    /// key that was accepted does not become the one in use (IOS-PLAN 0.1.37 §4.9: later unlocks use the newest key).
+    /// key that was accepted does not become the one in use (IOS-PLAN 0.1.38 §4.9: later unlocks use the newest key).
     func confirmUnlocked() throws
 }
 

@@ -4,7 +4,7 @@ import VettIDCrypto
 import VettIDKeys
 import VettIDVault
 
-// The identities of a phone that could not tell (IOS-PLAN 0.1.35 §4.9, "Two identities at most"; owner decisions of 2026-10-25):
+// The identities of a phone that could not tell (IOS-PLAN 0.1.38 §4.9, "Two identities at most"; owner decisions of 2026-10-25):
 // the earlier one (E) and one new one (N), never a third. The first new code is registered with N (its keys, its device state with
 // its own `recovery_id` and the history of its opens), and every further recovery registers N again: the same K, the same N keys,
 // the new code, and a new App Attest key each time. Nothing is deleted until the vault answered `ok` and the pairing completed: E's
@@ -215,7 +215,7 @@ extension VaultManager {
 
     /// The vault answered `ok` and the pairing completed: every identity that did not pair, its device state and App Attest keys,
     /// and the rule's record go, and so do the App Attest keys of the earlier registrations of the identity that paired. Nothing
-    /// before (IOS-PLAN 0.1.37 §4.9 "What it keeps"); a failure keeps all, and the next look tries again.
+    /// before (IOS-PLAN 0.1.38 §4.9 "What it keeps"); a failure keeps all, and the next look tries again.
     func settleCouldNotTell(winner: IdentitySet? = nil) {
         guard record.value.couldNotTell != nil else { return }
         let winner = winner ?? record.value.activeIdentity
@@ -245,7 +245,7 @@ extension VaultManager {
     }
 
     /// A start with a switch of identity that did not end (the app was killed during the unlock of another identity): the identity
-    /// to go back to is the one in use again (IOS-PLAN 0.1.33 §4.9, "never forget": nothing else changes). True when it changed.
+    /// to go back to is the one in use again (IOS-PLAN 0.1.38 §4.9, "never forget": nothing else changes). True when it changed.
     @discardableResult
     func settleTrial() -> Bool {
         guard moveFlags.book.trialDepth == 0, moveFlags.book.ruleSwitching == 0, let ct = record.value.couldNotTell else { return false }
@@ -350,7 +350,7 @@ extension VaultManager {
 
     /// The identity with the vault's `ok` got no `hs.resp`: the vault answers a handshake it does not accept with nothing, and the
     /// invitation may be an older identity's, under its `recovery_id`. The lost-ok unlock with each other identity, newest first,
-    /// then its `hs.init` with that `ctx` (IOS-PLAN 0.1.33 §4.9). Nil when none is the vault's key: nothing changed, the identity
+    /// then its `hs.init` with that `ctx` (IOS-PLAN 0.1.38 §4.9). Nil when none is the vault's key: nothing changed, the identity
     /// with the `ok` is in use again, and the caller reopens its session. The unlock's refusal code beside the session otherwise.
     func pairEarlierIdentity(pin: String) async throws -> (String?, VaultSession)? {
         guard let ct = record.value.couldNotTell, ct.identities.count > 1 else { return nil }

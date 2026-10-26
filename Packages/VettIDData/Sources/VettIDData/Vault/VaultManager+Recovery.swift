@@ -61,7 +61,7 @@ extension VaultManager {
     public nonisolated static let codeRecoveryOpenUnknown = "recovery_open_unknown"
     /// A registration for another recovery while this phone is registered for one (a register of it may have been taken).
     public nonisolated static let codeRecoveryRegistered = "recovery_registered"
-    /// (IOS-PLAN 0.1.35 §4.9) A recovery code of another vault than the one of a phone that could not tell: nothing registered.
+    /// (IOS-PLAN 0.1.38 §4.9) A recovery code of another vault than the one of a phone that could not tell: nothing registered.
     public nonisolated static let codeOtherVault = "other_vault"
     /// The requirements of the recovery of before release R (IOS-PLAN ID8).
     public nonisolated static let codeRecoveryBeforeR = "recovery_before_release_r"
@@ -88,7 +88,7 @@ extension VaultManager {
     public func registerRecovery(_ code: RecoveryCode) async throws -> RecoveryRegistration {
         try await guarded {
             let s = try await recoveryStart()
-            // IOS-PLAN 0.1.35 §4.9: a phone that could not tell registers the new recovery with N and the same K, and keeps the
+            // IOS-PLAN 0.1.38 §4.9: a phone that could not tell registers the new recovery with N and the same K, and keeps the
             // earlier registration; a scanned code names its vault, so that another vault's code is refused before the claim.
             let rule = registersAsNewRecovery
             if rule {
@@ -122,7 +122,7 @@ extension VaultManager {
             let s = try await recoveryStart()
             let rule = registersAsNewRecovery
             // (A typed code is claimed with K before its vault is known; one of another vault is refused as soon as the claim names
-            // it, IOS-PLAN 0.1.35 §4.9.)
+            // it, IOS-PLAN 0.1.38 §4.9.)
             let claim: @Sendable () async throws -> Claimed = { [self] in
                 try await member.recoveryClaim(locator: typed.locator, appKey: try config.keys.appKeys.getOrCreate().spki())
             }
@@ -165,7 +165,7 @@ extension VaultManager {
         let s = try await openSession()
         let d = s.device
         if registersAsNewRecovery {
-            // IOS-PLAN 0.1.35 §4.9: two reads said the recovery ended; the phone keeps everything and registers the new one.
+            // IOS-PLAN 0.1.38 §4.9: two reads said the recovery ended; the phone keeps everything and registers the new one.
             if d.hasVault || d.deviceID != nil { throw VaultFailure(.vaultExists) }
             return s
         }
@@ -316,7 +316,7 @@ extension VaultManager {
                 _ = try phoneSecrets.confirmCreate(id: epoch.id)
                 usesPhoneSecret = phoneSecrets.inUse
             }
-            // The mark goes only when the history of the opens leaves none unanswered (IOS-PLAN 0.1.34 §4.10): a `wrong`, a `retry`,
+            // The mark goes only when the history of the opens leaves none unanswered (IOS-PLAN 0.1.38 §4.10): a `wrong`, a `retry`,
             // `not_armed`, `stored_mismatch` or any code outside the list proves nothing after an unanswered open.
             let none = r.ok || !phoneHasUnansweredOpen(d)
             _ = try record.update(since: rec) {
@@ -351,7 +351,7 @@ extension VaultManager {
     public func resumeLostOk(pin: String) async throws -> RecoveryOpenOutcome {
         try await guarded {
             try prepared()
-            // IOS-PLAN 0.1.33 §4.9: a phone that could not tell unlocks with each identity that may hold the vault's key.
+            // IOS-PLAN 0.1.38 §4.9: a phone that could not tell unlocks with each identity that may hold the vault's key.
             if let ct = record.value.couldNotTell { return try await resumeLostOkEither(ct, pin: pin) }
             return try await lostOkOnce(pin: pin)
         }
@@ -390,7 +390,7 @@ extension VaultManager {
             if !u.ok {
                 // The vault does not hold this phone's secret: no open of this phone was adopted.
                 if u.result.code == UnlockEpoch.deviceSecret { clearOpenMark(since: rec) }
-                // IOS-PLAN 0.1.33 §4.9: the open continues while the recovery shows `registered`; otherwise the rule applies.
+                // IOS-PLAN 0.1.38 §4.9: the open continues while the recovery shows `registered`; otherwise the rule applies.
                 if u.result.code == Self.transferIncomplete { try await noteTransferIncomplete() }
                 return RecoveryOpenOutcome(u.result.code ?? "retry", used: used, opened: true, attemptUsed: false)
             }
@@ -429,7 +429,7 @@ extension VaultManager {
         }
         try await s.device.finishRecoveryOpen()
         config.attestStartOver?.set(recovering: false)
-        // IOS-PLAN 0.1.33 §4.9: the vault answered `ok` and the pairing completed; the identity that did not pair goes now.
+        // IOS-PLAN 0.1.38 §4.9: the vault answered `ok` and the pairing completed; the identity that did not pair goes now.
         settleCouldNotTell(winner: s.identity)
         return RecoveryOpenOutcome("ok", used: used)
     }
@@ -454,7 +454,7 @@ extension VaultManager {
             try await s.device.completeRecoveryOpen(timeout: handshakeWait(resuming: resuming))
             return (nil, s)
         } catch let e as VaultStateError where VaultFailures.noResponse(e) {
-            // IOS-PLAN 0.1.33 §4.9: the vault answers a handshake it does not accept with nothing. After the new open's `ok` the
+            // IOS-PLAN 0.1.38 §4.9: the vault answers a handshake it does not accept with nothing. After the new open's `ok` the
             // invitation may be the earlier identity's, under the earlier `recovery_id`.
             if let earlier = try await pairEarlierIdentity(pin: pin) { return earlier }
             // (A switch of identity stopped this session's device: the identity with the `ok` is opened again.)
@@ -539,7 +539,7 @@ extension VaultManager {
         let abandoned: Bool = try await guarded {
             try prepared()
             guard let d = try await storedSession()?.device, d.recovering else { return false }
-            // IOS-PLAN 0.1.33 §4.9: never while the phone could not tell (K and every identity stay).
+            // IOS-PLAN 0.1.38 §4.9: never while the phone could not tell (K and every identity stay).
             if record.value.couldNotTell != nil { throw VaultFailure(.other, code: Self.codeRecoveryOpenSent) }
             // Release R (§11.14.6): after `ok` the vault's only unlock key is this phone's; it is never deleted here. Whatever the
             // phone's records say (they may be unreadable now): a pinned or paired vault, or an open that may have succeeded.

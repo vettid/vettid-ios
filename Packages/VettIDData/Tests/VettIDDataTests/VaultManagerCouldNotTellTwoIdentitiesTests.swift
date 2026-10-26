@@ -7,7 +7,7 @@ import VettIDKeys
 import VettIDDataTesting
 @testable import VettIDVault
 
-/// Two identities at most, E and N, never a third (IOS-PLAN 0.1.35 §4.9; owner decisions of 2026-10-25): when N's recovery ends
+/// Two identities at most, E and N, never a third (IOS-PLAN 0.1.38 §4.9; owner decisions of 2026-10-25): when N's recovery ends
 /// too, the phone keeps both, tries the unlock with each, and registers N again for the next recovery; a code of another vault is
 /// refused (continues ``VaultManagerRecoveryTests``).
 extension VaultManagerRecoveryTests {
@@ -296,10 +296,11 @@ extension VaultManagerRecoveryTests {
         #expect(try await m.resumeLostOk(pin: pin).ok)
         #expect(Array(phone.attester.assertedKeys.dropFirst(asserted).prefix(2)) == [two.b, two.a])
         #expect(service.unlocks.count == unlocks + 1)
-        // IOS-PLAN 0.1.37 §4.9: an `ok` with an earlier key does not replace the newest; the handshake forgot every other key.
+        // A is a key of this registration (the applied copy's): it is confirmed; the handshake forgot every other key.
         let json = try #require(phone.attester.keptRecord)
         let kept = try #require(try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
-        #expect(kept["current"] == nil && (kept["pending"] as? [String])?.last == two.b && kept["earlier"] == nil && kept["parked"] == nil)
+        #expect(kept["current"] as? String == two.a && (kept["pending"] as? [String])?.isEmpty == true)
+        #expect(kept["earlier"] == nil && kept["parked"] == nil)
         #expect(service.recoveryHandshakeContexts.last == two.code.recoveryID && m.record.value.couldNotTell == nil)
     }
 

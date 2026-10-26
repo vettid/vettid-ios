@@ -32,7 +32,7 @@ public final class TestAttester: Attester, @unchecked Sendable {
 
     public init() {}
 
-    /// (IOS-PLAN 0.1.35 §4.9) From now on the attestations, assertions and the bookkeeping of keys and identities also go through
+    /// (IOS-PLAN 0.1.38 §4.9) From now on the attestations, assertions and the bookkeeping of keys and identities also go through
     /// the app's own App Attest key record, over a fake App Attest that records which key each assertion used
     /// (``assertedKeys``, ``attestedKeyIDs``).
     public func modelKeys() {
@@ -60,13 +60,13 @@ public final class TestAttester: Attester, @unchecked Sendable {
 
     private var modelled: AppAttestKey? { lock.withLock { model } }
 
-    /// The device identity (IOS-PLAN 0.1.33 §4.9) in use now, and the one in use at each assertion, in order.
+    /// The device identity (IOS-PLAN 0.1.38 §4.9) in use now, and the one in use at each assertion, in order.
     public var identityInUse: Int { lock.withLock { identity } }
     public var assertionIdentities: [Int] { lock.withLock { assertedBy } }
     public var forgotten: [Int] { lock.withLock { forgottenIdentities } }
     /// How many times a forget reset the identities.
     public var resets: Int { lock.withLock { resetCount } }
-    /// (IOS-PLAN 0.1.35 §4.9) The identity in use at each attestation, in order (``attested`` holds the keys).
+    /// (IOS-PLAN 0.1.38 §4.9) The identity in use at each attestation, in order (``attested`` holds the keys).
     public var attestationIdentities: [Int] { lock.withLock { attestedBy } }
     /// The identity in use each time its replaced keys were to be kept (a register of the new identity).
     public var keptReplacedKeys: [Int] { lock.withLock { keptReplaced } }

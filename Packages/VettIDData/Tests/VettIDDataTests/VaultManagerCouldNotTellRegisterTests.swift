@@ -10,7 +10,7 @@ import VettIDDataTesting
 // swiftlint:disable line_length
 
 /// A phone that could not tell, after the second read: the new recovery with a new device identity and the same K, the open with
-/// the earlier open's unlock secret, `409 key_in_use`, and the pairing of either identity (IOS-PLAN 0.1.35 §4.9). Continues
+/// the earlier open's unlock secret, `409 key_in_use`, and the pairing of either identity (IOS-PLAN 0.1.38 §4.9). Continues
 /// ``VaultManagerRecoveryTests``.
 extension VaultManagerRecoveryTests {
     /// A second recovery of the same vault, as the member starts it on the account site.

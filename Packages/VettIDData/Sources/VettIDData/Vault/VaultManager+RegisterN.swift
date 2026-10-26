@@ -5,7 +5,7 @@ import VettIDCrypto
 import VettIDRelay
 import VettIDVault
 
-/// One register flow of the new identity N of a phone that could not tell (IOS-PLAN 0.1.37 §4.9 "A failed register"), as it stood
+/// One register flow of the new identity N of a phone that could not tell (IOS-PLAN 0.1.38 §4.9 "A failed register"), as it stood
 /// before its first POST.
 struct RegisterAttempt {
     /// A register POST of N for the same code was made before: every later POST is a repeat, which the member API answers
@@ -26,14 +26,15 @@ final class RegisterPosts: @unchecked Sendable {
     func sent() { lock.withLock { if !posts.isEmpty { posts[posts.count - 1] = true } } }
     /// A request was built (and N's new registration made).
     var any: Bool { lock.withLock { !posts.isEmpty } }
-    /// An earlier POST of this flow (sealed again after `instance_moved` or an `expired` slot): the last one is a repeat, and N
-    /// was left maybe registered or unknown by it.
+    /// An earlier POST of this flow (sealed again after `instance_moved` or an `expired` slot): the last one is a repeat.
     var reposted: Bool { lock.withLock { posts.count > 1 } }
+    /// An earlier POST of this flow got a `202`: N was left maybe registered by it.
+    var earlierTaken: Bool { lock.withLock { posts.dropLast().contains(true) } }
     /// The member API took the last POST: anything that failed after that may have reached the vault.
     var lastTaken: Bool { lock.withLock { posts.last == true } }
 }
 
-/// What the last POST of a register flow of N said of N's registration for its code (IOS-PLAN 0.1.37 §4.9 "A failed register").
+/// What the last POST of a register flow of N said of N's registration for its code (IOS-PLAN 0.1.38 §4.9 "A failed register").
 enum RegisterPostOutcome: Equatable {
     /// Not registered by this POST: a first POST with no `202`, or a readable refusal.
     case notRegistered
@@ -45,7 +46,7 @@ enum RegisterPostOutcome: Equatable {
     case unauthorized
 }
 
-// The register of N (IOS-PLAN 0.1.37 §4.9; VAULT-MESSAGING 0.63.0 §11.14.6 "Two identities at most"), the first time or again for a
+// The register of N (IOS-PLAN 0.1.38 §4.9; VAULT-MESSAGING 0.63.1 §11.14.6 "Two identities at most"), the first time or again for a
 // further recovery: the same K, the same N keys, the new code, and a new App Attest key. Each POST is judged on its own. Mirrors
 // vettid-android `registerNewIdentity`.
 extension VaultManager {
@@ -87,7 +88,7 @@ extension VaultManager {
             (outcome, answer) = Self.registerFailed(error, repeated: attempt.repeated || posts.reposted, taken: posts.lastTaken)
         }
         // A POST for this code that left N maybe registered or unknown, before or in this flow, keeps that registration.
-        let kept = attempt.kept || posts.reposted
+        let kept = attempt.kept || posts.earlierTaken
         return try await settleRegisterN(
             s, code, claimed, outcome, answer: answer, failure: failure, kept: kept, firstN: attempt.firstN, posts: posts,
             claimAgain: claimAgain
@@ -110,7 +111,11 @@ extension VaultManager {
         case .unknown:
             if posts.any { try noteRegisterKept(code.recoveryID) }
         case .notRegistered:
-            if posts.any, !kept { try await s.device.restoreRecoveryRegistration() }
+            // (A `202` this POST got is settled by its readable refusal: nothing is left maybe registered for the code.)
+            if posts.any, !kept {
+                try await s.device.restoreRecoveryRegistration()
+                try persistRecord(record.generation) { $0.couldNotTell?.registerKept = nil }
+            }
         case .unauthorized:
             // A re-registered N, or one a POST for this code left maybe registered or unknown, may be the identity the vault
             // adopted: nothing is dropped.

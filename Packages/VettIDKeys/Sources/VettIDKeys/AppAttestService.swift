@@ -29,7 +29,7 @@ public protocol AppAttestService: Sendable {
 /// The kept key ids: the current one (the vault accepted its attestation) and the pending ones (sent, not yet
 /// confirmed), oldest first. Stored as JSON; a bare key id (an earlier format) reads as the current one.
 ///
-/// (IOS-PLAN 0.1.35 §4.9) A phone that could not tell whether an open recovered the vault holds two device identities for a
+/// (IOS-PLAN 0.1.38 §4.9) A phone that could not tell whether an open recovered the vault holds two device identities for a
 /// while, and the vault bound each identity's own App Attest key at its register: `current` and `pending` are those of the
 /// identity in use ([active]), and the other identity's are [parked] under its number, untouched, until it is used again or
 /// forgotten. The new identity is registered again for each new recovery, each time with a new key; while [keepsReplaced] (an

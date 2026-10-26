@@ -5,7 +5,7 @@ import VettIDData
 import VettIDDataTesting
 @testable import VettIDOnboarding
 
-/// A phone that could not tell whether an open recovered the vault (IOS-PLAN 0.1.33 §4.9), as the recovery view models show it.
+/// A phone that could not tell whether an open recovered the vault (IOS-PLAN 0.1.38 §4.9), as the recovery view models show it.
 /// The data layer's rule is `VaultManagerCouldNotTellTests` and `VaultManagerCouldNotTellRegisterTests` of VettIDData.
 @MainActor
 @Suite struct CouldNotTellViewModelTests {
@@ -190,7 +190,7 @@ extension CouldNotTellViewModelTests {
     }
 }
 
-/// IOS-PLAN 0.1.35 §4.9, "Two identities at most": N's recovery ended too, the contact text, and a code of another vault.
+/// IOS-PLAN 0.1.38 §4.9, "Two identities at most": N's recovery ended too, the contact text, and a code of another vault.
 extension CouldNotTellViewModelTests {
     @Test func bothRecoveriesEndedStartAtThePinWithANewCodeBesideIt() async throws {
         vault.couldNotTellValue = .unlockOrNewCode

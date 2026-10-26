@@ -24,7 +24,7 @@ public enum RecoverStep: Equatable, Sendable, CaseIterable {
     /// The vault keeps no backup copy of its credential (`no_backup`, `409 recovery_unavailable`; VAULT-MESSAGING 0.16.0):
     /// it cannot be recovered, only deleted on the account site and replaced by a new one.
     case noBackup
-    /// (IOS-PLAN 0.1.33 §4.9, "A phone that could not tell") An open this phone sent got no readable answer and its recovery has
+    /// (IOS-PLAN 0.1.38 §4.9, "A phone that could not tell") An open this phone sent got no readable answer and its recovery has
     /// ended; two status reads said so. The text "We could not tell whether your last attempt recovered the vault. You can start a
     /// new recovery on the account site and use this phone for it; nothing on this phone is deleted.", and the code step as
     /// ``intro`` has it (``RecoverViewModel/scan()``, ``RecoverViewModel/type()``): the new code is claimed with the same key.
@@ -50,7 +50,7 @@ public enum CodeRefusal: Equatable, Sendable, CaseIterable {
     /// (VAULT-MESSAGING 0.34.0 §11.10.9) The vault's release implements release R without `recovery_offered`: nothing is
     /// sent ("This vault's release does not offer recovery").
     case notOffered
-    /// (IOS-PLAN 0.1.35 §4.9) A recovery code of another vault than the one this phone is recovering: nothing was registered,
+    /// (IOS-PLAN 0.1.38 §4.9) A recovery code of another vault than the one this phone is recovering: nothing was registered,
     /// and nothing on this phone is deleted.
     case otherVault
 }
@@ -121,7 +121,7 @@ public struct RecoverState: Equatable, Sendable, CustomStringConvertible, Custom
     public var busy = false
     public var error: FailureKind?
     public var errorCode: String?
-    /// (IOS-PLAN 0.1.35 §4.9) Where the rule for a phone that could not tell stands: ``CouldNotTellStage/newCode`` is the step
+    /// (IOS-PLAN 0.1.38 §4.9) Where the rule for a phone that could not tell stands: ``CouldNotTellStage/newCode`` is the step
     /// ``RecoverStep/couldNotTell``; ``CouldNotTellStage/finishWithPin`` (the claim of a new code answered `409 key_in_use`, or
     /// two reads of `200`) is the PIN of ``RecoveryOpenViewModel/finishLostOk()`` on the ``RecoverStep/open`` step;
     /// ``CouldNotTellStage/contact`` adds the second text, "Your vault took this phone, but it cannot be unlocked right now.
@@ -168,7 +168,7 @@ public struct RecoverState: Equatable, Sendable, CustomStringConvertible, Custom
 @MainActor
 public protocol RecoverActions: AnyObject, Sendable {
     func scan()
-    /// (IOS-PLAN 0.1.33 §4.9) Reads the rule's status again when it is due (a return to the foreground, "Check again", after the
+    /// (IOS-PLAN 0.1.38 §4.9) Reads the rule's status again when it is due (a return to the foreground, "Check again", after the
     /// open's answer): ``RecoverState/couldNotTell`` and, for a new code, the step ``RecoverStep/couldNotTell`` follow.
     func checkEnded()
     /// Reads where the recovery stands again, after ``RecoverStep/stageFailed``.

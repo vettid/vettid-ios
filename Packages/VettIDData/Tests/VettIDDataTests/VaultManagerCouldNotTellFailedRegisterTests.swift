@@ -7,7 +7,7 @@ import VettIDKeys
 import VettIDDataTesting
 @testable import VettIDVault
 
-/// A failed register of N (IOS-PLAN 0.1.37 §4.9 "A failed register"), each POST judged on its own: only a first POST for a code with
+/// A failed register of N (IOS-PLAN 0.1.38 §4.9 "A failed register"), each POST judged on its own: only a first POST for a code with
 /// no `202` is not registered and is retried with the same N, K and code; a failure after a `202`, or a repeat refused
 /// `409 recovery_not_available` or `used`, is maybe registered and the status signed with K decides; a readable refusal settles its
 /// POST; a `401` drops only an N that never registered, was left maybe registered or unknown; any other answer without a `202` keeps
@@ -156,6 +156,16 @@ extension VaultManagerRecoveryTests {
         let n = try await m.openSession()
         #expect(ct.identities == [.first, .second] && n.identity == .second && n.device.recoveryID == second.recoveryID)
         for slot in KeySlot.slots(of: .second) { #expect(try phone.wrapped.get(slot) != nil) }
+    }
+
+    @Test func aReadableRefusalToARepostAfterInstanceMovedPutsNsRegistrationBack() async throws {
+        defer { phone.close() }
+        let ids = try await secondEnded(.neverProcessed)
+        // The first POST is answered `instance_moved` (nothing taken), the re-post a readable `bad_code`: a repeat, but nothing left
+        // N maybe registered, so N is registered for its earlier recovery again.
+        service.recoveryRegisterAnswers(.instanceMoved, .refused("bad_code"))
+        #expect(try await m.registerRecovery(try scanned(try secondRecovery())) == .refused(code: "bad_code"))
+        #expect(device?.recoveryID == ids.second.recoveryID && m.record.value.couldNotTell?.registerKept == nil)
     }
 
     @Test func anyOtherAnswerWithoutA202KeepsNAsUnknown() async throws {

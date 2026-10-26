@@ -99,6 +99,8 @@ extension FakeVaultService {
         case slotUnauthorized
         /// The register is queued (`202`) and applied, and its slot says `expired`: the app seals and posts it again.
         case slotExpiredAfterRegistering
+        /// `409 instance_moved` to the POST (nothing taken): the app seals and posts it again.
+        case instanceMoved
         /// The member API answers the POST itself with this status before the vault sees it (`503 vault_unavailable`,
         /// `429 rate_limited`).
         case apiRefused(Int)
@@ -300,6 +302,7 @@ extension FakeVaultService {
         case .apiNotAvailable: return .json(409, #"{"error":"recovery_not_available"}"#)
         case .apiNoBackup: return .json(409, #"{"error":"recovery_unavailable"}"#)
         case .unauthorized: return .json(401, #"{"error":"unauthorized"}"#)
+        case .instanceMoved: return .json(409, #"{"error":"instance_moved"}"#)
         case .apiRefused(let status): return .json(status, status == 429 ? #"{"error":"rate_limited"}"# : #"{"error":"vault_unavailable"}"#)
         case .ok, .refused, .answerLostAfterRegistering, .slotUnauthorized, .slotExpiredAfterRegistering: break
         }

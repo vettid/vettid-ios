@@ -30,7 +30,7 @@ public struct RecoveryOpenOutcome: Equatable, Sendable {
     public var opened: Bool
     /// Whether THIS request used an attempt, as the vault says; nil from a vault that does not say.
     public var attemptUsed: Bool?
-    /// (IOS-PLAN 0.1.35 §4.9) The new identity's fresh open was answered `exhausted`, `closed` or `not_armed` and K is not the
+    /// (IOS-PLAN 0.1.38 §4.9) The new identity's fresh open was answered `exhausted`, `closed` or `not_armed` and K is not the
     /// vault's key: the text `recover_could_not_recover` with the action that mails support. Not terminal.
     public var contactCouldNotRecover = false
 
@@ -542,7 +542,7 @@ public protocol MoveRepository: AnyObject, Sendable {
     /// (Release R) After an `ok` ``recoveryOpen(pin:password:)`` the member has read: the app opens.
     func finishRecoveryOpen() async throws
 
-    /// (IOS-PLAN 0.1.33 §4.9) Where the rule for a phone that could not tell stands, from what it keeps. Default: none.
+    /// (IOS-PLAN 0.1.38 §4.9) Where the rule for a phone that could not tell stands, from what it keeps. Default: none.
     func couldNotTellStage() async throws -> CouldNotTellStage
 
     /// (§4.9) One status read signed with K when due (never within 5 minutes of the first), then ``couldNotTellStage()``.

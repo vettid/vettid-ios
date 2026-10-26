@@ -36,7 +36,7 @@ public final class RecoveryOpenViewModel {
         }
     }
 
-    /// IOS-PLAN 0.1.35 §4.9: where the rule for a phone that could not tell stands. [startFinish]: at the start, a phone for
+    /// IOS-PLAN 0.1.38 §4.9: where the rule for a phone that could not tell stands. [startFinish]: at the start, a phone for
     /// which the unlock is what is left (beside a new code, for ``CouldNotTellStage/unlockOrNewCode``) is at the PIN of the
     /// lost-ok finish.
     private func refreshStage(startFinish: Bool = false) async {
@@ -102,7 +102,7 @@ public final class RecoveryOpenViewModel {
     /// The vault's answer (or this phone's own unlock while finishing an `ok` recovery).
     private func answered(_ out: RecoveryOpenOutcome) {
         if out.code == UnlockEpoch.transferIncomplete {
-            // IOS-PLAN 0.1.33 §4.9: the state is still under `DEK_0`; only an open repeats the recovery. While its recovery shows
+            // IOS-PLAN 0.1.38 §4.9: the state is still under `DEK_0`; only an open repeats the recovery. While its recovery shows
             // `registered` the phone opens again (the fields come back); otherwise the rule applies (``refreshStage()``).
             state.step = .enter
             state.outcome = nil

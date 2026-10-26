@@ -74,16 +74,16 @@ extension VaultDevice {
     }
 
     /// Whether a stored device state (its decrypted bytes) is of a device that paired and has no recovery left: the pairing of a
-    /// recovery completed there (IOS-PLAN 0.1.33 §4.9). Reads no keys.
+    /// recovery completed there (IOS-PLAN 0.1.38 §4.9). Reads no keys.
     public static func pairedAfterRecovery(state bytes: [UInt8]) -> Bool {
         guard let st = try? JSONDecoder().decode(DeviceState.self, from: Data(bytes)) else { return false }
         return st.deviceID != nil && st.recovery == nil
     }
 
-    /// What is known of each open this identity built, oldest first (IOS-PLAN 0.1.34 §4.10).
+    /// What is known of each open this identity built, oldest first (IOS-PLAN 0.1.38 §4.10).
     public var recoveryOpens: [RecoveryOpenEntry] { mem.withLock { st.recovery?.opens ?? [] } }
 
-    /// The `request_id`s of the opens this identity built, newest first (IOS-PLAN 0.1.33 §4.9).
+    /// The `request_id`s of the opens this identity built, newest first (IOS-PLAN 0.1.38 §4.9).
     public var recoveryOpenRequestIDs: [String] { recoveryOpens.reversed().map(\.id) }
 
     /// The `request_id`s of the opens that are unanswered, newest first.
@@ -123,7 +123,7 @@ extension VaultDevice {
     }
 
     /// An open that went out in a build before the history existed (the account record said so) is one unanswered entry, written
-    /// once: a later refusal never clears it (IOS-PLAN 0.1.34 §4.10).
+    /// once: a later refusal never clears it (IOS-PLAN 0.1.38 §4.10).
     public func addLegacyUnansweredOpen() async throws {
         try await lock.withLock {
             let added: Bool = mem.withLock {
@@ -137,7 +137,7 @@ extension VaultDevice {
     }
 
     /// A new identity starts from the floors the earlier one has seen (`min_state_seq`, `min_header_seq`, the release and the
-    /// manifest serial), never below them (IOS-PLAN 0.1.33 §4.9; chosen; not in the spec).
+    /// manifest serial), never below them (IOS-PLAN 0.1.38 §4.9; chosen; not in the spec).
     public func seedFloors(from other: AltState) async throws {
         try await lock.withLock {
             mem.withLock {

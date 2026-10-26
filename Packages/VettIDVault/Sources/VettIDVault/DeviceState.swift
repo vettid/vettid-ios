@@ -81,11 +81,11 @@ struct RecoveryRecord: Codable, Sendable {
     let recoveryID: String
     var requestID = ""
     var credentialBackup: Bool?
-    /// (IOS-PLAN 0.1.33 §4.9) The `request_id` of every `vault.recovery.open` this identity built, kept before the request is
+    /// (IOS-PLAN 0.1.38 §4.9) The `request_id` of every `vault.recovery.open` this identity built, kept before the request is
     /// posted: a phone that could not tell whether an open recovered the vault reads the slot of the earlier one once.
     /// Optional: a state written before it existed has none.
     var opens: [RecoveryOpenEntry]?
-    /// (IOS-PLAN 0.1.35 §4.9) The registration this one replaced (an identity registered again for a new recovery): a register
+    /// (IOS-PLAN 0.1.38 §4.9) The registration this one replaced (an identity registered again for a new recovery): a register
     /// that did not reach the vault puts it back (``VaultDevice/restoreRecoveryRegistration()``).
     var replaced: ReplacedRecovery?
 }
@@ -96,7 +96,7 @@ struct ReplacedRecovery: Codable, Sendable {
     var requestID = ""
 }
 
-/// What is known of one open this identity built (IOS-PLAN 0.1.34 §4.10): kept per open, never as the last answer. An entry is
+/// What is known of one open this identity built (IOS-PLAN 0.1.38 §4.10): kept per open, never as the last answer. An entry is
 /// written, unanswered, in the same save that stores its `request_id`, before the open is posted.
 public struct RecoveryOpenEntry: Codable, Sendable, Equatable {
     public enum State: Codable, Sendable, Equatable {

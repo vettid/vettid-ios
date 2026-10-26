@@ -157,7 +157,7 @@ extension VaultDevice: AltParty {
         setVault(try Principal.parse(bo))
     }
 
-    /// vault.recovery.register (§11.11.3): builds the request and records the recovery. [keepingHistory] (IOS-PLAN 0.1.35 §4.9,
+    /// vault.recovery.register (§11.11.3): builds the request and records the recovery. [keepingHistory] (IOS-PLAN 0.1.38 §4.9,
     /// the new identity of a phone that could not tell, registered again for a new recovery): the history of the identity's opens
     /// stays, and the registration it replaces is kept for ``restoreRecoveryRegistration()``.
     public func prepareRecoveryRegister(
@@ -186,7 +186,7 @@ extension VaultDevice: AltParty {
         }
     }
 
-    /// (IOS-PLAN 0.1.35 §4.9) A register that did not register (it failed before reaching the vault, or was refused): the
+    /// (IOS-PLAN 0.1.38 §4.9) A register that did not register (it failed before reaching the vault, or was refused): the
     /// registration it replaced is this identity's again, with the history of its opens; without one, the registration is
     /// forgotten (``dropRecoveryRegistration()``).
     public func restoreRecoveryRegistration() async throws {

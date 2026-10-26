@@ -7,7 +7,7 @@ import VettIDKeys
 import VettIDDataTesting
 @testable import VettIDVault
 
-/// The history of each identity's opens (IOS-PLAN 0.1.35 §4.9, §4.10: written before the post, sticky, per open), the return marker of
+/// The history of each identity's opens (IOS-PLAN 0.1.38 §4.9, §4.10: written before the post, sticky, per open), the return marker of
 /// the unlock with each identity, the reads of the rule and the setup code (continues ``VaultManagerRecoveryTests``).
 extension VaultManagerRecoveryTests {
     // MARK: - The history of the opens
@@ -50,7 +50,7 @@ extension VaultManagerRecoveryTests {
         defer { phone.close() }
         let k = try phone.appKeys.getOrCreate().spki()
         _ = try await registered()
-        // The POST's own `4xx` (IOS-PLAN 0.1.35 §4.9): a re-sent POST can be queued, so the entry stays unanswered.
+        // The POST's own `4xx` (IOS-PLAN 0.1.38 §4.9): a re-sent POST can be queued, so the entry stays unanswered.
         service.recoveryOpenAnswers(.apiRefused(429))
         _ = await vaultFailure { _ = try await m.recoveryOpen(pin: pin, password: password) }
         #expect(device?.recoveryOpens.map(\.state) == [.unanswered] && device?.recoveryOpenEverUnanswered == true)

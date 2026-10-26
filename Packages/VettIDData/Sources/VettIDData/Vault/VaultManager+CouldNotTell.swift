@@ -4,7 +4,7 @@ import VettIDCrypto
 import VettIDKeys
 import VettIDVault
 
-// A phone that could not tell (IOS-PLAN 0.1.35 §4.9; VAULT-MESSAGING 0.62.0 §11.14.6; MEMBER-API 2.12.0, owner decisions of
+// A phone that could not tell (IOS-PLAN 0.1.38 §4.9; VAULT-MESSAGING 0.63.1 §11.14.6; MEMBER-API 2.12.0, owner decisions of
 // 2026-10-24, "option A", and 2026-10-25). An open the member API took got no readable answer and its recovery has ended: the phone
 // cannot tell whether the vault adopted it. It reads the status signed with K twice, at least 5 minutes apart with the clock
 // checked; only then does it use the phone for a new recovery, with a new device identity (N, reused for every further recovery)
@@ -71,7 +71,7 @@ extension VaultManager {
         return ct.ended ? .newCode : .none
     }
 
-    /// Reads the status once when it is due and says where the rule stands (IOS-PLAN 0.1.33 §4.9 "When"). Only while an open the
+    /// Reads the status once when it is due and says where the rule stands (IOS-PLAN 0.1.38 §4.9 "When"). Only while an open the
     /// member API took has no answer that proves no step 1 was stored (the history of ``VaultDevice/recoveryOpens``, sticky); never
     /// while the recovery shows `registered` (the phone opens again); a decision needs two reads of the same kind at least 5
     /// minutes apart, on this phone's clock and its monotonic clock agreeing. A call made too soon sends nothing, and none is made
@@ -80,7 +80,7 @@ extension VaultManager {
 
     /// [duringSwitch]: the read of the identity in use that an unlock with it asks for (`transfer_incomplete`), made while the
     /// identities are switched. Once N's recovery ended too, a read that decides nothing leaves the stage as it is: the unlock and a
-    /// new code stay offered (IOS-PLAN 0.1.35 §4.9, "not terminal").
+    /// new code stay offered (IOS-PLAN 0.1.38 §4.9, "not terminal").
     func checkRule(duringSwitch: Bool) async throws -> CouldNotTellStage {
         let stage = try await readRule(duringSwitch: duringSwitch)
         if case .waiting = stage, record.value.couldNotTell?.bothEnded == true { return try await couldNotTellStage() }
@@ -222,7 +222,7 @@ extension VaultManager {
 
     /// The unlock answered `transfer_incomplete` (the state is still under `DEK_0`, only an open repeats the recovery): the phone
     /// opens again while its recovery shows `registered`; otherwise the rule applies, on the same two reads as every other decision
-    /// (a single `401` can be a clock or a nonce). The unlock of two reads of `200` is given up for it. IOS-PLAN 0.1.33 §4.9.
+    /// (a single `401` can be a clock or a nonce). The unlock of two reads of `200` is given up for it. IOS-PLAN 0.1.38 §4.9.
     func noteTransferIncomplete() async throws {
         // An unlock that a key in use led to stays: K is the vault's app key.
         if let ct = record.value.couldNotTell, ct.unlock, !ct.unlockByReads { return }
@@ -246,13 +246,13 @@ extension VaultManager {
         return record.value.activeIdentity != ct.earlier
     }
 
-    /// An answer that proves no step 1 was stored (IOS-PLAN 0.1.35 §4.10): only a code from the vault's readable answer, and only
+    /// An answer that proves no step 1 was stored (IOS-PLAN 0.1.38 §4.10): only a code from the vault's readable answer, and only
     /// `busy`, `wrong_again`, `attempt_lost`, `exhausted`, `not_armed`, `closed`, the counter-down answer, the wait verdicts and an
     /// `attestation` that used no attempt on their own, each for the open it answers alone; `wrong` and `expired` only for a phone with no earlier unanswered open. A
     /// slot `expired`, a 404, 410 or 5xx on the poll, no answer, `retry`, `transfer_incomplete` and any error are unanswered.
     nonisolated static func refusalProves(_ code: String, earlierUnanswered: Bool) -> Bool {
-        // `attestation`: the vault refuses the open's assertion before step 1 and before counting (chosen; not in the spec; owner
-        // decision 2026-10-26, spec question raised); ``noteOpenAnswer(_:device:id:)`` requires that no attempt was used.
+        // `attestation`: decided at step 1, before anything is written (IOS-PLAN 0.1.38 §4.9, §4.10); ``noteOpenAnswer(_:device:id:)``
+        // also requires that no attempt was used.
         let alone: Set = [
             "busy", "wrong_again", "attempt_lost", "exhausted", "not_armed", "closed", "counter_unavailable", "wait", "quiet",
             AltChannelFlow.codeAttestation,
@@ -260,7 +260,7 @@ extension VaultManager {
         return alone.contains(code) || (!earlierUnanswered && (code == "wrong" || code == "expired"))
     }
 
-    /// The answers of a fresh open that rule recovery of this vault out until its owner's app arms a new generation (IOS-PLAN 0.1.35
+    /// The answers of a fresh open that rule recovery of this vault out until its owner's app arms a new generation (IOS-PLAN 0.1.38
     /// §4.9): none can follow a stored step 1.
     nonisolated static let ruledOut: Set = ["exhausted", "closed", "not_armed"]
 
@@ -275,7 +275,8 @@ extension VaultManager {
     /// What became known of the open [id] with the answer [r], written to its entry of the history: `ok` decides; a refusal that
     /// proves no step 1 marks this entry only, and never changes an earlier open's.
     func noteOpenAnswer(_ r: RecoveryOpen.Result, device: VaultDevice, id: String) async {
-        // An `attestation` that used an attempt (or does not say) proves nothing.
+        // An `attestation` that used an attempt (or does not say) proves nothing (chosen; not in the spec: the vault answers it
+        // before counting).
         let unproven = r.code == AltChannelFlow.codeAttestation && r.attemptUsed != false
         if r.ok {
             try? await device.markRecoveryOpen(id, .ok)

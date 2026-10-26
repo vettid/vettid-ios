@@ -5,7 +5,7 @@ import VettIDData
 import VettIDDataTesting
 @testable import VettIDOnboarding
 
-/// A phone that could not tell (IOS-PLAN 0.1.35 §4.9), the recovery view model over the real vault manager: once the new identity's
+/// A phone that could not tell (IOS-PLAN 0.1.38 §4.9), the recovery view model over the real vault manager: once the new identity's
 /// recovery ended too, reads that decide nothing never take the code steps away ("not terminal").
 @MainActor
 @Suite(.serialized) struct CouldNotTellEndToEndTests {

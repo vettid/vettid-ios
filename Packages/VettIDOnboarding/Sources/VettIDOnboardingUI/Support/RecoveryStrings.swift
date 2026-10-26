@@ -147,7 +147,7 @@ enum RecoveryStrings {
         )
     }
 
-    // (IOS-PLAN 0.1.35 §4.9, "A phone that could not tell"; `recover_could_not_tell` and `onboarding_open_took_phone` approved by
+    // (IOS-PLAN 0.1.38 §4.9, "A phone that could not tell"; `recover_could_not_tell` and `onboarding_open_took_phone` approved by
     // the owner on 2026-10-24; `recover_could_not_recover`, its action, `recover_other_vault` and `recover_undecided_new_code` on
     // 2026-10-26.) The keys and the wording are the spec's and vettid-android's.
 

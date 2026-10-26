@@ -7,7 +7,7 @@ import VettIDKeys
 import VettIDDataTesting
 @testable import VettIDVault
 
-/// The sticky mark of an unanswered open (IOS-PLAN 0.1.35 §4.9, §4.10), the trial's wrong PIN, and the reads that go on (continues
+/// The sticky mark of an unanswered open (IOS-PLAN 0.1.38 §4.9, §4.10), the trial's wrong PIN, and the reads that go on (continues
 /// ``VaultManagerRecoveryTests``).
 extension VaultManagerRecoveryTests {
     @Test func aRefusalAfterAnUnansweredOpenNeverClearsTheStickyMark() async throws {
@@ -35,7 +35,7 @@ extension VaultManagerRecoveryTests {
         service.recoveryOpenAnswers(.neverProcessed, .refused(code))
         _ = await vaultFailure { _ = try await m.recoveryOpen(pin: pin, password: password) }
         #expect(try await m.recoveryOpen(pin: pin, password: password).code == code)
-        // IOS-PLAN 0.1.35 §4.9: the second open is settled; the first stays unanswered, and so does the phone.
+        // IOS-PLAN 0.1.38 §4.9: the second open is settled; the first stays unanswered, and so does the phone.
         #expect(device?.recoveryOpens.map(\.state) == [.unanswered, .refused(code)])
         #expect(device?.recoveryOpenEverUnanswered == true && VaultManager.refusalProves(code, earlierUnanswered: true))
         #expect(await vaultFailure { try await m.abandonRecovery() } != nil)

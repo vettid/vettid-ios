@@ -313,7 +313,7 @@ public struct AltChannelFlow: Sendable {
             // IOS-PLAN §6.2: an accepted assertion proves the key in use is the bound one; a refused one, while no key is
             // confirmed, tries the next unconfirmed key (bounded; chosen; not in the spec).
             // Best effort: the vault already opened, which a failed write must not turn into a failed unlock.
-            // (IOS-PLAN 0.1.37 §4.9: for an identity registered again, an earlier key that opens does not replace the newest.)
+            // (IOS-PLAN 0.1.38 §4.9: for an identity registered again, an earlier key that opens does not replace the newest.)
             if r.ok { try? attester.confirmUnlocked() }
             // A sealed `attestation` is decided before the PIN is checked (vettid-vault `vault/unlock.go`): a retry with
             // another key never costs a PIN attempt.
@@ -385,7 +385,7 @@ public struct AltChannelFlow: Sendable {
             let req = try await build(e)
             let taken = TakenMark()
             // A transport error (no answer to the POST: the member API may have taken it) is thrown with the key kept (chosen; not in
-            // the spec: for the registration such a POST got no `202`, IOS-PLAN 0.1.37 §4.9; the open falls back to another key).
+            // the spec: for the registration such a POST got no `202`, IOS-PLAN 0.1.38 §4.9; the open falls back to another key).
             let (err, slot) = try await postAndPoll(
                 {
                     try await api.recoveryRegister(vaultID: vaultID, instanceID: info.instanceID, req)
@@ -410,7 +410,7 @@ public struct AltChannelFlow: Sendable {
     /// Opens a registered recovery (§11.14.6, release R), routed like an unlock. Never retried here: every open may use
     /// an attempt, so the member sends again. [onSent] runs each time the member API has taken a request. The one exception:
     /// a readable `attestation` (the vault checks the assertion against the registration's attestation before anything is
-    /// counted) tries the next key [attester] holds, as an unlock does, bounded by ``maxKeySwitches`` (IOS-PLAN 0.1.35 §4.9:
+    /// counted) tries the next key [attester] holds, as an unlock does, bounded by ``maxKeySwitches`` (IOS-PLAN 0.1.38 §4.9:
     /// a register sent again attests a key of its own, and the vault's binding may be an earlier copy's); `ok` confirms the
     /// key in use.
     public func recoveryOpen(

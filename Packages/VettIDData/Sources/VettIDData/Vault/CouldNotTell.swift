@@ -2,7 +2,7 @@ import Foundation
 import VettIDAltChan
 import VettIDKeys
 
-/// Where a phone that could not tell whether an open recovered the vault stands (IOS-PLAN 0.1.35 §4.9; VAULT-MESSAGING 0.62.0
+/// Where a phone that could not tell whether an open recovered the vault stands (IOS-PLAN 0.1.38 §4.9; VAULT-MESSAGING 0.63.1
 /// §11.14.6 "A phone that could not tell", "Two identities at most"; MEMBER-API 2.12.0).
 public enum CouldNotTellStage: Equatable, Sendable {
     /// The rule does not apply: no open went out unanswered, or the recovery still shows `registered` (the phone opens again).
@@ -20,7 +20,7 @@ public enum CouldNotTellStage: Equatable, Sendable {
     /// A day of refusals to the unlock after `409 key_in_use` (K is the vault's `app_key`): the text "Your vault took this phone,
     /// but it cannot be unlocked right now. Contact VettID."
     case contact
-    /// (IOS-PLAN 0.1.35 §4.9, "Two identities at most") The new identity's recovery ended too: the phone keeps both identities,
+    /// (IOS-PLAN 0.1.38 §4.9, "Two identities at most") The new identity's recovery ended too: the phone keeps both identities,
     /// the PIN tries the lost-ok unlock (the new identity first, then the earlier one) whenever the member asks, and a new
     /// recovery the member starts is registered with the new identity again (the code steps are offered beside the PIN).
     case unlockOrNewCode
@@ -33,7 +33,7 @@ struct CouldNotTellRead: Codable, Equatable, Sendable {
     var ended: Bool
     var atMs: Int64
     var uptime: Double
-    /// (IOS-PLAN 0.1.35 §4.9) A `200` that shows the recovery `registered`: the phone acts on it only with the pair too.
+    /// (IOS-PLAN 0.1.38 §4.9) A `200` that shows the recovery `registered`: the phone acts on it only with the pair too.
     var registered = false
 
     enum CodingKeys: String, CodingKey {
@@ -63,7 +63,7 @@ struct CouldNotTellRead: Codable, Equatable, Sendable {
 /// Persisted as `could_not_tell` in the account record: `identities` (oldest first, indexes into the keys `relay`, `relay2`, …
 /// and the device state files `vault-device`, `vault-device-2`, …; the first is the identity of the open that could not be told),
 /// the flags below, and the run of refusals. Two identities at most, the earlier one (E) and a new one (N), never a third: every
-/// further recovery registers N again (IOS-PLAN 0.1.35 §4.9, owner decision of 2026-10-25).
+/// further recovery registers N again (IOS-PLAN 0.1.38 §4.9, owner decision of 2026-10-25).
 struct CouldNotTell: Codable, Equatable, Sendable {
     /// The identities, oldest first.
     var identities: [IdentitySet]
@@ -80,7 +80,7 @@ struct CouldNotTell: Codable, Equatable, Sendable {
     /// phone (``keyInUse``).
     var bothEnded = false
     /// The `recovery_id` of the last register POST of N, written before it is posted: every later POST for the same code is a
-    /// repeat, which the member API may refuse because the first was recorded (IOS-PLAN 0.1.37 §4.9 "A failed register").
+    /// repeat, which the member API may refuse because the first was recorded (IOS-PLAN 0.1.38 §4.9 "A failed register").
     var registerTried: String?
     /// The `recovery_id` for which a POST left N maybe registered (it got a `202`) or unknown: a `401` or a readable refusal to a
     /// later POST for it keeps N's registration.

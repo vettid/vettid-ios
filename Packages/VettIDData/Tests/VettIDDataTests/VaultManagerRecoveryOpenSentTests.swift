@@ -89,7 +89,7 @@ extension VaultManagerRecoveryTests {
         #expect(m.record.value.recoveryOpenUnanswered && pendingRecord && m.phase != .signedOut)
     }
 
-    /// The mark goes only when the history of the opens leaves none unanswered (IOS-PLAN 0.1.34 §4.10): the answers that prove no
+    /// The mark goes only when the history of the opens leaves none unanswered (IOS-PLAN 0.1.38 §4.10): the answers that prove no
     /// step 1 was stored on their own clear it for a first open; `wrong` and `expired` only with no earlier unanswered open; the
     /// rest (`retry`, `not_armed`, `stored_mismatch`, a code decided before the record is read, …) never do.
     @Test func onlyAnswersThatProveNoStepOneWasStoredClearTheMark() async throws {
@@ -108,7 +108,7 @@ extension VaultManagerRecoveryTests {
             _ = try await p.manager.recoveryOpen(pin: pin, password: password)
             return !p.manager.record.value.recoveryOpenUnanswered
         }
-        // IOS-PLAN 0.1.35 §4.10: `exhausted` and `not_armed` prove it too, and an `attestation` that used no attempt (owner decision
+        // IOS-PLAN 0.1.38 §4.10: `exhausted` and `not_armed` prove it too, and an `attestation` that used no attempt (owner decision
         // of 2026-10-26).
         for code in ["busy", "counter_unavailable", "wait", "quiet", "wrong", "expired", "exhausted", "not_armed", "attestation"] {
             let first = try await clears(code, earlierUnanswered: false)

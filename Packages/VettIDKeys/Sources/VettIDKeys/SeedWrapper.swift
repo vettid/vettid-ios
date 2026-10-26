@@ -105,7 +105,7 @@ public final class SeedWrapper: Sendable {
     static func aad(_ slot: KeySlot) -> [UInt8] { Array(aadLabel.utf8) + [0] + Array(slot.rawValue.utf8) }
 }
 
-/// One of the two device identities a phone holds (IOS-PLAN 0.1.33 §4.9): a phone that could not tell whether an open recovered
+/// One of the two device identities a phone holds (IOS-PLAN 0.1.38 §4.9): a phone that could not tell whether an open recovered
 /// the vault registers a new identity for its new recovery and keeps the earlier one until the pairing completed. Its relay,
 /// identity and KEM keys (``KeySlot/slots(of:)``) and its device state file are its own; the app key K is shared.
 public struct IdentitySet: RawRepresentable, Codable, Hashable, Sendable, CustomStringConvertible {

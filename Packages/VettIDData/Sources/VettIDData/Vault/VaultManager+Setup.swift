@@ -9,7 +9,7 @@ extension VaultManager {
     public func redeemSetupCode(_ code: SetupCodeInput) async throws -> String {
         let r: Redeemed = try await guarded {
             try prepared()
-            // IOS-PLAN 0.1.33 §4.9: never while the phone could not tell (a redeem would bind K to another vault).
+            // IOS-PLAN 0.1.38 §4.9: never while the phone could not tell (a redeem would bind K to another vault).
             if record.value.couldNotTell != nil { throw VaultFailure(.other, code: Self.codeRecoveryOpenSent) }
             // While this phone may hold a vault (``mayHoldVault(_:)``), no code is redeemed, not even the same vault's
             // again: a redeem spends the code and may bind this phone's app key to another vault (§11.12.2), and the

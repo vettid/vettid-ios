@@ -94,7 +94,7 @@ struct LocalAccount: Codable, Equatable, Sendable {
     /// (IOS-PLAN §4.2) The vault said it is being deleted: a start opens on "being deleted" until the member API no longer
     /// lists it. Non-secret; erased with the record.
     var deleting: DeletingMarker?
-    /// (IOS-PLAN 0.1.33 §4.9) Which of the phone's two device identities (keys and device state file) is in use. The first
+    /// (IOS-PLAN 0.1.38 §4.9) Which of the phone's two device identities (keys and device state file) is in use. The first
     /// unless a phone that could not tell whether an open recovered the vault registered a new identity.
     var activeIdentity = IdentitySet.first
     /// (§4.9) The first of the two status reads of the rule, kept until the second ≥ 5 minutes later decides.

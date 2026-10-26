@@ -9,7 +9,7 @@ import VettIDDataTesting
 
 // swiftlint:disable line_length
 
-/// A phone that could not tell (IOS-PLAN 0.1.33 §4.9; VAULT-MESSAGING 0.59.0 §11.14.6): when the rule applies, how the two
+/// A phone that could not tell (IOS-PLAN 0.1.38 §4.9; VAULT-MESSAGING 0.63.1 §11.14.6): when the rule applies, how the two
 /// status reads decide, and what is kept. Continues ``VaultManagerRecoveryTests``; the new recovery itself is in
 /// ``VaultManagerCouldNotTellRegisterTests``.
 extension VaultManagerRecoveryTests {

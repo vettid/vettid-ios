@@ -82,7 +82,7 @@ public final class RecoverViewModel: RecoverActions {
         state.error = nil
         state.errorCode = nil
         state.emailHint = account.account?.emailHint ?? ""
-        // IOS-PLAN 0.1.33 §4.9: a phone that could not tell is told (a read that fails decides nothing).
+        // IOS-PLAN 0.1.38 §4.9: a phone that could not tell is told (a read that fails decides nothing).
         // A read that fails or is cancelled falls back to what the phone keeps, and that to nothing.
         let kept = try? await move.couldNotTellStage()
         let rule = (try? await move.checkCouldNotTell()) ?? kept ?? .none
@@ -125,7 +125,7 @@ public final class RecoverViewModel: RecoverActions {
 
     /// The code's steps are entered from the intro and from each other, never over a failed or running read of the stage; for a
     /// phone that could not tell, also from the rule's text and from the open step once a new code registers the new identity
-    /// again (IOS-PLAN 0.1.35 §4.9).
+    /// again (IOS-PLAN 0.1.38 §4.9).
     private var codeEntry: Bool {
         [.intro, .couldNotTell, .scan, .type].contains(state.step) || (state.step == .open && state.couldNotTell == .unlockOrNewCode)
     }
@@ -285,7 +285,7 @@ public final class RecoverViewModel: RecoverActions {
     private func refused(from: RecoverStep, recoveryID: String, code: String) { // swiftlint:disable:this cyclomatic_complexity
         var refusal: CodeRefusal
         switch code {
-        // IOS-PLAN 0.1.33 §4.9: the claim says this phone's key is the vault's app key (`409 key_in_use`), or the earlier open's
+        // IOS-PLAN 0.1.38 §4.9: the claim says this phone's key is the vault's app key (`409 key_in_use`), or the earlier open's
         // slot was read after all and was `ok`: the PIN finishes it, and nothing more is registered.
         case VaultManager.codeKeyInUse, VaultManager.codeRecoveryOpenSent:
             state.step = .open

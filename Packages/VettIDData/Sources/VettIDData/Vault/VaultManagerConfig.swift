@@ -57,7 +57,7 @@ public enum VaultFiles {
             .map { directory.appendingPathComponent($0) }
     }
 
-    /// (IOS-PLAN 0.1.33 §4.9) The device state of identity [set]: the first is `vault-device`, the others (a phone that could not
+    /// (IOS-PLAN 0.1.38 §4.9) The device state of identity [set]: the first is `vault-device`, the others (a phone that could not
     /// tell) `vault-device-2`, `vault-device-3`, …
     public static func device(of set: IdentitySet) -> String { set.rawValue == 0 ? device : "\(device)-\(set.rawValue + 1)" }
 }

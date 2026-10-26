@@ -8,7 +8,7 @@ import VettIDVault
 /// This device's session with the vault: the device (keys, state, mailbox), its typed client and the alternate
 /// channel.
 struct VaultSession: Sendable {
-    let identity: IdentitySet // the device identity (IOS-PLAN 0.1.33 §4.9) whose keys and state this is
+    let identity: IdentitySet // the device identity (IOS-PLAN 0.1.38 §4.9) whose keys and state this is
     let device: VaultDevice
     let api: VaultApi
     let alt: AltChannelFlow
@@ -322,7 +322,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
 
     /// A record of its own (a redeem, or none after "that is not my account").
     func resetRecord(_ a: LocalAccount, carryRule: Bool = false) throws {
-        // IOS-PLAN 0.1.33 §4.9: only a new recovery's registration ([carryRule]) keeps the identities of a phone that could not
+        // IOS-PLAN 0.1.38 §4.9: only a new recovery's registration ([carryRule]) keeps the identities of a phone that could not
         // tell through its record; they are cleared with the completed pairing or when the vault is gone, in a save of their own.
         var a = a
         if carryRule { (a.activeIdentity, a.couldNotTell) = (record.value.activeIdentity, record.value.couldNotTell) }
@@ -387,7 +387,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             try Task.checkCancellation()
             try keys.generate(slot)
         }
-        // The App Attest keys the vault bound to this identity are in use (IOS-PLAN 0.1.33 §4.9); the app key K is the same.
+        // The App Attest keys the vault bound to this identity are in use (IOS-PLAN 0.1.38 §4.9); the app key K is the same.
         if twoIdentities { try c.attester.use(identity: identity.rawValue) } else { try? c.attester.use(identity: 0) }
         let secrets = DeviceSecrets(
             identity: try keys.ed25519(KeySlot.identity.of(identity)), kem: try keys.kem(KeySlot.kem.of(identity)),
@@ -449,7 +449,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// (``mayHoldVault(_:)``) unless [vaultGone]: the member API, asked again, said explicitly that it has none.
     /// [registrationOnly]: the device holds only a recovery's registration (``abandonRecovery()``), not taken for a vault.
     func dropSession(forget: Bool, vaultGone: Bool = false, registrationOnly: Bool = false) async throws {
-        // IOS-PLAN 0.1.33 §4.9: never while the phone could not tell (K and every identity stay until the pairing completed), unless
+        // IOS-PLAN 0.1.38 §4.9: never while the phone could not tell (K and every identity stay until the pairing completed), unless
         // the vault is gone: then the rule is cleared, in a save of its own, before any key is forgotten.
         if forget { try guardRule(vaultGone: vaultGone) }
         // [registrationOnly] skips the refusal only for a device with a vault id and nothing else (not pinned, not paired).
