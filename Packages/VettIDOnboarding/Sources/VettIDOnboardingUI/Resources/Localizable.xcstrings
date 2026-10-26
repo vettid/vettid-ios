@@ -51,7 +51,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Email support"
+            "value": "Email %@"
           }
         }
       }

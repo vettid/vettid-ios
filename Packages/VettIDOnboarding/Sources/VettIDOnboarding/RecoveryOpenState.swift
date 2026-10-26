@@ -77,7 +77,7 @@ public struct RecoveryOpenState: Equatable, Sendable, CustomStringConvertible, C
 
     /// (IOS-PLAN 0.1.35 §4.9) The answer ruled recovery out (`exhausted`, `closed` or `not_armed` to the new identity's fresh
     /// open): the text "This phone could not recover your vault. Nothing on this phone is deleted. Contact VettID at
-    /// support@vettid.org." (`recover_could_not_recover`) with the action "Email support", which opens ``SupportMail/url``. Not
+    /// support@vettid.org." (`recover_could_not_recover`) with the action "Email support@vettid.org", which opens ``SupportMail/url``. Not
     /// terminal: a later recovery the member starts still uses this phone (``newCodeAllowed`` once the reads allow it).
     public var couldNotRecover: Bool { outcome?.contactCouldNotRecover == true }
 

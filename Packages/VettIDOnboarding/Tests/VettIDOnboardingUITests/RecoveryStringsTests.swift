@@ -42,7 +42,7 @@ import Testing
         Row("recover_type_incomplete", RecoveryStrings.recoverTypeIncomplete, "The code has 12 groups of four characters. Type them all."),
         Row("recover_could_not_tell", RecoveryStrings.recoverCouldNotTell, "We could not tell whether your last attempt recovered the vault. You can start a new recovery on the account site and use this phone for it; nothing on this phone is deleted."),
         Row("recover_could_not_recover", RecoveryStrings.recoverCouldNotRecover, "This phone could not recover your vault. Nothing on this phone is deleted. Contact VettID at support@vettid.org."),
-        Row("onboarding_open_contact_support", RecoveryStrings.onboardingOpenContactSupport, "Email support"),
+        Row("onboarding_open_contact_support", RecoveryStrings.onboardingOpenContactSupport("support@vettid.org"), "Email support@vettid.org"),
         Row("recover_other_vault", RecoveryStrings.recoverOtherVault, "This recovery code is for a different vault than the one this phone is recovering. Nothing was registered, and nothing on this phone is deleted."),
         Row("recover_undecided_new_code", RecoveryStrings.recoverUndecidedNewCode, "Use a new recovery code"),
         Row("onboarding_open_took_phone", RecoveryStrings.onboardingOpenTookPhone, "Your vault took this phone, but it cannot be unlocked right now. Contact VettID."),

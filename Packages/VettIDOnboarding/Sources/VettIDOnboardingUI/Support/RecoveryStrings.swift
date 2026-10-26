@@ -148,7 +148,8 @@ enum RecoveryStrings {
     }
 
     // (IOS-PLAN 0.1.35 §4.9, "A phone that could not tell"; `recover_could_not_tell` and `onboarding_open_took_phone` approved by
-    // the owner on 2026-10-24, `recover_could_not_recover` and its action on 2026-10-26.) The keys are the spec's and vettid-android's.
+    // the owner on 2026-10-24; `recover_could_not_recover`, its action, `recover_other_vault` and `recover_undecided_new_code` on
+    // 2026-10-26.) The keys and the wording are the spec's and vettid-android's.
 
     static var recoverCouldNotTell: String {
         String(
@@ -173,12 +174,13 @@ enum RecoveryStrings {
         )
     }
 
-    /// The action beside `recover_could_not_recover`: opens a mail to support@vettid.org (``SupportMail/url``).
-    static var onboardingOpenContactSupport: String {
-        String(localized: "onboarding_open_contact_support", defaultValue: "Email support", bundle: .module)
+    /// The action beside `recover_could_not_recover`, "Email support@vettid.org" for [address] (``SupportMail/address``): opens
+    /// a mail to it (``SupportMail/url``).
+    static func onboardingOpenContactSupport(_ address: String) -> String {
+        String(localized: "onboarding_open_contact_support", defaultValue: "Email \(address)", bundle: .module)
     }
 
-    /// A code of another vault than the one this phone is recovering (vettid-android's wording).
+    /// A code of another vault than the one this phone is recovering.
     static var recoverOtherVault: String {
         String(
             localized: "recover_other_vault",
@@ -190,7 +192,7 @@ enum RecoveryStrings {
         )
     }
 
-    /// The code steps beside the PIN once a new recovery may use this phone (vettid-android's wording).
+    /// The code steps beside the PIN once a new recovery may use this phone.
     static var recoverUndecidedNewCode: String {
         String(localized: "recover_undecided_new_code", defaultValue: "Use a new recovery code", bundle: .module)
     }
