@@ -229,21 +229,27 @@ public final class AppAttestKey: KeyEraser, @unchecked Sendable {
 
     /// (IOS-PLAN 0.1.38 §4.9) The identity in use is registered again (the new identity, reused for another recovery): from now
     /// on, for this identity only, a new attestation is the key in use with the current one kept as an earlier one, and a
-    /// confirmation keeps the keys it replaces, until ``settle(identity:)`` or ``resetIdentities()``.
+    /// confirmation keeps the keys it replaces, until ``settle(identity:registration:)`` or ``resetIdentities()``.
     public func keepReplacedKeys() throws {
         try update { $0.keepsReplaced = true }
     }
 
-    /// (§4.9) The handshake completed with the identity [n]: it is in use, and the keys of every other identity and of its own
-    /// earlier registrations are forgotten (from the vault release that carries vettid-vault #150, the binding N pairs with is its
-    /// current registration's, IOS-PLAN 0.1.38 §4.9).
-    public func settle(identity n: Int) throws {
+    /// (IOS-PLAN 0.1.39 §4.9) The pending key [keyID] (raw bytes) of the identity in use was attested by the register of the
+    /// recovery [recoveryID]: written before that register is posted, so that the handshake keeps the key of the registration it
+    /// names. A key that is not pending changes nothing.
+    public func tag(keyID: [UInt8], registration recoveryID: String) throws {
         try update { record in
-            record.use(n)
-            record.parked = [:]
-            record.earlier = []
-            record.keepsReplaced = false
+            guard let id = record.pending.first(where: { Self.raw($0) == keyID }) else { return }
+            record.registrations[id] = recoveryID
         }
+    }
+
+    /// (IOS-PLAN 0.1.39 §4.9) The handshake completed with the identity [n] and `ctx` [ctx]: it is in use, the keys of every other
+    /// identity are forgotten, and of its own keys only those of the registration whose `recovery_id` was [ctx] stay (the vault's
+    /// binding is that registration's attested key, also when an unlock with another key answered the `ok`). See
+    /// ``KeyIDRecord/settle(on:registration:)``.
+    public func settle(identity n: Int, registration ctx: String?) throws {
+        try update { $0.settle(on: n, registration: ctx) }
     }
 
     /// (§4.9) A forget: the first identity is in use, with its own keys (the second's, and any earlier ones, are gone).

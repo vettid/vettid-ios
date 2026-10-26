@@ -9,7 +9,9 @@ import VettIDVault
 // its own `recovery_id` and the history of its opens), and every further recovery registers N again: the same K, the same N keys,
 // the new code, and a new App Attest key each time. Nothing is deleted until the vault answered `ok` and the pairing completed: E's
 // App Attest key and all of N's are kept too. If N's recovery ends, the phone keeps both, tries the lost-ok unlock with N, then E, and
-// registers N again for the next recovery; each identity pairs only with the `recovery_id` it last registered for as `ctx`.
+// registers N again for the next recovery; each identity pairs only with the `recovery_id` it last registered for as `ctx`, except
+// after an `ok` to an unlock (a lost ok): then with each `recovery_id` it registered for, newest first, before E (IOS-PLAN 0.1.39
+// §4.9). The binding after the handshake is the attested key of the registration its `ctx` named, which is the key kept.
 extension VaultManager {
     // MARK: - The new recovery with the same K
 
@@ -214,17 +216,25 @@ extension VaultManager {
     }
 
     /// The vault answered `ok` and the pairing completed: every identity that did not pair, its device state and App Attest keys,
-    /// and the rule's record go, and so do the App Attest keys of the earlier registrations of the identity that paired. Nothing
-    /// before (IOS-PLAN 0.1.38 §4.9 "What it keeps"); a failure keeps all, and the next look tries again.
+    /// and the rule's record go. Of the App Attest keys of the identity that paired, those of the registration whose `recovery_id`
+    /// was the `ctx` of the handshake that completed stay (the vault's binding is that registration's attested key, whichever key
+    /// answered the `ok`), and the others go (IOS-PLAN 0.1.39 §4.9). Nothing before (IOS-PLAN 0.1.38 §4.9 "What it keeps"); a
+    /// failure keeps all, and the next look tries again.
     func settleCouldNotTell(winner: IdentitySet? = nil) {
         guard record.value.couldNotTell != nil else { return }
         let winner = winner ?? record.value.activeIdentity
         do {
+            // Read from the winner's stored state before anything goes: the `ctx` the vault answered, saved with the handshake. A
+            // state that cannot be read keeps everything, as any other failure here.
+            guard let state = try config.file(VaultFiles.device(of: winner)).load() else {
+                throw VaultFailure(.localState, code: "no_device_state")
+            }
+            let ctx = try VaultDevice.recoveryPairedCtx(state: state)
             for loser in IdentitySet.all where loser != winner {
                 for slot in KeySlot.slots(of: loser) { try config.keys.wrapped.remove(slot) }
                 try config.file(VaultFiles.device(of: loser)).clear()
             }
-            try config.attester.settle(identity: winner.rawValue)
+            try config.attester.settle(identity: winner.rawValue, registration: ctx)
             try persistRecord(record.generation) {
                 $0.activeIdentity = winner
                 $0.couldNotTell = nil
@@ -350,7 +360,7 @@ extension VaultManager {
 
     /// The identity with the vault's `ok` got no `hs.resp`: the vault answers a handshake it does not accept with nothing, and the
     /// invitation may be an older identity's, under its `recovery_id`. The lost-ok unlock with each other identity, newest first,
-    /// then its `hs.init` with that `ctx` (IOS-PLAN 0.1.38 §4.9). Nil when none is the vault's key: nothing changed, the identity
+    /// then its `hs.init` with each `recovery_id` it registered for (IOS-PLAN 0.1.39 §4.9). Nil when none is the vault's key: nothing changed, the identity
     /// with the `ok` is in use again, and the caller reopens its session. The unlock's refusal code beside the session otherwise.
     func pairEarlierIdentity(pin: String) async throws -> (String?, VaultSession)? {
         guard let ct = record.value.couldNotTell, ct.identities.count > 1 else { return nil }
@@ -403,7 +413,7 @@ extension VaultManager {
                 try await other.device.completeRecoveryOpen(timeout: handshakeWait(resuming: false))
             } catch let e as VaultStateError where VaultFailures.noResponse(e) {
                 if let refusal = try await unlockOwn(other, pin: pin, cause: e) { return (refusal, other) }
-                try await other.device.completeRecoveryOpen()
+                try await other.device.completeRecoveryOpen(timeout: handshakeWait(resuming: false))
             }
             return (nil, other)
         }

@@ -84,7 +84,9 @@ struct AppAttestAttester: Attester {
 
     func keepReplacedKeys() throws { try key.keepReplacedKeys() }
 
-    func settle(identity: Int) throws { try key.settle(identity: identity) }
+    func tag(keyID: [UInt8], registration: String) throws { try key.tag(keyID: keyID, registration: registration) }
+
+    func settle(identity: Int, registration: String?) throws { try key.settle(identity: identity, registration: registration) }
 
     func confirmUnlocked() throws { try key.confirmUnlocked() }
 }

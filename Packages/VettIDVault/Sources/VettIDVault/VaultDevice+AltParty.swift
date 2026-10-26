@@ -119,6 +119,10 @@ extension VaultDevice: AltParty {
                 // failed unlock sets none: building it cleared the name, and the next vault.status says what runs.
                 opened(r.token == nil ? nil : r.unlockID)
                 if let bundle = r.vaultBundle, st.vault == nil, st.recovery != nil { try adoptBundle(bundle) }
+                // (IOS-PLAN 0.1.39 §4.9) An unlock's `ok` with the bundle is a lost ok: the invitation may be an earlier registration's.
+                // Any unlock that carries the bundle while recovering counts, the one with this phone's own key after an unanswered
+                // handshake too (chosen; not in the spec).
+                if r.vaultBundle != nil, st.recovery != nil { st.recovery?.lostOk = true }
                 // §11.11.5 step 1 (0.10.6): whether the password can recover the credential; kept across a restart.
                 if st.recovery != nil, let backup = r.credentialBackup { st.recovery?.credentialBackup = backup }
                 if let t = r.token, let exp = heldFromVault(t), st.vault != nil, Self.ms(exp) > st.vault?.tokenExpMs ?? 0 {
@@ -176,8 +180,12 @@ extension VaultDevice: AltParty {
                     record.opens = before.opens
                     // Another register for the same code (a request sealed again, or a repeat) replaces what the first replaced:
                     // a repeat the vault answered was not recorded by the member API, so neither was the first.
-                    record.replaced = before.recoveryID == code.recoveryID
-                        ? before.replaced : ReplacedRecovery(recoveryID: before.recoveryID, requestID: before.requestID)
+                    let same = before.recoveryID == code.recoveryID
+                    record.replaced = same ? before.replaced : ReplacedRecovery(recoveryID: before.recoveryID, requestID: before.requestID)
+                    // (IOS-PLAN 0.1.39 §4.9) Every recovery this identity registered for is kept, newest last: the invitation an
+                    // unlock's `ok` leaves may be an earlier registration's.
+                    let earlier = before.registeredBefore
+                    record.earlier = same || earlier.contains(before.recoveryID) ? earlier : earlier + [before.recoveryID]
                 }
                 st.recovery = record
             }
@@ -194,7 +202,10 @@ extension VaultDevice: AltParty {
             let changed: Bool = mem.withLock {
                 guard st.deviceID == nil, st.vault == nil, let now = st.recovery else { return false }
                 if let back = now.replaced {
-                    st.recovery = RecoveryRecord(recoveryID: back.recoveryID, requestID: back.requestID, opens: now.opens)
+                    st.recovery = RecoveryRecord(
+                        recoveryID: back.recoveryID, requestID: back.requestID, opens: now.opens,
+                        earlier: now.registeredBefore.filter { $0 != back.recoveryID }
+                    )
                 } else {
                     st.recovery = nil
                     st.vaultID = nil

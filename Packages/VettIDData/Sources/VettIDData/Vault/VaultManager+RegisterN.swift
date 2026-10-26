@@ -186,6 +186,9 @@ extension VaultManager {
                 let req = try await s.device.prepareRecoveryRegister(
                     userGuid: guid, code: code, enclave: e, attester: attester, keepingHistory: true
                 )
+                // (IOS-PLAN 0.1.39 §4.9) The key this register attested is written with its `recovery_id` before the POST: the
+                // handshake keeps the key of the registration its `ctx` names.
+                if let k = req.attestedKeyID { try attester.tag(keyID: k, registration: code.recoveryID) }
                 // Each POST is recorded durably before it is posted: every later one for this code is a repeat.
                 try await self?.noteRegisterPosting(code.recoveryID)
                 posts.built()

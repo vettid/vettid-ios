@@ -405,7 +405,8 @@ extension VaultManager {
         }
     }
 
-    /// After `ok` (§11.14.6): `hs.init` with `ctx` = `recovery_id`, then `credential.get` as the holder (no
+    /// After `ok` (§11.14.6): `hs.init` with `ctx` = `recovery_id` (after an unlock's `ok`, each `recovery_id` this identity
+    /// registered for, newest first, IOS-PLAN 0.1.39 §4.9), then `credential.get` as the holder (no
     /// `credential.recover`). The app is opened by ``finishRecoveryOpen()``, after the member has read the result. When the
     /// handshake is not answered (the vault locked meanwhile, or the relay lost it), the phone unlocks the vault with its own
     /// key, which the vault made its app's, and runs the handshake again.
@@ -460,7 +461,8 @@ extension VaultManager {
             // (A switch of identity stopped this session's device: the identity with the `ok` is opened again.)
             let own = record.value.couldNotTell == nil ? s : try await openSession()
             if let refusal = try await unlockOwn(own, pin: pin, cause: e) { return (refusal, own) }
-            try await own.device.completeRecoveryOpen()
+            // (IOS-PLAN 0.1.39 §4.9) That unlock's `ok` is a lost ok: each `recovery_id` this identity registered for is tried.
+            try await own.device.completeRecoveryOpen(timeout: handshakeWait(resuming: false))
             return (nil, own)
         }
     }

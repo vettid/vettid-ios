@@ -69,6 +69,8 @@ public struct VaultOpError: Error, Sendable, CustomStringConvertible {
 /// The device is not (yet) paired with a vault, or the vault sent something it should not have.
 public struct VaultStateError: Error, Equatable, Sendable, CustomStringConvertible {
     public let message: String
+    /// The wait for an event ran out (``VaultDevice/awaitEvent(_:timeout:match:)``).
+    public var timedOut = false
 
     public var description: String { "vault client: \(message)" }
 }

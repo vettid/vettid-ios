@@ -170,7 +170,9 @@ import VettIDKeysTesting
         let key = make(fake, store)
         let (first, second) = try nRegisteredTwice(key)
         #expect(first != second)
-        // The second register is confirmed: its key is in use, and the first registration's key is kept beside it.
+        // The second register (R2, its key tagged before the POST) is confirmed: its key is in use, and the first registration's key
+        // is kept beside it.
+        try key.tag(keyID: second, registration: "R2")
         try key.confirm(keyID: second)
         #expect(try asserted(key) == fake.keyID(3))
         let record = try stored(store)
@@ -181,8 +183,11 @@ import VettIDKeysTesting
         #expect(try asserted(later) == fake.keyID(1))
         try later.use(identity: 1)
         #expect(try asserted(later) == fake.keyID(3))
-        // The handshake completes with N: E's key and N's earlier one go; a confirmation drops the key it replaces again.
-        try later.settle(identity: 1)
+        // The handshake completes with N and the `ctx` of its second registration: E's key and N's earlier one go; a confirmation
+        // drops the key it replaces again.
+        try later.tag(keyID: first, registration: "R1")
+        #expect(try stored(store).registrations == [fake.keyID(3): "R2"]) // only a pending key is tagged
+        try later.settle(identity: 1, registration: "R2")
         let settled = try stored(store)
         #expect(settled.current == fake.keyID(3) && settled.earlier.isEmpty && settled.parked.isEmpty && !settled.keepsReplaced)
         #expect(try !later.nextCandidate())
@@ -308,6 +313,108 @@ import VettIDKeysTesting
         try key.resetIdentities()
         let record = try stored(store)
         #expect(record.active == 0 && record.current == fake.keyID(1) && record.earlier.isEmpty && !record.keepsReplaced)
+    }
+
+    // MARK: - The binding after the handshake (IOS-PLAN 0.1.39 §4.9)
+
+    /// E's key 1; N registered for R1 with key 2 (confirmed) and again for R2 with key 3 (confirmed), each tagged before its POST.
+    func nRegisteredTwiceTagged(_ key: AppAttestKey) throws {
+        try key.confirm(keyID: try attested(key))
+        try key.use(identity: 1)
+        try key.keepReplacedKeys()
+        for rid in ["R1", "R2"] {
+            let k = try attested(key)
+            try key.tag(keyID: k, registration: rid)
+            try key.confirm(keyID: k)
+        }
+    }
+
+    @Test func theHandshakeKeepsTheKeyOfTheRegistrationItsCtxNamedNotTheOneThatAnsweredTheOk() throws {
+        let fake = FakeAppAttest()
+        let store = MemoryKeyIDStore()
+        let key = make(fake, store)
+        try nRegisteredTwiceTagged(key)
+        #expect(try stored(store).registrations == [fake.keyID(2): "R1", fake.keyID(3): "R2"])
+        // The lost-ok unlock: key 3 refused, key 2 opens (it stays an earlier key); the handshake with `ctx` R2 completes: the
+        // binding is key 3, and key 2 goes.
+        #expect(try key.nextCandidate())
+        #expect(try asserted(key) == fake.keyID(2))
+        try key.confirmUnlocked()
+        let later = make(fake, store)
+        try later.settle(identity: 1, registration: "R2")
+        let record = try stored(store)
+        #expect(record.current == fake.keyID(3) && record.pending.isEmpty && record.earlier.isEmpty && record.parked.isEmpty)
+        #expect(record.registrations.isEmpty && !record.keepsReplaced)
+        #expect(try asserted(later) == fake.keyID(3) && !later.nextCandidate())
+    }
+
+    @Test func aHandshakeWithAnEarlierRegistrationsCtxKeepsThatRegistrationsKey() throws {
+        let fake = FakeAppAttest()
+        let store = MemoryKeyIDStore()
+        let key = make(fake, store)
+        try nRegisteredTwiceTagged(key)
+        // The invitation was R1's (R2's open stored nothing): the handshake with `ctx` R1 completes, key 2 is the binding.
+        try key.settle(identity: 1, registration: "R1")
+        let record = try stored(store)
+        #expect(record.current == fake.keyID(2) && record.pending.isEmpty && record.earlier.isEmpty && record.parked.isEmpty)
+        #expect(try asserted(key) == fake.keyID(2))
+        // Settled again (a kill before the rule's record was written): nothing changes.
+        try key.settle(identity: 1, registration: "R1")
+        #expect(try stored(store) == record)
+    }
+
+    @Test func aRegistrationWithTwoKeysKeepsBothUntilAnUnlockConfirmsOne() throws {
+        let fake = FakeAppAttest()
+        let store = MemoryKeyIDStore()
+        let key = make(fake, store)
+        try key.confirm(keyID: try attested(key))
+        try key.use(identity: 1)
+        try key.keepReplacedKeys()
+        // R1: key 2 confirmed. R2: keys 3 and 4 (a register sealed again), neither confirmed.
+        let k2 = try attested(key)
+        try key.tag(keyID: k2, registration: "R1")
+        try key.confirm(keyID: k2)
+        for _ in 0..<2 { try key.tag(keyID: try attested(key), registration: "R2") }
+        try key.settle(identity: 1, registration: "R2")
+        let record = try stored(store)
+        #expect(record.current == nil && record.pending == [fake.keyID(3), fake.keyID(4)] && record.earlier.isEmpty)
+        // The newest first; refused, the other, whose `ok` confirms it.
+        #expect(try asserted(key) == fake.keyID(4))
+        #expect(try key.nextCandidate())
+        #expect(try asserted(key) == fake.keyID(3))
+        try key.confirmUnlocked()
+        #expect(try stored(store).current == fake.keyID(3) && stored(store).pending.isEmpty)
+    }
+
+    @Test func aCtxNoKeyWasRegisteredForForgetsNoneOfTheIdentitysKeys() throws {
+        let fake = FakeAppAttest()
+        let store = MemoryKeyIDStore()
+        let key = make(fake, store)
+        try nRegisteredTwiceTagged(key)
+        // E's own `recovery_id`, or a handshake from a build before the tags: E's keys go, N's all stay.
+        for ctx in ["E", nil] as [String?] {
+            try key.settle(identity: 1, registration: ctx)
+            let record = try stored(store)
+            #expect(record.current == fake.keyID(3) && record.earlier == [fake.keyID(2)] && record.parked.isEmpty && !record.keepsReplaced)
+        }
+        #expect(try key.nextCandidate())
+        #expect(try asserted(key) == fake.keyID(2))
+    }
+
+    @Test func aTagOutlivesNoKey() throws {
+        let fake = FakeAppAttest()
+        let store = MemoryKeyIDStore()
+        let key = make(fake, store)
+        let a = try attested(key)
+        try key.tag(keyID: a, registration: "R1")
+        let b = try attested(key)
+        try key.tag(keyID: b, registration: "R1")
+        try key.discard(keyID: a)
+        #expect(try stored(store).registrations == [fake.keyID(2): "R1"])
+        // A later process reads the tags.
+        let later = make(fake, store)
+        try later.confirm(keyID: b)
+        #expect(try stored(store).registrations == [fake.keyID(2): "R1"])
     }
 
     @Test func theSlotsOfTheTwoIdentitiesAreDistinct() {
