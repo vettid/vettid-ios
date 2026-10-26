@@ -171,6 +171,32 @@ extension VaultManagerRecoveryTests {
         #expect(service.recoveryHandshakeContexts == [n.r2.recoveryID])
     }
 
+    @Test func aRecordOfTheBuildBeforeTheListPairsWithTheRegistrationItReplacedAndForgetsNoneOfNsKeys() async throws {
+        defer { phone.close() }
+        let n = try await nRegisteredAgainAfterStep2()
+        // As the build before the list and the tags left them: N's state names R2 and the registration it replaced (R1), no list;
+        // no key names its registration.
+        phone.close()
+        let file = m.config.file(VaultFiles.device(of: .second))
+        let bytes = try #require(try file.load())
+        var state = try #require(try JSONSerialization.jsonObject(with: Data(bytes)) as? [String: Any])
+        var recovery = try #require(state["recovery"] as? [String: Any])
+        #expect(recovery["earlier"] != nil && (recovery["replaced"] as? [String: Any])?["recoveryID"] as? String == n.r1.recoveryID)
+        recovery.removeValue(forKey: "earlier")
+        state["recovery"] = recovery
+        try file.save(Array(try JSONSerialization.data(withJSONObject: state)))
+        try phone.attester.dropTags()
+        try await phone.restart()
+        #expect(try await m.openSession().device.registeredRecoveryIDs == [n.r2.recoveryID, n.r1.recoveryID])
+        // R2's open never reached the vault: A1's unlock finishes R1's step 3; R2 gets no answer, R1 pairs.
+        #expect(try await m.resumeLostOk(pin: pin).ok)
+        #expect(service.recoveryHandshakeContexts == [n.r2.recoveryID, n.r1.recoveryID])
+        #expect(phone.attester.settledRegistrations == [n.r1.recoveryID] && service.recoveryBoundKey == raw(n.a1))
+        // No key names R1: none of N's keys goes (E's do), so the bound A1 is still there, tried after A2.
+        let kept = try keptKeys()
+        #expect(kept["current"] as? String == n.a2 && kept["earlier"] as? [String] == [n.a1] && kept["parked"] == nil)
+    }
+
     @Test func aRegisterOfNThatDidNotRegisterIsNoRecoveryNRegisteredFor() async throws {
         defer { phone.close() }
         phone.attester.modelKeys()

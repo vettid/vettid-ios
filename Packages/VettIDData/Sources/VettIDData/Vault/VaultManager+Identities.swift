@@ -224,8 +224,12 @@ extension VaultManager {
         guard record.value.couldNotTell != nil else { return }
         let winner = winner ?? record.value.activeIdentity
         do {
-            // Read from the winner's stored state before anything goes: the `ctx` the vault answered, saved with the handshake.
-            let ctx = (try? config.file(VaultFiles.device(of: winner)).load()).flatMap(VaultDevice.recoveryPairedCtx(state:))
+            // Read from the winner's stored state before anything goes: the `ctx` the vault answered, saved with the handshake. A
+            // state that cannot be read keeps everything, as any other failure here.
+            guard let state = try config.file(VaultFiles.device(of: winner)).load() else {
+                throw VaultFailure(.localState, code: "no_device_state")
+            }
+            let ctx = try VaultDevice.recoveryPairedCtx(state: state)
             for loser in IdentitySet.all where loser != winner {
                 for slot in KeySlot.slots(of: loser) { try config.keys.wrapped.remove(slot) }
                 try config.file(VaultFiles.device(of: loser)).clear()

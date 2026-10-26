@@ -185,15 +185,15 @@ extension VaultDevice {
     /// (``finishRecoveryOpen()``).
     ///
     /// (IOS-PLAN 0.1.39 §4.9) After an `ok` to an unlock (a lost ok), one `hs.init` with each `recovery_id` this identity registered
-    /// for, newest first (``pairingContexts``), each waiting [timeout]: the vault answers a `ctx` that is not its invitation's with
-    /// nothing. The last one's failure is thrown.
+    /// for, newest first (``pairingContexts``), each waiting [timeout] (the pairing timeout for each one; chosen; not in the spec):
+    /// the vault answers a `ctx` that is not its invitation's with nothing. The last one's failure is thrown.
     public func completeRecoveryOpen(timeout: TimeInterval = awaitDefault) async throws {
         let contexts = mem.withLock { pairingContexts }
         for (i, ctx) in contexts.enumerated() {
             do {
                 try await pairRecovered(ctx: ctx, timeout: timeout)
                 return
-            } catch let e as VaultStateError where i < contexts.count - 1 && Self.timedOut(e) {
+            } catch let e as VaultStateError where i < contexts.count - 1 && e.timedOut {
                 continue
             }
         }
@@ -222,27 +222,24 @@ extension VaultDevice {
         guard let rec = st.recovery else { return [] }
         guard rec.lostOk == true else { return [rec.recoveryID] }
         var all = [rec.recoveryID]
-        for id in (rec.earlier ?? []).reversed() where !all.contains(id) { all.append(id) }
+        for id in rec.registeredBefore.reversed() where !all.contains(id) { all.append(id) }
         return all
     }
-
-    /// The wait for an event ran out (``awaitEvent(of:timeout:match:)``).
-    static func timedOut(_ e: VaultStateError) -> Bool { e.message.hasPrefix("no ") && e.message.contains(" within ") }
 
     /// (IOS-PLAN 0.1.39 §4.9) The `ctx` of the recovered phone's first handshake the vault answered, nil before (or from a build
     /// before it was kept).
     public var recoveryPairedCtx: String? { mem.withLock { st.recoveryPairedCtx } }
 
-    /// ``recoveryPairedCtx`` of a stored device state (its decrypted bytes). Reads no keys.
-    public static func recoveryPairedCtx(state bytes: [UInt8]) -> String? {
-        (try? JSONDecoder().decode(DeviceState.self, from: Data(bytes)))?.recoveryPairedCtx
+    /// ``recoveryPairedCtx`` of a stored device state (its decrypted bytes); a state that cannot be read is thrown. Reads no keys.
+    public static func recoveryPairedCtx(state bytes: [UInt8]) throws -> String? {
+        try JSONDecoder().decode(DeviceState.self, from: Data(bytes)).recoveryPairedCtx
     }
 
     /// (IOS-PLAN 0.1.39 §4.9) The `recovery_id`s this identity registered for, newest first (this registration's first).
     public var registeredRecoveryIDs: [String] {
         mem.withLock {
             guard let rec = st.recovery else { return [] }
-            return [rec.recoveryID] + (rec.earlier ?? []).reversed().filter { $0 != rec.recoveryID }
+            return [rec.recoveryID] + rec.registeredBefore.reversed().filter { $0 != rec.recoveryID }
         }
     }
 

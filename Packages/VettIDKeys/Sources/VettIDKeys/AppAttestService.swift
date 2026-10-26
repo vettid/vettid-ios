@@ -139,7 +139,7 @@ struct KeyIDRecord: Equatable {
     /// (IOS-PLAN 0.1.39 §4.9) The handshake completed with the identity [n] and `ctx` [ctx]: it is in use, the other identities' keys
     /// are forgotten, and of its own keys those of the registration [ctx] names are kept (the vault's binding is that registration's
     /// attested key): the current one when it is one of them, else the only one, else all of them as pending keys, newest last, so
-    /// that an unlock tries them newest first and its `ok` confirms one. A `ctx` no key was registered for (none, the earlier
+    /// that an unlock tries them newest first and its `ok` confirms one (chosen; not in the spec). A `ctx` no key was registered for (none, the earlier
     /// identity's own, a handshake of a build before the tags) forgets none of [n]'s keys (chosen; not in the spec: as vettid-android).
     mutating func settle(on n: Int, registration ctx: String?) {
         use(n)

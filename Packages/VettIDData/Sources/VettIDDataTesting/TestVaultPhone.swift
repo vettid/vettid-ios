@@ -56,6 +56,14 @@ public final class TestAttester: Attester, @unchecked Sendable {
         return String(bytes: bytes, encoding: .utf8)
     }
 
+    /// The modelled key record as a build before the tags (IOS-PLAN 0.1.39 §4.9) kept it: no key names its registration.
+    public func dropTags() throws {
+        guard case .found(let bytes) = keyIDs.lookup(),
+              var object = try JSONSerialization.jsonObject(with: Data(bytes)) as? [String: Any] else { return }
+        object.removeValue(forKey: "registrations")
+        try keyIDs.write(Array(try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])))
+    }
+
     /// With ``modelKeys()``: the App Attest key id each assertion used, in order, and the key ids attested.
     public var assertedKeys: [String] { service.asserted }
     public var attestedKeyIDs: [String] { service.made }

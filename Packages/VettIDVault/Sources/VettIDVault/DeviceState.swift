@@ -100,6 +100,10 @@ struct RecoveryRecord: Codable, Sendable {
     var lostOk: Bool?
     /// The `ctx` of the last `hs.init` sent after the `ok`, saved with it.
     var pairing: String?
+
+    /// The `recovery_id`s registered for before this one, oldest first. A state from a build before [earlier] names only the one
+    /// this registration replaced (older ones were never recorded).
+    var registeredBefore: [String] { earlier ?? replaced.map { [$0.recoveryID] } ?? [] }
 }
 
 /// The `recovery_id` and register `request_id` of a registration a later register replaced.

@@ -228,7 +228,7 @@ extension VaultDevice {
             guard woke != nil else {
                 mem.withLock { inboxWaiters.removeAll { $0 === waiter } }
                 try Task.checkCancellation()
-                throw VaultStateError(message: "no \(types.sorted().joined(separator: "/")) within \(Int(timeout)) s")
+                throw VaultStateError(message: "no \(types.sorted().joined(separator: "/")) within \(Int(timeout)) s", timedOut: true)
             }
         }
     }

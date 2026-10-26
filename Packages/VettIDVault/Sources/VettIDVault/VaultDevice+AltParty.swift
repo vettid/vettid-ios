@@ -120,6 +120,8 @@ extension VaultDevice: AltParty {
                 opened(r.token == nil ? nil : r.unlockID)
                 if let bundle = r.vaultBundle, st.vault == nil, st.recovery != nil { try adoptBundle(bundle) }
                 // (IOS-PLAN 0.1.39 §4.9) An unlock's `ok` with the bundle is a lost ok: the invitation may be an earlier registration's.
+                // Any unlock that carries the bundle while recovering counts, the one with this phone's own key after an unanswered
+                // handshake too (chosen; not in the spec).
                 if r.vaultBundle != nil, st.recovery != nil { st.recovery?.lostOk = true }
                 // §11.11.5 step 1 (0.10.6): whether the password can recover the credential; kept across a restart.
                 if st.recovery != nil, let backup = r.credentialBackup { st.recovery?.credentialBackup = backup }
@@ -182,7 +184,7 @@ extension VaultDevice: AltParty {
                     record.replaced = same ? before.replaced : ReplacedRecovery(recoveryID: before.recoveryID, requestID: before.requestID)
                     // (IOS-PLAN 0.1.39 §4.9) Every recovery this identity registered for is kept, newest last: the invitation an
                     // unlock's `ok` leaves may be an earlier registration's.
-                    let earlier = before.earlier ?? []
+                    let earlier = before.registeredBefore
                     record.earlier = same || earlier.contains(before.recoveryID) ? earlier : earlier + [before.recoveryID]
                 }
                 st.recovery = record
@@ -202,7 +204,7 @@ extension VaultDevice: AltParty {
                 if let back = now.replaced {
                     st.recovery = RecoveryRecord(
                         recoveryID: back.recoveryID, requestID: back.requestID, opens: now.opens,
-                        earlier: now.earlier?.filter { $0 != back.recoveryID }
+                        earlier: now.registeredBefore.filter { $0 != back.recoveryID }
                     )
                 } else {
                     st.recovery = nil
