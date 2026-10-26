@@ -41,7 +41,7 @@ public final class RecoverViewModel: RecoverActions {
     @ObservationIgnored private let work = Work()
     @ObservationIgnored private var retryTicker: Task<Void, Never>?
     @ObservationIgnored private var countedFor: String?
-    /// The step the code steps return to: the intro, or the text of the rule for a phone that could not tell.
+    /// The step the code steps return to: the intro, or for a phone that could not tell the text of the rule or the open step.
     @ObservationIgnored private var codeHome = RecoverStep.intro
 
     public init(
@@ -123,12 +123,21 @@ public final class RecoverViewModel: RecoverActions {
 
     // MARK: - The code
 
-    /// The code's steps are entered from the intro and from each other, never over a failed or running read of the stage.
-    private var codeEntry: Bool { [.intro, .couldNotTell, .scan, .type].contains(state.step) }
+    /// The code's steps are entered from the intro and from each other, never over a failed or running read of the stage; for a
+    /// phone that could not tell, also from the rule's text and from the open step once a new code registers the new identity
+    /// again (IOS-PLAN 0.1.35 §4.9).
+    private var codeEntry: Bool {
+        [.intro, .couldNotTell, .scan, .type].contains(state.step) || (state.step == .open && state.couldNotTell == .unlockOrNewCode)
+    }
+
+    /// The step the code steps go back to, when the code steps are entered from it.
+    private func noteCodeHome() {
+        if [.intro, .couldNotTell, .open].contains(state.step) { codeHome = state.step }
+    }
 
     public func scan() {
         if state.busy || !codeEntry { return }
-        if state.step == .intro || state.step == .couldNotTell { codeHome = state.step }
+        noteCodeHome()
         state.step = .scan
         state.refusal = nil
         state.error = nil
@@ -137,7 +146,7 @@ public final class RecoverViewModel: RecoverActions {
 
     public func type() {
         if state.busy || !codeEntry { return }
-        if state.step == .intro || state.step == .couldNotTell { codeHome = state.step }
+        noteCodeHome()
         state.step = .type
         state.refusal = nil
         state.error = nil
@@ -293,6 +302,7 @@ public final class RecoverViewModel: RecoverActions {
         case Self.codeNone, Self.codeUsed: refusal = .gone
         case Self.codeNotAvailable: refusal = .notAvailable
         case Self.codeNotOffered: refusal = .notOffered
+        case VaultManager.codeOtherVault: refusal = .otherVault
         case Self.codeNoBackup:
             state.step = .noBackup
             state.busy = false

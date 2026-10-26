@@ -50,6 +50,9 @@ public enum CodeRefusal: Equatable, Sendable, CaseIterable {
     /// (VAULT-MESSAGING 0.34.0 §11.10.9) The vault's release implements release R without `recovery_offered`: nothing is
     /// sent ("This vault's release does not offer recovery").
     case notOffered
+    /// (IOS-PLAN 0.1.35 §4.9) A recovery code of another vault than the one this phone is recovering: nothing was registered,
+    /// and nothing on this phone is deleted.
+    case otherVault
 }
 
 /// Why the typed entry is not (yet) a code this app sends (§11.11.10 steps 1 and 2). None of these is a wrong code: nothing
@@ -118,12 +121,16 @@ public struct RecoverState: Equatable, Sendable, CustomStringConvertible, Custom
     public var busy = false
     public var error: FailureKind?
     public var errorCode: String?
-    /// (IOS-PLAN 0.1.33 §4.9) Where the rule for a phone that could not tell stands: ``CouldNotTellStage/newCode`` is the step
+    /// (IOS-PLAN 0.1.35 §4.9) Where the rule for a phone that could not tell stands: ``CouldNotTellStage/newCode`` is the step
     /// ``RecoverStep/couldNotTell``; ``CouldNotTellStage/finishWithPin`` (the claim of a new code answered `409 key_in_use`, or
     /// two reads of `200`) is the PIN of ``RecoveryOpenViewModel/finishLostOk()`` on the ``RecoverStep/open`` step;
     /// ``CouldNotTellStage/contact`` adds the second text, "Your vault took this phone, but it cannot be unlocked right now.
-    /// Contact VettID.".
+    /// Contact VettID."; ``CouldNotTellStage/unlockOrNewCode`` (the new identity's recovery ended too) is that PIN with the code
+    /// steps beside it (``newCodeAllowed``).
     public var couldNotTell = CouldNotTellStage.none
+
+    /// (§4.9) A new recovery code may be scanned or typed from here: it registers the new identity again, never a third.
+    public var newCodeAllowed: Bool { couldNotTell == .newCode || couldNotTell == .unlockOrNewCode }
 
     public init(step: RecoverStep = .loading, startOverURL: String = "", accountHost: String = "") {
         self.step = step

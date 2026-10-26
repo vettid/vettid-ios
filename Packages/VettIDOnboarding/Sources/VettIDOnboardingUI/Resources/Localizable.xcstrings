@@ -34,13 +34,46 @@
         }
       }
     },
-    "ios_recover_could_not_finish": {
+    "recover_could_not_recover": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "VettID could not finish recovering your vault on this phone. Contact VettID."
+            "value": "This phone could not recover your vault. Nothing on this phone is deleted. Contact VettID at support@vettid.org."
+          }
+        }
+      }
+    },
+    "onboarding_open_contact_support": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Email support"
+          }
+        }
+      }
+    },
+    "recover_other_vault": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This recovery code is for a different vault than the one this phone is recovering. Nothing was registered, and nothing on this phone is deleted."
+          }
+        }
+      }
+    },
+    "recover_undecided_new_code": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use a new recovery code"
           }
         }
       }

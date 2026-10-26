@@ -36,12 +36,14 @@ public final class RecoveryOpenViewModel {
         }
     }
 
-    /// IOS-PLAN 0.1.33 §4.9: where the rule for a phone that could not tell stands. [startFinish]: at the start, a phone for
-    /// which the unlock is what is left is at the PIN of the lost-ok finish.
+    /// IOS-PLAN 0.1.35 §4.9: where the rule for a phone that could not tell stands. [startFinish]: at the start, a phone for
+    /// which the unlock is what is left (beside a new code, for ``CouldNotTellStage/unlockOrNewCode``) is at the PIN of the
+    /// lost-ok finish.
     private func refreshStage(startFinish: Bool = false) async {
         let stage = (try? await move.couldNotTellStage()) ?? .none
         state.couldNotTell = stage
-        if startFinish, stage == .finishWithPin || stage == .contact || stage == .couldNotFinish, state.step == .enter { finishLostOk() }
+        let unlock: [CouldNotTellStage] = [.finishWithPin, .contact, .unlockOrNewCode]
+        if startFinish, unlock.contains(stage), state.step == .enter { finishLostOk() }
     }
 
     deinit { work.cancelAll() }

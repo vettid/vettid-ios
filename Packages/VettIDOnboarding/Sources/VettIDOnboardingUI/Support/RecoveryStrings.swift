@@ -147,7 +147,8 @@ enum RecoveryStrings {
         )
     }
 
-    // (IOS-PLAN 0.1.33 §4.9, "A phone that could not tell"; approved by the owner on 2026-10-24.) The keys are the spec's.
+    // (IOS-PLAN 0.1.35 §4.9, "A phone that could not tell"; `recover_could_not_tell` and `onboarding_open_took_phone` approved by
+    // the owner on 2026-10-24, `recover_could_not_recover` and its action on 2026-10-26.) The keys are the spec's and vettid-android's.
 
     static var recoverCouldNotTell: String {
         String(
@@ -160,14 +161,38 @@ enum RecoveryStrings {
         )
     }
 
-    /// (Owner decision of 2026-10-25) After both recoveries ended and a day of refusals to the unlock. An interim wording: the text
-    /// awaits the owner's; an iPhone-only key until then.
-    static var iosRecoverCouldNotFinish: String {
+    /// The answers rule recovery out (`exhausted`, `closed` or `not_armed` to a fresh open): with the action "Email support".
+    static var recoverCouldNotRecover: String {
         String(
-            localized: "ios_recover_could_not_finish",
-            defaultValue: "VettID could not finish recovering your vault on this phone. Contact VettID.",
+            localized: "recover_could_not_recover",
+            defaultValue: """
+                This phone could not recover your vault. Nothing on this phone is deleted. Contact VettID at \
+                support@vettid.org.
+                """,
             bundle: .module
         )
+    }
+
+    /// The action beside `recover_could_not_recover`: opens a mail to support@vettid.org (``SupportMail/url``).
+    static var onboardingOpenContactSupport: String {
+        String(localized: "onboarding_open_contact_support", defaultValue: "Email support", bundle: .module)
+    }
+
+    /// A code of another vault than the one this phone is recovering (vettid-android's wording).
+    static var recoverOtherVault: String {
+        String(
+            localized: "recover_other_vault",
+            defaultValue: """
+                This recovery code is for a different vault than the one this phone is recovering. Nothing was registered, and \
+                nothing on this phone is deleted.
+                """,
+            bundle: .module
+        )
+    }
+
+    /// The code steps beside the PIN once a new recovery may use this phone (vettid-android's wording).
+    static var recoverUndecidedNewCode: String {
+        String(localized: "recover_undecided_new_code", defaultValue: "Use a new recovery code", bundle: .module)
     }
 
     static var onboardingOpenTookPhone: String {

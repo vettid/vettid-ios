@@ -190,10 +190,74 @@ extension CouldNotTellViewModelTests {
     }
 }
 
+/// IOS-PLAN 0.1.35 §4.9, "Two identities at most": N's recovery ended too, the contact text, and a code of another vault.
 extension CouldNotTellViewModelTests {
-    @Test func theTextOfBothRecoveriesEndedStartsAtThePinWithItsOwnState() async throws {
-        vault.couldNotTellValue = .couldNotFinish
+    @Test func bothRecoveriesEndedStartAtThePinWithANewCodeBesideIt() async throws {
+        vault.couldNotTellValue = .unlockOrNewCode
         let open = await open()
-        #expect(open.state.couldNotFinishRecovery && !open.state.contactVettID && open.state.step == .finish && open.state.lostOk)
+        #expect(open.state.step == .finish && open.state.lostOk && open.state.newCodeAllowed && !open.state.contactVettID)
+        // The recovery flow is at the open step, and a code may be scanned or typed from there; back returns to the open.
+        vault.recoveryStageValue = .pin
+        vault.couldNotTellChecks = [.unlockOrNewCode]
+        let vm = await recover()
+        #expect(vm.state.step == .open && vm.state.newCodeAllowed)
+        vm.scan()
+        #expect(vm.state.step == .scan)
+        #expect(vm.back() && vm.state.step == .open)
+        vm.type()
+        #expect(vm.state.step == .type)
+        #expect(vm.back() && vm.state.step == .open)
+        vm.scan()
+        vm.scanned(qr)
+        await vm.settle()
+        #expect(vault.lastRegistered?.recoveryID == rid && vm.state.step == .open)
+    }
+
+    @Test func theCodeStepsAreNotOfferedFromTheOpenOtherwise() async throws {
+        vault.recoveryStageValue = .pin
+        vault.couldNotTellChecks = [.finishWithPin]
+        let vm = await recover()
+        #expect(vm.state.step == .open && !vm.state.newCodeAllowed)
+        vm.scan()
+        vm.type()
+        #expect(vm.state.step == .open)
+    }
+
+    @Test func theContactTextFollowsTheAnswerAndIsNotTerminal() async throws {
+        vault.recoveryOpenOutcomes = [RecoveryOpenOutcome("exhausted", attemptUsed: false, contactCouldNotRecover: true)]
+        let open = await open()
+        open.setPin("975310")
+        open.setPassword("correct horse")
+        open.review()
+        open.send()
+        await open.settle()
+        #expect(open.state.couldNotRecover && open.state.outcome?.code == "exhausted")
+        // Its action mails support.
+        #expect(SupportMail.url.absoluteString.hasPrefix("mailto:support@vettid.org"))
+        // When the reads allow it, a new code may still be used.
+        vault.couldNotTellValue = .unlockOrNewCode
+        let again = await self.open()
+        #expect(again.state.newCodeAllowed && !again.state.couldNotRecover)
+        // The same answer without the data layer's mark is not the text.
+        vault.recoveryOpenOutcomes = [RecoveryOpenOutcome("exhausted", attemptUsed: false)]
+        vault.couldNotTellValue = .none
+        let other = await self.open()
+        other.setPin("975310")
+        other.setPassword("correct horse")
+        other.review()
+        other.send()
+        await other.settle()
+        #expect(other.state.outcome?.code == "exhausted" && !other.state.couldNotRecover)
+    }
+
+    @Test func aCodeOfAnotherVaultIsRefusedWithItsOwnText() async throws {
+        vault.recoveryStageValue = .pin
+        vault.couldNotTellChecks = [.newCode]
+        vault.registrations = [.refused(code: VaultManager.codeOtherVault)]
+        let vm = await recover()
+        vm.scan()
+        vm.scanned(qr)
+        await vm.settle()
+        #expect(vm.state.step == .scan && vm.state.refusal == .otherVault && !vm.state.busy)
     }
 }
