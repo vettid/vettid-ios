@@ -108,12 +108,13 @@ extension VaultManagerRecoveryTests {
             _ = try await p.manager.recoveryOpen(pin: pin, password: password)
             return !p.manager.record.value.recoveryOpenUnanswered
         }
-        // IOS-PLAN 0.1.35 §4.10: `exhausted` and `not_armed` prove it too.
-        for code in ["busy", "counter_unavailable", "wait", "quiet", "wrong", "expired", "exhausted", "not_armed"] {
+        // IOS-PLAN 0.1.35 §4.10: `exhausted` and `not_armed` prove it too, and an `attestation` that used no attempt (owner decision
+        // of 2026-10-26).
+        for code in ["busy", "counter_unavailable", "wait", "quiet", "wrong", "expired", "exhausted", "not_armed", "attestation"] {
             let first = try await clears(code, earlierUnanswered: false)
             #expect(first, "\(code) clears the mark of a first open")
         }
-        for code in ["retry", "stored_mismatch", "attestation", "manifest", "wrong_release", "bad_request", "no_recovery"] {
+        for code in ["retry", "stored_mismatch", "manifest", "wrong_release", "bad_request", "no_recovery"] {
             let none = try await clears(code, earlierUnanswered: false)
             #expect(!none, "\(code) proves nothing")
         }

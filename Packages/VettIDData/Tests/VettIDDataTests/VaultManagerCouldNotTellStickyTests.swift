@@ -41,6 +41,44 @@ extension VaultManagerRecoveryTests {
         #expect(await vaultFailure { try await m.abandonRecovery() } != nil)
     }
 
+    /// Registered with the vault's binding on the first copy's key A while the key in use is a later one, B (the first copy's slot
+    /// said `expired`, the second copy was taken and its answer lost, a third was answered `used`).
+    func registeredOnTheFirstCopysKey() async throws {
+        phone.attester.modelKeys()
+        service.checkAttestationKeys()
+        let made = try armed()
+        service.recoveryRegisterAnswers(.slotExpiredAfterRegistering, .answerLostAfterRegistering)
+        _ = await vaultFailure { _ = try await m.registerRecovery(try scanned(made)) }
+        _ = try? await m.registerRecovery(try scanned(made))
+        #expect(try await m.openSession().device.recovering)
+    }
+
+    @Test func anOpenRefusedForItsKeyIsSettledAndAnEndedRecoveryIsNoPhoneThatCouldNotTell() async throws {
+        defer { phone.close() }
+        try await registeredOnTheFirstCopysKey()
+        // The open with B is refused `attestation` (no attempt used), the one with A is answered `wrong`: both are settled.
+        #expect(try await m.recoveryOpen(pin: "111111", password: password).code == "wrong")
+        #expect(device?.recoveryOpens.map(\.state) == [.refused("attestation"), .refused("wrong")])
+        #expect(device?.recoveryOpenEverUnanswered == false && !m.record.value.recoveryOpenUnanswered)
+        // The recovery ends: an ordinary ended recovery, not the rule.
+        service.cancelRecoveryAtApi()
+        let reads = service.statusReads
+        #expect(try await m.checkCouldNotTell() == .none)
+        #expect(m.record.value.couldNotTell == nil && service.statusReads == reads)
+    }
+
+    @Test func anEarlierOpenThatGotNoAnswerStillKeepsTheRuleAfterAnOpenRefusedForItsKey() async throws {
+        defer { phone.close() }
+        try await registeredOnTheFirstCopysKey()
+        service.recoveryOpenAnswers(.neverProcessed)
+        _ = await vaultFailure { _ = try await m.recoveryOpen(pin: pin, password: password) }
+        // B is refused for its key (that open alone is settled), A is answered `wrong` (no proof after an unanswered open).
+        #expect(try await m.recoveryOpen(pin: "111111", password: password).code == "wrong")
+        #expect(device?.recoveryOpens.map(\.state) == [.unanswered, .refused("attestation"), .unanswered])
+        service.cancelRecoveryAtApi()
+        #expect(try await twoReads() == .newCode)
+    }
+
     @Test func theNewIdentityKeepsGoingWhenNoOlderIdentityIsTheVaultsAndItsHandshakeWasLostOnce() async throws {
         defer { phone.close() }
         phone.pairingWait = 3

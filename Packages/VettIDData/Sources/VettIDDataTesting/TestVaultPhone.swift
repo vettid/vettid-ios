@@ -27,6 +27,8 @@ public final class TestAttester: Attester, @unchecked Sendable {
     /// The App Attest key record of the iPhone (``AppAttestKey``) over a fake App Attest, once ``modelKeys()`` installed it.
     private var model: AppAttestKey?
     private let service = TestAppAttestService()
+    private let keyIDs = TestKeyIDStore()
+    private let aside = TestKeyIDStore()
 
     public init() {}
 
@@ -35,10 +37,21 @@ public final class TestAttester: Attester, @unchecked Sendable {
     /// (``assertedKeys``, ``attestedKeyIDs``).
     public func modelKeys() {
         let key = AppAttestKey(
-            service: service, keyID: TestKeyIDStore(), aside: TestKeyIDStore(), mayStartOver: { true }, backoff: [], sleep: { _ in },
-            checkThread: false
+            service: service, keyID: keyIDs, aside: aside, mayStartOver: { true }, backoff: [], sleep: { _ in }, checkThread: false
         )
         lock.withLock { model = key }
+    }
+
+    /// A new process (``TestVaultPhone/restart()``): the modelled key record is read again from what it kept, without the
+    /// choices it made in memory (the key tried after a refusal).
+    public func newProcess() {
+        if modelled != nil { modelKeys() }
+    }
+
+    /// The modelled key record as kept (its JSON), or nil.
+    public var keptRecord: String? {
+        guard case .found(let bytes) = keyIDs.lookup() else { return nil }
+        return String(bytes: bytes, encoding: .utf8)
     }
 
     /// With ``modelKeys()``: the App Attest key id each assertion used, in order, and the key ids attested.
@@ -290,6 +303,7 @@ public final class TestVaultPhone {
     /// new one runs.
     public func restart() async throws {
         await manager.halt()
+        attester.newProcess()
         var config = try Self.configured(
             service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock,
             wipes ? wipeTargets : nil, attester, attestStartOver, waits, uptime

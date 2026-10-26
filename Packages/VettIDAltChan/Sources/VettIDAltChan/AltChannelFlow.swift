@@ -383,20 +383,16 @@ public struct AltChannelFlow: Sendable {
             let (info, e) = try await enclave(release: nil, manifest: m, enroll: false)
             let req = try await build(e)
             let taken = TakenMark()
-            let err: Error?, slot: Slot?
-            do {
-                (err, slot) = try await postAndPoll(
-                    {
-                        try await api.recoveryRegister(vaultID: vaultID, instanceID: info.instanceID, req)
-                        taken.set()
-                        await onSent()
-                    }, req.requestID
-                )
-            } catch {
-                // A POST the member API never took (no `202`) never reached the enclave: its key was never bound (IOS-PLAN §6.2).
-                if !taken.value, let attester, let k = req.attestedKeyID { try? attester.discard(keyID: k) }
-                throw error
-            }
+            // A transport error (no answer to the POST: the member API may have taken it) is thrown with the key kept.
+            let (err, slot) = try await postAndPoll(
+                {
+                    try await api.recoveryRegister(vaultID: vaultID, instanceID: info.instanceID, req)
+                    taken.set()
+                    await onSent()
+                }, req.requestID
+            )
+            // A POST the member API answered without taking it (no `202`) never reached the enclave: its key was never bound
+            // (IOS-PLAN §6.2).
             if !taken.value || Self.unprocessed(err, slot), let attester, let k = req.attestedKeyID { try attester.discard(keyID: k) }
             if Self.retryable(err, slot), attempt < Self.maxAttempts {
                 attempt += 1

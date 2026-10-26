@@ -281,20 +281,22 @@ extension VaultManagerRecoveryTests {
         #expect(phone.attester.assertedKeys.dropFirst(asserted).first == keys[0])
     }
 
-    @Test func theLostOkUnlockOfNAssertsWithTheKeyTheVaultBound() async throws {
+    @Test func theLostOkUnlockOfNFallsBackToTheBoundKeyInANewProcess() async throws {
         defer { phone.close() }
         let two = try await registeredWithTwoKeys()
-        let (third, a) = (two.code, two.a)
-        // The open with B is refused for its key; the one with A completes at the vault, and its answer is lost.
+        // The open with B is refused for its key; the one with A completes at the vault (A is bound), and its answer is lost.
         service.recoveryOpenAnswers(.vault, .answerLost)
         _ = await vaultFailure { _ = try await m.recoveryOpen(pin: pin, password: password) }
-        // Two reads of `200`: the lost-ok unlock with N asserts with the bound key A (the vault refuses any other), and the
-        // recovery finishes.
+        // A new process: nothing of the key tried in memory is left, and B (the newest unconfirmed key) is the one in use.
+        try await phone.restart()
         #expect(try await twoReads() == .finishWithPin)
-        let asserted = phone.attester.assertedKeys.count
+        let (asserted, unlocks) = (phone.attester.assertedKeys.count, service.unlocks.count)
+        // The unlock with N asserts B, is refused `attestation` before the PIN is checked, and tries A, which opens.
         #expect(try await m.resumeLostOk(pin: pin).ok)
-        #expect(phone.attester.assertedKeys.dropFirst(asserted).last == a)
-        #expect(service.recoveryHandshakeContexts.last == third.recoveryID && m.record.value.couldNotTell == nil)
+        #expect(Array(phone.attester.assertedKeys.dropFirst(asserted).prefix(2)) == [two.b, two.a])
+        #expect(service.unlocks.count == unlocks + 1)
+        #expect(phone.attester.keptRecord?.contains(#""current":"\#(two.a)""#) == true)
+        #expect(service.recoveryHandshakeContexts.last == two.code.recoveryID && m.record.value.couldNotTell == nil)
     }
 
     // MARK: - The contact text

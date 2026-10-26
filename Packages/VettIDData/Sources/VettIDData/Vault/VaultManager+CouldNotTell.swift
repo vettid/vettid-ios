@@ -247,12 +247,15 @@ extension VaultManager {
     }
 
     /// An answer that proves no step 1 was stored (IOS-PLAN 0.1.35 §4.10): only a code from the vault's readable answer, and only
-    /// `busy`, `wrong_again`, `attempt_lost`, `exhausted`, `not_armed`, `closed`, the counter-down answer and the wait verdicts on
-    /// their own, each for the open it answers alone; `wrong` and `expired` only for a phone with no earlier unanswered open. A
+    /// `busy`, `wrong_again`, `attempt_lost`, `exhausted`, `not_armed`, `closed`, the counter-down answer, the wait verdicts and an
+    /// `attestation` that used no attempt on their own, each for the open it answers alone; `wrong` and `expired` only for a phone with no earlier unanswered open. A
     /// slot `expired`, a 404, 410 or 5xx on the poll, no answer, `retry`, `transfer_incomplete` and any error are unanswered.
     nonisolated static func refusalProves(_ code: String, earlierUnanswered: Bool) -> Bool {
+        // `attestation`: the vault refuses the open's assertion before step 1 and before counting (chosen; not in the spec; owner
+        // decision 2026-10-26, spec question raised); ``noteOpenAnswer(_:device:id:)`` requires that no attempt was used.
         let alone: Set = [
             "busy", "wrong_again", "attempt_lost", "exhausted", "not_armed", "closed", "counter_unavailable", "wait", "quiet",
+            AltChannelFlow.codeAttestation,
         ]
         return alone.contains(code) || (!earlierUnanswered && (code == "wrong" || code == "expired"))
     }
@@ -272,9 +275,11 @@ extension VaultManager {
     /// What became known of the open [id] with the answer [r], written to its entry of the history: `ok` decides; a refusal that
     /// proves no step 1 marks this entry only, and never changes an earlier open's.
     func noteOpenAnswer(_ r: RecoveryOpen.Result, device: VaultDevice, id: String) async {
+        // An `attestation` that used an attempt (or does not say) proves nothing.
+        let unproven = r.code == AltChannelFlow.codeAttestation && r.attemptUsed != false
         if r.ok {
             try? await device.markRecoveryOpen(id, .ok)
-        } else if Self.refusalProves(r.code, earlierUnanswered: earlierUnanswered(before: id, device: device)) {
+        } else if !unproven, Self.refusalProves(r.code, earlierUnanswered: earlierUnanswered(before: id, device: device)) {
             try? await device.markRecoveryOpen(id, .refused(r.code))
         }
     }
