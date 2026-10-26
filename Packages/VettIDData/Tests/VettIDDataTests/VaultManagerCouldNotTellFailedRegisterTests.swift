@@ -26,7 +26,7 @@ extension VaultManagerRecoveryTests {
         _ = try? await m.registerRecovery(try scanned(made))
         // N is made and kept, but not registered; the code step stays.
         let ct = try #require(m.record.value.couldNotTell)
-        #expect(ct.new == .second && ct.registerTried == made.recoveryID && ct.ended)
+        #expect(ct.new == .second && ct.registerTried == nil && ct.ended)
         #expect(try await m.openSession().device.recovering == false && m.record.value.activeIdentity == .second)
         #expect(try await m.couldNotTellStage() == .newCode)
         try expectKept(k, secondToo: true)
@@ -36,6 +36,23 @@ extension VaultManagerRecoveryTests {
         let seen = try #require(service.recoveryRegisters.last)
         #expect(seen.ik != earlier.ik && seen.apiKey == k && seen.recoveryID == made.recoveryID)
         #expect(m.record.value.couldNotTell?.identities == [.first, .second] && phone.attester.forgotten == [1])
+    }
+
+    @Test func aRetryAfterAPostThatWasNeverTakenIsAFirstAttemptAgain() async throws {
+        defer { phone.close() }
+        try await endedForGood()
+        let made = try secondRecovery()
+        // `503` to the POST (no `202`), then `409 recovery_not_available` to the retry: still a first attempt, so not registered
+        // and N's registration is put back (never "maybe registered" on the status).
+        service.recoveryRegisterAnswers(.apiRefused(503), .apiNotAvailable)
+        _ = await vaultFailure { _ = try await m.registerRecovery(try scanned(made)) }
+        let reads = service.statusReads
+        #expect(try await m.registerRecovery(try scanned(made)) == .refused(code: VaultManager.codeNotAvailable))
+        #expect(service.statusReads == reads && device?.recovering == false && m.record.value.couldNotTell?.registerTried == nil)
+        // A register the member API takes makes the next one for the code a repeat.
+        service.recoveryRegisterAnswers(.answerLostAfterRegistering)
+        _ = await vaultFailure { _ = try await m.registerRecovery(try scanned(made)) }
+        #expect(m.record.value.couldNotTell?.registerTried == made.recoveryID)
     }
 
     @Test func aRepeatRefusedNotAvailableIsMaybeRegisteredAndTheStatusWithKSaysRegistered() async throws {

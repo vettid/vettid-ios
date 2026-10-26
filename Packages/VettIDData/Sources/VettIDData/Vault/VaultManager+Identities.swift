@@ -8,9 +8,9 @@ import VettIDVault
 // the earlier one (E) and one new one (N), never a third. The first new code is registered with N (its keys, its device state with
 // its own `recovery_id` and the history of its opens), and every further recovery registers N again: the same K, the same N keys,
 // the new code, and a new App Attest key each time. Nothing is deleted until the vault answered `ok` and the pairing completed: E's
-// App Attest key and all of N's are kept too (N's earlier ones also after, until the vault's binding at the handshake is
-// confirmed). If N's recovery ends, the phone keeps both, tries the lost-ok unlock with N, then E,
-// and registers N again for the next recovery; each identity pairs only with the `recovery_id` it last registered for as `ctx`.
+// App Attest key and all of N's are kept too (N's earlier ones also after it, until a forget, pending the spec's answer on the
+// vault's binding at the handshake). If N's recovery ends, the phone keeps both, tries the lost-ok unlock with N, then E, and
+// registers N again for the next recovery; each identity pairs only with the `recovery_id` it last registered for as `ctx`.
 extension VaultManager {
     // MARK: - The new recovery with the same K
 
@@ -57,7 +57,6 @@ extension VaultManager {
             let attempt = RegisterAttempt(
                 repeated: record.value.couldNotTell?.registerTried == code.recoveryID, firstN: n.device.recoveryID == nil
             )
-            try persistRecord(record.generation) { $0.couldNotTell?.registerTried = code.recoveryID }
             // N's earlier App Attest keys stay beside the new one this register attests.
             try config.attester.keepReplacedKeys()
             return try await registerN(n, code, claimed, attempt, claimAgain: claimAgain)
@@ -214,8 +213,8 @@ extension VaultManager {
 
     /// The vault answered `ok` and the pairing completed: every identity that did not pair, its device state and App Attest keys,
     /// and the rule's record go (the App Attest keys of the earlier registrations of the identity that paired stay candidates of its
-    /// unlock: chosen; not in the spec: kept until the vault's binding at the handshake is confirmed). Nothing before (IOS-PLAN 0.1.35 §4.9 "What it keeps"); a failure
-    /// keeps all, and the next look tries again.
+    /// unlock: chosen; not in the spec: kept until a forget, pending the spec's answer on the vault's binding at the handshake). Nothing before (IOS-PLAN 0.1.35
+    /// §4.9 "What it keeps"); a failure keeps all, and the next look tries again.
     func settleCouldNotTell(winner: IdentitySet? = nil) {
         guard record.value.couldNotTell != nil else { return }
         let winner = winner ?? record.value.activeIdentity

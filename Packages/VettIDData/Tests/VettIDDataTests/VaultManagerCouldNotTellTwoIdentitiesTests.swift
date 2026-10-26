@@ -228,21 +228,73 @@ extension VaultManagerRecoveryTests {
         #expect(phone.attester.assertedKeys.last == k3)
     }
 
-    @Test func aRepeatConfirmedByTheStatusOpensWithAKeyOfThatRecoveryNeverAnEarlierOne() async throws {
+    /// N registered again with the vault's binding on the first copy's key A, while the phone holds a later key B of the same
+    /// recovery that nothing confirmed or discarded, and asserts with B: the first copy is applied but its slot says `expired`; the
+    /// flow seals again with B, the member API takes it and its answer is lost; the next try (key C) is answered `used`, which
+    /// discards C, and the status with K confirms the registration.
+    func registeredWithTwoKeys() async throws -> TwoKeys {
+        phone.attester.modelKeys()
+        service.checkAttestationKeys()
+        _ = try await secondEnded(.neverProcessed)
+        let third = try secondRecovery()
+        let before = phone.attester.attestedKeyIDs.count
+        service.recoveryRegisterAnswers(.slotExpiredAfterRegistering, .answerLostAfterRegistering)
+        _ = await vaultFailure { _ = try await m.registerRecovery(try scanned(third)) }
+        #expect(try await m.registerRecovery(try scanned(third)) == .registered(emailHint: service.emailHint))
+        let keys = Array(phone.attester.attestedKeyIDs.dropFirst(before))
+        #expect(keys.count == 3)
+        return TwoKeys(code: third, a: keys[0], b: keys[1])
+    }
+
+    struct TwoKeys {
+        let code: FakeVaultService.RecoveryCodeMade
+        let a: String
+        let b: String
+    }
+
+    @Test func anOpenRefusedForItsKeyTriesTheOtherKeyOfThatRecoveryAndCountsNoAttempt() async throws {
+        defer { phone.close() }
+        let two = try await registeredWithTwoKeys()
+        let (a, b) = (two.a, two.b)
+        // The open with B is refused `attestation` (nothing counted); the open with A, the registration's, succeeds.
+        let asserted = phone.attester.assertedKeys.count
+        #expect(try await m.recoveryOpen(pin: pin, password: password).ok)
+        #expect(Array(phone.attester.assertedKeys.dropFirst(asserted).prefix(2)) == [b, a])
+        #expect(service.recoveryAttemptsUsed == 1)
+    }
+
+    @Test func aRepeatWhosePostWasNeverTakenDiscardsItsKeyAndTheOpenUsesTheFirst() async throws {
         defer { phone.close() }
         phone.attester.modelKeys()
+        service.checkAttestationKeys()
         _ = try await secondEnded(.neverProcessed)
-        let before = Set(phone.attester.attestedKeyIDs)
         let third = try secondRecovery()
+        // Taken and applied (key A), the answer lost; the repeat (key B) is refused by the member API before the vault: B is discarded.
+        let before = phone.attester.attestedKeyIDs.count
         service.recoveryRegisterAnswers(.answerLostAfterRegistering, .apiNotAvailable)
         _ = await vaultFailure { _ = try await m.registerRecovery(try scanned(third)) }
         #expect(try await m.registerRecovery(try scanned(third)) == .registered(emailHint: service.emailHint))
-        // Both attempts attested a key of their own; the open asserts with one of them (an `attestation` refusal tries the other).
-        let new = Set(phone.attester.attestedKeyIDs).subtracting(before)
-        #expect(new.count == 2)
+        let keys = Array(phone.attester.attestedKeyIDs.dropFirst(before))
+        #expect(keys.count == 2 && phone.attester.discarded.count >= 1)
         let asserted = phone.attester.assertedKeys.count
         #expect(try await m.recoveryOpen(pin: pin, password: password).ok)
-        #expect(phone.attester.assertedKeys.count > asserted && new.contains(phone.attester.assertedKeys[asserted]))
+        #expect(phone.attester.assertedKeys.dropFirst(asserted).first == keys[0])
+    }
+
+    @Test func theLostOkUnlockOfNAssertsWithTheKeyTheVaultBound() async throws {
+        defer { phone.close() }
+        let two = try await registeredWithTwoKeys()
+        let (third, a) = (two.code, two.a)
+        // The open with B is refused for its key; the one with A completes at the vault, and its answer is lost.
+        service.recoveryOpenAnswers(.vault, .answerLost)
+        _ = await vaultFailure { _ = try await m.recoveryOpen(pin: pin, password: password) }
+        // Two reads of `200`: the lost-ok unlock with N asserts with the bound key A (the vault refuses any other), and the
+        // recovery finishes.
+        #expect(try await twoReads() == .finishWithPin)
+        let asserted = phone.attester.assertedKeys.count
+        #expect(try await m.resumeLostOk(pin: pin).ok)
+        #expect(phone.attester.assertedKeys.dropFirst(asserted).last == a)
+        #expect(service.recoveryHandshakeContexts.last == third.recoveryID && m.record.value.couldNotTell == nil)
     }
 
     // MARK: - The contact text

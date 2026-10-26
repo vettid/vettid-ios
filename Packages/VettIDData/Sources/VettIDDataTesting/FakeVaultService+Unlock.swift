@@ -205,6 +205,11 @@ extension FakeVaultService {
         if device == nil, recovery.phone != nil || recovery.earlierPhone != nil, !recovery.phoneHoldsUnlockKey {
             return recovery.cancelled ? .json(401, #"{"error":"unauthorized"}"#) : .json(403, #"{"error":"forbidden"}"#)
         }
+        // vettid-vault: the unlock's assertion is checked against the key the completed recovery bound.
+        if recovery.strictAttestation, let bound = recovery.boundKey, !Self.asserted(body, with: bound) {
+            slots[rid] = try? Self.sealResult(kem, "vault.unlock.result", rid, #"{"ok":false,"code":"attestation","header_seq":\#(headerSeq)}"#)
+            return .json(202, "{}")
+        }
         let secret = try? body.base64("unlock_secret")
         let cancel = body.has("cancel_recovery")
         // The vault records the highest manifest serial it was sent (§11.10.4) and answers it.

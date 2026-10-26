@@ -120,7 +120,8 @@ extension VaultManagerRecoveryTests {
         try await phone.restart()
         _ = try await m.couldNotTellStage()
         #expect(m.record.value.couldNotTell?.new == .second && m.record.value.activeIdentity == .second)
-        #expect(try await m.openSession().device.recovering == false && m.record.value.couldNotTell?.registerTried == made.recoveryID)
+        // The POST was never taken: no repeat follows from it.
+        #expect(try await m.openSession().device.recovering == false && m.record.value.couldNotTell?.registerTried == nil)
         // Not registered: the same N, K and code try again.
         #expect(try await m.registerRecovery(try scanned(made)) == .registered(emailHint: service.emailHint))
         try await phone.restart()

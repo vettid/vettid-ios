@@ -7,7 +7,7 @@ import VettIDVault
 
 /// One register of the new identity N of a phone that could not tell (IOS-PLAN 0.1.35 §4.9 "A failed register").
 struct RegisterAttempt {
-    /// A register of N was posted for the same code before: the member API answers any repeat `409 recovery_not_available` once the
+    /// The member API took a register of N for the same code before: it answers any repeat `409 recovery_not_available` once the
     /// first is recorded, and the vault a repeat it took `used`.
     let repeated: Bool
     /// N never had a registration accepted or unknown: only then does a `401` at the register drop it.
@@ -23,8 +23,8 @@ final class RegisterPosts: @unchecked Sendable {
     func sent() { lock.withLock { if !posts.isEmpty { posts[posts.count - 1] = true } } }
     /// A request was built (and N's new registration made).
     var any: Bool { lock.withLock { !posts.isEmpty } }
-    /// The flow posted the code more than once (a request sealed again after an `expired` slot or `instance_moved`).
-    var reposted: Bool { lock.withLock { posts.count > 1 } }
+    /// The member API took an earlier request of this flow (a request sealed again after an `expired` slot): this one is a repeat.
+    var reposted: Bool { lock.withLock { posts.dropLast().contains(true) } }
     /// The member API took the last request: anything that failed after that may have reached the vault.
     var lastTaken: Bool { lock.withLock { posts.last == true } }
 }
@@ -92,7 +92,11 @@ extension VaultManager {
                 return req
             },
             open: { raw, rid in try s.device.openRecoveryResult(raw, requestID: rid) },
-            onSent: { posts.sent() }
+            onSent: { [weak self] in
+                posts.sent()
+                // Only a register the member API took makes the next one for this code a repeat.
+                await self?.noteRegisterTaken(code.recoveryID)
+            }
         )
     }
 
@@ -157,6 +161,11 @@ extension VaultManager {
         if let e = error as? MemberApiError { return !e.queued && (e.status == 429 || e.status == 503) }
         if let f = error as? VaultFailure { return f.kind == .network }
         return error is URLError || error is RelayError
+    }
+
+    /// The member API took a register of N for [recoveryID] (its `202`): any later register for the same code is a repeat.
+    private func noteRegisterTaken(_ recoveryID: String) {
+        _ = try? record.update(since: record.generation) { $0.couldNotTell?.registerTried = recoveryID }
     }
 
     /// N registered for this recovery: the rule's decisions are made again from the next reads.

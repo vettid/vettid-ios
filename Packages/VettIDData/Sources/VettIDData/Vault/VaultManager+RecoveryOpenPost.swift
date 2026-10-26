@@ -17,8 +17,10 @@ extension VaultManager {
         let (vaultID, guid) = (record.value.vaultID, record.value.userGuid)
         let attester = config.attester
         let built = BuiltOpen()
+        // A readable `attestation` tries the next key of the identity (a register sent again attested a key of its own). Each open
+        // built has its entry; an `attestation` proves nothing of step 1 (§4.10), so only the last open's answer is written.
         let r = try await s.alt.recoveryOpen(
-            vaultID: vaultID,
+            vaultID: vaultID, attester: attester,
             build: { [weak self] e, m in
                 // IOS-PLAN ID8: this phone registered with release R; an instance without it is refused, nothing sent.
                 try ReleasePath.requireR(e.descriptor.capabilities)

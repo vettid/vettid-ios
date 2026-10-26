@@ -54,8 +54,8 @@ public protocol Attester: Sendable {
     func keepReplacedKeys() throws
 
     /// (§4.9) The handshake completed with the identity [identity]: it is in use, and the keys of the other identities are
-    /// forgotten; those of its own earlier registrations stay candidates of its unlock (chosen; not in the spec: kept until the
-    /// vault's binding at the handshake is confirmed).
+    /// forgotten; those of its own earlier registrations stay candidates of its unlock, tried only after an `attestation` refusal
+    /// (chosen; not in the spec: kept until a forget, pending the spec's answer on the vault's binding at the handshake).
     func settle(identity: Int) throws
 }
 

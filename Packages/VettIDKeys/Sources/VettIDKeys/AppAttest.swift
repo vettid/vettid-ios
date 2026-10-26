@@ -219,8 +219,8 @@ public final class AppAttestKey: KeyEraser, @unchecked Sendable {
     }
 
     /// (§4.9) The handshake completed with the identity [n]: it is in use, and the keys of every other identity are forgotten. The
-    /// keys of its own earlier registrations stay candidates of its unlock (chosen; not in the spec: kept until the vault's binding
-    /// at the handshake is confirmed).
+    /// keys of its own earlier registrations stay candidates of its unlock, tried only after an `attestation` refusal (chosen; not
+    /// in the spec: kept until a forget, pending the spec's answer on the vault's binding at the handshake).
     public func settle(identity n: Int) throws {
         try update { record in
             record.use(n)

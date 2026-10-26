@@ -79,8 +79,9 @@ struct CouldNotTell: Codable, Equatable, Sendable {
     /// tried, and a new code registers N again (``ended`` and ``unlock`` are both set). Never the text of a vault that took this
     /// phone (``keyInUse``).
     var bothEnded = false
-    /// The `recovery_id` of the last register of N that was posted (whatever its answer): another register for the same code is a
-    /// repeat, which the member API may refuse because the first was recorded (IOS-PLAN 0.1.35 §4.9 "A failed register").
+    /// The `recovery_id` of the last register of N the member API took (its `202`, whatever followed): another register for the
+    /// same code is a repeat, which the member API may refuse because the first was recorded (IOS-PLAN 0.1.35 §4.9 "A failed
+    /// register").
     var registerTried: String?
     /// The unlock answered `transfer_incomplete`: only an open repeats the recovery. Both kinds of read then mean "ended" unless
     /// the recovery shows `registered`.

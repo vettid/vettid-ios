@@ -15,6 +15,8 @@ struct FakeRecoveryPhone {
     let relay: RelayAddr
     /// The app key (K) the register named as `app.api_key`.
     var apiKey: [UInt8]?
+    /// The App Attest key id the applied register attested (iOS).
+    var attestKey: [UInt8]?
 }
 
 /// The state of the fake's recovery (VAULT-MESSAGING §11.11, §11.14.6), under the service's lock.
@@ -63,6 +65,9 @@ struct FakeRecoveryStore {
     var registers: [FakeVaultService.RecoveryRegisterSeen] = []
     var opens: [FakeVaultService.RecoveryOpenSeen] = []
     var handshakeContexts: [String] = []
+    /// The vault's checks of the App Attest key (``FakeVaultService/checkAttestationKeys()``), and the key its unlock binding is.
+    var strictAttestation = false
+    var boundKey: [UInt8]?
 }
 
 // TEST ONLY. Recovery on a new phone as vettid-vault answers it: the member API's claim and register
@@ -234,6 +239,11 @@ extension FakeVaultService {
 
     /// The next claims answer these, in order; then the recovery's rules.
     public func recoveryClaimAnswers(_ answers: RecoveryClaimAnswer...) { locked { recovery.claimAnswers += answers } }
+    /// From now on the vault checks App Attest keys as vettid-vault does, for a phone whose assertions name their key (the test
+    /// attester's ``TestAttester/modelKeys()``): a register after the one it applied is answered `used` and the first copy's
+    /// attestation stays the registration's; an open asserted with another key is a readable `attestation` refusal that counts no
+    /// attempt; and so is an unlock asserted with another key than the one the completed recovery bound.
+    public func checkAttestationKeys() { locked { recovery.strictAttestation = true } }
     /// The next registers answer these, in order; then ``RecoveryRegisterAnswer/ok``.
     public func recoveryRegisterAnswers(_ answers: RecoveryRegisterAnswer...) { locked { recovery.registerAnswers += answers } }
     /// The next opens answer these, in order; then the vault's rules.
@@ -313,8 +323,11 @@ extension FakeVaultService {
             result = #"{"ok":false,"code":"no_recovery"}"#
         } else if (try? body.string("code")) != recovery.code {
             result = #"{"ok":false,"code":"bad_code"}"#
+        } else if recovery.strictAttestation, recovery.phone != nil {
+            // vettid-vault: a repeat after the register was applied is `used`; the first copy's attestation stays.
+            result = #"{"ok":false,"code":"used"}"#
         } else {
-            recovery.phone = FakeRecoveryPhone(ik: ik, kem: kem, relay: addr, apiKey: try? app.base64("api_key"))
+            recovery.phone = FakeRecoveryPhone(ik: ik, kem: kem, relay: addr, apiKey: try? app.base64("api_key"), attestKey: da?.iosKeyID)
             result = #"{"ok":true}"#
         }
         slots[rid] = try? Self.sealResult(kem, "vault.recovery.result", rid, result)
@@ -330,7 +343,7 @@ extension FakeVaultService {
     /// `POST /api/vault/recovery/open`: the sealed `vault.recovery.open` (§11.14.6) in the order of the spec that matters to
     /// the app: the registered phone, then the counter and the entry; an `ok` makes the phone the vault's app. Callers hold
     /// ``cond``.
-    func recoveryOpen(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer {
+    func recoveryOpen(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer { // swiftlint:disable:this cyclomatic_complexity
         let answer = recovery.openAnswers.isEmpty ? RecoveryOpenAnswer.vault : recovery.openAnswers.removeFirst()
         if case .offline = answer { return .failure(.notConnectedToInternet) }
         if case .apiRefused(let status) = answer { return .json(status, #"{"error":"refused"}"#) }
@@ -362,6 +375,11 @@ extension FakeVaultService {
         }
         if case .neverProcessed = answer {
             lostSlots.insert(rid)
+            return .json(202, "{}")
+        }
+        // vettid-vault checks the assertion against the registration's attestation before anything is counted.
+        if recovery.strictAttestation, !Self.asserted(body, with: phone.attestKey) {
+            slots[rid] = try? Self.sealResult(phone.kem, "vault.recovery.open.result", rid, #"{"ok":false,"code":"attestation","attempt_used":false}"#)
             return .json(202, "{}")
         }
         if case .wrongAnswerLost = answer {
@@ -434,6 +452,7 @@ extension FakeVaultService {
         } else {
             recovery.vaultAppKey = phone.apiKey
         }
+        recovery.boundKey = phone.attestKey
         vaultSecret = secret
         device = (phone.kem, phone.relay)
         vaultOpen = true
@@ -442,6 +461,15 @@ extension FakeVaultService {
         return JsonBuilder().bool("ok", true).uint("state_seq", stateSeq).uint("header_seq", headerSeq).string("token", token)
             .base64("vault_bundle", vaultBundle()).string("release", Self.pcr0(releases.serving)).uint("release_number", releases.serving)
             .bool("attempt_used", true).raw("attempts", #"{"used":\#(recovery.used),"of":10}"#).build()
+    }
+
+    /// Whether the request [body]'s assertion was made with the App Attest key [key] (the test App Attest begins each assertion with
+    /// its key id, base64).
+    static func asserted(_ body: JsonObject, with key: [UInt8]?) -> Bool {
+        guard let key, let a = try? body.obj("device_assertion"), let bytes = try? a.base64("assertion"), bytes.count > 32 else {
+            return false
+        }
+        return Array(bytes.dropLast(32)) == Array(Data(key).base64EncodedString().utf8)
     }
 
     static func normalized(_ body: JsonObject, _ app: JsonObject) -> String {

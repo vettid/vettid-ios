@@ -6,8 +6,8 @@ import VettIDKeysTesting
 
 /// A phone that could not tell holds two device identities (IOS-PLAN 0.1.35 §4.9), and the vault bound each one's own App Attest
 /// key at its register: the keys of the identity in use are the current and pending ones, the other's wait untouched. N is
-/// registered again with a new key for each further recovery, and its earlier keys are kept (after the handshake too, until the
-/// vault's binding there is confirmed).
+/// registered again with a new key for each further recovery, and its earlier keys are kept (after the handshake too, until a
+/// forget, pending the spec's answer on the vault's binding at the handshake).
 @Suite struct AppAttestIdentityTests {
     let challenge = [UInt8](repeating: 7, count: 32)
 
@@ -182,8 +182,8 @@ import VettIDKeysTesting
         #expect(try asserted(later) == fake.keyID(1))
         try later.use(identity: 1)
         #expect(try asserted(later) == fake.keyID(3))
-        // The handshake completes with N: E's key goes; N's earlier one stays a candidate of its unlock (kept until the vault's
-        // binding at the handshake is confirmed), and a confirmation no longer keeps the key it replaces.
+        // The handshake completes with N: E's key goes; N's earlier one stays a candidate of its unlock (kept until a forget,
+        // pending the spec's answer on the vault's binding at the handshake), and a confirmation no longer keeps the key it replaces.
         try later.settle(identity: 1)
         let settled = try stored(store)
         #expect(settled.current == fake.keyID(3) && settled.earlier == [fake.keyID(2)] && settled.parked.isEmpty && !settled.keepsReplaced)
