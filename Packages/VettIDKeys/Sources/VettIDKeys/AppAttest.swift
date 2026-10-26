@@ -108,6 +108,11 @@ public final class AppAttestKey: KeyEraser, @unchecked Sendable {
         guard record.pending.count < Self.maxPending else { throw AppAttestError.pendingFull }
         let (id, attestation) = try attestFresh(clientDataHash)
         guard let raw = Data(base64Encoded: id), !raw.isEmpty else { throw AppAttestError.failed(-1) }
+        // (IOS-PLAN 0.1.35 §4.9) Each registration's binding stays tied to its own key: an identity registered again asserts with
+        // the new key, and its earlier ones stay candidates.
+        let before = record.current
+        record.attesting()
+        if record.current != before { (override, tried) = (nil, []) }
         record.pending.append(id)
         try store.write(record.encoded())
         return try DeviceAttest.iosAttestation(keyID: Array(raw), attestation: attestation)
@@ -207,7 +212,8 @@ public final class AppAttestKey: KeyEraser, @unchecked Sendable {
     }
 
     /// (IOS-PLAN 0.1.35 §4.9) The identity in use is registered again (the new identity, reused for another recovery): from now
-    /// on a confirmation keeps the keys it replaces, until ``settle(identity:)`` or ``resetIdentities()``.
+    /// on, for this identity only, a new attestation is the key in use with the current one kept as an earlier one, and a
+    /// confirmation keeps the keys it replaces, until ``settle(identity:)`` or ``resetIdentities()``.
     public func keepReplacedKeys() throws {
         try update { $0.keepsReplaced = true }
     }

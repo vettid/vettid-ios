@@ -189,6 +189,31 @@ import VettIDKeysTesting
         #expect(try stored(store).earlier.isEmpty)
     }
 
+    @Test func aRegisterOfNAgainWhoseAnswerIsLostAssertsWithItsOwnNewKey() throws {
+        let fake = FakeAppAttest()
+        let store = MemoryKeyIDStore()
+        let key = make(fake, store)
+        // N confirmed for its first recovery (key 2), then registered again (key 3), the answer never read: nothing confirms key 3.
+        _ = try nRegisteredTwice(key)
+        // The open of the new recovery asserts with key 3, the key its registration bound; key 2 stays a candidate.
+        #expect(try asserted(key) == fake.keyID(3))
+        let record = try stored(store)
+        #expect(record.current == nil && record.pending == [fake.keyID(3)] && record.earlier == [fake.keyID(2)])
+        // An unlock refused for its assertion tries key 2 next, then nothing is left.
+        #expect(try key.nextCandidate())
+        #expect(try asserted(key) == fake.keyID(2))
+        #expect(try !key.nextCandidate())
+        // E is untouched, and its own register was never marked: a new attestation of E keeps its current key in use.
+        try key.use(identity: 0)
+        #expect(try asserted(key) == fake.keyID(1))
+        _ = try attested(key)
+        #expect(try asserted(key) == fake.keyID(1))
+        // The mark is N's and survives a later process.
+        let later = make(fake, store)
+        try later.use(identity: 1)
+        #expect(try stored(store).keepsReplaced)
+    }
+
     @Test func aRepeatThatWasNeverConfirmedKeepsEveryKeyOfN() throws {
         let fake = FakeAppAttest()
         let key = make(fake)
