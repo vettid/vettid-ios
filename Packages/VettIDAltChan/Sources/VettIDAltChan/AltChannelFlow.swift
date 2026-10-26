@@ -313,7 +313,8 @@ public struct AltChannelFlow: Sendable {
             // IOS-PLAN §6.2: an accepted assertion proves the key in use is the bound one; a refused one, while no key is
             // confirmed, tries the next unconfirmed key (bounded; chosen; not in the spec).
             // Best effort: the vault already opened, which a failed write must not turn into a failed unlock.
-            if r.ok { try? attester.confirmInUse() }
+            // (IOS-PLAN 0.1.37 §4.9: for an identity registered again, an earlier key that opens does not replace the newest.)
+            if r.ok { try? attester.confirmUnlocked() }
             // A sealed `attestation` is decided before the PIN is checked (vettid-vault `vault/unlock.go`): a retry with
             // another key never costs a PIN attempt.
             if !r.ok, r.code == Self.codeAttestation, switched < Self.maxKeySwitches, try attester.nextCandidate() {
@@ -383,7 +384,8 @@ public struct AltChannelFlow: Sendable {
             let (info, e) = try await enclave(release: nil, manifest: m, enroll: false)
             let req = try await build(e)
             let taken = TakenMark()
-            // A transport error (no answer to the POST: the member API may have taken it) is thrown with the key kept.
+            // A transport error (no answer to the POST: the member API may have taken it) is thrown with the key kept (chosen; not in
+            // the spec: for the registration such a POST got no `202`, IOS-PLAN 0.1.37 §4.9; the open falls back to another key).
             let (err, slot) = try await postAndPoll(
                 {
                     try await api.recoveryRegister(vaultID: vaultID, instanceID: info.instanceID, req)

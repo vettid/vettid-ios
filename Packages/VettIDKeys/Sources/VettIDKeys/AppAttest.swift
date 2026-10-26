@@ -183,6 +183,21 @@ public final class AppAttestKey: KeyEraser, @unchecked Sendable {
         }
     }
 
+    /// An unlock asserted with the key in use was accepted: as ``confirmInUse()``, except for an identity registered again whose
+    /// accepted key is not its newest: later unlocks use the newest key again (IOS-PLAN 0.1.37 §4.9: an unlock with an earlier key
+    /// binds the newest in the vault's header, "Accepted gap").
+    public func confirmUnlocked() throws {
+        lock.lock()
+        let record = try? readRecord(missingIsEmpty: false)
+        if let record, record.keepsReplaced, let used = inUse(record), used != (record.pending.last ?? record.current) {
+            (override, tried) = (nil, [])
+            lock.unlock()
+            return
+        }
+        lock.unlock()
+        try confirmInUse()
+    }
+
     /// An assertion of the key in use was refused: while no key is confirmed, the next untried pending key, newest first; then,
     /// for an identity registered again (IOS-PLAN 0.1.35 §4.9), the keys of its earlier registrations, newest first (chosen; not
     /// in the spec: the vault's binding may be an earlier registration's).
@@ -218,13 +233,14 @@ public final class AppAttestKey: KeyEraser, @unchecked Sendable {
         try update { $0.keepsReplaced = true }
     }
 
-    /// (§4.9) The handshake completed with the identity [n]: it is in use, and the keys of every other identity are forgotten. The
-    /// keys of its own earlier registrations stay candidates of its unlock, tried only after an `attestation` refusal (chosen; not
-    /// in the spec: kept until a forget, pending the spec's answer on the vault's binding at the handshake).
+    /// (§4.9) The handshake completed with the identity [n]: it is in use, and the keys of every other identity and of its own
+    /// earlier registrations are forgotten (from the vault release that carries vettid-vault #150, the binding N pairs with is its
+    /// current registration's, IOS-PLAN 0.1.37 §4.9).
     public func settle(identity n: Int) throws {
         try update { record in
             record.use(n)
             record.parked = [:]
+            record.earlier = []
             record.keepsReplaced = false
         }
     }

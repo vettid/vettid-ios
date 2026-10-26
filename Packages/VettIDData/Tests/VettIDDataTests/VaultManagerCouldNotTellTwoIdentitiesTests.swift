@@ -230,8 +230,8 @@ extension VaultManagerRecoveryTests {
 
     /// N registered again with the vault's binding on the first copy's key A, while the phone holds a later key B of the same
     /// recovery that nothing confirmed or discarded, and asserts with B: the first copy is applied but its slot says `expired`; the
-    /// flow seals again with B, the member API takes it and its answer is lost; the next try (key C) is answered `used`, which
-    /// discards C, and the status with K confirms the registration.
+    /// flow seals again with B, the member API takes it and its answer is lost (maybe registered), and the status with K confirms
+    /// the registration.
     func registeredWithTwoKeys() async throws -> TwoKeys {
         phone.attester.modelKeys()
         service.checkAttestationKeys()
@@ -239,10 +239,9 @@ extension VaultManagerRecoveryTests {
         let third = try secondRecovery()
         let before = phone.attester.attestedKeyIDs.count
         service.recoveryRegisterAnswers(.slotExpiredAfterRegistering, .answerLostAfterRegistering)
-        _ = await vaultFailure { _ = try await m.registerRecovery(try scanned(third)) }
         #expect(try await m.registerRecovery(try scanned(third)) == .registered(emailHint: service.emailHint))
         let keys = Array(phone.attester.attestedKeyIDs.dropFirst(before))
-        #expect(keys.count == 3)
+        #expect(keys.count == 2)
         return TwoKeys(code: third, a: keys[0], b: keys[1])
     }
 
@@ -272,7 +271,9 @@ extension VaultManagerRecoveryTests {
         // Taken and applied (key A), the answer lost; the repeat (key B) is refused by the member API before the vault: B is discarded.
         let before = phone.attester.attestedKeyIDs.count
         service.recoveryRegisterAnswers(.answerLostAfterRegistering, .apiNotAvailable)
+        service.recoveryStatusShows("available")
         _ = await vaultFailure { _ = try await m.registerRecovery(try scanned(third)) }
+        service.recoveryStatusShows(nil)
         #expect(try await m.registerRecovery(try scanned(third)) == .registered(emailHint: service.emailHint))
         let keys = Array(phone.attester.attestedKeyIDs.dropFirst(before))
         #expect(keys.count == 2 && phone.attester.discarded.count >= 1)
@@ -291,11 +292,14 @@ extension VaultManagerRecoveryTests {
         try await phone.restart()
         #expect(try await twoReads() == .finishWithPin)
         let (asserted, unlocks) = (phone.attester.assertedKeys.count, service.unlocks.count)
-        // The unlock with N asserts B, is refused `attestation` before the PIN is checked, and tries A, which opens.
+        // The unlock with N asserts its newest key B, is refused `attestation` before the PIN is checked, and tries A, which opens.
         #expect(try await m.resumeLostOk(pin: pin).ok)
         #expect(Array(phone.attester.assertedKeys.dropFirst(asserted).prefix(2)) == [two.b, two.a])
         #expect(service.unlocks.count == unlocks + 1)
-        #expect(phone.attester.keptRecord?.contains(#""current":"\#(two.a)""#) == true)
+        // IOS-PLAN 0.1.37 §4.9: an `ok` with an earlier key does not replace the newest; the handshake forgot every other key.
+        let json = try #require(phone.attester.keptRecord)
+        let kept = try #require(try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+        #expect(kept["current"] == nil && (kept["pending"] as? [String])?.last == two.b && kept["earlier"] == nil && kept["parked"] == nil)
         #expect(service.recoveryHandshakeContexts.last == two.code.recoveryID && m.record.value.couldNotTell == nil)
     }
 

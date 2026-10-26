@@ -50,13 +50,16 @@ public protocol Attester: Sendable {
     func resetIdentities() throws
 
     /// (IOS-PLAN 0.1.35 §4.9) The identity in use registers again, with a new key: the keys its earlier registrations attested
-    /// are kept beside it (the vault's binding may still be one of them), also after ``settle(identity:)``.
+    /// are kept beside it (the vault's binding may still be one of them) until ``settle(identity:)``.
     func keepReplacedKeys() throws
 
-    /// (§4.9) The handshake completed with the identity [identity]: it is in use, and the keys of the other identities are
-    /// forgotten; those of its own earlier registrations stay candidates of its unlock, tried only after an `attestation` refusal
-    /// (chosen; not in the spec: kept until a forget, pending the spec's answer on the vault's binding at the handshake).
+    /// (§4.9) The handshake completed with the identity [identity]: it is in use, and the keys of the other identities and of
+    /// its own earlier registrations are forgotten.
     func settle(identity: Int) throws
+
+    /// An unlock with the key in use was accepted: as ``confirmInUse()``, except that for an identity registered again an earlier
+    /// key that was accepted does not become the one in use (IOS-PLAN 0.1.37 §4.9: later unlocks use the newest key).
+    func confirmUnlocked() throws
 }
 
 /// What the device key signs (VAULT-MESSAGING §11.7, §11.10.3), as vettid-vault `devattest.Signed` carries it
@@ -99,4 +102,5 @@ extension Attester {
     public func resetIdentities() throws {}
     public func keepReplacedKeys() throws {}
     public func settle(identity: Int) throws {}
+    public func confirmUnlocked() throws { try confirmInUse() }
 }

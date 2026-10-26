@@ -110,6 +110,7 @@ public final class TestAttester: Attester, @unchecked Sendable {
 
     public func prune(keeping keyIDs: [[UInt8]]) throws { try modelled?.prune(keeping: keyIDs) }
     public func confirmInUse() throws { try modelled?.confirmInUse() }
+    public func confirmUnlocked() throws { try modelled?.confirmUnlocked() }
     public func nextCandidate() throws -> Bool { try modelled?.nextCandidate() ?? false }
 
     public func use(identity n: Int) throws {

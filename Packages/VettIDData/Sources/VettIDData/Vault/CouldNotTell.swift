@@ -79,10 +79,12 @@ struct CouldNotTell: Codable, Equatable, Sendable {
     /// tried, and a new code registers N again (``ended`` and ``unlock`` are both set). Never the text of a vault that took this
     /// phone (``keyInUse``).
     var bothEnded = false
-    /// The `recovery_id` of the last register of N the member API took (its `202`, whatever followed): another register for the
-    /// same code is a repeat, which the member API may refuse because the first was recorded (IOS-PLAN 0.1.35 §4.9 "A failed
-    /// register").
+    /// The `recovery_id` of the last register POST of N, written before it is posted: every later POST for the same code is a
+    /// repeat, which the member API may refuse because the first was recorded (IOS-PLAN 0.1.37 §4.9 "A failed register").
     var registerTried: String?
+    /// The `recovery_id` for which a POST left N maybe registered (it got a `202`) or unknown: a `401` or a readable refusal to a
+    /// later POST for it keeps N's registration.
+    var registerKept: String?
     /// The unlock answered `transfer_incomplete`: only an open repeats the recovery. Both kinds of read then mean "ended" unless
     /// the recovery shows `registered`.
     var transferIncomplete = false
@@ -115,6 +117,7 @@ struct CouldNotTell: Codable, Equatable, Sendable {
         case identities, ended, unlock
         case bothEnded = "both_ended"
         case registerTried = "register_tried"
+        case registerKept = "register_kept"
         case floors
         case returnTo = "return_to"
         case unlockByReads = "unlock_by_reads"
@@ -133,6 +136,7 @@ struct CouldNotTell: Codable, Equatable, Sendable {
         unlock = try c.decodeIfPresent(Bool.self, forKey: .unlock) ?? false
         bothEnded = try c.decodeIfPresent(Bool.self, forKey: .bothEnded) ?? false
         registerTried = try c.decodeIfPresent(String.self, forKey: .registerTried)
+        registerKept = try c.decodeIfPresent(String.self, forKey: .registerKept)
         unlockByReads = try c.decodeIfPresent(Bool.self, forKey: .unlockByReads) ?? false
         transferIncomplete = try c.decodeIfPresent(Bool.self, forKey: .transferIncomplete) ?? false
         returnTo = try c.decodeIfPresent(IdentitySet.self, forKey: .returnTo)

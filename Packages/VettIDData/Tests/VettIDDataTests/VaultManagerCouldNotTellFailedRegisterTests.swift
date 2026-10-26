@@ -7,92 +7,106 @@ import VettIDKeys
 import VettIDDataTesting
 @testable import VettIDVault
 
-/// A failed register of N (IOS-PLAN 0.1.35 §4.9 "A failed register"): only a first attempt for a code that failed before reaching
-/// the vault is not registered and is retried with the same N, K and code; a repeat refused `409 recovery_not_available` or `used`
-/// is maybe registered and the status signed with K decides; a `401` drops only an N that never registered; any other failure keeps
+/// A failed register of N (IOS-PLAN 0.1.37 §4.9 "A failed register"), each POST judged on its own: only a first POST for a code with
+/// no `202` is not registered and is retried with the same N, K and code; a failure after a `202`, or a repeat refused
+/// `409 recovery_not_available` or `used`, is maybe registered and the status signed with K decides; a readable refusal settles its
+/// POST; a `401` drops only an N that never registered, was left maybe registered or unknown; any other answer without a `202` keeps
 /// N as unknown (continues ``VaultManagerRecoveryTests``).
 extension VaultManagerRecoveryTests {
     @Test(arguments: [
         FakeVaultService.RecoveryRegisterAnswer.apiRefused(503), .apiRefused(429), .apiNotAvailable, .offline,
     ])
-    func aFirstAttemptThatFailedBeforeTheVaultIsNotRegisteredAndIsRetriedWithTheSameNAndK(
-        _ answer: FakeVaultService.RecoveryRegisterAnswer
-    ) async throws {
+    func aFirstPostWithNo202IsNotRegisteredAndIsRetriedWithTheSameNAndK(_ answer: FakeVaultService.RecoveryRegisterAnswer) async throws {
         defer { phone.close() }
         let k = try phone.appKeys.getOrCreate().spki()
         try await endedForGood()
         let made = try secondRecovery()
         service.recoveryRegisterAnswers(answer)
         _ = try? await m.registerRecovery(try scanned(made))
-        // N is made and kept, but not registered; the code step stays.
+        // N is made and kept, but not registered; the POST was recorded before it was posted; the code step stays.
         let ct = try #require(m.record.value.couldNotTell)
-        #expect(ct.new == .second && ct.registerTried == nil && ct.ended)
+        #expect(ct.new == .second && ct.registerTried == made.recoveryID && ct.registerKept == nil && ct.ended)
         #expect(try await m.openSession().device.recovering == false && m.record.value.activeIdentity == .second)
         #expect(try await m.couldNotTellStage() == .newCode)
         try expectKept(k, secondToo: true)
         let earlier = try #require(service.recoveryRegisters.first)
-        // The retry: the same N (made once) and K, the same code; the first was not recorded, so it registers.
+        // The retry (a repeat): the same N (made once) and K, the same code; the first was not recorded, so it registers.
         #expect(try await m.registerRecovery(try scanned(made)) == .registered(emailHint: service.emailHint))
         let seen = try #require(service.recoveryRegisters.last)
         #expect(seen.ik != earlier.ik && seen.apiKey == k && seen.recoveryID == made.recoveryID)
         #expect(m.record.value.couldNotTell?.identities == [.first, .second] && phone.attester.forgotten == [1])
     }
 
-    @Test func aRetryAfterAPostThatWasNeverTakenIsAFirstAttemptAgain() async throws {
+    @Test func aSecondPostAfterOneWithNo202IsARepeatAndTheStatusDecides() async throws {
         defer { phone.close() }
         try await endedForGood()
         let made = try secondRecovery()
-        // `503` to the POST (no `202`), then `409 recovery_not_available` to the retry: still a first attempt, so not registered
-        // and N's registration is put back (never "maybe registered" on the status).
+        // `503` to the first POST (not registered), `409 recovery_not_available` to the second: a repeat, so maybe registered, and
+        // the status with K (no registration applied) does not confirm it.
         service.recoveryRegisterAnswers(.apiRefused(503), .apiNotAvailable)
         _ = await vaultFailure { _ = try await m.registerRecovery(try scanned(made)) }
         let reads = service.statusReads
-        #expect(try await m.registerRecovery(try scanned(made)) == .refused(code: VaultManager.codeNotAvailable))
-        #expect(service.statusReads == reads && device?.recovering == false && m.record.value.couldNotTell?.registerTried == nil)
-        // A register the member API takes makes the next one for the code a repeat.
-        service.recoveryRegisterAnswers(.answerLostAfterRegistering)
-        _ = await vaultFailure { _ = try await m.registerRecovery(try scanned(made)) }
-        #expect(m.record.value.couldNotTell?.registerTried == made.recoveryID)
+        #expect(try await m.registerRecovery(try scanned(made)) == .refused(code: "retry"))
+        #expect(service.statusReads > reads && m.record.value.couldNotTell?.registerKept == made.recoveryID)
+        // Retries are always allowed: the next one registers.
+        #expect(try await m.registerRecovery(try scanned(made)) == .registered(emailHint: service.emailHint))
     }
 
-    @Test func aRepeatRefusedNotAvailableIsMaybeRegisteredAndTheStatusWithKSaysRegistered() async throws {
+    @Test(arguments: [FakeVaultService.RecoveryRegisterAnswer.answerLostAfterRegistering, .slotUnauthorized])
+    func aFailureAfterA202IsMaybeRegisteredAndConfirmedByTheStatus(_ answer: FakeVaultService.RecoveryRegisterAnswer) async throws {
         defer { phone.close() }
         try await endedForGood()
         let made = try secondRecovery()
-        // The first copy is recorded and applied, but its answer is lost: N may have registered.
-        service.recoveryRegisterAnswers(.answerLostAfterRegistering, .apiNotAvailable)
-        _ = await vaultFailure { _ = try await m.registerRecovery(try scanned(made)) }
-        // The repeat is refused by the member API because the first was recorded: the status with K shows `registered`.
+        // Taken (`202`) and applied; the poll fails: the status with K shows `registered`.
+        service.recoveryRegisterAnswers(answer)
         #expect(try await m.registerRecovery(try scanned(made)) == .registered(emailHint: service.emailHint))
         #expect(device?.recoveryID == made.recoveryID && m.record.value.couldNotTell?.ended == false)
         #expect(try await m.recoveryOpen(pin: pin, password: password).ok)
     }
 
-    @Test func aRepeatAnsweredUsedIsHarmlessAndKeepsN() async throws {
-        defer { phone.close() }
-        try await endedForGood()
-        let made = try secondRecovery()
-        service.recoveryRegisterAnswers(.answerLostAfterRegistering, .refused("used"))
-        _ = await vaultFailure { _ = try await m.registerRecovery(try scanned(made)) }
-        #expect(try await m.registerRecovery(try scanned(made)) == .registered(emailHint: service.emailHint))
-        #expect(device?.recoveryID == made.recoveryID)
-    }
-
-    @Test func aRepeatThatTheStatusDoesNotShowRegisteredKeepsNAsUnknown() async throws {
+    @Test func aFailureAfterA202ThatTheStatusDoesNotConfirmKeepsN() async throws {
         defer { phone.close() }
         let k = try phone.appKeys.getOrCreate().spki()
         try await endedForGood()
         let made = try secondRecovery()
-        service.recoveryRegisterAnswers(.slotUnauthorized, .refused("used"))
-        _ = await vaultFailure { _ = try await m.registerRecovery(try scanned(made)) }
-        // The status with K is not `registered` (the first copy was not applied): not confirmed, N keeps the registration.
+        service.recoveryRegisterAnswers(.answerLostAfterRegistering, .apiNotAvailable)
         service.recoveryStatusShows("available")
-        #expect(try await m.registerRecovery(try scanned(made)) == .refused(code: "retry"))
+        _ = await vaultFailure { _ = try await m.registerRecovery(try scanned(made)) }
         #expect(device?.recovering == true && device?.recoveryID == made.recoveryID)
+        #expect(m.record.value.couldNotTell?.registerKept == made.recoveryID)
         try expectKept(k, secondToo: true)
+        // The repeat is refused because the first was recorded; the status with K now confirms it.
+        service.recoveryStatusShows(nil)
+        #expect(try await m.registerRecovery(try scanned(made)) == .registered(emailHint: service.emailHint))
     }
 
-    @Test func aDefiniteRefusalOfARegisterAgainPutsNsEarlierRegistrationAndHistoryBack() async throws {
+    @Test func aRepeatAnsweredUsedIsMaybeRegistered() async throws {
+        defer { phone.close() }
+        try await endedForGood()
+        let made = try secondRecovery()
+        // The first copy is applied, its answer lost, and the status does not confirm it yet: N stays maybe registered.
+        service.recoveryRegisterAnswers(.answerLostAfterRegistering)
+        service.recoveryStatusShows("available")
+        _ = await vaultFailure { _ = try await m.registerRecovery(try scanned(made)) }
+        // A repeat the vault answers `used`: maybe registered, and the status with K now confirms it.
+        service.recoveryStatusShows(nil)
+        service.recoveryRegisterAnswers(.refused("used"))
+        #expect(try await m.registerRecovery(try scanned(made)) == .registered(emailHint: service.emailHint))
+        #expect(device?.recoveryID == made.recoveryID)
+    }
+
+    @Test func aRepostOfTheSameCodeInTheSameFlowIsARepeat() async throws {
+        defer { phone.close() }
+        try await endedForGood()
+        let made = try secondRecovery()
+        // The first copy is applied but its slot says `expired`; the flow seals and posts it again, and the member API refuses the
+        // repeat: maybe registered, and the status with K says registered.
+        service.recoveryRegisterAnswers(.slotExpiredAfterRegistering, .apiNotAvailable)
+        #expect(try await m.registerRecovery(try scanned(made)) == .registered(emailHint: service.emailHint))
+        #expect(device?.recoveryID == made.recoveryID && m.record.value.couldNotTell?.ended == false)
+    }
+
+    @Test func aReadableRefusalOfARegisterAgainPutsNsEarlierRegistrationAndHistoryBack() async throws {
         defer { phone.close() }
         let ids = try await secondEnded(.neverProcessed)
         let history = try #require(device?.recoveryOpens)
@@ -102,7 +116,7 @@ extension VaultManagerRecoveryTests {
         // N is registered for its earlier recovery again, with the history of its opens: it pairs with that one.
         #expect(device?.recoveryID == ids.second.recoveryID && device?.recoveryOpens == history && history.count == 1)
         #expect(try await m.couldNotTellStage() == .unlockOrNewCode)
-        // A failure before the vault does the same.
+        // A first POST with no answer at all does the same.
         service.recoveryRegisterAnswers(.offline)
         _ = await vaultFailure { _ = try await m.registerRecovery(try scanned(try secondRecovery())) }
         #expect(device?.recoveryID == ids.second.recoveryID && device?.recoveryOpens == history)
@@ -122,37 +136,37 @@ extension VaultManagerRecoveryTests {
         #expect(phone.attester.forgotten == [1])
     }
 
-    @Test func aNetworkFailureAfterTheMemberApiTookTheRegisterKeepsNAsUnknown() async throws {
+    /// A first N whose earlier POST for the code got a `202` (in this flow: its slot said `expired`; in an earlier flow: the poll
+    /// failed and the status did not confirm it): a `401` or a readable refusal to the next POST keeps N, registered for the code.
+    @Test(arguments: [FakeVaultService.RecoveryRegisterAnswer.unauthorized, .refused("bad_code")], [true, false])
+    func aUnauthorizedOrARefusalAfterA202KeepsN(_ answer: FakeVaultService.RecoveryRegisterAnswer, sameFlow: Bool) async throws {
         defer { phone.close() }
         try await endedForGood()
-        let made = try secondRecovery()
-        // Taken (`202`) and applied; the poll of the slot gets no answer: the vault may have registered N.
-        service.recoveryRegisterAnswers(.answerLostAfterRegistering, .apiNotAvailable)
-        _ = await vaultFailure { _ = try await m.registerRecovery(try scanned(made)) }
-        #expect(device?.recovering == true && device?.recoveryID == made.recoveryID)
-        // The repeat is refused because the first was recorded; the status with K confirms it.
-        #expect(try await m.registerRecovery(try scanned(made)) == .registered(emailHint: service.emailHint))
+        let second = try secondRecovery()
+        service.recoveryStatusShows("available")
+        if sameFlow {
+            service.recoveryRegisterAnswers(.slotExpiredAfterRegistering, answer, answer)
+        } else {
+            service.recoveryRegisterAnswers(.answerLostAfterRegistering)
+            _ = try? await m.registerRecovery(try scanned(second))
+            service.recoveryRegisterAnswers(answer, answer)
+        }
+        _ = try? await m.registerRecovery(try scanned(second))
+        let ct = try #require(m.record.value.couldNotTell)
+        let n = try await m.openSession()
+        #expect(ct.identities == [.first, .second] && n.identity == .second && n.device.recoveryID == second.recoveryID)
+        for slot in KeySlot.slots(of: .second) { #expect(try phone.wrapped.get(slot) != nil) }
     }
 
-    @Test func aRepostOfTheSameCodeInTheSameFlowIsARepeat() async throws {
+    @Test func anyOtherAnswerWithoutA202KeepsNAsUnknown() async throws {
         defer { phone.close() }
         try await endedForGood()
         let made = try secondRecovery()
-        // The first copy is applied but its slot says `expired`; the flow seals and posts it again, and the member API refuses the
-        // repeat: maybe registered, and the status with K says registered.
-        service.recoveryRegisterAnswers(.slotExpiredAfterRegistering, .apiNotAvailable)
-        #expect(try await m.registerRecovery(try scanned(made)) == .registered(emailHint: service.emailHint))
-        #expect(device?.recoveryID == made.recoveryID && m.record.value.couldNotTell?.ended == false)
-    }
-
-    @Test func anyOtherFailureKeepsNAsUnknown() async throws {
-        defer { phone.close() }
-        try await endedForGood()
-        let made = try secondRecovery()
-        // The register was queued, and the poll of its slot is answered `401`: it may have registered.
-        service.recoveryRegisterAnswers(.slotUnauthorized)
-        _ = await vaultFailure { _ = try await m.registerRecovery(try scanned(made)) }
+        // `409 recovery_unavailable` is no answer of the list: N may have registered.
+        service.recoveryRegisterAnswers(.apiNoBackup)
+        #expect(try await m.registerRecovery(try scanned(made)) == .refused(code: VaultManager.codeNoBackup))
         #expect(device?.recovering == true && device?.recoveryID == made.recoveryID)
-        #expect(m.record.value.couldNotTell?.identities == [.first, .second])
+        let ct = try #require(m.record.value.couldNotTell)
+        #expect(ct.identities == [.first, .second] && ct.registerKept == made.recoveryID)
     }
 }

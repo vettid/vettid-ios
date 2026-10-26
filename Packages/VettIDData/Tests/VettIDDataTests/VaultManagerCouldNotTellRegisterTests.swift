@@ -120,8 +120,8 @@ extension VaultManagerRecoveryTests {
         try await phone.restart()
         _ = try await m.couldNotTellStage()
         #expect(m.record.value.couldNotTell?.new == .second && m.record.value.activeIdentity == .second)
-        // The POST was never taken: no repeat follows from it.
-        #expect(try await m.openSession().device.recovering == false && m.record.value.couldNotTell?.registerTried == nil)
+        // (The POST was recorded before it was posted: the next one for this code is a repeat.)
+        #expect(try await m.openSession().device.recovering == false && m.record.value.couldNotTell?.registerTried == made.recoveryID)
         // Not registered: the same N, K and code try again.
         #expect(try await m.registerRecovery(try scanned(made)) == .registered(emailHint: service.emailHint))
         try await phone.restart()
@@ -456,9 +456,11 @@ extension VaultManagerRecoveryTests {
         let made = try secondRecovery()
         let claims = service.recoveryClaims.count
         service.recoveryRegisterAnswers(.slotUnauthorized)
+        // (The status with K does not show the registration yet.)
+        service.recoveryStatusShows("available")
         let f = await vaultFailure { _ = try await m.registerRecovery(try scanned(made)) }
         #expect(f?.kind == .unauthorized)
-        // The register was queued: it may have been taken, so the new identity keeps its registration, and nothing is claimed again.
+        // The register was queued: maybe registered, so the new identity keeps its registration, and nothing is claimed again.
         let d = try await m.openSession().device
         #expect(d.recovering && service.recoveryClaims.count == claims + 1 && m.record.value.couldNotTell?.unlock == false)
     }

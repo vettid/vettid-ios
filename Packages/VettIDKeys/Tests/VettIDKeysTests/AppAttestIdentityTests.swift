@@ -6,8 +6,7 @@ import VettIDKeysTesting
 
 /// A phone that could not tell holds two device identities (IOS-PLAN 0.1.35 §4.9), and the vault bound each one's own App Attest
 /// key at its register: the keys of the identity in use are the current and pending ones, the other's wait untouched. N is
-/// registered again with a new key for each further recovery, and its earlier keys are kept (after the handshake too, until a
-/// forget, pending the spec's answer on the vault's binding at the handshake).
+/// registered again with a new key for each further recovery, and its earlier keys are kept until the handshake completes.
 @Suite struct AppAttestIdentityTests {
     let challenge = [UInt8](repeating: 7, count: 32)
 
@@ -182,16 +181,13 @@ import VettIDKeysTesting
         #expect(try asserted(later) == fake.keyID(1))
         try later.use(identity: 1)
         #expect(try asserted(later) == fake.keyID(3))
-        // The handshake completes with N: E's key goes; N's earlier one stays a candidate of its unlock (kept until a forget,
-        // pending the spec's answer on the vault's binding at the handshake), and a confirmation no longer keeps the key it replaces.
+        // The handshake completes with N: E's key and N's earlier one go; a confirmation drops the key it replaces again.
         try later.settle(identity: 1)
         let settled = try stored(store)
-        #expect(settled.current == fake.keyID(3) && settled.earlier == [fake.keyID(2)] && settled.parked.isEmpty && !settled.keepsReplaced)
-        #expect(try later.nextCandidate())
-        #expect(try asserted(later) == fake.keyID(2))
+        #expect(settled.current == fake.keyID(3) && settled.earlier.isEmpty && settled.parked.isEmpty && !settled.keepsReplaced)
+        #expect(try !later.nextCandidate())
         try later.confirm(keyID: try attested(later))
-        let after = try stored(store)
-        #expect(after.current == fake.keyID(4) && after.earlier == [fake.keyID(2)])
+        #expect(try stored(store).earlier.isEmpty)
     }
 
     @Test func aRegisterOfNAgainWhoseAnswerIsLostAssertsWithItsOwnNewKey() throws {
@@ -217,6 +213,30 @@ import VettIDKeysTesting
         let later = make(fake, store)
         try later.use(identity: 1)
         #expect(try stored(store).keepsReplaced)
+    }
+
+    @Test func nsUnlockTriesItsNewestKeyFirstAndAnEarlierOneThatOpensDoesNotReplaceIt() throws {
+        let fake = FakeAppAttest()
+        let store = MemoryKeyIDStore()
+        let key = make(fake, store)
+        let (_, second) = try nRegisteredTwice(key)
+        try key.confirm(keyID: second)
+        // The newest key (3) first; refused, the earlier one (2), which opens.
+        #expect(try asserted(key) == fake.keyID(3))
+        #expect(try key.nextCandidate())
+        #expect(try asserted(key) == fake.keyID(2))
+        try key.confirmUnlocked()
+        // IOS-PLAN 0.1.37 §4.9: that unlock binds the newest key in the vault's header; later unlocks use the newest again.
+        let record = try stored(store)
+        #expect(record.current == fake.keyID(3) && record.earlier == [fake.keyID(2)])
+        #expect(try asserted(key) == fake.keyID(3))
+        // Without a register again, an unlock that opens with a pending key confirms it, as before.
+        let other = make(FakeAppAttest(), MemoryKeyIDStore())
+        _ = try attested(other)
+        _ = try attested(other)
+        #expect(try other.nextCandidate())
+        try other.confirmUnlocked()
+        #expect(try asserted(other) == fake.keyID(1))
     }
 
     @Test func aRepeatThatWasNeverConfirmedKeepsEveryKeyOfN() throws {
