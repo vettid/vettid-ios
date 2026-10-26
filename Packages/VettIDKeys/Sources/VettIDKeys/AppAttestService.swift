@@ -28,9 +28,30 @@ public protocol AppAttestService: Sendable {
 
 /// The kept key ids: the current one (the vault accepted its attestation) and the pending ones (sent, not yet
 /// confirmed), oldest first. Stored as JSON; a bare key id (an earlier format) reads as the current one.
+///
+/// (IOS-PLAN 0.1.38 §4.9) A phone that could not tell whether an open recovered the vault holds two device identities for a
+/// while, and the vault bound each identity's own App Attest key at its register: `current` and `pending` are those of the
+/// identity in use ([active]), and the other identity's are [parked] under its number, untouched, until it is used again or
+/// forgotten. The new identity is registered again for each new recovery, each time with a new key; while [keepsReplaced] (an
+/// identity's own mark), its new attestation puts the current key among the [earlier] ones, so that the newest registration's key
+/// is the one in use, and a confirmation keeps the keys it replaces there too (an earlier registration's binding may still be the
+/// vault's). The handshake (``AppAttestKey/settle(identity:)``) forgets them, the other identities' keys too, and ends the mark.
 struct KeyIDRecord: Equatable {
+    /// The keys of an identity that is not in use.
+    struct Parked: Equatable {
+        var current: String?
+        var pending: [String]
+        var earlier: [String] = []
+        var keepsReplaced = false
+    }
+
     var current: String?
     var pending: [String]
+    /// The identity in use's keys of its earlier registrations, oldest first.
+    var earlier: [String] = []
+    var keepsReplaced = false
+    var active = 0
+    var parked: [Int: Parked] = [:]
 
     /// The key an assertion uses.
     var inUse: String? { current ?? pending.last }
@@ -44,19 +65,84 @@ struct KeyIDRecord: Equatable {
         if let object = try? JSONSerialization.jsonObject(with: Data(bytes)) as? [String: Any] {
             guard object["v"] as? Int == 1, let pending = object["pending"] as? [String] else { return nil }
             let current = object["current"] as? String
-            guard (pending + [current].compactMap { $0 }).allSatisfy({ AppAttestKey.raw($0)?.isEmpty == false }) else {
-                return nil
-            }
+            guard Self.valid(pending, current) else { return nil }
             self.init(current: current, pending: pending)
+            earlier = object["earlier"] as? [String] ?? []
+            guard Self.valid(earlier, nil) else { return nil }
+            keepsReplaced = object["keeps_replaced"] as? Bool ?? false
+            if let a = object["active"] as? Int { active = a }
+            if let others = object["parked"] as? [String: [String: Any]] {
+                for (key, value) in others {
+                    guard let n = Int(key), let p = value["pending"] as? [String] else { return nil }
+                    let c = value["current"] as? String
+                    let e = value["earlier"] as? [String] ?? []
+                    guard Self.valid(p + e, c) else { return nil }
+                    parked[n] = Parked(current: c, pending: p, earlier: e, keepsReplaced: value["keeps_replaced"] as? Bool ?? false)
+                }
+            }
             return
         }
         guard let id = String(bytes: bytes, encoding: .utf8), AppAttestKey.raw(id)?.isEmpty == false else { return nil }
         self.init(current: id, pending: [])
     }
 
+    private static func valid(_ pending: [String], _ current: String?) -> Bool {
+        (pending + [current].compactMap { $0 }).allSatisfy { AppAttestKey.raw($0)?.isEmpty == false }
+    }
+
+    /// The keys of identity [n] in use from now on; the ones in use are parked under their number. Nothing for the identity in use.
+    mutating func use(_ n: Int) {
+        guard n != active else { return }
+        parked[active] = Parked(current: current, pending: pending, earlier: earlier, keepsReplaced: keepsReplaced)
+        let next = parked.removeValue(forKey: n)
+        current = next?.current
+        pending = next?.pending ?? []
+        earlier = next?.earlier ?? []
+        keepsReplaced = next?.keepsReplaced ?? false
+        active = n
+    }
+
+    /// A new attestation of an identity registered again: its current key joins the earlier ones, so that the new key (pending) is
+    /// the one in use until a confirmation, and every other key stays a candidate.
+    mutating func attesting() {
+        guard keepsReplaced, let c = current else { return }
+        if !earlier.contains(c) { earlier.append(c) }
+        current = nil
+    }
+
+    /// [id] is the bound key: the current one, the pending ones forgotten, or, while [keepsReplaced], kept as earlier ones with
+    /// the current key it replaces.
+    mutating func promote(_ id: String) {
+        if keepsReplaced {
+            let replaced = ([current].compactMap { $0 } + pending).filter { $0 != id && !earlier.contains($0) }
+            earlier = earlier.filter { $0 != id } + replaced
+        } else {
+            earlier.removeAll { $0 == id }
+        }
+        current = id
+        pending = []
+    }
+
     func encoded() throws -> [UInt8] {
         var object: [String: Any] = ["v": 1, "pending": pending]
         if let current { object["current"] = current }
+        if !earlier.isEmpty { object["earlier"] = earlier }
+        if keepsReplaced { object["keeps_replaced"] = true }
+        if active != 0 { object["active"] = active }
+        let others = parked.filter {
+            $0.value.current != nil || !$0.value.pending.isEmpty || !$0.value.earlier.isEmpty || $0.value.keepsReplaced
+        }
+        if !others.isEmpty {
+            var map: [String: Any] = [:]
+            for (n, p) in others {
+                var entry: [String: Any] = ["pending": p.pending]
+                if let c = p.current { entry["current"] = c }
+                if !p.earlier.isEmpty { entry["earlier"] = p.earlier }
+                if p.keepsReplaced { entry["keeps_replaced"] = true }
+                map[String(n)] = entry
+            }
+            object["parked"] = map
+        }
         return Array(try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]))
     }
 }

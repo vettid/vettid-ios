@@ -157,9 +157,11 @@ extension VaultDevice: AltParty {
         setVault(try Principal.parse(bo))
     }
 
-    /// vault.recovery.register (§11.11.3): builds the request and records the recovery.
+    /// vault.recovery.register (§11.11.3): builds the request and records the recovery. [keepingHistory] (IOS-PLAN 0.1.38 §4.9,
+    /// the new identity of a phone that could not tell, registered again for a new recovery): the history of the identity's opens
+    /// stays, and the registration it replaces is kept for ``restoreRecoveryRegistration()``.
     public func prepareRecoveryRegister(
-        userGuid: String, code: RecoveryCode, enclave: VerifiedEnclave, attester: Attester
+        userGuid: String, code: RecoveryCode, enclave: VerifiedEnclave, attester: Attester, keepingHistory: Bool = false
     ) async throws -> SealedRequest {
         try await lock.withLock {
             guard mem.withLock({ st.vault == nil }) else { throw VaultStateError(message: "already paired with a vault") }
@@ -169,10 +171,37 @@ extension VaultDevice: AltParty {
             mem.withLock {
                 st.signerSeen = false // a new attestation is a new key (§11.7.1)
                 st.vaultID = code.vaultID
-                st.recovery = RecoveryRecord(recoveryID: code.recoveryID, requestID: req.requestID)
+                var record = RecoveryRecord(recoveryID: code.recoveryID, requestID: req.requestID)
+                if keepingHistory, let before = st.recovery {
+                    record.opens = before.opens
+                    // Another register for the same code (a request sealed again, or a repeat) replaces what the first replaced:
+                    // a repeat the vault answered was not recorded by the member API, so neither was the first.
+                    record.replaced = before.recoveryID == code.recoveryID
+                        ? before.replaced : ReplacedRecovery(recoveryID: before.recoveryID, requestID: before.requestID)
+                }
+                st.recovery = record
             }
             try save()
             return req
+        }
+    }
+
+    /// (IOS-PLAN 0.1.38 §4.9) A register that did not register (it failed before reaching the vault, or was refused): the
+    /// registration it replaced is this identity's again, with the history of its opens; without one, the registration is
+    /// forgotten (``dropRecoveryRegistration()``).
+    public func restoreRecoveryRegistration() async throws {
+        try await lock.withLock {
+            let changed: Bool = mem.withLock {
+                guard st.deviceID == nil, st.vault == nil, let now = st.recovery else { return false }
+                if let back = now.replaced {
+                    st.recovery = RecoveryRecord(recoveryID: back.recoveryID, requestID: back.requestID, opens: now.opens)
+                } else {
+                    st.recovery = nil
+                    st.vaultID = nil
+                }
+                return true
+            }
+            if changed { try save() }
         }
     }
 

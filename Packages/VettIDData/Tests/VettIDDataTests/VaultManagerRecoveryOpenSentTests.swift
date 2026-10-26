@@ -89,31 +89,39 @@ extension VaultManagerRecoveryTests {
         #expect(m.record.value.recoveryOpenUnanswered && pendingRecord && m.phase != .signedOut)
     }
 
-    /// Only an answer that proves the record existed clears the mark (§11.14.6 steps 1 to 3).
-    @Test func onlyAnswersThatProveTheRecordExistedClearTheMark() async throws {
-        defer { phone.close() }
-        _ = try await registered()
-        func marked() async -> Bool {
-            service.recoveryOpenAnswers(.unreadable)
-            _ = await vaultFailure { _ = try await m.recoveryOpen(pin: "111111", password: password) }
-            return m.record.value.recoveryOpenUnanswered
+    /// The mark goes only when the history of the opens leaves none unanswered (IOS-PLAN 0.1.38 §4.10): the answers that prove no
+    /// step 1 was stored on their own clear it for a first open; `wrong` and `expired` only with no earlier unanswered open; the
+    /// rest (`retry`, `not_armed`, `stored_mismatch`, a code decided before the record is read, …) never do.
+    @Test func onlyAnswersThatProveNoStepOneWasStoredClearTheMark() async throws {
+        phone.close()
+        func clears(_ code: String, earlierUnanswered: Bool) async throws -> Bool {
+            let s = try FakeVaultService()
+            let p = try TestVaultPhone(service: s, requestTimeout: TestVaultPhone.shortRequestTimeout)
+            defer { p.close() }
+            let made = try s.armRecovery(pin: pin, password: password)
+            _ = try await p.manager.registerRecovery(try scanned(made))
+            if earlierUnanswered {
+                s.recoveryOpenAnswers(.unreadable)
+                _ = await vaultFailure { _ = try await p.manager.recoveryOpen(pin: "111111", password: password) }
+            }
+            s.recoveryOpenAnswers(.refused(code))
+            _ = try await p.manager.recoveryOpen(pin: pin, password: password)
+            return !p.manager.record.value.recoveryOpenUnanswered
         }
-        for code in ["attestation", "manifest", "wrong_release", "bad_request", "no_recovery"] {
-            #expect(await marked())
-            service.recoveryOpenAnswers(.refused(code))
-            _ = try await m.recoveryOpen(pin: pin, password: password)
-            #expect(m.record.value.recoveryOpenUnanswered, "\(code) keeps the mark")
+        // IOS-PLAN 0.1.38 §4.10: `exhausted` and `not_armed` prove it too, and an `attestation` that used no attempt (owner decision
+        // of 2026-10-26).
+        for code in ["busy", "counter_unavailable", "wait", "quiet", "wrong", "expired", "exhausted", "not_armed", "attestation"] {
+            let first = try await clears(code, earlierUnanswered: false)
+            #expect(first, "\(code) clears the mark of a first open")
         }
-        for code in ["busy", "not_armed", "stored_mismatch", "expired", "retry", "counter_unavailable"] {
-            #expect(await marked())
-            service.recoveryOpenAnswers(.refused(code))
-            _ = try await m.recoveryOpen(pin: pin, password: password)
-            #expect(!m.record.value.recoveryOpenUnanswered, "\(code) clears the mark")
+        for code in ["retry", "stored_mismatch", "manifest", "wrong_release", "bad_request", "no_recovery"] {
+            let none = try await clears(code, earlierUnanswered: false)
+            #expect(!none, "\(code) proves nothing")
         }
-        // An answer with the counter's attempts (a wrong entry) too.
-        #expect(await marked())
-        #expect(try await m.recoveryOpen(pin: "222222", password: password).code == "wrong")
-        #expect(!m.record.value.recoveryOpenUnanswered)
+        for code in ["wrong", "expired", "retry", "not_armed", "busy", "wrong_again"] {
+            let after = try await clears(code, earlierUnanswered: true)
+            #expect(!after, "\(code) after an unanswered open leaves the mark")
+        }
     }
 
     /// A register of another recovery would overwrite the registration of one whose register may have been taken.

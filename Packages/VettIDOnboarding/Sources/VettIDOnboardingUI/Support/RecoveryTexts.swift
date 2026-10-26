@@ -21,6 +21,7 @@ enum RecoveryTexts {
         case .noApi: RecoveryStrings.recoverScanNoApi
         case .notAvailable: RecoveryStrings.recoverNotAvailable(TimeScales.text(TimeScales.recoveryDelay, by: timeScale))
         case .notOffered: RecoveryStrings.recoverNotOffered
+        case .otherVault: RecoveryStrings.recoverOtherVault
         }
     }
 

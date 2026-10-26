@@ -81,6 +81,35 @@ struct RecoveryRecord: Codable, Sendable {
     let recoveryID: String
     var requestID = ""
     var credentialBackup: Bool?
+    /// (IOS-PLAN 0.1.38 §4.9) The `request_id` of every `vault.recovery.open` this identity built, kept before the request is
+    /// posted: a phone that could not tell whether an open recovered the vault reads the slot of the earlier one once.
+    /// Optional: a state written before it existed has none.
+    var opens: [RecoveryOpenEntry]?
+    /// (IOS-PLAN 0.1.38 §4.9) The registration this one replaced (an identity registered again for a new recovery): a register
+    /// that did not reach the vault puts it back (``VaultDevice/restoreRecoveryRegistration()``).
+    var replaced: ReplacedRecovery?
+}
+
+/// The `recovery_id` and register `request_id` of a registration a later register replaced.
+struct ReplacedRecovery: Codable, Sendable {
+    let recoveryID: String
+    var requestID = ""
+}
+
+/// What is known of one open this identity built (IOS-PLAN 0.1.38 §4.10): kept per open, never as the last answer. An entry is
+/// written, unanswered, in the same save that stores its `request_id`, before the open is posted.
+public struct RecoveryOpenEntry: Codable, Sendable, Equatable {
+    public enum State: Codable, Sendable, Equatable {
+        /// Posted (or about to be) with no answer that proves no step 1 was stored.
+        case unanswered
+        /// Proven not to have stored step 1: a definite non-acceptance, or an answer that proves it (the code).
+        case refused(String)
+        /// The vault answered `ok`.
+        case ok
+    }
+
+    public let id: String
+    public var state: State
 }
 
 /// A deposit not yet answered 201 by the relay (§8.3: the entry goes once the relay accepted it).

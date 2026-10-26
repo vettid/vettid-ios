@@ -49,6 +49,10 @@ final class MoveBook {
     var keptEnding = false
     /// The pending lock found at the start was taken up (once, after the first-run cleanup and the record).
     var lockResumed = false
+    /// The earlier identity's unlock is being tried now (``VaultManager/pairEarlierIdentity(pin:)``): not a trial to settle.
+    var trialDepth = 0
+    /// Identities are being switched for the rule now (a status read of the rule waits).
+    var ruleSwitching = 0
     /// The kept transfer of the record was looked at (once per process, at the start; then at each return to the foreground).
     var keptResumed = false
     /// Bumped by every move to the foreground and to the background: a check that saw it change was interrupted.
@@ -160,6 +164,7 @@ extension VaultManager {
         guard !moveFlags.book.keptResumed else { return }
         moveFlags.book.keptResumed = true
         movedAway = wiper?.movedAway ?? false
+        settleTrial()
         resumeKeptTransfer()
     }
 

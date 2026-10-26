@@ -174,7 +174,7 @@ import VettIDDataTesting
         #expect(s.step == .intro && s.emailHint.isEmpty && !s.busy && vault.phase == .signedOut)
         #expect(!vm.back())
         // The app has no call that cancels the recovery itself (VAULT-MESSAGING §11.11.4): none was made.
-        #expect(vault.calls.filter { $0 != "recoveryStage" } == ["abandonRecovery"])
+        #expect(vault.calls.filter { ![ "recoveryStage", "checkCouldNotTell", "couldNotTellStage" ].contains($0) } == ["abandonRecovery"])
         vm.scan()
         vm.scanned(qr)
         await vm.settle()

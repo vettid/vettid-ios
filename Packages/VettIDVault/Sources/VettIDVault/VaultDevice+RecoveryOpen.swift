@@ -34,11 +34,124 @@ extension VaultDevice {
                 return (vid, rec)
             }
             let tok = try own.mintOpenToken(audience: cfg.relayURL, ttl: Self.openTokenTTL)
-            return try AltRequests.buildRecoveryOpen(
+            let req = try AltRequests.buildRecoveryOpen(
                 userGuid: userGuid, vaultID: vid, recoveryID: rec.recoveryID, pin: pin, password: password,
                 unlockSecret: unlockSecret, enclave: enclave, manifest: manifest, attester: attester, ik: secrets.identity,
                 token: tok, now: now()
             )
+            // Kept, unanswered, before the request is posted, in one save: a kill between the two, or a response that is lost after
+            // the member API took the request, must not lose an open that went out. A save that fails posts nothing.
+            mem.withLock {
+                guard var record = st.recovery else { return }
+                record.opens = (record.opens ?? []) + [RecoveryOpenEntry(id: req.requestID, state: .unanswered)]
+                st.recovery = record
+            }
+            do {
+                try save()
+            } catch {
+                mem.withLock {
+                    guard var record = st.recovery else { return }
+                    record.opens?.removeAll { $0.id == req.requestID }
+                    st.recovery = record
+                }
+                throw error
+            }
+            return req
+        }
+    }
+
+    /// Whether a stored device state (its decrypted bytes) holds an open the vault answered `ok` that is not finished (the vault is
+    /// pinned and the recovery record is still there, or an entry of the history is `ok`). Reads no keys.
+    public static func okToFinish(state bytes: [UInt8]) -> Bool {
+        guard let st = try? JSONDecoder().decode(DeviceState.self, from: Data(bytes)), let recovery = st.recovery else { return false }
+        return st.vault != nil || (recovery.opens ?? []).contains { $0.state == .ok }
+    }
+
+    /// Whether a stored device state has an open that is unanswered (and none `ok`). Reads no keys.
+    public static func hasUnansweredOpen(state bytes: [UInt8]) -> Bool {
+        guard let opens = (try? JSONDecoder().decode(DeviceState.self, from: Data(bytes)))?.recovery?.opens else { return false }
+        return opens.contains { $0.state == .unanswered } && !opens.contains { $0.state == .ok }
+    }
+
+    /// Whether a stored device state (its decrypted bytes) is of a device that paired and has no recovery left: the pairing of a
+    /// recovery completed there (IOS-PLAN 0.1.38 §4.9). Reads no keys.
+    public static func pairedAfterRecovery(state bytes: [UInt8]) -> Bool {
+        guard let st = try? JSONDecoder().decode(DeviceState.self, from: Data(bytes)) else { return false }
+        return st.deviceID != nil && st.recovery == nil
+    }
+
+    /// What is known of each open this identity built, oldest first (IOS-PLAN 0.1.38 §4.10).
+    public var recoveryOpens: [RecoveryOpenEntry] { mem.withLock { st.recovery?.opens ?? [] } }
+
+    /// The `request_id`s of the opens this identity built, newest first (IOS-PLAN 0.1.38 §4.9).
+    public var recoveryOpenRequestIDs: [String] { recoveryOpens.reversed().map(\.id) }
+
+    /// The `request_id`s of the opens that are unanswered, newest first.
+    public var unansweredOpenRequestIDs: [String] { recoveryOpens.reversed().filter { $0.state == .unanswered }.map(\.id) }
+
+    /// Whether an open of this identity is unanswered (sticky: an open stays so until its own answer proves otherwise, and a
+    /// later refusal never changes an earlier open's entry), unless one was answered `ok`.
+    public var recoveryOpenEverUnanswered: Bool {
+        let opens = recoveryOpens
+        return opens.contains { $0.state == .unanswered } && !opens.contains { $0.state == .ok }
+    }
+
+    /// Writes what became known of the open [id], durably. Never "the newest": an id this device did not build changes nothing. A
+    /// save that fails leaves nothing changed in memory either.
+    public func markRecoveryOpen(_ id: String, _ state: RecoveryOpenEntry.State) async throws {
+        try await lock.withLock {
+            let before: RecoveryRecord? = mem.withLock { st.recovery }
+            let changed: Bool = mem.withLock {
+                guard var record = st.recovery, var opens = record.opens,
+                      let i = opens.firstIndex(where: { $0.id == id }) else { return false }
+                var entry = opens[i]
+                entry.state = state
+                guard entry != opens[i] else { return false }
+                opens[i] = entry
+                record.opens = opens
+                st.recovery = record
+                return true
+            }
+            guard changed else { return }
+            do {
+                try save()
+            } catch {
+                mem.withLock { st.recovery = before }
+                throw error
+            }
+        }
+    }
+
+    /// An open that went out in a build before the history existed (the account record said so) is one unanswered entry, written
+    /// once: a later refusal never clears it (IOS-PLAN 0.1.38 §4.10).
+    public func addLegacyUnansweredOpen() async throws {
+        try await lock.withLock {
+            let added: Bool = mem.withLock {
+                guard var record = st.recovery, (record.opens ?? []).isEmpty else { return false }
+                record.opens = [RecoveryOpenEntry(id: "legacy", state: .unanswered)]
+                st.recovery = record
+                return true
+            }
+            if added { try save() }
+        }
+    }
+
+    /// A new identity starts from the floors the earlier one has seen (`min_state_seq`, `min_header_seq`, the release and the
+    /// manifest serial), never below them (IOS-PLAN 0.1.38 §4.9; chosen; not in the spec).
+    public func seedFloors(from other: AltState) async throws {
+        try await lock.withLock {
+            mem.withLock {
+                var a = alt()
+                a.stateSeq = max(a.stateSeq, other.stateSeq)
+                a.manifestSerial = max(a.manifestSerial, other.manifestSerial)
+                for (k, v) in other.headerSeq { a.headerSeq[k] = max(a.headerSeq[k] ?? 0, v) }
+                if other.releaseNumber > a.releaseNumber {
+                    a.release = other.release
+                    a.releaseNumber = other.releaseNumber
+                }
+                setAlt(a)
+            }
+            try save()
         }
     }
 

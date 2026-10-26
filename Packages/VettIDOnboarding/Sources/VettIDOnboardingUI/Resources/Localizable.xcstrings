@@ -12,6 +12,72 @@
         }
       }
     },
+    "recover_could_not_tell": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "We could not tell whether your last attempt recovered the vault. You can start a new recovery on the account site and use this phone for it; nothing on this phone is deleted."
+          }
+        }
+      }
+    },
+    "onboarding_open_took_phone": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault took this phone, but it cannot be unlocked right now. Contact VettID."
+          }
+        }
+      }
+    },
+    "recover_could_not_recover": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This phone could not recover your vault. Nothing on this phone is deleted. Contact VettID at support@vettid.org."
+          }
+        }
+      }
+    },
+    "onboarding_open_contact_support": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Email %@"
+          }
+        }
+      }
+    },
+    "recover_other_vault": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This recovery code is for a different vault than the one this phone is recovering. Nothing was registered, and nothing on this phone is deleted."
+          }
+        }
+      }
+    },
+    "recover_undecided_new_code": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use a new recovery code"
+          }
+        }
+      }
+    },
     "ios_unlock_earlier_secret": {
       "extractionState": "manual",
       "localizations": {

@@ -57,6 +57,13 @@ public struct RecoveryOpenState: Equatable, Sendable, CustomStringConvertible, C
     /// The member continued after `ok` and the vault opened on this phone (``RecoveryOpenViewModel/openApp()``): the
     /// recovery's own screen hands over to the end of setup.
     public var opened = false
+    /// (IOS-PLAN 0.1.38 §4.9, "A phone that could not tell") ``CouldNotTellStage/finishWithPin`` puts this screen at the PIN of
+    /// ``OpenStep/finish`` (the unlock with this phone's secret, the new identity first if it registered, then the earlier one);
+    /// ``CouldNotTellStage/contact`` adds the second text, "Your vault took this phone, but it cannot be unlocked right now.
+    /// Contact VettID."; ``CouldNotTellStage/unlockOrNewCode`` (the new identity's recovery ended too) is the same PIN with "Use a
+    /// new recovery code" beside it (``newCodeAllowed``, ``RecoverViewModel/scan()``, ``RecoverViewModel/type()``).
+    /// ``CouldNotTellStage/newCode`` after an answer is the step ``RecoverStep/couldNotTell`` (``RecoverViewModel/checkEnded()``).
+    public var couldNotTell = CouldNotTellStage.none
 
     public init(step: OpenStep = .enter, used: Int? = nil) {
         self.step = step
@@ -64,6 +71,18 @@ public struct RecoveryOpenState: Equatable, Sendable, CustomStringConvertible, C
     }
 
     public var pinValid: Bool { (Self.minPin...Self.maxPin).contains(pin.count) && pin.allSatisfy { $0.isASCII && $0.isNumber } }
+
+    /// The second text of the rule is shown (a day of refusals to the unlock after `409 key_in_use`).
+    public var contactVettID: Bool { couldNotTell == .contact }
+
+    /// (IOS-PLAN 0.1.38 §4.9) The answer ruled recovery out (`exhausted`, `closed` or `not_armed` to the new identity's fresh
+    /// open): the text "This phone could not recover your vault. Nothing on this phone is deleted. Contact VettID at
+    /// support@vettid.org." (`recover_could_not_recover`) with the action "Email support@vettid.org", which opens ``SupportMail/url``. Not
+    /// terminal: a later recovery the member starts still uses this phone (``newCodeAllowed`` once the reads allow it).
+    public var couldNotRecover: Bool { outcome?.contactCouldNotRecover == true }
+
+    /// (§4.9) A new recovery code may be used with this phone now: it registers the new identity again (never a third).
+    public var newCodeAllowed: Bool { couldNotTell == .unlockOrNewCode || couldNotTell == .newCode }
 
     public var canContinue: Bool { pinValid && !password.isEmpty }
 

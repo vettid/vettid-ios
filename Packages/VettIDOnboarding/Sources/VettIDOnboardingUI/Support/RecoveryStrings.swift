@@ -147,6 +147,64 @@ enum RecoveryStrings {
         )
     }
 
+    // (IOS-PLAN 0.1.38 §4.9, "A phone that could not tell"; `recover_could_not_tell` and `onboarding_open_took_phone` approved by
+    // the owner on 2026-10-24; `recover_could_not_recover`, its action, `recover_other_vault` and `recover_undecided_new_code` on
+    // 2026-10-26.) The keys and the wording are the spec's and vettid-android's.
+
+    static var recoverCouldNotTell: String {
+        String(
+            localized: "recover_could_not_tell",
+            defaultValue: """
+                We could not tell whether your last attempt recovered the vault. You can start a new recovery on the account \
+                site and use this phone for it; nothing on this phone is deleted.
+                """,
+            bundle: .module
+        )
+    }
+
+    /// The answers rule recovery out (`exhausted`, `closed` or `not_armed` to a fresh open): with the action "Email support".
+    static var recoverCouldNotRecover: String {
+        String(
+            localized: "recover_could_not_recover",
+            defaultValue: """
+                This phone could not recover your vault. Nothing on this phone is deleted. Contact VettID at \
+                support@vettid.org.
+                """,
+            bundle: .module
+        )
+    }
+
+    /// The action beside `recover_could_not_recover`, "Email support@vettid.org" for [address] (``SupportMail/address``): opens
+    /// a mail to it (``SupportMail/url``).
+    static func onboardingOpenContactSupport(_ address: String) -> String {
+        String(localized: "onboarding_open_contact_support", defaultValue: "Email \(address)", bundle: .module)
+    }
+
+    /// A code of another vault than the one this phone is recovering.
+    static var recoverOtherVault: String {
+        String(
+            localized: "recover_other_vault",
+            defaultValue: """
+                This recovery code is for a different vault than the one this phone is recovering. Nothing was registered, and \
+                nothing on this phone is deleted.
+                """,
+            bundle: .module
+        )
+    }
+
+    /// The code steps beside the PIN once a new recovery may use this phone.
+    static var recoverUndecidedNewCode: String {
+        String(localized: "recover_undecided_new_code", defaultValue: "Use a new recovery code", bundle: .module)
+    }
+
+    static var onboardingOpenTookPhone: String {
+        String(
+            localized: "onboarding_open_took_phone",
+            defaultValue: "Your vault took this phone, but it cannot be unlocked right now. Contact VettID.",
+            bundle: .module
+        )
+    }
+
     static func recoverRateLimitedWait(_ wait: String) -> String {
         String(localized: "recover_rate_limited_wait", defaultValue: "Too many attempts. Try again in \(wait).", bundle: .module)
     }

@@ -40,8 +40,9 @@ public enum AppAttestError: Error, Equatable, Sendable, CustomStringConvertible 
 /// - No pending key is dropped while it may be the bound one: with ``maxPending`` of them a new attestation is refused
 ///   (``AppAttestError/pendingFull``).
 /// - ``assert(clientDataHash:)`` asserts with the current key, or without one the newest pending key. An unlock the
-///   vault refuses for its assertion while no key is confirmed moves to the next untried pending key, newest first
-///   (``nextCandidate()``); an accepted one confirms the key in use (``confirmInUse()``).
+///   vault refuses for its assertion while no key is confirmed moves to the next untried pending key, newest first, then to
+///   the keys of an identity's earlier registrations (``nextCandidate()``); an accepted one confirms the key in use
+///   (``confirmInUse()``).
 /// - Calls are serialized, so two assertions of one request are made one after the other with increasing counters
 ///   (§11.10.3). They block the calling thread while App Attest answers (the ``Attester`` protocol is synchronous):
 ///   never on the main thread, which is checked.
@@ -107,6 +108,11 @@ public final class AppAttestKey: KeyEraser, @unchecked Sendable {
         guard record.pending.count < Self.maxPending else { throw AppAttestError.pendingFull }
         let (id, attestation) = try attestFresh(clientDataHash)
         guard let raw = Data(base64Encoded: id), !raw.isEmpty else { throw AppAttestError.failed(-1) }
+        // (IOS-PLAN 0.1.38 §4.9) Each registration's binding stays tied to its own key: an identity registered again asserts with
+        // the new key, and its earlier ones stay candidates.
+        let before = record.current
+        record.attesting()
+        if record.current != before { (override, tried) = (nil, []) }
         record.pending.append(id)
         try store.write(record.encoded())
         return try DeviceAttest.iosAttestation(keyID: Array(raw), attestation: attestation)
@@ -149,7 +155,7 @@ public final class AppAttestKey: KeyEraser, @unchecked Sendable {
     public func confirm(keyID: [UInt8]) throws {
         try update { record in
             guard let id = record.pending.first(where: { Self.raw($0) == keyID }) else { return }
-            record = KeyIDRecord(current: id, pending: [])
+            record.promote(id)
         }
     }
 
@@ -169,23 +175,90 @@ public final class AppAttestKey: KeyEraser, @unchecked Sendable {
         }
     }
 
-    /// An assertion of the key in use was accepted: without a current key, it is the bound one.
+    /// An assertion of the key in use was accepted: without a current key, or when it is an earlier one, it is the bound one.
     public func confirmInUse() throws {
         try update { record in
-            guard record.current == nil, let id = inUse(record) else { return }
-            record = KeyIDRecord(current: id, pending: [])
+            guard let id = inUse(record), id != record.current else { return }
+            record.promote(id)
         }
     }
 
-    /// An assertion of the key in use was refused while no key is confirmed: the next untried pending key, newest first.
+    /// An unlock asserted with the key in use was accepted: as ``confirmInUse()``, except for a key of an earlier registration of an
+    /// identity registered again: later unlocks use the newest key again (IOS-PLAN 0.1.38 §4.9: an unlock with an earlier
+    /// registration's key binds the new one in the vault's header, "Accepted gap"). A pending key of the current registration
+    /// that opens is the bound one, and is confirmed.
+    public func confirmUnlocked() throws {
+        lock.lock()
+        let record = try? readRecord(missingIsEmpty: false)
+        if let record, record.keepsReplaced, let used = inUse(record), record.earlier.contains(used) {
+            (override, tried) = (nil, [])
+            lock.unlock()
+            return
+        }
+        lock.unlock()
+        try confirmInUse()
+    }
+
+    /// An assertion of the key in use was refused: while no key is confirmed, the next untried pending key, newest first; then,
+    /// for an identity registered again (IOS-PLAN 0.1.38 §4.9), the keys of its earlier registrations, newest first (chosen; not
+    /// in the spec: the vault's binding may be an earlier registration's).
     public func nextCandidate() throws -> Bool {
         lock.lock()
         defer { lock.unlock() }
         let record = try readRecord(missingIsEmpty: false)
-        guard record.current == nil else { return false }
+        let candidates = (record.current == nil ? Array(record.pending.reversed()) : []) + record.earlier.reversed()
         if let used = inUse(record) { tried.insert(used) }
-        override = record.pending.reversed().first { !tried.contains($0) }
+        override = candidates.first { !tried.contains($0) }
         return override != nil
+    }
+
+    /// (IOS-PLAN 0.1.38 §4.9) The device identity [n] is in use: its keys are the current and pending ones from now on, those of
+    /// the identity that was in use are kept as they are.
+    public func use(identity n: Int) throws {
+        try update { $0.use(n) }
+    }
+
+    /// (§4.9) The identity [n]'s keys are forgotten (App Attest keys cannot be deleted; a forgotten one is never used again):
+    /// once the vault answered `ok` and the other identity's pairing completed. The identity in use is never forgotten here.
+    public func forget(identity n: Int) throws {
+        try update { record in
+            guard n != record.active else { return }
+            record.parked.removeValue(forKey: n)
+        }
+    }
+
+    /// (IOS-PLAN 0.1.38 §4.9) The identity in use is registered again (the new identity, reused for another recovery): from now
+    /// on, for this identity only, a new attestation is the key in use with the current one kept as an earlier one, and a
+    /// confirmation keeps the keys it replaces, until ``settle(identity:)`` or ``resetIdentities()``.
+    public func keepReplacedKeys() throws {
+        try update { $0.keepsReplaced = true }
+    }
+
+    /// (§4.9) The handshake completed with the identity [n]: it is in use, and the keys of every other identity and of its own
+    /// earlier registrations are forgotten (from the vault release that carries vettid-vault #150, the binding N pairs with is its
+    /// current registration's, IOS-PLAN 0.1.38 §4.9).
+    public func settle(identity n: Int) throws {
+        try update { record in
+            record.use(n)
+            record.parked = [:]
+            record.earlier = []
+            record.keepsReplaced = false
+        }
+    }
+
+    /// (§4.9) A forget: the first identity is in use, with its own keys (the second's, and any earlier ones, are gone).
+    public func resetIdentities() throws {
+        try update { record in
+            let first = record.active == 0 ? nil : record.parked[0]
+            if record.active != 0 {
+                record.current = first?.current
+                record.pending = first?.pending ?? []
+            }
+            record.active = 0
+            record.parked = [:]
+            record.earlier = []
+            record.keepsReplaced = false
+        }
     }
 
     /// Whether a key id is kept, classified by IOS-PLAN §6.3.
@@ -205,7 +278,7 @@ public final class AppAttestKey: KeyEraser, @unchecked Sendable {
     }
 
     private func inUse(_ record: KeyIDRecord) -> String? {
-        if let o = override, record.current == nil, record.pending.contains(o) { return o }
+        if let o = override, (record.current == nil && record.pending.contains(o)) || record.earlier.contains(o) { return o }
         return record.inUse
     }
 
@@ -216,7 +289,7 @@ public final class AppAttestKey: KeyEraser, @unchecked Sendable {
         let before = record
         change(&record)
         guard record != before else { return }
-        if record.current != before.current {
+        if record.current != before.current || record.active != before.active {
             override = nil
             tried = []
         }

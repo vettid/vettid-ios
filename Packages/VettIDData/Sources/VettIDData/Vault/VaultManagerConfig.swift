@@ -53,8 +53,13 @@ public enum VaultFiles {
 
     /// Every data file of the vault manager in [directory].
     public static func all(in directory: URL) -> [URL] {
-        [account, device, phoneSecrets, lock, ownerCheck, connections, approvals].map { directory.appendingPathComponent($0) }
+        ([account] + IdentitySet.all.map(device(of:)) + [phoneSecrets, lock, ownerCheck, connections, approvals])
+            .map { directory.appendingPathComponent($0) }
     }
+
+    /// (IOS-PLAN 0.1.38 §4.9) The device state of identity [set]: the first is `vault-device`, the others (a phone that could not
+    /// tell) `vault-device-2`, `vault-device-3`, …
+    public static func device(of set: IdentitySet) -> String { set.rawValue == 0 ? device : "\(device)-\(set.rawValue + 1)" }
 }
 
 /// How the member's lock waits (VAULT-LOCK as vettid-android implements it): the app's values by default; the tests
@@ -167,6 +172,9 @@ public struct VaultManagerConfig: Sendable {
     /// How long the end-of-keep check of a transfer's old phone waits for the vault's `device.list` (vettid-android
     /// `KEPT_END_CHECK_MS`: 60 s).
     public var keptEndCheck: Duration = .seconds(60)
+    /// How long a recovered phone waits for the vault's `hs.resp` after its `hs.init` (90 s after `ok`, 30 s when resuming):
+    /// when set, the tests' wait for both.
+    public var pairingWait: TimeInterval?
     /// The monotonic clock the vault's clock is counted on between its answers (seconds; tests move it).
     public var uptime: @Sendable () -> TimeInterval = DeviceConfig.monotonicNow
     /// How a change of PIN or password waits for the credential operations before it (VAULT-MESSAGING §11.14.9 step 1:

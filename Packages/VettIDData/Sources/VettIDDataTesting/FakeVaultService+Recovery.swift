@@ -13,6 +13,10 @@ struct FakeRecoveryPhone {
     let ik: [UInt8]
     let kem: KemPublicKey
     let relay: RelayAddr
+    /// The app key (K) the register named as `app.api_key`.
+    var apiKey: [UInt8]?
+    /// The App Attest key id the applied register attested (iOS).
+    var attestKey: [UInt8]?
 }
 
 /// The state of the fake's recovery (VAULT-MESSAGING §11.11, §11.14.6), under the service's lock.
@@ -23,6 +27,9 @@ struct FakeRecoveryStore {
     var locator = ""
     /// The phone that registered: its keys and relay address.
     var phone: FakeRecoveryPhone?
+    /// The phone that registered for the recovery before this one (a new recovery was made since): its unlock is answered as
+    /// before.
+    var earlierPhone: FakeRecoveryPhone?
     /// The recovery record was removed by an `ok` open; the phone's first-handshake invitation stands until it pairs.
     var completed = false
     /// The recovery was cancelled or replaced: the member API takes its recovering key no more (`401`).
@@ -31,6 +38,22 @@ struct FakeRecoveryStore {
     /// without a bundle); otherwise a registered phone not adopted is answered random bytes, as a key the vault does not hold.
     var phoneHoldsUnlockKey = false
     var invitation = false
+    /// The recovery id the first-handshake invitation was made under: a handshake naming another is dropped and never answered
+    /// (VAULT-MESSAGING §11.14.6 "A phone that could not tell").
+    var inviteID: String?
+    /// The vault's `app_key` (VAULT-MESSAGING §11.14.2 step 3): a claim with it is `409 key_in_use` (MEMBER-API 2.12.0).
+    var vaultAppKey: [UInt8]?
+    /// The next open stops after step 2 (the invitation is stored, `app_key_next` is K and `app_key` is not): K reads the status
+    /// but is no key in use.
+    var stopsAfterStep2 = false
+    /// An open stopped after step 2: a later open of a new recovery repeats it, keeping its invitation and requiring its secret.
+    var stoppedAfterStep2 = false
+    /// The recovering key's status when the recovery ended: `410 recovery_ended` instead of the bare `401`.
+    var endedStatus410 = false
+    var droppedHandshakes = 0
+    var endedHeaders: [String: String] = [:]
+    /// The state the status shows to the recovering key instead of `registered`.
+    var statusState: String?
     var used = 0
     var lastWrong: String?
     // Scripted answers.
@@ -42,6 +65,9 @@ struct FakeRecoveryStore {
     var registers: [FakeVaultService.RecoveryRegisterSeen] = []
     var opens: [FakeVaultService.RecoveryOpenSeen] = []
     var handshakeContexts: [String] = []
+    /// The vault's checks of the App Attest key (``FakeVaultService/checkAttestationKeys()``), and the key its unlock binding is.
+    var strictAttestation = false
+    var boundKey: [UInt8]?
 }
 
 // TEST ONLY. Recovery on a new phone as vettid-vault answers it: the member API's claim and register
@@ -53,6 +79,12 @@ extension FakeVaultService {
         /// `409 recovery_not_available` (the recovery is not `available` yet), `409 recovery_unavailable` (no backup copy),
         /// `404 not_found`, `429` with a `Retry-After`, or no connection.
         case notAvailable, noBackup, notFound, limited(Int), offline
+        /// `409 key_in_use` (MEMBER-API 2.12.0).
+        case keyInUse
+        /// The recovery's own rules decide (a place in the queue that scripts nothing).
+        case vault
+        /// A claim that names another vault than the service's own (a typed code of another vault).
+        case otherVault
     }
 
     /// How the register answers: done (the default), refused by the enclave with a code, refused by the member API
@@ -61,6 +93,17 @@ extension FakeVaultService {
         case ok, refused(String), apiNotAvailable, apiNoBackup, offline
         /// The register is taken and applied, but its slot cannot be read (the answer is lost).
         case answerLostAfterRegistering
+        /// `401`: the claim key has since become a key in use (MEMBER-API 2.12.0).
+        case unauthorized
+        /// The register is queued (`202`) and taken, and the poll of its slot is answered `401`.
+        case slotUnauthorized
+        /// The register is queued (`202`) and applied, and its slot says `expired`: the app seals and posts it again.
+        case slotExpiredAfterRegistering
+        /// `409 instance_moved` to the POST (nothing taken): the app seals and posts it again.
+        case instanceMoved
+        /// The member API answers the POST itself with this status before the vault sees it (`503 vault_unavailable`,
+        /// `429 rate_limited`).
+        case apiRefused(Int)
     }
 
     /// How the open answers besides the vault's own rules.
@@ -72,6 +115,15 @@ extension FakeVaultService {
         case refused(String, attemptUsed: Bool? = false, used: Int? = nil, retryAt: Date? = nil)
         /// The vault processes the request (an `ok` completes the recovery) but the answer is lost.
         case answerLost
+        /// The member API takes the request (`202`) and the vault never processes it: no answer, nothing changed.
+        case neverProcessed
+        /// A counted refusal (a wrong entry, one attempt used) whose answer is lost.
+        case wrongAnswerLost
+        /// The member API takes the request and the vault never processes it, but the response to the POST is lost: the phone
+        /// never sees the `202`.
+        case acceptedResponseLost
+        /// The member API refuses the POST itself with this status (nothing was taken).
+        case apiRefused(Int)
         /// The slot holds bytes the phone cannot open.
         case unreadable
         /// The member API cannot be reached.
@@ -95,6 +147,10 @@ extension FakeVaultService {
         public let platform: String?
         public let keyID: [UInt8]?
         public let apiKey: [UInt8]?
+        /// The identity, KEM and relay keys the register named: a new device identity differs in all three.
+        public let ik: [UInt8]
+        public let kem: [UInt8]
+        public let relayKey: [UInt8]
         public let name: String
         /// The member names of the request's body and of its `app`, sorted: what a typed and a scanned entry must agree on.
         /// The body as `name=value` lines, sorted, without the request id, and with the phone's own keys and attestation
@@ -104,6 +160,7 @@ extension FakeVaultService {
     }
 
     public struct RecoveryOpenSeen: Sendable {
+        public let requestID: String
         public let recoveryID: String
         public let pin: String
         public let password: String
@@ -137,9 +194,11 @@ extension FakeVaultService {
             recovery.recoveryID = id
             recovery.code = code
             recovery.locator = locator
+            if let registered = recovery.phone { recovery.earlierPhone = registered }
             recovery.phone = nil
             recovery.completed = false
-            recovery.invitation = false
+            recovery.cancelled = false
+            // An earlier open that was adopted keeps its invitation beside a new recovery until the phone pairs.
             recovery.used = 0
             hasCredential = true
             vaultMade = true
@@ -155,13 +214,38 @@ extension FakeVaultService {
     }
 
     /// The recovery ended for the member API (cancelled, replaced): the recovering key's `status` is `401`, a claim `404`.
-    public func cancelRecoveryAtApi() { locked { recovery.cancelled = true } }
+    public func cancelRecoveryAtApi(as410: Bool = false, headers: [String: String] = [:]) {
+        locked {
+            recovery.cancelled = true
+            recovery.endedStatus410 = as410
+            recovery.endedHeaders = headers
+        }
+    }
+    /// The recovery is current again for the member API.
+    public func uncancelRecoveryAtApi() { locked { recovery.cancelled = false } }
+    /// The next [n] first handshakes of the recovered phone, with the right `ctx`, are never answered.
+    public func dropNextRecoveryHandshakes(_ n: Int) { locked { recovery.droppedHandshakes = n } }
+    /// The status shows the recovering key this state of the recovery instead of `registered` (`pending`, `available`, …).
+    public func recoveryStatusShows(_ state: String?) { locked { recovery.statusState = state } }
+    /// The next open stops after step 2 (see ``FakeRecoveryStore/stopsAfterStep2``).
+    public func nextOpenStopsAfterStep2() { locked { recovery.stopsAfterStep2 = true } }
+    /// The slot of [requestID] answers again (a lost answer that can be read after all).
+    public func answerReadable(_ requestID: String) { locked { lostSlots.remove(requestID) } }
+    /// The vault's `app_key` is [key] (K), as after an open that completed.
+    public func vaultAppKeyIs(_ key: [UInt8]?) { locked { recovery.vaultAppKey = key } }
+    /// The vault's `app_key`.
+    public var recoveryVaultAppKey: [UInt8]? { locked { recovery.vaultAppKey } }
 
     /// The registered phone is an unlock key of the vault though it was not adopted (an ok unlock without a bundle).
     public func registeredPhoneHoldsUnlockKey() { locked { recovery.phoneHoldsUnlockKey = true } }
 
     /// The next claims answer these, in order; then the recovery's rules.
     public func recoveryClaimAnswers(_ answers: RecoveryClaimAnswer...) { locked { recovery.claimAnswers += answers } }
+    /// From now on the vault checks App Attest keys as vettid-vault does, for a phone whose assertions name their key (the test
+    /// attester's ``TestAttester/modelKeys()``): a register after the one it applied is answered `used` and the first copy's
+    /// attestation stays the registration's; an open asserted with another key is a readable `attestation` refusal that counts no
+    /// attempt; and so is an unlock asserted with another key than the one the completed recovery bound.
+    public func checkAttestationKeys() { locked { recovery.strictAttestation = true } }
     /// The next registers answer these, in order; then ``RecoveryRegisterAnswer/ok``.
     public func recoveryRegisterAnswers(_ answers: RecoveryRegisterAnswer...) { locked { recovery.registerAnswers += answers } }
     /// The next opens answer these, in order; then the vault's rules.
@@ -185,7 +269,7 @@ extension FakeVaultService {
     // MARK: - The member API's routes
 
     /// `POST /api/vault/recovery/claim`: by `vault_id` and `recovery_id`, or by a typed code's `locator`. Callers hold ``cond``.
-    func recoveryClaim(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer {
+    func recoveryClaim(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer { // swiftlint:disable:this cyclomatic_complexity
         let answer = recovery.claimAnswers.isEmpty ? nil : recovery.claimAnswers.removeFirst()
         switch answer {
         case .offline?: return .failure(.notConnectedToInternet)
@@ -193,12 +277,17 @@ extension FakeVaultService {
         case .noBackup?: return .json(409, #"{"error":"recovery_unavailable"}"#)
         case .notFound?: return .json(404, #"{"error":"not_found"}"#)
         case .limited(let seconds)?: return .json(429, #"{"error":"rate_limited","retry_after":\#(seconds)}"#)
-        case nil: break
+        case .keyInUse?: return .json(409, #"{"error":"key_in_use"}"#)
+        case .otherVault?:
+            return .json(200, #"{"user_guid":"\#(userGuid)","email_hint":"\#(emailHint)","vault_id":"someone-elses-vault","recovery_id":"\#(recovery.recoveryID ?? "")"}"#)
+        case .vault?, nil: break
         }
         guard let o = try? StrictJson.parseObject(r.body), let appKey = try? o.base64("app_key") else { return .json(400, #"{"error":"bad_request"}"#) }
         let locator = try? o.string("locator")
         let vault = try? o.string("vault_id"), id = try? o.string("recovery_id")
         recovery.claims.append(RecoveryClaimSeen(kind: locator == nil ? "qr" : "locator", vaultID: vault, recoveryID: id, locator: locator, appKey: appKey))
+        // MEMBER-API 2.12.0: the vault's `app_key` is no claim key; nothing is written.
+        if let k = recovery.vaultAppKey, k == appKey { return .json(409, #"{"error":"key_in_use"}"#) }
         let known = locator.map { $0 == recovery.locator } ?? (vault == vaultID && id == recovery.recoveryID)
         guard known, let rid = recovery.recoveryID, !recovery.completed, !recovery.cancelled else { return .json(404, #"{"error":"not_found"}"#) }
         return .json(200, #"{"user_guid":"\#(userGuid)","email_hint":"\#(emailHint)","vault_id":"\#(vaultID)","recovery_id":"\#(rid)"}"#)
@@ -206,13 +295,16 @@ extension FakeVaultService {
 
     /// `POST /api/vault/recovery/register`: the sealed `vault.recovery.register` (§11.11.3), answered in its slot. Callers
     /// hold ``cond``.
-    func recoveryRegister(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer {
+    func recoveryRegister(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer { // swiftlint:disable:this cyclomatic_complexity
         let answer = recovery.registerAnswers.isEmpty ? RecoveryRegisterAnswer.ok : recovery.registerAnswers.removeFirst()
         switch answer {
         case .offline: return .failure(.notConnectedToInternet)
         case .apiNotAvailable: return .json(409, #"{"error":"recovery_not_available"}"#)
         case .apiNoBackup: return .json(409, #"{"error":"recovery_unavailable"}"#)
-        case .ok, .refused, .answerLostAfterRegistering: break
+        case .unauthorized: return .json(401, #"{"error":"unauthorized"}"#)
+        case .instanceMoved: return .json(409, #"{"error":"instance_moved"}"#)
+        case .apiRefused(let status): return .json(status, status == 429 ? #"{"error":"rate_limited"}"# : #"{"error":"vault_unavailable"}"#)
+        case .ok, .refused, .answerLostAfterRegistering, .slotUnauthorized, .slotExpiredAfterRegistering: break
         }
         guard let o = try? StrictJson.parseObject(r.body), let rid = try? o.string("request_id"), let env = try? o.base64("envelope"),
               let request = try? openRequest(env), let body = try? StrictJson.parseObject(request.body), let app = try? body.obj("app"),
@@ -223,7 +315,8 @@ extension FakeVaultService {
         recovery.registers.append(RecoveryRegisterSeen(
             userGuid: (try? body.string("user_guid")) ?? "", vaultID: (try? body.string("vault_id")) ?? "",
             recoveryID: (try? body.string("recovery_id")) ?? "", code: (try? body.string("code")) ?? "",
-            platform: da?.platform, keyID: da?.iosKeyID, apiKey: try? app.base64("api_key"), name: (try? app.string("name")) ?? "",
+            platform: da?.platform, keyID: da?.iosKeyID, apiKey: try? app.base64("api_key"), ik: ik, kem: kem.bytes, relayKey: addr.pk,
+            name: (try? app.string("name")) ?? "",
             normalized: Self.normalized(body, app), shape: body.members.map(\.name).sorted() + app.members.map { "app." + $0.name }.sorted()
         ))
         let result: String
@@ -233,29 +326,45 @@ extension FakeVaultService {
             result = #"{"ok":false,"code":"no_recovery"}"#
         } else if (try? body.string("code")) != recovery.code {
             result = #"{"ok":false,"code":"bad_code"}"#
+        } else if recovery.strictAttestation, recovery.phone != nil {
+            // vettid-vault: a repeat after the register was applied is `used`; the first copy's attestation stays.
+            result = #"{"ok":false,"code":"used"}"#
         } else {
-            recovery.phone = FakeRecoveryPhone(ik: ik, kem: kem, relay: addr)
+            recovery.phone = FakeRecoveryPhone(ik: ik, kem: kem, relay: addr, apiKey: try? app.base64("api_key"), attestKey: da?.iosKeyID)
             result = #"{"ok":true}"#
         }
         slots[rid] = try? Self.sealResult(kem, "vault.recovery.result", rid, result)
         if case .answerLostAfterRegistering = answer { lostSlots.insert(rid) }
+        if case .slotUnauthorized = answer { unauthorizedSlots.insert(rid) }
+        if case .slotExpiredAfterRegistering = answer {
+            slots[rid] = nil
+            plainSlots[rid] = #"{"status":"expired"}"#
+        }
         return .json(202, #"{"vault_id":"\#(vaultID)"}"#)
     }
 
     /// `POST /api/vault/recovery/open`: the sealed `vault.recovery.open` (§11.14.6) in the order of the spec that matters to
     /// the app: the registered phone, then the counter and the entry; an `ok` makes the phone the vault's app. Callers hold
     /// ``cond``.
-    func recoveryOpen(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer {
+    func recoveryOpen(_ r: FakeHTTPServer.Request) -> FakeHTTPServer.Answer { // swiftlint:disable:this cyclomatic_complexity
         let answer = recovery.openAnswers.isEmpty ? RecoveryOpenAnswer.vault : recovery.openAnswers.removeFirst()
         if case .offline = answer { return .failure(.notConnectedToInternet) }
+        if case .apiRefused(let status) = answer { return .json(status, #"{"error":"refused"}"#) }
         guard let o = try? StrictJson.parseObject(r.body), let rid = try? o.string("request_id"), let env = try? o.base64("envelope"),
               let request = try? openRequest(env), let body = try? StrictJson.parseObject(request.body)
         else { return .json(400, #"{"error":"bad_request"}"#) }
+        if case .acceptedResponseLost = answer {
+            lostSlots.insert(rid)
+            recovery.opens.append(RecoveryOpenSeen(
+                requestID: rid, recoveryID: (try? body.string("recovery_id")) ?? "", pin: "", password: "", unlockSecret: [], manifestSerial: 0
+            ))
+            return .failure(.timedOut)
+        }
         let pin = (try? body.string("pin")) ?? "", password = (try? body.string("password")) ?? ""
         let secret = (try? body.base64("unlock_secret")) ?? []
         let recoveryID = (try? body.string("recovery_id")) ?? ""
         recovery.opens.append(RecoveryOpenSeen(
-            recoveryID: recoveryID, pin: pin, password: password, unlockSecret: secret,
+            requestID: rid, recoveryID: recoveryID, pin: pin, password: password, unlockSecret: secret,
             manifestSerial: ((try? body.optUint("manifest_serial", min: 0, max: StrictJson.maxSafeInteger)) ?? nil) ?? 0
         ))
         // Another key than the registered phone's gets random bytes (§11.4), as an unlock does.
@@ -265,6 +374,23 @@ extension FakeVaultService {
         }
         if case .unreadable = answer {
             plainSlots[rid] = JsonBuilder().string("status", "done").base64("envelope", Randomness.bytes(5252)).build()
+            return .json(202, "{}")
+        }
+        if case .neverProcessed = answer {
+            lostSlots.insert(rid)
+            return .json(202, "{}")
+        }
+        // vettid-vault checks the assertion against the registration's attestation before anything is counted.
+        if recovery.strictAttestation, !Self.asserted(body, with: phone.attestKey) {
+            slots[rid] = try? Self.sealResult(phone.kem, "vault.recovery.open.result", rid, #"{"ok":false,"code":"attestation","attempt_used":false}"#)
+            return .json(202, "{}")
+        }
+        if case .wrongAnswerLost = answer {
+            recovery.used += 1
+            let result = JsonBuilder().bool("ok", false).string("code", "wrong").bool("attempt_used", true)
+                .raw("attempts", #"{"used":\#(recovery.used),"of":10}"#).build()
+            slots[rid] = try? Self.sealResult(phone.kem, "vault.recovery.open.result", rid, result)
+            lostSlots.insert(rid)
             return .json(202, "{}")
         }
         let result = scripted(answer) ?? openResult(recoveryID: recoveryID, pin: pin, password: password, secret: secret, phone: phone)
@@ -294,6 +420,8 @@ extension FakeVaultService {
         }
         guard recoveryID == recovery.recoveryID, !recovery.completed, !recovery.cancelled else { return refused("no_recovery", used: false, counted: false) }
         guard secret.count == 32 else { return refused("bad_request", used: false, counted: false) }
+        // A vault whose step 1 is stored repeats the recovery and requires that secret (`device_secret` otherwise, nothing used).
+        if recovery.stoppedAfterStep2, secret != vaultSecret { return refused("device_secret", used: false, counted: false) }
         if recovery.used >= 10 { return refused("exhausted", used: false) }
         let entry = "\(pin)\n\(password)"
         guard pin == vaultPin, Passwords.nfc(password) == vaultPassword.map(Passwords.nfc) else {
@@ -308,8 +436,26 @@ extension FakeVaultService {
         recovery.used += 1
         // The completion: the phone is the vault's app, the vault runs, and the phone's first handshake is invited.
         recovery.completed = true
-        recovery.invitation = true
         recovery.lastWrong = nil
+        if recovery.stoppedAfterStep2 {
+            // The repeat keeps the earlier invitation and the earlier phone as the vault's device; K becomes the `app_key`.
+            recovery.vaultAppKey = phone.apiKey
+            recovery.stoppedAfterStep2 = false
+            vaultOpen = true
+            return JsonBuilder().bool("ok", true).uint("state_seq", stateSeq).uint("header_seq", headerSeq)
+                .string("token", (try? self.token(phone.relay)) ?? "").base64("vault_bundle", vaultBundle())
+                .string("release", Self.pcr0(releases.serving)).uint("release_number", releases.serving)
+                .bool("attempt_used", true).raw("attempts", #"{"used":\#(recovery.used),"of":10}"#).build()
+        }
+        recovery.invitation = true
+        recovery.inviteID = recoveryID
+        if recovery.stopsAfterStep2 {
+            recovery.stopsAfterStep2 = false
+            recovery.stoppedAfterStep2 = true
+        } else {
+            recovery.vaultAppKey = phone.apiKey
+        }
+        recovery.boundKey = phone.attestKey
         vaultSecret = secret
         device = (phone.kem, phone.relay)
         vaultOpen = true
@@ -318,6 +464,15 @@ extension FakeVaultService {
         return JsonBuilder().bool("ok", true).uint("state_seq", stateSeq).uint("header_seq", headerSeq).string("token", token)
             .base64("vault_bundle", vaultBundle()).string("release", Self.pcr0(releases.serving)).uint("release_number", releases.serving)
             .bool("attempt_used", true).raw("attempts", #"{"used":\#(recovery.used),"of":10}"#).build()
+    }
+
+    /// Whether the request [body]'s assertion was made with the App Attest key [key] (the test App Attest begins each assertion with
+    /// its key id, base64).
+    static func asserted(_ body: JsonObject, with key: [UInt8]?) -> Bool {
+        guard let key, let a = try? body.obj("device_assertion"), let bytes = try? a.base64("assertion"), bytes.count > 32 else {
+            return false
+        }
+        return Array(bytes.dropLast(32)) == Array(Data(key).base64EncodedString().utf8)
     }
 
     static func normalized(_ body: JsonObject, _ app: JsonObject) -> String {
@@ -333,8 +488,11 @@ extension FakeVaultService {
     func recoveryStatusField() -> (unauthorized: FakeHTTPServer.Answer?, member: String) {
         guard recovery.phone != nil else { return (nil, "") }
         if recovery.completed { return (nil, "") }
-        if recovery.cancelled { return (.json(401, #"{"error":"unauthorized"}"#), "") }
-        return (nil, #","recovery":{"state":"registered","available_at":""}"#)
+        if recovery.cancelled {
+            let headers = recovery.endedHeaders
+            return (recovery.endedStatus410 ? .json(410, #"{"error":"recovery_ended"}"#, headers: headers) : .json(401, #"{"error":"unauthorized"}"#, headers: headers), "")
+        }
+        return (nil, #","recovery":{"state":"\#(recovery.statusState ?? "registered")","available_at":""}"#)
     }
 
     /// The vault's bundle (§3.4): its identity, KEM and relay keys.

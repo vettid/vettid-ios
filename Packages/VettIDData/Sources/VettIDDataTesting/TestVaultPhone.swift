@@ -16,8 +16,62 @@ public final class TestAttester: Attester, @unchecked Sendable {
     private var attestedKeys: [[UInt8]] = []
     private var confirmedKeys: [[UInt8]] = []
     private var discardedKeys: [[UInt8]] = []
+    private var identity = 0
+    private var assertedBy: [Int] = []
+    private var forgottenIdentities: [Int] = []
+    private var resetCount = 0
+    private var attestedBy: [Int] = []
+    private var keptReplaced: [Int] = []
+    private var settledIdentities: [Int] = []
+
+    /// The App Attest key record of the iPhone (``AppAttestKey``) over a fake App Attest, once ``modelKeys()`` installed it.
+    private var model: AppAttestKey?
+    private let service = TestAppAttestService()
+    private let keyIDs = TestKeyIDStore()
+    private let aside = TestKeyIDStore()
 
     public init() {}
+
+    /// (IOS-PLAN 0.1.38 §4.9) From now on the attestations, assertions and the bookkeeping of keys and identities also go through
+    /// the app's own App Attest key record, over a fake App Attest that records which key each assertion used
+    /// (``assertedKeys``, ``attestedKeyIDs``).
+    public func modelKeys() {
+        let key = AppAttestKey(
+            service: service, keyID: keyIDs, aside: aside, mayStartOver: { true }, backoff: [], sleep: { _ in }, checkThread: false
+        )
+        lock.withLock { model = key }
+    }
+
+    /// A new process (``TestVaultPhone/restart()``): the modelled key record is read again from what it kept, without the
+    /// choices it made in memory (the key tried after a refusal).
+    public func newProcess() {
+        if modelled != nil { modelKeys() }
+    }
+
+    /// The modelled key record as kept (its JSON), or nil.
+    public var keptRecord: String? {
+        guard case .found(let bytes) = keyIDs.lookup() else { return nil }
+        return String(bytes: bytes, encoding: .utf8)
+    }
+
+    /// With ``modelKeys()``: the App Attest key id each assertion used, in order, and the key ids attested.
+    public var assertedKeys: [String] { service.asserted }
+    public var attestedKeyIDs: [String] { service.made }
+
+    private var modelled: AppAttestKey? { lock.withLock { model } }
+
+    /// The device identity (IOS-PLAN 0.1.38 §4.9) in use now, and the one in use at each assertion, in order.
+    public var identityInUse: Int { lock.withLock { identity } }
+    public var assertionIdentities: [Int] { lock.withLock { assertedBy } }
+    public var forgotten: [Int] { lock.withLock { forgottenIdentities } }
+    /// How many times a forget reset the identities.
+    public var resets: Int { lock.withLock { resetCount } }
+    /// (IOS-PLAN 0.1.38 §4.9) The identity in use at each attestation, in order (``attested`` holds the keys).
+    public var attestationIdentities: [Int] { lock.withLock { attestedBy } }
+    /// The identity in use each time its replaced keys were to be kept (a register of the new identity).
+    public var keptReplacedKeys: [Int] { lock.withLock { keptReplaced } }
+    /// The identities a completed handshake settled on, in order.
+    public var settled: [Int] { lock.withLock { settledIdentities } }
 
     /// The key ids attested, in order.
     public var attested: [[UInt8]] { lock.withLock { attestedKeys } }
@@ -25,17 +79,104 @@ public final class TestAttester: Attester, @unchecked Sendable {
     public var discarded: [[UInt8]] { lock.withLock { discardedKeys } }
 
     public func attest(_ challenge: [UInt8]) throws -> DeviceAttest {
+        if let m = modelled {
+            let a = try m.attest(clientDataHash: challenge)
+            if case .ios(let id, _) = a { lock.withLock { (attestedKeys, attestedBy) = (attestedKeys + [id], attestedBy + [identity]) } }
+            return a
+        }
         let k = Bytes.sha256(challenge)
-        lock.withLock { attestedKeys.append(k) }
+        lock.withLock {
+            attestedKeys.append(k)
+            attestedBy.append(identity)
+        }
         return try DeviceAttest.iosAttestation(keyID: k, attestation: Array("test-attestation".utf8))
     }
 
     public func assert(_ signed: AttestSigned) throws -> DeviceAssertion {
-        try DeviceAssertion.iosAssertion(Bytes.sha256(signed.clientDataHash))
+        lock.withLock { assertedBy.append(identity) }
+        if let m = modelled { return try m.assert(clientDataHash: signed.clientDataHash) }
+        return try DeviceAssertion.iosAssertion(Bytes.sha256(signed.clientDataHash))
     }
 
-    public func confirm(keyID: [UInt8]) throws { lock.withLock { confirmedKeys.append(keyID) } }
-    public func discard(keyID: [UInt8]) throws { lock.withLock { discardedKeys.append(keyID) } }
+    public func confirm(keyID: [UInt8]) throws {
+        lock.withLock { confirmedKeys.append(keyID) }
+        try modelled?.confirm(keyID: keyID)
+    }
+
+    public func discard(keyID: [UInt8]) throws {
+        lock.withLock { discardedKeys.append(keyID) }
+        try modelled?.discard(keyID: keyID)
+    }
+
+    public func prune(keeping keyIDs: [[UInt8]]) throws { try modelled?.prune(keeping: keyIDs) }
+    public func confirmInUse() throws { try modelled?.confirmInUse() }
+    public func confirmUnlocked() throws { try modelled?.confirmUnlocked() }
+    public func nextCandidate() throws -> Bool { try modelled?.nextCandidate() ?? false }
+
+    public func use(identity n: Int) throws {
+        lock.withLock { identity = n }
+        try modelled?.use(identity: n)
+    }
+
+    public func forget(identity n: Int) throws {
+        lock.withLock { forgottenIdentities.append(n) }
+        try modelled?.forget(identity: n)
+    }
+
+    public func resetIdentities() throws {
+        lock.withLock { (identity, resetCount) = (0, resetCount + 1) }
+        try modelled?.resetIdentities()
+    }
+
+    public func keepReplacedKeys() throws {
+        lock.withLock { keptReplaced.append(identity) }
+        try modelled?.keepReplacedKeys()
+    }
+
+    public func settle(identity n: Int) throws {
+        lock.withLock {
+            identity = n
+            settledIdentities.append(n)
+        }
+        try modelled?.settle(identity: n)
+    }
+}
+
+/// TEST ONLY. App Attest on the phone, faked: key ids are `key-1`, `key-2`, … (base64), and each assertion records its key.
+final class TestAppAttestService: AppAttestService, @unchecked Sendable {
+    private let lock = NSLock()
+    private var keys: [String] = []
+    private var asserts: [String] = []
+
+    var made: [String] { lock.withLock { keys } }
+    var asserted: [String] { lock.withLock { asserts } }
+
+    var isSupported: Bool { true }
+
+    func generateKey() throws -> String {
+        lock.withLock {
+            let id = Data("key-\(keys.count + 1)".utf8).base64EncodedString()
+            keys.append(id)
+            return id
+        }
+    }
+
+    func attestKey(_ keyID: String, clientDataHash: [UInt8]) throws -> [UInt8] { Array("test-attestation".utf8) + clientDataHash }
+
+    func generateAssertion(_ keyID: String, clientDataHash: [UInt8]) throws -> [UInt8] {
+        lock.withLock { asserts.append(keyID) }
+        return Array(keyID.utf8) + clientDataHash
+    }
+}
+
+/// TEST ONLY. A kept App Attest key id in memory.
+final class TestKeyIDStore: KeyIDStore, @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: [UInt8]?
+
+    func lookup() -> ItemLookup<[UInt8]> { lock.withLock { value.map { .found($0) } ?? .missing } }
+    func write(_ value: [UInt8]) throws { lock.withLock { self.value = value } }
+    func delete() throws { lock.withLock { value = nil } }
 }
 
 /// TEST ONLY. One iPhone running the app against a ``FakeVaultService``: software keys behind the Secure Enclave's
@@ -154,15 +295,22 @@ public final class TestVaultPhone {
         ))
     }
 
+    /// How long a recovered phone waits for the vault's `hs.resp` (90 s, or 30 s when resuming, when nil): a test of the handshake
+    /// the vault does not answer sets it, then ``restart()``s.
+    public var pairingWait: TimeInterval?
+
     /// The app killed and started again: a new manager over the same keys and files. The old manager is halted first
     /// (``VaultManager/halt()``): a process death ends what it had on the way, so nothing of it may send or write once the
     /// new one runs.
     public func restart() async throws {
         await manager.halt()
-        manager = VaultManager(config: try Self.configured(
+        attester.newProcess()
+        var config = try Self.configured(
             service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock,
             wipes ? wipeTargets : nil, attester, attestStartOver, waits, uptime
-        ))
+        )
+        config.pairingWait = pairingWait
+        manager = VaultManager(config: config)
     }
 
     private var waits: Waits {

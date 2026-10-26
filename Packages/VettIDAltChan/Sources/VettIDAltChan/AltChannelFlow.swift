@@ -191,8 +191,13 @@ public struct AltChannelFlow: Sendable {
     private func postAndPoll(_ post: () async throws -> Void, _ requestID: String) async throws -> (Error?, Slot?) {
         do {
             try await post()
-            return (nil, try await api.poll(requestID))
         } catch let e as MemberApiError {
+            return (e, nil)
+        }
+        do {
+            return (nil, try await api.poll(requestID))
+        } catch var e as MemberApiError {
+            e.queued = true
             return (e, nil)
         }
     }
@@ -308,7 +313,8 @@ public struct AltChannelFlow: Sendable {
             // IOS-PLAN §6.2: an accepted assertion proves the key in use is the bound one; a refused one, while no key is
             // confirmed, tries the next unconfirmed key (bounded; chosen; not in the spec).
             // Best effort: the vault already opened, which a failed write must not turn into a failed unlock.
-            if r.ok { try? attester.confirmInUse() }
+            // (IOS-PLAN 0.1.38 §4.9: for an identity registered again, an earlier key that opens does not replace the newest.)
+            if r.ok { try? attester.confirmUnlocked() }
             // A sealed `attestation` is decided before the PIN is checked (vettid-vault `vault/unlock.go`): a retry with
             // another key never costs a PIN attempt.
             if !r.ok, r.code == Self.codeAttestation, switched < Self.maxKeySwitches, try attester.nextCandidate() {
@@ -363,22 +369,33 @@ public struct AltChannelFlow: Sendable {
     /// enclave; [open] opens vault.recovery.result.
     /// [attester] hears whether the vault bound the key the request attested (IOS-PLAN §6.2), as for an enrollment.
     /// The instance's time scale (refused above when this build does not accept it) reaches [build] with the verified
-    /// enclave (`descriptor.timeScale`): the recovery on a new phone (I3) stores it with the vault it brings.
+    /// enclave (`descriptor.timeScale`): the recovery on a new phone (I3) stores it with the vault it brings. [onSent] runs
+    /// each time the member API has taken a request (its `202`).
     public func recoveryRegister(
         vaultID: String,
         attester: Attester? = nil,
         build: @Sendable (VerifiedEnclave) async throws -> SealedRequest,
-        open: @Sendable ([UInt8], String) async throws -> RecoveryResult
+        open: @Sendable ([UInt8], String) async throws -> RecoveryResult,
+        onSent: @Sendable () async -> Void = {}
     ) async throws -> RecoveryResult {
         let m = try await manifest(seen: 0)
         var attempt = 1
         while true {
             let (info, e) = try await enclave(release: nil, manifest: m, enroll: false)
             let req = try await build(e)
+            let taken = TakenMark()
+            // A transport error (no answer to the POST: the member API may have taken it) is thrown with the key kept (chosen; not in
+            // the spec: for the registration such a POST got no `202`, IOS-PLAN 0.1.38 §4.9; the open falls back to another key).
             let (err, slot) = try await postAndPoll(
-                { try await api.recoveryRegister(vaultID: vaultID, instanceID: info.instanceID, req) }, req.requestID
+                {
+                    try await api.recoveryRegister(vaultID: vaultID, instanceID: info.instanceID, req)
+                    taken.set()
+                    await onSent()
+                }, req.requestID
             )
-            if Self.unprocessed(err, slot), let attester, let k = req.attestedKeyID { try attester.discard(keyID: k) }
+            // A POST the member API answered without taking it (no `202`) never reached the enclave: its key was never bound
+            // (IOS-PLAN §6.2).
+            if !taken.value || Self.unprocessed(err, slot), let attester, let k = req.attestedKeyID { try attester.discard(keyID: k) }
             if Self.retryable(err, slot), attempt < Self.maxAttempts {
                 attempt += 1
                 continue
@@ -391,21 +408,44 @@ public struct AltChannelFlow: Sendable {
     }
 
     /// Opens a registered recovery (§11.14.6, release R), routed like an unlock. Never retried here: every open may use
-    /// an attempt, so the member sends again. [onSent] runs once the member API has taken the request.
+    /// an attempt, so the member sends again. [onSent] runs each time the member API has taken a request. The one exception:
+    /// a readable `attestation` (the vault checks the assertion against the registration's attestation before anything is
+    /// counted) tries the next key [attester] holds, as an unlock does, bounded by ``maxKeySwitches`` (IOS-PLAN 0.1.38 §4.9:
+    /// a register sent again attests a key of its own, and the vault's binding may be an earlier copy's); `ok` confirms the
+    /// key in use.
     public func recoveryOpen(
         vaultID: String,
+        attester: Attester? = nil,
         build: @Sendable (VerifiedEnclave, ReleaseManifest) async throws -> SealedRequest,
         open: @Sendable ([UInt8], String) async throws -> RecoveryOpen.Result,
         onSent: @Sendable () async -> Void = {}
     ) async throws -> RecoveryOpen.Result {
         let m = try await manifest(seen: 0)
-        let (info, e) = try await enclave(release: nil, manifest: m, enroll: false)
-        let req = try await build(e, m)
-        try await api.recoveryOpen(vaultID: vaultID, instanceID: info.instanceID, req)
-        await onSent()
-        let s = try await api.poll(req.requestID)
-        return try await open(try Self.answered(s, "recovery open"), req.requestID)
+        var switched = 0
+        while true {
+            let (info, e) = try await enclave(release: nil, manifest: m, enroll: false)
+            let req = try await build(e, m)
+            try await api.recoveryOpen(vaultID: vaultID, instanceID: info.instanceID, req)
+            await onSent()
+            let s = try await api.poll(req.requestID)
+            let r = try await open(try Self.answered(s, "recovery open"), req.requestID)
+            if r.ok { try? attester?.confirmInUse() }
+            if !r.ok, r.code == Self.codeAttestation, let attester, switched < Self.maxKeySwitches, try attester.nextCandidate() {
+                switched += 1
+                continue
+            }
+            return r
+        }
     }
+}
+
+/// Whether the member API took a request (its `202`).
+final class TakenMark: @unchecked Sendable {
+    private let lock = NSLock()
+    private var done = false
+
+    func set() { lock.withLock { done = true } }
+    var value: Bool { lock.withLock { done } }
 }
 
 /// The release check before an unlock (§11.10.6). [routed] is the manifest entry of the attested instance the vault is

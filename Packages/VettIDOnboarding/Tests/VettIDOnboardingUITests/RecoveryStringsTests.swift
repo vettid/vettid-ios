@@ -40,6 +40,12 @@ import Testing
         Row("recover_type_bad_check", RecoveryStrings.recoverTypeBadCheck("S1"), "That code doesn't match. Compare it with the account site group by group, and check that the site is S1."),
         Row("recover_type_short_code", RecoveryStrings.recoverTypeShortCode, "That is the short code of an older page. Reload the recovery page on the account site: it shows 12 groups."),
         Row("recover_type_incomplete", RecoveryStrings.recoverTypeIncomplete, "The code has 12 groups of four characters. Type them all."),
+        Row("recover_could_not_tell", RecoveryStrings.recoverCouldNotTell, "We could not tell whether your last attempt recovered the vault. You can start a new recovery on the account site and use this phone for it; nothing on this phone is deleted."),
+        Row("recover_could_not_recover", RecoveryStrings.recoverCouldNotRecover, "This phone could not recover your vault. Nothing on this phone is deleted. Contact VettID at support@vettid.org."),
+        Row("onboarding_open_contact_support", RecoveryStrings.onboardingOpenContactSupport("support@vettid.org"), "Email support@vettid.org"),
+        Row("recover_other_vault", RecoveryStrings.recoverOtherVault, "This recovery code is for a different vault than the one this phone is recovering. Nothing was registered, and nothing on this phone is deleted."),
+        Row("recover_undecided_new_code", RecoveryStrings.recoverUndecidedNewCode, "Use a new recovery code"),
+        Row("onboarding_open_took_phone", RecoveryStrings.onboardingOpenTookPhone, "Your vault took this phone, but it cannot be unlocked right now. Contact VettID."),
         Row("recover_rate_limited_wait", RecoveryStrings.recoverRateLimitedWait("S1"), "Too many attempts. Try again in S1."),
         Row("onboarding_open_answer_title", RecoveryOpenStrings.onboardingOpenAnswerTitle, "Recovery"),
         Row("onboarding_open_ok", RecoveryOpenStrings.onboardingOpenOk(7), "The vault is recovered. You used 7 of your 10 attempts. They do not come back. Change your PIN or your password now to get 10 new ones."),
@@ -86,7 +92,7 @@ import Testing
     ]
 
     @Test func theTextsAreAndroids() {
-        #expect(Self.table.count == 61)
+        #expect(Self.table.count == 67)
         for row in Self.table { #expect(row.actual == row.expected, "\(row.key)") }
     }
 

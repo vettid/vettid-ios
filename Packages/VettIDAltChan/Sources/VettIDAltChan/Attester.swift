@@ -32,8 +32,34 @@ public protocol Attester: Sendable {
     func confirmInUse() throws
 
     /// The vault refused an assertion of the key in use (`attestation`) while no key is confirmed: the next untried
-    /// unconfirmed key, newest first, is used instead. False when none is left.
+    /// unconfirmed key, newest first, is used instead; then the keys of the identity's earlier registrations (IOS-PLAN 0.1.38
+    /// §4.9). False when none is left.
     func nextCandidate() throws -> Bool
+
+    /// (IOS-PLAN 0.1.38 §4.9) The phone's device identity [identity] (an index of ``IdentitySet``) is the one in use: the vault bound each identity's
+    /// own key at its register, so this identity's keys are the current and pending ones from now on and the other's are kept
+    /// as they are. Called before a session of the identity is used; the same identity again changes nothing.
+    func use(identity: Int) throws
+
+    /// (§4.9) The identity's keys are forgotten: the vault answered `ok` and the other identity's pairing completed. Never the
+    /// identity in use.
+    func forget(identity: Int) throws
+
+    /// (§4.9) A forget (a start over, a deleted vault): the bookkeeping of identities is reset, so that the first identity is in use
+    /// and the keys of the other identities are gone. Never a key of the identity in use is made the other's.
+    func resetIdentities() throws
+
+    /// (IOS-PLAN 0.1.38 §4.9) The identity in use registers again, with a new key: the keys its earlier registrations attested
+    /// are kept beside it (the vault's binding may still be one of them) until ``settle(identity:)``.
+    func keepReplacedKeys() throws
+
+    /// (§4.9) The handshake completed with the identity [identity]: it is in use, and the keys of the other identities and of
+    /// its own earlier registrations are forgotten.
+    func settle(identity: Int) throws
+
+    /// An unlock with the key in use was accepted: as ``confirmInUse()``, except that for an identity registered again an earlier
+    /// key that was accepted does not become the one in use (IOS-PLAN 0.1.38 §4.9: later unlocks use the newest key).
+    func confirmUnlocked() throws
 }
 
 /// What the device key signs (VAULT-MESSAGING §11.7, §11.10.3), as vettid-vault `devattest.Signed` carries it
@@ -71,4 +97,10 @@ extension Attester {
     public func prune(keeping keyIDs: [[UInt8]]) throws {}
     public func confirmInUse() throws {}
     public func nextCandidate() throws -> Bool { false }
+    public func use(identity: Int) throws {}
+    public func forget(identity: Int) throws {}
+    public func resetIdentities() throws {}
+    public func keepReplacedKeys() throws {}
+    public func settle(identity: Int) throws {}
+    public func confirmUnlocked() throws { try confirmInUse() }
 }

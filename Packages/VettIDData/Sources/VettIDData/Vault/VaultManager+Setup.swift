@@ -9,6 +9,8 @@ extension VaultManager {
     public func redeemSetupCode(_ code: SetupCodeInput) async throws -> String {
         let r: Redeemed = try await guarded {
             try prepared()
+            // IOS-PLAN 0.1.38 §4.9: never while the phone could not tell (a redeem would bind K to another vault).
+            if record.value.couldNotTell != nil { throw VaultFailure(.other, code: Self.codeRecoveryOpenSent) }
             // While this phone may hold a vault (``mayHoldVault(_:)``), no code is redeemed, not even the same vault's
             // again: a redeem spends the code and may bind this phone's app key to another vault (§11.12.2), and the
             // record already names the vault (chosen; not in the spec). A phone that holds nothing yet but carries a
@@ -45,6 +47,10 @@ extension VaultManager {
     /// spec). The stored device is looked at, not only an open session.
     public func forgetSetupCode() async throws {
         try await guarded {
+            // The same: K is not replaced, whether or not a device state is stored yet (``dropSession(forget:vaultGone:registrationOnly:)``).
+            // K is replaced only when nothing is stored: a record that cannot be read, with a device state on the phone, refuses
+            // (``storedSession()`` throws), as the rule does when the record says so.
+            if (try? prepared()) != nil, record.value.couldNotTell != nil { throw VaultFailure(.other, code: Self.codeRecoveryOpenSent) }
             if try await storedSession() != nil {
                 try await dropSession(forget: true)
             } else {

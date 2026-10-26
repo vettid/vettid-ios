@@ -125,8 +125,17 @@ extension FakeVaultService {
         if keyring.current() == nil {
             let kem = kem
             let p = try PendingInit.open(raw, lookup: { k in k == kem.publicKey.kid ? kem : nil }, now: Date())
+            if recovery.invitation {
+                recovery.handshakeContexts.append(p.body.ctx)
+                // The vault looks the invitation up by `ctx` (handshakes.go): another id is `invite_invalid`, never answered.
+                guard p.body.ctx == recovery.inviteID else { return }
+                // A handshake the relay lost on its way to the vault's answer: the first ones are never answered.
+                if recovery.droppedHandshakes > 0 {
+                    recovery.droppedHandshakes -= 1
+                    return
+                }
+            }
             deviceIk = p.body.from.ik
-            if recovery.invitation { recovery.handshakeContexts.append(p.body.ctx) }
             let (resp, env) = try p.respond(ResponderConfig(identity: ik, token: try token(device.relay), policy: .vaultToDevice, collectSender: device.relay.pk))
             responder = resp
             queue(env)

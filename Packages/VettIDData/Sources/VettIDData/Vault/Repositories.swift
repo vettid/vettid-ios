@@ -30,14 +30,13 @@ public struct RecoveryOpenOutcome: Equatable, Sendable {
     public var opened: Bool
     /// Whether THIS request used an attempt, as the vault says; nil from a vault that does not say.
     public var attemptUsed: Bool?
+    /// (IOS-PLAN 0.1.38 §4.9) The new identity's fresh open was answered `exhausted`, `closed` or `not_armed` and K is not the
+    /// vault's key: the text `recover_could_not_recover` with the action that mails support. Not terminal.
+    public var contactCouldNotRecover = false
 
     public init(
-        _ code: String,
-        used: Int? = nil,
-        retryAt: Date? = nil,
-        afterUnanswered: Bool = false,
-        opened: Bool = false,
-        attemptUsed: Bool? = nil
+        _ code: String, used: Int? = nil, retryAt: Date? = nil, afterUnanswered: Bool = false, opened: Bool = false,
+        attemptUsed: Bool? = nil, contactCouldNotRecover: Bool = false
     ) {
         self.code = code
         self.used = used
@@ -45,6 +44,7 @@ public struct RecoveryOpenOutcome: Equatable, Sendable {
         self.afterUnanswered = afterUnanswered
         self.opened = opened
         self.attemptUsed = attemptUsed
+        self.contactCouldNotRecover = contactCouldNotRecover
     }
 
     public var ok: Bool { code == "ok" }
@@ -541,6 +541,12 @@ public protocol MoveRepository: AnyObject, Sendable {
 
     /// (Release R) After an `ok` ``recoveryOpen(pin:password:)`` the member has read: the app opens.
     func finishRecoveryOpen() async throws
+
+    /// (IOS-PLAN 0.1.38 §4.9) Where the rule for a phone that could not tell stands, from what it keeps. Default: none.
+    func couldNotTellStage() async throws -> CouldNotTellStage
+
+    /// (§4.9) One status read signed with K when due (never within 5 minutes of the first), then ``couldNotTellStage()``.
+    func checkCouldNotTell() async throws -> CouldNotTellStage
 }
 
 public extension MoveRepository {
@@ -550,6 +556,8 @@ public extension MoveRepository {
     var recoveryAttemptsUsed: Int? { nil }
     func resumeLostOk(pin: String) async throws -> RecoveryOpenOutcome { throw VaultFailure(.notSupported) }
     func finishRecoveryOpen() async throws {}
+    func couldNotTellStage() async throws -> CouldNotTellStage { .none }
+    func checkCouldNotTell() async throws -> CouldNotTellStage { .none }
 
     // Kotlin's default arguments.
 
