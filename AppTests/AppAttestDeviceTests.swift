@@ -115,6 +115,36 @@ final class AppAttestDeviceTests: XCTestCase {
         XCTAssertTrue(nowB, "the confirmed key takes over")
     }
 
+    /// A key attested again (asked for IOS-PLAN §4.9, a second registration with the same K): on iOS 27.0.1, a second
+    /// `attestKey` on the same key, over a new challenge or over the same one, is NOT refused. It gives a full
+    /// attestation of the same key, counter 0, with a new credential certificate whose nonce is that of this
+    /// attestation, and the key still asserts after it. The app never relies on this: every attestation is over a new key
+    /// (``AppAttestKey``).
+    func testAKeyAttestedAgain() async throws {
+        let service = DeviceCheckAppAttestService()
+        let challenge = Randomness.bytes(32)
+        let id = try await background { try service.generateKey() }
+        let first = try Attested(try await background { try service.attestKey(id, clientDataHash: challenge) })
+        let point = first.point
+        XCTAssertEqual(point.count, 65, "the attested key")
+        for again in [Randomness.bytes(32), challenge] {
+            let second = try Attested(try await background { try service.attestKey(id, clientDataHash: again) })
+            XCTAssertEqual(second.point, point, "the same key")
+            XCTAssertEqual(second.credentialID, first.credentialID)
+            XCTAssertEqual(second.counter, 0)
+            XCTAssertEqual(second.aaguid, Self.production)
+            XCTAssertNotNil(second.leaf.firstRange(of: Bytes.sha256(second.authData, again)), "the new challenge's nonce")
+            XCTAssertNotEqual(second.leaf, first.leaf, "a new credential certificate")
+        }
+        let signed = Randomness.bytes(32)
+        let assertion = try await background { try service.generateAssertion(id, clientDataHash: signed) }
+        let (ad, sig) = try Self.assertionParts(assertion)
+        XCTAssertGreaterThan(ad[33 ..< 37].reduce(0) { $0 << 8 | UInt32($1) }, 0)
+        let ecdsa = try P256.Signing.ECDSASignature(derRepresentation: sig)
+        XCTAssertTrue(try P256.Signing.PublicKey(x963Representation: point).isValidSignature(ecdsa, for: Bytes.sha256(ad, signed)),
+                      "the key asserts after the second attestation")
+    }
+
     private func signedBy(_ attester: AppAttestAttester, _ point: [UInt8]) async throws -> Bool {
         let signed = AttestSigned.challenge(Randomness.bytes(32))
         guard case .ios(let assertion) = try await background({ try attester.assert(signed) }) else { return false }
