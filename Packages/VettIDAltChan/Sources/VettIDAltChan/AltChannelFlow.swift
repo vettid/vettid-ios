@@ -368,12 +368,14 @@ public struct AltChannelFlow: Sendable {
     /// enclave; [open] opens vault.recovery.result.
     /// [attester] hears whether the vault bound the key the request attested (IOS-PLAN §6.2), as for an enrollment.
     /// The instance's time scale (refused above when this build does not accept it) reaches [build] with the verified
-    /// enclave (`descriptor.timeScale`): the recovery on a new phone (I3) stores it with the vault it brings.
+    /// enclave (`descriptor.timeScale`): the recovery on a new phone (I3) stores it with the vault it brings. [onSent] runs
+    /// each time the member API has taken a request (its `202`).
     public func recoveryRegister(
         vaultID: String,
         attester: Attester? = nil,
         build: @Sendable (VerifiedEnclave) async throws -> SealedRequest,
-        open: @Sendable ([UInt8], String) async throws -> RecoveryResult
+        open: @Sendable ([UInt8], String) async throws -> RecoveryResult,
+        onSent: @Sendable () async -> Void = {}
     ) async throws -> RecoveryResult {
         let m = try await manifest(seen: 0)
         var attempt = 1
@@ -381,7 +383,10 @@ public struct AltChannelFlow: Sendable {
             let (info, e) = try await enclave(release: nil, manifest: m, enroll: false)
             let req = try await build(e)
             let (err, slot) = try await postAndPoll(
-                { try await api.recoveryRegister(vaultID: vaultID, instanceID: info.instanceID, req) }, req.requestID
+                {
+                    try await api.recoveryRegister(vaultID: vaultID, instanceID: info.instanceID, req)
+                    await onSent()
+                }, req.requestID
             )
             if Self.unprocessed(err, slot), let attester, let k = req.attestedKeyID { try attester.discard(keyID: k) }
             if Self.retryable(err, slot), attempt < Self.maxAttempts {

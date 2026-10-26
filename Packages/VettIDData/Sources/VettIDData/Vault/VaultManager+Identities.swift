@@ -103,7 +103,9 @@ extension VaultManager {
         try await dropSession(forget: false)
         for slot in KeySlot.slots(of: n) { try config.keys.wrapped.remove(slot) }
         try config.file(VaultFiles.device(of: n)).clear()
-        try? config.attester.forget(identity: n.rawValue)
+        // The App Attest record moves to E (its keys untouched) before N's keys are forgotten: those of the identity in use never are.
+        try config.attester.use(identity: ct.earlier.rawValue)
+        try config.attester.forget(identity: n.rawValue)
     }
 
     /// A forget: refused while the phone could not tell, unless the vault is gone, when the rule is cleared first, in a save of its

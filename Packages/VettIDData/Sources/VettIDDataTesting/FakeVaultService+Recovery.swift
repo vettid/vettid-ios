@@ -92,6 +92,8 @@ extension FakeVaultService {
         case unauthorized
         /// The register is queued (`202`) and taken, and the poll of its slot is answered `401`.
         case slotUnauthorized
+        /// The register is queued (`202`) and applied, and its slot says `expired`: the app seals and posts it again.
+        case slotExpiredAfterRegistering
         /// The member API answers the POST itself with this status before the vault sees it (`503 vault_unavailable`,
         /// `429 rate_limited`).
         case apiRefused(Int)
@@ -289,7 +291,7 @@ extension FakeVaultService {
         case .apiNoBackup: return .json(409, #"{"error":"recovery_unavailable"}"#)
         case .unauthorized: return .json(401, #"{"error":"unauthorized"}"#)
         case .apiRefused(let status): return .json(status, status == 429 ? #"{"error":"rate_limited"}"# : #"{"error":"vault_unavailable"}"#)
-        case .ok, .refused, .answerLostAfterRegistering, .slotUnauthorized: break
+        case .ok, .refused, .answerLostAfterRegistering, .slotUnauthorized, .slotExpiredAfterRegistering: break
         }
         guard let o = try? StrictJson.parseObject(r.body), let rid = try? o.string("request_id"), let env = try? o.base64("envelope"),
               let request = try? openRequest(env), let body = try? StrictJson.parseObject(request.body), let app = try? body.obj("app"),
@@ -318,6 +320,10 @@ extension FakeVaultService {
         slots[rid] = try? Self.sealResult(kem, "vault.recovery.result", rid, result)
         if case .answerLostAfterRegistering = answer { lostSlots.insert(rid) }
         if case .slotUnauthorized = answer { unauthorizedSlots.insert(rid) }
+        if case .slotExpiredAfterRegistering = answer {
+            slots[rid] = nil
+            plainSlots[rid] = #"{"status":"expired"}"#
+        }
         return .json(202, #"{"vault_id":"\#(vaultID)"}"#)
     }
 

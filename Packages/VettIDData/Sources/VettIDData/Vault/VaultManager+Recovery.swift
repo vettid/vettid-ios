@@ -23,15 +23,6 @@ private final class RegisterEpoch: @unchecked Sendable {
     var created: Bool? { lock.withLock { madeHere } }
 }
 
-/// A mark set once (a request built, or taken).
-final class SentFlag: @unchecked Sendable {
-    private let lock = NSLock()
-    private var done = false
-
-    func set() { lock.withLock { done = true } }
-    var value: Bool { lock.withLock { done } }
-}
-
 /// A secret kept in one buffer, so that wiping it wipes what was sent.
 final class SecretBox: @unchecked Sendable {
     private let lock = NSLock()

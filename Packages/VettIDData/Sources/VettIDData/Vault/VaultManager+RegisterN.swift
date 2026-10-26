@@ -14,6 +14,21 @@ struct RegisterAttempt {
     let firstN: Bool
 }
 
+/// The posts of one register of N: each request built, and whether the member API took it (its `202`).
+final class RegisterPosts: @unchecked Sendable {
+    private let lock = NSLock()
+    private var posts: [Bool] = []
+
+    func built() { lock.withLock { posts.append(false) } }
+    func sent() { lock.withLock { if !posts.isEmpty { posts[posts.count - 1] = true } } }
+    /// A request was built (and N's new registration made).
+    var any: Bool { lock.withLock { !posts.isEmpty } }
+    /// The flow posted the code more than once (a request sealed again after an `expired` slot or `instance_moved`).
+    var reposted: Bool { lock.withLock { posts.count > 1 } }
+    /// The member API took the last request: anything that failed after that may have reached the vault.
+    var lastTaken: Bool { lock.withLock { posts.last == true } }
+}
+
 // The register of N (IOS-PLAN 0.1.35 §4.9; VAULT-MESSAGING 0.62.0 §11.14.6 "Two identities at most"), the first time or again for a
 // further recovery: the same K, the same N keys, the new code, and a new App Attest key. Mirrors vettid-android
 // `registerNewIdentity`.
@@ -21,8 +36,8 @@ extension VaultManager {
     /// The sealed `vault.recovery.register` of N, whose answers decide whether N registered for this recovery:
     /// - `ok`, or a repeat answered `409 recovery_not_available` or `used` that the status signed with K shows `registered`:
     ///   registered for this recovery;
-    /// - a first attempt that failed before reaching the vault (`503`, `429`, `409 recovery_not_available`, the network), or a
-    ///   readable refusal: not registered, and N's registration of before is its own again (the same N, K and code may try again);
+    /// - a first attempt that failed before reaching the vault (`503`, `429`, `409 recovery_not_available`, the network before
+    ///   the member API took the request), or a readable refusal: not registered, and N's registration of before is its own again (the same N, K and code may try again);
     /// - a `401` of the register itself: N is dropped when it never had a registration accepted or unknown; otherwise nothing is
     ///   dropped. A new claim then says whether K became a key in use;
     /// - any other failure: N is kept as unknown (it may have registered).
@@ -37,23 +52,27 @@ extension VaultManager {
         try resetRecord(account, carryRule: true)
         publishAccount()
         let rec = record.generation
-        let built = SentFlag()
+        let posts = RegisterPosts()
         let result: RecoveryResult
         do {
-            result = try await postRegisterN(s, code, guid: claimed.userGuid, since: rec, built: built)
+            result = try await postRegisterN(s, code, guid: claimed.userGuid, since: rec, posts: posts)
         } catch {
-            if built.value, registerNLeftNUnregistered(error, attempt) { try await s.device.restoreRecoveryRegistration() }
-            return try await registerNFailed(error, attempt, claimed, claimAgain: claimAgain)
+            // Any post of the same code after the first, in this flow or an earlier one, is a repeat.
+            let now = RegisterAttempt(repeated: attempt.repeated || posts.reposted, firstN: attempt.firstN)
+            if posts.any, registerNLeftNUnregistered(error, now, taken: posts.lastTaken) {
+                try await s.device.restoreRecoveryRegistration()
+            }
+            return try await registerNFailed(error, now, claimed, claimAgain: claimAgain)
         }
         if result.ok { return try registeredN(claimed) }
-        if attempt.repeated, result.code == "used" { return try await maybeRegistered(claimed) }
-        if built.value { try await s.device.restoreRecoveryRegistration() }
+        if attempt.repeated || posts.reposted, result.code == "used" { return try await maybeRegistered(claimed) }
+        if posts.any { try await s.device.restoreRecoveryRegistration() }
         return .refused(code: result.code ?? "retry")
     }
 
-    /// The register itself; [built] is set once the request (and N's new registration) was made.
+    /// The register itself; [posts] notes each request made (with N's new registration) and each the member API took.
     private func postRegisterN(
-        _ s: VaultSession, _ code: RecoveryCode, guid: String, since rec: Int, built: SentFlag
+        _ s: VaultSession, _ code: RecoveryCode, guid: String, since rec: Int, posts: RegisterPosts
     ) async throws -> RecoveryResult {
         let (secrets, attester) = (phoneSecrets, config.attester)
         return try await s.alt.recoveryRegister(
@@ -69,17 +88,18 @@ extension VaultManager {
                 let req = try await s.device.prepareRecoveryRegister(
                     userGuid: guid, code: code, enclave: e, attester: attester, keepingHistory: true
                 )
-                built.set()
+                posts.built()
                 return req
             },
-            open: { raw, rid in try s.device.openRecoveryResult(raw, requestID: rid) }
+            open: { raw, rid in try s.device.openRecoveryResult(raw, requestID: rid) },
+            onSent: { posts.sent() }
         )
     }
 
     /// Whether a register of N that threw left N not registered for its code (N's registration of before is then put back): the
     /// request did not reach the vault on a first attempt, or was refused for certain. Never for a repeat that may have registered,
     /// nor for a `401` to an N that never registered (``dropNewIdentity()`` drops it all).
-    private func registerNLeftNUnregistered(_ error: any Error, _ attempt: RegisterAttempt) -> Bool {
+    private func registerNLeftNUnregistered(_ error: any Error, _ attempt: RegisterAttempt, taken: Bool) -> Bool {
         if let f = error as? VaultFailure, f.code == Self.codeNotOffered { return true }
         if let e = error as? MemberApiError, !e.queued {
             switch e.code {
@@ -90,7 +110,7 @@ extension VaultManager {
             default: break
             }
         }
-        return !attempt.repeated && Self.failedBeforeVault(error)
+        return !attempt.repeated && Self.failedBeforeVault(error, taken: taken)
     }
 
     /// A register of N that threw: what it answers (``registerN(_:_:_:_:claimAgain:)``).
@@ -129,8 +149,11 @@ extension VaultManager {
     }
 
     /// A failure that did not reach the vault: the member API's `503` (`release_starting`, `vault_unavailable`) or `429` to the
-    /// request itself, or the network.
-    nonisolated static func failedBeforeVault(_ error: any Error) -> Bool {
+    /// request itself, or the network before the member API took it. A failure after its `202` ([taken]: the poll of the slot)
+    /// may follow a register the vault applied: N is kept as unknown, and a repeat is confirmed by the status signed with K
+    /// (chosen; not in the spec: vettid-android counts every `IOException` as before the vault).
+    nonisolated static func failedBeforeVault(_ error: any Error, taken: Bool) -> Bool {
+        if taken { return false }
         if let e = error as? MemberApiError { return !e.queued && (e.status == 429 || e.status == 503) }
         if let f = error as? VaultFailure { return f.kind == .network }
         return error is URLError || error is RelayError
@@ -152,7 +175,8 @@ extension VaultManager {
     }
 
     /// A repeat refused because the first copy may have been recorded: N keeps the new registration, and the status signed with K
-    /// decides (`registered`: registered for this recovery). Otherwise N stays unknown, and the code may be tried again.
+    /// decides (`registered`: registered for this recovery). Otherwise N stays unknown, and the code may be tried again. One read
+    /// decides, not the pair of reads (chosen; not in the spec: as vettid-android's `maybeRegistered`).
     private func maybeRegistered(_ claimed: Claimed) async throws -> RecoveryRegistration {
         guard await ruleRead() == .registered else { return .refused(code: "retry") }
         return try registeredN(claimed)

@@ -180,7 +180,8 @@ extension VaultManagerRecoveryTests {
         // The member API takes N's recovery again; the earlier identity is the one in use.
         service.uncancelRecoveryAtApi()
         try await m.selectIdentity(.first)
-        guard case .waiting = try await m.checkCouldNotTell() else { Issue.record("acted on one read of a 200"); return }
+        // The first read is no decision: the stage stays the unlock and a new code (not a wait).
+        #expect(try await m.checkCouldNotTell() == .unlockOrNewCode)
         #expect(m.record.value.couldNotTell?.bothEnded == true && m.record.value.couldNotTellRead?.registered == true)
         let (wall, up) = (phone.clockAhead, phone.uptimeAhead)
         later(301)
@@ -191,6 +192,57 @@ extension VaultManagerRecoveryTests {
         // N opens again, and pairs with the recovery it registered for last.
         #expect(try await m.recoveryOpen(pin: pin, password: password).ok)
         #expect(service.recoveryHandshakeContexts == [ids.second.recoveryID] && m.record.value.couldNotTell == nil)
+    }
+
+    @Test func readsThatDecideNothingAfterBothRecoveriesEndedLeaveTheUnlockAndANewCode() async throws {
+        defer { phone.close() }
+        _ = try await secondEnded(.neverProcessed)
+        // Reads of every kind, at once and a minute apart: never a wait, so the code steps stay offered.
+        for read in 0..<4 {
+            if read == 2 { service.recoveryStatusShows("available") }
+            later(60)
+            #expect(try await m.checkCouldNotTell() == .unlockOrNewCode)
+        }
+        try await phone.restart()
+        #expect(try await m.checkCouldNotTell() == .unlockOrNewCode)
+        #expect(try await m.registerRecovery(try scanned(try secondRecovery())) == .registered(emailHint: service.emailHint))
+    }
+
+    // MARK: - The App Attest key each registration of N asserts with
+
+    @Test func aRegisterOfNAgainWhoseAnswerWasLostOpensWithItsOwnNewKey() async throws {
+        defer { phone.close() }
+        phone.attester.modelKeys()
+        _ = try await secondEnded(.neverProcessed)
+        let before = Set(phone.attester.attestedKeyIDs)
+        // N is registered again; the register is taken and applied, and the poll of its slot is answered `401`: nothing confirms
+        // its key, and N keeps the registration as unknown.
+        let third = try secondRecovery()
+        service.recoveryRegisterAnswers(.slotUnauthorized)
+        _ = await vaultFailure { _ = try await m.registerRecovery(try scanned(third)) }
+        let k3 = try #require(phone.attester.attestedKeyIDs.last)
+        #expect(!before.contains(k3) && device?.recoveryID == third.recoveryID)
+        // The open of that recovery asserts with the key that registration bound, not N's earlier one.
+        service.recoveryOpenAnswers(.neverProcessed)
+        _ = await vaultFailure { _ = try await m.recoveryOpen(pin: pin, password: password) }
+        #expect(phone.attester.assertedKeys.last == k3)
+    }
+
+    @Test func aRepeatConfirmedByTheStatusOpensWithAKeyOfThatRecoveryNeverAnEarlierOne() async throws {
+        defer { phone.close() }
+        phone.attester.modelKeys()
+        _ = try await secondEnded(.neverProcessed)
+        let before = Set(phone.attester.attestedKeyIDs)
+        let third = try secondRecovery()
+        service.recoveryRegisterAnswers(.answerLostAfterRegistering, .apiNotAvailable)
+        _ = await vaultFailure { _ = try await m.registerRecovery(try scanned(third)) }
+        #expect(try await m.registerRecovery(try scanned(third)) == .registered(emailHint: service.emailHint))
+        // Both attempts attested a key of their own; the open asserts with one of them (an `attestation` refusal tries the other).
+        let new = Set(phone.attester.attestedKeyIDs).subtracting(before)
+        #expect(new.count == 2)
+        let asserted = phone.attester.assertedKeys.count
+        #expect(try await m.recoveryOpen(pin: pin, password: password).ok)
+        #expect(phone.attester.assertedKeys.count > asserted && new.contains(phone.attester.assertedKeys[asserted]))
     }
 
     // MARK: - The contact text

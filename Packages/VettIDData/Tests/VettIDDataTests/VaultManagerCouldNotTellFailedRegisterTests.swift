@@ -105,6 +105,29 @@ extension VaultManagerRecoveryTests {
         #expect(phone.attester.forgotten == [1])
     }
 
+    @Test func aNetworkFailureAfterTheMemberApiTookTheRegisterKeepsNAsUnknown() async throws {
+        defer { phone.close() }
+        try await endedForGood()
+        let made = try secondRecovery()
+        // Taken (`202`) and applied; the poll of the slot gets no answer: the vault may have registered N.
+        service.recoveryRegisterAnswers(.answerLostAfterRegistering, .apiNotAvailable)
+        _ = await vaultFailure { _ = try await m.registerRecovery(try scanned(made)) }
+        #expect(device?.recovering == true && device?.recoveryID == made.recoveryID)
+        // The repeat is refused because the first was recorded; the status with K confirms it.
+        #expect(try await m.registerRecovery(try scanned(made)) == .registered(emailHint: service.emailHint))
+    }
+
+    @Test func aRepostOfTheSameCodeInTheSameFlowIsARepeat() async throws {
+        defer { phone.close() }
+        try await endedForGood()
+        let made = try secondRecovery()
+        // The first copy is applied but its slot says `expired`; the flow seals and posts it again, and the member API refuses the
+        // repeat: maybe registered, and the status with K says registered.
+        service.recoveryRegisterAnswers(.slotExpiredAfterRegistering, .apiNotAvailable)
+        #expect(try await m.registerRecovery(try scanned(made)) == .registered(emailHint: service.emailHint))
+        #expect(device?.recoveryID == made.recoveryID && m.record.value.couldNotTell?.ended == false)
+    }
+
     @Test func anyOtherFailureKeepsNAsUnknown() async throws {
         defer { phone.close() }
         try await endedForGood()

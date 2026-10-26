@@ -79,8 +79,15 @@ extension VaultManager {
     public func checkCouldNotTell() async throws -> CouldNotTellStage { try await checkRule(duringSwitch: false) }
 
     /// [duringSwitch]: the read of the identity in use that an unlock with it asks for (`transfer_incomplete`), made while the
-    /// identities are switched.
+    /// identities are switched. Once N's recovery ended too, a read that decides nothing leaves the stage as it is: the unlock and a
+    /// new code stay offered (IOS-PLAN 0.1.35 §4.9, "not terminal").
     func checkRule(duringSwitch: Bool) async throws -> CouldNotTellStage {
+        let stage = try await readRule(duringSwitch: duringSwitch)
+        if case .waiting = stage, record.value.couldNotTell?.bothEnded == true { return try await couldNotTellStage() }
+        return stage
+    }
+
+    private func readRule(duringSwitch: Bool) async throws -> CouldNotTellStage {
         try await guarded {
             let here = try await currentCouldNotTell()
             let ct = record.value.couldNotTell
@@ -119,7 +126,8 @@ extension VaultManager {
 
     /// A read showing the recovery `registered`: it is not over, and the phone opens again (with N when there is one: K's recovery is
     /// the one N last registered for). What the rule decided changes only on the pair of reads (§4.9 "The two status reads"),
-    /// except after a `transfer_incomplete`, whose own read decides (as vettid-android).
+    /// except after a `transfer_incomplete`, whose own read decides (chosen; not in the spec: as vettid-android, whose lost-ok
+    /// unlock reads the status once after `transfer_incomplete`).
     private func noteRegistered(
         _ ct: CouldNotTell?, duringSwitch: Bool, since rec: Int, nowMs now: Int64, uptime up: Double
     ) async throws -> CouldNotTellStage {
