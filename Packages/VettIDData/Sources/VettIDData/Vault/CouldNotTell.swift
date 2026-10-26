@@ -2,8 +2,8 @@ import Foundation
 import VettIDAltChan
 import VettIDKeys
 
-/// Where a phone that could not tell whether an open recovered the vault stands (IOS-PLAN 0.1.33 §4.9; VAULT-MESSAGING 0.59.0
-/// §11.14.6 "A phone that could not tell"; MEMBER-API 2.12.0).
+/// Where a phone that could not tell whether an open recovered the vault stands (IOS-PLAN 0.1.35 §4.9; VAULT-MESSAGING 0.62.0
+/// §11.14.6 "A phone that could not tell", "Two identities at most"; MEMBER-API 2.12.0).
 public enum CouldNotTellStage: Equatable, Sendable {
     /// The rule does not apply: no open went out unanswered, or the recovery still shows `registered` (the phone opens again).
     case none
@@ -17,13 +17,13 @@ public enum CouldNotTellStage: Equatable, Sendable {
     /// site and use this phone for it. The text "We could not tell whether your last attempt recovered the vault. You can
     /// start a new recovery on the account site and use this phone for it; nothing on this phone is deleted."
     case newCode
-    /// A day of refusals to the unlock: the text "Your vault took this phone, but it cannot be unlocked right now. Contact
-    /// VettID."
+    /// A day of refusals to the unlock after `409 key_in_use` (K is the vault's `app_key`): the text "Your vault took this phone,
+    /// but it cannot be unlocked right now. Contact VettID."
     case contact
-    /// Both identities' recoveries ended and the unlock with each of them was refused for a day (owner decision of 2026-10-25): the
-    /// phone keeps both, and says VettID could not finish recovering the vault on this phone (`ios_recover_could_not_finish`; the
-    /// text awaits the owner's).
-    case couldNotFinish
+    /// (IOS-PLAN 0.1.35 §4.9, "Two identities at most") The new identity's recovery ended too: the phone keeps both identities,
+    /// the PIN tries the lost-ok unlock (the new identity first, then the earlier one) whenever the member asks, and a new
+    /// recovery the member starts is registered with the new identity again (the code steps are offered beside the PIN).
+    case unlockOrNewCode
 }
 
 /// (§4.9) A status read of the rule: what it said, and when (this phone's clock and its monotonic clock, which keeps
@@ -33,11 +33,26 @@ struct CouldNotTellRead: Codable, Equatable, Sendable {
     var ended: Bool
     var atMs: Int64
     var uptime: Double
+    /// (IOS-PLAN 0.1.35 §4.9) A `200` that shows the recovery `registered`: the phone acts on it only with the pair too.
+    var registered = false
 
     enum CodingKeys: String, CodingKey {
         case ended
         case atMs = "at_ms"
         case uptime
+        case registered
+    }
+
+    init(ended: Bool, atMs: Int64, uptime: Double, registered: Bool = false) {
+        (self.ended, self.atMs, self.uptime, self.registered) = (ended, atMs, uptime, registered)
+    }
+
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        ended = try c.decode(Bool.self, forKey: .ended)
+        atMs = try c.decode(Int64.self, forKey: .atMs)
+        uptime = try c.decode(Double.self, forKey: .uptime)
+        registered = try c.decodeIfPresent(Bool.self, forKey: .registered) ?? false
     }
 }
 
@@ -47,7 +62,8 @@ struct CouldNotTellRead: Codable, Equatable, Sendable {
 ///
 /// Persisted as `could_not_tell` in the account record: `identities` (oldest first, indexes into the keys `relay`, `relay2`, …
 /// and the device state files `vault-device`, `vault-device-2`, …; the first is the identity of the open that could not be told),
-/// the flags below, and the run of refusals. Two identities at most (owner decision of 2026-10-25).
+/// the flags below, and the run of refusals. Two identities at most, the earlier one (E) and a new one (N), never a third: every
+/// further recovery registers N again (IOS-PLAN 0.1.35 §4.9, owner decision of 2026-10-25).
 struct CouldNotTell: Codable, Equatable, Sendable {
     /// The identities, oldest first.
     var identities: [IdentitySet]
@@ -59,10 +75,13 @@ struct CouldNotTell: Codable, Equatable, Sendable {
     /// is read again, and two reads of `401`/`410` make it ``ended``. It never leads to the second text (that is for a vault that
     /// took this phone, §4.9).
     var unlockByReads = false
-    /// The second identity's recovery ended too (owner decision of 2026-10-25: two identities, no third, no registering the second
-    /// again): the unlock with each identity, newest first, is what is left, for good. After a day of refusals the text is
-    /// ``CouldNotTellStage/couldNotFinish``, not the one of a vault that took this phone.
-    var couldNotFinish = false
+    /// N's recovery ended too (two reads of `401`/`410` with N there): both identities are kept, the unlock with each, N first, is
+    /// tried, and a new code registers N again (``ended`` and ``unlock`` are both set). Never the text of a vault that took this
+    /// phone (``keyInUse``).
+    var bothEnded = false
+    /// The `recovery_id` of the last register of N that was posted (whatever its answer): another register for the same code is a
+    /// repeat, which the member API may refuse because the first was recorded (IOS-PLAN 0.1.35 §4.9 "A failed register").
+    var registerTried: String?
     /// The unlock answered `transfer_incomplete`: only an open repeats the recovery. Both kinds of read then mean "ended" unless
     /// the recovery shows `registered`.
     var transferIncomplete = false
@@ -84,13 +103,17 @@ struct CouldNotTell: Codable, Equatable, Sendable {
     var earlier: IdentitySet { identities[0] }
     /// The newest identity, when there is one beside the first.
     var new: IdentitySet? { identities.count > 1 ? identities.last : nil }
+    /// The unlock is what is left because K is the vault's key (`409 key_in_use`, or an earlier open's readable `ok`): the only
+    /// case of the text "Your vault took this phone…" after a day of refusals.
+    var keyInUse: Bool { unlock && !unlockByReads && !bothEnded }
     var newest: IdentitySet { identities[identities.count - 1] }
     /// The lowest index no identity of the rule uses (nil when all ``IdentitySet/limit`` are in use).
     var nextFree: IdentitySet? { IdentitySet.all.first { !identities.contains($0) } }
 
     enum CodingKeys: String, CodingKey {
         case identities, ended, unlock
-        case couldNotFinish = "could_not_finish"
+        case bothEnded = "both_ended"
+        case registerTried = "register_tried"
         case floors
         case returnTo = "return_to"
         case unlockByReads = "unlock_by_reads"
@@ -107,7 +130,8 @@ struct CouldNotTell: Codable, Equatable, Sendable {
         identities = all.isEmpty ? [.first] : all
         ended = try c.decodeIfPresent(Bool.self, forKey: .ended) ?? false
         unlock = try c.decodeIfPresent(Bool.self, forKey: .unlock) ?? false
-        couldNotFinish = try c.decodeIfPresent(Bool.self, forKey: .couldNotFinish) ?? false
+        bothEnded = try c.decodeIfPresent(Bool.self, forKey: .bothEnded) ?? false
+        registerTried = try c.decodeIfPresent(String.self, forKey: .registerTried)
         unlockByReads = try c.decodeIfPresent(Bool.self, forKey: .unlockByReads) ?? false
         transferIncomplete = try c.decodeIfPresent(Bool.self, forKey: .transferIncomplete) ?? false
         returnTo = try c.decodeIfPresent(IdentitySet.self, forKey: .returnTo)

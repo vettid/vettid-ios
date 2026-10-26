@@ -7,7 +7,7 @@ import VettIDKeys
 import VettIDDataTesting
 @testable import VettIDVault
 
-/// The history of each identity's opens (IOS-PLAN 0.1.34 §4.10: written before the post, sticky, per open), the return marker of
+/// The history of each identity's opens (IOS-PLAN 0.1.35 §4.9, §4.10: written before the post, sticky, per open), the return marker of
 /// the unlock with each identity, the reads of the rule and the setup code (continues ``VaultManagerRecoveryTests``).
 extension VaultManagerRecoveryTests {
     // MARK: - The history of the opens
@@ -46,17 +46,23 @@ extension VaultManagerRecoveryTests {
         try expectKept(k)
     }
 
-    @Test func aDefiniteNonAcceptanceIsNoUnansweredOpen() async throws {
+    @Test func aPostFailureOfAnyKindKeepsTheOpensEntry() async throws {
         defer { phone.close() }
+        let k = try phone.appKeys.getOrCreate().spki()
         _ = try await registered()
-        // A `4xx` to the POST itself: nothing was taken.
+        // The POST's own `4xx` (IOS-PLAN 0.1.35 §4.9): a re-sent POST can be queued, so the entry stays unanswered.
         service.recoveryOpenAnswers(.apiRefused(429))
         _ = await vaultFailure { _ = try await m.recoveryOpen(pin: pin, password: password) }
-        #expect(device?.recoveryOpens.map(\.state) == [.refused("not_accepted")] && device?.recoveryOpenEverUnanswered == false)
-        // A `5xx` proves nothing.
-        service.recoveryOpenAnswers(.apiRefused(503))
-        _ = await vaultFailure { _ = try await m.recoveryOpen(pin: pin, password: password) }
-        #expect(device?.recoveryOpenEverUnanswered == true)
+        #expect(device?.recoveryOpens.map(\.state) == [.unanswered] && device?.recoveryOpenEverUnanswered == true)
+        service.recoveryOpenAnswers(.apiRefused(400), .apiRefused(409), .apiRefused(503))
+        for _ in 0..<3 { _ = await vaultFailure { _ = try await m.recoveryOpen(pin: pin, password: password) } }
+        #expect(device?.recoveryOpens.map(\.state) == Array(repeating: .unanswered, count: 4))
+        // Nothing after the post removes one: a later answer settles its own open only, and a start over is refused.
+        service.recoveryOpenAnswers(.refused("busy"))
+        #expect(try await m.recoveryOpen(pin: pin, password: password).code == "busy")
+        #expect(device?.recoveryOpens.prefix(4).allSatisfy { $0.state == .unanswered } == true)
+        #expect(await vaultFailure { try await m.abandonRecovery() } != nil)
+        try expectKept(k)
     }
 
     @Test func aRefusalAfterAnEarlierUnansweredOpenNeverChangesTheEarlierEntry() async throws {

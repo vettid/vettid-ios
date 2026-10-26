@@ -92,6 +92,9 @@ extension FakeVaultService {
         case unauthorized
         /// The register is queued (`202`) and taken, and the poll of its slot is answered `401`.
         case slotUnauthorized
+        /// The member API answers the POST itself with this status before the vault sees it (`503 vault_unavailable`,
+        /// `429 rate_limited`).
+        case apiRefused(Int)
     }
 
     /// How the open answers besides the vault's own rules.
@@ -285,6 +288,7 @@ extension FakeVaultService {
         case .apiNotAvailable: return .json(409, #"{"error":"recovery_not_available"}"#)
         case .apiNoBackup: return .json(409, #"{"error":"recovery_unavailable"}"#)
         case .unauthorized: return .json(401, #"{"error":"unauthorized"}"#)
+        case .apiRefused(let status): return .json(status, status == 429 ? #"{"error":"rate_limited"}"# : #"{"error":"vault_unavailable"}"#)
         case .ok, .refused, .answerLostAfterRegistering, .slotUnauthorized: break
         }
         guard let o = try? StrictJson.parseObject(r.body), let rid = try? o.string("request_id"), let env = try? o.base64("envelope"),

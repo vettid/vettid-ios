@@ -7,10 +7,11 @@ import VettIDKeys
 import VettIDDataTesting
 @testable import VettIDVault
 
-/// Two identities at most (owner decision of 2026-10-25): when the second identity's recovery ends too, the phone keeps both and
-/// goes on with the unlock; a code of another vault drives nothing (continues ``VaultManagerRecoveryTests``).
+/// Two identities at most, E and N, never a third (IOS-PLAN 0.1.35 §4.9; owner decisions of 2026-10-25): when N's recovery ends
+/// too, the phone keeps both, tries the unlock with each, and registers N again for the next recovery; a code of another vault is
+/// refused (continues ``VaultManagerRecoveryTests``).
 extension VaultManagerRecoveryTests {
-    /// The second identity registers a new code, optionally opens, and its recovery ends too; two reads said so.
+    /// N registers a new code, optionally opens, and its recovery ends too; two reads said so.
     func secondEnded(_ open: FakeVaultService.RecoveryOpenAnswer?, pin entered: String? = nil) async throws -> Codes {
         let first = try await endedForGood()
         let second = try secondRecovery()
@@ -22,7 +23,7 @@ extension VaultManagerRecoveryTests {
             #expect(try await m.recoveryOpen(pin: entered, password: password).code == "wrong")
         }
         service.cancelRecoveryAtApi()
-        #expect(try await twoReads() == .finishWithPin)
+        #expect(try await twoReads() == .unlockOrNewCode)
         return (first, second)
     }
 
@@ -30,7 +31,7 @@ extension VaultManagerRecoveryTests {
 
     func expectBothKept(_ k: [UInt8], _ ids: Codes) async throws {
         let ct = try #require(m.record.value.couldNotTell)
-        #expect(ct.couldNotFinish && ct.unlock && !ct.unlockByReads && !ct.ended && ct.identities == [.first, .second])
+        #expect(ct.bothEnded && ct.unlock && !ct.unlockByReads && ct.ended && !ct.keyInUse && ct.identities == [.first, .second])
         try expectKept(k, secondToo: true)
         try await m.selectIdentity(.first)
         #expect(try await m.openSession().device.recoveryID == ids.first.recoveryID)
@@ -59,38 +60,97 @@ extension VaultManagerRecoveryTests {
         try await expectBothKept(k, ids)
     }
 
-    @Test func noThirdIdentityAndNoSecondRegistrationAfterThat() async throws {
+    // MARK: - N registered again
+
+    @Test func aFurtherRecoveryRegistersNAgainAndOpensWithTheEarlierUnlockSecretNeverAThirdIdentity() async throws {
         defer { phone.close() }
-        _ = try await secondEnded(.neverProcessed)
-        let (claims, registers) = (service.recoveryClaims.count, service.recoveryRegisters.count)
-        let f = await vaultFailure { _ = try await m.registerRecovery(try scanned(try secondRecovery())) }
-        let t = await vaultFailure { _ = try await m.registerTypedRecovery(try typed(try secondRecovery())) }
-        #expect(f?.code == VaultManager.codeRecoveryOpenSent && t?.code == VaultManager.codeRecoveryOpenSent)
-        #expect(service.recoveryClaims.count == claims && service.recoveryRegisters.count == registers)
-        #expect(m.record.value.couldNotTell?.identities.count == 2 && IdentitySet.limit == 2)
-        // The stage stays the unlock, however often the status is read.
-        service.cancelRecoveryAtApi()
-        #expect(try await twoReads() == .finishWithPin)
+        let k = try phone.appKeys.getOrCreate().spki()
+        let ids = try await secondEnded(.neverProcessed)
+        let nRegister = try #require(service.recoveryRegisters.last)
+        let (attested, registers) = (phone.attester.attested.count, service.recoveryRegisters.count)
+        let third = try secondRecovery()
+        #expect(try await m.registerRecovery(try scanned(third)) == .registered(emailHint: service.emailHint))
+        // The same K, the same N keys, the new code; no third identity, and N pairs with the recovery it registered for last.
+        let seen = try #require(service.recoveryRegisters.last)
+        #expect(service.recoveryRegisters.count == registers + 1 && service.recoveryClaims.last?.appKey == k)
+        #expect(seen.recoveryID == third.recoveryID && seen.apiKey == k)
+        #expect(seen.ik == nRegister.ik && seen.kem == nRegister.kem && seen.relayKey == nRegister.relayKey)
+        let ct = try #require(m.record.value.couldNotTell)
+        #expect(ct.identities == [.first, .second] && !ct.ended && !ct.unlock && !ct.bothEnded && m.record.value.activeIdentity == .second)
+        #expect(device?.recoveryID == third.recoveryID && device?.recoveryOpens.count == 1)
+        // A new App Attest key of its own, N's earlier ones kept: nothing of N is forgotten.
+        #expect(phone.attester.attested.count == attested + 1 && phone.attester.attestationIdentities.last == 1)
+        #expect(Set(phone.attester.attested).count == phone.attester.attested.count)
+        #expect(phone.attester.forgotten == [1] && phone.attester.keptReplacedKeys == [1, 1] && phone.attester.settled.isEmpty)
+        try expectKept(k, secondToo: true)
+        try await m.selectIdentity(.first)
+        #expect(try await m.openSession().device.recoveryID == ids.first.recoveryID)
+        try await m.selectIdentity(.second)
+        // The open carries E's unlock secret, and the pairing completes with N's last recovery id.
+        let out = try await m.recoveryOpen(pin: pin, password: password)
+        #expect(out.ok)
+        let secrets = service.recoveryOpens.map(\.unlockSecret).filter { !$0.isEmpty }
+        #expect(Set(secrets.map { Data($0) }).count == 1 && service.recoveryOpens.last?.recoveryID == third.recoveryID)
+        #expect(service.recoveryHandshakeContexts == [third.recoveryID] && m.record.value.couldNotTell == nil)
+        #expect(phone.attester.settled == [1])
     }
 
-    @Test func aDayOfRefusalsShowsTheOtherTextNotTheOneOfAVaultThatTookThePhone() async throws {
+    @Test func eachReRegisterOfNUsesANewAppAttestKeyAndAllOfThemStayUntilTheHandshake() async throws {
+        defer { phone.close() }
+        _ = try await secondEnded(.neverProcessed)
+        var nKeys = Array(zip(phone.attester.attestationIdentities, phone.attester.attested).filter { $0.0 == 1 }.map(\.1))
+        for _ in 0..<2 {
+            // N's recovery ends again, and a further one registers N again.
+            #expect(try await m.registerRecovery(try scanned(try secondRecovery())) == .registered(emailHint: service.emailHint))
+            nKeys.append(try #require(phone.attester.attested.last))
+            #expect(phone.attester.attestationIdentities.last == 1)
+            service.cancelRecoveryAtApi()
+            #expect(try await twoReads() == .unlockOrNewCode)
+        }
+        #expect(nKeys.count == 3 && Set(nKeys).count == 3)
+        // E's key and N's are never forgotten meanwhile (forgotten once: the parked keys of a new N, before its first register).
+        #expect(phone.attester.forgotten == [1] && phone.attester.settled.isEmpty && phone.attester.resets == 0)
+        #expect(m.record.value.couldNotTell?.identities.count == 2)
+    }
+
+    @Test func aTypedFurtherCodeRegistersNAgainToo() async throws {
+        defer { phone.close() }
+        _ = try await secondEnded(.neverProcessed)
+        let claims = service.recoveryClaims.count
+        let third = try secondRecovery()
+        #expect(try await m.registerTypedRecovery(try typed(third)) == .registered(emailHint: service.emailHint))
+        #expect(service.recoveryClaims.count == claims + 1 && service.recoveryClaims.last?.kind == "locator")
+        #expect(m.record.value.couldNotTell?.identities.count == 2 && device?.recoveryID == third.recoveryID)
+    }
+
+    @Test func noCodeIsRegisteredBeforeTheReadsAllowIt() async throws {
+        defer { phone.close() }
+        try await endedForGood()
+        _ = try await m.registerRecovery(try scanned(try secondRecovery()))
+        service.recoveryOpenAnswers(.neverProcessed)
+        _ = await vaultFailure { _ = try await m.recoveryOpen(pin: pin, password: password) }
+        // N's open got no answer and its recovery still shows `registered`: a further code is refused, nothing claimed.
+        let claims = service.recoveryClaims.count
+        let f = await vaultFailure { _ = try await m.registerRecovery(try scanned(try secondRecovery())) }
+        #expect(f != nil && service.recoveryClaims.count == claims)
+    }
+
+    @Test func aDayOfRefusalsAfterBothRecoveriesEndedShowsNoTextAndANewCodeStillWorks() async throws {
         defer { phone.close() }
         _ = try await secondEnded(.neverProcessed)
         // The network not answering is no refusal.
         service.unlockAnswers(.offline, .offline)
         _ = await vaultFailure { _ = try await m.resumeLostOk(pin: pin) }
         #expect(m.record.value.couldNotTell?.refusalsSinceMs == nil)
-        // Both unlocks are refused (the recoveries ended): the run begins, and a day later the text is the third one.
+        // Both unlocks are refused (the recoveries ended), for more than a day: no contact text; the unlock and a new code stay.
         _ = await vaultFailure { _ = try await m.resumeLostOk(pin: pin) }
-        #expect(m.record.value.couldNotTell?.refusalsSinceMs != nil)
-        #expect(try await m.couldNotTellStage() == .finishWithPin)
         later(86_500)
-        #expect(try await m.couldNotTellStage() == .couldNotFinish)
+        #expect(try await m.couldNotTellStage() == .unlockOrNewCode)
         try await phone.restart()
-        #expect(try await m.couldNotTellStage() == .couldNotFinish)
-        // A key in use is the other case: its text stays `contact`.
+        #expect(try await m.couldNotTellStage() == .unlockOrNewCode)
+        // A key in use is the other case: its text is `contact`.
         var ct = try #require(m.record.value.couldNotTell)
-        ct.couldNotFinish = false
+        (ct.bothEnded, ct.ended, ct.refusalsSinceMs, ct.refusalsForMs) = (false, false, 0, 1)
         try m.persistRecord(m.record.generation) { $0.couldNotTell = ct }
         #expect(try await m.couldNotTellStage() == .contact)
     }
@@ -104,13 +164,75 @@ extension VaultManagerRecoveryTests {
         service.statusUnauthorized = false
         _ = try await m.registerRecovery(try scanned(try secondRecovery()))
         service.statusUnauthorized = true
-        #expect(try await twoReads() == .finishWithPin)
+        #expect(try await twoReads() == .unlockOrNewCode)
         service.statusUnauthorized = false
-        #expect(m.record.value.couldNotTell?.couldNotFinish == true)
+        #expect(m.record.value.couldNotTell?.bothEnded == true)
         // The vault took the first identity: the second's unlock is not its key, the first's is.
         #expect(try await m.resumeLostOk(pin: pin).ok)
         #expect(phone.attester.assertionIdentities.suffix(2) == [1, 0])
         #expect(service.recoveryHandshakeContexts == [first.recoveryID] && m.record.value.couldNotTell == nil)
+        #expect(phone.attester.settled == [0])
+    }
+
+    @Test func aRecoveryThatShowsRegisteredAgainIsOpenedAgainOnlyOnThePairOfReads() async throws {
+        defer { phone.close() }
+        let ids = try await secondEnded(.neverProcessed)
+        // The member API takes N's recovery again; the earlier identity is the one in use.
+        service.uncancelRecoveryAtApi()
+        try await m.selectIdentity(.first)
+        guard case .waiting = try await m.checkCouldNotTell() else { Issue.record("acted on one read of a 200"); return }
+        #expect(m.record.value.couldNotTell?.bothEnded == true && m.record.value.couldNotTellRead?.registered == true)
+        let (wall, up) = (phone.clockAhead, phone.uptimeAhead)
+        later(301)
+        #expect(try await m.checkCouldNotTell() == .none)
+        (phone.clockAhead, phone.uptimeAhead) = (wall, up)
+        let ct = try #require(m.record.value.couldNotTell)
+        #expect(!ct.bothEnded && !ct.unlock && !ct.ended && m.record.value.activeIdentity == .second)
+        // N opens again, and pairs with the recovery it registered for last.
+        #expect(try await m.recoveryOpen(pin: pin, password: password).ok)
+        #expect(service.recoveryHandshakeContexts == [ids.second.recoveryID] && m.record.value.couldNotTell == nil)
+    }
+
+    // MARK: - The contact text
+
+    @Test(arguments: ["exhausted", "closed", "not_armed"])
+    func aFreshOpenOfNAnsweredSoThatRecoveryIsRuledOutIsTheContactTextAndNotTerminal(_ code: String) async throws {
+        defer { phone.close() }
+        let k = try phone.appKeys.getOrCreate().spki()
+        try await endedForGood()
+        _ = try await m.registerRecovery(try scanned(try secondRecovery()))
+        service.recoveryOpenAnswers(.refused(code))
+        let out = try await m.recoveryOpen(pin: pin, password: password)
+        #expect(out.code == code && out.contactCouldNotRecover)
+        // Not terminal: everything is kept, and when the reads allow it a new code registers N again.
+        #expect(m.record.value.couldNotTell?.identities == [.first, .second])
+        try expectKept(k, secondToo: true)
+        service.cancelRecoveryAtApi()
+        #expect(try await twoReads() == .unlockOrNewCode)
+        let third = try secondRecovery()
+        #expect(try await m.registerRecovery(try scanned(third)) == .registered(emailHint: service.emailHint))
+        #expect(device?.recoveryID == third.recoveryID && m.record.value.couldNotTell?.identities.count == 2)
+    }
+
+    @Test func theContactTextIsNeverForOtherAnswersOrForTheEarlierIdentityOrAKeyInUse() async throws {
+        defer { phone.close() }
+        // E alone, a fresh open answered `exhausted`: not the text (N is not there).
+        _ = try await registered()
+        service.recoveryOpenAnswers(.refused("exhausted"))
+        #expect(try await m.recoveryOpen(pin: pin, password: password).contactCouldNotRecover == false)
+        // N there: `wrong`, `busy`, `no_recovery` are not it.
+        service.recoveryOpenAnswers(.neverProcessed)
+        _ = await vaultFailure { _ = try await m.recoveryOpen(pin: pin, password: password) }
+        service.cancelRecoveryAtApi()
+        #expect(try await twoReads() == .newCode)
+        _ = try await m.registerRecovery(try scanned(try secondRecovery()))
+        service.recoveryOpenAnswers(.refused("busy"), .refused("no_recovery"))
+        #expect(try await m.recoveryOpen(pin: pin, password: password).contactCouldNotRecover == false)
+        #expect(try await m.recoveryOpen(pin: pin, password: password).contactCouldNotRecover == false)
+        #expect(m.couldNotRecover("exhausted"))
+        // A key in use (K is the vault's): never this text.
+        try m.persistRecord(m.record.generation) { $0.couldNotTell?.unlock = true }
+        #expect(!m.couldNotRecover("exhausted"))
     }
 
     // MARK: - An ok to finish
@@ -144,31 +266,29 @@ extension VaultManagerRecoveryTests {
 
     // MARK: - A code of another vault
 
-    @Test func aStatusOfAnotherVaultDrivesNothing() async throws {
-        defer { phone.close() }
-        try await openGotNoAnswer()
-        service.statusShowsVault("someone-elses-vault")
-        let reads = service.statusReads
-        _ = try await m.checkCouldNotTell()
-        _ = try await m.checkCouldNotTell()
-        #expect(service.statusReads > reads && m.record.value.couldNotTell == nil && m.record.value.couldNotTellRead == nil)
-    }
-
-    @Test func aTypedCodeOfAnotherVaultIsRefusedAsSoonAsItsVaultIsKnown() async throws {
+    @Test func aTypedCodeOfAnotherVaultIsRefusedAsSoonAsTheClaimNamesItsVault() async throws {
         defer { phone.close() }
         let k = try phone.appKeys.getOrCreate().spki()
         try await endedForGood()
         let made = try secondRecovery()
         service.recoveryClaimAnswers(.otherVault)
         let registers = service.recoveryRegisters.count
-        let f = await vaultFailure { _ = try await m.registerTypedRecovery(try typed(made)) }
-        #expect(f?.code == VaultManager.codeRecoveryOpenUnknown && service.recoveryRegisters.count == registers)
+        let r = try await m.registerTypedRecovery(try typed(made))
+        #expect(r == .refused(code: VaultManager.codeOtherVault, recoveryID: made.recoveryID))
+        #expect(service.recoveryRegisters.count == registers)
         #expect(m.record.value.couldNotTell?.identities == [.first] && m.record.value.couldNotTell?.ended == true)
         try expectKept(k)
-        // The status of that vault, read meanwhile, drives nothing.
-        service.statusShowsVault("someone-elses-vault")
-        service.cancelRecoveryAtApi()
         #expect(try await m.couldNotTellStage() == .newCode)
+        // The same with N there: nothing registered, E, N and K stay.
+        _ = try await m.registerRecovery(try scanned(made))
+        service.cancelRecoveryAtApi()
+        #expect(try await twoReads() == .unlockOrNewCode)
+        service.recoveryClaimAnswers(.otherVault)
+        let later = try secondRecovery()
+        let again = try await m.registerTypedRecovery(try typed(later))
+        #expect(again == .refused(code: VaultManager.codeOtherVault, recoveryID: later.recoveryID))
+        #expect(service.recoveryRegisters.count == registers + 1)
+        try expectKept(k, secondToo: true)
     }
 
     // MARK: - A mark from a build before the history

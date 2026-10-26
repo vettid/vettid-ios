@@ -30,14 +30,13 @@ public struct RecoveryOpenOutcome: Equatable, Sendable {
     public var opened: Bool
     /// Whether THIS request used an attempt, as the vault says; nil from a vault that does not say.
     public var attemptUsed: Bool?
+    /// (IOS-PLAN 0.1.35 §4.9) The new identity's fresh open was answered `exhausted`, `closed` or `not_armed` and K is not the
+    /// vault's key: the text `recover_could_not_recover` with the action that mails support. Not terminal.
+    public var contactCouldNotRecover = false
 
     public init(
-        _ code: String,
-        used: Int? = nil,
-        retryAt: Date? = nil,
-        afterUnanswered: Bool = false,
-        opened: Bool = false,
-        attemptUsed: Bool? = nil
+        _ code: String, used: Int? = nil, retryAt: Date? = nil, afterUnanswered: Bool = false, opened: Bool = false,
+        attemptUsed: Bool? = nil, contactCouldNotRecover: Bool = false
     ) {
         self.code = code
         self.used = used
@@ -45,6 +44,7 @@ public struct RecoveryOpenOutcome: Equatable, Sendable {
         self.afterUnanswered = afterUnanswered
         self.opened = opened
         self.attemptUsed = attemptUsed
+        self.contactCouldNotRecover = contactCouldNotRecover
     }
 
     public var ok: Bool { code == "ok" }

@@ -4,13 +4,13 @@ import VettIDCrypto
 import VettIDKeys
 import VettIDVault
 
-// A phone that could not tell (IOS-PLAN 0.1.33 §4.9; VAULT-MESSAGING 0.59.0 §11.14.6; MEMBER-API 2.12.0, owner decision of
-// 2026-10-24, "option A"). An open the member API took got no readable answer and its recovery has ended: the phone cannot tell
-// whether the vault adopted it. It reads the status signed with K twice, at least 5 minutes apart with the clock checked; only
-// then does it use the phone for a new recovery, with a new device identity and the same K, and the earlier open's unlock
-// secret. Nothing is deleted until the vault answered `ok` and the pairing completed: K, every identity (keys and device state:
-// its `recovery_id`, the history of its opens, `min_header_seq` / `min_state_seq`) and the phone-secret record. The identities are in
-// ``VaultManager+Identities``.
+// A phone that could not tell (IOS-PLAN 0.1.35 §4.9; VAULT-MESSAGING 0.62.0 §11.14.6; MEMBER-API 2.12.0, owner decisions of
+// 2026-10-24, "option A", and 2026-10-25). An open the member API took got no readable answer and its recovery has ended: the phone
+// cannot tell whether the vault adopted it. It reads the status signed with K twice, at least 5 minutes apart with the clock
+// checked; only then does it use the phone for a new recovery, with a new device identity (N, reused for every further recovery)
+// and the same K, and the earlier open's unlock secret. Nothing is deleted until the vault answered `ok` and the pairing completed:
+// K, both identities (keys and device state: its `recovery_id`, the history of its opens, `min_header_seq` / `min_state_seq`), their
+// App Attest keys and the phone-secret record. The identities are in ``VaultManager+Identities``.
 extension VaultManager {
     /// The claim of a new code answered `409 key_in_use` (K is the vault's `app_key`, or a live `app_key_pending`): nothing was
     /// written, the phone is the vault's app, and the lost-ok unlock decides (``RecoveryRegistration/refused(code:recoveryID:)``).
@@ -59,10 +59,12 @@ extension VaultManager {
         // An identity holds an `ok` that is not finished: the PIN finishes it, whatever else the reads said.
         if identityHoldingOk(ct) != nil { return .finishWithPin }
         if ct.unlock {
-            // A text after a day of refusals is for a vault that took this phone (a key in use), or for both recoveries having ended;
-            // not for a `200` that may be an orphaned key.
-            if !ct.unlockByReads, let since = ct.refusalsSinceMs, let period = ct.refusalsForMs, nowMs >= since, nowMs - since >= period {
-                return ct.couldNotFinish ? .couldNotFinish : .contact
+            // N's recovery ended too: the unlock, and a new code with N again; no text after a day of refusals (§4.9).
+            if ct.bothEnded { return .unlockOrNewCode }
+            // A text after a day of refusals is only for a vault that took this phone (a key in use); not for a `200` that may be
+            // an orphaned key.
+            if ct.keyInUse, let since = ct.refusalsSinceMs, let period = ct.refusalsForMs, nowMs >= since, nowMs - since >= period {
+                return .contact
             }
             return .finishWithPin
         }
@@ -83,7 +85,9 @@ extension VaultManager {
             let here = try await currentCouldNotTell()
             let ct = record.value.couldNotTell
             let switching = moveFlags.book.ruleSwitching > 0 || moveFlags.book.trialDepth > 0
-            if ct?.ended == true || (switching && !duringSwitch) { return here }
+            // Decided for a new code: nothing more to read, unless N's recovery ended too (a recovery that shows `registered` again
+            // is opened again, §4.9).
+            if (ct?.ended == true && ct?.bothEnded != true) || (switching && !duringSwitch) { return here }
             guard try await hasSomethingToRead(ct) else { return here }
             let rec = record.generation
             let (now, up) = (nowMs, config.uptime())
@@ -92,15 +96,7 @@ extension VaultManager {
             }
             switch await ruleRead() {
             case .registered:
-                // The recovery is not over: the phone opens again.
-                try persistRecord(rec) {
-                    $0.couldNotTellRead = nil
-                    guard var ct = $0.couldNotTell, ct.identities.count == 1 else { return }
-                    ct.transferIncomplete = false
-                    if ct.unlockByReads { (ct.unlock, ct.unlockByReads, ct.refusalsSinceMs, ct.refusalsForMs) = (false, false, nil, nil) }
-                    $0.couldNotTell = !ct.ended && !ct.unlock ? nil : ct
-                }
-                return try await currentCouldNotTell()
+                return try await noteRegistered(ct, duringSwitch: duringSwitch, since: rec, nowMs: now, uptime: up)
             case .undecided:
                 return here
             case .ended: return try await noteRead(ended: true, since: rec, nowMs: now, uptime: up)
@@ -121,22 +117,58 @@ extension VaultManager {
         return ct != nil || record.value.recoveryOpenUnanswered || device.recoveryOpenEverUnanswered
     }
 
+    /// A read showing the recovery `registered`: it is not over, and the phone opens again (with N when there is one: K's recovery is
+    /// the one N last registered for). What the rule decided changes only on the pair of reads (§4.9 "The two status reads"),
+    /// except after a `transfer_incomplete`, whose own read decides (as vettid-android).
+    private func noteRegistered(
+        _ ct: CouldNotTell?, duringSwitch: Bool, since rec: Int, nowMs now: Int64, uptime up: Double
+    ) async throws -> CouldNotTellStage {
+        if let ct, !ct.transferIncomplete, !duringSwitch, !pairOfRegistered(nowMs: now, uptime: up) {
+            try persistRecord(rec) { $0.couldNotTellRead = CouldNotTellRead(ended: false, atMs: now, uptime: up, registered: true) }
+            return .waiting(until: Date(timeIntervalSince1970: Double(now) / 1000 + Self.readGap))
+        }
+        try persistRecord(rec) {
+            $0.couldNotTellRead = nil
+            guard var ct = $0.couldNotTell else { return }
+            ct.transferIncomplete = false
+            if ct.unlockByReads || ct.bothEnded {
+                (ct.unlock, ct.unlockByReads, ct.bothEnded, ct.refusalsSinceMs, ct.refusalsForMs) = (false, false, false, nil, nil)
+            }
+            if let n = ct.new {
+                if !ct.unlock { (ct.ended, $0.activeIdentity) = (false, n) }
+                $0.couldNotTell = ct
+            } else {
+                $0.couldNotTell = !ct.ended && !ct.unlock ? nil : ct
+            }
+        }
+        return try await currentCouldNotTell()
+    }
+
+    /// Whether a read showing `registered` now is the second of a pair: the first showed it too, at least the gap before, on both
+    /// clocks.
+    private func pairOfRegistered(nowMs now: Int64, uptime up: Double) -> Bool {
+        guard let m = record.value.couldNotTellRead, m.registered, let due = Self.readsAgree(m, nowMs: now, uptime: up) else {
+            return false
+        }
+        return due >= Self.readGap
+    }
+
     /// The second read of a kind, at least the gap after the first, decides; any other read is the first of the next pair. After a
     /// `transfer_incomplete` both kinds are "ended".
     private func noteRead(ended read: Bool, since rec: Int, nowMs now: Int64, uptime up: Double) async throws -> CouldNotTellStage {
         let ended = read || record.value.couldNotTell?.transferIncomplete == true
-        if let m = record.value.couldNotTellRead, m.ended == ended, let due = Self.readsAgree(m, nowMs: now, uptime: up),
+        if let m = record.value.couldNotTellRead, m.ended == ended, !m.registered, let due = Self.readsAgree(m, nowMs: now, uptime: up),
            due >= Self.readGap {
             try persistRecord(rec) {
                 var ct = $0.couldNotTell ?? CouldNotTell(earlier: $0.activeIdentity)
                 if ended {
-                    // Two reads of `401`/`410`: a new code with a second identity, also after two reads of `200` and a refused
-                    // unlock; with the second identity already there, both recoveries ended and the unlock with each identity is
-                    // what is left, for good. An unlock that a key in use led to stays.
+                    // Two reads of `401`/`410`: a new code with N, also after two reads of `200` and a refused unlock; with N
+                    // already there, its recovery ended too: both are kept, the unlock with each (N first) is tried, and a new code
+                    // registers N again (§4.9). An unlock that a key in use led to stays.
                     if !ct.unlock || ct.unlockByReads {
                         let both = ct.identities.count > 1
-                        (ct.ended, ct.unlock, ct.unlockByReads, ct.transferIncomplete) = (!both, both, false, false)
-                        ct.couldNotFinish = both
+                        (ct.ended, ct.unlock, ct.unlockByReads, ct.transferIncomplete) = (true, both, false, false)
+                        ct.bothEnded = both
                         (ct.refusalsSinceMs, ct.refusalsForMs) = (nil, nil)
                     }
                 } else if !ct.unlock {
@@ -164,9 +196,8 @@ extension VaultManager {
     /// is none.
     func ruleRead() async -> RuleRead {
         do {
+            // (Status with K is always of K's own vault: a code of another vault is refused before anything is registered.)
             guard let status = try await vaultStatus() else { return .undecided }
-            // A status of another vault than the one of this recovery (a code of another vault was claimed with K) drives nothing.
-            guard status.vaultID == record.value.vaultID else { return .undecided }
             return status.recoveryState == "registered" ? .registered : .notRegistered
         } catch let e as MemberApiError {
             if e.status == 401, e.code == MemberApiError.unauthorized { return .ended }
@@ -207,13 +238,27 @@ extension VaultManager {
         return record.value.activeIdentity != ct.earlier
     }
 
-    /// An answer that proves no step 1 was stored (IOS-PLAN 0.1.34 §4.10): only a code from the vault's readable answer, and only
-    /// `busy`, `wrong_again`, `attempt_lost`, `closed`, the counter-down answer and the wait verdicts on their own; `wrong` and
-    /// `expired` only for a phone with no earlier unanswered open. A slot `expired`, a 404, 410 or 5xx on the poll, no answer,
-    /// `retry`, `transfer_incomplete` and any error are unanswered.
+    /// An answer that proves no step 1 was stored (IOS-PLAN 0.1.35 §4.10): only a code from the vault's readable answer, and only
+    /// `busy`, `wrong_again`, `attempt_lost`, `exhausted`, `not_armed`, `closed`, the counter-down answer and the wait verdicts on
+    /// their own, each for the open it answers alone; `wrong` and `expired` only for a phone with no earlier unanswered open. A
+    /// slot `expired`, a 404, 410 or 5xx on the poll, no answer, `retry`, `transfer_incomplete` and any error are unanswered.
     nonisolated static func refusalProves(_ code: String, earlierUnanswered: Bool) -> Bool {
-        let alone: Set = ["busy", "wrong_again", "attempt_lost", "closed", "counter_unavailable", "wait", "quiet"]
+        let alone: Set = [
+            "busy", "wrong_again", "attempt_lost", "exhausted", "not_armed", "closed", "counter_unavailable", "wait", "quiet",
+        ]
         return alone.contains(code) || (!earlierUnanswered && (code == "wrong" || code == "expired"))
+    }
+
+    /// The answers of a fresh open that rule recovery of this vault out until its owner's app arms a new generation (IOS-PLAN 0.1.35
+    /// §4.9): none can follow a stored step 1.
+    nonisolated static let ruledOut: Set = ["exhausted", "closed", "not_armed"]
+
+    /// Whether the answer [code] to an open of the identity in use is the contact text "This phone could not recover your vault…"
+    /// (`recover_could_not_recover`, §4.9): N's open, K not the vault's key, and an answer that rules recovery out. Not terminal: a
+    /// later recovery the member starts registers N again. Mirrors vettid-android `Rules.showCouldNotRecover`.
+    func couldNotRecover(_ code: String) -> Bool {
+        guard let ct = record.value.couldNotTell, let n = ct.new, record.value.activeIdentity == n else { return false }
+        return !ct.keyInUse && Self.ruledOut.contains(code)
     }
 
     /// What became known of the open [id] with the answer [r], written to its entry of the history: `ok` decides; a refusal that

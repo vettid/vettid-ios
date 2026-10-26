@@ -10,7 +10,7 @@ import VettIDDataTesting
 // swiftlint:disable line_length
 
 /// A phone that could not tell, after the second read: the new recovery with a new device identity and the same K, the open with
-/// the earlier open's unlock secret, `409 key_in_use`, and the pairing of either identity (IOS-PLAN 0.1.33 §4.9). Continues
+/// the earlier open's unlock secret, `409 key_in_use`, and the pairing of either identity (IOS-PLAN 0.1.35 §4.9). Continues
 /// ``VaultManagerRecoveryTests``.
 extension VaultManagerRecoveryTests {
     /// A second recovery of the same vault, as the member starts it on the account site.
@@ -33,6 +33,7 @@ extension VaultManagerRecoveryTests {
         #expect(seen.ik != earlier.ik && seen.kem != earlier.kem && seen.relayKey != earlier.relayKey)
         // A key of its own was attested for it, and the identity in use is the second.
         #expect(phone.attester.attested.count == attested + 1 && phone.attester.identityInUse == 1 && phone.attester.forgotten == [1])
+        #expect(phone.attester.attestationIdentities.last == 1 && phone.attester.keptReplacedKeys == [1] && phone.attester.settled.isEmpty)
         let ct = try #require(m.record.value.couldNotTell)
         #expect(ct.earlier == .first && ct.new == .second && m.record.value.activeIdentity == .second && device?.recoveryID == made.recoveryID)
         // Nothing was deleted: the earlier identity's keys, device state (with the earlier recovery id) and phone-secret record.
@@ -70,7 +71,7 @@ extension VaultManagerRecoveryTests {
         #expect(m.record.value.couldNotTell == nil && m.record.value.activeIdentity == .second)
         for slot in KeySlot.slots(of: .first) { #expect(try phone.wrapped.get(slot) == nil) }
         #expect(try !FileManager.default.fileExists(atPath: phone.directory.appendingPathComponent(VaultFiles.device).path))
-        #expect(phone.attester.forgotten.contains(0) && hasCurrentRecord && !pendingRecord)
+        #expect(phone.attester.settled == [1] && hasCurrentRecord && !pendingRecord)
         // K is the same, and the phone is the vault's app with the second identity from now on.
         #expect(try phone.appKeys.getOrCreate().spki() == k)
         try await phone.restart()
@@ -78,15 +79,15 @@ extension VaultManagerRecoveryTests {
         #expect(m.phase == .unlocked)
     }
 
-    @Test func thePhoneOnlyUsesTheRuleForTheVaultOfTheEarlierOpen() async throws {
+    @Test func aScannedCodeOfAnotherVaultIsRefusedBeforeTheClaim() async throws {
         defer { phone.close() }
         let k = try phone.appKeys.getOrCreate().spki()
         try await endedForGood()
         let made = try secondRecovery()
         let other = try #require(RecoveryCode.parseScanned(made.qr.replacingOccurrences(of: made.vaultID, with: "someone-elses-vault")))
         let claims = service.recoveryClaims.count
-        let f = await vaultFailure { _ = try await m.registerRecovery(other) }
-        #expect(f?.code == VaultManager.codeRecoveryOpenUnknown && service.recoveryClaims.count == claims)
+        #expect(try await m.registerRecovery(other) == .refused(code: VaultManager.codeOtherVault))
+        #expect(service.recoveryClaims.count == claims && service.recoveryRegisters.count == 1)
         #expect(m.record.value.couldNotTell?.new == nil && m.record.value.activeIdentity == .first)
         try expectKept(k)
     }
@@ -113,13 +114,14 @@ extension VaultManagerRecoveryTests {
         defer { phone.close() }
         try await endedForGood()
         let made = try secondRecovery()
-        // Killed after the identity was made and before the register went out.
+        // The first register failed before it reached the vault (no network), and the app is killed.
         service.recoveryRegisterAnswers(.offline)
         _ = await vaultFailure { _ = try await m.registerRecovery(try scanned(made)) }
         try await phone.restart()
         _ = try await m.couldNotTellStage()
         #expect(m.record.value.couldNotTell?.new == .second && m.record.value.activeIdentity == .second)
-        // The register may have been taken: the registration stays for a retry, with the earlier identity beside it.
+        #expect(try await m.openSession().device.recovering == false && m.record.value.couldNotTell?.registerTried == made.recoveryID)
+        // Not registered: the same N, K and code try again.
         #expect(try await m.registerRecovery(try scanned(made)) == .registered(emailHint: service.emailHint))
         try await phone.restart()
         #expect(try await m.recoveryStage() == .pin && device?.recoveryID == made.recoveryID)
@@ -212,14 +214,15 @@ extension VaultManagerRecoveryTests {
         service.recoveryClaimAnswers(.vault, .keyInUse)
         #expect(try await m.registerRecovery(try scanned(made)) == .refused(code: VaultManager.codeKeyInUse))
         let ct = try #require(m.record.value.couldNotTell)
-        // The new identity did not register: the screens find the earlier one, registered, at the PIN.
+        // A first N that never registered is dropped (it no longer counts as one of the two): the earlier one is at the PIN.
         let atPin = try await m.openSession().device
-        #expect(ct.unlock && ct.new == .second && m.record.value.activeIdentity == .first && atPin.recovering)
+        #expect(ct.unlock && ct.new == nil && ct.identities == [.first] && m.record.value.activeIdentity == .first && atPin.recovering)
+        for slot in KeySlot.slots(of: .second) { #expect(try phone.wrapped.get(slot) == nil) }
         #expect(try await m.couldNotTellStage() == .finishWithPin)
-        // The unlock is refused by a vault that has not adopted this phone: everything is kept.
+        // The unlock is refused by a vault that has not adopted this phone: everything else is kept.
         let out = try await m.resumeLostOk(pin: pin)
         #expect(out.code == VaultManager.codeNoBundle)
-        try expectKept(k, secondToo: true)
+        try expectKept(k)
         #expect(m.record.value.activeIdentity == .first)
     }
 
@@ -231,12 +234,16 @@ extension VaultManagerRecoveryTests {
         service.recoveryRegisterAnswers(.unauthorized, .unauthorized)
         let f = await vaultFailure { _ = try await m.registerRecovery(try scanned(made)) }
         #expect(f?.kind == .unauthorized)
-        // The new claim was no key in use: the rule goes on, with everything kept. A `401` queued nothing, so the new identity
-        // is not registered and the code step stays.
+        // The new claim was no key in use: the rule goes on. A `401` queued nothing, so N (which never registered) is dropped,
+        // E and K stay, and the code step stays.
         #expect(m.record.value.couldNotTell?.unlock == false && m.record.value.couldNotTell?.ended == true)
+        #expect(m.record.value.couldNotTell?.identities == [.first] && m.record.value.activeIdentity == .first)
         #expect(try await m.couldNotTellStage() == .newCode)
-        try expectKept(k, secondToo: true)
+        try expectKept(k)
+        for slot in KeySlot.slots(of: .second) { #expect(try phone.wrapped.get(slot) == nil) }
+        // A later code makes N anew.
         #expect(try await m.registerRecovery(try scanned(made)) == .registered(emailHint: service.emailHint))
+        #expect(m.record.value.couldNotTell?.new == .second && phone.attester.forgotten.filter { $0 == 1 }.count >= 2)
     }
 
     // MARK: - Either identity pairs
@@ -262,7 +269,7 @@ extension VaultManagerRecoveryTests {
         #expect(m.record.value.activeIdentity == .first && device?.recoveryID == nil && device?.deviceID != nil)
         #expect(m.record.value.couldNotTell == nil && service.unlocks.count == 1)
         // The unlock asserted with the earlier identity's key; the new identity went.
-        #expect(phone.attester.assertionIdentities.last == 0 && phone.attester.forgotten.contains(1))
+        #expect(phone.attester.assertionIdentities.last == 0 && phone.attester.settled == [0])
         for slot in KeySlot.slots(of: .second) { #expect(try phone.wrapped.get(slot) == nil) }
         #expect(try phone.appKeys.getOrCreate().spki() == k)
         try await m.finishRecoveryOpen()
