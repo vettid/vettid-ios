@@ -20,6 +20,9 @@ public final class TestAttester: Attester, @unchecked Sendable {
     private var assertedBy: [Int] = []
     private var forgottenIdentities: [Int] = []
     private var resetCount = 0
+    private var attestedBy: [Int] = []
+    private var keptReplaced: [Int] = []
+    private var settledIdentities: [Int] = []
 
     public init() {}
 
@@ -29,6 +32,12 @@ public final class TestAttester: Attester, @unchecked Sendable {
     public var forgotten: [Int] { lock.withLock { forgottenIdentities } }
     /// How many times a forget reset the identities.
     public var resets: Int { lock.withLock { resetCount } }
+    /// (IOS-PLAN 0.1.35 §4.9) The identity in use at each attestation, in order (``attested`` holds the keys).
+    public var attestationIdentities: [Int] { lock.withLock { attestedBy } }
+    /// The identity in use each time its replaced keys were to be kept (a register of the new identity).
+    public var keptReplacedKeys: [Int] { lock.withLock { keptReplaced } }
+    /// The identities a completed handshake settled on, in order.
+    public var settled: [Int] { lock.withLock { settledIdentities } }
 
     /// The key ids attested, in order.
     public var attested: [[UInt8]] { lock.withLock { attestedKeys } }
@@ -37,7 +46,10 @@ public final class TestAttester: Attester, @unchecked Sendable {
 
     public func attest(_ challenge: [UInt8]) throws -> DeviceAttest {
         let k = Bytes.sha256(challenge)
-        lock.withLock { attestedKeys.append(k) }
+        lock.withLock {
+            attestedKeys.append(k)
+            attestedBy.append(identity)
+        }
         return try DeviceAttest.iosAttestation(keyID: k, attestation: Array("test-attestation".utf8))
     }
 
@@ -51,6 +63,13 @@ public final class TestAttester: Attester, @unchecked Sendable {
     public func use(identity n: Int) throws { lock.withLock { identity = n } }
     public func forget(identity n: Int) throws { lock.withLock { forgottenIdentities.append(n) } }
     public func resetIdentities() throws { lock.withLock { (identity, resetCount) = (0, resetCount + 1) } }
+    public func keepReplacedKeys() throws { lock.withLock { keptReplaced.append(identity) } }
+    public func settle(identity n: Int) throws {
+        lock.withLock {
+            identity = n
+            settledIdentities.append(n)
+        }
+    }
 }
 
 /// TEST ONLY. One iPhone running the app against a ``FakeVaultService``: software keys behind the Secure Enclave's

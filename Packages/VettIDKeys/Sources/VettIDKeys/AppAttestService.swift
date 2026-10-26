@@ -29,19 +29,25 @@ public protocol AppAttestService: Sendable {
 /// The kept key ids: the current one (the vault accepted its attestation) and the pending ones (sent, not yet
 /// confirmed), oldest first. Stored as JSON; a bare key id (an earlier format) reads as the current one.
 ///
-/// (IOS-PLAN 0.1.33 §4.9) A phone that could not tell whether an open recovered the vault holds two device identities for a
+/// (IOS-PLAN 0.1.35 §4.9) A phone that could not tell whether an open recovered the vault holds two device identities for a
 /// while, and the vault bound each identity's own App Attest key at its register: `current` and `pending` are those of the
 /// identity in use ([active]), and the other identity's are [parked] under its number, untouched, until it is used again or
-/// forgotten.
+/// forgotten. The new identity is registered again for each new recovery, each time with a new key; while [keepsReplaced],
+/// a confirmation keeps the keys it replaces as [earlier] ones (an earlier registration's binding may still be the vault's),
+/// until the handshake completes (``AppAttestKey/settle(identity:)``).
 struct KeyIDRecord: Equatable {
     /// The keys of an identity that is not in use.
     struct Parked: Equatable {
         var current: String?
         var pending: [String]
+        var earlier: [String] = []
     }
 
     var current: String?
     var pending: [String]
+    /// The identity in use's keys of its earlier registrations, oldest first.
+    var earlier: [String] = []
+    var keepsReplaced = false
     var active = 0
     var parked: [Int: Parked] = [:]
 
@@ -59,13 +65,17 @@ struct KeyIDRecord: Equatable {
             let current = object["current"] as? String
             guard Self.valid(pending, current) else { return nil }
             self.init(current: current, pending: pending)
+            earlier = object["earlier"] as? [String] ?? []
+            guard Self.valid(earlier, nil) else { return nil }
+            keepsReplaced = object["keeps_replaced"] as? Bool ?? false
             if let a = object["active"] as? Int { active = a }
             if let others = object["parked"] as? [String: [String: Any]] {
                 for (key, value) in others {
                     guard let n = Int(key), let p = value["pending"] as? [String] else { return nil }
                     let c = value["current"] as? String
-                    guard Self.valid(p, c) else { return nil }
-                    parked[n] = Parked(current: c, pending: p)
+                    let e = value["earlier"] as? [String] ?? []
+                    guard Self.valid(p + e, c) else { return nil }
+                    parked[n] = Parked(current: c, pending: p, earlier: e)
                 }
             }
             return
@@ -81,23 +91,40 @@ struct KeyIDRecord: Equatable {
     /// The keys of identity [n] in use from now on; the ones in use are parked under their number. Nothing for the identity in use.
     mutating func use(_ n: Int) {
         guard n != active else { return }
-        parked[active] = Parked(current: current, pending: pending)
+        parked[active] = Parked(current: current, pending: pending, earlier: earlier)
         let next = parked.removeValue(forKey: n)
         current = next?.current
         pending = next?.pending ?? []
+        earlier = next?.earlier ?? []
         active = n
+    }
+
+    /// [id] is the bound key: the current one, the pending ones forgotten, or, while [keepsReplaced], kept as earlier ones with
+    /// the current key it replaces.
+    mutating func promote(_ id: String) {
+        if keepsReplaced {
+            let replaced = ([current].compactMap { $0 } + pending).filter { $0 != id && !earlier.contains($0) }
+            earlier = earlier.filter { $0 != id } + replaced
+        } else {
+            earlier.removeAll { $0 == id }
+        }
+        current = id
+        pending = []
     }
 
     func encoded() throws -> [UInt8] {
         var object: [String: Any] = ["v": 1, "pending": pending]
         if let current { object["current"] = current }
+        if !earlier.isEmpty { object["earlier"] = earlier }
+        if keepsReplaced { object["keeps_replaced"] = true }
         if active != 0 { object["active"] = active }
-        let others = parked.filter { $0.value.current != nil || !$0.value.pending.isEmpty }
+        let others = parked.filter { $0.value.current != nil || !$0.value.pending.isEmpty || !$0.value.earlier.isEmpty }
         if !others.isEmpty {
             var map: [String: Any] = [:]
             for (n, p) in others {
                 var entry: [String: Any] = ["pending": p.pending]
                 if let c = p.current { entry["current"] = c }
+                if !p.earlier.isEmpty { entry["earlier"] = p.earlier }
                 map[String(n)] = entry
             }
             object["parked"] = map

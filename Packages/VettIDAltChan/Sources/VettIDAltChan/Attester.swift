@@ -32,7 +32,8 @@ public protocol Attester: Sendable {
     func confirmInUse() throws
 
     /// The vault refused an assertion of the key in use (`attestation`) while no key is confirmed: the next untried
-    /// unconfirmed key, newest first, is used instead. False when none is left.
+    /// unconfirmed key, newest first, is used instead; then the keys of the identity's earlier registrations (IOS-PLAN 0.1.35
+    /// §4.9). False when none is left.
     func nextCandidate() throws -> Bool
 
     /// (IOS-PLAN 0.1.33 §4.9) The phone's device identity [identity] (an index of ``IdentitySet``) is the one in use: the vault bound each identity's
@@ -47,6 +48,14 @@ public protocol Attester: Sendable {
     /// (§4.9) A forget (a start over, a deleted vault): the bookkeeping of identities is reset, so that the first identity is in use
     /// and the keys of the other identities are gone. Never a key of the identity in use is made the other's.
     func resetIdentities() throws
+
+    /// (IOS-PLAN 0.1.35 §4.9) The identity in use registers again, with a new key: the keys its earlier registrations attested
+    /// are kept beside it (the vault's binding may still be one of them) until ``settle(identity:)``.
+    func keepReplacedKeys() throws
+
+    /// (§4.9) The handshake completed with the identity [identity]: it is in use, and the keys of the other identities and of
+    /// its own earlier registrations are forgotten.
+    func settle(identity: Int) throws
 }
 
 /// What the device key signs (VAULT-MESSAGING §11.7, §11.10.3), as vettid-vault `devattest.Signed` carries it
@@ -87,4 +96,6 @@ extension Attester {
     public func use(identity: Int) throws {}
     public func forget(identity: Int) throws {}
     public func resetIdentities() throws {}
+    public func keepReplacedKeys() throws {}
+    public func settle(identity: Int) throws {}
 }
