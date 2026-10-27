@@ -192,6 +192,11 @@ enum RecoveryStrings {
         )
     }
 
+    /// The title of the step after an open whose answer was lost, once the recovery ended (vettid-android's ended step).
+    static var recoverEndedTitle: String {
+        String(localized: "recover_ended_title", defaultValue: "This recovery has ended", bundle: .module)
+    }
+
     /// The code steps beside the PIN once a new recovery may use this phone.
     static var recoverUndecidedNewCode: String {
         String(localized: "recover_undecided_new_code", defaultValue: "Use a new recovery code", bundle: .module)

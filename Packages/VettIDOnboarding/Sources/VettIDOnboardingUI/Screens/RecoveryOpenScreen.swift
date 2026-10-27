@@ -62,6 +62,8 @@ public struct RecoveryOpenContent: View {
     /// TEST ONLY: told which notice (`guidance`, `error`) a step shows when it appears.
     let noticeProbe: (@MainActor (String) -> Void)?
     let onStartOver: (@MainActor () -> Void)?
+    /// (IOS-PLAN §4.9) "Use a new recovery code": the code steps, once the rule lets a new recovery use this phone.
+    let onNewCode: (@MainActor () -> Void)?
     let onOpened: @MainActor () -> Void
     @State private var pin: PinBuffer
 
@@ -73,6 +75,7 @@ public struct RecoveryOpenContent: View {
         busy: Bool = false,
         noticeProbe: (@MainActor (String) -> Void)? = nil,
         onStartOver: (@MainActor () -> Void)? = nil,
+        onNewCode: (@MainActor () -> Void)? = nil,
         onOpened: @escaping @MainActor () -> Void = {},
         pin: PinBuffer = PinBuffer()
     ) {
@@ -82,6 +85,7 @@ public struct RecoveryOpenContent: View {
         self.busy = busy
         self.noticeProbe = noticeProbe
         self.onStartOver = onStartOver
+        self.onNewCode = onNewCode
         self.onOpened = onOpened
         _pin = State(initialValue: pin)
     }
@@ -128,14 +132,18 @@ public struct RecoveryOpenContent: View {
         // After a recovery that already succeeded on this phone nothing is started over (the notice offers the finish).
         let startOver = problem == .guidance(.alreadyRecovered) ? nil : onStartOver
         let side = OpenSide(problem: problem, busy: busy, finishWithPin: { actions.finishLostOk() }, probe: noticeProbe)
+        let newCode = newCodeAction(state, onNewCode)
         SecureContainer(isSecure: true) {
             switch state.step {
             case .enter: OpenEntry(state: state, actions: actions, side: side, onStartOver: startOver, pin: pin)
             case .check: OpenCheck(state: state, actions: actions, side: side, timeScale: timeScale)
             case .sending: OpenSending()
             case .answered:
-                OpenAnswer(state: state, actions: actions, side: side, onStartOver: startOver, timeScale: timeScale)
-            case .finish: OpenFinish(state: state, actions: actions, side: side, timeScale: timeScale, pin: pin)
+                OpenAnswer(
+                    state: state, actions: actions, side: side, onStartOver: startOver, onNewCode: newCode, timeScale: timeScale
+                )
+            case .finish:
+                OpenFinish(state: state, actions: actions, side: side, onNewCode: newCode, timeScale: timeScale, pin: pin)
             case .done: OpenDone(state: state, actions: actions, timeScale: timeScale)
             }
         }
@@ -285,6 +293,7 @@ private struct OpenAnswer: View {
     let actions: RecoveryOpenActions
     let side: OpenSide
     let onStartOver: (@MainActor () -> Void)?
+    let onNewCode: (@MainActor () -> Void)?
     let timeScale: UInt64
 
     var body: some View {
@@ -317,7 +326,7 @@ private struct OpenAnswer: View {
                 OpenSideNoticeView(side: side)
                 NoticeCard(
                     ended ? .urgent : .warning, title: RecoveryOpenStrings.onboardingOpenAnswerTitle,
-                    message: RecoveryTexts.openAnswer(t, retryAt: RecoveryTexts.retryAt(o.retryAt))
+                    message: ruleText(state, o) ?? RecoveryTexts.openAnswer(t, retryAt: RecoveryTexts.retryAt(o.retryAt))
                 )
                 .accessibilityAddTraits(.updatesFrequently)
                 .accessibilityIdentifier("open_answer_\(o.code)")
@@ -333,6 +342,7 @@ private struct OpenAnswer: View {
                     PrimaryButton(RecoveryScreenStrings.onboardingOpenLostTitle) { actions.finishLostOk() }
                         .accessibilityIdentifier("open_lost_ok")
                 }
+                RuleWays(contact: state.contactVettID || state.couldNotRecover, onNewCode: state.couldNotRecover ? onNewCode : nil)
             }
         }
         .disabled(side.busy)
@@ -366,12 +376,50 @@ private struct OpenAnswer: View {
     }
 }
 
+/// (IOS-PLAN §4.9) "Use a new recovery code" is offered only while the rule lets a new recovery use this phone.
+func newCodeAction(_ state: RecoveryOpenState, _ onNewCode: (@MainActor () -> Void)?) -> (@MainActor () -> Void)? {
+    state.newCodeAllowed ? onNewCode : nil
+}
+
+/// (IOS-PLAN §4.9) The rule's own texts before the plan's table, as vettid-android's `openAnswerText`: the vault took this
+/// phone but it cannot be unlocked, then the answers that rule recovery out on this phone.
+@MainActor
+func ruleText(_ state: RecoveryOpenState, _ o: RecoveryOpenOutcome) -> String? {
+    if state.contactVettID { return RecoveryStrings.onboardingOpenTookPhone }
+    if o.contactCouldNotRecover { return RecoveryStrings.recoverCouldNotRecover }
+    return nil
+}
+
+/// (IOS-PLAN §4.9) The ways on beside the rule's texts: "Email support@vettid.org" (the address shown when no mail app takes
+/// it), and "Use a new recovery code" when [onNewCode] is set (a new recovery that uses this phone).
+private struct RuleWays: View {
+    @Environment(\.openURL) private var openURL
+    let contact: Bool
+    let onNewCode: (@MainActor () -> Void)?
+    @State private var noMailApp = false
+
+    var body: some View {
+        if contact {
+            TextLink(RecoveryStrings.onboardingOpenContactSupport(SupportMail.address), identifier: "open_contact_support") {
+                openURL(SupportMail.url) { accepted in noMailApp = !accepted }
+            }
+            if noMailApp {
+                Text(SupportMail.address).vettIDFont(.bodyLarge).textSelection(.enabled).accessibilityIdentifier("support_address")
+            }
+        }
+        if let onNewCode {
+            SecondaryButton(RecoveryStrings.recoverUndecidedNewCode, action: onNewCode).accessibilityIdentifier("open_new_code")
+        }
+    }
+}
+
 /// The vault answered `ok` earlier: the PIN alone finishes opening it. No new open, no start over. After a lost answer the way
 /// back to the open stays (only an `ok` the vault confirmed has none).
 private struct OpenFinish: View {
     let state: RecoveryOpenState
     let actions: RecoveryOpenActions
     let side: OpenSide
+    let onNewCode: (@MainActor () -> Void)?
     let timeScale: UInt64
     let pin: PinBuffer
 
@@ -398,7 +446,7 @@ private struct OpenFinish: View {
                 if let o = state.outcome, o.opened {
                     NoticeCard(
                         .warning, title: RecoveryOpenStrings.onboardingOpenAnswerTitle,
-                        message: RecoveryTexts.openAnswer(openAnswerText(o, rightButIncomplete: false), retryAt: "")
+                        message: ruleText(state, o) ?? RecoveryTexts.openAnswer(openAnswerText(o, rightButIncomplete: false), retryAt: "")
                     )
                     .accessibilityIdentifier("open_finish_answer")
                 } else if let failure = state.failure {
@@ -407,6 +455,9 @@ private struct OpenFinish: View {
                     )
                     .accessibilityIdentifier("open_finish_failure")
                 }
+                // Beside the PIN while a new recovery code may use this phone (IOS-PLAN §4.9, `unlockOrNewCode`).
+                let answered = state.outcome?.opened == true
+                RuleWays(contact: answered && (state.contactVettID || state.couldNotRecover), onNewCode: onNewCode)
                 if state.canErase {
                     Text(RecoveryScreenStrings.onboardingOpenFinishGone).vettIDFont(.bodyMedium)
                     DestructiveLink(label: OnboardingStrings.unlockErase, identifier: "open_finish_erase") { actions.askErase() }
@@ -460,19 +511,21 @@ struct RecoveryOpenRoute: View {
     let problem: OpenSideNotice?
     let busy: Bool
     let onStartOver: @MainActor () -> Void
+    let onNewCode: @MainActor () -> Void
     let onOpened: @MainActor () -> Void
     @State private var model: RecoveryOpenViewModel?
 
     init(
         move: any MoveRepository, account: any AccountRepository, problem: OpenSideNotice?, busy: Bool = false,
-        onStartOver: @escaping @MainActor () -> Void, onOpened: @escaping @MainActor () -> Void,
-        model: RecoveryOpenViewModel? = nil
+        onStartOver: @escaping @MainActor () -> Void, onNewCode: @escaping @MainActor () -> Void = {},
+        onOpened: @escaping @MainActor () -> Void, model: RecoveryOpenViewModel? = nil
     ) {
         self.move = move
         self.account = account
         self.problem = problem
         self.busy = busy
         self.onStartOver = onStartOver
+        self.onNewCode = onNewCode
         self.onOpened = onOpened
         _model = State(initialValue: model)
     }
@@ -480,7 +533,7 @@ struct RecoveryOpenRoute: View {
     var body: some View {
         RecoveryOpenContent(
             state: model?.state ?? RecoveryOpenState(), actions: model.map(RecoveryOpenActions.init) ?? RecoveryOpenActions(),
-            problem: problem, busy: busy, onStartOver: onStartOver, onOpened: onOpened
+            problem: problem, busy: busy, onStartOver: onStartOver, onNewCode: onNewCode, onOpened: onOpened
         )
         .onAppear { if model == nil { model = RecoveryOpenViewModel(move: move, account: account) } }
         .onDisappear { model?.forgetSecrets() }

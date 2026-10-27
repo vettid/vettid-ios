@@ -67,6 +67,17 @@
         }
       }
     },
+    "recover_ended_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This recovery has ended"
+          }
+        }
+      }
+    },
     "recover_undecided_new_code": {
       "extractionState": "manual",
       "localizations": {

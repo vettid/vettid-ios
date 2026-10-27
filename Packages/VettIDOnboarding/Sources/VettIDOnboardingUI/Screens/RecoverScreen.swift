@@ -73,6 +73,7 @@ public struct RecoverContent: View {
         case .registering: registering
         case .open: openPane ?? AnyView(EmptyView())
         case .noBackup: noBackup
+        case .couldNotTell: couldNotTell
         }
     }
 
@@ -100,6 +101,22 @@ public struct RecoverContent: View {
             }
         }
         .accessibilityIdentifier("recover_intro")
+    }
+
+    /// (IOS-PLAN §4.9) An open got no readable answer and its recovery ended: a new code may use this phone (vettid-android's
+    /// ended step with `recover_could_not_tell`; the scan step offers typing).
+    private var couldNotTell: some View {
+        FormScaffold(
+            title: RecoveryStrings.recoverEndedTitle, message: RecoveryStrings.recoverCouldNotTell,
+            primaryLabel: RecoveryStrings.recoverUndecidedNewCode, busy: state.busy, onPrimary: actions.scan, onBack: back
+        ) {
+            VStack(alignment: .leading, spacing: Spacing.l) {
+                CodeRefusalNotice(state: state)
+                ClaimFailure(state: state, onGoToOpen: goToOpen)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("recover_could_not_tell")
     }
 
     /// Where the recovery stands could not be read: only a retry, so that a registered recovery is never taken for none.
@@ -285,7 +302,7 @@ public struct RecoverRoute: View {
         return AnyView(
             RecoveryOpenRoute(
                 move: move, account: account, problem: problem, busy: state.busy, onStartOver: { model.askStartOver() },
-                onOpened: { model.finish() }
+                onNewCode: { model.scan() }, onOpened: { model.finish() }
             )
         )
     }

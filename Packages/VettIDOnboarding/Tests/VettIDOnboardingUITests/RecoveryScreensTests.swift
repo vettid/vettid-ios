@@ -31,6 +31,7 @@ import VettIDDataTesting
         #expect(RecoveryScreenStrings.onboardingOpenLostTitle == "Finish with your PIN" && RecoveryScreenStrings.onboardingOpenFinishGo == "Finish")
         #expect(RecoveryScreenStrings.onboardingOpenFinishEraseBody.hasPrefix("This erases VettID's data on this phone only") && RecoveryScreenStrings.onboardingOpenFinishEraseBody.contains("\n\nYour vault was recovered onto this phone"))
         #expect(RecoveryScreenStrings.onboardingOpenNewRecovery == "Start a new recovery" && RecoveryScreenStrings.onboardingOpenBack == "Back to the recovery")
+        #expect(RecoveryStrings.recoverEndedTitle == "This recovery has ended" && RecoveryStrings.recoverUndecidedNewCode == "Use a new recovery code")
     }
 
     /// The groups of four, four to a row, as the code is drawn while typing.
@@ -58,6 +59,8 @@ import VettIDDataTesting
             ("rate limited", with(.scan) { $0.error = .rateLimited; $0.retrySeconds = 42 }),
             ("no answer", with(.intro) { $0.error = .noResponse }),
             ("typed, complete", with(.type) { $0.typed = String(repeating: "7ZK3", count: 12) }),
+            ("could not tell", with(.couldNotTell) { $0.couldNotTell = .newCode }),
+            ("could not tell, other vault", with(.couldNotTell) { $0.couldNotTell = .newCode; $0.refusal = .otherVault }),
         ]
         for r in CodeRefusal.allCases {
             states.append(("scan, \(r)", with(.scan) { $0.refusal = r; $0.otherApi = "https://account.example.org"; $0.wrongCodes = 3 }))
@@ -110,6 +113,9 @@ import VettIDDataTesting
             states.append(("answer \(code)", with(.answered, used: 2) { $0.outcome = RecoveryOpenOutcome(code, used: 2) }))
             states.append(("answer \(code), waiting", with(.answered, used: 2) { $0.outcome = RecoveryOpenOutcome(code, used: 2, retryAt: retry, attemptUsed: false) }))
         }
+        states.append(("answer, could not recover", with(.answered) { $0.outcome = RecoveryOpenOutcome("exhausted", contactCouldNotRecover: true); $0.couldNotTell = .unlockOrNewCode }))
+        states.append(("finish, took phone", with(.finish) { $0.outcome = RecoveryOpenOutcome("bad_pin", opened: true); $0.couldNotTell = .contact }))
+        states.append(("finish, unlock or new code", with(.finish) { $0.lostOk = true; $0.couldNotTell = .unlockOrNewCode }))
         states.append(("no recovery, unanswered", with(.answered) { $0.outcome = RecoveryOpenOutcome("no_recovery", afterUnanswered: true) }))
         states.append(("right but incomplete", with(.answered) { $0.outcome = RecoveryOpenOutcome("wait", retryAt: retry, afterUnanswered: true); $0.rightButIncomplete = true }))
         return states
@@ -133,6 +139,25 @@ import VettIDDataTesting
         let text = RecoveryTexts.openAnswer(openAnswerText(o, rightButIncomplete: false), retryAt: "")
         #expect(text.hasPrefix("PIN or password is wrong. The vault does not tell us which."))
         #expect(openCanTryAgain("wrong") && !openCanTryAgain("exhausted") && openNeedsNewRecovery("expired") && !openNeedsNewRecovery("wrong"))
+    }
+
+    /// (IOS-PLAN §4.9) The rule's texts come before the table's, and "Use a new recovery code" stands beside the PIN only while
+    /// the rule lets a new recovery use this phone.
+    @Test func theRuleSaysItsOwnWordsAndOffersANewCodeOnlyWhenAllowed() {
+        var ruled = RecoveryOpenState(step: .answered)
+        ruled.outcome = RecoveryOpenOutcome("exhausted", contactCouldNotRecover: true)
+        #expect(ruleText(ruled, ruled.outcome!) == RecoveryStrings.recoverCouldNotRecover)
+        ruled.couldNotTell = .contact
+        #expect(ruleText(ruled, ruled.outcome!) == RecoveryStrings.onboardingOpenTookPhone)
+        #expect(ruleText(RecoveryOpenState(), RecoveryOpenOutcome("exhausted")) == nil)
+
+        for rule in [CouldNotTellStage.none, .waiting(until: Date()), .finishWithPin, .newCode, .contact, .unlockOrNewCode] {
+            var s = RecoveryOpenState(step: .finish)
+            s.couldNotTell = rule
+            let offered = rule == .newCode || rule == .unlockOrNewCode
+            #expect((newCodeAction(s, {}) != nil) == offered, "\(rule)")
+            #expect(newCodeAction(s, nil) == nil, "\(rule), no action")
+        }
     }
 
     // MARK: - The PIN and the code
