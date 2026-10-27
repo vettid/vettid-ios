@@ -43,7 +43,7 @@ public final class RecoveryOpenViewModel {
         let stage = (try? await move.couldNotTellStage()) ?? .none
         state.couldNotTell = stage
         let unlock: [CouldNotTellStage] = [.finishWithPin, .contact, .unlockOrNewCode]
-        if startFinish, unlock.contains(stage), state.step == .enter { finishLostOk() }
+        if startFinish, unlock.contains(stage), state.step == .enter { enterLostOk(fromRule: true) }
     }
 
     deinit { work.cancelAll() }
@@ -155,13 +155,21 @@ public final class RecoveryOpenViewModel {
         state.failure = nil
         state.failureCode = nil
         state.lostOk = false
+        state.lostOkFromRule = false
     }
 
     /// (0.34.0) The open's answer was lost or unreadable, or the recovery ended after such an open: the PIN may finish a
     /// recovery that completed on the way (an unlock with this phone's secret; no attempt is used).
-    public func finishLostOk() {
+    public func finishLostOk() { enterLostOk(fromRule: false) }
+
+    /// (IOS-PLAN §4.9) The rule as the recovery flow read it last (a return to the foreground, an answer): the new-code action
+    /// beside the PIN follows it.
+    public func adopt(rule: CouldNotTellStage) { state.couldNotTell = rule }
+
+    private func enterLostOk(fromRule: Bool) {
         state.step = .finish
         state.lostOk = true
+        state.lostOkFromRule = fromRule
         state.outcome = nil
         state.failure = nil
         state.failureCode = nil
