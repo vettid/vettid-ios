@@ -106,6 +106,8 @@ final class DeletionWatch {
     private var loop: Task<Void, Never>?
     private var inFlight: Task<DeletionRead, Never>?
     private var goneSeen = false
+    /// Stopped: no read starts until the schedule starts again.
+    private var stopped = false
 
     init(
         now: @escaping @Sendable () -> Date, sleep: @escaping LockSleep, read: @escaping @MainActor () async -> DeletionRead,
@@ -128,6 +130,7 @@ final class DeletionWatch {
     func start(since: Date, until: Date, readFirst: Bool) {
         loop?.cancel()
         goneSeen = false
+        stopped = false
         loop = Task { @MainActor [weak self] in
             if readFirst, await self?.readOnce() == .gone { return }
             var i = 0
@@ -155,11 +158,12 @@ final class DeletionWatch {
     @discardableResult
     func readOnce() async -> DeletionRead {
         if let inFlight { return await inFlight.value }
+        if stopped { return .unreachable }
         let task = Task { @MainActor [read] in await read() }
         inFlight = task
         let r = await task.value
         inFlight = nil
-        if r == .gone, !goneSeen {
+        if r == .gone, !goneSeen, !stopped {
             goneSeen = true
             loop?.cancel()
             let gone = onGone
@@ -170,8 +174,19 @@ final class DeletionWatch {
 
     /// No more reads (the vault is gone, or this phone was wiped).
     func stop() {
+        stopped = true
         loop?.cancel()
         loop = nil
+    }
+
+    /// Stops, and cancels and waits for the read on its way: a wipe erases only once no read can still sign with the app key
+    /// (the member API's signer would create it again on a phone left as freshly installed). The schedule is not waited
+    /// for: a wipe can run from its own read's `onGone`, and once stopped the schedule starts no read.
+    func stopAndWait() async {
+        let read = inFlight
+        stop()
+        read?.cancel()
+        _ = await read?.value
     }
 
     /// TEST ONLY: returns once the schedule has ended.

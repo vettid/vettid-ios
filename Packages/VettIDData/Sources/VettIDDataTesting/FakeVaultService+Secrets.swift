@@ -68,6 +68,9 @@ extension FakeVaultService {
     /// ``releaseStatusReads()``.
     public func holdStatusReads() { locked { statusGateValue = FakeHTTPServer.Gate() } }
 
+    /// [answer], held at the gate of ``holdStatusReads()`` when one is set (under the lock).
+    func held(_ answer: FakeHTTPServer.Answer) -> FakeHTTPServer.Answer { statusGateValue.map { .held($0, answer) } ?? answer }
+
     /// The answers of `GET /api/vault/status` held now.
     public var heldStatusReads: Int { locked { statusGateValue?.waiting ?? 0 } }
 
