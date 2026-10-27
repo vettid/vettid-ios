@@ -26,12 +26,13 @@ public enum ApprovalParser {
 
     static func instant(_ s: String?) -> Date? { OwnerCheckManager.instant(s) }
 
-    /// `connection.authenticate.pending`: `{request_id, connection_id, context?, exp}`.
+    /// `connection.authenticate.pending`: `{request_id, connection_id, context?, purpose?, exp}`; a `purpose` other than
+    /// `signin` or `approval` is read as absent (0.65.0).
     public static func authentication(_ o: JsonObject, at: Date) -> AuthenticationRequest? {
         guard let id = VaultJSON.string(o, "request_id"), let conn = VaultJSON.string(o, "connection_id") else { return nil }
         return AuthenticationRequest(
             requestID: id, connectionID: conn, context: VaultJSON.string(o, "context"), receivedAt: at,
-            exp: instant(VaultJSON.string(o, "exp"))
+            exp: instant(VaultJSON.string(o, "exp")), purpose: .of(VaultJSON.string(o, "purpose"))
         )
     }
 

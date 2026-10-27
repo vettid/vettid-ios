@@ -1580,6 +1580,39 @@
         }
       }
     },
+    "data_feed_authenticate_signin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in to %@?"
+          }
+        }
+      }
+    },
+    "data_feed_authenticate_signin_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only approve if you are signing in right now."
+          }
+        }
+      }
+    },
+    "data_feed_authenticate_approval": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ asks you to approve"
+          }
+        }
+      }
+    },
     "data_feed_message": {
       "extractionState": "manual",
       "localizations": {

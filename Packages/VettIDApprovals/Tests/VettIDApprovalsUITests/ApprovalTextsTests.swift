@@ -18,7 +18,7 @@ import VettIDApprovals
             .appendingPathComponent("Sources/VettIDApprovalsUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 142)
+        #expect(keys.count == 148)
         let missing = "\u{0}missing"
         for key in keys {
             let text = ApprovalsStrings.bundle.localizedString(forKey: key, value: missing, table: nil)
@@ -65,7 +65,7 @@ import VettIDApprovals
     @Test func aDecisionSaysWhatItDoes() {
         #expect(ApprovalTexts.body(.connection(Samples.incoming()), name: nil) == "Ada Lovelace used your invitation. Compare this code with Ada Lovelace: it must match the code on their phone.")
         #expect(ApprovalTexts.body(.connection(Samples.outgoing(sas: nil)), name: nil) == "Your vault is still setting up a secure session with theirs. The safety code appears here once it is done.")
-        #expect(ApprovalTexts.body(.connection(Samples.outgoing()), name: nil).hasPrefix("You accepted Grace Hopper's invitation link."))
+        #expect(ApprovalTexts.body(.connection(Samples.outgoing()), name: nil)?.hasPrefix("You accepted Grace Hopper's invitation link.") == true)
         #expect(ApprovalTexts.body(Samples.auth(), name: "Sam Lee") == "Sam Lee asks you to prove it is you. Approving signs their challenge with your credential key.")
         #expect(ApprovalTexts.body(Samples.grant(), name: nil) == "A connection asks to see items from your vault.")
         #expect(ApprovalTexts.body(Samples.share(), name: "Sam Lee") == "A share rule asks whether to share these items with Sam Lee.")
@@ -76,6 +76,30 @@ import VettIDApprovals
         #expect(ApprovalTexts.approveLabel(.connection(Samples.outgoing(sas: nil))) == nil && ApprovalTexts.approveLabel(Samples.device()) == nil)
         #expect(ApprovalTexts.approveLabel(Samples.critical()) == "Allow this one use" && ApprovalTexts.approveLabel(Samples.share()) == "Share the ticked items")
         #expect(ApprovalTexts.denyLabel(Samples.share()) == "Do not share" && ApprovalTexts.denyLabel(Samples.auth()) == "Deny")
+    }
+
+    /// VAULT-MESSAGING §10.4 "The screens per purpose" (0.65.0), word for word: a sign-in asks "Sign in to <name>?", warns
+    /// and offers "Approve" and "Not me"; an approval says who asks and offers "Approve" and "Deny"; without a purpose, as
+    /// before.
+    @Test func aChallengeSaysItsPurpose() {
+        #expect(ApprovalsStrings.authSigninTitle("Sam Lee") == "Sign in to Sam Lee?")
+        #expect(ApprovalsStrings.authSigninBody == "Only approve if you are signing in right now.")
+        #expect(ApprovalsStrings.authSigninDeny == "Not me" && ApprovalsStrings.authPurposeApprove == "Approve")
+        #expect(ApprovalsStrings.authApprovalTitle("Sam Lee") == "Sam Lee asks you to approve")
+        let sam = AccountNames.isolate("Sam Lee")
+        let signin = Samples.auth("s1", purpose: .signin), approval = Samples.auth("p1", purpose: .approval)
+        #expect(ApprovalTexts.title(signin, name: "Sam Lee") == "Sign in to \(sam)?" && ApprovalTexts.title(signin) == "Sign in to a connection?")
+        #expect(ApprovalTexts.body(signin, name: "Sam Lee") == "Only approve if you are signing in right now.")
+        #expect(ApprovalTexts.approveLabel(signin) == "Approve" && ApprovalTexts.denyLabel(signin) == "Not me")
+        #expect(ApprovalTexts.supporting(signin, name: "Sam Lee") == "Sam Lee · Sign-in")
+        #expect(ApprovalTexts.title(approval, name: "Sam Lee") == "\(sam) asks you to approve" && ApprovalTexts.title(approval) == "A connection asks you to approve")
+        #expect(ApprovalTexts.body(approval, name: "Sam Lee") == nil && ApprovalTexts.summary(approval) == "Sign-in")
+        #expect(ApprovalTexts.approveLabel(approval) == "Approve" && ApprovalTexts.denyLabel(approval) == "Deny")
+        // Without a purpose (absent or unknown, read as absent): as before 0.65.0, even with a name.
+        let none = Samples.auth()
+        #expect(ApprovalTexts.title(none, name: "Sam Lee") == "Authenticate to a connection" && ApprovalTexts.approveLabel(none) == "Authenticate")
+        #expect(ApprovalTexts.body(none, name: "Sam Lee") == "Sam Lee asks you to prove it is you. Approving signs their challenge with your credential key.")
+        #expect(ApprovalTexts.denyLabel(none) == "Deny")
     }
 
     @Test func failuresAndResults() {

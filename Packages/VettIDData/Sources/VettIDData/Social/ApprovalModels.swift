@@ -73,6 +73,24 @@ public struct ShareItem: Equatable, Sendable {
     }
 }
 
+/// Why a connection challenges the member (§10.4 "Purpose", 0.65.0): a sign-in to something it runs, an approval of what
+/// `context` names, or neither. A challenge without a purpose, or with a value this app does not know, is ``absent`` and
+/// is shown as before 0.65.0.
+public enum AuthenticationPurpose: Equatable, Sendable {
+    case absent
+    case signin
+    case approval
+
+    /// The wire value's purpose; any other value (or none) is ``absent``.
+    public static func of(_ value: String?) -> AuthenticationPurpose {
+        switch value {
+        case "signin": .signin
+        case "approval": .approval
+        default: .absent
+        }
+    }
+}
+
 /// `connection.authenticate.pending` (§10.4): sign a connection's challenge with the credential key.
 public struct AuthenticationRequest: Equatable, Sendable {
     public var requestID: String
@@ -80,6 +98,8 @@ public struct AuthenticationRequest: Equatable, Sendable {
     public var context: String?
     public var receivedAt: Date
     public var exp: Date?
+    /// Why it is asked (0.65.0); ``AuthenticationPurpose/absent`` when the challenge has none.
+    public var purpose: AuthenticationPurpose = .absent
 }
 
 /// `grant.pending`, or an entry of `grant.list`'s `pending` (§10.12): a connection asks to read items.

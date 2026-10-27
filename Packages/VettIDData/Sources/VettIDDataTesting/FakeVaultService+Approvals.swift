@@ -194,14 +194,16 @@ extension FakeVaultService {
         }
     }
 
-    /// The connection asks the member to prove presence (§10.4). Returns the request id.
+    /// The connection asks the member to prove presence (§10.4), with a `purpose` (0.65.0) when given. Returns the request id.
     @discardableResult
-    public func peerAsksAuthentication(_ connectionID: String, context: String = "Sign in") throws -> String {
+    public func peerAsksAuthentication(_ connectionID: String, context: String = "Sign in", purpose: String? = nil) throws -> String {
         try locked {
             let id = Ulid.new()
             activity.asks.challenges[id] = connectionID
             record("connection.authenticate.requested", connectionID: connectionID, ref: id, direction: "in")
-            try reply("connection.authenticate.pending", JsonBuilder().string("request_id", id).string("connection_id", connectionID).string("context", context).string("exp", Timestamps.formatMillis(Date().addingTimeInterval(600))).build())
+            var body = JsonBuilder().string("request_id", id).string("connection_id", connectionID).string("context", context)
+            if let purpose { body = body.string("purpose", purpose) }
+            try reply("connection.authenticate.pending", body.string("exp", Timestamps.formatMillis(Date().addingTimeInterval(600))).build())
             try addFeedItem("connection.authenticate.requested", connectionID: connectionID, ref: id)
             return id
         }

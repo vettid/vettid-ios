@@ -87,8 +87,19 @@ public extension FeedKinds {
             guard let body = item.body, !body.isEmpty else { return nil }
             return body.split(separator: "\n", omittingEmptySubsequences: false).first.map(String.init)
         case "device.signer_changed": return signerChangeText(item.ref)
+        case "connection.authenticate.requested" where authenticationPurpose(item, names) == .signin:
+            return DataStrings.feedAuthenticateSigninBody
         default: return eventLine(item) ?? itemName(item, names)
         }
+    }
+
+    /// A challenge's purpose (§10.4, 0.65.0), from its pending approval: the feed item does not carry it, so an item whose
+    /// approval is no longer pending reads as one without a purpose.
+    static func authenticationPurpose(_ item: FeedItem, _ names: FeedNames) -> AuthenticationPurpose {
+        guard case .authentication(let a)? = FeedAsks.approvalKey(item.kind, ref: item.ref).flatMap({ names.approvals[$0] }) else {
+            return .absent
+        }
+        return a.purpose
     }
 
     /// `device.signer_changed`'s `ref` (§11.7.1) as "From … to …" in the member's words; nil when it does not read.
@@ -116,7 +127,12 @@ public extension FeedKinds {
         case "connection.removed": return DataStrings.feedConnectionRemoved(who())
         case "connection.stale": return DataStrings.feedConnectionStale(who())
         case "connection.asks_paused": return DataStrings.feedAsksPaused(firstName(item, names))
-        case "connection.authenticate.requested": return DataStrings.feedAuthenticate(who())
+        case "connection.authenticate.requested":
+            switch authenticationPurpose(item, names) {
+            case .signin: return DataStrings.feedAuthenticateSignin(who())
+            case .approval: return DataStrings.feedAuthenticateApproval(who())
+            case .absent: return DataStrings.feedAuthenticate(who())
+            }
         case "message.received": return DataStrings.feedMessage(who())
         // §10.5.1: an outgoing photo that failed, an incoming one refused because the vault is full.
         case "message.attachment_failed": return DataStrings.feedPhotoFailed(who())

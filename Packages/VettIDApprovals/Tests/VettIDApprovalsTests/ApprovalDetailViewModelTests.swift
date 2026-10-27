@@ -108,6 +108,22 @@ import VettIDDataTesting
         #expect(fake.calls.last == "denyAuthentication:a2" && d.state.done)
     }
 
+    /// §10.4 (0.65.0): a sign-in's "Not me" and an approval's "Deny" are both `connection.authenticate.deny`; approving
+    /// either still needs the credential password.
+    @Test func aChallengeWithAPurposeIsDecidedAsBefore() async {
+        fake.listed = [Samples.auth("s1", purpose: .signin), Samples.auth("p1", purpose: .approval)]
+        let signin = await model("auth:s1")
+        #expect(signin.state.needs == .password && !signin.state.canApprove())
+        signin.deny()
+        await signin.settle()
+        #expect(fake.calls.last == "denyAuthentication:s1" && signin.state.done)
+        let approval = await model("auth:p1")
+        approval.setPassword("correct horse")
+        approval.approve()
+        await approval.settle()
+        #expect(fake.calls.last == "approveAuthentication:p1" && approval.state.done)
+    }
+
     /// §10.12: the named items that exist by default; a category entry once answered; uses and lifetime the member set.
     @Test func aGrantIsDecidedEntryByEntry() async {
         fake.listed = [Samples.grant()]

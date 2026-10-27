@@ -16,8 +16,10 @@ enum Samples {
         .outgoing(OutgoingRequest(connectionID: id, sas: sas, remote: true, name: "Grace Hopper", state: state, receivedAt: t0, exp: nil))
     }
 
-    static func auth(_ id: String = "a1", conn: String = "c1", at: Date = t0) -> PendingApproval {
-        .authentication(AuthenticationRequest(requestID: id, connectionID: conn, context: "Sign-in", receivedAt: at, exp: nil))
+    static func auth(_ id: String = "a1", conn: String = "c1", at: Date = t0, purpose: AuthenticationPurpose = .absent) -> PendingApproval {
+        .authentication(
+            AuthenticationRequest(requestID: id, connectionID: conn, context: "Sign-in", receivedAt: at, exp: nil, purpose: purpose)
+        )
     }
 
     static func entry(_ ref: String, kind: String = "item", available: Bool = true, name: String? = "Passport") -> GrantEntry {

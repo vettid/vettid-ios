@@ -47,9 +47,10 @@ struct Facts: View {
             case .authentication(let x):
                 FactLabel(ApprovalsStrings.from)
                 FactValue(name ?? ApprovalsStrings.aConnection)
+                // The challenger's claim (§10.4), in full whatever the purpose.
                 if let c = x.context {
                     FactLabel(ApprovalsStrings.context)
-                    FactValue(c)
+                    FactValue(c).accessibilityIdentifier("auth_context")
                 }
                 expires(x.exp)
             case .critical(let c): CriticalFacts(use: c, name: name)

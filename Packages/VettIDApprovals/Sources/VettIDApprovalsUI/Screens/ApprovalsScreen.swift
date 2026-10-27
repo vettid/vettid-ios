@@ -113,7 +113,7 @@ struct ApprovalRow: View {
     var body: some View {
         let who = ApprovalTexts.who(approval, name: name)
         VettIDListRow(
-            title: ApprovalTexts.title(approval),
+            title: ApprovalTexts.title(approval, name: name),
             supporting: ApprovalTexts.supporting(approval, name: name),
             meta: ApprovalTimes.short(approval.receivedAt),
             tileName: who ?? "?",
@@ -139,7 +139,7 @@ struct BatchRow: View {
         VStack(alignment: .leading, spacing: 0) {
             VettIDListRow(
                 title: ApprovalTexts.batchTitle(asks: asks.count, name: name),
-                supporting: Self.kinds(asks),
+                supporting: Self.kinds(asks, name: name),
                 meta: ApprovalTimes.short(receivedAt),
                 tileName: name ?? ApprovalsStrings.aConnection,
                 emphasized: true,
@@ -161,9 +161,9 @@ struct BatchRow: View {
     }
 
     /// The asks' kinds, each once, in order.
-    static func kinds(_ asks: [PendingApproval]) -> String {
+    static func kinds(_ asks: [PendingApproval], name: String? = nil) -> String {
         var seen = Set<String>()
-        return asks.map(ApprovalTexts.title).filter { seen.insert($0).inserted }.joined(separator: " · ")
+        return asks.map { ApprovalTexts.title($0, name: name) }.filter { seen.insert($0).inserted }.joined(separator: " · ")
     }
 }
 
