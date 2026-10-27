@@ -41,8 +41,11 @@ public final class SecureEnclaveAppKeyStore: AppKeyStore, @unchecked Sendable {
         return key(try keychain.create(label: nil, what: Self.what))
     }
 
+    /// Under the store's lock, so that a lookup never falls between ``regenerate()``'s delete and its create.
     public func lookup() -> ItemLookup<any AppSigningKey> {
-        keychain.lookup(nil).map { key($0) }
+        lock.lock()
+        defer { lock.unlock() }
+        return keychain.lookup(nil).map { key($0) }
     }
 
     public func deleteAll() throws {
