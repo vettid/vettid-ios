@@ -116,8 +116,6 @@ public struct RecoverContent: View {
             }
         }
         .accessibilityIdentifier("recover_could_not_tell")
-        // The step can replace the open step while the member looks: it is announced (vettid-android's live region).
-        .onAppear { AccessibilityNotification.Announcement(RecoveryStrings.recoverCouldNotTell).post() }
     }
 
     /// Where the recovery stands could not be read: only a retry, so that a registered recovery is never taken for none.
@@ -293,6 +291,10 @@ public struct RecoverRoute: View {
             if now == .background { Self.forget(model) }
             // (IOS-PLAN §4.9) The rule is read again when the app comes back (when a read is due).
             if now == .active { model?.checkEnded() }
+        }
+        // The ended step replacing the open step while the member looks is announced, once (vettid-android's live region).
+        .onChange(of: model?.state.step) { old, now in
+            if old == .open && now == .couldNotTell { AccessibilityNotification.Announcement(RecoveryStrings.recoverCouldNotTell).post() }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.protectedDataWillBecomeUnavailableNotification)) { _ in
             Self.forget(model)
