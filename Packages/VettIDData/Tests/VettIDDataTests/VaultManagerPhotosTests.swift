@@ -78,6 +78,9 @@ enum TestPhotos {
         try await m.enroll(pin: pin) { _ in }
         try await m.createCredential(password: "correct horse battery", backup: true, pin: pin) { _ in }
         try await m.finishSetup()
+        // The opening's reads done (the items are read last): none of them reads the conversation once it exists, which
+        // would put the vault's list over a message the test has just received.
+        #expect(await eventually(within: .seconds(30)) { m.items.load == .loaded })
         let r = try await c.acceptInvite(try service.peerInvite(first: "Morgan", last: "Lee", name: "Mo"))
         // Under a loaded full run the opening's reads (with this suite's short request timeout) take longer than the default.
         #expect(await eventually(within: .seconds(30)) { c.requests.first?.sas != nil })

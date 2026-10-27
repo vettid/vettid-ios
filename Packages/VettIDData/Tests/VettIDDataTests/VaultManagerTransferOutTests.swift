@@ -184,6 +184,8 @@ import VettIDDataTesting
         _ = try await m.transferApprove(transferID: offer.transferID, pin: pin, password: password, signer: nil)
         let keep: Int64 = 7 * 3_600_000
         #expect(m.record.value.transferKeepMs == keep)
+        // The approval's timer has asked for its wait: the check's comes after it, not before.
+        #expect(await eventually { !phone.keepPauses.lengths.isEmpty })
         // 6 hours later: kept; the timer runs for the hour left.
         phone.freezeClocks()
         phone.clockAhead = 6 * 3_600
@@ -222,6 +224,8 @@ import VettIDDataTesting
         defer { phone.close() }
         try await setUp()
         _ = try await approve()
+        // The approval's timer has asked for its wait: the check's comes after it, not before.
+        #expect(await eventually { !phone.keepPauses.lengths.isEmpty })
         phone.freezeClocks() // the 600 s left are measured against a clock that stands still
         phone.clockAhead = week - 600
         await m.checkKeptTransfer()
