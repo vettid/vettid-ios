@@ -251,12 +251,16 @@ public extension EnrolledAttestation {
 }
 
 /// The app key as the member API client signs with it: the key the store holds at each request, so that a new key for a
-/// new vault (``AppKeyStore/regenerate()``) is used from the next request on.
+/// new vault (``AppKeyStore/regenerate()``) is used from the next request on. It never makes one: a setup, a recovery's
+/// claim and a device make the key before their first request, and a request still on its way after a wipe must fail
+/// rather than leave a new key on a phone left as freshly installed (``KeysError/missing(_:)``).
 struct StoredAppKeySigner: AppKeySigner {
     let store: any AppKeyStore
 
-    func spki() throws -> [UInt8] { try store.getOrCreate().spki() }
-    func sign(_ message: [UInt8]) throws -> [UInt8] { try store.getOrCreate().sign(message) }
+    func spki() throws -> [UInt8] { try key().spki() }
+    func sign(_ message: [UInt8]) throws -> [UInt8] { try key().sign(message) }
+
+    private func key() throws -> any AppSigningKey { try store.lookup().get("app key") }
 }
 
 /// The device state in the encrypted file store (secret: it holds session keys).
