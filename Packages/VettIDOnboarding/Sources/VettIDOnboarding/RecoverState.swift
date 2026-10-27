@@ -96,6 +96,14 @@ public struct RecoverState: Equatable, Sendable, CustomStringConvertible, Custom
     /// The account site's "Delete my vault and start over" page (MEMBER-API 2.1.0).
     public static let startOverPath = "/account/vault/deletion/"
 
+    /// The characters of one group of the typed code, and the groups of all of it (``RecoveryCodes``), for the screens.
+    public static let codeGroup = RecoveryCodes.group
+    public static let codeGroups = RecoveryCodes.typedGroups
+
+    /// Whether the typed field keeps [character] (a digit or letter of the code, also after I, L and O are read as 1 and 0); a
+    /// separator or a refused character is not kept.
+    public static func keepsTyped(_ character: Character) -> Bool { !RecoveryCodes.typedInput(String(character)).text.isEmpty }
+
     public var step: RecoverStep = .loading
     /// The account the vault belongs to, masked (`email_hint` from the claim, §11.11.7).
     public var emailHint = ""
@@ -171,6 +179,9 @@ public protocol RecoverActions: AnyObject, Sendable {
     /// (IOS-PLAN 0.1.38 §4.9) Reads the rule's status again when it is due (a return to the foreground, "Check again", after the
     /// open's answer): ``RecoverState/couldNotTell`` and, for a new code, the step ``RecoverStep/couldNotTell`` follow.
     func checkEnded()
+    /// (§4.9) "Use a new recovery code" beside the PIN: the rule is read from what the phone keeps (the open pane may know more
+    /// than this flow), and the code steps follow when it lets a new recovery use this phone. Mirrors vettid-android `useNewCode`.
+    func useNewCode()
     /// Reads where the recovery stands again, after ``RecoverStep/stageFailed``.
     func retryStage()
     /// Back within the flow; false when the member leaves it (the onboarding flow takes over).
@@ -182,6 +193,8 @@ public protocol RecoverActions: AnyObject, Sendable {
     func setTyped(_ v: String)
     /// **Continue** on the typed entry.
     func submitTyped()
+    /// From a code step whose refusal is ``RecoverGuidance``: to the open step.
+    func showOpen()
     /// "Start over" on the open step: asks first (``RecoverState/confirmStartOver``).
     func askStartOver()
     func dismissStartOver()
@@ -197,12 +210,14 @@ public final class NoRecoverActions: RecoverActions {
 
     public func scan() {}
     public func checkEnded() {}
+    public func useNewCode() {}
     public func retryStage() {}
     public func back() -> Bool { false }
     public func scanned(_ text: String) {}
     public func type() {}
     public func setTyped(_ v: String) {}
     public func submitTyped() {}
+    public func showOpen() {}
     public func askStartOver() {}
     public func dismissStartOver() {}
     public func confirmStartOver() {}

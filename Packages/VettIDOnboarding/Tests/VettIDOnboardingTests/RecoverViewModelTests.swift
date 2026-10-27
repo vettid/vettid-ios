@@ -85,10 +85,12 @@ import VettIDDataTesting
         let vm = await model()
         vm.scan()
         for i in 1...4 {
+            vm.scan() // the member scans again: the same QR is read again
             vm.scanned(qr)
             await vm.settle()
             #expect(vm.state.step == .scan && vm.state.refusal == .badCode && vm.state.wrongCodes == i)
         }
+        vm.scan()
         vm.scanned(qr)
         await vm.settle()
         #expect(vm.state.refusal == .voided)
@@ -109,6 +111,7 @@ import VettIDDataTesting
         ]
         for (c, r) in table {
             vault.registrations.append(.refused(code: c))
+            vm.scan()
             vm.scanned(qr)
             await vm.settle()
             #expect(vm.state.refusal == r && vm.state.step == .scan, "\(c)")
@@ -205,6 +208,88 @@ import VettIDDataTesting
             s.errorCode = code
             #expect(s.guidance == g)
         }
+    }
+
+    /// Guidance on a code step leads to the open step; any other refusal does not.
+    @Test func guidanceOnACodeStepLeadsToTheOpen() async throws {
+        let plain = await model()
+        plain.showOpen()
+        #expect(plain.state.step == .intro)
+        vault.fail["registerRecovery"] = VaultFailure(.other, code: VaultManager.codeRecoveryOpenSent)
+        let vm = await model()
+        vm.scan()
+        vm.scanned(qr)
+        await vm.settle()
+        #expect(vm.state.guidance == .finishWithPin && vm.state.step == .scan)
+        vm.showOpen()
+        #expect(vm.state.step == .open && vm.state.guidance == .finishWithPin && vm.state.refusal == nil)
+    }
+
+    /// The camera reads a refused QR again at once: it is not sent again until the member acts.
+    @Test func aRefusedQrIsNotSentAgainUntilTheMemberActs() async throws {
+        let vm = await model()
+        vm.scan()
+        vault.registrations = Array(repeating: .refused(code: "bad_code"), count: 3)
+        vm.scanned(qr)
+        await vm.settle()
+        #expect(vm.state.step == .scan && vm.state.wrongCodes == 1 && count("registerRecovery") == 1)
+        vm.scanned(qr)
+        vm.scanned(qr)
+        await vm.settle()
+        #expect(count("registerRecovery") == 1 && vm.state.wrongCodes == 1, "the same text is ignored")
+        vm.scanned(qr.replacingOccurrences(of: code, with: "SK01TG8WK2FYJ1Y5MEHJ5R5J7QZKWHX1"))
+        await vm.settle()
+        #expect(count("registerRecovery") == 2, "another QR is read")
+        // A member's action (type, back, scan again) lets the same one through again.
+        vm.type()
+        vm.scan()
+        vm.scanned(qr)
+        await vm.settle()
+        #expect(count("registerRecovery") == 3)
+        // A failure counts as well.
+        vm.scan()
+        vault.fail["registerRecovery"] = VaultFailure(.network)
+        vm.scanned(qr)
+        await vm.settle()
+        vm.scanned(qr)
+        await vm.settle()
+        #expect(count("registerRecovery") == 4 && vm.state.error == .network)
+    }
+
+    /// The typed code is dropped whatever the step and whatever runs.
+    @Test func theTypedCodeIsForgottenWhateverTheStep() async throws {
+        // "Scan instead", then the app goes to the background.
+        let vm = await typing()
+        vm.setTyped("7ZK3M9QX")
+        vm.scan()
+        #expect(vm.state.step == .scan && vm.state.typed == "7ZK3M9QX")
+        vm.forgetTyped()
+        #expect(vm.state.typed.isEmpty && vm.state.typedProblem == nil && vm.state.typedGroup == 0)
+        // Back to the intro and again.
+        let other = await typing()
+        other.setTyped("7ZK3U")
+        #expect(other.state.typedProblem == .letterU)
+        #expect(other.back())
+        other.forgetTyped()
+        #expect(other.state.typed.isEmpty && other.state.typedProblem == nil && other.state.typedGroup == 0)
+        // The app goes to the background while the code is being registered; the refusal that follows brings nothing back.
+        let busy = await typing()
+        busy.setTyped(typed)
+        vault.registrations = [.refused(code: "bad_code")]
+        busy.submitTyped()
+        #expect(busy.state.busy && busy.state.step == .registering)
+        busy.forgetTyped()
+        await busy.settle()
+        #expect(busy.state.refusal == .badCode && busy.state.typed.isEmpty)
+        // Guidance leads to the open step, and the code does not go with it.
+        vault.fail["registerTypedRecovery"] = VaultFailure(.other, code: VaultManager.codeRecoveryOpenSent)
+        let guided = await typing()
+        guided.setTyped(typed)
+        guided.submitTyped()
+        await guided.settle()
+        #expect(guided.state.guidance == .finishWithPin && guided.state.typed == typed)
+        guided.showOpen()
+        #expect(guided.state.step == .open && guided.state.typed.isEmpty)
     }
 
     @Test func startOverIsOfferedOnlyWhereARegistrationIsHeld() async throws {

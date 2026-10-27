@@ -43,6 +43,9 @@ public final class RecoverViewModel: RecoverActions {
     @ObservationIgnored private var countedFor: String?
     /// The step the code steps return to: the intro, or for a phone that could not tell the text of the rule or the open step.
     @ObservationIgnored private var codeHome = RecoverStep.intro
+    /// The last QR text that was refused or failed: the camera reads it again at once, and it is not sent again until the member
+    /// acts (types, goes back, or scans again from the intro).
+    @ObservationIgnored private var lastScanned: String?
 
     public init(
         move: any MoveRepository,
@@ -113,6 +116,17 @@ public final class RecoverViewModel: RecoverActions {
         }
     }
 
+    public func useNewCode() {
+        guard !state.busy, state.step == .open else { return }
+        work.launch { [weak self, move] in
+            // A read that fails keeps what this flow knows.
+            let rule = try? await move.couldNotTellStage()
+            guard let self, !state.busy, state.step == .open else { return }
+            if let rule { state.couldNotTell = rule }
+            scan()
+        }
+    }
+
     public func retryStage() {
         guard state.step == .stageFailed else { return }
         state.step = .loading
@@ -127,7 +141,7 @@ public final class RecoverViewModel: RecoverActions {
     /// phone that could not tell, also from the rule's text and from the open step once a new code registers the new identity
     /// again (IOS-PLAN 0.1.38 §4.9).
     private var codeEntry: Bool {
-        [.intro, .couldNotTell, .scan, .type].contains(state.step) || (state.step == .open && state.couldNotTell == .unlockOrNewCode)
+        [.intro, .couldNotTell, .scan, .type].contains(state.step) || (state.step == .open && state.newCodeAllowed)
     }
 
     /// The step the code steps go back to, when the code steps are entered from it.
@@ -138,18 +152,22 @@ public final class RecoverViewModel: RecoverActions {
     public func scan() {
         if state.busy || !codeEntry { return }
         noteCodeHome()
+        lastScanned = nil
         state.step = .scan
         state.refusal = nil
         state.error = nil
+        state.errorCode = nil
         state.typedProblem = nil
     }
 
     public func type() {
         if state.busy || !codeEntry { return }
         noteCodeHome()
+        lastScanned = nil
         state.step = .type
         state.refusal = nil
         state.error = nil
+        state.errorCode = nil
         state.typedProblem = nil
     }
 
@@ -157,10 +175,13 @@ public final class RecoverViewModel: RecoverActions {
     @discardableResult
     public func back() -> Bool {
         if state.busy { return true }
+        lastScanned = nil
         switch state.step {
         case .scan, .type:
             state.step = codeHome
             state.refusal = nil
+            state.error = nil
+            state.errorCode = nil
             state.typedProblem = nil
             return true
         default:
@@ -171,7 +192,8 @@ public final class RecoverViewModel: RecoverActions {
     /// A QR the camera read: only a recovery QR of this app's environment is claimed (its `api` compared exactly with the
     /// app's own member API origin, never contacted, §11.11.2).
     public func scanned(_ text: String) {
-        guard !state.busy, state.step == .scan else { return }
+        guard !state.busy, state.step == .scan, text != lastScanned else { return }
+        lastScanned = text
         guard let code = RecoveryCode.parseScanned(text) else {
             state.refusal = .notACode
             return
@@ -186,6 +208,14 @@ public final class RecoverViewModel: RecoverActions {
             return
         }
         register(countKey: code.recoveryID) { [move] in try await move.registerRecovery(code) }
+    }
+
+    /// The typed code is dropped, whatever the step and whatever runs: the app left the foreground, the iPhone locked, or the
+    /// screen goes (IOS-PLAN §6.3).
+    public func forgetTyped() {
+        state.typed = ""
+        state.typedProblem = nil
+        state.typedGroup = 0
     }
 
     /// The typed field (§11.11.10 step 1): separators dropped, upper case, I and L read as 1 and O as 0; a `U` or any other
@@ -224,6 +254,7 @@ public final class RecoverViewModel: RecoverActions {
         state.typedGroup = 0
         state.refusal = nil
         state.error = nil
+        state.errorCode = nil
     }
 
     /// The claim and the register, however the code was read. Wrong codes are counted per recovery: the one the answer names
@@ -235,6 +266,7 @@ public final class RecoverViewModel: RecoverActions {
         state.busy = true
         state.refusal = nil
         state.error = nil
+        state.errorCode = nil
         state.retrySeconds = 0
         work.launch { [weak self] in
             do {
@@ -325,6 +357,7 @@ public final class RecoverViewModel: RecoverActions {
         state.step = from
         state.busy = false
         state.refusal = refusal
+        state.errorCode = nil
         state.wrongCodes = wrong
         if ended { state.typed = "" }
         state.typedProblem = nil
@@ -333,6 +366,16 @@ public final class RecoverViewModel: RecoverActions {
     /// 0.16.0: nothing more to do with this vault on this phone; forget the registration (quietly).
     private func noBackup() {
         work.launch { [move] in try? await move.abandonRecovery() }
+    }
+
+    /// From a code step whose refusal is guidance (``RecoverState/guidance``): to the open step, where the recovery goes on
+    /// ("finish with your PIN", another open) and where "Start over" is; the guidance stays for the open step to say. A refusal
+    /// that is not guidance stays where it is.
+    public func showOpen() {
+        guard !state.busy, codeEntry, state.guidance != nil else { return }
+        state.step = .open
+        state.refusal = nil
+        forgetTyped()
     }
 
     // MARK: - Leaving a registered recovery

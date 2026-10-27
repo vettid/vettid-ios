@@ -44,11 +44,18 @@ public struct OnboardingRoutes: Sendable {
 }
 
 public extension OnboardingRoutes {
-    /// The transfer from the old phone and the move's last screen wired over [move] and [vault]; the recovery is still
-    /// ``pending`` (its row of IOS-PLAN §8 brings it). Mirrors the defaults of vettid-android `OnboardingContent`.
-    static func moves(move: any MoveRepository, vault: any VaultRepository) -> OnboardingRoutes {
+    /// The recovery, the transfer from the old phone and the move's last screen wired over [move], [vault] and [account]. Mirrors
+    /// the defaults of vettid-android `OnboardingContent`.
+    static func moves(move: any MoveRepository, vault: any VaultRepository, account: any AccountRepository) -> OnboardingRoutes {
         OnboardingRoutes(
-            recover: pending.recover,
+            recover: { onLeave, onNewVault, onOpenAccountSite in
+                AnyView(
+                    RecoverRoute(
+                        move: move, vault: vault, account: account, onLeave: onLeave, onNewVault: onNewVault,
+                        onOpenAccountSite: onOpenAccountSite
+                    )
+                )
+            },
             transferIn: { onLeave in AnyView(TransferInRoute(move: move, vault: vault, onLeave: onLeave)) },
             movedIn: { state, finish in AnyView(MovedInScreen(state: state, vault: vault, finish: finish)) }
         )
