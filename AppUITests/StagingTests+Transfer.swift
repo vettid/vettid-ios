@@ -34,17 +34,26 @@ extension StagingTests {
         return found
     }
 
-    /// The transfer code as the link's own element shows it (`transfer_link`), nil if it cannot be read.
+    /// The transfer code as the link's own element shows it (`transfer_link`: the box on the capture-protected layer, the
+    /// code's text inside it), nil if it cannot be read. The vault hands out the code itself (base64url, as the new phone
+    /// takes it pasted), or a link to it.
     @MainActor
     private func transferLink(_ app: XCUIApplication) -> String? {
         guard let root = try? app.snapshot() else { return nil }
         guard let box = ordered(under: root).first(where: { $0.identifier == "transfer_link" }) else { return nil }
         for e in [box] + ordered(under: box) {
-            for text in [e.label, (e.value as? String) ?? ""] where text.hasPrefix("https://") {
-                return text.trimmingCharacters(in: .whitespacesAndNewlines)
+            for text in [e.label, (e.value as? String) ?? ""] {
+                let code = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if Self.isTransferCode(code) { return code }
             }
         }
         return nil
+    }
+
+    /// A transfer code as shown: a link, or the code itself (base64url, longer than any other text in the box).
+    static func isTransferCode(_ text: String) -> Bool {
+        if text.hasPrefix("https://") { return true }
+        return text.count >= 64 && text.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || "-_=.".contains($0)) }
     }
 
     /// The safety code on screen (within 30 s), reported; nil when none shows.
@@ -245,7 +254,11 @@ extension StagingTests {
     /// The old phone's steps; the state to report.
     @MainActor
     private func moveOut(_ app: XCUIApplication, _ inputs: TransferInputs) -> String {
-        guard waitForAny(app, ["transfer_intro"], timeout: 30) != nil else { return "none" }
+        guard waitForAny(app, ["transfer_intro"], timeout: 30) != nil else {
+            // The identifiers on screen instead (names only: no label, so no code or link, is printed).
+            Self.say("TRANSFER_SCREEN_IDS: \(shown(app).keys.sorted().joined(separator: " "))")
+            return "none"
+        }
         tapPrimary(app)
         guard transferStep(app, ["transfer_showing"], timeout: Self.network) == "transfer_showing" else { return "error" }
         var link: String?
@@ -255,6 +268,13 @@ extension StagingTests {
         }
         // The code is handed to the new phone: this line is what the script leaves in clear.
         Self.say("TRANSFER_LINK: \(link ?? "none")")
+        if link == nil, let root = try? app.snapshot() {
+            // What the screen holds instead: each element's type, identifier, and its label's first 8 characters and
+            // length (never more of a label, so no code is printed).
+            for e in [root] + ordered(under: root) where !e.identifier.isEmpty || !e.label.isEmpty {
+                Self.say("TRANSFER_ELEMENT: \(e.elementType.rawValue) id=\(e.identifier) label=\(e.label.prefix(8))…(\(e.label.count))")
+            }
+        }
         guard link != nil else { return "no_link" }
 
         switch transferStep(app, ["transfer_compare", "transfer_expired"], timeout: inputs.limit) {

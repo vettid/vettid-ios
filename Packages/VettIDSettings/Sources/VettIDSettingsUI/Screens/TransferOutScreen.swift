@@ -56,6 +56,8 @@ public struct TransferOutContent: View {
     }
 
     public var body: some View {
+        // No identifier of its own: on `screen` it would land on the step's element and replace the step's identifier (UI
+        // tests find each step by its own).
         screen
             .confirmDialog(
                 isPresented: Binding(get: { state.confirmReject }, set: { if !$0 { actions.askReject(false) } }),
@@ -91,7 +93,6 @@ public struct TransferOutContent: View {
             .onChange(of: state.confirmApprove) { was, now in
                 if was, !now, !state.busy, state.step == .approve { actions.setPin("") }
             }
-            .accessibilityIdentifier("transfer_out")
     }
 
     @ViewBuilder private var screen: some View {
@@ -129,6 +130,7 @@ public struct TransferOutContent: View {
                 TransferError(state: state)
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("transfer_intro")
     }
 
@@ -145,6 +147,7 @@ public struct TransferOutContent: View {
                 TransferError(state: state)
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("transfer_compare")
     }
 
@@ -165,6 +168,7 @@ public struct TransferOutContent: View {
                 TransferError(state: state)
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("transfer_signer")
     }
 
@@ -200,6 +204,7 @@ public struct TransferOutContent: View {
                 if state.error != .badPin, state.error != .badPassword { TransferError(state: state) }
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("transfer_approve")
     }
 
@@ -213,6 +218,7 @@ public struct TransferOutContent: View {
         ) {
             if state.keptKeys { SmallNote(state.stagingNote) }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("transfer_moved")
     }
 
@@ -247,6 +253,7 @@ public struct TransferOutContent: View {
                 }
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("transfer_showing")
     }
 

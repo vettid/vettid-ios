@@ -59,6 +59,7 @@ public struct FinishMoveContent: View {
         .padding(Spacing.gutter)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(colors.background)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("finish_move")
         .onDisappear { pin.clear() }
         .onChange(of: pin.count) { before, now in

@@ -94,6 +94,7 @@ public struct TransferInContent: View {
                 MoveFailure(kind: state.error, timeScale: timeScale)
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("transfer_in")
     }
 
@@ -108,6 +109,7 @@ public struct TransferInContent: View {
                 MoveFailure(kind: state.error, timeScale: timeScale)
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("transfer_in_scan")
     }
 
@@ -132,6 +134,7 @@ public struct TransferInContent: View {
                 MoveFailure(kind: state.error, timeScale: timeScale)
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("transfer_in_paste")
     }
 
@@ -145,6 +148,7 @@ public struct TransferInContent: View {
                 WaitingRow(text: MoveStrings.transferInWaiting(formatWait(state.secondsLeft)), identifier: "waiting_old_phone")
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("transfer_in_compare")
     }
 }
