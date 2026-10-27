@@ -369,6 +369,8 @@ public final class VaultDevice: @unchecked Sendable {
     /// terminal relay error ends the collection (``collectionEnded``); start it again to go on.
     public func start() {
         let begin: Bool = mem.withLock {
+            // A quieted device collects nothing again (``quiet()``): its answers could not be sent.
+            if quieted { return false }
             stopped = false
             if collector != nil, collectEnded == nil { return false }
             collectEnded = nil

@@ -108,8 +108,11 @@ import VettIDVault
         service.unlinkThisPhone(reason: VaultManager.reasonVaultDeleted)
         #expect(await eventually { m.phase == .deleting })
         let seen = service.requestsSeen.count
+        // The read ends at once, well within one request timeout (5 s): it waits for no re-send, where it would otherwise
+        // end only after both.
+        let started = ContinuousClock.now
         #expect(await (try? read.value) == nil, "the read ends without an answer")
-        // A re-send would go out a request timeout after the last copy.
+        #expect(ContinuousClock.now - started < .seconds(3), "the read waited for re-sends")
         try await Task.sleep(for: .seconds(2 * TestVaultPhone.shortRequestTimeout))
         #expect(service.requestsSeen.count == seen, "sent after the event: \(service.requestsSeen.dropFirst(seen))")
     }
