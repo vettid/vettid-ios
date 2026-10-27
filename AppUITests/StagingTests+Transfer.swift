@@ -14,6 +14,8 @@ extension StagingTests {
     /// The seconds a transfer step waits for the other phone (`VETTID_STAGING_TRANSFER_TIMEOUT`, 300 without it, which is
     /// the code's own window).
     static func transferWait() throws -> TimeInterval { try seconds("VETTID_STAGING_TRANSFER_TIMEOUT", fallback: 300) }
+    /// The app's window for the whole pairing, from the code shown to the approval (the vault manager's own, 11 minutes).
+    static let pairingWindow: TimeInterval = 660
 
     /// The `TRANSFER_STATE:` line: the state alone.
     static func report(transferState state: String) { print("TRANSFER_STATE: \(state)") }
@@ -154,13 +156,16 @@ extension StagingTests {
     @MainActor
     private func awaitApproval(_ app: XCUIApplication, _ inputs: TransferInputs) -> String {
         let ends = ["finish_move", "moved", "transfer_rejected", "transfer_timed_out", "transfer_not_answered"]
-        switch transferStep(app, ends, timeout: inputs.limit) {
+        // Longer than the old phone can still approve (its decision, signer and approval waits, and the app's own pairing
+        // window), so that this phone never cancels a handshake the vault may complete.
+        let wait = max(inputs.limit, Self.pairingWindow) + Self.network * 4
+        switch transferStep(app, ends, timeout: wait) {
         case "finish_move": return finishMove(app, inputs)
         case "moved": return afterMove(app, tapGo: true, inputs)
         case "transfer_rejected": return "rejected"
         case "transfer_timed_out": return "timed_out"
         case "transfer_not_answered": return "not_answered"
-        case nil: return abandoned(app, "none")
+        case nil: return "none"
         default: return abandoned(app, "error")
         }
     }
@@ -211,7 +216,8 @@ extension StagingTests {
     /// approval. Reported on a `TRANSFER_STATE:` line: `moved` (the approval went through; `TRANSFER_AFTER:` then says
     /// what this phone shows: `kept` when the moved screen says the keys stay until the new phone has finished (release R:
     /// the test taps nothing more and never locks, the vault is the new phone's to finish), `welcome` or `welcome_notice`
-    /// when the app erased itself, `none`), `rejected`, `expired`, `no_decision`, `no_link`, `no_phone`, `no_safety_code`, `approve_failed`, `approve_unknown` (after the tap on "Move"), `error`, `none`. After any
+    /// when the app erased itself, `none`), `rejected`, `expired`, `not_compared` (with `--auto-match`, another screen than the comparison), `no_decision`, `no_link`, `no_phone`, `no_safety_code`, `approve_failed`,
+    /// `approve_not_confirmed` (no "Move" to confirm), `approve_unknown` (after the tap on "Move"), `error`, `none`. After any
     /// other state the vault is locked only when a screen from before the approval shows and "Move" was never confirmed: a
     /// stuck confirmation, an approval still running or one of unknown outcome leaves the vault unlocked (a lock is never
     /// sent after a successful or possible approval).
@@ -269,10 +275,10 @@ extension StagingTests {
         // The code is handed to the new phone: this line is what the script leaves in clear.
         Self.say("TRANSFER_LINK: \(link ?? "none")")
         if link == nil, let root = try? app.snapshot() {
-            // What the screen holds instead: each element's type, identifier, and its label's first 8 characters and
-            // length (never more of a label, so no code is printed).
+            // What the screen holds instead: each element's type, identifier and label length (never its text, which may
+            // be the code).
             for e in [root] + ordered(under: root) where !e.identifier.isEmpty || !e.label.isEmpty {
-                Self.say("TRANSFER_ELEMENT: \(e.elementType.rawValue) id=\(e.identifier) label=\(e.label.prefix(8))…(\(e.label.count))")
+                Self.say("TRANSFER_ELEMENT: \(e.elementType.rawValue) id=\(e.identifier) label=(\(e.label.count))")
             }
         }
         guard link != nil else { return "no_link" }
@@ -292,6 +298,8 @@ extension StagingTests {
     private func decideOut(_ app: XCUIApplication, _ inputs: TransferInputs) -> String {
         if inputs.autoMatch {
             Self.say("TRANSFER_SAS_UNCHECKED")
+            // Only on the comparison: an expired code's button would start a new transfer.
+            guard shown(app)["transfer_compare"] != nil else { return "not_compared" }
             tapPrimary(app)
         } else {
             Self.say("TRANSFER_OPERATOR: compare the safety codes on both phones and tap on this iPhone")
@@ -306,14 +314,31 @@ extension StagingTests {
         }
     }
 
-    /// Taps the confirmation alert's button, by its identifier or else by its [label], and waits for the alert to close.
+    /// Taps the confirmation alert's button, by its identifier or else by its [label], and waits for the alert to close:
+    /// nil when there was no button to tap, false when the alert stayed open after the tap.
     @MainActor
-    private func confirmAlert(_ app: XCUIApplication, label: String) -> Bool {
+    private func confirmAlert(_ app: XCUIApplication, label: String) -> Bool? {
         let byId = anyElement(app, "confirm_button")
         let button = byId.waitForExistence(timeout: 10) ? byId : app.alerts.buttons[label]
-        guard button.waitForExistence(timeout: 10) else { return false }
+        guard button.waitForExistence(timeout: 10) else { return nil }
         button.tap()
         return waitUntil(timeout: 10) { !app.alerts.firstMatch.exists }
+    }
+
+    /// Asks to move and confirms it; nil once "Move" was confirmed, else the state. Return on the password already asks,
+    /// as it does for a person; the button is tapped only otherwise.
+    @MainActor
+    private func submitApproval(_ app: XCUIApplication) -> String? {
+        let alert = app.alerts.firstMatch
+        let button = app.buttons["form_primary"]
+        _ = waitUntil(timeout: 30) { alert.exists || (button.exists && button.isEnabled && button.isHittable) }
+        if !alert.exists { tapPrimary(app) }
+        // From the tap on "Move" the approval may be on its way: any outcome but the end screens is unknown.
+        switch confirmAlert(app, label: "Move") {
+        case nil: return "approve_not_confirmed"
+        case false?: return "approve_unknown"
+        case true?: return nil
+        }
     }
 
     /// From the screen after the match ([step]): the change of signer, then the PIN and the password, and the approval.
@@ -332,10 +357,7 @@ extension StagingTests {
         tap(field)
         field.typeText(inputs.password ?? "")
         dismissKeyboard(app)
-        // Return on the password already asks to move, as it does for a person; the button is tapped only otherwise.
-        if !app.alerts.firstMatch.waitForExistence(timeout: 2) { tapPrimary(app) }
-        // From the tap on "Move" the approval may be on its way: any outcome but the end screens is unknown.
-        guard confirmAlert(app, label: "Move") else { return "approve_unknown" }
+        if let state = submitApproval(app) { return state }
         failOnSavePassword(app)
 
         // A wiped phone erases itself to the welcome screen and never shows the moved screen.
@@ -390,7 +412,9 @@ extension StagingTests {
             let before = ["transfer_intro", "transfer_showing", "transfer_compare", "transfer_signer", "transfer_rejected",
                           "transfer_expired"].contains { screen[$0] != nil }
             let approveIdle = screen["transfer_approve"] != nil && reject.exists && reject.isEnabled
-            if mayLock && (before || approveIdle) { return .quiet }
+            // The transfer never started: the app's own screens, none of the transfer's.
+            let notStarted = screen["app_shell"] != nil && !screen.keys.contains { $0.hasPrefix("transfer_") }
+            if mayLock && (before || approveIdle || notStarted) { return .quiet }
             if attempt == 0 { Thread.sleep(forTimeInterval: 2) }
         }
         fail(app, "The screen is not one before the approval: the vault was not locked.")

@@ -361,7 +361,7 @@ xcodebuild test-without-building \
     if (/MESSAGE_STATE: (none|sent|delivered|read)\s*$/) { $_ = "MESSAGE_STATE: $1\n"; next }
     if (/MESSAGE_RECEIVED: (yes|no)\s*$/) { $_ = "MESSAGE_RECEIVED: $1\n"; next }
     if (/INVITE_LINK: (https:\/\/[A-Za-z0-9._~:\/?#\[\]@!\$\&()*+,;=%-]+|none)\s*$/) { $_ = "INVITE_LINK: $1\n"; next }
-    if (/TRANSFER_LINK: (https:\/\/[A-Za-z0-9._~:\/?#\[\]@!\$\&()*+,;=%-]+|none)\s*$/) {
+    if (/TRANSFER_LINK: (https:\/\/[A-Za-z0-9._~:\/?#\[\]@!\$\&()*+,;=%-]+|[A-Za-z0-9_=.-]{64,}|none)\s*$/) {
       # Printed alone; the link is remembered, so that any later line that shows it is redacted.
       my $l = $1; $_ = "TRANSFER_LINK: $l\n";
       if ($l ne "none") { push @s, $l; @s = sort { length($b) <=> length($a) } @s }

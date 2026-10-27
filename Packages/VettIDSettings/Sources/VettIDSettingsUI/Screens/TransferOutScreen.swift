@@ -107,12 +107,14 @@ public struct TransferOutContent: View {
                 title: TransferStrings.transferExpiredTitle, message: TransferStrings.transferExpiredBody,
                 primaryLabel: TransferStrings.transferAgain, busy: state.busy, onPrimary: actions.create, onBack: leave
             ) { TransferError(state: state) }
+                .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("transfer_expired")
         case .rejected:
             FormScaffold(
                 title: TransferStrings.transferRejectedTitle, message: TransferStrings.transferRejectedBody,
                 primaryLabel: SettingsStrings.done, onPrimary: leave, onBack: leave
             ) { EmptyView() }
+                .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("transfer_rejected")
         case .moved: moved
         }
