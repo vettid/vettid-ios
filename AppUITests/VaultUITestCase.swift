@@ -54,8 +54,9 @@ class VaultUITestCase: XCTestCase {
             if alert.buttons["Not Now"].exists { alert.buttons["Not Now"].tap() }
             return true
         }
+        // The first match: an iOS permission alert can expose the same button twice ("Allow" found more than once).
         for label in ["Allow", "OK", "Allow While Using App"] where alert.buttons[label].exists {
-            alert.buttons[label].tap()
+            alert.buttons[label].firstMatch.tap()
             return true
         }
         return false
