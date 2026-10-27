@@ -6,9 +6,13 @@ import VettIDData
 /// (`ApprovalsScreen.kt`'s `titleOf`, `whoOf`, `summaryOf`, `bodyOf`, `approveLabel`). [name] is the requesting
 /// connection's "First Last" when there is one. Kept free of SwiftUI so that the tests read them on any platform.
 enum ApprovalTexts {
-    /// The kind of request, as a row title.
-    static func title(_ a: PendingApproval) -> String {
+    /// The kind of request, as a row title; a challenge with a purpose (§10.4, 0.65.0) names [name] in it.
+    static func title(_ a: PendingApproval, name: String? = nil) -> String {
         switch a {
+        case .authentication(let x) where x.purpose == .signin:
+            ApprovalsStrings.authSigninTitle(name.map(AccountNames.isolate) ?? ApprovalsStrings.aConnectionInline)
+        case .authentication(let x) where x.purpose == .approval:
+            ApprovalsStrings.authApprovalTitle(name.map(AccountNames.isolate) ?? ApprovalsStrings.aConnection)
         case .connection(.incoming(let r)): r.remote ? ApprovalsStrings.typeConnectionRemote : ApprovalsStrings.typeConnection
         case .connection(.outgoing): ApprovalsStrings.typeOutgoing
         case .authentication: ApprovalsStrings.typeAuthentication
@@ -50,10 +54,13 @@ enum ApprovalTexts {
         [who(a, name: name), summary(a)].compactMap { $0 }.joined(separator: " · ")
     }
 
-    /// The decision screen's body.
-    static func body(_ a: PendingApproval, name: String?) -> String {
+    /// The decision screen's body. An `approval` challenge has none: its title says who asks, and its note follows in full
+    /// (chosen; not in the spec).
+    static func body(_ a: PendingApproval, name: String?) -> String? {
         let conn = name ?? ApprovalsStrings.aConnection
         switch a {
+        case .authentication(let x) where x.purpose == .signin: return ApprovalsStrings.authSigninBody
+        case .authentication(let x) where x.purpose == .approval: return nil
         case .connection(.incoming(let r)):
             let n = r.name ?? ApprovalsStrings.someone
             return r.remote ? ApprovalsStrings.connectionBodyRemote(n) : ApprovalsStrings.connectionBody(n)
@@ -75,7 +82,7 @@ enum ApprovalTexts {
         switch a {
         case .connection(.incoming(let r)): r.state == .pending ? ApprovalsStrings.connectionApprove : nil
         case .connection(.outgoing(let r)): r.state == .pending && r.sas != nil ? ApprovalsStrings.outgoingApprove : nil
-        case .authentication: ApprovalsStrings.authApprove
+        case .authentication(let x): x.purpose == .absent ? ApprovalsStrings.authApprove : ApprovalsStrings.authPurposeApprove
         case .grant: ApprovalsStrings.grantApprove
         case .critical: ApprovalsStrings.criticalApprove
         case .share: ApprovalsStrings.shareApprove
@@ -83,9 +90,13 @@ enum ApprovalTexts {
         }
     }
 
+    /// The deny button's label: "Not me" for a sign-in (§10.4), which declines it as "Deny" does.
     static func denyLabel(_ a: PendingApproval) -> String {
-        if case .share = a { return ApprovalsStrings.shareDecline }
-        return ApprovalsStrings.deny
+        switch a {
+        case .share: ApprovalsStrings.shareDecline
+        case .authentication(let x) where x.purpose == .signin: ApprovalsStrings.authSigninDeny
+        default: ApprovalsStrings.deny
+        }
     }
 
     /// A requester's name inside a sentence (bidi-isolated, §10.8), or "them".

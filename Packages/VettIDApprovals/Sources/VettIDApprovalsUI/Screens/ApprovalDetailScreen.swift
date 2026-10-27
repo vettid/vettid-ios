@@ -71,6 +71,7 @@ public struct ApprovalDetailScreen: View {
             title: ApprovalsStrings.goneTitle, message: ApprovalsStrings.goneBody, primaryLabel: ApprovalsStrings.back,
             onPrimary: actions.onBack, onBack: actions.onBack
         ) { EmptyView() }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("approval_gone")
     }
 
@@ -83,12 +84,13 @@ public struct ApprovalDetailScreen: View {
         return FormScaffold(
             title: r.title, message: r.body, primaryLabel: ApprovalsStrings.back, onPrimary: actions.onFinish, onBack: actions.onFinish
         ) { EmptyView() }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("critical_result")
     }
 
     private func decision(_ a: PendingApproval, now: Date) -> some View {
         FormScaffold(
-            title: ApprovalTexts.title(a),
+            title: ApprovalTexts.title(a, name: state.connectionName),
             message: ApprovalTexts.body(a, name: state.connectionName),
             primaryLabel: ApprovalTexts.approveLabel(a),
             primaryEnabled: state.canApprove(at: now),
@@ -108,6 +110,7 @@ public struct ApprovalDetailScreen: View {
             destructive: true,
             onConfirm: actions.onBlock
         )
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("approval_detail")
     }
 }

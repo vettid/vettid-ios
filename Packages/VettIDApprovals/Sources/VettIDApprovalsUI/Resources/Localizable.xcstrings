@@ -684,6 +684,72 @@
         }
       }
     },
+    "approvals_auth_signin_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in to %@?"
+          }
+        }
+      }
+    },
+    "approvals_auth_signin_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only approve if you are signing in right now."
+          }
+        }
+      }
+    },
+    "approvals_auth_signin_deny": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not me"
+          }
+        }
+      }
+    },
+    "approvals_auth_approval_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ asks you to approve"
+          }
+        }
+      }
+    },
+    "approvals_auth_purpose_approve": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approve"
+          }
+        }
+      }
+    },
+    "approvals_a_connection_inline": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a connection"
+          }
+        }
+      }
+    },
     "approvals_from": {
       "extractionState": "manual",
       "localizations": {

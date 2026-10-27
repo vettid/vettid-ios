@@ -192,6 +192,24 @@ final class FakeApprovalOps: ApprovalOps, @unchecked Sendable {
         #expect(ops.calls.last == "criticalApprove:k1:\(Self.sha)" && m.approvals.isEmpty && read == ["k1"])
     }
 
+    /// §10.4 (0.65.0): a challenge's `purpose` is kept with it (a new manager reads it back), and a sign-in's "Not me" is
+    /// `connection.authenticate.deny`, as a "Deny" is.
+    @Test func aSignInKeepsItsPurposeAndNotMeDenies() async throws {
+        let m = manager()
+        m.onEvent(event("connection.authenticate.pending", #"{"request_id":"a1","connection_id":"c1","context":"example.org","purpose":"signin","exp":"\#(exp)"}"#))
+        m.onEvent(event("connection.authenticate.pending", #"{"request_id":"a2","connection_id":"c1","purpose":"later","exp":"\#(exp)"}"#))
+        let purposes = { (m: ApprovalsManager) in
+            m.approvals.compactMap { a -> String? in
+                guard case .authentication(let x) = a else { return nil }
+                return "\(x.requestID):\(x.purpose)"
+            }.sorted()
+        }
+        #expect(purposes(m) == ["a1:signin", "a2:absent"])
+        #expect(purposes(manager()) == ["a1:signin", "a2:absent"])
+        try await m.denyAuthentication("a1")
+        #expect(ops.calls == ["authDeny:a1"] && m.approvals.map(\.key) == ["auth:a2"])
+    }
+
     @Test func decisionsAndTheirFeedItems() async throws {
         var unlocked: [String] = []
         let m = manager { unlocked.append($0) }

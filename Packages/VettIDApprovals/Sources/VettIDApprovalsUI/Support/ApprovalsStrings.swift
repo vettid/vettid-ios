@@ -366,6 +366,34 @@ enum ApprovalsStrings {
 
     static var authApprove: String { String(localized: "approvals_auth_approve", defaultValue: "Authenticate", bundle: .module) }
 
+    // A challenge with a purpose (VAULT-MESSAGING §10.4 "The screens per purpose", 0.65.0): the texts are the spec's, the
+    // keys chosen (chosen; not in the spec), named for vettid-android to use the same.
+
+    /// A `signin` challenge's title.
+    static func authSigninTitle(_ value: String) -> String {
+        String(localized: "approvals_auth_signin_title", defaultValue: "Sign in to \(value)?", bundle: .module)
+    }
+
+    static var authSigninBody: String {
+        String(localized: "approvals_auth_signin_body", defaultValue: "Only approve if you are signing in right now.", bundle: .module)
+    }
+
+    /// A `signin` challenge's decline: it sends `connection.authenticate.deny`, as "Deny" does.
+    static var authSigninDeny: String { String(localized: "approvals_auth_signin_deny", defaultValue: "Not me", bundle: .module) }
+
+    /// An `approval` challenge's title.
+    static func authApprovalTitle(_ value: String) -> String {
+        String(localized: "approvals_auth_approval_title", defaultValue: "\(value) asks you to approve", bundle: .module)
+    }
+
+    /// The approve button of a challenge with a purpose.
+    static var authPurposeApprove: String { String(localized: "approvals_auth_purpose_approve", defaultValue: "Approve", bundle: .module) }
+
+    /// The requester inside a sentence when the connection has no name (chosen; not in the spec).
+    static var aConnectionInline: String {
+        String(localized: "approvals_a_connection_inline", defaultValue: "a connection", bundle: .module)
+    }
+
     static var from: String { String(localized: "approvals_from", defaultValue: "From", bundle: .module) }
 
     static var context: String { String(localized: "approvals_context", defaultValue: "Their note", bundle: .module) }

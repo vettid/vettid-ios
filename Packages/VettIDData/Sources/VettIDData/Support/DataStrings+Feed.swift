@@ -74,6 +74,30 @@ extension DataStrings {
         )
     }
 
+    // A challenge with a purpose (VAULT-MESSAGING §10.4 "The screens per purpose", 0.65.0): the texts are the spec's, the
+    // keys chosen (chosen; not in the spec), named for vettid-android to use the same.
+
+    static func feedAuthenticateSignin(_ value: String) -> String {
+        String(localized: "data_feed_authenticate_signin", defaultValue: "Sign in to \(value)?", bundle: .module)
+    }
+
+    static var feedAuthenticateSigninBody: String {
+        String(
+            localized: "data_feed_authenticate_signin_body",
+            defaultValue: "Only approve if you are signing in right now.",
+            bundle: .module
+        )
+    }
+
+    static func feedAuthenticateApproval(_ value: String) -> String {
+        String(localized: "data_feed_authenticate_approval", defaultValue: "\(value) asks you to approve", bundle: .module)
+    }
+
+    /// The requester inside a sign-in's title when no name is known.
+    static var feedAConnectionInline: String {
+        String(localized: "data_feed_a_connection_inline", defaultValue: "a connection", bundle: .module)
+    }
+
     static func feedMessage(_ value: String) -> String {
         String(
             localized: "data_feed_message",

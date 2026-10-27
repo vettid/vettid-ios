@@ -37,6 +37,7 @@ import VettIDUI
         let row = BatchRow(key: "batch:auth:a1", asks: asks, receivedAt: Samples.t0, name: "Sam Lee", open: true, onOpen: { _ in }) { toggled += 1 }
         #expect(height(row) > height(BatchRow(key: "b", asks: asks, receivedAt: Samples.t0, name: nil, open: false, onOpen: { _ in }) {}))
         #expect(BatchRow.kinds(asks + [Samples.auth("a3")]) == "Authenticate to a connection · Request to see your items")
+        #expect(BatchRow.kinds([Samples.auth("a4", purpose: .signin)] + asks, name: "Sam") == "Sign in to \(AccountNames.isolate("Sam"))? · Authenticate to a connection · Request to see your items")
         #expect(toggled == 0)
     }
 
@@ -87,7 +88,7 @@ import VettIDUI
         full.peerDeclines = [PeerDecline(requestID: "r", name: nil, outgoing: false, at: Date())]
         full.approvals = [
             .connection(Samples.incoming()), .connection(Samples.outgoing(sas: nil)), Samples.auth(),
-            Samples.grant(at: Samples.t0.addingTimeInterval(60)), Samples.critical(conn: "c9"), Samples.share(), Samples.device(),
+            Samples.auth("a2", purpose: .signin), Samples.auth("a3", purpose: .approval), Samples.grant(at: Samples.t0.addingTimeInterval(60)), Samples.critical(conn: "c9"), Samples.share(), Samples.device(),
         ]
         return [loading, failed, empty, full]
     }
@@ -125,6 +126,11 @@ import VettIDUI
         var gone = out[0]
         gone.gone = true
         out += [failing, backoff, limit, result, unsuitable, gone, ApprovalDetailState(key: "none")]
+        out += [AuthenticationPurpose.signin, .approval].map { p in
+            var s = out[4]
+            s.approval = Samples.auth("a\(p)", purpose: p)
+            return s
+        }
         return out
     }
 
