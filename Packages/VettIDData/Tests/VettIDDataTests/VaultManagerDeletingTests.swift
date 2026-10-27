@@ -28,8 +28,8 @@ import VettIDDataTesting
         try await m.createCredential(password: "correct horse battery", backup: true, pin: pin) { _ in }
         try await m.finishSetup()
         #expect(m.phase == .unlocked)
-        // The opening's reads done (the items are read last, the attachments probed beside them), so that none of them
-        // reaches the vault after the event.
+        // The opening's list reads done (the items are read last in their chain, the attachments probed beside them), so
+        // that none of them is on its way at the event: the test checks that nothing new is sent after it.
         #expect(await eventually { m.items.load == .loaded && m.attachments.available })
     }
 

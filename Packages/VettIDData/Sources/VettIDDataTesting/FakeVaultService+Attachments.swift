@@ -156,6 +156,12 @@ extension FakeVaultService {
         return b.build()
     }
 
+    /// [view] with the sender's file name, when there is one.
+    static func named(_ view: String, _ name: String?) -> String {
+        guard let name else { return view }
+        return String(view.dropLast()) + #","name":\#(JsonBuilder.quote(name))}"#
+    }
+
     // MARK: - The other member
 
     /// The connection's member sent a photo (`message.attachment.deliver`): the vault stored it, and every device gets
@@ -166,12 +172,12 @@ extension FakeVaultService {
             guard social.connections[connectionID] != nil else { throw CryptoError.format("unknown connection") }
             var msg = FakeMessaging.Message(id: Ulid.new(), outgoing: false, text: caption, sentAt: Self.millis(Date()))
             let s = FakePhotos.Stored(connectionID: connectionID, messageID: msg.id, attID: Ulid.new(), outgoing: false, content: content, thumb: thumb, width: width, height: height, state: "stored")
-            msg.attachment = Self.deviceView(s, thumb: false)
+            // The listed view keeps the name too (VAULT-MESSAGING §10.5.1), so a later list read loses nothing.
+            msg.attachment = Self.named(Self.deviceView(s, thumb: false), name)
             photos.stored[msg.id] = s
             social.messages.conversations[connectionID, default: []].append(msg)
             social.messages.receiptsSent.append((msg.id, "delivered"))
-            var view = Self.deviceView(s, thumb: true)
-            if let name { view = String(view.dropLast()) + #","name":\#(JsonBuilder.quote(name))}"# }
+            let view = Self.named(Self.deviceView(s, thumb: true), name)
             let b = JsonBuilder().string("connection_id", connectionID).string("message_id", msg.id).string("direction", "in").string("text", caption).string("sent_at", Timestamps.formatMillis(msg.sentAt)).bool("delivered", false).bool("read", false).raw("attachment", view)
             try reply("message.new", b.build())
             return msg.id
