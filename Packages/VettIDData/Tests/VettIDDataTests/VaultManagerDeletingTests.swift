@@ -28,6 +28,9 @@ import VettIDDataTesting
         try await m.createCredential(password: "correct horse battery", backup: true, pin: pin) { _ in }
         try await m.finishSetup()
         #expect(m.phase == .unlocked)
+        // The opening's reads done (the items are read last, the attachments probed beside them), so that none of them
+        // reaches the vault after the event.
+        #expect(await eventually { m.items.load == .loaded && m.attachments.available })
     }
 
     /// The files left in the phone's data directory.
