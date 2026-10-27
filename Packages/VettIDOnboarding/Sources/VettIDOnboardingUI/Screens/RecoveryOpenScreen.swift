@@ -143,7 +143,10 @@ public struct RecoveryOpenContent: View {
                     state: state, actions: actions, side: side, onStartOver: startOver, onNewCode: newCode, timeScale: timeScale
                 )
             case .finish:
-                OpenFinish(state: state, actions: actions, side: side, onNewCode: newCode, timeScale: timeScale, pin: pin)
+                OpenFinish(
+                    state: state, actions: actions, side: side, onNewCode: finishNewCodeAction(state, onNewCode), timeScale: timeScale,
+                    pin: pin
+                )
             case .done: OpenDone(state: state, actions: actions, timeScale: timeScale)
             }
         }
@@ -382,6 +385,12 @@ func newCodeAction(_ state: RecoveryOpenState, _ onNewCode: (@MainActor () -> Vo
     state.newCodeAllowed ? onNewCode : nil
 }
 
+/// On the finish step only beside the lost-ok PIN (owner decision of 2026-10-27; vettid-android #203): never on the finish of
+/// an `ok` the vault confirmed, where a new code has nothing to do.
+func finishNewCodeAction(_ state: RecoveryOpenState, _ onNewCode: (@MainActor () -> Void)?) -> (@MainActor () -> Void)? {
+    state.lostOk ? newCodeAction(state, onNewCode) : nil
+}
+
 /// (IOS-PLAN §4.9) The rule's own texts before the table's, for the lost-ok unlock's answer (vettid-android's `openAnswerText`):
 /// "Your vault took this phone…" only for an answer that refuses this phone (not a wrong PIN, a wait or a failure on the way),
 /// then the answers that rule recovery out on this phone.
@@ -517,13 +526,16 @@ struct RecoveryOpenRoute: View {
     let onNewCode: @MainActor () -> Void
     /// An answer (or the finish by PIN) is shown: the flow reads the rule again (IOS-PLAN §4.9).
     let onAnswered: @MainActor () -> Void
+    /// Whether the pane shows a lost-ok finish the member chose (``RecoveryOpenState/memberLostOk``).
+    let onHold: @MainActor (Bool) -> Void
     let onOpened: @MainActor () -> Void
     @State private var model: RecoveryOpenViewModel?
 
     init(
         move: any MoveRepository, account: any AccountRepository, problem: OpenSideNotice?, busy: Bool = false,
         onStartOver: @escaping @MainActor () -> Void, onNewCode: @escaping @MainActor () -> Void = {},
-        onAnswered: @escaping @MainActor () -> Void = {}, onOpened: @escaping @MainActor () -> Void,
+        onAnswered: @escaping @MainActor () -> Void = {}, onHold: @escaping @MainActor (Bool) -> Void = { _ in },
+        onOpened: @escaping @MainActor () -> Void,
         model: RecoveryOpenViewModel? = nil
     ) {
         self.move = move
@@ -533,6 +545,7 @@ struct RecoveryOpenRoute: View {
         self.onStartOver = onStartOver
         self.onNewCode = onNewCode
         self.onAnswered = onAnswered
+        self.onHold = onHold
         self.onOpened = onOpened
         _model = State(initialValue: model)
     }
@@ -545,6 +558,8 @@ struct RecoveryOpenRoute: View {
         .onAppear { if model == nil { model = RecoveryOpenViewModel(move: move, account: account) } }
         .onDisappear { model?.forgetSecrets() }
         .onChange(of: model?.state.step) { _, now in if now == .answered || now == .finish { onAnswered() } }
+        .onChange(of: model?.state.memberLostOk ?? false, initial: true) { _, held in onHold(held) }
+        .onDisappear { onHold(false) }
     }
 }
 #endif

@@ -43,6 +43,8 @@ public final class RecoverViewModel: RecoverActions {
     @ObservationIgnored private var countedFor: String?
     /// The step the code steps return to: the intro, or for a phone that could not tell the text of the rule or the open step.
     @ObservationIgnored private var codeHome = RecoverStep.intro
+    /// The open pane shows a lost-ok finish the member chose (``holdOpen(_:)``).
+    @ObservationIgnored private var openHeld = false
     /// The last QR text that was refused or failed: the camera reads it again at once, and it is not sent again until the member
     /// acts (types, goes back, or scans again from the intro).
     @ObservationIgnored private var lastScanned: String?
@@ -108,13 +110,15 @@ public final class RecoverViewModel: RecoverActions {
             guard let rule = try? await move.checkCouldNotTell() else { return }
             guard let self, !state.busy else { return }
             state.couldNotTell = rule
-            if rule == .newCode, state.step == .open {
+            if rule == .newCode, state.step == .open, !openHeld {
                 state.step = .couldNotTell
             } else if rule != .newCode, state.step == .couldNotTell {
                 state.step = .open
             }
         }
     }
+
+    public func holdOpen(_ held: Bool) { openHeld = held }
 
     public func useNewCode() {
         guard !state.busy, state.step == .open else { return }

@@ -293,3 +293,36 @@ extension CouldNotTellViewModelTests {
         #expect(vm.state.step == .open && vm.state.couldNotTell == .finishWithPin)
     }
 }
+
+extension CouldNotTellViewModelTests {
+    /// (vettid-android #203) A lost-ok finish the member chose stays: a read of the rule that says a new code may start
+    /// does not replace the open step while it is shown; it does once the member leaves it.
+    @Test func aLostOkTheMemberChoseIsNotTakenAway() async throws {
+        vault.recoveryStageValue = .pin
+        let vm = await recover()
+        #expect(vm.state.step == .open)
+        vm.holdOpen(true)
+        vault.couldNotTellChecks = [.newCode]
+        vm.checkEnded()
+        await vm.settle()
+        #expect(vm.state.step == .open && vm.state.couldNotTell == .newCode)
+        vm.holdOpen(false)
+        vault.couldNotTellChecks = [.newCode]
+        vm.checkEnded()
+        await vm.settle()
+        #expect(vm.state.step == .couldNotTell)
+    }
+
+    /// The member's lost-ok finish is told apart from one the rule entered at the start.
+    @Test func theOpenTellsTheMembersLostOkFromTheRules() async throws {
+        vault.couldNotTellValue = .finishWithPin
+        let ruled = await open()
+        #expect(ruled.state.step == .finish && ruled.state.lostOk && ruled.state.lostOkFromRule && !ruled.state.memberLostOk)
+        vault.couldNotTellValue = .none
+        let chosen = await open()
+        chosen.finishLostOk()
+        #expect(chosen.state.memberLostOk)
+        chosen.again()
+        #expect(!chosen.state.memberLostOk && !chosen.state.lostOkFromRule)
+    }
+}

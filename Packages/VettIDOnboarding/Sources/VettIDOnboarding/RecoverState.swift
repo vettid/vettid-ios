@@ -182,6 +182,9 @@ public protocol RecoverActions: AnyObject, Sendable {
     /// (§4.9) "Use a new recovery code" beside the PIN: the rule is read from what the phone keeps (the open pane may know more
     /// than this flow), and the code steps follow when it lets a new recovery use this phone. Mirrors vettid-android `useNewCode`.
     func useNewCode()
+    /// (IOS-PLAN §4.9) The open pane shows a lost-ok finish the member chose (``RecoveryOpenState/memberLostOk``): while it
+    /// does, a read of the rule never replaces the open step with the ended one. Mirrors vettid-android #203.
+    func holdOpen(_ held: Bool)
     /// Reads where the recovery stands again, after ``RecoverStep/stageFailed``.
     func retryStage()
     /// Back within the flow; false when the member leaves it (the onboarding flow takes over).
@@ -211,6 +214,7 @@ public final class NoRecoverActions: RecoverActions {
     public func scan() {}
     public func checkEnded() {}
     public func useNewCode() {}
+    public func holdOpen(_ held: Bool) {}
     public func retryStage() {}
     public func back() -> Bool { false }
     public func scanned(_ text: String) {}

@@ -309,7 +309,8 @@ public struct RecoverRoute: View {
         return AnyView(
             RecoveryOpenRoute(
                 move: move, account: account, problem: problem, busy: state.busy, onStartOver: { model.askStartOver() },
-                onNewCode: { model.useNewCode() }, onAnswered: { model.checkEnded() }, onOpened: { model.finish() }
+                onNewCode: { model.useNewCode() }, onAnswered: { model.checkEnded() },
+                onHold: { model.holdOpen($0) }, onOpened: { model.finish() }
             )
         )
     }

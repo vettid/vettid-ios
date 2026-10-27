@@ -161,6 +161,12 @@ import VettIDDataTesting
             #expect((newCodeAction(s, {}) != nil) == offered, "\(rule)")
             #expect(newCodeAction(s, nil) == nil, "\(rule), no action")
         }
+        // On the finish step only beside the lost-ok PIN, never on the finish of a confirmed `ok`.
+        var finish = RecoveryOpenState(step: .finish)
+        finish.couldNotTell = .unlockOrNewCode
+        #expect(finishNewCodeAction(finish, {}) == nil)
+        finish.lostOk = true
+        #expect(finishNewCodeAction(finish, {}) != nil)
     }
 
     // MARK: - The PIN and the code
