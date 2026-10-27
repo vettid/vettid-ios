@@ -57,8 +57,11 @@ jobs:
             -resultBundlePath build/VettID.xcresult
       - name: release check (Release and Staging carry no TEST, dev-stack or other-environment strings)
         run: scripts/release-check.sh --self-test
+      # Best effort: the result bundle helps diagnose a failure, but an upload that fails (GitHub's artifact service
+      # unreachable) says nothing about the app and must not fail a required check.
       - name: results
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: results
