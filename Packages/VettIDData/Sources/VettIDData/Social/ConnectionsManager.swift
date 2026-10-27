@@ -6,11 +6,12 @@ import VettIDVault
 /// Connections, invitations and connection requests on this device (VAULT-MESSAGING §6.4, §10.4, §10.4.1, §10.8;
 /// ANDROID-PLAN §4), over the vault client. The lists live in memory and are read again from the vault (which keeps
 /// them) when it opens and on its events (``onEvent(_:)``, forwarded by ``VaultManager``). What only this phone learns,
-/// the names open requests showed and the other member's declines not yet dismissed (0.10.5), is kept in an encrypted
-/// file through [load] and [persist]. The safety code of a request is not kept on the phone: `connection.request.list`
-/// returns it while the request is open (vettid-android writes it to its file but never reads it back; chosen; not in
-/// the spec). Nothing here touches transport or crypto beyond the typed calls. Mirrors the connection part of
-/// vettid-android `SocialManager`.
+/// the names open requests showed and the other member's declines not yet dismissed (0.10.5), lives in memory only, like
+/// every other vault content: nothing is written to the phone, and it is dropped with the requests when the vault locks,
+/// at a hold and at a wipe. The safety code of a request is not kept apart from its request: `connection.request.list`
+/// returns it while the request is open (§10.4), so an unlock or a new start reads it again (chosen; not in the spec:
+/// vettid-android writes it to its file but never reads it back). Nothing here touches transport or crypto beyond the
+/// typed calls. Mirrors the connection part of vettid-android `SocialManager`.
 @MainActor
 @Observable
 public final class ConnectionsManager: ConnectionsRepository, ConnectionRequestsRepository {
@@ -24,11 +25,8 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
     /// The calls of a read nobody asked for (at the opening, after an owner check, on an event): only over the session
     /// already open, never opening one.
     @ObservationIgnored let quietOps: @MainActor () async throws -> any ConnectionOps
-    @ObservationIgnored private let load: @MainActor () throws -> [UInt8]?
-    @ObservationIgnored private let persist: @MainActor ([UInt8]) throws -> Void
     @ObservationIgnored let now: @Sendable () -> Date
     @ObservationIgnored var local = Local()
-    @ObservationIgnored private var loaded = false
     /// Peer declines noted in this run, so that the `failed` that accompanies one never shows it again (0.10.5).
     @ObservationIgnored var notedDeclines: Set<String> = []
     @ObservationIgnored private var ttls: [InviteTtl]?
@@ -38,19 +36,14 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
     /// Told of every connection that is gone (removed, blocked, or removed by the peer): its messages go with it.
     @ObservationIgnored public var onForget: @MainActor (String) -> Void = { _ in }
 
-    /// [ops] the vault's calls, opened when needed; [quietOps] those of the background reads (nil: [ops]); [load] and
-    /// [persist] the encrypted file (read by ``loadIfNeeded()``; an empty write clears it).
+    /// [ops] the vault's calls, opened when needed; [quietOps] those of the background reads (nil: [ops]).
     public init(
         ops: @escaping @MainActor () async throws -> any ConnectionOps,
         quietOps: (@MainActor () async throws -> any ConnectionOps)? = nil,
-        load: @escaping @MainActor () throws -> [UInt8]? = { nil },
-        persist: @escaping @MainActor ([UInt8]) throws -> Void = { _ in },
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.ops = ops
         self.quietOps = quietOps ?? ops
-        self.load = load
-        self.persist = persist
         self.now = now
     }
 
@@ -61,7 +54,8 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
 
     // MARK: - Local state
 
-    /// What the file keeps: the names open requests showed, by request id, and the other member's declines.
+    /// What only this phone learns, in memory: the names open requests showed, by request id, and the other member's
+    /// declines.
     struct Local: Codable, Equatable {
         var requestNames: [String: StoredRequestName] = [:]
         var declines: [PeerDecline] = []
@@ -73,43 +67,36 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
         var at: Date
     }
 
-    /// Reads the file once (after the first-run cleanup); a file that cannot be read is an empty state.
-    public func loadIfNeeded() {
-        guard !loaded else { return }
-        loaded = true
-        if let b = try? load(), !b.isEmpty, let l = try? JSONDecoder().decode(Local.self, from: Data(b)) { local = l }
-        peerDeclines = local.declines
-    }
-
-    /// Changes the kept state and writes it (kept in memory when the write fails; the next one retries).
+    /// Changes the kept state (in memory only).
     func edit(_ f: (inout Local) -> Void) {
-        loadIfNeeded()
         var next = local
         f(&next)
         guard next != local else { return }
         local = next
         if peerDeclines != next.declines { peerDeclines = next.declines }
-        if let b = try? JSONEncoder().encode(next) { try? persist(Array(b)) }
     }
 
     /// The vault is no longer open on this phone (locked, or a lock was asked for): the connections and requests read
-    /// from it are dropped from memory. What the phone keeps by design stays; an unlock reads the lists again.
+    /// from it, and the names and declines learnt of them, are dropped from memory; an unlock reads the lists again.
     public func forgetOpenVault() {
-        generation += 1
         connections = []
+        forgetRequests()
+    }
+
+    /// The vault is held or due (§3.6.3), or no longer open: the open requests, with their names and safety codes, and the
+    /// other member's declines are dropped from memory; a passed owner check or an unlock reads the requests again
+    /// (`connection.request.list`). A read on its way is not published. The ids of the declines already told stay, so
+    /// that a late `failed` does not tell one again (they hold no name).
+    public func forgetRequests() {
+        generation += 1
         open = []
+        edit { $0 = Local() }
     }
 
     /// Forgets everything (a wipe, or a deleted vault).
     public func clear() {
-        generation += 1
-        local = Local()
-        loaded = true
-        try? persist([])
-        connections = []
-        open = []
+        forgetOpenVault()
         requestEnds = [:]
-        peerDeclines = []
         notedDeclines = []
         ttls = nil
     }

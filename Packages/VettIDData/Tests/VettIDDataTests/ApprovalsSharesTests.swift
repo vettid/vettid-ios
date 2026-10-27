@@ -15,18 +15,12 @@ import VettIDDataTesting
 @Suite struct ApprovalsSharesTests {
     let ops = FakeApprovalOps()
     let connOps = FakeConnectionOps()
-    let file = MemoryFile()
     let now = Date(timeIntervalSince1970: 1_791_115_200)
 
     func manager(names: [String: ShareItem] = [:]) -> ApprovalsManager {
-        let ops = ops, connOps = connOps, file = file, now = now
+        let ops = ops, connOps = connOps, now = now
         let c = ConnectionsManager(ops: { connOps }, now: { now })
-        let m = ApprovalsManager(
-            connections: c, ops: { ops }, load: { file.bytes }, persist: { file.bytes = $0.isEmpty ? nil : $0 }, now: { now },
-            itemNames: { names }
-        )
-        m.loadIfNeeded()
-        return m
+        return ApprovalsManager(connections: c, ops: { ops }, now: { now }, itemNames: { names })
     }
 
     func event(_ type: String, _ body: String) -> VaultMessage {
@@ -48,8 +42,6 @@ import VettIDDataTesting
         let s = try #require(share(m, "r1"))
         #expect(s.items.map(\.name) == ["Allergies"] && s.tags == ["medical"] && s.rules.map(\.ruleID) == ["r1", "r2"] && s.rule?.mode == .ask)
         #expect(ops.shareCalls == ["pending:nil:500", "rules:nil"])
-        // Read only: nothing is kept in the file for a decision the list builds.
-        #expect(file.bytes == nil)
     }
 
     @Test func anEventsItemsAreWhatTheListSaysIsStillPending() async throws {
@@ -71,14 +63,13 @@ import VettIDDataTesting
         ops.rulePages = [Self.rules]
         try await m.refreshApprovals()
         #expect(m.approvals.isEmpty)
-        #expect(manager().approvals.isEmpty, "gone from the file too")
     }
 
     @Test func aListThatCannotBeReadDropsNothing() async throws {
         let m = manager()
         m.onEvent(event("share.pending", #"{"rule_id":"r1","subject":{"connection_id":"c1"},"items":[{"item_id":"i1","name":"A","category":"other","sensitivity":"data"}]}"#))
         try await m.refreshApprovals()
-        #expect(share(m, "r1")?.items.map(\.itemID) == ["i1"] && manager().approvals.count == 1)
+        #expect(share(m, "r1")?.items.map(\.itemID) == ["i1"])
         #expect(ops.shareCalls == ["pending:nil:500", "rules:nil"], "the older form was tried, and failed too")
     }
 
@@ -174,7 +165,11 @@ import VettIDDataTesting
         try await read.value
         #expect(share(m, "r1")?.items.map(\.itemID) == ["B"], "X was withdrawn before the read")
         // And the kept event holds only B: a later screen without a read does not bring X back.
-        #expect(share(manager(), "r1")?.items.map(\.itemID) == ["B"])
+        let kept = m.stored.compactMap(m.parsed).compactMap { a -> [String]? in
+            guard case .share(let s) = a else { return nil }
+            return s.items.map(\.itemID)
+        }
+        #expect(kept == [["B"]])
     }
 
     /// A question the vault no longer knows (`not_found` on a decision) forgets the batches before it.

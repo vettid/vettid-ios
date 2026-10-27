@@ -5,15 +5,17 @@ import VettIDVault
 
 /// The approvals on this device (VAULT-MESSAGING §10.4, §10.12, §10.13, §6.8; ANDROID-PLAN §4 Approvals), over the vault
 /// client. What the vault lists (grant and critical-item requests, `grant.list` and `critical-secret-use.list`) is read
-/// again when it opens and kept in memory only. What arrives only as events (member authentication, share decisions,
-/// desktop and agent requests) and what the lists leave out (a critical-item request's payload) is kept, as the vault sent
-/// it, in an encrypted file through [load] and [persist], as vettid-android keeps it, until it is decided, expires, or a
-/// list shows it gone. The connection requests are the ``ConnectionsManager``'s, listed here with the others. Nothing
-/// here touches transport or crypto beyond the typed calls. Mirrors the approvals part of vettid-android `SocialManager`.
+/// again when it opens. What arrives only as events (member authentication, share decisions, desktop and agent requests)
+/// and what the lists leave out (a critical-item request's payload) is kept as the vault sent it until it is decided,
+/// expires, or a list shows it gone. All of it lives in memory only, like every other vault content: nothing is written to
+/// the phone, and it is dropped when the vault locks, at a hold and at a wipe (``forgetOpenVault()``). An approval that
+/// arrived only as an event and was not decided before then is not shown again (no vault list names it). The connection
+/// requests are the ``ConnectionsManager``'s, listed here with the others. Nothing here touches transport or crypto beyond
+/// the typed calls. Mirrors the approvals part of vettid-android `SocialManager`.
 @MainActor
 @Observable
 public final class ApprovalsManager: ApprovalsRepository {
-    /// What the file keeps: approval events as the vault sent them.
+    /// An approval event as the vault sent it, kept in memory.
     struct StoredEvent: Codable, Equatable {
         var type: String
         var body: String
@@ -30,12 +32,9 @@ public final class ApprovalsManager: ApprovalsRepository {
     @ObservationIgnored let ops: @MainActor () async throws -> any ApprovalOps
     @ObservationIgnored let quietOps: @MainActor () async throws -> any ApprovalOps
     @ObservationIgnored let openUnlockWindow: @MainActor (String) async throws -> Void
-    @ObservationIgnored private let load: @MainActor () throws -> [UInt8]?
-    @ObservationIgnored private let persist: @MainActor ([UInt8]) throws -> Void
     @ObservationIgnored let now: @Sendable () -> Date
     /// The items by id, to name what a vault before 0.21.0 asks about (``SharePending``); empty when not known.
     @ObservationIgnored let itemNames: @MainActor () -> [String: ShareItem]
-    @ObservationIgnored private var loaded = false
     /// Bumped whenever what was read from the open vault is dropped: a list read before is not published.
     @ObservationIgnored private var generation = 0
     /// Counts the approvals that arrived or left (decided here or on another device), and when each did: a list read
@@ -73,15 +72,12 @@ public final class ApprovalsManager: ApprovalsRepository {
     @ObservationIgnored public var onDecided: @MainActor (_ kinds: Set<String>, _ ref: String) -> Void = { _, _ in }
 
     /// [ops] the vault's calls, opened when needed; [quietOps] those of the background reads (nil: [ops]);
-    /// [openUnlockWindow] the credential's `credential.unlock` with the password (§3.5.3); [load] and [persist] the
-    /// encrypted file (an empty write clears it).
+    /// [openUnlockWindow] the credential's `credential.unlock` with the password (§3.5.3).
     public init(
         connections: ConnectionsManager,
         ops: @escaping @MainActor () async throws -> any ApprovalOps,
         quietOps: (@MainActor () async throws -> any ApprovalOps)? = nil,
         openUnlockWindow: @escaping @MainActor (String) async throws -> Void = { _ in },
-        load: @escaping @MainActor () throws -> [UInt8]? = { nil },
-        persist: @escaping @MainActor ([UInt8]) throws -> Void = { _ in },
         now: @escaping @Sendable () -> Date = { Date() },
         itemNames: @escaping @MainActor () -> [String: ShareItem] = { [:] }
     ) {
@@ -90,8 +86,6 @@ public final class ApprovalsManager: ApprovalsRepository {
         self.ops = ops
         self.quietOps = quietOps ?? ops
         self.openUnlockWindow = openUnlockWindow
-        self.load = load
-        self.persist = persist
         self.now = now
     }
 
@@ -145,42 +139,31 @@ public final class ApprovalsManager: ApprovalsRepository {
 
     // MARK: - Local state
 
-    /// Reads the file once (after the first-run cleanup); a file that cannot be read is an empty state.
-    public func loadIfNeeded() {
-        guard !loaded else { return }
-        loaded = true
-        if let b = try? load(), !b.isEmpty, let s = try? JSONDecoder().decode([StoredEvent].self, from: Data(b)) {
-            stored = s
-            storedVersion += 1
-        }
-    }
-
-    /// Changes the kept events and writes them (kept in memory when the write fails; the next one retries).
+    /// Changes the kept events (in memory only).
     private func edit(_ f: (inout [StoredEvent]) -> Void) {
-        loadIfNeeded()
         var next = stored
         f(&next)
         guard next != stored else { return }
         stored = next
         storedVersion += 1
-        if let b = try? JSONEncoder().encode(next) { try? persist(Array(b)) }
     }
 
-    /// The vault is no longer open on this phone: the lists read from it are dropped. The events kept by design stay.
+    /// The vault is no longer open on this phone (locked, or a lock was asked for), or it is held or due (§3.6.3): every
+    /// approval is dropped from memory, the events kept as well as the lists; an unlock, or a passed owner check, reads
+    /// the lists again. A read on its way is not published.
     public func forgetOpenVault() {
         generation += 1
         listed = []
+        if !stored.isEmpty {
+            stored = []
+            storedVersion += 1
+        }
+        decidedLog = []
+        batchLog = []
     }
 
     /// Forgets everything (a wipe, or a deleted vault).
-    public func clear() {
-        generation += 1
-        stored = []
-        storedVersion += 1
-        loaded = true
-        try? persist([])
-        listed = []
-    }
+    public func clear() { forgetOpenVault() }
 
     // MARK: - Events
 
@@ -301,7 +284,7 @@ public final class ApprovalsManager: ApprovalsRepository {
     /// Whether the approval [key] is still held, listed or kept.
     func holds(_ key: String) -> Bool { listed.contains { $0.key == key } || stored.contains { parsed($0)?.key == key } }
 
-    /// Drops the approval [key] from the file and the lists.
+    /// Drops the approval [key] from the kept events and the lists.
     func drop(_ key: String) {
         changes += 1
         changedAt[key] = changes
@@ -459,7 +442,7 @@ public final class ApprovalsManager: ApprovalsRepository {
             if g == generation { drop(key) }
             throw f
         }
-        // An answer from before a lock or a wipe is not kept (the file is not written again).
+        // An answer from before a lock, a hold or a wipe is not kept.
         guard g == generation else { return }
         // Kept as the event would have been; the payload is shown only if it matches the listed hash.
         keep("critical-secret-use.pending", body)

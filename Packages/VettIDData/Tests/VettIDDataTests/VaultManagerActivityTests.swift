@@ -99,8 +99,9 @@ import VettIDVault
         #expect(page.entries.map(\.kind).prefix(1) == ["grant.denied"] && page.searchSent == false)
     }
 
-    /// Locked, the feed and the lists are not kept; an approval that arrived only as an event stays in its encrypted file;
-    /// the unlock reads everything again. While a lock is pending nothing is taken in or sent.
+    /// Locked, the feed and every approval are dropped from memory (nothing of them is written to the phone); the unlock
+    /// reads the vault's lists again, and what only an event brought (a member authentication) does not come back. While
+    /// a lock is pending nothing is taken in or sent.
     @Test func approvalsAndTheFeedFollowTheLock() async throws {
         defer { phone.close() }
         let id = try await connected()
@@ -108,10 +109,12 @@ import VettIDVault
         let grant = try service.peerAsksForItems(id, [AskedItem(ref: "01JITEM000000000000000000A", label: "Passport")])
         #expect(await eventually { approvals.approvals.count == 2 && feed.items.count == 2 })
         try await m.lock()
-        #expect(feed.items.isEmpty && feed.badge == FeedBadge() && approvals.listed.isEmpty)
-        #expect(Set(approvals.approvals.map(\.key)) == ["auth:\(auth)", "grant:\(grant)"], "the events stay in their file")
+        #expect(feed.items.isEmpty && feed.badge == FeedBadge() && approvals.listed.isEmpty && approvals.approvals.isEmpty)
+        for name in VaultFiles.retired {
+            #expect(!FileManager.default.fileExists(atPath: phone.directory.appendingPathComponent(name).path))
+        }
         #expect(try await m.unlock(pin: pin) == .success)
-        #expect(await eventually { feed.items.count == 2 && approvals.approvals.count == 2 }, "read again at the opening")
+        #expect(await eventually { feed.items.count == 2 && approvals.approvals.map(\.key) == ["grant:\(grant)"] }, "read again at the opening")
 
         service.relayLockAnswer = .noAnswer
         service.memberLockAnswer = .queued
@@ -182,19 +185,25 @@ import VettIDVault
         #expect(!at.contains(-1) && at == at.sorted(), "\(seen)")
     }
 
-    /// Due or held by the owner check's state (§3.6.3, not only on `vault.held`): no feed content is kept; after the
-    /// check the feed is read again.
-    @Test func theFeedIsDroppedWhileTheCheckIsDue() async throws {
+    /// Due or held by the owner check's state (§3.6.3, not only on `vault.held`): no feed content, approval or
+    /// connection request (with its name and safety code) is kept; after the check they are read again.
+    @Test func theFeedAndTheAsksAreDroppedWhileTheCheckIsDue() async throws {
         defer { phone.close() }
         let id = try await connected()
-        try service.peerAsksForItems(id, [AskedItem(ref: "01JITEM000000000000000000A", label: "Passport")])
-        #expect(await eventually { feed.items.count == 1 })
+        let grant = try service.peerAsksForItems(id, [AskedItem(ref: "01JITEM000000000000000000A", label: "Passport")])
+        let r = try await m.connections.acceptInvite(try service.peerInvite(first: "Sam", last: "Ray", name: "Sam"))
+        #expect(await eventually { feed.items.count == 1 && m.connections.requests.first?.sas != nil })
+        let sas = m.connections.requests.first?.sas
+        #expect(await eventually { Set(approvals.approvals.map(\.key)) == ["grant:\(grant)", "outgoing:\(r.connectionID)"] })
         service.advanceVaultClock(86_401)
         try await m.ownerChecks.refreshOwnerCheck()
         #expect(m.ownerChecks.ownerCheck?.state != .ok)
         #expect(feed.items.isEmpty && feed.badge == FeedBadge())
+        #expect(approvals.approvals.isEmpty && m.connections.requests.isEmpty && m.connections.local.requestNames.isEmpty)
         #expect(try await m.ownerChecks.check(pin: pin, password: password) == .passed)
         #expect(await eventually { feed.items.count == 1 }, "read again after the check")
+        #expect(await eventually { Set(approvals.approvals.map(\.key)) == ["grant:\(grant)", "outgoing:\(r.connectionID)"] })
+        #expect(m.connections.requests.map(\.sas) == [sas])
     }
 
     /// The vault's `share.decide`: items not waiting are ignored, and the answer names what was decided.

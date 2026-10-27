@@ -95,7 +95,6 @@ extension ConnectionsManager {
 
     /// Keeps the names requests showed (0.10.5), dropping ones older than any request can live.
     func rememberNames(_ names: [(String, String)]) {
-        loadIfNeeded()
         let fresh = names.filter { local.requestNames[$0.0]?.name != $0.1 }
         guard !fresh.isEmpty else { return }
         let t = now()
@@ -124,7 +123,6 @@ extension ConnectionsManager {
     /// Comes as `sync.event{peer_declined}` and, on the accepter's side, also as `connection.event{failed, reason:
     /// "declined"}`, in either order.
     func onPeerDeclined(_ id: String, outgoing: Bool) {
-        loadIfNeeded()
         let name = open.first(where: { $0.id == id })?.name ?? local.requestNames[id]?.name
         let first = notedDeclines.insert(id).inserted && !local.declines.contains { $0.requestID == id }
         open.removeAll { $0.id == id }

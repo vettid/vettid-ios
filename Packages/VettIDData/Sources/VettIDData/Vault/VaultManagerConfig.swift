@@ -46,14 +46,20 @@ public enum VaultFiles {
     /// The canary manifest installed out of band (``CanaryManifestManager``). Not one of ``all(in:)``: it holds nothing
     /// of a vault, so its presence alone does not refuse the first-run cleanup (chosen; not in the spec).
     public static let canary = "canary-manifest"
-    /// What only this phone learns of connection requests (``ConnectionsManager``).
+    /// Retired: what only this phone learnt of connection requests (``ConnectionsManager``), written by earlier builds.
+    /// The requests, their names and the declines now live in memory only; the file is deleted at the start.
     public static let connections = "connections"
-    /// The approvals that arrive only as events (``ApprovalsManager``).
+    /// Retired: the approvals that arrived only as events (``ApprovalsManager``), written by earlier builds. They now live
+    /// in memory only; the file is deleted at the start.
     public static let approvals = "approvals"
+    /// The files earlier builds wrote and this one never writes or reads: deleted at the start
+    /// (``VaultManager/removeRetiredFiles()``). Still among ``all(in:)`` while one may be left: its presence refuses the
+    /// first-run cleanup as before, and a wipe erases it with the data directory.
+    public static let retired = [connections, approvals]
 
     /// Every data file of the vault manager in [directory].
     public static func all(in directory: URL) -> [URL] {
-        ([account] + IdentitySet.all.map(device(of:)) + [phoneSecrets, lock, ownerCheck, connections, approvals])
+        ([account] + IdentitySet.all.map(device(of:)) + [phoneSecrets, lock, ownerCheck] + retired)
             .map { directory.appendingPathComponent($0) }
     }
 

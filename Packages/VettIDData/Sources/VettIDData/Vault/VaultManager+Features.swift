@@ -27,10 +27,21 @@ extension VaultManager {
         )
     }
 
-    /// The connections over this manager's session, what only this phone learns kept in their encrypted file.
-    static func connectionsManager(_ config: VaultManagerConfig, _ ref: ManagerRef, _ rec: AccountRecord) -> ConnectionsManager {
-        let file = config.file(VaultFiles.connections)
-        return ConnectionsManager(
+    /// The files earlier builds wrote and this one no longer does (``VaultFiles/retired``) are deleted, once per process
+    /// once it succeeds: a file already gone is not an error, and one that could not be deleted is tried again at the next
+    /// call, and at every start until it is gone. Nothing of them is read.
+    func removeRetiredFiles() {
+        guard !retiredRemoved else { return }
+        var left = false
+        for name in VaultFiles.retired {
+            do { try config.file(name).clear() } catch { left = true }
+        }
+        retiredRemoved = !left
+    }
+
+    /// The connections over this manager's session, in memory only (nothing of them is written to the phone).
+    static func connectionsManager(_ config: VaultManagerConfig, _ ref: ManagerRef) -> ConnectionsManager {
+        ConnectionsManager(
             // Nothing goes to a vault whose lock is pending, and no session is opened for it.
             ops: {
                 guard let m = ref.manager else { throw VaultFailure(.other, code: "session_dropped") }
@@ -44,12 +55,6 @@ extension VaultManager {
                     throw VaultFailure(.other, code: "session_dropped")
                 }
                 return try m.openApi(s)
-            },
-            load: { try file.load() },
-            // Nothing is written while a wipe runs or after one that did not finish.
-            persist: { b in
-                guard !rec.closed else { return }
-                if b.isEmpty { try file.clear() } else { try file.save(b) }
             },
             now: config.now
         )

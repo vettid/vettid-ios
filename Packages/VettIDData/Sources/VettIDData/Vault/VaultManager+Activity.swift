@@ -21,11 +21,9 @@ extension VaultManager {
         return try m.openApi(s)
     }
 
-    /// The feed and History in memory only; the approvals that arrive only as events in their encrypted file. Deciding an
-    /// ask marks its feed item read.
+    /// The feed, the approvals and History in memory only. Deciding an ask marks its feed item read.
     static func activityManagers(
-        _ config: VaultManagerConfig, _ ref: ManagerRef, _ rec: AccountRecord, _ connections: ConnectionsManager,
-        _ checks: OwnerCheckManager
+        _ config: VaultManagerConfig, _ ref: ManagerRef, _ connections: ConnectionsManager, _ checks: OwnerCheckManager
     ) -> (FeedManager, ApprovalsManager, HistoryManager, HistoryExportManager) { // swiftlint:disable:this large_tuple
         let feed = FeedManager(
             ops: { try await memberApi(ref) }, quietOps: { try quietApi(ref) },
@@ -33,16 +31,9 @@ extension VaultManager {
             gated: { [now = config.now] in ref.manager?.ownerChecks.ownerCheck?.gated(now()) ?? false },
             now: config.now
         )
-        let file = config.file(VaultFiles.approvals)
         let approvals = ApprovalsManager(
             connections: connections, ops: { try await memberApi(ref) }, quietOps: { try quietApi(ref) },
             openUnlockWindow: { password in try await ref.manager?.openUnlockWindow(password: password) },
-            load: { try file.load() },
-            // Nothing is written while a wipe runs or after one that did not finish.
-            persist: { b in
-                guard !rec.closed else { return }
-                if b.isEmpty { try file.clear() } else { try file.save(b) }
-            },
             now: config.now,
             // A vault before 0.21.0 lists only the ids of what waits: named from the item list where the app has it.
             itemNames: {
@@ -68,12 +59,31 @@ extension VaultManager {
         approvals.onEvent(m)
     }
 
-    /// Entering the hold (§3.6.3): the feed is not shown, and no photo, item or revealed value is kept.
+    /// Entering the hold (§3.6.3): the feed is not shown, and no photo, item, revealed value, approval or connection
+    /// request is kept.
     func activityHeld() {
         feed.clear()
         attachments.clear()
         items.clear()
         sharing.clear()
+        forgetAsks()
+    }
+
+    /// Held or due: the approvals and the connection requests, with the names and safety codes they showed, are dropped
+    /// from memory; a passed check reads them again from the vault's lists (chosen; not in the spec: vettid-android keeps
+    /// them while held).
+    func forgetAsks() {
+        approvals.forgetOpenVault()
+        connections.forgetRequests()
+    }
+
+    /// The approvals and the connection requests are read again from the vault's lists, after another device's owner
+    /// check (this phone's own reads every list, ``refreshListsQuietly()``).
+    func refreshAsksQuietly() {
+        Task { [weak self] in
+            guard let self, !items.listsReadPending else { return }
+            try? await approvals.refreshApprovals(quietly: true)
+        }
     }
 
     /// Held or due (§3.6.3), as the owner check's state says: no feed content is kept, nor the member's own names, full
@@ -88,6 +98,7 @@ extension VaultManager {
                 ref.manager?.attachments.clear()
                 ref.manager?.items.clear()
                 ref.manager?.sharing.clear()
+                ref.manager?.forgetAsks()
             } else if ref.manager?.phase == .unlocked {
                 feed?.catchUp()
                 // Another device's check: the items, dropped at the hold, are read again. This phone's own check reads
@@ -98,6 +109,8 @@ extension VaultManager {
                 }
                 // The tags and their colours, dropped at the hold, are read again (the colour keeper follows them).
                 Task { @MainActor in _ = try? await ref.manager?.sharing.refreshTagsQuietly() }
+                // The approvals and the connection requests, dropped at the hold, too.
+                ref.manager?.refreshAsksQuietly()
             }
             guard let m = ref.manager else { return }
             switch OwnProfileStep.onCheck(wasHeld: !held, held: held, phase: m.phase) {
@@ -108,8 +121,7 @@ extension VaultManager {
         }
     }
 
-    /// The vault is no longer open: the feed, the approvals' lists and History are dropped (the approvals kept by design
-    /// stay).
+    /// The vault is no longer open: the feed, the approvals and History are dropped.
     func forgetActivity() {
         feed.clear()
         approvals.forgetOpenVault()
