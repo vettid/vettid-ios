@@ -77,6 +77,8 @@ extension VaultManager {
     public func onBackground(budget: Duration = .seconds(25)) async {
         let began = foregrounds
         moveFlags.book.lifecycle += 1
+        // IOS-PLAN §6.3: the PIN kept for the pairing goes with the other secrets (§4.9).
+        forgetPairingPin()
         let work = Task { @MainActor [weak self] in
             guard let self else { return }
             await lockGuard.keeper.firstAttemptDone()

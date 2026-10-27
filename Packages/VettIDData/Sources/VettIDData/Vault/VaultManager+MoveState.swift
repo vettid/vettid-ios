@@ -49,7 +49,7 @@ final class MoveBook {
     var keptEnding = false
     /// The pending lock found at the start was taken up (once, after the first-run cleanup and the record).
     var lockResumed = false
-    /// The earlier identity's unlock is being tried now (``VaultManager/pairEarlierIdentity(pin:)``): not a trial to settle.
+    /// The earlier identity's unlock is being tried now (``VaultManager/pairEarlierIdentity(pin:skipping:)``): not a trial to settle.
     var trialDepth = 0
     /// Identities are being switched for the rule now (a status read of the rule waits).
     var ruleSwitching = 0
@@ -59,6 +59,9 @@ final class MoveBook {
     var lifecycle = 0
     /// The wipe that runs now is an old phone's at the end of a kept transfer (it says so on the welcome screen).
     var wipeMovedAway = false
+    /// (IOS-PLAN 0.1.40 §4.9) The PIN the recovered phone's unlock just used, kept in memory only while the pairing runs on the
+    /// screen in front, for the lost-ok unlock that may be sent again; forgotten when the app leaves the foreground (§6.3).
+    var pairingPin: String?
 }
 
 extension VaultManager {

@@ -74,6 +74,13 @@ struct FakeRecoveryStore {
     /// The vault's checks of the App Attest key (``FakeVaultService/checkAttestationKeys()``), and the key its unlock binding is.
     var strictAttestation = false
     var boundKey: [UInt8]?
+    /// (VAULT-MESSAGING 0.67.0 §11.14.6 "Pairing") The vault names the invitation in an unlock's `ok` (`invitation_recovery_id`),
+    /// as a vault of the next staging release after 23 does; off, an older vault (the default).
+    var namesInvitation = false
+    /// How many more results name it (nil: every one).
+    var namedResultsLeft: Int?
+    /// The id named instead of the invitation's (one no identity registered, or another identity's).
+    var namedAs: String?
 }
 
 // TEST ONLY. Recovery on a new phone as vettid-vault answers it: the member API's claim and register
@@ -245,6 +252,16 @@ extension FakeVaultService {
     public func vaultAppKeyIs(_ key: [UInt8]?) { locked { recovery.vaultAppKey = key } }
     /// The vault's `app_key`.
     public var recoveryVaultAppKey: [UInt8]? { locked { recovery.vaultAppKey } }
+
+    /// From now on an unlock's `ok` names the invitation (`invitation_recovery_id`, VAULT-MESSAGING 0.67.0), as [id] when set
+    /// instead of the invitation's own, in the next [results] results only when set.
+    public func namesInvitation(as id: String? = nil, results: Int? = nil) {
+        locked {
+            recovery.namesInvitation = true
+            recovery.namedAs = id
+            recovery.namedResultsLeft = results
+        }
+    }
 
     /// The registered phone is an unlock key of the vault though it was not adopted (an ok unlock without a bundle).
     public func registeredPhoneHoldsUnlockKey() { locked { recovery.phoneHoldsUnlockKey = true } }
@@ -555,7 +572,18 @@ extension FakeVaultService {
     func recoveryBundleMember() -> String {
         guard recovery.invitation else { return "" }
         responder = nil
-        return #","vault_bundle":"\#(Base64s.encodeStd(vaultBundle()))""#
+        return #","vault_bundle":"\#(Base64s.encodeStd(vaultBundle()))""# + invitationMember()
+    }
+
+    /// (VAULT-MESSAGING 0.67.0) `invitation_recovery_id`, under the condition of `vault_bundle`: the `ctx` of the invitation the
+    /// unlock leaves and renews. Callers hold ``cond``.
+    private func invitationMember() -> String {
+        guard recovery.namesInvitation, let id = recovery.namedAs ?? recovery.inviteID else { return "" }
+        if let left = recovery.namedResultsLeft {
+            guard left > 0 else { return "" }
+            recovery.namedResultsLeft = left - 1
+        }
+        return #","invitation_recovery_id":"\#(id)""#
     }
 }
 

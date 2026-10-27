@@ -299,6 +299,8 @@ extension VaultManager {
         guard d.recovering || d.recoveryOpenedNotFinished else { return .skip }
         do {
             let out = try await lostOkOnce(pin: pin)
+            // (IOS-PLAN 0.1.40 §4.9) The vault's `ok` came, and the pairing waits for the PIN asked again: no other identity tries.
+            if out.code == Self.codePinNeeded { return .done(out) }
             guard Self.knowsThisPhone(out) else { return out.ok ? .done(out) : .refused(out) }
             // An answer only a key the vault holds ends the run of refusals.
             try persistRecord(record.generation) {
@@ -362,7 +364,9 @@ extension VaultManager {
     /// invitation may be an older identity's, under its `recovery_id`. The lost-ok unlock with each other identity, newest first,
     /// then its `hs.init` with each `recovery_id` it registered for (IOS-PLAN 0.1.39 §4.9). Nil when none is the vault's key: nothing changed, the identity
     /// with the `ok` is in use again, and the caller reopens its session. The unlock's refusal code beside the session otherwise.
-    func pairEarlierIdentity(pin: String) async throws -> (String?, VaultSession)? {
+    /// [pin]: nil for the PIN kept for the pairing (``pairingPinNow()``). [skipping]: the `recovery_id`s the named invitation
+    /// already tried (IOS-PLAN 0.1.40 §4.9).
+    func pairEarlierIdentity(pin: String? = nil, skipping: Set<String> = []) async throws -> (String?, VaultSession)? {
         guard let ct = record.value.couldNotTell, ct.identities.count > 1 else { return nil }
         let back = record.value.activeIdentity
         moveFlags.book.trialDepth += 1
@@ -386,10 +390,10 @@ extension VaultManager {
                 other = try await openSession()
                 // An identity that never registered is no key.
                 guard other.device.recovering || other.device.recoveryOpenedNotFinished else { continue }
-                u = try await unlockWithSecret(other, pin: pin, options: UnlockOptions(), path: .current)
+                u = try await unlockWithSecret(other, pin: try pin ?? pairingPinNow(), options: UnlockOptions(), path: .current)
             } catch {
-                // The unlock did not answer, or was cancelled.
-                if error is CancellationError {
+                // The unlock did not answer, or was cancelled (or the PIN kept for it was forgotten).
+                if error is CancellationError || error is PairingPinForgotten {
                     try? await selectIdentity(back)
                     try? end()
                     throw error
@@ -410,10 +414,10 @@ extension VaultManager {
             guard other.device.recoveryOpenedNotFinished else { continue }
             try end(strict: true)
             do {
-                try await other.device.completeRecoveryOpen(timeout: handshakeWait(resuming: false))
+                try await other.device.completeRecoveryOpen(timeout: handshakeWait(resuming: false), skipping: skipping)
             } catch let e as VaultStateError where VaultFailures.noResponse(e) {
-                if let refusal = try await unlockOwn(other, pin: pin, cause: e) { return (refusal, other) }
-                try await other.device.completeRecoveryOpen(timeout: handshakeWait(resuming: false))
+                if let refusal = try await unlockOwn(other, pin: try pin ?? pairingPinNow(), cause: e) { return (refusal, other) }
+                try await other.device.completeRecoveryOpen(timeout: handshakeWait(resuming: false), skipping: skipping)
             }
             return (nil, other)
         }

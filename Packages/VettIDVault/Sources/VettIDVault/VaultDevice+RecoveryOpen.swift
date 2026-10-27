@@ -164,6 +164,9 @@ extension VaultDevice {
             guard r.ok else { return r }
             try mem.withLock {
                 if let bundle = r.vaultBundle { try adoptBundle(bundle) }
+                // The open's own invitation: one an earlier unlock named goes (IOS-PLAN 0.1.40 §4.9).
+                st.recovery?.invitation = nil
+                st.recovery?.invitationSent = nil
                 if st.vault != nil {
                     let exp = heldFromVault(r.token).map(Self.ms) ?? 0
                     st.vault?.token = r.token
@@ -187,8 +190,16 @@ extension VaultDevice {
     /// (IOS-PLAN 0.1.39 §4.9) After an `ok` to an unlock (a lost ok), one `hs.init` with each `recovery_id` this identity registered
     /// for, newest first (``pairingContexts``), each waiting [timeout] (the pairing timeout for each one; chosen; not in the spec):
     /// the vault answers a `ctx` that is not its invitation's with nothing. The last one's failure is thrown.
-    public func completeRecoveryOpen(timeout: TimeInterval = awaitDefault) async throws {
-        let contexts = mem.withLock { pairingContexts }
+    ///
+    /// (IOS-PLAN 0.1.40 §4.9) [skipping]: the `recovery_id`s already tried with the invitation the vault named, left out of the
+    /// walk; when none is left this throws a timed-out ``VaultStateError`` without sending anything.
+    public func completeRecoveryOpen(timeout: TimeInterval = awaitDefault, skipping: Set<String> = []) async throws {
+        let contexts = mem.withLock { pairingContexts }.filter { !skipping.contains($0) }
+        if contexts.isEmpty, !skipping.isEmpty {
+            var e = VaultStateError(message: "no hs.resp within the walk: every recovery_id was tried")
+            e.timedOut = true
+            throw e
+        }
         for (i, ctx) in contexts.enumerated() {
             do {
                 try await pairRecovered(ctx: ctx, timeout: timeout)
@@ -210,7 +221,10 @@ extension VaultDevice {
                 return v
             }
             try await startInit(purpose: .app, ctx: ctx, depositToken: v.token)
-            mem.withLock { st.recovery?.pairing = ctx }
+            mem.withLock {
+                st.recovery?.pairing = ctx
+                if st.recovery?.invitation == ctx { st.recovery?.invitationSent = true }
+            }
             try save()
         }
         _ = try await awaitPaired(timeout: timeout)
@@ -224,6 +238,30 @@ extension VaultDevice {
         var all = [rec.recoveryID]
         for id in rec.registeredBefore.reversed() where !all.contains(id) { all.append(id) }
         return all
+    }
+
+    /// (IOS-PLAN 0.1.40 §4.9) The invitation the last unlock's `ok` named (`invitation_recovery_id`), and whether its `hs.init`
+    /// was sent since; nil when that result named none, or when this identity is not recovering.
+    public var namedInvitation: NamedInvitation? {
+        mem.withLock {
+            guard let rec = st.recovery, let id = rec.invitation else { return nil }
+            return NamedInvitation(recoveryID: id, sent: rec.invitationSent == true)
+        }
+    }
+
+    /// (IOS-PLAN 0.1.40 §4.9, VAULT-MESSAGING 0.67.0 §11.14.6 "Pairing") The single `hs.init` with [recoveryID], the
+    /// invitation the vault named, as `ctx` (saved as sent with it), and the wait for `device.paired`. The caller has checked
+    /// that this identity registered [recoveryID]; the binding is that registration's attested key, verified as for any `ctx`.
+    public func pairNamedInvitation(_ recoveryID: String, timeout: TimeInterval) async throws {
+        guard registeredRecoveryIDs.contains(recoveryID) else { throw VaultStateError(message: "not a recovery of this identity") }
+        try await pairRecovered(ctx: recoveryID, timeout: timeout)
+    }
+
+    /// ``registeredRecoveryIDs`` of a stored device state (its decrypted bytes); a state that cannot be read is thrown. Reads no
+    /// keys.
+    public static func registeredRecoveryIDs(state bytes: [UInt8]) throws -> [String] {
+        guard let rec = try JSONDecoder().decode(DeviceState.self, from: Data(bytes)).recovery else { return [] }
+        return [rec.recoveryID] + rec.registeredBefore.reversed().filter { $0 != rec.recoveryID }
     }
 
     /// (IOS-PLAN 0.1.39 §4.9) The `ctx` of the recovered phone's first handshake the vault answered, nil before (or from a build
@@ -252,5 +290,16 @@ extension VaultDevice {
             }
             try save()
         }
+    }
+}
+
+/// (IOS-PLAN 0.1.40 §4.9) The invitation an unlock's `ok` named (`invitation_recovery_id`), and whether its `hs.init` went.
+public struct NamedInvitation: Sendable, Equatable {
+    public let recoveryID: String
+    public let sent: Bool
+
+    public init(recoveryID: String, sent: Bool) {
+        self.recoveryID = recoveryID
+        self.sent = sent
     }
 }

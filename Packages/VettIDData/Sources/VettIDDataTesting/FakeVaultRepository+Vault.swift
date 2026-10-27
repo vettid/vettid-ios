@@ -270,6 +270,8 @@ extension FakeVaultRepository: MoveRepository {
         return lostOkOutcomes.isEmpty ? RecoveryOpenOutcome("ok", used: 2, attemptUsed: false) : lostOkOutcomes.removeFirst()
     }
 
+    public func forgetPairingPin() { calls.append("forgetPairingPin") }
+
     public func finishRecoveryOpen() async throws {
         try call("finishRecoveryOpen")
         if let recoveryFinishError { throw recoveryFinishError }

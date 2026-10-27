@@ -453,7 +453,7 @@ public extension CredentialRepository {
 /// Moving the vault to another phone (VAULT-MESSAGING §11.11 recovery, §6.7.1 direct transfer), on both phones.
 /// Mirrors vettid-android `MoveRepository`.
 @MainActor
-public protocol MoveRepository: AnyObject, Sendable {
+public protocol MoveRepository: AnyObject, Sendable, PairingPinKeeper {
     // Recovery, on the new phone (§11.11).
 
     /// Where a recovery on this phone stands.

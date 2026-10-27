@@ -65,6 +65,9 @@ extension VaultManager {
     public nonisolated static let codeOtherVault = "other_vault"
     /// The requirements of the recovery of before release R (IOS-PLAN ID8).
     public nonisolated static let codeRecoveryBeforeR = "recovery_before_release_r"
+    /// (IOS-PLAN 0.1.40 §4.9) The pairing needs the lost-ok unlock again, and the PIN kept for it was forgotten (the app left the
+    /// foreground): the PIN is asked for again. Nothing was used.
+    public nonisolated static let codePinNeeded = "pin_needed"
     /// The recovered phone's handshake right after `ok` (§11.14.6), and, for a recovery whose `ok` came earlier, the wait
     /// before an unlock with this phone's own key.
     nonisolated static let openedHandshakeWait: TimeInterval = 90
@@ -287,10 +290,14 @@ extension VaultManager {
 
     /// `vault.recovery.open` (§11.14.6). Once the vault answered `ok` it has made this phone its app and removed the recovery
     /// record: a phone in that state (``recoveryOpened()``) never sends another open (which could only be answered
-    /// `no_recovery`) but finishes the one that succeeded (``finishOpened(_:pin:used:resuming:)``). An open the member API
+    /// `no_recovery`) but finishes the one that succeeded (``finishOpened(_:used:resuming:since:)``). An open the member API
     /// took that got no answer is remembered across a restart (``LocalAccount/recoveryOpenUnanswered``) and reported with
     /// the next answer.
     public func recoveryOpen(pin: String, password: String) async throws -> RecoveryOpenOutcome {
+        try await keepingPairingPin(pin) { try await recoveryOpenKept(pin: pin, password: password) }
+    }
+
+    private func recoveryOpenKept(pin: String, password: String) async throws -> RecoveryOpenOutcome {
         try await guarded {
             try prepared()
             let rec = record.generation
@@ -299,7 +306,7 @@ extension VaultManager {
             guard d.recovering else { throw VaultFailure(.notSupported, code: Self.codeNoRecovery) }
             guard phoneSecrets.inUse else { throw VaultFailure(.notSupported, code: Self.codeNoPhoneSecret) }
             if d.recoveryOpenedNotFinished {
-                return try await finishOpened(s, pin: pin, used: record.value.recoveryAttemptsUsed, resuming: true, since: rec)
+                return try await finishOpened(s, used: record.value.recoveryAttemptsUsed, resuming: true, since: rec)
             }
             let afterUnanswered = record.value.recoveryOpenUnanswered
             let vaultID = record.value.vaultID
@@ -329,7 +336,7 @@ extension VaultManager {
                     contactCouldNotRecover: couldNotRecover(r.code)
                 )
             }
-            var out = try await finishOpened(s, pin: pin, used: used, resuming: false, since: rec)
+            var out = try await finishOpened(s, used: used, resuming: false, since: rec)
             out.attemptUsed = r.attemptUsed
             return out
         }
@@ -349,11 +356,13 @@ extension VaultManager {
     /// handshake; the bundle pins the vault, and the handshake is sent again (the unlock dropped any that was under way),
     /// then `credential.get`. No attempt is used. Without a bundle the recovery did not complete here.
     public func resumeLostOk(pin: String) async throws -> RecoveryOpenOutcome {
-        try await guarded {
-            try prepared()
-            // IOS-PLAN 0.1.38 §4.9: a phone that could not tell unlocks with each identity that may hold the vault's key.
-            if let ct = record.value.couldNotTell { return try await resumeLostOkEither(ct, pin: pin) }
-            return try await lostOkOnce(pin: pin)
+        try await keepingPairingPin(pin) {
+            try await guarded {
+                try prepared()
+                // IOS-PLAN 0.1.38 §4.9: a phone that could not tell unlocks with each identity that may hold the vault's key.
+                if let ct = record.value.couldNotTell { return try await resumeLostOkEither(ct, pin: pin) }
+                return try await lostOkOnce(pin: pin)
+            }
         }
     }
 
@@ -367,7 +376,7 @@ extension VaultManager {
             guard phoneSecrets.inUse, d.recovering else { throw VaultFailure(.notSupported, code: Self.codeNoRecovery) }
             let used = record.value.recoveryAttemptsUsed
             let rec = record.generation
-            if d.recoveryOpenedNotFinished { return try await finishOpened(s, pin: pin, used: used, resuming: true, since: rec) }
+            if d.recoveryOpenedNotFinished { return try await finishOpened(s, used: used, resuming: true, since: rec) }
             let u: UnlockOutcome
             do {
                 u = try await unlockWithSecret(s, pin: pin, options: UnlockOptions(), path: .current)
@@ -399,28 +408,33 @@ extension VaultManager {
             guard d.recoveryOpenedNotFinished else {
                 throw VaultFailure(.other, code: MoveCodes.recoveryOpened)
             }
-            var out = try await finishOpened(s, pin: pin, used: used, resuming: false, since: rec)
+            var out = try await finishOpened(s, used: used, resuming: false, since: rec)
             out.attemptUsed = false
             return out
         }
     }
 
-    /// After `ok` (§11.14.6): `hs.init` with `ctx` = `recovery_id` (after an unlock's `ok`, each `recovery_id` this identity
-    /// registered for, newest first, IOS-PLAN 0.1.39 §4.9), then `credential.get` as the holder (no
+    /// After `ok` (§11.14.6): `hs.init` with `ctx` = `recovery_id` (after an unlock's `ok`, the invitation the vault named, else
+    /// each `recovery_id` this identity registered for, newest first, IOS-PLAN 0.1.40 §4.9), then `credential.get` as the holder (no
     /// `credential.recover`). The app is opened by ``finishRecoveryOpen()``, after the member has read the result. When the
     /// handshake is not answered (the vault locked meanwhile, or the relay lost it), the phone unlocks the vault with its own
     /// key, which the vault made its app's, and runs the handshake again.
     ///
+    /// Every unlock after the first takes the PIN kept for the pairing (``keepingPairingPin(_:_:)``); once it was forgotten (the
+    /// app left the foreground, IOS-PLAN §6.3) the answer is ``codePinNeeded``, and the PIN entered again finishes it.
+    ///
     /// [rec] is the record's generation when the open began: a wipe or a reset during the handshake drops what follows.
-    private func finishOpened(
-        _ s: VaultSession, pin: String, used: Int?, resuming: Bool, since rec: Int
-    ) async throws -> RecoveryOpenOutcome {
+    private func finishOpened(_ s: VaultSession, used: Int?, resuming: Bool, since rec: Int) async throws -> RecoveryOpenOutcome {
         var s = s
         confirmRecoveredSecret()
         // The handshake only when it has not completed yet: a phone paired earlier fetches the credential straight away.
         var refused: String?
-        if s.device.deviceID == nil { (refused, s) = try await pairRecovered(s, pin: pin, resuming: resuming) }
-        if refused == nil { refused = try await fetchRecovered(s, pin: pin, unlockFirst: resuming) }
+        do {
+            if s.device.deviceID == nil { (refused, s) = try await pairRecovered(s, resuming: resuming) }
+            if refused == nil { refused = try await fetchRecovered(s, unlockFirst: resuming) }
+        } catch is PairingPinForgotten {
+            return RecoveryOpenOutcome(Self.codePinNeeded, used: used, opened: true, attemptUsed: false)
+        }
         if let refused { return RecoveryOpenOutcome(refused, used: used, opened: true) }
         // Only now, with the credential on this phone, is the recovery over (until then the phone resumes it). The vault was
         // confirmed long ago (§3.5.7): this phone does not wait for `vault.enroll.confirm` (as after a transfer).
@@ -448,33 +462,14 @@ extension VaultManager {
         config.pairingWait ?? (resuming ? Self.resumeHandshakeWait : Self.openedHandshakeWait)
     }
 
-    /// The recovered phone's handshake; unanswered, an unlock with its own key and the handshake again. The unlock's refusal
-    /// code, and the session that paired (the earlier identity's, for a phone that could not tell whose invitation it was).
-    private func pairRecovered(_ s: VaultSession, pin: String, resuming: Bool) async throws -> (String?, VaultSession) {
-        do {
-            try await s.device.completeRecoveryOpen(timeout: handshakeWait(resuming: resuming))
-            return (nil, s)
-        } catch let e as VaultStateError where VaultFailures.noResponse(e) {
-            // IOS-PLAN 0.1.38 §4.9: the vault answers a handshake it does not accept with nothing. After the new open's `ok` the
-            // invitation may be the earlier identity's, under the earlier `recovery_id`.
-            if let earlier = try await pairEarlierIdentity(pin: pin) { return earlier }
-            // (A switch of identity stopped this session's device: the identity with the `ok` is opened again.)
-            let own = record.value.couldNotTell == nil ? s : try await openSession()
-            if let refusal = try await unlockOwn(own, pin: pin, cause: e) { return (refusal, own) }
-            // (IOS-PLAN 0.1.39 §4.9) That unlock's `ok` is a lost ok: each `recovery_id` this identity registered for is tried.
-            try await own.device.completeRecoveryOpen(timeout: handshakeWait(resuming: false))
-            return (nil, own)
-        }
-    }
-
     /// `credential.get` as the holder; when resuming ([unlockFirst]) and it is not answered (the vault locked since the
     /// pairing), an unlock with this phone's own key and `credential.get` again. The unlock's refusal code.
-    private func fetchRecovered(_ s: VaultSession, pin: String, unlockFirst: Bool) async throws -> String? {
+    private func fetchRecovered(_ s: VaultSession, unlockFirst: Bool) async throws -> String? {
         do {
             try await s.api.credentialFetch()
             return nil
         } catch let e as VaultStateError where unlockFirst {
-            if let refusal = try await unlockOwn(s, pin: pin, cause: e) { return refusal }
+            if let refusal = try await unlockOwn(s, pin: try pairingPinNow(), cause: e) { return refusal }
             try await s.api.credentialFetch()
             return nil
         }

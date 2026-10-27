@@ -25,6 +25,22 @@ import Testing
         #expect(try EnrollResult.parse(Array(#"{"ok":true,"vault_id":"abc","unlock_id":""}"#.utf8)).unlockID == nil)
         #expect(UnlockIds.of(nil) == nil && UnlockIds.of(id) == id)
     }
+
+    /// (VAULT-MESSAGING 0.67.0 §11.4) `invitation_recovery_id`: kept when a string; absent (an older vault), "" or not a string:
+    /// none, and the rest of the result stands.
+    @Test func theInvitationRecoveryIDIsOptional() throws {
+        let pcr = FakeEnclave.pcr0
+        let head = #"{"ok":true,"state_seq":3,"header_seq":2,"token":"t","release":"\#(pcr)","release_number":3,"release_status":"active","manifest_serial":7"#
+        #expect(try UnlockResult.parse(Array((head + "}").utf8)).invitationRecoveryID == nil)
+        let named = try UnlockResult.parse(Array((head + #","invitation_recovery_id":"01J0RECOVERY"}"#).utf8))
+        #expect(named.invitationRecoveryID == "01J0RECOVERY" && named.ok && named.stateSeq == 3)
+        for v in [#""""#, "7", "true"] {
+            let r = try UnlockResult.parse(Array((head + #","invitation_recovery_id":\#(v)}"#).utf8))
+            #expect(r.invitationRecoveryID == nil && r.ok, "\(v)")
+        }
+        // A refusal carries none.
+        #expect(try UnlockResult.parse(Array(#"{"ok":false,"code":"bad_pin","header_seq":2}"#.utf8)).invitationRecoveryID == nil)
+    }
 }
 
 // swiftlint:enable line_length
