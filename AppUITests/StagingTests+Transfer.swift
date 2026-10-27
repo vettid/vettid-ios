@@ -332,7 +332,8 @@ extension StagingTests {
         tap(field)
         field.typeText(inputs.password ?? "")
         dismissKeyboard(app)
-        tapPrimary(app)
+        // Return on the password already asks to move, as it does for a person; the button is tapped only otherwise.
+        if !app.alerts.firstMatch.waitForExistence(timeout: 2) { tapPrimary(app) }
         // From the tap on "Move" the approval may be on its way: any outcome but the end screens is unknown.
         guard confirmAlert(app, label: "Move") else { return "approve_unknown" }
         failOnSavePassword(app)
