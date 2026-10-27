@@ -379,6 +379,31 @@ import VettIDDataTesting
         #expect(forgotten)
     }
 
+    /// The open pane's route tells the flow while it shows the member's lost-ok finish, and no more once that ends or the
+    /// pane goes.
+    @Test func theOpenRouteReportsTheMembersLostOk() async throws {
+        let vault = FakeVaultRepository(.setup(.recovering))
+        vault.phoneSecret = true
+        let model = RecoveryOpenViewModel(move: vault, account: vault)
+        await model.settle()
+        let log = ActionLog()
+        var window: UIWindow? = host(RecoveryOpenRoute(
+            move: vault, account: vault, problem: nil, onStartOver: {}, onHold: { log.items.append($0 ? "held" : "free") },
+            onOpened: {}, model: model
+        ))
+        #expect(await eventually { log.items.last == "free" })
+        model.finishLostOk()
+        #expect(await eventually { log.items.last == "held" })
+        model.again()
+        #expect(await eventually { log.items.last == "free" })
+        model.finishLostOk()
+        #expect(await eventually { log.items.last == "held" })
+        window?.rootViewController = nil
+        window?.isHidden = true
+        window = nil
+        #expect(await eventually { log.items.last == "free" }, "released when the pane goes")
+    }
+
     /// The flow's recover route is the screen, and the app's routes carry it.
     @Test func theMovesRoutesCarryTheRecovery() {
         let vault = FakeVaultRepository(.setup(.vaultElsewhere))

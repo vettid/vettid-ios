@@ -326,3 +326,40 @@ extension CouldNotTellViewModelTests {
         #expect(!chosen.state.memberLostOk && !chosen.state.lostOkFromRule)
     }
 }
+
+extension CouldNotTellViewModelTests {
+    /// Back from the code steps that "Use a new recovery code" opened beside the member's lost-ok PIN: the open step comes back
+    /// at that PIN; from steps opened otherwise, at the entries.
+    @Test func backFromANewCodeReturnsToTheMembersLostOk() async throws {
+        vault.recoveryStageValue = .pin
+        vault.couldNotTellValue = .unlockOrNewCode
+        let vm = await recover()
+        #expect(vm.state.step == .open)
+        vm.holdOpen(true)
+        vm.useNewCode()
+        await vm.settle()
+        #expect(vm.state.step == .scan)
+        vm.holdOpen(false) // the pane went with the open step
+        #expect(vm.back())
+        #expect(vm.state.step == .open && vm.state.reopenLostOk)
+        vm.lostOkReopened()
+        #expect(!vm.state.reopenLostOk)
+        // The code steps opened again without the member's lost-ok: back at the entries.
+        vm.scan()
+        #expect(vm.state.step == .scan)
+        #expect(vm.back())
+        #expect(vm.state.step == .open && !vm.state.reopenLostOk)
+    }
+
+    /// The open pane adopts the rule the flow read, and holds while the member's lost-ok unlock is on its way.
+    @Test func theOpenAdoptsTheFlowsRule() async throws {
+        let open = await open()
+        open.finishLostOk()
+        #expect(!open.state.newCodeAllowed)
+        open.adopt(rule: .newCode)
+        #expect(open.state.newCodeAllowed && open.state.memberLostOk)
+        var sending = open.state
+        sending.step = .sending
+        #expect(sending.memberLostOk)
+    }
+}

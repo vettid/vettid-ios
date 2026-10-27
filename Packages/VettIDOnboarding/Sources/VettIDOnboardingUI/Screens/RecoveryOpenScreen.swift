@@ -522,6 +522,11 @@ struct RecoveryOpenRoute: View {
     let account: any AccountRepository
     let problem: OpenSideNotice?
     let busy: Bool
+    /// The rule as the recovery flow read it last: the pane adopts it (``RecoveryOpenViewModel/adopt(rule:)``).
+    let rule: CouldNotTellStage
+    /// The pane comes back at the lost-ok PIN the member had chosen (``RecoverState/reopenLostOk``); [onReopened] says it did.
+    let reopenLostOk: Bool
+    let onReopened: @MainActor () -> Void
     let onStartOver: @MainActor () -> Void
     let onNewCode: @MainActor () -> Void
     /// An answer (or the finish by PIN) is shown: the flow reads the rule again (IOS-PLAN §4.9).
@@ -533,15 +538,19 @@ struct RecoveryOpenRoute: View {
 
     init(
         move: any MoveRepository, account: any AccountRepository, problem: OpenSideNotice?, busy: Bool = false,
+        rule: CouldNotTellStage = .none, reopenLostOk: Bool = false,
         onStartOver: @escaping @MainActor () -> Void, onNewCode: @escaping @MainActor () -> Void = {},
         onAnswered: @escaping @MainActor () -> Void = {}, onHold: @escaping @MainActor (Bool) -> Void = { _ in },
-        onOpened: @escaping @MainActor () -> Void,
+        onReopened: @escaping @MainActor () -> Void = {}, onOpened: @escaping @MainActor () -> Void,
         model: RecoveryOpenViewModel? = nil
     ) {
         self.move = move
         self.account = account
         self.problem = problem
         self.busy = busy
+        self.rule = rule
+        self.reopenLostOk = reopenLostOk
+        self.onReopened = onReopened
         self.onStartOver = onStartOver
         self.onNewCode = onNewCode
         self.onAnswered = onAnswered
@@ -555,7 +564,17 @@ struct RecoveryOpenRoute: View {
             state: model?.state ?? RecoveryOpenState(), actions: model.map(RecoveryOpenActions.init) ?? RecoveryOpenActions(),
             problem: problem, busy: busy, onStartOver: onStartOver, onNewCode: onNewCode, onOpened: onOpened
         )
-        .onAppear { if model == nil { model = RecoveryOpenViewModel(move: move, account: account) } }
+        .onAppear {
+            guard model == nil else { return }
+            let m = RecoveryOpenViewModel(move: move, account: account)
+            model = m
+            if reopenLostOk {
+                m.finishLostOk()
+                onReopened()
+            }
+        }
+        // Not at the start (the model reads the rule itself then): only a later read of the flow's.
+        .onChange(of: rule) { _, now in model?.adopt(rule: now) }
         .onDisappear { model?.forgetSecrets() }
         .onChange(of: model?.state.step) { _, now in if now == .answered || now == .finish { onAnswered() } }
         .onChange(of: model?.state.memberLostOk ?? false, initial: true) { _, held in onHold(held) }

@@ -45,6 +45,8 @@ public final class RecoverViewModel: RecoverActions {
     @ObservationIgnored private var codeHome = RecoverStep.intro
     /// The open pane shows a lost-ok finish the member chose (``holdOpen(_:)``).
     @ObservationIgnored private var openHeld = false
+    /// The code steps were opened beside a lost-ok PIN the member chose (``useNewCode()``).
+    @ObservationIgnored private var codeFromLostOk = false
     /// The last QR text that was refused or failed: the camera reads it again at once, and it is not sent again until the member
     /// acts (types, goes back, or scans again from the intro).
     @ObservationIgnored private var lastScanned: String?
@@ -120,6 +122,9 @@ public final class RecoverViewModel: RecoverActions {
 
     public func holdOpen(_ held: Bool) { openHeld = held }
 
+    /// The open pane came back at the lost-ok PIN (``RecoverState/reopenLostOk``).
+    public func lostOkReopened() { state.reopenLostOk = false }
+
     public func useNewCode() {
         guard !state.busy, state.step == .open else { return }
         work.launch { [weak self, move] in
@@ -127,7 +132,9 @@ public final class RecoverViewModel: RecoverActions {
             let rule = try? await move.couldNotTellStage()
             guard let self, !state.busy, state.step == .open else { return }
             if let rule { state.couldNotTell = rule }
+            let held = openHeld
             scan()
+            codeFromLostOk = held && state.step == .scan
         }
     }
 
@@ -150,7 +157,10 @@ public final class RecoverViewModel: RecoverActions {
 
     /// The step the code steps go back to, when the code steps are entered from it.
     private func noteCodeHome() {
-        if [.intro, .couldNotTell, .open].contains(state.step) { codeHome = state.step }
+        guard [.intro, .couldNotTell, .open].contains(state.step) else { return }
+        codeHome = state.step
+        // Entered afresh: only ``useNewCode()`` marks the steps as opened beside a lost-ok PIN, after this.
+        codeFromLostOk = false
     }
 
     public func scan() {
@@ -182,6 +192,8 @@ public final class RecoverViewModel: RecoverActions {
         lastScanned = nil
         switch state.step {
         case .scan, .type:
+            state.reopenLostOk = codeHome == .open && codeFromLostOk
+            codeFromLostOk = false
             state.step = codeHome
             state.refusal = nil
             state.error = nil

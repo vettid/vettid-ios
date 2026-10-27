@@ -136,6 +136,9 @@ public struct RecoverState: Equatable, Sendable, CustomStringConvertible, Custom
     /// Contact VettID."; ``CouldNotTellStage/unlockOrNewCode`` (the new identity's recovery ended too) is that PIN with the code
     /// steps beside it (``newCodeAllowed``).
     public var couldNotTell = CouldNotTellStage.none
+    /// (§4.9) Back from the code steps that "Use a new recovery code" opened beside a lost-ok PIN the member chose: the open
+    /// step comes back at that PIN, not at the entries (an open uses an attempt; the lost-ok unlock does not).
+    public var reopenLostOk = false
 
     /// (§4.9) A new recovery code may be scanned or typed from here: it registers the new identity again, never a third.
     public var newCodeAllowed: Bool { couldNotTell == .newCode || couldNotTell == .unlockOrNewCode }
@@ -182,8 +185,9 @@ public protocol RecoverActions: AnyObject, Sendable {
     /// (§4.9) "Use a new recovery code" beside the PIN: the rule is read from what the phone keeps (the open pane may know more
     /// than this flow), and the code steps follow when it lets a new recovery use this phone. Mirrors vettid-android `useNewCode`.
     func useNewCode()
-    /// (IOS-PLAN §4.9) The open pane shows a lost-ok finish the member chose (``RecoveryOpenState/memberLostOk``): while it
-    /// does, a read of the rule never replaces the open step with the ended one. Mirrors vettid-android #203.
+    /// (IOS-PLAN §4.9) The open pane shows a lost-ok finish the member chose, or sends its unlock
+    /// (``RecoveryOpenState/memberLostOk``): while it does, a read of the rule never replaces the open step with the ended one
+    /// (chosen; not in the spec: vettid-android has no read of the rule that replaces the PIN step).
     func holdOpen(_ held: Bool)
     /// Reads where the recovery stands again, after ``RecoverStep/stageFailed``.
     func retryStage()

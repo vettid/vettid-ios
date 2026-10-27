@@ -68,8 +68,9 @@ public struct RecoveryOpenState: Equatable, Sendable, CustomStringConvertible, C
     /// open that got no answer. Mirrors vettid-android `lostOkFromRule`.
     public var lostOkFromRule = false
 
-    /// (IOS-PLAN §4.9) The member chose the lost-ok finish: the recovery flow does not take the screen from it.
-    public var memberLostOk: Bool { step == .finish && lostOk && !lostOkFromRule }
+    /// (IOS-PLAN §4.9) The member chose the lost-ok finish, or its unlock is on its way: the recovery flow does not take the
+    /// screen from it.
+    public var memberLostOk: Bool { (step == .finish || step == .sending) && lostOk && !lostOkFromRule }
 
     public init(step: OpenStep = .enter, used: Int? = nil) {
         self.step = step

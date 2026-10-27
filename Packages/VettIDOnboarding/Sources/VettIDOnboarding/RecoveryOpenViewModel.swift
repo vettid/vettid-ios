@@ -162,6 +162,10 @@ public final class RecoveryOpenViewModel {
     /// recovery that completed on the way (an unlock with this phone's secret; no attempt is used).
     public func finishLostOk() { enterLostOk(fromRule: false) }
 
+    /// (IOS-PLAN §4.9) The rule as the recovery flow read it last (a return to the foreground, an answer): the new-code action
+    /// beside the PIN follows it.
+    public func adopt(rule: CouldNotTellStage) { state.couldNotTell = rule }
+
     private func enterLostOk(fromRule: Bool) {
         state.step = .finish
         state.lostOk = true

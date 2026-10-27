@@ -308,9 +308,10 @@ public struct RecoverRoute: View {
         let problem: OpenSideNotice? = state.guidance.map(OpenSideNotice.guidance) ?? state.error.map(OpenSideNotice.failure)
         return AnyView(
             RecoveryOpenRoute(
-                move: move, account: account, problem: problem, busy: state.busy, onStartOver: { model.askStartOver() },
+                move: move, account: account, problem: problem, busy: state.busy, rule: state.couldNotTell,
+                reopenLostOk: state.reopenLostOk, onStartOver: { model.askStartOver() },
                 onNewCode: { model.useNewCode() }, onAnswered: { model.checkEnded() },
-                onHold: { model.holdOpen($0) }, onOpened: { model.finish() }
+                onHold: { model.holdOpen($0) }, onReopened: { model.lostOkReopened() }, onOpened: { model.finish() }
             )
         )
     }
