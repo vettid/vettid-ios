@@ -179,6 +179,8 @@ public final class VaultDevice: @unchecked Sendable {
     var forgotten = false
     /// Set by ``halt()``: nothing is sent or written to the store any more, and the stored state stays as it was.
     var halted = false
+    /// Set by ``quiet()``: nothing is sent to the vault any more; the store is still written.
+    var quieted = false
     /// The newest `ts` of a message from the vault and the monotonic time it arrived (in memory only).
     var vaultClock: (ts: Date, at: TimeInterval)?
     /// The newest `ts` the vault stamped on an **answer** (in memory only): only answers settle a request (VAULT-MESSAGING
@@ -488,6 +490,30 @@ public final class VaultDevice: @unchecked Sendable {
     /// Throws once the device is halted (``halt()``): nothing is sent from then on.
     func refuseHalted() throws {
         if mem.withLock({ halted }) { throw Self.haltedError }
+    }
+
+    /// Quiets the device of a vault being deleted (IOS-PLAN §4.2 point 1): it stops collecting, ends the requests that
+    /// await an answer (their callers throw, and nothing is sent again), and from then on deposits nothing to the vault,
+    /// neither a new message nor one the outbox holds. Unlike ``halt()``, the store is still written, and ``forget()``
+    /// and ``deleteMailbox()`` still work (the wipe after the deletion forgets the device). For the rest of the
+    /// device's life: a session opened later uses a new device, restored from the store, which sends again.
+    public func quiet() {
+        stop()
+        let shots: [OneShot<Inner>] = mem.withLock {
+            quieted = true
+            return Array(pending.values)
+        }
+        for s in shots { s.abort() }
+    }
+
+    static let quietedError = VaultStateError(message: "device quieted")
+
+    /// Throws once the device is halted (``halt()``) or quieted (``quiet()``): nothing is sent to the vault from then on.
+    func refuseSending() throws {
+        try mem.withLock {
+            if halted { throw Self.haltedError }
+            if quieted { throw Self.quietedError }
+        }
     }
 
     /// Stops collecting and deletes the device's own mailbox at its relay with everything in it (RELAY-PROTOCOL

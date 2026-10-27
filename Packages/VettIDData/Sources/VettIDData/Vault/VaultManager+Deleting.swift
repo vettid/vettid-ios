@@ -124,7 +124,9 @@ extension VaultManager {
 
     /// Closes the open vault (§4.2 point 1): the shell and every vault screen (the phase), a release update, the
     /// session and its collection, a pending lock, the PIN steps and the changes in memory, the owner check, the lists.
-    /// The app key and the device keys stay: the status needs the app key.
+    /// Every device a session held is quieted (``VaultDevice/quiet()``): a request on its way (a list read, the account,
+    /// the owner check's status) ends without being sent again. The app key and the device keys stay: the status needs
+    /// the app key.
     private func closeForDeleting() {
         // An unlock, a refresh or a lock on its way publishes nothing over this state, nor writes the record.
         lockGeneration += 1
@@ -133,6 +135,7 @@ extension VaultManager {
         storedPhase = .deleting
         releaseUpdate.clear()
         lockGuard.keeper.abandon()
+        for d in devicesMade.alive { d.quiet() }
         stopCollecting()
         pinChangeOperation = nil
         renewOperation = nil
