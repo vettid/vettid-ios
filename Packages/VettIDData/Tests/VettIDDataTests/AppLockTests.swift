@@ -4,12 +4,12 @@ import Testing
 import VettIDKeys
 import VettIDKeysTesting
 
-/// The app lock's preferences and sealed data key in memory; [unavailable] answers like a locked iPhone, [corrupt] like a
-/// damaged file.
+/// The app lock's preferences in memory, with the sealed data key an earlier build may have left ([retired]);
+/// [unavailable] answers like a locked iPhone, [corrupt] like a damaged file.
 final class MemoryAppLockStore: AppLockStore, @unchecked Sendable {
     private let lock = NSLock()
     private var prefs = AppLockPreferences()
-    private var sealedValue: [UInt8]?
+    private var retiredValue: [UInt8]?
     private var unavailableValue = false
     private var corruptValue = false
 
@@ -18,9 +18,9 @@ final class MemoryAppLockStore: AppLockStore, @unchecked Sendable {
         set { lock.withLock { prefs = newValue } }
     }
 
-    var sealed: [UInt8]? {
-        get { lock.withLock { sealedValue } }
-        set { lock.withLock { sealedValue = newValue } }
+    var retired: [UInt8]? {
+        get { lock.withLock { retiredValue } }
+        set { lock.withLock { retiredValue = newValue } }
     }
 
     var unavailable: Bool {
@@ -46,13 +46,7 @@ final class MemoryAppLockStore: AppLockStore, @unchecked Sendable {
 
     func setPreferences(_ p: AppLockPreferences) throws { current = p }
 
-    func readSealed() throws -> [UInt8]? {
-        try check()
-        return sealed
-    }
-
-    func writeSealed(_ b: [UInt8]) throws { sealed = b }
-    func deleteSealed() throws { sealed = nil }
+    func deleteRetired() throws { retired = nil }
 }
 
 /// The app lock (ANDROID-PLAN D6; IOS-PLAN ID17) with a software stand-in for the Secure Enclave key. Mirrors
@@ -82,25 +76,53 @@ final class MemoryAppLockStore: AppLockStore, @unchecked Sendable {
     @Test func offByDefault() {
         let l = lock()
         l.start()
-        #expect(l.state == .disabled && l.appDataKey() == nil)
+        #expect(l.state == .disabled)
     }
 
+    /// A UI gate only: each prompt opens a fresh challenge sealed to the key; no data key is made or kept.
     @Test func enableThenRestartStartsLockedAndUnlocks() async throws {
         let l = try await enabled()
-        #expect(l.state == .unlocked)
-        let k = try #require(l.appDataKey())
-        #expect(k.count == 32 && store.current.enabled)
+        #expect(l.state == .unlocked && store.current.enabled && keys.opens == 1)
+        #expect(store.retired == nil)
 
         let again = lock()
         again.start()
-        #expect(again.state == .locked && again.appDataKey() == nil)
+        #expect(again.state == .locked)
         #expect(await again.unlock(reason: "Unlock VettID"))
-        #expect(again.state == .unlocked && again.appDataKey() == k)
+        #expect(again.state == .unlocked && keys.opens == 2)
     }
 
-    /// Whatever fails at the start, the lock leaves "pending": a sealed key that cannot be read is a lock that cannot open,
+    /// The sealed data key an earlier build left is deleted at the start, unread, and the lock that was on stays on (its
+    /// key is the gate); a start with nothing left changes nothing.
+    @Test func anEarlierBuildsSealedDataKeyIsDeletedAtTheStart() async throws {
+        _ = try await enabled()
+        store.retired = [0x01, 1, 2, 3]
+        let l = lock()
+        l.start()
+        #expect(store.retired == nil && l.state == .locked && store.current.enabled)
+        #expect(await l.unlock(reason: "Unlock VettID"))
+        let again = lock()
+        again.start()
+        #expect(store.retired == nil && again.state == .locked)
+    }
+
+    /// The file of the sealed data key an earlier build left is deleted by the file store, and a second deletion is no
+    /// error.
+    @Test func theFileStoreDeletesTheRetiredFile() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent(FileAppLockStore.sealedFile)
+        try Data([1, 2, 3]).write(to: file)
+        let s = FileAppLockStore(directory: dir, keys: InMemoryFileKeyHolder(), protectedData: ProtectedDataFlag(available: true))
+        try s.deleteRetired()
+        #expect(!FileManager.default.fileExists(atPath: file.path))
+        try s.deleteRetired()
+    }
+
+    /// Whatever fails at the start, the lock leaves "pending": settings that cannot be read are a lock that cannot open,
     /// off, with the notice. A locked iPhone (no protected data yet) stays pending until the next start.
-    @Test func aKeyFileThatCannotBeReadTurnsTheLockOffInsteadOfLeavingItPending() async throws {
+    @Test func settingsThatCannotBeReadTurnTheLockOffInsteadOfLeavingItPending() async throws {
         store.current = AppLockPreferences(enabled: true, method: .biometrics)
         try keys.create(.biometrics)
         store.unavailable = true
@@ -125,7 +147,7 @@ final class MemoryAppLockStore: AppLockStore, @unchecked Sendable {
         l.onBackground()
         clock.t += 60
         l.onForeground()
-        #expect(l.state == .locked && l.appDataKey() == nil)
+        #expect(l.state == .locked)
     }
 
     /// iOS's prompt makes the app inactive and, for the passcode, may send it to the background: not leaving the app.
@@ -152,18 +174,19 @@ final class MemoryAppLockStore: AppLockStore, @unchecked Sendable {
         #expect(l.state == .disabled && l.invalidated && !store.current.enabled)
     }
 
-    @Test func aMissingSealedKeyTurnsTheLockOff() async throws {
+    /// The key gone (deleted outside the app lock): the lock cannot open and turns itself off, with the notice.
+    @Test func aMissingKeyTurnsTheLockOff() async throws {
         let l = try await enabled()
         l.lockNow()
-        store.sealed = nil
+        try keys.delete()
         #expect(await !l.unlock(reason: "Unlock VettID"))
-        #expect(l.state == .disabled && l.invalidated)
+        #expect(l.state == .disabled && l.invalidated && keys.opens == 1, "no prompt for a key that is gone")
     }
 
     @Test func disableForgetsEverything() async throws {
         let l = try await enabled()
         try l.disable()
-        #expect(try l.state == .disabled && !keys.exists() && store.sealed == nil)
+        #expect(try l.state == .disabled && !keys.exists() && store.retired == nil)
         // The chosen method stays for the next time the lock is turned on.
         #expect(store.current == AppLockPreferences(enabled: false, method: .biometrics))
     }
@@ -277,7 +300,7 @@ final class MemoryAppLockStore: AppLockStore, @unchecked Sendable {
         let l = try await enabled(.passcode)
         try l.setTimeout(.oneHour)
         l.reset()
-        #expect(try l.state == .disabled && l.method == .biometrics && l.timeout == .standard && !keys.exists() && store.sealed == nil)
+        #expect(try l.state == .disabled && l.method == .biometrics && l.timeout == .standard && !keys.exists() && store.retired == nil)
     }
 
     struct NoAppLockKeys: AppLockKeys {

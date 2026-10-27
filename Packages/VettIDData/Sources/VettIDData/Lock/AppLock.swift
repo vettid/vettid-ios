@@ -11,7 +11,7 @@ public enum AppLockState: Equatable, Sendable {
     case disabled
     /// On, and the member has not authenticated since the app started or timed out.
     case locked
-    /// On, and authenticated: the app's data key is in memory.
+    /// On, and the member authenticated.
     case unlocked
 }
 
@@ -40,19 +40,19 @@ public struct AppLockPreferences: Codable, Equatable, Sendable {
     }
 }
 
-/// Where the app lock keeps its preferences and the sealed data key. Mirrors vettid-android `PreferencesRepository` (its
-/// app-lock part) and `WrappedKeyFile`.
+/// Where the app lock keeps its preferences. Mirrors vettid-android `PreferencesRepository` (its app-lock part).
 public protocol AppLockStore: Sendable {
     func preferences() throws -> AppLockPreferences
     func setPreferences(_ p: AppLockPreferences) throws
-    func readSealed() throws -> [UInt8]?
-    func writeSealed(_ b: [UInt8]) throws
-    func deleteSealed() throws
+    /// Deletes, unread, the sealed data key earlier builds kept beside the preferences; nothing when it is gone already.
+    func deleteRetired() throws
 }
 
-/// ``AppLockStore`` in two encrypted files of the app's data directory (excluded from backups, IOS-PLAN §6.1).
+/// ``AppLockStore`` in an encrypted file of the app's data directory (excluded from backups, IOS-PLAN §6.1).
 public struct FileAppLockStore: AppLockStore {
     public static let settingsFile = "app-lock-settings"
+    /// Retired: the data key sealed to the app-lock key, which earlier builds wrote and nothing used. Deleted at the
+    /// start (``AppLock/start()``), when the lock is turned off and at a reset; a wipe erases it with the data directory.
     public static let sealedFile = "app-lock"
 
     private let settings: EncryptedFileStore
@@ -77,9 +77,7 @@ public struct FileAppLockStore: AppLockStore {
     }
 
     public func setPreferences(_ p: AppLockPreferences) throws { try settings.save(Array(try JSONEncoder().encode(p))) }
-    public func readSealed() throws -> [UInt8]? { try sealed.load() }
-    public func writeSealed(_ b: [UInt8]) throws { try sealed.save(b) }
-    public func deleteSealed() throws { try sealed.clear() }
+    public func deleteRetired() throws { try sealed.clear() }
 }
 
 /// How an app-lock prompt ended. Mirrors vettid-android `PromptOutcome`.
@@ -117,9 +115,11 @@ public final class UnlockPromptGate {
     public func newLock() { endedWithoutSuccess = false }
 }
 
-/// The app lock (ANDROID-PLAN D6; IOS-PLAN ID17). When on, opening the app, and returning to it after the timeout, asks
-/// for Face ID or Touch ID, or for the iPhone passcode only (``AppLockMethod``), whose Secure Enclave key opens the app's
-/// data key: a random 32-byte key that the app's local caches will be encrypted under (with the rows that bring them). A
+/// The app lock (ANDROID-PLAN D6; IOS-PLAN ID17): a gate in front of the app's screens. When on, opening the app, and
+/// returning to it after the timeout, asks for Face ID or Touch ID, or for the iPhone passcode only (``AppLockMethod``):
+/// a fresh random challenge is sealed to the Secure Enclave key, and the lock opens when the key, after the prompt,
+/// opens it again. No data key is kept, sealed or in memory: nothing on the phone is encrypted under the lock (chosen;
+/// not in the spec: earlier builds sealed a data key that nothing used; its file is deleted at the start). A
 /// convenience layer only: it never replaces the vault PIN or the credential password, and nothing of the vault depends
 /// on it. A key that no longer opens (a new face or finger with Face ID or Touch ID) turns the lock off and says so
 /// ([invalidated]); one that stops opening with the passcode method (the passcode turned off) turns it off without that
@@ -128,8 +128,8 @@ public final class UnlockPromptGate {
 @MainActor
 @Observable
 public final class AppLock {
-    nonisolated static let keySize = 32
-    nonisolated static let format: UInt8 = 0x01
+    /// The size of the random challenge each prompt opens.
+    nonisolated static let challengeSize = 32
 
     public private(set) var state: AppLockState = .pending
     /// The key no longer opened and the lock turned itself off (Face ID or Touch ID only).
@@ -148,7 +148,6 @@ public final class AppLock {
     @ObservationIgnored private let store: any AppLockStore
     @ObservationIgnored private let keys: any AppLockKeys
     @ObservationIgnored private let now: @Sendable () -> Date
-    @ObservationIgnored private var dataKey: [UInt8]?
     @ObservationIgnored private var backgroundAt: Date?
 
     public init(store: any AppLockStore, keys: any AppLockKeys, now: @escaping @Sendable () -> Date = { Date() }) {
@@ -157,11 +156,13 @@ public final class AppLock {
         self.now = now
     }
 
-    /// Reads the preferences: an enabled lock starts locked. Leaves ``AppLockState/pending`` unless the iPhone has not been
-    /// unlocked since it started (tried again by the next call). Anything else that fails is a lock that cannot open: off,
-    /// with the notice, never pending for good.
+    /// Reads the preferences: an enabled lock whose key exists starts locked. Leaves ``AppLockState/pending`` unless the
+    /// iPhone has not been unlocked since it started (tried again by the next call). Anything else that fails is a lock
+    /// that cannot open: off, with the notice, never pending for good. The sealed data key of earlier builds is deleted
+    /// first (again at the next start when that fails).
     public func start() {
         guard state == .pending else { return }
+        try? store.deleteRetired()
         let p: AppLockPreferences
         do {
             p = try store.preferences()
@@ -179,8 +180,7 @@ public final class AppLock {
         var usable = false
         if p.enabled {
             do {
-                let sealed = try store.readSealed()
-                usable = try keys.exists() && sealed != nil
+                usable = try keys.exists()
             } catch KeysError.unavailable {
                 return
             } catch {
@@ -217,29 +217,26 @@ public final class AppLock {
         timeout = t
     }
 
-    /// Turns the lock on with [m] (also how the method of a lock that is on changes): a fresh key, the data key sealed to
-    /// it, then one prompt that opens it, so that the member has shown they can. True once on; false when the prompt was
+    /// Turns the lock on with [m] (also how the method of a lock that is on changes): a fresh key, then one prompt that
+    /// opens a challenge sealed to it, so that the member has shown they can. True once on; false when the prompt was
     /// cancelled or failed: the fresh key replaced any earlier one, so a lock that was on cannot open any more and is
     /// turned off, without the notice. Throws when the key cannot be made (``KeysError/noSecureHardware``).
     public func enable(_ m: AppLockMethod, reason: String) async throws -> Bool {
         guard prompts.tryStart(auto: false) else { return false }
         authenticating = true
         defer { authenticating = false }
-        var fresh = Randomness.bytes(Self.keySize)
-        defer { Bytes.wipe(&fresh) }
+        let challenge = Randomness.bytes(Self.challengeSize)
+        let sealed: [UInt8]
         do {
             try keys.create(m)
-            try store.writeSealed([Self.format] + (try keys.seal(fresh)))
+            sealed = try keys.seal(challenge)
         } catch {
             prompts.finished(.dismissed)
             try? turnOff(invalidated: false)
             throw error
         }
         do {
-            guard let sealed = try store.readSealed() else { throw AppLockKeyError.invalidated }
-            var opened = try await keys.open(Array(sealed.dropFirst()), reason: reason)
-            defer { Bytes.wipe(&opened) }
-            guard opened == fresh else { throw AppLockKeyError.invalidated }
+            guard try await keys.open(sealed, reason: reason) == challenge else { throw AppLockKeyError.invalidated }
         } catch {
             prompts.finished(.dismissed)
             try? turnOff(invalidated: false)
@@ -248,14 +245,14 @@ public final class AppLock {
         prompts.finished(.succeeded)
         try store.setPreferences(AppLockPreferences(enabled: true, method: m, timeout: timeout))
         method = m
-        keep(fresh)
         invalidated = false
         state = .unlocked
         return true
     }
 
-    /// Opens the lock: one prompt, unless one is in flight or ([auto]) the last one of this lock did not succeed. True
-    /// when the app is open. A key that cannot open any more turns the lock off.
+    /// Opens the lock: one prompt, unless one is in flight or ([auto]) the last one of this lock did not succeed, that
+    /// opens a fresh challenge sealed to the key. True when the app is open. A key that is gone or cannot open any more
+    /// turns the lock off.
     @discardableResult
     public func unlock(reason: String, auto: Bool = false) async -> Bool {
         guard state == .locked, prompts.tryStart(auto: auto) else { return false }
@@ -264,23 +261,22 @@ public final class AppLock {
         defer { authenticating = false }
         // The "new face or finger" notice is the biometric method's only.
         let notice = method == .biometrics
+        let challenge = Randomness.bytes(Self.challengeSize)
         let sealed: [UInt8]
         do {
-            guard let s = try store.readSealed(), s.count > 1, s[0] == Self.format else {
-                prompts.finished(.dismissed)
-                try? turnOff(invalidated: notice)
-                return false
-            }
-            sealed = s
+            sealed = try keys.seal(challenge)
+        } catch KeysError.missing, KeysError.invalid {
+            // No key (or none that seals): a lock that cannot open.
+            prompts.finished(.dismissed)
+            try? turnOff(invalidated: notice)
+            return false
         } catch {
             prompts.finished(.dismissed)
             return false
         }
         do {
-            let k = try await keys.open(Array(sealed.dropFirst()), reason: reason)
-            guard k.count == Self.keySize else { throw AppLockKeyError.invalidated }
+            guard try await keys.open(sealed, reason: reason) == challenge else { throw AppLockKeyError.invalidated }
             prompts.finished(.succeeded)
-            keep(k)
             state = .unlocked
             return true
         } catch AppLockKeyError.invalidated {
@@ -297,13 +293,12 @@ public final class AppLock {
         }
     }
 
-    /// Turns the lock off: the key and the sealed data key go.
+    /// Turns the lock off: the key goes (and an earlier build's sealed data key, if one is left).
     public func disable() throws { try turnOff(invalidated: false) }
 
     private func turnOff(invalidated notice: Bool) throws {
         try? keys.delete()
-        try? store.deleteSealed()
-        forgetKey()
+        try? store.deleteRetired()
         turnedOff(invalidated: notice)
         var p = (try? store.preferences()) ?? AppLockPreferences()
         p.enabled = false
@@ -318,8 +313,7 @@ public final class AppLock {
     /// As on a fresh install (a wipe of this phone): off, no key, the default method and timeout.
     public func reset() {
         try? keys.delete()
-        try? store.deleteSealed()
-        forgetKey()
+        try? store.deleteRetired()
         invalidated = false
         lockedOut = false
         state = .disabled
@@ -331,10 +325,9 @@ public final class AppLock {
 
     public func acknowledgeInvalidated() { invalidated = false }
 
-    /// Locks now (the key leaves memory).
+    /// Locks now.
     public func lockNow() {
         guard state == .unlocked else { return }
-        forgetKey()
         prompts.newLock()
         state = .locked
     }
@@ -351,18 +344,5 @@ public final class AppLock {
         guard let at = backgroundAt else { return }
         backgroundAt = nil
         if state == .unlocked && now().timeIntervalSince(at) >= Double(timeout.rawValue) { lockNow() }
-    }
-
-    /// The app's data key while unlocked (a copy; the caller wipes it), else nil.
-    public func appDataKey() -> [UInt8]? { dataKey }
-
-    private func keep(_ k: [UInt8]) {
-        forgetKey()
-        dataKey = k
-    }
-
-    private func forgetKey() {
-        if dataKey != nil { Bytes.wipe(&dataKey!) } // swiftlint:disable:this force_unwrapping
-        dataKey = nil
     }
 }

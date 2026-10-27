@@ -25,8 +25,9 @@ public enum AppLockKeyError: Error, Equatable, Sendable {
     case failed
 }
 
-/// The app-lock key (IOS-PLAN §6.1 "App-lock key", ID17): a convenience layer that gates the unwrap of the app's local
-/// data key, never in place of the PIN or the password, and the only key of the app bound to biometry or the passcode.
+/// The app-lock key (IOS-PLAN §6.1 "App-lock key", ID17): the gate of a convenience layer in front of the app's screens,
+/// which opens a random challenge sealed to it at each prompt, never in place of the PIN or the password, and the only
+/// key of the app bound to biometry or the passcode.
 /// On the iPhone a Secure Enclave key with `.biometryCurrentSet` or `.devicePasscode` per the member's choice
 /// (``SecureEnclaveAppLockKeys``); a software stand-in in VettIDKeysTesting for the simulator's tests. Mirrors
 /// vettid-android `AppLockKeys`, with the prompt inside ``open(_:reason:)`` (iOS shows it when the private key is used).
@@ -55,8 +56,8 @@ public extension AppLockKeys {
 }
 
 /// The app-lock key in the Secure Enclave: a P-256 key whose private half needs `.biometryCurrentSet` (a new face or
-/// finger invalidates it) or `.devicePasscode`, `WhenUnlockedThisDeviceOnly`, never synchronizable; the data key sealed
-/// to it with ECIES (`eciesEncryptionCofactorVariableIVX963SHA256AESGCM`). The app uses it wherever it has the Secure
+/// finger invalidates it) or `.devicePasscode`, `WhenUnlockedThisDeviceOnly`, never synchronizable; the app lock's
+/// challenge sealed to it with ECIES (`eciesEncryptionCofactorVariableIVX963SHA256AESGCM`). The app uses it wherever it has the Secure
 /// Enclave keys (IOS-PLAN §8 I1.4), a refusing placeholder elsewhere.
 public final class SecureEnclaveAppLockKeys: AppLockKeys, @unchecked Sendable {
     public static let tag = "com.vettid.applock.v1"
