@@ -475,8 +475,9 @@ public final class FakeVaultService: @unchecked Sendable {
             case ("POST", "/api/vault/recovery/open"): return recoveryOpen(r)
             case ("GET", "/api/vault/status"):
                 statusReadsValue += 1
-                if statusUnauthorizedValue { return .json(401, #"{"error":"unauthorized"}"#) }
-                if statusForbiddenValue { return .json(403, #"{"error":"forbidden"}"#) }
+                // A held read holds its refusal too (``holdStatusReads()``: each answer as it is when asked).
+                if statusUnauthorizedValue { return held(.json(401, #"{"error":"unauthorized"}"#)) }
+                if statusForbiddenValue { return held(.json(403, #"{"error":"forbidden"}"#)) }
                 let rs = recoveryStatusField()
                 if let refused = rs.unauthorized { return refused }
                 let a: FakeHTTPServer.Answer = if noVault || vaultDeletedValue && !statusLagsDeletionValue {
@@ -484,7 +485,7 @@ public final class FakeVaultService: @unchecked Sendable {
                 } else {
                     .json(200, #"{"vault":{"vault_id":"\#(statusVaultValue ?? vaultID)","state":"\#(statusState)","release":{"number":\#(releases.routed),"status":"active"}\#(rs.member)}}"#)
                 }
-                return statusGateValue.map { .held($0, a) } ?? a
+                return held(a)
             default:
                 if r.method == "GET", r.path.hasPrefix("/api/vault/requests/") { return slot(String(r.path.dropFirst("/api/vault/requests/".count))) }
                 return .json(404, #"{"error":"not_found"}"#)

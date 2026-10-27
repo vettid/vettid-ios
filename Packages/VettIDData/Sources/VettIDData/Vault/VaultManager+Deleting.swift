@@ -70,6 +70,8 @@ extension VaultManager {
     /// erases: only a definite word does (none yet), or the member's confirmed removal.
     public func checkDeletionAgain() async -> DeletionRead {
         guard deletion != nil else { return .gone }
+        // During a wipe nothing is read: a read would sign with the app key the wipe erases.
+        if record.closed { return .unreachable }
         return await deletionReads.readOnce()
     }
 

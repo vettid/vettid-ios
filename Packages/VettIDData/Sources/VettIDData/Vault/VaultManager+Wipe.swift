@@ -57,6 +57,8 @@ extension VaultManager {
         _ = await cancelOpening()
         if let d = session?.device { wipeDevice = d }
         stopCollecting()
+        // A vault being deleted: its status reads stop, and the one on its way is waited for before anything is erased.
+        await deletionWatch?.stopAndWait()
     }
 
     /// The wipe after its marker: true when nothing is left.

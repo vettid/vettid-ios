@@ -56,6 +56,26 @@ import VettIDDataTesting
         #expect(try !phone.wipeTargets.keysLeft())
     }
 
+    /// A status read on its way when the member erases this phone: the wipe cancels it and waits for it, and starts none
+    /// of its own, so that nothing signs with the app key after the erase (the member API's signer would create the key
+    /// again). A `401` is answered after the erase: the client's retry, signed again, is the late signature.
+    @Test func aStatusReadOnItsWayLeavesNoKeyAfterTheErase() async throws {
+        defer { phone.close() }
+        try await deleting()
+        service.statusUnauthorized = true
+        service.holdStatusReads()
+        let read = Task { await m.checkDeletionAgain() }
+        #expect(await eventually { service.heldStatusReads == 1 })
+        let reads = service.statusReads
+        try await m.eraseThisPhone()
+        #expect(m.phase == .signedOut)
+        service.releaseStatusReads()
+        _ = await read.value
+        #expect(service.statusReads == reads, "the refused read is not sent again after the erase")
+        #expect(files.isEmpty, "files left: \(files)")
+        #expect(try !phone.wipeTargets.keysLeft(), "no key created after the erase")
+    }
+
     /// The event while the vault is open: closed at once (no session, no lists), the marker stored with a 10-minute
     /// bound, and nothing more sent: an unlock is refused before anything goes out.
     @Test func theEventClosesTheOpenVaultAtOnce() async throws {
