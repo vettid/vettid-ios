@@ -51,6 +51,7 @@ public struct TransferInContent: View {
             ) {
                 WaitingRow(text: MoveStrings.transferInConnecting, identifier: "connecting")
             }
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("transfer_in_connecting")
         case .compare: compare
         case .done:
@@ -68,18 +69,21 @@ public struct TransferInContent: View {
                 title: MoveStrings.transferInRejectedTitle, body: MoveStrings.transferInRejectedBody,
                 primary: MoveStrings.transferInAgain, onPrimary: actions.again, onBack: onLeave
             )
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("transfer_rejected")
         case .timedOut:
             Outcome(
                 title: MoveStrings.transferInTimeoutTitle, body: MoveStrings.transferInTimeoutBody,
                 primary: MoveStrings.transferInAgain, onPrimary: actions.again, onBack: onLeave
             )
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("transfer_timed_out")
         case .notAnswered:
             Outcome(
                 title: MoveStrings.transferInNoAnswerTitle, body: MoveStrings.transferInNoAnswer,
                 primary: MoveStrings.transferInScanNew, onPrimary: actions.again, onBack: onLeave
             )
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("transfer_not_answered")
         }
     }
@@ -94,6 +98,7 @@ public struct TransferInContent: View {
                 MoveFailure(kind: state.error, timeScale: timeScale)
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("transfer_in")
     }
 
@@ -108,6 +113,7 @@ public struct TransferInContent: View {
                 MoveFailure(kind: state.error, timeScale: timeScale)
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("transfer_in_scan")
     }
 
@@ -132,6 +138,7 @@ public struct TransferInContent: View {
                 MoveFailure(kind: state.error, timeScale: timeScale)
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("transfer_in_paste")
     }
 
@@ -145,6 +152,7 @@ public struct TransferInContent: View {
                 WaitingRow(text: MoveStrings.transferInWaiting(formatWait(state.secondsLeft)), identifier: "waiting_old_phone")
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("transfer_in_compare")
     }
 }
@@ -228,6 +236,7 @@ public struct MovedScreen: View {
                 }
             }
         ) { EmptyView() }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("moved")
     }
 }

@@ -75,22 +75,33 @@ class VaultUITestCase: XCTestCase {
     }
 
     /// The PIN on the keypad, one digit at a time, each key tapped only once it can be hit (not under the keyboard).
-    /// Fails, sending nothing, unless the keypad then holds exactly as many digits as [pin]: a missed tap must never
-    /// send a wrong PIN, which the vault counts as a failed check (VAULT-MESSAGING §3.6.1).
-    @MainActor
-    func enterPin(_ app: XCUIApplication, _ pin: String) {
+    /// True only when the keypad then holds exactly as many digits as [pin]: a missed tap must never send a wrong PIN,
+    /// which the vault counts as a failed check (VAULT-MESSAGING §3.6.1). On false the failure is recorded and the caller
+    /// must send nothing (a test that goes on after a failure must check it).
+    @MainActor @discardableResult
+    func enterPin(_ app: XCUIApplication, _ pin: String) -> Bool {
         dismissKeyboard(app)
         for digit in pin {
             let key = app.buttons["pin_\(digit)"]
-            XCTAssertTrue(waitUntil(timeout: 10, { key.exists }), "no keypad")
+            guard waitUntil(timeout: 10, { key.exists }) else {
+                fail(app, "The keypad is not there; nothing was sent.")
+                return false
+            }
             scrollToHittable(app, key)
-            XCTAssertTrue(waitUntil(timeout: 10, { key.isHittable }), "the keypad cannot be reached")
+            guard waitUntil(timeout: 10, { key.isHittable }) else {
+                fail(app, "The keypad cannot be reached; nothing was sent.")
+                return false
+            }
             key.tap()
         }
         let dots = app.descendants(matching: .any)["pin_dots"]
-        if dots.exists, let entered = dots.value as? String, entered != String(pin.count) {
-            return fail(app, "The keypad holds \(entered) digits, not \(pin.count); nothing was sent.")
+        // Fails closed: a keypad whose digit count cannot be read is not trusted.
+        guard dots.exists, let entered = dots.value as? String, entered == String(pin.count) else {
+            let held = (dots.value as? String).map { "\($0) digits, not \(pin.count)" } ?? "an unreadable number of digits"
+            fail(app, "The keypad holds \(held); nothing was sent.")
+            return false
         }
+        return true
     }
 
     /// Scrolls the screen up until [element] can be tapped (a long notice, such as the unlock screen's What's new, can
@@ -216,11 +227,12 @@ class VaultUITestCase: XCTestCase {
         }
     }
 
-    /// The daily owner check past its deadline (VAULT-MESSAGING §3.6.5): the PIN and the password together.
-    @MainActor
-    func ownerCheck(_ app: XCUIApplication, pin: String, password: String) {
+    /// The daily owner check past its deadline (VAULT-MESSAGING §3.6.5): the PIN and the password together. False, after
+    /// the failure, when the PIN was not entered whole (nothing is sent then).
+    @MainActor @discardableResult
+    func ownerCheck(_ app: XCUIApplication, pin: String, password: String) -> Bool {
         expect(app, "owner_check_pin", timeout: 30)
-        enterPin(app, pin)
+        guard enterPin(app, pin) else { return false }
         let field = app.secureTextFields["owner_check_password"]
         field.tap()
         field.typeText(password)
@@ -230,6 +242,7 @@ class VaultUITestCase: XCTestCase {
         }
         expect(app, "app_shell", timeout: Self.network)
         failOnSavePassword(app)
+        return shown(app)["app_shell"] != nil
     }
 
     /// "Lock vault" from the account sheet, then the unlock screen once the vault has confirmed the lock.

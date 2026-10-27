@@ -67,6 +67,7 @@
 		944241F35F84B24040C3C97F /* CanaryManifestFilesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6026316F2864710BB7DFBBCB /* CanaryManifestFilesTests.swift */; };
 		947B90F626615FBFDC4AB60F /* VettIDMessages in Frameworks */ = {isa = PBXBuildFile; productRef = 29121F6C29BAE98F04C4EFAC /* VettIDMessages */; };
 		952798E17BA70F638B502377 /* DevStackWiring.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF184030262E43FB151252EE /* DevStackWiring.swift */; };
+		9677BF2DC1585290382C8F93 /* StagingTests+Transfer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9812A6CD3A1425C23018950A /* StagingTests+Transfer.swift */; };
 		9AC6E6766E388B3332491622 /* VettIDMessages in Frameworks */ = {isa = PBXBuildFile; productRef = E159DF0BD64E08CD3DE1DD88 /* VettIDMessages */; };
 		9AFDE19700D4376ECAACFF6B /* OwnerCheckCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABB2FC11CCF6AAD6F6399524 /* OwnerCheckCatalog.swift */; };
 		9C686D12D46144D0CF1890A9 /* VettIDHistory in Frameworks */ = {isa = PBXBuildFile; productRef = C5A65DAFD3B8EBAB52757B9E /* VettIDHistory */; };
@@ -183,6 +184,7 @@
 		8EA490A99EEA3D46D0CCDA5B /* VettIDOnboarding */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDOnboarding; path = Packages/VettIDOnboarding; sourceTree = SOURCE_ROOT; };
 		93AFC9E49CAEEB5D0ABC86DF /* SettingsFlowsCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsFlowsCatalog.swift; sourceTree = "<group>"; };
 		9506AF3AA287477B16E8612D /* StagingTests+Mesh.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StagingTests+Mesh.swift"; sourceTree = "<group>"; };
+		9812A6CD3A1425C23018950A /* StagingTests+Transfer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StagingTests+Transfer.swift"; sourceTree = "<group>"; };
 		99011BCFDF16002458067C88 /* ShellCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellCatalogTests.swift; sourceTree = "<group>"; };
 		9B4477541F907F6E92A131BB /* KeychainTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainTests.swift; sourceTree = "<group>"; };
 		9D2B5CA030BC6FA62B3EEF7D /* AppAttestDeviceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAttestDeviceTests.swift; sourceTree = "<group>"; };
@@ -310,6 +312,7 @@
 				9506AF3AA287477B16E8612D /* StagingTests+Mesh.swift */,
 				2D4DA90211D97D9417FAC02C /* StagingTests+Messages.swift */,
 				1AFE8FE46F7ABE0D9CA0684B /* StagingTests+Photos.swift */,
+				9812A6CD3A1425C23018950A /* StagingTests+Transfer.swift */,
 				73029356B90552AC0C29EE9F /* StagingUITests.xctestplan */,
 				461CF475BEF16D6D464D6ECE /* VaultUITestCase.swift */,
 			);
@@ -735,6 +738,7 @@
 				EB2DE1A4E67EB0C6E529D097 /* StagingTests+Mesh.swift in Sources */,
 				0E4BA253AB8E8655B797C7F6 /* StagingTests+Messages.swift in Sources */,
 				92ABE83488BD43FFAE0F21B4 /* StagingTests+Photos.swift in Sources */,
+				9677BF2DC1585290382C8F93 /* StagingTests+Transfer.swift in Sources */,
 				16CC7F1AD834271FC0C79440 /* StagingTests.swift in Sources */,
 				34D5AD803AA496D57470232B /* VaultUITestCase.swift in Sources */,
 			);

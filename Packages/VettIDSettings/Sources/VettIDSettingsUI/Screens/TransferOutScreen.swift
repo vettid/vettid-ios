@@ -56,6 +56,8 @@ public struct TransferOutContent: View {
     }
 
     public var body: some View {
+        // No identifier of its own: on `screen` it would land on the step's element and replace the step's identifier (UI
+        // tests find each step by its own).
         screen
             .confirmDialog(
                 isPresented: Binding(get: { state.confirmReject }, set: { if !$0 { actions.askReject(false) } }),
@@ -91,7 +93,6 @@ public struct TransferOutContent: View {
             .onChange(of: state.confirmApprove) { was, now in
                 if was, !now, !state.busy, state.step == .approve { actions.setPin("") }
             }
-            .accessibilityIdentifier("transfer_out")
     }
 
     @ViewBuilder private var screen: some View {
@@ -106,12 +107,14 @@ public struct TransferOutContent: View {
                 title: TransferStrings.transferExpiredTitle, message: TransferStrings.transferExpiredBody,
                 primaryLabel: TransferStrings.transferAgain, busy: state.busy, onPrimary: actions.create, onBack: leave
             ) { TransferError(state: state) }
+                .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("transfer_expired")
         case .rejected:
             FormScaffold(
                 title: TransferStrings.transferRejectedTitle, message: TransferStrings.transferRejectedBody,
                 primaryLabel: SettingsStrings.done, onPrimary: leave, onBack: leave
             ) { EmptyView() }
+                .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("transfer_rejected")
         case .moved: moved
         }
@@ -129,6 +132,7 @@ public struct TransferOutContent: View {
                 TransferError(state: state)
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("transfer_intro")
     }
 
@@ -145,6 +149,7 @@ public struct TransferOutContent: View {
                 TransferError(state: state)
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("transfer_compare")
     }
 
@@ -165,6 +170,7 @@ public struct TransferOutContent: View {
                 TransferError(state: state)
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("transfer_signer")
     }
 
@@ -200,6 +206,7 @@ public struct TransferOutContent: View {
                 if state.error != .badPin, state.error != .badPassword { TransferError(state: state) }
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("transfer_approve")
     }
 
@@ -213,6 +220,7 @@ public struct TransferOutContent: View {
         ) {
             if state.keptKeys { SmallNote(state.stagingNote) }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("transfer_moved")
     }
 
@@ -247,6 +255,7 @@ public struct TransferOutContent: View {
                 }
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("transfer_showing")
     }
 
