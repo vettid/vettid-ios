@@ -69,7 +69,7 @@ targets:
     platform: iOS
     sources:
       - path: App
-        excludes: [Info.plist]
+        excludes: [Info.plist, Sounds/SOURCE.md]
     info:
       path: App/Info.plist
       properties:
@@ -159,7 +159,7 @@ targets:
     platform: iOS
     sources:
       - path: App
-        excludes: [Info.plist]
+        excludes: [Info.plist, Sounds/SOURCE.md]
       - path: AppDevStack
         excludes: [Info.plist]
     info:
