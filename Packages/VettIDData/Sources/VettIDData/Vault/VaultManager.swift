@@ -92,7 +92,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored var session: VaultSession?
     @ObservationIgnored private var opening: Task<VaultSession, any Error>?
     /// Bumped whenever the session is dropped: a session opened before is not kept.
-    @ObservationIgnored private var sessionGeneration = 0
+    @ObservationIgnored var sessionGeneration = 0
     /// Bumped by every change of ``phase``: a refresh that started before one does not overwrite it.
     @ObservationIgnored private var phaseChanges = 0
 
@@ -339,7 +339,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     func openSession() async throws -> VaultSession {
         if let session, session.identity == record.value.activeIdentity { return session }
         if session != nil { try await dropSession(forget: false) } // a session of another identity than the record's is stale
-        if let opening { return try await opening.value }
+        if let opening { return try await join(opening) }
         guard !halted else { throw VaultFailure(.other, code: "halted") }
         try prepared()
         try refuseWhileDeleting()

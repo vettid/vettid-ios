@@ -122,9 +122,20 @@ extension VaultManager {
         endDeletion()
     }
 
+    /// A session being opened, joined: refused as its opener refuses it when the session was dropped meanwhile (a vault
+    /// being deleted closed it), so that no caller goes on with a device this manager neither quieted nor holds.
+    func join(_ opening: Task<VaultSession, Error>) async throws -> VaultSession {
+        let generation = sessionGeneration
+        let s = try await opening.value
+        guard generation == sessionGeneration else { throw VaultFailure(.other, code: "session_dropped") }
+        return s
+    }
+
     /// Closes the open vault (§4.2 point 1): the shell and every vault screen (the phase), a release update, the
     /// session and its collection, a pending lock, the PIN steps and the changes in memory, the owner check, the lists.
-    /// The app key and the device keys stay: the status needs the app key.
+    /// Every device a session held is quieted (``VaultDevice/quiet()``): a request on its way (a list read, the account,
+    /// the owner check's status) ends without being sent again. The app key and the device keys stay: the status needs
+    /// the app key.
     private func closeForDeleting() {
         // An unlock, a refresh or a lock on its way publishes nothing over this state, nor writes the record.
         lockGeneration += 1
@@ -133,6 +144,7 @@ extension VaultManager {
         storedPhase = .deleting
         releaseUpdate.clear()
         lockGuard.keeper.abandon()
+        for d in devicesMade.alive { d.quiet() }
         stopCollecting()
         pinChangeOperation = nil
         renewOperation = nil

@@ -478,6 +478,43 @@ import VettIDTesting
         #expect(saved != nil && store.load() == saved && d.hasVault)
     }
 
+    /// A quieted device (a vault being deleted, IOS-PLAN §4.2): a request awaiting its answer ends at once and is not
+    /// sent again (§8.6), one waiting for the lock deposits nothing, nothing more is sent, uploaded or flushed from the
+    /// outbox, and the store is still written: a mailbox deletion and a forget still work.
+    @Test func quietEndsTheRequestsAndSendsNothingMore() async throws {
+        let store = InMemoryDeviceStateStore()
+        let (d, v) = try await pairedDevice(cfg: config(store, timeout: 0.3))
+        relay.refuseStatus = 429
+        relay.refuseDeposits = RelayError.quotaExceeded
+        await #expect(throws: RelayError.self) { try await d.send("message.send") }
+        relay.refuseDeposits = nil
+        let started = Date()
+        let status = Task { try await d.op("vault.status", timeout: 60) }
+        #expect(try v.open(try await relay.nextDeposit().payload).type == "vault.status")
+        let blocked: Task<[UInt8], Error> = await d.lock.withLock {
+            let t = Task { try await d.op("vault.status") }
+            try? await Task.sleep(for: .milliseconds(100)) // waiting for the lock
+            d.quiet()
+            return t
+        }
+        await #expect(throws: VaultStateError.self) { _ = try await status.value }
+        #expect(Date().timeIntervalSince(started) < 30, "ended by the quiet, not by its timeout")
+        await #expect(throws: VaultStateError.self) { _ = try await blocked.value }
+        await #expect(throws: VaultStateError.self) { try await d.send("message.send") }
+        await #expect(throws: VaultStateError.self) { try await d.sendOnce("vault.lock") }
+        let held = HeldRequest(type: "pin.change", id: Ulid.new(), exp: Date().addingTimeInterval(600), body: VaultJSON.empty)
+        await #expect(throws: VaultStateError.self) { _ = try await d.resend(held, timeout: 60) }
+        await #expect(throws: VaultStateError.self) { _ = try await d.uploadBlobToVault([1, 2, 3]) }
+        await d.flushOutbox()
+        // Three request timeouts: a re-send of either request would be here.
+        #expect(await relay.noDeposit(within: 1))
+        #expect(try savedState(store).outbox.count == 1, "kept in the store, not deposited")
+        // Not refused: it reaches the relay (whose fake here has no mailbox deletion).
+        await #expect(throws: RelayError.self) { try await d.deleteMailbox() }
+        try await d.forget()
+        #expect(store.load() == nil && !d.hasVault)
+    }
+
     @Test func deviceStateJSONRoundTrips() throws {
         let s = DeviceState(role: "app", name: "phone", relayURL: "https://relay.example.org")
         s.vaultID = "v"

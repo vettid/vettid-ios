@@ -3,6 +3,7 @@ import Testing
 import VettIDAltChan
 @testable import VettIDData
 import VettIDDataTesting
+import VettIDVault
 
 /// A vault being deleted (IOS-PLAN §4.2) end to end against ``FakeVaultService``: the vault's
 /// `device.unlinked{vault_deleted}` closes the open vault at once and stores the marker; the member API's status is read
@@ -94,6 +95,26 @@ import VettIDDataTesting
         #expect(service.unlocks.count == unlocks)
         #expect(service.requestsSeen.count == seen, "sent after the event: \(service.requestsSeen.dropFirst(seen))")
         #expect(m.phase == .deleting)
+    }
+
+    /// A request on its way at the event (an items read whose answer does not come) ends with the session: it is not
+    /// sent again after the event (VAULT-MESSAGING §8.6's re-sends stop there).
+    @Test func aRequestOnItsWayIsNotSentAgainAfterTheEvent() async throws {
+        defer { phone.close() }
+        try await setUp()
+        service.loseAnswers([VaultApi.typeItemList])
+        let read = Task { try await m.items.refresh() }
+        #expect(await eventually { service.requestsSeen.contains(VaultApi.typeItemList) })
+        service.unlinkThisPhone(reason: VaultManager.reasonVaultDeleted)
+        #expect(await eventually { m.phase == .deleting })
+        let seen = service.requestsSeen.count
+        // The read ends at once, well within one request timeout (5 s): it waits for no re-send, where it would otherwise
+        // end only after both.
+        let started = ContinuousClock.now
+        #expect(await (try? read.value) == nil, "the read ends without an answer")
+        #expect(ContinuousClock.now - started < .seconds(3), "the read waited for re-sends")
+        try await Task.sleep(for: .seconds(2 * TestVaultPhone.shortRequestTimeout))
+        #expect(service.requestsSeen.count == seen, "sent after the event: \(service.requestsSeen.dropFirst(seen))")
     }
 
     /// The status still listing the vault as unlocked, then locked: still being deleted. `{vault: null}` is advisory

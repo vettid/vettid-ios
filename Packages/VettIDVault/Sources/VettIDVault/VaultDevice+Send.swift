@@ -21,6 +21,7 @@ extension VaultDevice {
     func sendOnceLocked(id: String, type: String, body: [UInt8], exp: Date?) async throws -> String {
         let (v, env): (VaultRecord, [UInt8]) = try mem.withLock {
             if halted { throw Self.haltedError }
+            if quieted { throw Self.quietedError }
             let v = try requireVault()
             guard let ep = keyring.current() else { throw VaultStateError(message: "no session with the vault") }
             guard !v.token.isEmpty else { throw VaultStateError(message: "no token for the vault") }
@@ -60,6 +61,7 @@ extension VaultDevice {
     ) async throws -> String {
         let entry: OutboxEntry = try mem.withLock {
             if halted { throw Self.haltedError }
+            if quieted { throw Self.quietedError }
             let v = try requireVault()
             guard let ep = keyring.current() else { throw VaultStateError(message: "no session with the vault") }
             guard !v.token.isEmpty else { throw VaultStateError(message: "no token for the vault") }
@@ -80,7 +82,7 @@ extension VaultDevice {
     /// Deposits an outbox entry; removes it once the relay accepted it, or on a terminal relay error (rethrown). A
     /// transport failure, `429 rate_limited`, 5xx and a stale or replayed signature keep it for the next flush.
     func deliver(_ e: OutboxEntry) async throws {
-        try refuseHalted()
+        try refuseSending()
         do {
             _ = try await relayFor(e.relayURL).deposit(mailboxID: e.mailbox, token: e.token, payload: try Base64s.decodeStd(e.envelope))
             mem.withLock { st.outbox.removeAll { $0.id == e.id && $0.envelope == e.envelope } }
@@ -115,7 +117,7 @@ extension VaultDevice {
 
     /// A deposit straight to the vault (handshake messages, outside the outbox), its refusal counted as deliver's.
     func depositToVault(_ v: VaultRecord, _ payload: [UInt8]) async throws {
-        try refuseHalted()
+        try refuseSending()
         do {
             _ = try await relayFor(v.relayURL).deposit(mailboxID: v.mailbox, token: v.token, payload: payload)
         } catch let x as RelayError {
@@ -174,6 +176,8 @@ extension VaultDevice {
             if let inner = await d.wait(timeout: timeout ?? cfg.requestTimeout(for: type)) { return VaultMessage(inner: inner) }
             // Cancelled: not sent again (a copy already deposited may still reach the vault).
             try Task.checkCancellation()
+            // Halted or quieted (its wait ended at once): not sent again either.
+            try refuseSending()
             // No answer: the collection may have ended (the answer would then wait in the mailbox unread).
             ensureCollecting()
             if attempt < retries {
