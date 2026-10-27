@@ -60,7 +60,6 @@ import VettIDDataTesting
             ("no answer", with(.intro) { $0.error = .noResponse }),
             ("typed, complete", with(.type) { $0.typed = String(repeating: "7ZK3", count: 12) }),
             ("could not tell", with(.couldNotTell) { $0.couldNotTell = .newCode }),
-            ("could not tell, other vault", with(.couldNotTell) { $0.couldNotTell = .newCode; $0.refusal = .otherVault }),
         ]
         for r in CodeRefusal.allCases {
             states.append(("scan, \(r)", with(.scan) { $0.refusal = r; $0.otherApi = "https://account.example.org"; $0.wrongCodes = 3 }))
@@ -144,12 +143,16 @@ import VettIDDataTesting
     /// (IOS-PLAN §4.9) The rule's texts come before the table's, and "Use a new recovery code" stands beside the PIN only while
     /// the rule lets a new recovery use this phone.
     @Test func theRuleSaysItsOwnWordsAndOffersANewCodeOnlyWhenAllowed() {
-        var ruled = RecoveryOpenState(step: .answered)
-        ruled.outcome = RecoveryOpenOutcome("exhausted", contactCouldNotRecover: true)
-        #expect(ruleText(ruled, ruled.outcome!) == RecoveryStrings.recoverCouldNotRecover)
+        var ruled = RecoveryOpenState(step: .finish)
+        ruled.outcome = RecoveryOpenOutcome("exhausted", opened: true, contactCouldNotRecover: true)
+        #expect(finishRuleText(ruled, ruled.outcome!) == RecoveryStrings.recoverCouldNotRecover)
         ruled.couldNotTell = .contact
-        #expect(ruleText(ruled, ruled.outcome!) == RecoveryStrings.onboardingOpenTookPhone)
-        #expect(ruleText(RecoveryOpenState(), RecoveryOpenOutcome("exhausted")) == nil)
+        #expect(finishRuleText(ruled, ruled.outcome!) == RecoveryStrings.onboardingOpenTookPhone)
+        // A wrong PIN, a wait or a failure on the way says its own words, also a day after the refusals began.
+        for code in ["bad_pin", "backoff", "network", "rate_limited"] {
+            #expect(finishRuleText(ruled, RecoveryOpenOutcome(code, opened: true)) == nil, "\(code)")
+        }
+        #expect(finishRuleText(RecoveryOpenState(), RecoveryOpenOutcome("exhausted")) == nil)
 
         for rule in [CouldNotTellStage.none, .waiting(until: Date()), .finishWithPin, .newCode, .contact, .unlockOrNewCode] {
             var s = RecoveryOpenState(step: .finish)

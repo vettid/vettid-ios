@@ -250,6 +250,14 @@ extension VaultManager {
     /// `busy`, `wrong_again`, `attempt_lost`, `exhausted`, `not_armed`, `closed`, the counter-down answer, the wait verdicts and an
     /// `attestation` that used no attempt on their own, each for the open it answers alone; `wrong` and `expired` only for a phone with no earlier unanswered open. A
     /// slot `expired`, a 404, 410 or 5xx on the poll, no answer, `retry`, `transfer_incomplete` and any error are unanswered.
+    /// (§4.9) Whether the answer [code] to the lost-ok unlock refuses this phone, so that the text "Your vault took this phone…"
+    /// may stand for it: not a wrong PIN, a wait or a failure on the way. Mirrors vettid-android `Rules.countsAsRefusal`.
+    public nonisolated static func countsAsRefusal(_ code: String) -> Bool { !notRefusals.contains(code) }
+
+    private nonisolated static let notRefusals: Set<String> = [
+        "bad_pin", "backoff", "retry", "busy", "counter_unavailable", "no_answer", "timeout", "network", "service", "rate_limited",
+    ]
+
     nonisolated static func refusalProves(_ code: String, earlierUnanswered: Bool) -> Bool {
         // `attestation`: decided at step 1, before anything is written (IOS-PLAN 0.1.38 §4.9, §4.10); ``noteOpenAnswer(_:device:id:)``
         // also requires that no attempt was used.

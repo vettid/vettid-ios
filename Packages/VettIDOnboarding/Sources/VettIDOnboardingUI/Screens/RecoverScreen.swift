@@ -115,8 +115,9 @@ public struct RecoverContent: View {
                 ClaimFailure(state: state, onGoToOpen: goToOpen)
             }
         }
-        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("recover_could_not_tell")
+        // The step can replace the open step while the member looks: it is announced (vettid-android's live region).
+        .onAppear { AccessibilityNotification.Announcement(RecoveryStrings.recoverCouldNotTell).post() }
     }
 
     /// Where the recovery stands could not be read: only a retry, so that a registered recovery is never taken for none.
@@ -288,7 +289,11 @@ public struct RecoverRoute: View {
         )
         .onAppear { if model == nil { model = RecoverViewModel(move: move, vault: vault, account: account) } }
         .onDisappear { Self.forget(model) }
-        .onChange(of: scenePhase) { _, now in if now == .background { Self.forget(model) } }
+        .onChange(of: scenePhase) { _, now in
+            if now == .background { Self.forget(model) }
+            // (IOS-PLAN §4.9) The rule is read again when the app comes back (when a read is due).
+            if now == .active { model?.checkEnded() }
+        }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.protectedDataWillBecomeUnavailableNotification)) { _ in
             Self.forget(model)
         }
@@ -302,7 +307,7 @@ public struct RecoverRoute: View {
         return AnyView(
             RecoveryOpenRoute(
                 move: move, account: account, problem: problem, busy: state.busy, onStartOver: { model.askStartOver() },
-                onNewCode: { model.scan() }, onOpened: { model.finish() }
+                onNewCode: { model.useNewCode() }, onAnswered: { model.checkEnded() }, onOpened: { model.finish() }
             )
         )
     }

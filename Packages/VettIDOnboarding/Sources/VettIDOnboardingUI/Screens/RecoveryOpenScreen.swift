@@ -326,7 +326,8 @@ private struct OpenAnswer: View {
                 OpenSideNoticeView(side: side)
                 NoticeCard(
                     ended ? .urgent : .warning, title: RecoveryOpenStrings.onboardingOpenAnswerTitle,
-                    message: ruleText(state, o) ?? RecoveryTexts.openAnswer(t, retryAt: RecoveryTexts.retryAt(o.retryAt))
+                    message: o.contactCouldNotRecover
+                        ? RecoveryStrings.recoverCouldNotRecover : RecoveryTexts.openAnswer(t, retryAt: RecoveryTexts.retryAt(o.retryAt))
                 )
                 .accessibilityAddTraits(.updatesFrequently)
                 .accessibilityIdentifier("open_answer_\(o.code)")
@@ -342,7 +343,7 @@ private struct OpenAnswer: View {
                     PrimaryButton(RecoveryScreenStrings.onboardingOpenLostTitle) { actions.finishLostOk() }
                         .accessibilityIdentifier("open_lost_ok")
                 }
-                RuleWays(contact: state.contactVettID || state.couldNotRecover, onNewCode: state.couldNotRecover ? onNewCode : nil)
+                RuleWays(contact: state.couldNotRecover, onNewCode: state.couldNotRecover ? onNewCode : nil)
             }
         }
         .disabled(side.busy)
@@ -381,11 +382,11 @@ func newCodeAction(_ state: RecoveryOpenState, _ onNewCode: (@MainActor () -> Vo
     state.newCodeAllowed ? onNewCode : nil
 }
 
-/// (IOS-PLAN §4.9) The rule's own texts before the plan's table, as vettid-android's `openAnswerText`: the vault took this
-/// phone but it cannot be unlocked, then the answers that rule recovery out on this phone.
-@MainActor
-func ruleText(_ state: RecoveryOpenState, _ o: RecoveryOpenOutcome) -> String? {
-    if state.contactVettID { return RecoveryStrings.onboardingOpenTookPhone }
+/// (IOS-PLAN §4.9) The rule's own texts before the table's, for the lost-ok unlock's answer (vettid-android's `openAnswerText`):
+/// "Your vault took this phone…" only for an answer that refuses this phone (not a wrong PIN, a wait or a failure on the way),
+/// then the answers that rule recovery out on this phone.
+func finishRuleText(_ state: RecoveryOpenState, _ o: RecoveryOpenOutcome) -> String? {
+    if state.contactVettID && o.opened && VaultManager.countsAsRefusal(o.code) { return RecoveryStrings.onboardingOpenTookPhone }
     if o.contactCouldNotRecover { return RecoveryStrings.recoverCouldNotRecover }
     return nil
 }
@@ -446,7 +447,8 @@ private struct OpenFinish: View {
                 if let o = state.outcome, o.opened {
                     NoticeCard(
                         .warning, title: RecoveryOpenStrings.onboardingOpenAnswerTitle,
-                        message: ruleText(state, o) ?? RecoveryTexts.openAnswer(openAnswerText(o, rightButIncomplete: false), retryAt: "")
+                        message: finishRuleText(state, o)
+                            ?? RecoveryTexts.openAnswer(openAnswerText(o, rightButIncomplete: false), retryAt: "")
                     )
                     .accessibilityIdentifier("open_finish_answer")
                 } else if let failure = state.failure {
@@ -457,7 +459,8 @@ private struct OpenFinish: View {
                 }
                 // Beside the PIN while a new recovery code may use this phone (IOS-PLAN §4.9, `unlockOrNewCode`).
                 let answered = state.outcome?.opened == true
-                RuleWays(contact: answered && (state.contactVettID || state.couldNotRecover), onNewCode: onNewCode)
+                let ruled = state.outcome.map { finishRuleText(state, $0) != nil } ?? false
+                RuleWays(contact: answered && ruled, onNewCode: onNewCode)
                 if state.canErase {
                     Text(RecoveryScreenStrings.onboardingOpenFinishGone).vettIDFont(.bodyMedium)
                     DestructiveLink(label: OnboardingStrings.unlockErase, identifier: "open_finish_erase") { actions.askErase() }
@@ -512,13 +515,16 @@ struct RecoveryOpenRoute: View {
     let busy: Bool
     let onStartOver: @MainActor () -> Void
     let onNewCode: @MainActor () -> Void
+    /// An answer (or the finish by PIN) is shown: the flow reads the rule again (IOS-PLAN §4.9).
+    let onAnswered: @MainActor () -> Void
     let onOpened: @MainActor () -> Void
     @State private var model: RecoveryOpenViewModel?
 
     init(
         move: any MoveRepository, account: any AccountRepository, problem: OpenSideNotice?, busy: Bool = false,
         onStartOver: @escaping @MainActor () -> Void, onNewCode: @escaping @MainActor () -> Void = {},
-        onOpened: @escaping @MainActor () -> Void, model: RecoveryOpenViewModel? = nil
+        onAnswered: @escaping @MainActor () -> Void = {}, onOpened: @escaping @MainActor () -> Void,
+        model: RecoveryOpenViewModel? = nil
     ) {
         self.move = move
         self.account = account
@@ -526,6 +532,7 @@ struct RecoveryOpenRoute: View {
         self.busy = busy
         self.onStartOver = onStartOver
         self.onNewCode = onNewCode
+        self.onAnswered = onAnswered
         self.onOpened = onOpened
         _model = State(initialValue: model)
     }
@@ -537,6 +544,7 @@ struct RecoveryOpenRoute: View {
         )
         .onAppear { if model == nil { model = RecoveryOpenViewModel(move: move, account: account) } }
         .onDisappear { model?.forgetSecrets() }
+        .onChange(of: model?.state.step) { _, now in if now == .answered || now == .finish { onAnswered() } }
     }
 }
 #endif

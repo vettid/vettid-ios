@@ -116,6 +116,17 @@ public final class RecoverViewModel: RecoverActions {
         }
     }
 
+    public func useNewCode() {
+        guard !state.busy, state.step == .open else { return }
+        work.launch { [weak self, move] in
+            // A read that fails keeps what this flow knows.
+            let rule = try? await move.couldNotTellStage()
+            guard let self, !state.busy, state.step == .open else { return }
+            if let rule { state.couldNotTell = rule }
+            scan()
+        }
+    }
+
     public func retryStage() {
         guard state.step == .stageFailed else { return }
         state.step = .loading
@@ -130,7 +141,7 @@ public final class RecoverViewModel: RecoverActions {
     /// phone that could not tell, also from the rule's text and from the open step once a new code registers the new identity
     /// again (IOS-PLAN 0.1.38 §4.9).
     private var codeEntry: Bool {
-        [.intro, .couldNotTell, .scan, .type].contains(state.step) || (state.step == .open && state.couldNotTell == .unlockOrNewCode)
+        [.intro, .couldNotTell, .scan, .type].contains(state.step) || (state.step == .open && state.newCodeAllowed)
     }
 
     /// The step the code steps go back to, when the code steps are entered from it.

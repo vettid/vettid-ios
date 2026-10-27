@@ -261,3 +261,35 @@ extension CouldNotTellViewModelTests {
         #expect(vm.state.step == .scan && vm.state.refusal == .otherVault && !vm.state.busy)
     }
 }
+
+extension CouldNotTellViewModelTests {
+    /// "Use a new recovery code" beside the PIN reads the rule from what the phone keeps: the open pane may have learned that
+    /// both recoveries ended after this flow last read it.
+    @Test func aNewCodeFollowsTheRuleThePhoneKeeps() async throws {
+        vault.recoveryStageValue = .pin
+        vault.couldNotTellValue = .finishWithPin
+        let vm = await recover()
+        #expect(vm.state.step == .open && !vm.state.newCodeAllowed)
+        vault.couldNotTellValue = .unlockOrNewCode
+        vm.useNewCode()
+        await vm.settle()
+        #expect(vm.state.step == .scan && vm.state.couldNotTell == .unlockOrNewCode)
+        // Back returns to the PIN.
+        #expect(vm.back())
+        #expect(vm.state.step == .open)
+    }
+
+    @Test func noNewCodeBeforeTheRuleAllowsIt() async throws {
+        vault.recoveryStageValue = .pin
+        vault.couldNotTellValue = .finishWithPin
+        let vm = await recover()
+        vm.useNewCode()
+        await vm.settle()
+        #expect(vm.state.step == .open)
+        // A read that fails keeps what the flow knows.
+        vault.fail["couldNotTellStage"] = VaultFailure(.network)
+        vm.useNewCode()
+        await vm.settle()
+        #expect(vm.state.step == .open && vm.state.couldNotTell == .finishWithPin)
+    }
+}
