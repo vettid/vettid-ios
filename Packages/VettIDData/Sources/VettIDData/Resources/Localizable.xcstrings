@@ -1613,6 +1613,17 @@
         }
       }
     },
+    "data_feed_a_connection_inline": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a connection"
+          }
+        }
+      }
+    },
     "data_feed_message": {
       "extractionState": "manual",
       "localizations": {

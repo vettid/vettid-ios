@@ -32,10 +32,8 @@ public struct FeedNames: Equatable, Sendable {
 public extension FeedKinds {
     /// The connection's "First Last" (never an alias), the request's sender, or "Removed connection".
     static func connectionName(_ item: FeedItem, _ names: FeedNames) -> String {
-        let c = item.connectionID.flatMap { names.connections[$0] }
-        let sender = FeedAsks.approvalKey(item.kind, ref: item.ref).flatMap { names.approvals[$0] }.flatMap(senderOf)
-        if let name = c?.accountName ?? c.flatMap({ $0.name.isEmpty ? nil : $0.name }) ?? sender { return name }
-        if c != nil { return DataStrings.feedNameNotShared }
+        if let name = knownName(item, names) { return name }
+        if item.connectionID.flatMap({ names.connections[$0] }) != nil { return DataStrings.feedNameNotShared }
         return item.connectionID != nil ? DataStrings.feedRemovedConnection : DataStrings.feedSomeone
     }
 
@@ -43,6 +41,13 @@ public extension FeedKinds {
     static func firstName(_ item: FeedItem, _ names: FeedNames) -> String {
         if let first = item.connectionID.flatMap({ names.connections[$0] })?.firstName, !first.isEmpty { return first }
         return connectionName(item, names)
+    }
+
+    /// The connection's "First Last" or the request's sender; nil when neither is known.
+    private static func knownName(_ item: FeedItem, _ names: FeedNames) -> String? {
+        let c = item.connectionID.flatMap { names.connections[$0] }
+        let sender = FeedAsks.approvalKey(item.kind, ref: item.ref).flatMap { names.approvals[$0] }.flatMap(senderOf)
+        return c?.accountName ?? c.flatMap { $0.name.isEmpty ? nil : $0.name } ?? sender
     }
 
     private static func senderOf(_ a: PendingApproval) -> String? {
@@ -93,13 +98,28 @@ public extension FeedKinds {
         }
     }
 
-    /// A challenge's purpose (§10.4, 0.65.0), from its pending approval: the feed item does not carry it, so an item whose
-    /// approval is no longer pending reads as one without a purpose.
+    /// A challenge's purpose (§10.4, 0.65.0), from its pending approval of the same connection: the feed item does not
+    /// carry it, so an item whose approval is no longer pending (or names another connection) reads as one without a
+    /// purpose. A notification built from these texts (phase P, IOS-PLAN §6.7) must therefore be built after the
+    /// `connection.authenticate.pending` event is kept, or it misses the sign-in wording.
     static func authenticationPurpose(_ item: FeedItem, _ names: FeedNames) -> AuthenticationPurpose {
-        guard case .authentication(let a)? = FeedAsks.approvalKey(item.kind, ref: item.ref).flatMap({ names.approvals[$0] }) else {
+        guard case .authentication(let a)? = FeedAsks.approvalKey(item.kind, ref: item.ref).flatMap({ names.approvals[$0] }),
+              a.connectionID == item.connectionID else {
             return .absent
         }
         return a.purpose
+    }
+
+    /// A challenge's title (§10.4): a §10.4.1 batch's "Sam asks for 3 things" whatever the purpose; else per purpose, the
+    /// name bidi-isolated (§10.8) in the purpose's sentences.
+    private static func authenticationTitle(_ item: FeedItem, _ names: FeedNames) -> String {
+        if let n = item.count, n > 1 { return DataStrings.feedGrantRequestBatch(firstName(item, names), n) }
+        let known = knownName(item, names).map(AccountNames.isolate)
+        switch authenticationPurpose(item, names) {
+        case .signin: return DataStrings.feedAuthenticateSignin(known ?? DataStrings.feedAConnectionInline)
+        case .approval: return DataStrings.feedAuthenticateApproval(known ?? connectionName(item, names))
+        case .absent: return DataStrings.feedAuthenticate(connectionName(item, names))
+        }
     }
 
     /// `device.signer_changed`'s `ref` (§11.7.1) as "From … to …" in the member's words; nil when it does not read.
@@ -127,12 +147,7 @@ public extension FeedKinds {
         case "connection.removed": return DataStrings.feedConnectionRemoved(who())
         case "connection.stale": return DataStrings.feedConnectionStale(who())
         case "connection.asks_paused": return DataStrings.feedAsksPaused(firstName(item, names))
-        case "connection.authenticate.requested":
-            switch authenticationPurpose(item, names) {
-            case .signin: return DataStrings.feedAuthenticateSignin(who())
-            case .approval: return DataStrings.feedAuthenticateApproval(who())
-            case .absent: return DataStrings.feedAuthenticate(who())
-            }
+        case "connection.authenticate.requested": return authenticationTitle(item, names)
         case "message.received": return DataStrings.feedMessage(who())
         // §10.5.1: an outgoing photo that failed, an incoming one refused because the vault is full.
         case "message.attachment_failed": return DataStrings.feedPhotoFailed(who())

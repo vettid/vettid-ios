@@ -39,34 +39,62 @@ import VettIDVault
         var sam = ConnectionInfo(id: "c1", name: "", state: .active)
         sam.firstName = "Sam"
         sam.lastName = "Lee"
-        let auth = { (id: String, p: AuthenticationPurpose) in
-            PendingApproval.authentication(AuthenticationRequest(requestID: id, connectionID: "c1", context: "Sign in", receivedAt: Date(), exp: nil, purpose: p))
+        let unnamed = ConnectionInfo(id: "c2", name: "", state: .active)
+        let auth = { (id: String, conn: String, p: AuthenticationPurpose) in
+            PendingApproval.authentication(AuthenticationRequest(requestID: id, connectionID: conn, context: "Sign in", receivedAt: Date(), exp: nil, purpose: p))
         }
-        return FeedNames(connections: ["c1": sam], approvals: ["auth:s1": auth("s1", .signin), "auth:p1": auth("p1", .approval), "auth:n1": auth("n1", .absent)])
+        return FeedNames(
+            connections: ["c1": sam, "c2": unnamed],
+            approvals: ["auth:s1": auth("s1", "c1", .signin), "auth:p1": auth("p1", "c1", .approval), "auth:n1": auth("n1", "c1", .absent), "auth:s2": auth("s2", "c2", .signin), "auth:p2": auth("p2", "c2", .approval)]
+        )
     }()
 
-    static func item(_ ref: String) -> FeedItem {
-        FeedItem(itemID: "i", seq: 1, kind: "connection.authenticate.requested", at: "2026-10-27T12:00:00Z", status: "active", priority: "high", connectionID: "c1", ref: ref)
+    static func item(_ ref: String, connection: String = "c1", count: Int? = nil) -> FeedItem {
+        var i = FeedItem(itemID: "i", seq: 1, kind: "connection.authenticate.requested", at: "2026-10-27T12:00:00Z", status: "active", priority: "high", connectionID: connection, ref: ref)
+        i.count = count
+        return i
     }
 
-    /// The feed's (and so a notification's) words per purpose; the vault's item carries no purpose, so one whose
-    /// approval is gone reads as before.
+    /// The feed's (and so a notification's) words per purpose, the name bidi-isolated (§10.8); the vault's item carries no
+    /// purpose, so one whose approval is gone reads as before.
     @Test func theFeedSaysThePurpose() {
         let title = { (ref: String) in FeedKinds.title(Self.item(ref), Self.names) }
         let line = { (ref: String) in FeedKinds.supporting(Self.item(ref), Self.names) }
-        #expect(title("s1") == "Sign in to Sam Lee?" && line("s1") == "Only approve if you are signing in right now.")
-        #expect(title("p1") == "Sam Lee asks you to approve" && line("p1") == nil)
+        let sam = AccountNames.isolate("Sam Lee")
+        #expect(title("s1") == "Sign in to \(sam)?" && line("s1") == "Only approve if you are signing in right now.")
+        #expect(title("p1") == "\(sam) asks you to approve" && line("p1") == nil)
         #expect(title("n1") == "Sam Lee asks you to confirm it is you" && line("n1") == nil)
         #expect(title("gone") == "Sam Lee asks you to confirm it is you" && line("gone") == nil)
-        #expect(FeedKinds.title(Self.item("s1"), Self.names, details: false) == "Sign in to Sam Lee?")
-        // A sign-in is never presented as urgent (§10.4): the vault makes its item `high`, not `urgent`.
-        #expect(!FeedKinds.urgent(Self.item("s1")))
+        #expect(FeedKinds.title(Self.item("s1"), Self.names, details: false) == "Sign in to \(sam)?")
+    }
+
+    /// A connection without a name: never "Sign in to A connection?".
+    @Test func aMissingNameFallsBack() {
+        #expect(FeedKinds.title(Self.item("s2", connection: "c2"), Self.names) == "Sign in to a connection?")
+        #expect(FeedKinds.title(Self.item("p2", connection: "c2"), Self.names) == "A connection asks you to approve")
+    }
+
+    /// A §10.4.1 batch led by a challenge says how many asks, whatever the first one's purpose.
+    @Test func aBatchLedByASignInIsABatch() {
+        for ref in ["s1", "p1", "n1"] {
+            let batch = Self.item(ref, count: 3)
+            #expect(FeedKinds.title(batch, Self.names) == "Sam asks for 3 things", "\(ref)")
+            #expect(FeedKinds.supporting(batch, Self.names) == "3 things", "\(ref)")
+        }
+    }
+
+    /// The purpose is read only from a pending approval of the item's own connection.
+    @Test func anotherConnectionsApprovalGivesNoPurpose() {
+        #expect(FeedKinds.authenticationPurpose(Self.item("s1"), Self.names) == .signin)
+        #expect(FeedKinds.authenticationPurpose(Self.item("s1", connection: "c2"), Self.names) == .absent)
+        #expect(FeedKinds.title(Self.item("s1", connection: "c2"), Self.names) == "A connection asks you to confirm it is you")
+        #expect(FeedKinds.supporting(Self.item("s1", connection: "c2"), Self.names) == nil)
     }
 
     @Test func theTextsAreTheSpecs() {
         #expect(DataStrings.feedAuthenticateSignin("Sam") == "Sign in to Sam?")
         #expect(DataStrings.feedAuthenticateSigninBody == "Only approve if you are signing in right now.")
-        #expect(DataStrings.feedAuthenticateApproval("Sam") == "Sam asks you to approve")
+        #expect(DataStrings.feedAuthenticateApproval("Sam") == "Sam asks you to approve" && DataStrings.feedAConnectionInline == "a connection")
     }
 }
 

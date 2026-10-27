@@ -93,6 +93,11 @@ extension DataStrings {
         String(localized: "data_feed_authenticate_approval", defaultValue: "\(value) asks you to approve", bundle: .module)
     }
 
+    /// The requester inside a sign-in's title when no name is known.
+    static var feedAConnectionInline: String {
+        String(localized: "data_feed_a_connection_inline", defaultValue: "a connection", bundle: .module)
+    }
+
     static func feedMessage(_ value: String) -> String {
         String(
             localized: "data_feed_message",
