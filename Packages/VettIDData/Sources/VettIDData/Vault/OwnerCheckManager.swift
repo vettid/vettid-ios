@@ -357,6 +357,7 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     private func checksLeftAfterFailure() async -> Int? {
         let left = await checksLeftAfterFailureRead()
         // The tenth failure locks the vault (§3.6.4), whether or not `vault.locking` has arrived yet: the app says so at once.
+        // (chosen; not in the spec) Also when this answer is stale (a newer unlock cleared the flag): the vault did lock.
         if let left, left <= 0 { lockedByOwnerCheck = true }
         return left
     }

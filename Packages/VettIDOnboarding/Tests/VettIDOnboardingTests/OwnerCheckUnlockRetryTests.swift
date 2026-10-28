@@ -146,4 +146,28 @@ import VettIDDataTesting
         await vm.settle()
         #expect(!vm.state.pinKept && vm.state.message == .badPassword(checksLeft: 7))
     }
+
+    /// The app leaves the front while the retry's check is on its way and comes back before the answer: the PIN does not
+    /// come back with it.
+    @Test func leavingWhileTheRetryRunsDoesNotBringThePinBack() async throws {
+        let vm = try await heldScreen([.badPassword(checksLeft: 7), .badPassword(checksLeft: 6)])
+        vault.onCheck = { [vault] in
+            vault.setForeground(false)
+            await Task.yield()
+            vault.setForeground(true)
+        }
+        vm.setPassword("again")
+        vm.submit()
+        for _ in 0..<5 { await vm.settle() }
+        #expect(!vm.state.pinKept && vm.state.pin.isEmpty && vm.state.unlockedWrong == nil)
+    }
+
+    /// A lock that fails leaves the screen asking for both, not stuck without a keypad.
+    @Test func aFailedLockLeavesTheScreenAskingForBoth() async throws {
+        let vm = try await heldScreen([.badPassword(checksLeft: 7)])
+        vault.fail["lock"] = VaultFailure(.network)
+        vm.lockVault()
+        await vm.settle()
+        #expect(!vm.state.pinKept && !vm.state.locking && vm.state.pin.isEmpty)
+    }
 }

@@ -202,7 +202,7 @@ public struct OwnerCheckScreen: View {
                 .accessibilityIdentifier("owner_check_unlocked_wrong")
         }
         if state.unlockedOpen, !state.locked {
-            // (chosen; not in the spec) The approved wording of the backoff state; Android uses the same words.
+            // The approved wording of the backoff state (IOS-PLAN 0.1.48; VAULT-MESSAGING 0.71.1 §3.6.5).
             Text(OnboardingStrings.unlockCheckOpenWaiting)
                 .vettIDFont(.bodyMedium)
                 .accessibilityIdentifier("owner_check_unlocked_open")

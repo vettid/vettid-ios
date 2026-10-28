@@ -129,6 +129,8 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var lockedByOwnerCheck = false
     public var unlockCheckOutcome: OwnerCheckOutcome?
     public private(set) var inFront = true
+    /// A test's hook: what happens while a check is on its way.
+    public var onCheck: (@MainActor () async -> Void)?
     var unlockPin: String?
     public var notices: [OwnerCheckNotice] = []
     public var presenceUnrecorded = false
@@ -339,6 +341,7 @@ extension FakeVaultRepository: OwnerCheckRepository {
 
     public func check(pin: String, password: String, holdOff: HoldOff?) async throws -> OwnerCheckOutcome {
         try call("check")
+        await onCheck?()
         lastPin = pin
         lastPassword = password
         lastHoldOff = holdOff

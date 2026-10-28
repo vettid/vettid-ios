@@ -1624,7 +1624,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your vault locked itself after ten wrong daily checks in a row. Unlock it with your PIN; it then asks for the check again."
+            "value": "Your vault locked itself after ten wrong daily checks in a row. Unlock it with your PIN and your credential password."
           }
         }
       }

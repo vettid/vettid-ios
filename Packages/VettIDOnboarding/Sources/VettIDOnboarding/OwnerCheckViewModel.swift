@@ -335,11 +335,13 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
             let unrecorded = passed && repo.presenceUnrecorded
             // The unlock's PIN stays for another try of the password only after a wrong password (a try left), a backoff or
             // a failure that never reached the vault's verdict; it is not kept once the vault locked.
-            let keep = s.pinKept && Self.keepsPin(r) && !repo.lockedByOwnerCheck && repo.inFront
+            // Decided from the state as it is now: a PIN dropped while the check was on its way (the app left the front) does
+            // not come back when the answer lands.
+            let keep = state.pinKept && Self.keepsPin(r) && !repo.lockedByOwnerCheck && repo.inFront
             var left: Int?
             if keep, case .badPassword(let n) = r, let n, n > 0 { left = n }
             state.busy = false
-            state.pin = keep ? s.pin : ""
+            state.pin = keep ? state.pin : ""
             state.password = ""
             state.passed = passed && !unrecorded
             state.passedUnrecorded = unrecorded
@@ -356,8 +358,8 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
     public func lockVault() {
         guard !state.locking else { return }
         state.locking = true
-        state.pin = ""
-        state.password = ""
+        // The kept PIN goes with the lock; a lock that fails leaves the screen asking for both again.
+        dropKeptPin()
         launch { [self] in
             do {
                 try await vault.lock()

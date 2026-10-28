@@ -371,8 +371,8 @@ extension OnboardingStrings {
             bundle: .module
         )
     }
-    /// A backoff used no try: the vault is open and the check waits. (chosen; not in the spec) The spec does not approve this
-    /// text; vettid-android uses the same words.
+    /// A backoff used no try: the vault is open and the check waits (approved by the owner 2026-10-28; IOS-PLAN 0.1.48,
+    /// VAULT-MESSAGING 0.71.1 §3.6.5), under vettid-android's key.
     static var unlockCheckOpenWaiting: String {
         String(
             localized: "unlock_check_open_waiting",
@@ -386,12 +386,14 @@ extension OnboardingStrings {
     static var unlockOwnerCheckLockedTitle: String {
         String(localized: "unlock_owner_check_locked_title", defaultValue: "Locked after ten wrong checks", bundle: .module)
     }
+    /// The ten-failure lock, on the unlock screen and the check screen (approved by the owner 2026-10-28; IOS-PLAN 0.1.48,
+    /// VAULT-MESSAGING 0.71.1 §3.6.5), under vettid-android's key.
     static var unlockOwnerCheckLockedBody: String {
         String(
             localized: "unlock_owner_check_locked_body",
             defaultValue: """
-                Your vault locked itself after ten wrong daily checks in a row. Unlock it with your PIN; it then asks \
-                for the check again.
+                Your vault locked itself after ten wrong daily checks in a row. Unlock it with your PIN and your credential \
+                password.
                 """,
             bundle: .module
         )

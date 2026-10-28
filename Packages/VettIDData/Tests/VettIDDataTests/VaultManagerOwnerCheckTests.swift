@@ -171,6 +171,18 @@ import VettIDDataTesting
         m.onForeground()
     }
 
+    /// The check screen is shown only by the open app: when setup comes first, no PIN waits for it.
+    @Test func noPinWaitsWhenSetupComesBeforeTheCheckScreen() async throws {
+        defer { phone.close() }
+        try await setUp()
+        try await m.lock()
+        service.advanceVaultClock(pastDeadline)
+        _ = try m.record.update(since: m.record.generation) { $0.setupComplete = false }
+        #expect(try await m.unlockWithCheck(pin: pin, password: "wrong horse") == .success)
+        #expect(m.phase != .unlocked)
+        #expect(checks.takeUnlockPin() == nil)
+    }
+
     /// The same when the app leaves the front before the unlock's answer lands, and when the collection stops.
     @Test func theKeptPinGoesWithAStopOfTheCollection() async throws {
         defer { phone.close() }

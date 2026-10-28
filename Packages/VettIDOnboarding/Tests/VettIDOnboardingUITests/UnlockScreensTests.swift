@@ -140,7 +140,7 @@ import VettIDUI
         }
     }
 
-    /// (VAULT-MESSAGING §3.6.5 "Ask only for what is used"; IOS-PLAN) The approved texts of the PIN and password screen and of
+    /// (VAULT-MESSAGING §3.6.5 "Ask only for what is used"; IOS-PLAN §6.6) The approved texts of the PIN and password screen and of
     /// the password-only retry, with Android's keys.
     @Test func theCheckInTextsAreTheApprovedOnes() {
         #expect(OnboardingStrings.unlockOwnerCheckTitle == "Unlock and check in")
@@ -150,7 +150,11 @@ import VettIDUI
         #expect(OnboardingStrings.unlockCheckPasswordWrong(7)
             == "Your vault is unlocked, but the credential password was wrong, so your daily check didn't pass. "
             + "7 tries left before your vault locks again.")
-        #expect(OnboardingStrings.unlockCheckPasswordWrong(1).hasSuffix("1 try left before your vault locks again."))
+        #expect(OnboardingStrings.unlockCheckPasswordWrong(1)
+            == "Your vault is unlocked, but the credential password was wrong, so your daily check didn't pass. "
+            + "1 try left before your vault locks again.")
+        #expect(OnboardingStrings.unlockOwnerCheckLockedBody
+            == "Your vault locked itself after ten wrong daily checks in a row. Unlock it with your PIN and your credential password.")
         #expect(OnboardingStrings.unlockCheckPasswordWrongUnknown
             == "Your vault is unlocked, but the credential password was wrong, so your daily check didn't pass.")
         #expect(OnboardingStrings.unlockCheckOpenWaiting == "Your vault is unlocked. Enter your credential password to check in.")
