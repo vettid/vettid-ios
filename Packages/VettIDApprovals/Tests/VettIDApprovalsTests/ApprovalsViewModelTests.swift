@@ -122,6 +122,8 @@ import VettIDDataTesting
         let m = await model(ownerChecks: vault)
         #expect(m.state.error == .ownerCheckRequired)
         vault.ownerCheck = OwnerCheckView(state: .ok, deadline: Date(), hold: false)
+        // The view model follows the check on a later turn of the main actor.
+        for _ in 0..<2000 where !(m.state.error == nil && fake.calls.count == 2) { try? await Task.sleep(for: .milliseconds(10)) }
         await m.settle()
         #expect(m.state.error == nil && fake.calls.count == 2)
         fake.fail["refreshApprovals"] = VaultFailure(.network)

@@ -105,8 +105,9 @@ enum Samples {
         await m.settle()
         #expect(m.state.error == .ownerCheckRequired)
         vault.ownerCheck = OwnerCheckView(state: .ok, deadline: Date(), hold: false)
+        // The view model follows the check on a later turn of the main actor.
+        #expect(await eventually { m.state.error == nil && fake.calls.count == 2 })
         await m.settle()
-        #expect(m.state.error == nil && fake.calls.count == 2)
         fake.fail["refreshConversations"] = VaultFailure(.network)
         m.refresh()
         await m.settle()

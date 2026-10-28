@@ -91,6 +91,9 @@ import VettIDTesting
         let top = Task { try await api.topUpUTKs() }
         try await ops.answer(v, d, "credential.utk.get", utks)
         try await top.value
+        // With a short [timeout] on a slow machine, a set-up request can be resent before its answer: the resend stays
+        // queued, and it is not the request the test then waits for.
+        ops.base.relay.dropDeposits()
         return Holder(d: d, v: v, api: api, keys: keys)
     }
 
@@ -126,7 +129,10 @@ import VettIDTesting
         let h = try await holder(timeout: 0.2)
         let (v, api) = (h.v, h.api)
         let delete = Task { try await api.deleteVault(pin: "975310", password: "pw", exp: Date().addingTimeInterval(600)) }
-        for _ in 0...VaultDevice.appRetries { #expect(try await open(v).type == VaultApi.typeVaultDelete) }
+        for _ in 0...VaultDevice.appRetries {
+            let type = try await open(v).type
+            #expect(type == VaultApi.typeVaultDelete, "\(type)")
+        }
         await #expect(throws: RequestUnanswered.self) { try await delete.value }
         #expect(!(await h.d.credentialSettled()), "the deletion may still reach the vault")
     }
