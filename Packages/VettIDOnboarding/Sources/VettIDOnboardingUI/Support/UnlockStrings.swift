@@ -337,14 +337,46 @@ extension OnboardingStrings {
         String(localized: "unlock_lock_ok", defaultValue: "OK", bundle: .module)
     }
     static var unlockOwnerCheckTitle: String {
-        String(localized: "unlock_owner_check_title", defaultValue: "Your daily check is due", bundle: .module)
+        String(localized: "unlock_owner_check_title", defaultValue: "Unlock and check in", bundle: .module)
     }
     static var unlockOwnerCheckBody: String {
         String(
             localized: "unlock_owner_check_body",
             defaultValue: """
-                Enter your credential password too: the app sends the check right after the unlock.
+                Your daily check is due, so your vault needs your PIN and your credential password.
                 """,
+            bundle: .module
+        )
+    }
+    /// The primary action of the check screen's password-only retry after an unlock (IOS-PLAN §6.6; VAULT-MESSAGING §3.6.5).
+    static var unlockCheckIn: String {
+        String(localized: "unlock_check_in", defaultValue: "Check in", bundle: .module)
+    }
+    /// The PIN unlocked the vault and the check failed on the password; [left]: tries before the vault locks again
+    /// (approved by the owner 2026-10-28, ANDROID-PLAN §6 owner check item 6).
+    static func unlockCheckPasswordWrong(_ left: Int) -> String {
+        String(
+            localized: "unlock_check_password_wrong",
+            defaultValue: """
+                Your vault is unlocked, but the credential password was wrong, so your daily check didn't pass. \(left) tries \
+                left before your vault locks again.
+                """,
+            bundle: .module
+        )
+    }
+    static var unlockCheckPasswordWrongUnknown: String {
+        String(
+            localized: "unlock_check_password_wrong_unknown",
+            defaultValue: "Your vault is unlocked, but the credential password was wrong, so your daily check didn't pass.",
+            bundle: .module
+        )
+    }
+    /// A backoff used no try: the vault is open and the check waits. (chosen; not in the spec) The spec does not approve this
+    /// text; vettid-android uses the same words.
+    static var unlockCheckOpenWaiting: String {
+        String(
+            localized: "unlock_check_open_waiting",
+            defaultValue: "Your vault is unlocked. Enter your credential password to check in.",
             bundle: .module
         )
     }
@@ -375,8 +407,8 @@ extension OnboardingStrings {
             return String(
                 localized: "unlock_idle_locked_body_unknown",
                 defaultValue: """
-                    You hadn't checked in, so your vault locked. Unlock it with your PIN to carry on. New messages wait for up \
-                    to 14 days.
+                    You hadn't checked in, so your vault locked. Unlock it with your PIN and your credential password to carry on. \
+                    New messages wait for up to 14 days.
                     """,
                 bundle: .module
             )
@@ -385,8 +417,8 @@ extension OnboardingStrings {
         return String(
             localized: "unlock_idle_locked_body",
             defaultValue: """
-                You hadn't checked in for \(time), so your vault locked. Unlock it with your PIN to carry on. New messages wait \
-                for up to 14 days.
+                You hadn't checked in for \(time), so your vault locked. Unlock it with your PIN and your credential password to \
+                carry on. New messages wait for up to 14 days.
                 """,
             bundle: .module
         )

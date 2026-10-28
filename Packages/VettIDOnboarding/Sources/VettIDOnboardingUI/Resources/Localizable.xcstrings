@@ -1569,7 +1569,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Enter your credential password too: the app sends the check right after the unlock."
+            "value": "Your daily check is due, so your vault needs your PIN and your credential password."
           }
         }
       }
@@ -1591,7 +1591,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "You hadn't checked in for %@, so your vault locked. Unlock it with your PIN to carry on. New messages wait for up to 14 days."
+            "value": "You hadn't checked in for %@, so your vault locked. Unlock it with your PIN and your credential password to carry on. New messages wait for up to 14 days."
           }
         }
       }
@@ -1602,7 +1602,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "You hadn't checked in, so your vault locked. Unlock it with your PIN to carry on. New messages wait for up to 14 days."
+            "value": "You hadn't checked in, so your vault locked. Unlock it with your PIN and your credential password to carry on. New messages wait for up to 14 days."
           }
         }
       }
@@ -1646,7 +1646,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Your daily check is due"
+            "value": "Unlock and check in"
           }
         }
       }
@@ -5150,6 +5150,62 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sending to your vault"
+          }
+        }
+      }
+    },
+    "unlock_check_in": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check in"
+          }
+        }
+      }
+    },
+    "unlock_check_password_wrong_unknown": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault is unlocked, but the credential password was wrong, so your daily check didn't pass."
+          }
+        }
+      }
+    },
+    "unlock_check_open_waiting": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault is unlocked. Enter your credential password to check in."
+          }
+        }
+      }
+    },
+    "unlock_check_password_wrong": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Your vault is unlocked, but the credential password was wrong, so your daily check didn't pass. %lld try left before your vault locks again."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Your vault is unlocked, but the credential password was wrong, so your daily check didn't pass. %lld tries left before your vault locks again."
+                }
+              }
+            }
           }
         }
       }
