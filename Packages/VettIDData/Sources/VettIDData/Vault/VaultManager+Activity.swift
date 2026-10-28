@@ -45,7 +45,7 @@ extension VaultManager {
             }
         )
         approvals.onDecided = { [weak feed] kinds, ref in feed?.markReadWhere(kinds: kinds, ref: ref) }
-        followHold(checks, ref, feed)
+        followHold(checks, ref)
         let selfID = { @MainActor in ref.manager?.session?.device.deviceID }
         return (
             feed, approvals, HistoryManager(selfID: selfID) { try await memberApi(ref) },
@@ -59,60 +59,54 @@ extension VaultManager {
         approvals.onEvent(m)
     }
 
-    /// Entering the hold (§3.6.3): the feed is not shown, and no photo, item, revealed value, approval or connection
-    /// request is kept.
-    func activityHeld() {
-        feed.clear()
-        attachments.clear()
+    /// Held or due (§3.6.3): IOS-PLAN §6.9 clears vault content at a hold as at the vault lock. The feed, the photos, the
+    /// items and revealed values, the tags, the connections with their requests (the names and safety codes they showed)
+    /// and the other member's declines, the messages, the approvals and History are dropped from memory; the member's own
+    /// profile follows the check's state (``OwnProfileStep``). They are read again when the hold ends
+    /// (``refreshAfterHold()``, or this phone's own check's ``refreshListsQuietly()``). Reads on their way are not
+    /// published.
+    func forgetHeld() {
         items.clear()
         sharing.clear()
-        forgetAsks()
+        connections.forgetOpenVault()
+        messages.forgetOpenVault()
+        attachments.clear()
+        forgetActivity()
     }
 
-    /// Held or due: the approvals and the connection requests, with the names and safety codes they showed, are dropped
-    /// from memory; a passed check reads them again from the vault's lists (chosen; not in the spec: vettid-android keeps
-    /// them while held).
-    func forgetAsks() {
-        approvals.forgetOpenVault()
-        connections.forgetRequests()
-    }
-
-    /// The approvals and the connection requests are read again from the vault's lists, after another device's owner
-    /// check (this phone's own reads every list, ``refreshListsQuietly()``).
-    func refreshAsksQuietly() {
+    /// Another device's owner check ended the hold (§3.6.3): what was dropped at it is read again, the tags at once, then
+    /// the connections and the requests, the approvals' lists, the conversations and the items, one after the other
+    /// (History is read by its screen). This phone's own check reads every list itself (`onPassed`, which follows at
+    /// once), so then nothing is read here. A read of every list begun before (the unlock's) may have lost to the hold
+    /// what it read: it is waited for, and the lists are read after it (a double read is harmless).
+    func refreshAfterHold() {
+        let reads = listsReads
+        Task { [weak self] in _ = try? await self?.sharing.refreshTagsQuietly() }
         Task { [weak self] in
-            guard let self, !items.listsReadPending else { return }
-            try? await approvals.refreshApprovals(quietly: true)
+            guard let self, listsReads == reads else { return }
+            await listsRead?.value
+            guard listsReads == reads, phase == .unlocked else { return }
+            try? await connections.refresh(quietly: true)
+            try? await connections.refreshRequests(quietly: true)
+            try? await approvals.refreshApprovals(quietly: true, requests: false)
+            await messages.refreshConversationsQuietly()
+            try? await items.refresh(quietly: true)
         }
     }
 
-    /// Held or due (§3.6.3), as the owner check's state says: no feed content is kept, nor the member's own names, full
-    /// email or photo (IOS-PLAN §4.7); after the check (here or on another device) they are read again. As vettid-android
-    /// `VaultManager`.
-    static func followHold(_ checks: OwnerCheckManager, _ ref: ManagerRef, _ feed: FeedManager) {
-        checks.onHeldChange = { [weak feed] held in
-            if held {
-                feed?.clear()
-                // Held or due: no photo or thumbnail kept (ANDROID-PLAN "Photo attachments"), and no item or revealed value
-                // (chosen; not in the spec: vettid-android keeps the item list while held).
-                ref.manager?.attachments.clear()
-                ref.manager?.items.clear()
-                ref.manager?.sharing.clear()
-                ref.manager?.forgetAsks()
-            } else if ref.manager?.phase == .unlocked {
-                feed?.catchUp()
-                // Another device's check: the items, dropped at the hold, are read again. This phone's own check reads
-                // them with the other lists, last (`onPassed`, which follows at once), so not here as well.
-                Task { @MainActor in
-                    guard let items = ref.manager?.items, !items.listsReadPending else { return }
-                    items.refreshQuietly()
-                }
-                // The tags and their colours, dropped at the hold, are read again (the colour keeper follows them).
-                Task { @MainActor in _ = try? await ref.manager?.sharing.refreshTagsQuietly() }
-                // The approvals and the connection requests, dropped at the hold, too.
-                ref.manager?.refreshAsksQuietly()
-            }
+    /// Held or due (§3.6.3), as the owner check's state says: no vault content is kept (``forgetHeld()``), nor the
+    /// member's own names, full email or photo (IOS-PLAN §4.7); after the check (here or on another device) they are read
+    /// again. As vettid-android `VaultManager`, which keeps the lists other than the feed while held (IOS-PLAN §6.9 does
+    /// not).
+    static func followHold(_ checks: OwnerCheckManager, _ ref: ManagerRef) {
+        checks.onHeldChange = { held in
             guard let m = ref.manager else { return }
+            if held {
+                m.forgetHeld()
+            } else if m.phase == .unlocked {
+                m.feed.catchUp()
+                m.refreshAfterHold()
+            }
             switch OwnProfileStep.onCheck(wasHeld: !held, held: held, phase: m.phase) {
             case .forget: m.forgetOwnProfile()
             case .read: m.readOwnProfile()

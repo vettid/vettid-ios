@@ -7,11 +7,11 @@ import VettIDVault
 /// ANDROID-PLAN §4), over the vault client. The lists live in memory and are read again from the vault (which keeps
 /// them) when it opens and on its events (``onEvent(_:)``, forwarded by ``VaultManager``). What only this phone learns,
 /// the names open requests showed and the other member's declines not yet dismissed (0.10.5), lives in memory only, like
-/// every other vault content: nothing is written to the phone, and it is dropped with the requests when the vault locks,
-/// at a hold and at a wipe. The safety code of a request is not kept apart from its request: `connection.request.list`
-/// returns it while the request is open (§10.4), so an unlock or a new start reads it again (chosen; not in the spec:
-/// vettid-android writes it to its file but never reads it back). Nothing here touches transport or crypto beyond the
-/// typed calls. Mirrors the connection part of vettid-android `SocialManager`.
+/// every other vault content (IOS-PLAN §6.9): nothing is written to the phone, and it is dropped with the connections and
+/// the requests when the vault locks, at a hold and at a wipe. The safety code of a request is not kept apart from its
+/// request: `connection.request.list` returns it while the request is open (§10.4), so an unlock or a new start reads it
+/// again (IOS-PLAN §6.9; vettid-android writes it to its file but never reads it back). Nothing here touches transport or
+/// crypto beyond the typed calls. Mirrors the connection part of vettid-android `SocialManager`.
 @MainActor
 @Observable
 public final class ConnectionsManager: ConnectionsRepository, ConnectionRequestsRepository {
@@ -30,9 +30,12 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
     /// Peer declines noted in this run, so that the `failed` that accompanies one never shows it again (0.10.5).
     @ObservationIgnored var notedDeclines: Set<String> = []
     @ObservationIgnored private var ttls: [InviteTtl]?
-    /// Bumped whenever what was read from the open vault is dropped: a list read before is not published (chosen; not in
-    /// the spec).
+    /// Bumped whenever the connections read from the open vault are dropped: a list read before is not published (chosen;
+    /// not in the spec).
     @ObservationIgnored var generation = 0
+    /// The same for the requests (``forgetRequests()``), apart, so that dropping the requests never drops a read of the
+    /// connections on its way.
+    @ObservationIgnored var requestGeneration = 0
     /// Told of every connection that is gone (removed, blocked, or removed by the peer): its messages go with it.
     @ObservationIgnored public var onForget: @MainActor (String) -> Void = { _ in }
 
@@ -78,17 +81,20 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
 
     /// The vault is no longer open on this phone (locked, or a lock was asked for): the connections and requests read
     /// from it, and the names and declines learnt of them, are dropped from memory; an unlock reads the lists again.
+    /// Also at a hold (IOS-PLAN §6.9: vault content is cleared at the vault lock, at a hold and at a wipe). A read on its
+    /// way is not published.
     public func forgetOpenVault() {
+        generation += 1
         connections = []
         forgetRequests()
     }
 
-    /// The vault is held or due (§3.6.3), or no longer open: the open requests, with their names and safety codes, and the
-    /// other member's declines are dropped from memory; a passed owner check or an unlock reads the requests again
-    /// (`connection.request.list`). A read on its way is not published. The ids of the declines already told stay, so
+    /// The open requests, with their names and safety codes, and the other member's declines are dropped from memory; an
+    /// unlock or a passed owner check reads the requests again (`connection.request.list`). A read of the requests or an
+    /// accept on its way is not published; a read of the connections is. The ids of the declines already told stay, so
     /// that a late `failed` does not tell one again (they hold no name).
-    public func forgetRequests() {
-        generation += 1
+    func forgetRequests() {
+        requestGeneration += 1
         open = []
         edit { $0 = Local() }
     }
@@ -188,9 +194,9 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
         case .notAConnection: throw VaultFailure(.inviteNotConnection)
         case .invalid: throw VaultFailure(.inviteInvalid)
         }
-        let g = generation
+        let g = requestGeneration
         let r = try await guarded { try await accepted(link) }
-        if !r.exists, g == generation { addWaiting(r) }
+        if !r.exists, g == requestGeneration { addWaiting(r) }
         return r
     }
 

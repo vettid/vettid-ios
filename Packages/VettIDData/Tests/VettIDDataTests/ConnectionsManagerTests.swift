@@ -268,8 +268,9 @@ final class FakeConnectionOps: ConnectionOps, @unchecked Sendable {
         #expect(m.connections.isEmpty && ops.calls.suffix(2) == ["remove:c1", "block:c2"])
     }
 
-    /// Locked: what was read from the vault goes, and what this phone learnt of the requests (their names, the other
-    /// member's declines) with it; held, the requests go and the connections stay. A wipe forgets everything.
+    /// Locked or held (IOS-PLAN §6.9: both ``ConnectionsManager/forgetOpenVault()``): what was read from the vault goes,
+    /// and what this phone learnt of the requests (their names, the other member's declines) with it. Dropping the
+    /// requests alone keeps the connections. A wipe forgets everything.
     @Test func lockingForgetsTheListsAndAWipeEverything() async throws {
         ops.connections = [Self.connection("c1")]
         let m = manager()
@@ -290,6 +291,33 @@ final class FakeConnectionOps: ConnectionOps, @unchecked Sendable {
         #expect(m.peerDeclines.isEmpty)
         m.clear()
         #expect(m.peerDeclines.isEmpty && m.requestEnds.isEmpty)
+    }
+
+    /// The requests have their own generation: dropping them drops a read of the requests on its way, never a read of the
+    /// connections.
+    @Test func droppingTheRequestsKeepsAConnectionsReadOnItsWay() async throws {
+        ops.connections = [Self.connection("c1")]
+        let gate = TestDeferred<Void>()
+        ops.listGate = gate
+        let m = manager()
+        let reading = Task { try await m.refresh() }
+        #expect(await eventually { ops.calls == ["list"] })
+        m.forgetRequests()
+        gate.complete(())
+        try await reading.value
+        #expect(m.connections.map(\.id) == ["c1"])
+        ops.requests = #"{"incoming":[{"pending_id":"p1","sas":"042817","state":"pending"}],"outgoing":[]}"#
+        let requestGate = TestDeferred<Void>()
+        ops.requestGate = requestGate
+        let requests = Task { try await m.refreshRequests() }
+        #expect(await eventually { ops.calls == ["list", "requestList"] })
+        m.forgetRequests()
+        requestGate.complete(())
+        try await requests.value
+        #expect(m.requests.isEmpty && m.connections.map(\.id) == ["c1"])
+        ops.requestGate = nil
+        try await m.refreshRequests()
+        #expect(m.requests.map(\.id) == ["p1"])
     }
 
     /// A list read before the vault was locked is not published after (chosen; not in the spec).

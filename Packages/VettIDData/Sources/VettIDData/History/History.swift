@@ -286,7 +286,7 @@ public final class HistoryManager: HistoryRepository {
 
     public func searchIgnored() { searchUnsupported = true }
 
-    /// Forgets what was read (the vault locked, or a wipe).
+    /// Forgets what was read (the vault locked or held, IOS-PLAN §6.9, or a wipe).
     public func clear() {
         generation += 1
         cache = [:]

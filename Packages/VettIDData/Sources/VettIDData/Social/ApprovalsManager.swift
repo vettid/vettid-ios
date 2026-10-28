@@ -7,11 +7,12 @@ import VettIDVault
 /// client. What the vault lists (grant and critical-item requests, `grant.list` and `critical-secret-use.list`) is read
 /// again when it opens. What arrives only as events (member authentication, share decisions, desktop and agent requests)
 /// and what the lists leave out (a critical-item request's payload) is kept as the vault sent it until it is decided,
-/// expires, or a list shows it gone. All of it lives in memory only, like every other vault content: nothing is written to
-/// the phone, and it is dropped when the vault locks, at a hold and at a wipe (``forgetOpenVault()``). An approval that
-/// arrived only as an event and was not decided before then is not shown again (no vault list names it). The connection
-/// requests are the ``ConnectionsManager``'s, listed here with the others. Nothing here touches transport or crypto beyond
-/// the typed calls. Mirrors the approvals part of vettid-android `SocialManager`.
+/// expires, or a list shows it gone. All of it lives in memory only, like every other vault content (IOS-PLAN §6.9):
+/// nothing is written to the phone, and it is dropped when the vault locks, at a hold and at a wipe
+/// (``forgetOpenVault()``). An approval that arrived only as an event and was not decided before then is not shown again
+/// (no vault list names it). The connection requests are the ``ConnectionsManager``'s, listed here with the others.
+/// Nothing here touches transport or crypto beyond the typed calls. Mirrors the approvals part of vettid-android
+/// `SocialManager`.
 @MainActor
 @Observable
 public final class ApprovalsManager: ApprovalsRepository {

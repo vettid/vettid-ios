@@ -123,10 +123,10 @@ extension VaultManager {
             activityEvent(m)
         }
         switch m.type {
-        // §3.6.3: entering the hold ends the credential's unlock window.
+        // §3.6.3: entering the hold ends the credential's unlock window; IOS-PLAN §6.9: no vault content is kept.
         case Self.typeHeld:
             unlockWindow = nil
-            activityHeld()
+            forgetHeld()
         case LockNotices.type:
             locking(m)
         case Self.typeAlarm:

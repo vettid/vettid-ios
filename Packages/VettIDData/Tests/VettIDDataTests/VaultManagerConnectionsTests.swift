@@ -230,6 +230,37 @@ import VettIDVault
         #expect(try await m.unlock(pin: pin) == .success)
     }
 
+    /// A retired file that cannot be deleted at the start is left, with the start going on, and deleted at the next call
+    /// once it can be; the temporary files interrupted writes of the retired files left go with them, and nothing else.
+    @Test func aRetiredFileThatCannotBeDeletedIsTriedAgain() async throws {
+        defer { phone.close() }
+        try await setUp()
+        try await m.lock()
+        let fm = FileManager.default
+        let dir = phone.directory
+        let tmps = VaultFiles.retired.map { dir.appendingPathComponent(".\($0).\(UUID().uuidString).tmp") }
+        for u in VaultFiles.retired.map(dir.appendingPathComponent) + tmps { try Data([1, 2, 3]).write(to: u) }
+        let kept = dir.appendingPathComponent(".\(VaultFiles.account).\(UUID().uuidString).tmp")
+        try Data([1]).write(to: kept)
+        // A directory in place of the approvals file: `unlink` refuses it.
+        let stuck = dir.appendingPathComponent(VaultFiles.approvals)
+        try fm.removeItem(at: stuck)
+        try fm.createDirectory(at: stuck.appendingPathComponent("x"), withIntermediateDirectories: true)
+        try await phone.restart()
+        try await m.refresh()
+        #expect(!m.retiredRemoved && fm.fileExists(atPath: stuck.path))
+        #expect(!fm.fileExists(atPath: dir.appendingPathComponent(VaultFiles.connections).path))
+        #expect(tmps.allSatisfy { !fm.fileExists(atPath: $0.path) } && fm.fileExists(atPath: kept.path))
+        m.removeRetiredFiles()
+        #expect(!m.retiredRemoved && fm.fileExists(atPath: stuck.path))
+        try fm.removeItem(at: stuck)
+        try Data([1, 2, 3]).write(to: stuck)
+        m.removeRetiredFiles()
+        #expect(m.retiredRemoved && !fm.fileExists(atPath: stuck.path))
+        try fm.removeItem(at: kept)
+        #expect(try await m.unlock(pin: pin) == .success)
+    }
+
     /// Nothing the vault sends is taken into the lists while a lock is pending (as vettid-android): a request that
     /// arrives between the lock and its confirmation is neither shown nor kept.
     @Test func eventsWhileALockIsPendingAreNotTaken() async throws {

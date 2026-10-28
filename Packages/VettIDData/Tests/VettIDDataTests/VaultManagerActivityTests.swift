@@ -186,7 +186,8 @@ import VettIDVault
     }
 
     /// Due or held by the owner check's state (§3.6.3, not only on `vault.held`): no feed content, approval or
-    /// connection request (with its name and safety code) is kept; after the check they are read again.
+    /// connection request (with its name and safety code) is kept (IOS-PLAN §6.9); after the check they are read again,
+    /// once.
     @Test func theFeedAndTheAsksAreDroppedWhileTheCheckIsDue() async throws {
         defer { phone.close() }
         let id = try await connected()
@@ -200,10 +201,70 @@ import VettIDVault
         #expect(m.ownerChecks.ownerCheck?.state != .ok)
         #expect(feed.items.isEmpty && feed.badge == FeedBadge())
         #expect(approvals.approvals.isEmpty && m.connections.requests.isEmpty && m.connections.local.requestNames.isEmpty)
+        let grantReads = { service.requestsSeen.filter { $0 == "grant.list" }.count }
+        let before = grantReads()
         #expect(try await m.ownerChecks.check(pin: pin, password: password) == .passed)
         #expect(await eventually { feed.items.count == 1 }, "read again after the check")
         #expect(await eventually { Set(approvals.approvals.map(\.key)) == ["grant:\(grant)", "outgoing:\(r.connectionID)"] })
         #expect(m.connections.requests.map(\.sas) == [sas])
+        // This phone's own check reads every list once (`onPassed`), not again for the end of the hold.
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(grantReads() == before + 1)
+    }
+
+    /// `vault.held` (§3.6.3) as the vault sends it.
+    static func held() -> VaultMessage {
+        VaultMessage(inner: Inner(id: Ulid.new(), type: "vault.held", ts: Date(), body: Array(#"{"waiting":{"messages":0}}"#.utf8)))
+    }
+
+    /// `vault.held` (§3.6.3): IOS-PLAN §6.9 clears vault content at a hold as at the lock, the connections with their
+    /// requests, the messages, the approvals and History among it. Another device's check ends the hold
+    /// (`sync.event{owner_check}`): they are read again.
+    @Test func aHoldDropsTheVaultContentAndAnotherDevicesCheckReadsItAgain() async throws {
+        defer { phone.close() }
+        let id = try await connected()
+        let grant = try service.peerAsksForItems(id, [AskedItem(ref: "01JITEM000000000000000000A", label: "Passport")])
+        _ = try service.peerSends(id, "Hello")
+        let r = try await m.connections.acceptInvite(try service.peerInvite(first: "Sam", last: "Ray", name: "Sam"))
+        #expect(await eventually { m.connections.requests.first?.sas != nil && m.messages.messages(id).count == 1 })
+        let asks: Set<String> = ["grant:\(grant)", "outgoing:\(r.connectionID)"]
+        #expect(await eventually { Set(approvals.approvals.map(\.key)) == asks })
+        let seq = try #require(try await m.history.auditPage(AuditRequest(limit: 10)).entries.first?.seq)
+        #expect(m.history.cached(seq) != nil)
+        let feedItems = feed.items.count
+
+        m.onEvent(Self.held())
+        #expect(m.ownerChecks.ownerCheck?.state != .ok)
+        #expect(m.connections.connections.isEmpty && m.connections.requests.isEmpty && m.connections.local.requestNames.isEmpty)
+        #expect(m.messages.messages(id).isEmpty && approvals.approvals.isEmpty && feed.items.isEmpty && m.history.cached(seq) == nil)
+
+        try service.otherDevicePassesCheck()
+        #expect(await eventually { m.ownerChecks.ownerCheck?.state == .ok })
+        #expect(await eventually { m.connections.connections.map(\.id) == [id] && m.messages.messages(id).count == 1 })
+        #expect(await eventually { Set(approvals.approvals.map(\.key)) == asks })
+        #expect(m.connections.requests.first?.name == "Sam")
+        #expect(await eventually { feed.items.count == feedItems })
+    }
+
+    /// Another device ends the hold while the opening's read of every list is on its way: what that read took in before
+    /// the hold was dropped, so the lists are read again once it ends, and the asks come back.
+    @Test func aHoldEndedDuringTheOpeningsReadLeavesNoAskBehind() async throws {
+        defer { phone.close() }
+        let id = try await connected()
+        let grant = try service.peerAsksForItems(id, [AskedItem(ref: "01JITEM000000000000000000A", label: "Passport")])
+        #expect(await eventually { approvals.approvals.map(\.key) == ["grant:\(grant)"] })
+        // The opening's read, still on its way.
+        let opening = TestDeferred<Void>()
+        m.listsReads += 1
+        m.listsRead = Task { _ = try? await opening.value() }
+        m.onEvent(Self.held())
+        #expect(approvals.approvals.isEmpty)
+        try service.otherDevicePassesCheck()
+        #expect(await eventually { m.ownerChecks.ownerCheck?.state == .ok })
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(approvals.approvals.isEmpty, "read after the read on its way")
+        opening.complete(())
+        #expect(await eventually { approvals.approvals.map(\.key) == ["grant:\(grant)"] && m.connections.connections.map(\.id) == [id] })
     }
 
     /// The vault's `share.decide`: items not waiting are ignored, and the answer names what was decided.

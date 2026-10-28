@@ -143,10 +143,10 @@ extension ConnectionsManager {
     public func refreshRequests() async throws { try await refreshRequests(quietly: false) }
 
     func refreshRequests(quietly: Bool) async throws {
-        let g = generation
+        let g = requestGeneration
         let o = quietly ? quietOps : ops
         let list = try await guarded { try await o().requestList() }
-        guard g == generation else { return }
+        guard g == requestGeneration else { return }
         let t = now()
         let parsed: [PendingConnection] = VaultJSON.objects(list, "incoming").compactMap { ConnectionParser.incoming($0, at: t) }
             .map(PendingConnection.incoming)

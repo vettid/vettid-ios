@@ -32,6 +32,33 @@ import VettIDKeysTesting
         try s.clear()
     }
 
+    /// A retired file goes with the temporary files interrupted writes of it left, and only those; a second call, or one
+    /// whose directory is gone, finds nothing to do. One that cannot be removed throws after the others went, and goes at
+    /// the next call.
+    @Test func aRetiredFileGoesWithItsTemporaryFiles() throws {
+        let dir = try scratchDirectory().appendingPathComponent("data")
+        let file = dir.appendingPathComponent("approvals")
+        let fm = FileManager.default
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        let tmps = (0..<2).map { _ in dir.appendingPathComponent(".approvals.\(UUID().uuidString).tmp") }
+        let others = [".approvals-x.\(UUID().uuidString).tmp", ".account.\(UUID().uuidString).tmp", "approvals.tmp", ".approvals..tmp"]
+            .map { dir.appendingPathComponent($0) }
+        for u in [file] + tmps + others { try Data([1]).write(to: u) }
+        // A directory in place of one temporary file: `unlink` refuses it.
+        let stuck = dir.appendingPathComponent(".approvals.\(UUID().uuidString).tmp")
+        try fm.createDirectory(at: stuck.appendingPathComponent("x"), withIntermediateDirectories: true)
+        let s = store(file)
+        #expect(throws: KeysError.unavailable("approvals")) { try s.clearRetired() }
+        #expect(([file] + tmps).allSatisfy { !fm.fileExists(atPath: $0.path) } && fm.fileExists(atPath: stuck.path))
+        #expect(others.allSatisfy { fm.fileExists(atPath: $0.path) })
+        try fm.removeItem(at: stuck)
+        try Data([1]).write(to: stuck)
+        try s.clearRetired()
+        #expect(!fm.fileExists(atPath: stuck.path) && others.allSatisfy { fm.fileExists(atPath: $0.path) })
+        try s.clearRetired()
+        try store(dir.appendingPathComponent("gone/approvals")).clearRetired()
+    }
+
     /// Android's format: `0x01 || iv (12) || ciphertext || tag (16)`, nothing else in the file.
     @Test func theFileFormat() throws {
         let file = try scratchDirectory().appendingPathComponent("f.bin")
