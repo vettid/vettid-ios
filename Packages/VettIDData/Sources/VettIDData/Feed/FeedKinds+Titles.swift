@@ -111,13 +111,14 @@ public extension FeedKinds {
     }
 
     /// A challenge's title (§10.4): a §10.4.1 batch's "Sam asks for 3 things" whatever the purpose; else per purpose, the
-    /// name bidi-isolated (§10.8) in the purpose's sentences.
+    /// name bidi-isolated (§10.8) in the purpose's sentences, or for either purpose "a connection" when no name is known
+    /// (chosen; not in the spec).
     private static func authenticationTitle(_ item: FeedItem, _ names: FeedNames) -> String {
         if let n = item.count, n > 1 { return DataStrings.feedGrantRequestBatch(firstName(item, names), n) }
         let known = knownName(item, names).map(AccountNames.isolate)
         switch authenticationPurpose(item, names) {
         case .signin: return DataStrings.feedAuthenticateSignin(known ?? DataStrings.feedAConnectionInline)
-        case .approval: return DataStrings.feedAuthenticateApproval(known ?? connectionName(item, names))
+        case .approval: return DataStrings.feedAuthenticateApproval(known ?? DataStrings.feedNameNotShared)
         case .absent: return DataStrings.feedAuthenticate(connectionName(item, names))
         }
     }
