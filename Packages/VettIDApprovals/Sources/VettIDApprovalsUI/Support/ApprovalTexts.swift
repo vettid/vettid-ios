@@ -41,7 +41,7 @@ enum ApprovalTexts {
         case .connection(.outgoing(let r)):
             r.sas.map { r.state == .approved ? ApprovalsStrings.summaryWaitingPeer($0) : ApprovalsStrings.summarySas($0) }
                 ?? ApprovalsStrings.summaryHandshake
-        case .authentication(let x): x.context
+        case .authentication(let x): x.context.map(firstLine)
         case .grant(let g): ApprovalsStrings.summaryItems(g.entries.count)
         case .critical(let c): "\(c.itemName) · \(c.fieldLabel)"
         case .share(let s): ApprovalsStrings.summaryItems(s.items.count)
@@ -49,10 +49,14 @@ enum ApprovalTexts {
         }
     }
 
-    /// The row's second line: who and the summary, joined.
+    /// The row's second line: who and the summary, joined, each bidi-isolated (§10.8) since either can come from the
+    /// other side.
     static func supporting(_ a: PendingApproval, name: String?) -> String {
-        [who(a, name: name), summary(a)].compactMap { $0 }.joined(separator: " · ")
+        [who(a, name: name), summary(a)].compactMap { $0.map(AccountNames.isolate) }.joined(separator: " · ")
     }
+
+    /// [s] up to its first line break: a row shows one line.
+    static func firstLine(_ s: String) -> String { String(s.prefix { !$0.isNewline }) }
 
     /// The decision screen's body. An `approval` challenge has none: its title says who asks, and its note follows in full
     /// (chosen; not in the spec).

@@ -50,7 +50,7 @@ struct Facts: View {
                 // The challenger's claim (§10.4), in full whatever the purpose.
                 if let c = x.context {
                     FactLabel(ApprovalsStrings.context)
-                    FactValue(c).accessibilityIdentifier("auth_context")
+                    FactValue(AccountNames.isolate(c)).accessibilityIdentifier("auth_context")
                 }
                 expires(x.exp)
             case .critical(let c): CriticalFacts(use: c, name: name)
@@ -143,7 +143,7 @@ struct CriticalFacts: View {
         FactValue(ApprovalTexts.operation(use.operation))
         if let c = use.context {
             FactLabel(ApprovalsStrings.context)
-            FactValue(c)
+            FactValue(AccountNames.isolate(c))
         }
         payload
         if let exp = use.exp { Text(ApprovalsStrings.expires(ApprovalTimes.full(exp))).vettIDFont(.bodySmall).padding(.top, Spacing.s) }
