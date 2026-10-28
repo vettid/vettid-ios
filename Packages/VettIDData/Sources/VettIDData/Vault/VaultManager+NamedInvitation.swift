@@ -8,12 +8,8 @@ import VettIDVault
 public protocol PairingPinKeeper {
     /// The pairing screen left the foreground, or the iPhone locked: the PIN kept in memory for the lost-ok unlock the pairing
     /// may send again is forgotten; that unlock then answers ``VaultManager/codePinNeeded`` and the PIN is asked for again.
-    /// Default: nothing.
+    /// Required, with no default: a repository that keeps nothing says so itself.
     func forgetPairingPin()
-}
-
-public extension PairingPinKeeper {
-    func forgetPairingPin() {}
 }
 
 /// The PIN kept for the pairing was forgotten (the app left the foreground) when an unlock needed it.
@@ -58,7 +54,8 @@ extension VaultManager {
     /// then an unlock with its own key and the walk again. The unlock's refusal code, and the session that paired (the earlier
     /// identity's, for a phone that could not tell whose invitation it was).
     func pairRecovered(_ s: VaultSession, resuming: Bool) async throws -> (String?, VaultSession) {
-        guard s.device.namedInvitation != nil else { return try await pairWalking(s, resuming: resuming, skipping: [], named: false) }
+        // An id that none of the phone's identities registered is ignored: the pairing is the one without the member.
+        guard hasNamedOwner(s) else { return try await pairWalking(s, resuming: resuming, skipping: [], named: false) }
         switch try await pairNamed(s, resuming: resuming) {
         case .paired(let p): return (nil, p)
         case .refused(let code, let p): return (code, p)
@@ -84,11 +81,17 @@ extension VaultManager {
             let own = record.value.couldNotTell == nil ? s : try await openSession()
             if let refusal = try await unlockOwn(own, pin: try pairingPinNow(), cause: e) { return (refusal, own) }
             // (IOS-PLAN 0.1.40 §4.9) That unlock's `ok` may name the invitation.
-            if own.device.namedInvitation != nil { return try await pairNamedThenWalk(own) }
+            if hasNamedOwner(own) { return try await pairNamedThenWalk(own) }
             // (IOS-PLAN 0.1.39 §4.9) That unlock's `ok` is a lost ok: each `recovery_id` this identity registered for is tried.
             try await own.device.completeRecoveryOpen(timeout: handshakeWait(resuming: false))
             return (nil, own)
         }
+    }
+
+    /// The last unlock named an invitation that one of the phone's identities registered.
+    private func hasNamedOwner(_ s: VaultSession) -> Bool {
+        guard let named = s.device.namedInvitation else { return false }
+        return namedOwner(named.recoveryID, current: s) != nil
     }
 
     /// The named invitation after an unlock of the walk, then the remaining walk once.

@@ -110,6 +110,12 @@ extension FakeVaultService {
         // A transfer's target has no device until the new phone's hs.init arrives (FakeVaultService+Transfer.swift).
         if device == nil, transfer.inviteID != nil { return try acceptTransferInit(raw) }
         guard let device else { return }
+        // The recovered phone's `hs.init` again while the first is begun: the vault takes no other on the same invitation until an
+        // unlock drops the begun one (VAULT-MESSAGING 0.67.0 §11.14.6 "Pairing"). Seen, never answered.
+        if responder != nil, recovery.invitation, let again = try? PendingInit.open(raw, lookup: { [kem] k in k == kem.publicKey.kid ? kem : nil }, now: Date()) {
+            recovery.handshakeContexts.append(again.body.ctx)
+            return
+        }
         if let r = responder {
             // §6.3: the hs.fin activates the epoch; device.paired follows in the session.
             let fin = try r.handleFin(raw, collectSender: device.relay.pk, now: Date())

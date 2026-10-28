@@ -36,6 +36,7 @@ import VettIDData
             return .success
         }
         func lock() async throws { calls.append("lock") }
+        func forgetPairingPin() { calls.append("forgetPairingPin") }
         func overview() async throws -> VaultOverview { throw VaultFailure(.other) }
         func changePin(pin: String, newPin: String) async throws { calls.append("changePin") }
         func deleteVault(pin: String, password: String) async throws {}

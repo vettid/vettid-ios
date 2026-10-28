@@ -77,6 +77,32 @@ extension VaultManagerRecoveryTests {
         try expectOnlyKey(n.a1)
     }
 
+    @Test func anUnregisteredIdIsThePairingWithoutTheMemberEvenWhenItsWalkFailsTheFirstTime() async throws {
+        defer { phone.close() }
+        let n = try await nRegisteredAgainAfterStep2()
+        service.namesInvitation(as: Ulid.new())
+        // The walk's R1 is lost: as without the member, E's fallback, then N's own unlock and the walk again.
+        service.dropNextRecoveryHandshakes(1)
+        let unlocks = service.unlocks.count
+        #expect(try await m.resumeLostOk(pin: pin).ok)
+        #expect(service.recoveryHandshakeContexts == [n.r2.recoveryID, n.r1.recoveryID, n.r2.recoveryID, n.r1.recoveryID])
+        #expect(service.unlocks.count == unlocks + 2)
+        try expectOnlyKey(n.a1)
+    }
+
+    @Test func aCancelledPairingForgetsTheKeptPin() async throws {
+        defer { phone.close() }
+        _ = try await nRegisteredAgainAfterStep2()
+        service.namesInvitation()
+        service.dropNextRecoveryHandshakes(1)
+        let run = Task { try await m.resumeLostOk(pin: pin) }
+        #expect(await eventually { service.recoveryHandshakeContexts.count == 1 })
+        #expect(m.moveFlags.book.pairingPin == pin)
+        run.cancel()
+        _ = try? await run.value
+        #expect(m.moveFlags.book.pairingPin == nil)
+    }
+
     @Test func anIdOfTheEarlierIdentityIsItsToPairAndWhenItIsNotTheVaultsKeyTheWalkFollows() async throws {
         defer { phone.close() }
         let n = try await nRegisteredAgainAfterStep2()
@@ -120,9 +146,14 @@ extension VaultManagerRecoveryTests {
         // Both `hs.init`s with R1 are lost: one unlock between them, never a third with R1 on its own; then R2 (the remaining one).
         service.dropNextRecoveryHandshakes(2)
         let unlocks = service.unlocks.count
+        let asserted = phone.attester.assertionIdentities.count
         _ = await vaultFailure { _ = try await m.resumeLostOk(pin: pin) }
         #expect(service.recoveryHandshakeContexts == [n.r1.recoveryID, n.r1.recoveryID, n.r2.recoveryID])
-        #expect(service.unlocks.count == unlocks + 2)
+        #expect(service.unlocks.count == unlocks + 2 && m.moveFlags.book.pairingPin == nil)
+        // N holds the vault's `ok`: its failed pairing ends the run. E unlocked once, for the walk's fallback to E, and the unlock
+        // with each identity did not go on to E.
+        #expect(phone.attester.assertionIdentities.dropFirst(asserted).filter { $0 == 0 }.count == 1)
+        #expect(m.record.value.activeIdentity == .second)
         // The app is killed. The named id and its sent `hs.init` are kept, and so are N's keys.
         try await phone.restart()
         #expect(try await m.recoveryOpened())
@@ -143,7 +174,8 @@ extension VaultManagerRecoveryTests {
         service.namesInvitation()
         service.dropNextRecoveryHandshakes(2)
         _ = await vaultFailure { _ = try await m.resumeLostOk(pin: pin) }
-        // As a kill after the unlock's result was saved and before its `hs.init` went: the named id, not sent.
+        // As a kill after the unlock's result was saved and before the save that marks its `hs.init` sent (that save comes before
+        // the deposit, so nothing went): the named id, not sent.
         phone.close()
         let file = m.config.file(VaultFiles.device(of: .second))
         let bytes = try #require(try file.load())
@@ -169,6 +201,7 @@ extension VaultManagerRecoveryTests {
         service.namesInvitation()
         service.dropNextRecoveryHandshakes(1)
         let unlocks = service.unlocks.count
+        let asserted = phone.attester.assertionIdentities.count
         let run = Task { try await m.resumeLostOk(pin: pin) }
         #expect(await eventually { service.recoveryHandshakeContexts.count == 1 })
         // The app leaves the foreground while the first `hs.init` waits: the kept PIN goes, and the unlock again needs it.
@@ -178,6 +211,8 @@ extension VaultManagerRecoveryTests {
         #expect(out.code == VaultManager.codePinNeeded && out.opened && out.attemptUsed == false)
         #expect(service.recoveryHandshakeContexts == [n.r1.recoveryID] && service.unlocks.count == unlocks + 1)
         #expect(m.moveFlags.book.pairingPin == nil && m.record.value.activeIdentity == .second)
+        // No later unlock: not N's again, not E's.
+        #expect(!phone.attester.assertionIdentities.dropFirst(asserted).contains(0))
         // A wrong PIN: an ordinary `bad_pin`, no `hs.init`.
         let bad = try await m.resumeLostOk(pin: "000000")
         #expect(bad.code == "bad_pin" && bad.opened && service.recoveryHandshakeContexts.count == 1)
@@ -189,6 +224,35 @@ extension VaultManagerRecoveryTests {
     }
 
     // MARK: - The earlier identity
+
+    @Test func whenNsOkNamesEsInvitationAndEIsTheVaultsKeyEPairsAloneWithItsRegistrationsKey() async throws {
+        defer { phone.close() }
+        phone.attester.modelKeys()
+        service.nextOpenStopsAfterStep2()
+        let first = try await openGotNoAnswer(.answerLost)
+        service.statusUnauthorized = true
+        #expect(try await twoReads() == .newCode)
+        service.statusUnauthorized = false
+        let made = try secondRecovery()
+        _ = try await m.registerRecovery(try scanned(made))
+        service.recoveryOpenAnswers(.answerLost)
+        _ = await vaultFailure { _ = try await m.recoveryOpen(pin: pin, password: password) }
+        #expect(try await twoReads() == .finishWithPin)
+        // N's unlock is answered `ok` too, naming E's kept invitation: E unlocks, and its `ok` names it again.
+        service.namesInvitation()
+        service.nextUnlockAnswersRegisteredPhone()
+        let (seen, unlocks) = (service.recoveryHandshakeContexts.count, service.unlocks.count)
+        let asserted = phone.attester.assertionIdentities.count
+        #expect(try await m.resumeLostOk(pin: pin).ok)
+        #expect(Array(phone.attester.assertionIdentities.dropFirst(asserted)).prefix(2) == [1, 0])
+        #expect(service.unlocks.count == unlocks + 2)
+        // One `hs.init`, by E, with E's `recovery_id`; the binding is E's registration key; E wins and N's keys go.
+        #expect(Array(service.recoveryHandshakeContexts.dropFirst(seen)) == [first.recoveryID])
+        let eKey = try #require(service.recoveryRegisters.first?.keyID)
+        #expect(service.recoveryBoundKey == eKey)
+        #expect(m.record.value.activeIdentity == .first && m.record.value.couldNotTell == nil && phone.attester.settled == [0])
+        for slot in KeySlot.slots(of: .second) { #expect(try phone.wrapped.get(slot) == nil) }
+    }
 
     @Test func theMemberNamingEsRecoveryIdLetsEPairWithASingleHsInit() async throws {
         defer { phone.close() }

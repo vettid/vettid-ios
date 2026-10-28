@@ -81,6 +81,9 @@ struct FakeRecoveryStore {
     var namedResultsLeft: Int?
     /// The id named instead of the invitation's (one no identity registered, or another identity's).
     var namedAs: String?
+    /// The next unlock's result is sealed to the registered phone's KEM key instead of the vault's device's: the registered phone
+    /// is one of its unlock keys too.
+    var sealNextToRegistered = false
 }
 
 // TEST ONLY. Recovery on a new phone as vettid-vault answers it: the member API's claim and register
@@ -262,6 +265,9 @@ extension FakeVaultService {
             recovery.namedResultsLeft = results
         }
     }
+
+    /// The next unlock is answered to the registered phone (its KEM key) though the vault's device is another: both unlock.
+    public func nextUnlockAnswersRegisteredPhone() { locked { recovery.sealNextToRegistered = true } }
 
     /// The registered phone is an unlock key of the vault though it was not adopted (an ok unlock without a bundle).
     public func registeredPhoneHoldsUnlockKey() { locked { recovery.phoneHoldsUnlockKey = true } }

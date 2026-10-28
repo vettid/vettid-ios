@@ -123,6 +123,7 @@ public final class RecoveryOpenViewModel {
             state.failure = nil
             state.failureCode = nil
             state.pin = ""
+            state.password = ""
             return
         }
         if out.code == UnlockEpoch.transferIncomplete {

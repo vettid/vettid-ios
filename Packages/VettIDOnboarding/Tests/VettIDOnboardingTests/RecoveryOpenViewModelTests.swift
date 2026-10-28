@@ -245,7 +245,7 @@ import VettIDDataTesting
         #expect(vm.state.step == .sending && vault.calls.contains("forgetPairingPin"))
         await vm.settle()
         #expect(vm.state.step == .finish && vm.state.lostOk && vm.state.outcome == nil && vm.state.failure == nil)
-        #expect(vm.state.pin.isEmpty)
+        #expect(vm.state.pin.isEmpty && vm.state.password.isEmpty)
         // The PIN entered again finishes it.
         vm.setPin("975310")
         vm.send()
