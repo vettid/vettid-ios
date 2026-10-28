@@ -168,6 +168,63 @@ import VettIDDataTesting
         #expect(vm.state.pinKept && vm.state.message == .failed(.network, code: nil) && vm.state.pin == pin)
     }
 
+    /// Only where trying again can help is the PIN kept (as vettid-android): an unknown count, or a refusal that is not a
+    /// passing failure, drops it; the screen then asks for both, "Check" off until the PIN is typed again, and the next
+    /// check sends the PIN typed.
+    @Test(arguments: [
+        OwnerCheckOutcome.badPassword(checksLeft: nil),
+        .failed(.credentialFrozen, code: "credential_frozen"),
+        .failed(.rotationRequired, code: "rotation_required"),
+        .failed(.unauthorized, code: nil),
+        .failed(.other, code: nil),
+        .failed(.vaultUnavailable, code: VaultManager.codeVaultDeleting),
+        .failed(.vaultUnavailable, code: VaultManager.codeReleaseNotRouted),
+    ])
+    func aRefusalOrAnUnknownCountDropsThePin(r: OwnerCheckOutcome) async throws {
+        let vm = try await heldScreen([.badPassword(checksLeft: 7), r, .passed])
+        vm.setPassword("pw")
+        vm.submit()
+        await vm.settle()
+        #expect(!vm.state.pinKept && vm.state.pin.isEmpty && vm.state.unlockedWrong == nil)
+        vm.setPassword("pw")
+        #expect(!vm.state.submitAllowed, "the PIN again")
+        vm.setPin("135790")
+        #expect(vm.state.submitAllowed)
+        vm.submit()
+        await vm.settle()
+        #expect(vault.lastPin == "135790" && vm.state.passed)
+    }
+
+    /// A failure that passes by itself keeps it (`utk_invalid` and `stale_credential` read as no answer), and so does a
+    /// backoff on a retry.
+    @Test(arguments: [
+        OwnerCheckOutcome.failed(.noResponse, code: "utk_invalid"),
+        .failed(.rateLimited, code: nil),
+        .failed(.vaultUnavailable, code: nil),
+        .failed(.servicePaused, code: nil),
+        .backoff(retryAfterSeconds: 0),
+    ])
+    func aPassingFailureOrABackoffKeepsThePin(r: OwnerCheckOutcome) async throws {
+        let vm = try await heldScreen([.badPassword(checksLeft: 7), r])
+        vm.setPassword("pw")
+        vm.submit()
+        await vm.settle()
+        #expect(vm.state.pinKept && vm.state.pin == pin)
+    }
+
+    /// A "Lock vault" that fails: the kept PIN and its lines go, and the screen asks for both with a way on.
+    @Test func aFailedLockEndsTheRetry() async throws {
+        let vm = try await heldScreen([.badPassword(checksLeft: 7)])
+        vault.fail["lock"] = VaultFailure(.network)
+        vm.lockVault()
+        await vm.settle()
+        let s = vm.state
+        #expect(!s.locking && !s.pinKept && s.pin.isEmpty && s.unlockedWrong == nil && !s.unlockedOpen)
+        vm.setPin(pin)
+        vm.setPassword("pw")
+        #expect(vm.state.submitAllowed)
+    }
+
     /// A refused update after an open whose check failed: the PIN is kept all the same.
     @Test func anUpdateRefusedStillKeepsThePin() async throws {
         vault.unlockResults = [.updateRefused(code: "x")]
