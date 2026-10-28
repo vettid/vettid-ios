@@ -364,13 +364,6 @@ extension OnboardingStrings {
             bundle: .module
         )
     }
-    static var unlockCheckPasswordWrongUnknown: String {
-        String(
-            localized: "unlock_check_password_wrong_unknown",
-            defaultValue: "Your vault is unlocked, but the credential password was wrong, so your daily check didn't pass.",
-            bundle: .module
-        )
-    }
     /// A backoff used no try: the vault is open and the check waits (approved by the owner 2026-10-28; IOS-PLAN 0.1.48,
     /// VAULT-MESSAGING 0.71.1 §3.6.5), under vettid-android's key.
     static var unlockCheckOpenWaiting: String {

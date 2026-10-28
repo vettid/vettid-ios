@@ -50,10 +50,11 @@ final class CheckGate: @unchecked Sendable {
     let pin = "975310"
     let held = #"{"state":"held","deadline":"2026-10-06T11:00:00Z","interval_seconds":86400,"failures":1,"hold":true}"#
 
-    func manager(_ ops: FakeOwnerCheckOps) -> OwnerCheckManager {
+    /// [sleep]: the wait for the status read after a failure (by default none: the count kept here may answer first).
+    func manager(_ ops: FakeOwnerCheckOps, sleep: @escaping LockSleep = { _ in }) -> OwnerCheckManager {
         let stored = stored
         let now = now
-        let m = OwnerCheckManager(ops: { ops }, load: { stored.bytes }, persist: { stored.bytes = $0 }, now: { now }, sleep: { _ in })
+        let m = OwnerCheckManager(ops: { ops }, load: { stored.bytes }, persist: { stored.bytes = $0 }, now: { now }, sleep: sleep)
         m.loadIfNeeded()
         return m
     }
@@ -162,10 +163,24 @@ final class CheckGate: @unchecked Sendable {
         let ops = heldOps()
         ops.status = #"{"state":"held","deadline":"2026-10-06T11:00:00Z","interval_seconds":86400,"failures":9,"hold":true}"#
         ops.onCheck = { _ in ops.status = #"{"state":"held","deadline":"2026-10-06T11:00:00Z","interval_seconds":86400,"failures":10,"hold":true}"# }
-        let m = manager(ops)
+        // The vault's own count, read after the failure, marks the lock: the wait lets that read answer.
+        let m = manager(ops, sleep: { _ in try await Task.sleep(for: .seconds(30)) })
         await m.afterUnlock(pin: pin, password: "nope")
         #expect(m.unlockCheckOutcome == .badPassword(checksLeft: 0))
         #expect(m.lockedByOwnerCheck)
+        #expect(m.takeUnlockPin() == nil)
+    }
+
+    /// Out of the front and back between the unlock's start and its check (the unlock request on its way): no PIN is kept,
+    /// and every leave is counted.
+    @Test func leavingTheFrontBeforeTheUnlockAnswersDropsThePin() async {
+        let m = manager(heldOps())
+        let kept = m.startUnlockPin()
+        m.setForeground(false)
+        m.setForeground(true)
+        #expect(m.leftFront == 1)
+        await m.afterUnlock(pin: pin, password: "nope", kept: kept)
+        #expect(Self.isBadPassword(m.unlockCheckOutcome))
         #expect(m.takeUnlockPin() == nil)
     }
 

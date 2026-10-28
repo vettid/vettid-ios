@@ -231,6 +231,9 @@ public protocol OwnerCheckRepository: AnyObject, Observable, Sendable {
     /// Whether the app is in front (the app, not a screen). Default: true.
     var inFront: Bool { get }
 
+    /// How many times the app left the front. Default: 0.
+    var leftFront: Int { get }
+
     /// Unread `owner_check.*` feed items. Default: none.
     var notices: [OwnerCheckNotice] { get }
 
@@ -278,6 +281,7 @@ public extension OwnerCheckRepository {
     func takeUnlockPin() -> String? { nil }
     func setForeground(_ front: Bool) {}
     var inFront: Bool { true }
+    var leftFront: Int { 0 }
     var notices: [OwnerCheckNotice] { [] }
     var presenceUnrecorded: Bool { false }
     var checkAfterCancel: Bool { false }

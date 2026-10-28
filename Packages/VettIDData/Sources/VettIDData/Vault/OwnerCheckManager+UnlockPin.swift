@@ -6,11 +6,12 @@ extension OwnerCheckManager {
     /// due, sends the check with the same entries; the answer waits in ``unlockCheckOutcome``. After a wrong password with
     /// tries left, or a backoff, the accepted [pin] is kept for the check screen's password-only retry
     /// (``takeUnlockPin()``), unless the app left the front, or the vault locked or was wiped, or another unlock began,
-    /// meanwhile. An answer to a check sent before another unlock, a lock made here or a wipe is dropped.
-    func afterUnlock(pin: String, password: String) async {
-        forgetUnlockPin()
+    /// meanwhile. An answer to a check sent before another unlock, a lock made here or a wipe is dropped. [kept]: what
+    /// ``startUnlockPin()`` returned before the unlock request was sent (nil: taken now).
+    func afterUnlock(pin: String, password: String, kept: Int? = nil) async {
+        let kept = kept ?? startUnlockPin()
         unlockEpoch += 1
-        let (unlock, kept) = (unlockEpoch, pinEpoch)
+        let unlock = unlockEpoch
         lockedByOwnerCheck = false
         endIdleLocked()
         let v = try? await readStatus().view
@@ -36,12 +37,22 @@ extension OwnerCheckManager {
         return unlockPin
     }
 
+    /// Called before an unlock that may keep its PIN is sent: drops a PIN kept earlier, and returns the mark that anything
+    /// ending the kept PIN from now on (the app leaving the front included, during the unlock request itself) moves.
+    func startUnlockPin() -> Int {
+        forgetUnlockPin()
+        return pinEpoch
+    }
+
     /// The app entered the foreground or left it (IOS-PLAN §6.6; ``VaultManager/onForeground()``,
     /// ``VaultManager/onBackground(budget:)``): leaving drops the kept PIN, also while the unlock and its check are on
     /// their way (§3.6.5: both are then asked for again).
     public func setForeground(_ front: Bool) {
         inFront = front
-        if !front { forgetUnlockPin() }
+        if !front {
+            leftFront += 1
+            forgetUnlockPin()
+        }
     }
 
     /// Drops the kept PIN, and the one an unlock's check has not yet decided to keep.

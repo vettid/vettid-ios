@@ -129,6 +129,7 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var lockedByOwnerCheck = false
     public var unlockCheckOutcome: OwnerCheckOutcome?
     public private(set) var inFront = true
+    public private(set) var leftFront = 0
     /// A test's hook: what happens while a check is on its way.
     public var onCheck: (@MainActor () async -> Void)?
     var unlockPin: String?
@@ -414,7 +415,10 @@ extension FakeVaultRepository: OwnerCheckRepository {
 
     public func setForeground(_ front: Bool) {
         inFront = front
-        if !front { unlockPin = nil }
+        if !front {
+            leftFront += 1
+            unlockPin = nil
+        }
     }
 }
 

@@ -209,8 +209,15 @@ public struct OwnerCheckScreen: View {
         }
     }
 
-    /// The keypad (not after an unlock whose PIN was kept) and the password (§3.6.5: one screen for both).
+    /// The keypad (not after an unlock whose PIN was kept) and the password (§3.6.5: one screen for both); neither once the
+    /// vault locked.
     @ViewBuilder private var entries: some View {
+        if !state.locked {
+            entryFields
+        }
+    }
+
+    @ViewBuilder private var entryFields: some View {
         if !state.pinKept {
             PinEntry(
                 label: OnboardingStrings.ownerCheckPinLabel,

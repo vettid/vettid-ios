@@ -155,8 +155,6 @@ import VettIDUI
             + "1 try left before your vault locks again.")
         #expect(OnboardingStrings.unlockOwnerCheckLockedBody
             == "Your vault locked itself after ten wrong daily checks in a row. Unlock it with your PIN and your credential password.")
-        #expect(OnboardingStrings.unlockCheckPasswordWrongUnknown
-            == "Your vault is unlocked, but the credential password was wrong, so your daily check didn't pass.")
         #expect(OnboardingStrings.unlockCheckOpenWaiting == "Your vault is unlocked. Enter your credential password to check in.")
     }
 

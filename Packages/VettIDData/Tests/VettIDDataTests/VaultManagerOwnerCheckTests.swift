@@ -171,6 +171,29 @@ import VettIDDataTesting
         m.onForeground()
     }
 
+    /// Out of the front and back while the unlock request itself is on its way: the PIN is not kept, though the app is in
+    /// front again when the answer lands.
+    @Test func leavingTheFrontDuringTheUnlockRequestDropsThePin() async throws {
+        defer { phone.close() }
+        try await setUp()
+        try await m.lock()
+        service.advanceVaultClock(pastDeadline)
+        service.unlockAnswers(.held)
+        let unlocks = service.unlocks.count
+        let unlock = Task { try await m.unlockWithCheck(pin: pin, password: "wrong horse") }
+        #expect(await eventually { service.unlocks.count > unlocks })
+        checks.setForeground(false)
+        m.onForeground()
+        service.releaseHeldUnlock()
+        #expect(try await unlock.value == .success)
+        #expect(m.phase == .unlocked && checks.inFront)
+        guard case .badPassword = checks.unlockCheckOutcome else {
+            Issue.record("the check after the unlock was refused for its password")
+            return
+        }
+        #expect(checks.takeUnlockPin() == nil)
+    }
+
     /// The check screen is shown only by the open app: when setup comes first, no PIN waits for it.
     @Test func noPinWaitsWhenSetupComesBeforeTheCheckScreen() async throws {
         defer { phone.close() }

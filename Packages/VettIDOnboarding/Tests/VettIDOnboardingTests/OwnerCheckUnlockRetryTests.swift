@@ -81,6 +81,22 @@ import VettIDDataTesting
         #expect(!vm.state.pinKept && vm.state.pin.isEmpty && vm.state.password.isEmpty)
     }
 
+    /// Out of the front and back while the retry's check is on its way: the PIN does not come back with its answer.
+    @Test func aQuickLeaveDuringTheRetryDropsThePin() async throws {
+        let vm = try await heldScreen([.badPassword(checksLeft: 7), .badPassword(checksLeft: 6)])
+        let gate = TestHold()
+        vault.onCheck = { await gate.wait() }
+        vm.setPassword("still no")
+        vm.submit()
+        while gate.count == 0 { await Task.yield() }
+        vault.setForeground(false)
+        vault.setForeground(true)
+        gate.releaseAll()
+        await vm.settle()
+        #expect(!vm.state.pinKept && vm.state.pin.isEmpty && vm.state.unlockedWrong == nil)
+        #expect(vm.state.message == .badPassword(checksLeft: 6))
+    }
+
     /// The app left the front while the unlock and its check were on their way: no PIN, and the spent try shows as the
     /// ordinary failure (not a line the member did not see happen).
     @Test func leavingWhileTheUnlockRunsKeepsNoPin() async throws {
@@ -91,17 +107,20 @@ import VettIDDataTesting
         #expect(vm.state.message == .badPassword(checksLeft: 7))
     }
 
-    /// The tenth failure: the lock text, set at once (the flag comes without `vault.locking`), no retry, no "unlocked" line.
+    /// The tenth failure: the lock text, set at once (the flag comes without `vault.locking`), no retry, no "unlocked" line;
+    /// "Check in" stays, off, and no entry shows.
     @Test func theTenthFailureShowsTheLockTextAndNoRetry() async throws {
         let vm = try await heldScreen([.badPassword(checksLeft: 0)])
         let s = vm.state
-        #expect(s.locked && !s.pinKept && s.unlockedWrong == nil && !s.unlockedOpen && s.message == nil)
+        #expect(s.locked && s.pinKept && s.pin.isEmpty && s.unlockedWrong == nil && !s.unlockedOpen && s.message == nil)
+        #expect(!s.entriesAllowed)
         vm.setPassword("pw")
         vm.setPin(pin)
         #expect(!vm.state.submitAllowed)
     }
 
-    /// The tenth failure on a retry: the screen turns to the lock text and drops the PIN and the "unlocked" line.
+    /// The tenth failure on a retry: the screen turns to the lock text and drops the PIN and the "unlocked" line; the
+    /// button keeps its label, off.
     @Test func aRetryThatLocksTurnsToTheLockText() async throws {
         let vm = try await heldScreen([.badPassword(checksLeft: 1), .badPassword(checksLeft: 0)])
         #expect(vm.state.unlockedWrong == 1)
@@ -110,7 +129,7 @@ import VettIDDataTesting
         vm.submit()
         await vm.settle()
         let s = vm.state
-        #expect(s.locked && !s.pinKept && s.unlockedWrong == nil && s.message == nil && s.pin.isEmpty)
+        #expect(s.locked && s.pinKept && !s.submitAllowed && s.unlockedWrong == nil && s.message == nil && s.pin.isEmpty)
     }
 
     /// A lock that comes while the retry shows ends it (any `vault.locking` reason), as the lock flag says.
@@ -118,7 +137,15 @@ import VettIDDataTesting
         let vm = try await heldScreen([.badPassword(checksLeft: 5)])
         vault.lockedByOwnerCheck = true
         await vm.settle()
-        #expect(vm.state.locked && !vm.state.pinKept && vm.state.unlockedWrong == nil)
+        #expect(vm.state.locked && vm.state.pin.isEmpty && vm.state.unlockedWrong == nil)
+        // Leaving the front while locked keeps the label; opening again keeps nothing from before.
+        vault.setForeground(false)
+        await vm.settle()
+        #expect(vm.state.pinKept)
+        vault.setForeground(true)
+        vault.lockedByOwnerCheck = false
+        await vm.settle()
+        #expect(!vm.state.locked && !vm.state.pinKept)
     }
 
     /// A failure that is not the vault's verdict on the entries keeps the retry and is said on the same screen.

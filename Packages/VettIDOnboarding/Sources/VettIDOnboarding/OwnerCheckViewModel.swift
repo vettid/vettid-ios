@@ -194,6 +194,8 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
     @ObservationIgnored private var ticker: Task<Void, Never>?
     @ObservationIgnored private var work: [Int: Task<Void, Never>] = [:]
     @ObservationIgnored private var nextWork = 0
+    /// How many times the app had left the front when the screen last looked (``OwnerCheckRepository/leftFront``).
+    @ObservationIgnored private var leftFrontSeen = 0
 
     public init(
         repo: any OwnerCheckRepository,
@@ -209,28 +211,41 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
         followers.add(follow(self, read: { $0.repo.ownerCheck }, apply: { $0.state.view = $1 }))
         followers.add(follow(self, read: { $0.repo.presenceUnrecorded }, apply: { $0.state.presenceUnrecorded = $1 }))
         // IOS-PLAN §6.6: the PIN kept for the password-only retry is forgotten when the app leaves the front (the app, not
-        // this screen); then the same screen asks for both.
-        followers.add(follow(self, read: { $0.repo.inFront }, apply: { if !$1 { $0.dropKeptPin() } }))
+        // this screen); then the same screen asks for both. Counted, so that a quick out-and-back is not missed.
+        leftFrontSeen = repo.leftFront
+        followers.add(follow(self, read: { $0.repo.leftFront }, apply: { vm, n in
+            if n != vm.leftFrontSeen || !vm.repo.inFront { vm.dropKeptPin() }
+            vm.leftFrontSeen = n
+        }))
         // VAULT-MESSAGING §3.6.4: the tenth failed check locks the vault, whether or not `vault.locking` has arrived.
         followers.add(follow(
-            self, read: { $0.repo.lockedByOwnerCheck }, apply: { if $1 { $0.enterLocked() } else { $0.state.locked = false } }
+            self, read: { $0.repo.lockedByOwnerCheck }, apply: { if $1 { $0.enterLocked() } else { $0.leaveLocked() } }
         ))
     }
 
-    /// The accepted PIN, the password and the lines that depend on them go; the screen asks for both again.
+    /// The accepted PIN, the password and the lines that depend on them go; the screen asks for both again (not once
+    /// locked: the screen then keeps its button's label, off).
     private func dropKeptPin() {
         state.pin = ""
         state.password = ""
-        state.pinKept = false
+        if !state.locked { state.pinKept = false }
         state.unlockedOpen = false
     }
 
     /// Locked by failed checks: only the lock text shows, never "Your vault is unlocked" beside it, and no check is sent.
+    /// The entries go; "Check in" stays, off (§3.6.5).
     private func enterLocked() {
-        dropKeptPin()
         state.locked = true
+        dropKeptPin()
         state.unlockedWrong = nil
         state.message = nil
+    }
+
+    /// Open again: nothing kept from before the lock.
+    private func leaveLocked() {
+        guard state.locked else { return }
+        state.locked = false
+        state.pinKept = false
     }
 
     deinit {
@@ -278,7 +293,11 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
             }
             if case .backoff? = after { state.unlockedOpen = true }
         }
-        if repo.lockedByOwnerCheck { enterLocked() }
+        if repo.lockedByOwnerCheck {
+            // The unlock's check locked it: its "Check in", off, under the lock text (§3.6.5).
+            if after != nil { state.pinKept = true }
+            enterLocked()
+        }
         if case .backoff(let wait)? = after { startBackoff(wait) }
         launch { [repo] in try? await repo.refreshOwnerCheck() }
     }
@@ -320,6 +339,7 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
             ? HoldOff(until: s.holdOff.days.map { now().addingTimeInterval(Double($0) * 86_400) }) : nil
         state.busy = true
         state.message = nil
+        let away = repo.leftFront
         launch { [self] in
             let r: OwnerCheckOutcome
             do {
@@ -335,9 +355,9 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
             let unrecorded = passed && repo.presenceUnrecorded
             // The unlock's PIN stays for another try of the password only after a wrong password (a try left), a backoff or
             // a failure that never reached the vault's verdict; it is not kept once the vault locked.
-            // Decided from the state as it is now: a PIN dropped while the check was on its way (the app left the front) does
-            // not come back when the answer lands.
-            let keep = state.pinKept && Self.keepsPin(r) && !repo.lockedByOwnerCheck && repo.inFront
+            // Decided from the state as it is now: a PIN dropped while the check was on its way (the app left the front, even
+            // if it is back) does not come back when the answer lands.
+            let keep = state.pinKept && Self.keepsPin(r) && !repo.lockedByOwnerCheck && repo.inFront && repo.leftFront == away
             var left: Int?
             if keep, case .badPassword(let n) = r, let n, n > 0 { left = n }
             state.busy = false
@@ -346,7 +366,8 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
             state.passed = passed && !unrecorded
             state.passedUnrecorded = unrecorded
             if passed { state.presenceUnrecorded = repo.presenceUnrecorded }
-            state.pinKept = keep
+            // Locked by this answer: the label stays as it was, off (``enterLocked()``).
+            state.pinKept = keep || (state.pinKept && repo.lockedByOwnerCheck)
             state.unlockedWrong = left
             state.unlockedOpen = keep && Self.isBackoff(r)
             state.message = left != nil ? nil : Self.message(r)

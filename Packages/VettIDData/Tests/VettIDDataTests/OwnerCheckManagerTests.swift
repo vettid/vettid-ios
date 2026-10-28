@@ -281,6 +281,19 @@ final class StoredBytes {
         #expect(try await m.check(pin: "975310", password: "nope") == .badPassword(checksLeft: 1))
     }
 
+    /// The count kept here reaching zero does not mark the lock: only the vault's own count does (an open vault never shows
+    /// as locked on a guess).
+    @Test func aGuessedLastFailureDoesNotMarkTheLock() async throws {
+        let ops = FakeOwnerCheckOps()
+        ops.status = #"{"state":"held","deadline":"2026-10-06T11:00:00Z","interval_seconds":86400,"failures":9}"#
+        let m = manager(ops)
+        try await m.refreshOwnerCheck()
+        ops.status = nil
+        ops.checkError = ("bad_password", 0)
+        #expect(try await m.check(pin: "975310", password: "nope") == .badPassword(checksLeft: 0))
+        #expect(!m.lockedByOwnerCheck)
+    }
+
     @Test func aRefusedRequestGatesAndTheUnlockSendsTheCheck() async throws {
         let ops = FakeOwnerCheckOps()
         ops.status = #"{"state":"ok","deadline":"2026-10-07T00:00:00Z","interval_seconds":86400}"#

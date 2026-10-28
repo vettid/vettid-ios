@@ -5165,17 +5165,6 @@
         }
       }
     },
-    "unlock_check_password_wrong_unknown": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Your vault is unlocked, but the credential password was wrong, so your daily check didn't pass."
-          }
-        }
-      }
-    },
     "unlock_check_open_waiting": {
       "extractionState": "manual",
       "localizations": {

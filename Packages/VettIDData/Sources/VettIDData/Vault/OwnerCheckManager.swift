@@ -53,6 +53,9 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     public internal(set) var unlockCheckOutcome: OwnerCheckOutcome?
     /// The app is in front or not (the app, not a screen); ``setForeground(_:)``.
     public internal(set) var inFront = true
+    /// How many times the app left the front: an answer compares it with the count at its request, so that a quick
+    /// out-and-back is not missed.
+    public internal(set) var leftFront = 0
     public private(set) var notices: [OwnerCheckNotice] = []
     public private(set) var presenceUnrecorded = false
     public private(set) var checkAfterCancel = false
@@ -355,14 +358,16 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     /// A failed check counts (§3.6.4): `failures` is read again, for at most ``statusAfterFailure`` (the tenth locks the
     /// vault, and then nothing answers); without a fresh status the count kept here goes up by one.
     private func checksLeftAfterFailure() async -> Int? {
-        let left = await checksLeftAfterFailureRead()
-        // The tenth failure locks the vault (§3.6.4), whether or not `vault.locking` has arrived yet: the app says so at once.
+        let (left, fresh) = await checksLeftAfterFailureRead()
+        // The tenth failure locks the vault (§3.6.4), whether or not `vault.locking` has arrived yet: the app says so at once,
+        // from the vault's own count only (a count guessed here could show an open vault as locked).
         // (chosen; not in the spec) Also when this answer is stale (a newer unlock cleared the flag): the vault did lock.
-        if let left, left <= 0 { lockedByOwnerCheck = true }
+        if fresh, let left, left <= 0 { lockedByOwnerCheck = true }
         return left
     }
 
-    private func checksLeftAfterFailureRead() async -> Int? {
+    /// The checks left, and whether the vault said so (a fresh `vault.status`) rather than the count kept here.
+    private func checksLeftAfterFailureRead() async -> (Int?, Bool) {
         let before = ownerCheck
         let wait = KickableWait()
         let read = FreshStatus()
@@ -371,11 +376,11 @@ public final class OwnerCheckManager: OwnerCheckRepository {
             wait.kick()
         }
         await wait.wait(Self.statusAfterFailure, sleep: sleep)
-        if let after = read.view { return after.checksLeft }
-        guard var b = before else { return nil }
+        if let after = read.view { return (after.checksLeft, true) }
+        guard var b = before else { return (nil, false) }
         b.failures += 1
         set(b)
-        return b.checksLeft
+        return (b.checksLeft, false)
     }
 
     private func clampHoldOff(_ until: Date) -> Date {
