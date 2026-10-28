@@ -172,14 +172,14 @@ import VettIDVault
     }
 
     /// Every key of the package's table resolves, in the built bundle, to its own non-empty text: vettid-android's
-    /// `strings.xml` (113) and `strings_kinds.xml` (232). Every key the code names is in it.
+    /// `strings.xml` (113) and `strings_kinds.xml` (234). Every key the code names is in it.
     @Test func everyStringResolves() throws {
         let url = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("Sources/VettIDHistory/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 346)
+        #expect(keys.count == 347)
         let missing = "\u{0}missing"
         for key in keys {
             let text = HistoryKindTexts.bundle.localizedString(forKey: key, value: missing, table: nil)
@@ -187,7 +187,7 @@ import VettIDVault
             #expect(key.hasPrefix("history_"), "\(key)")
         }
         // The kinds' table in the code is the same as the bundle's.
-        #expect(Set(HistoryKindTexts.english.keys).isSubset(of: Set(keys)) && HistoryKindTexts.english.count == 233)
+        #expect(Set(HistoryKindTexts.english.keys).isSubset(of: Set(keys)) && HistoryKindTexts.english.count == 234)
         let named = AuditKinds.named.values.flatMap { t -> [String] in if case .named(let a, let b, _) = t { [a, b] } else { [] } }
         for key in Array(AuditKinds.titles.values) + named {
             #expect(HistoryKindTexts.english[key] != nil, "\(key)")

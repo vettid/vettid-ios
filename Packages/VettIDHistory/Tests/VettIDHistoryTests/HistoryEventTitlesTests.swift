@@ -120,6 +120,9 @@ import VettIDVault
         #expect(lines("recovery.generation_closed", "2/delete") == ["Your vault is being deleted."])
         #expect(lines("recovery.generation_closed", "2/delete/unconfirmed") == ["Your vault is being deleted.", "The service could not confirm this step."])
         #expect(lines("recovery.presence_unrecorded", nil) == ["If this lasts three days, your vault is no longer protected against a recovery started by someone else."])
+        // VAULT-MESSAGING 0.69.2 §11.14.10: the move's line only for a transfer's rotation.
+        #expect(lines("identity.rotated", "t-1") == ["Replaced when you moved your vault to a new phone."])
+        #expect(lines("identity.rotated", "recovery").isEmpty && lines("identity.rotated", nil).isEmpty && lines("identity.rotated", "").isEmpty)
         #expect(lines("identity.rotation_failed", "recovery") == ["Your connections still know your old keys. VettID will offer the update again."])
         #expect(lines("identity.rotate_conflict", nil) == ["This connection's vault announced two different new keys. That can mean someone holds an old copy of their vault. Nothing is sent or received until you check."])
         #expect(lines("push.registered", "fcm") == ["Through Google."])

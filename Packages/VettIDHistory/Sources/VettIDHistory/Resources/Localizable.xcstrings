@@ -3766,6 +3766,17 @@
         }
       }
     },
+    "history_detail_rotated_transfer": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replaced when you moved your vault to a new phone."
+          }
+        }
+      }
+    },
     "history_detail_push_off_transferred": {
       "extractionState": "manual",
       "localizations": {
