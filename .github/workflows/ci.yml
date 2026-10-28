@@ -8,9 +8,12 @@ on:
 permissions:
   contents: read
 
+# A pull request's newer push cancels its run on the way. On master a run is
+# never cancelled: it finishes, and of the merges after it only the latest
+# waits and runs, so every finished master run tests the code as merged.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   ios:
