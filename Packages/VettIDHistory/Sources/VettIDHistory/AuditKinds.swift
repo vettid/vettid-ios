@@ -188,6 +188,11 @@ public enum AuditKinds {
                     "history_detail_presence_unrecorded", scaled: "history_detail_presence_unrecorded_scaled", realSeconds: quietSeconds
                 ),
             ]
+        // VAULT-MESSAGING 0.69.2 §11.14.10: a rotation made for a transfer carries its `transfer_id` as the ref, a
+        // recovery's the literal "recovery", a plain key replacement none.
+        case "identity.rotated":
+            guard let ref, !ref.isEmpty, ref != "recovery" else { return [] }
+            return [.line("history_detail_rotated_transfer")]
         case "identity.rotation_failed": return [.line("history_detail_rotation_failed")]
         case "identity.rotate_conflict": return [.line("history_detail_rotate_conflict")]
         case "push.registered", "push.unregistered": return pushDetails(kind, ref)
