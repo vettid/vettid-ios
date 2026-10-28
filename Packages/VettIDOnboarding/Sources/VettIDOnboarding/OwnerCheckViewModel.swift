@@ -403,11 +403,13 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
         return false
     }
 
-    /// Whether the kept PIN stays after the answer [r] to a retry: a wrong password, a backoff, or a failure that is not the
-    /// vault's verdict on the entries.
+    /// Whether the kept PIN stays after the answer [r] to a retry: a wrong password with a try left (or no count), a backoff,
+    /// or a failure that is not the vault's verdict on the entries. None left: the vault locked (§3.6.4), whether or not the
+    /// lock flag has come yet.
     static func keepsPin(_ r: OwnerCheckOutcome) -> Bool {
         switch r {
-        case .badPassword, .backoff, .failed: true
+        case .badPassword(let left): left.map { $0 > 0 } ?? true
+        case .backoff, .failed: true
         default: false
         }
     }

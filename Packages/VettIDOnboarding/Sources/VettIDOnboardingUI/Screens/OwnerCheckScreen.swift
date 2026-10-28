@@ -176,6 +176,10 @@ public struct OwnerCheckScreen: View {
             }
         }
         .onDisappear { forgetSecrets() }
+        // Locked: digits typed on the hidden keypad do not wait in its buffer.
+        .onChange(of: state.locked) { _, locked in
+            if locked { pin.clear() }
+        }
         .onChange(of: scenePhase) { _, now in
             // IOS-PLAN §6.3: typed secrets are dropped when the app leaves the foreground, and when the iPhone locks.
             if now == .background { forgetSecrets() }

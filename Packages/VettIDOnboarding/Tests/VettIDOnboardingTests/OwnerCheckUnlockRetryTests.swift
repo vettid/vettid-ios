@@ -132,6 +132,17 @@ import VettIDDataTesting
         #expect(s.locked && s.pinKept && !s.submitAllowed && s.unlockedWrong == nil && s.message == nil && s.pin.isEmpty)
     }
 
+    /// A retry answered "none left" before the lock flag comes (the vault's count not read): the PIN goes at once.
+    @Test func noTriesLeftDropsThePinBeforeTheLockFlag() async throws {
+        let vm = try await heldScreen([.badPassword(checksLeft: 1), .badPassword(checksLeft: 0)])
+        vm.setPassword("nope")
+        vm.submit()
+        await vm.settle()
+        #expect(!vault.lockedByOwnerCheck)
+        #expect(!vm.state.pinKept && vm.state.pin.isEmpty && vm.state.unlockedWrong == nil)
+        #expect(!vm.state.submitAllowed)
+    }
+
     /// A lock that comes while the retry shows ends it (any `vault.locking` reason), as the lock flag says.
     @Test func aLockWhileRetryingEndsTheRetry() async throws {
         let vm = try await heldScreen([.badPassword(checksLeft: 5)])
