@@ -42,14 +42,13 @@ enum TestPhotos {
         return (0...(hay.count - needle.count)).contains { i in hay[i..<(i + needle.count)].elementsEqual(needle) }
     }
 
-    /// A JPEG, PNG or WebP signature anywhere in [b].
+    /// A JPEG, PNG or WebP signature at the start of [b]: an image file written as it is. Searched anywhere, the
+    /// three-byte JPEG signature turns up by chance in encrypted bytes; an image inside a file is found by its own bytes.
     static func hasImageSignature(_ b: [UInt8]) -> Bool {
         guard b.count >= 12 else { return false }
-        return (0..<(b.count - 11)).contains { i in
-            (b[i] == 0xFF && b[i + 1] == 0xD8 && b[i + 2] == 0xFF)
-                || (b[i] == 0x89 && b[i + 1] == 0x50 && b[i + 2] == 0x4E && b[i + 3] == 0x47)
-                || (b[i..<(i + 4)].elementsEqual("RIFF".utf8) && b[(i + 8)..<(i + 12)].elementsEqual("WEBP".utf8))
-        }
+        return (b[0] == 0xFF && b[1] == 0xD8 && b[2] == 0xFF)
+            || (b[0] == 0x89 && b[1] == 0x50 && b[2] == 0x4E && b[3] == 0x47)
+            || (b[0..<4].elementsEqual("RIFF".utf8) && b[8..<12].elementsEqual("WEBP".utf8))
     }
 }
 
@@ -211,10 +210,14 @@ enum TestPhotos {
         #expect(att.cleared >= 1 && att.thumbs.count == 0 && att.photos.count == 0 && att.pending.isEmpty)
         #expect(pending.isWiped && !SharedPhotos.shared.live(token) && msgs.messages(id).isEmpty)
 
-        let needles: [[UInt8]] = [
+        let theirJpeg = [UInt8](theirs.jpeg.copy()), theirThumb = [UInt8](theirs.thumb.copy())
+        var needles: [[UInt8]] = [
             Array(jpeg[(jpeg.count / 2)..<(jpeg.count / 2 + 64)]), Array(thumb[(thumb.count / 2)..<(thumb.count / 2 + 32)]),
-            Array(theirs.jpeg.copy()[100..<164]),
-        ] + (service.photoAttIDs + service.deviceBlobsDeleted).map { Array($0.utf8) }
+            Array(theirJpeg[100..<164]),
+        ]
+        // The start of each image, its signature with the bytes after it.
+        needles += [Array(jpeg[0..<32]), Array(thumb[0..<32]), Array(theirJpeg[0..<32]), Array(theirThumb[0..<32])]
+        needles += (service.photoAttIDs + service.deviceBlobsDeleted).map { Array($0.utf8) }
         let files = FileManager.default.enumerator(at: phone.directory, includingPropertiesForKeys: [.isRegularFileKey])?
             .compactMap { $0 as? URL }.filter { (try? $0.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true } ?? []
         #expect(!files.isEmpty, "the phone keeps its encrypted files there")

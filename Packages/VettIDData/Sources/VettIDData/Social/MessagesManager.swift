@@ -82,8 +82,8 @@ public final class MessagesManager: MessagesRepository {
 
     // MARK: - Lifecycle
 
-    /// The vault is no longer open on this phone (locked, or a lock was asked for): every message is dropped from memory;
-    /// an unlock reads the conversations again.
+    /// The vault is no longer open on this phone (locked, or a lock was asked for), or it is held or due (IOS-PLAN §6.9):
+    /// every message is dropped from memory; an unlock, or the end of the hold, reads the conversations again.
     public func forgetOpenVault() {
         generation += 1
         byConnection = [:]

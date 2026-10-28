@@ -180,23 +180,85 @@ import VettIDVault
         #expect(await kind { try await c.cancelInvite(i.inviteID) } == .notFound)
     }
 
-    /// Locked, the lists read from the vault are not kept in memory; the unlock reads them again. The other member's
-    /// decline not yet seen is kept on the phone across a restart.
-    @Test func theListsFollowTheLockAndDeclinesTheRestart() async throws {
+    /// In memory only: locked, the connections, the requests with their names and safety codes, and the other member's
+    /// declines are dropped; the unlock, also after a restart, reads the lists again, the safety code with them. Nothing
+    /// of them is written to the phone.
+    @Test func theListsFollowTheLockAndNothingIsWritten() async throws {
         defer { phone.close() }
         try await setUp()
         let id = try await connectByAccepting()
         let r = try await c.acceptInvite(try service.peerInvite(first: "Sam", last: "Ray", name: "Sam"))
-        #expect(await eventually { c.requests.count == 1 })
-        try service.peerDeclines(r.connectionID)
-        #expect(await eventually { c.peerDeclines.count == 1 })
+        #expect(await eventually { c.requests.first?.sas != nil })
+        let sas = c.requests.first?.sas
         try await m.lock()
-        #expect(c.connections.isEmpty && c.requests.isEmpty)
+        #expect(c.connections.isEmpty && c.requests.isEmpty && c.local.requestNames.isEmpty)
         #expect(try await m.unlock(pin: pin) == .success)
-        #expect(await eventually { c.connections.map(\.id) == [id] })
+        #expect(await eventually { c.connections.map(\.id) == [id] && c.requests.map(\.sas) == [sas] })
+        try await m.lock()
         try await phone.restart()
         try await m.refresh()
-        #expect(c.peerDeclines.map(\.name) == ["Sam"])
+        #expect(c.requests.isEmpty)
+        #expect(try await m.unlock(pin: pin) == .success)
+        #expect(await eventually { c.requests.map(\.id) == [r.connectionID] && c.requests.map(\.sas) == [sas] })
+        #expect(c.requests.first?.name == "Sam")
+        try service.peerDeclines(r.connectionID)
+        #expect(await eventually { c.peerDeclines.map(\.name) == ["Sam"] })
+        try await m.lock()
+        #expect(c.peerDeclines.isEmpty)
+        for name in VaultFiles.retired {
+            #expect(!FileManager.default.fileExists(atPath: phone.directory.appendingPathComponent(name).path))
+        }
+    }
+
+    /// The files earlier builds wrote (the connection requests' names and declines, the approvals that arrived as events)
+    /// are deleted at the next start, unread; once gone, a later start finds nothing to do.
+    @Test func theRetiredFilesAreDeletedAtTheStart() async throws {
+        defer { phone.close() }
+        try await setUp()
+        try await m.lock()
+        for name in VaultFiles.retired {
+            try Data([1, 2, 3]).write(to: phone.directory.appendingPathComponent(name))
+        }
+        try await phone.restart()
+        try await m.refresh()
+        for name in VaultFiles.retired {
+            #expect(!FileManager.default.fileExists(atPath: phone.directory.appendingPathComponent(name).path))
+        }
+        // Idempotent: nothing left, nothing fails.
+        try await phone.restart()
+        try await m.refresh()
+        #expect(try await m.unlock(pin: pin) == .success)
+    }
+
+    /// A retired file that cannot be deleted at the start is left, with the start going on, and deleted at the next call
+    /// once it can be; the temporary files interrupted writes of the retired files left go with them, and nothing else.
+    @Test func aRetiredFileThatCannotBeDeletedIsTriedAgain() async throws {
+        defer { phone.close() }
+        try await setUp()
+        try await m.lock()
+        let fm = FileManager.default
+        let dir = phone.directory
+        let tmps = VaultFiles.retired.map { dir.appendingPathComponent(".\($0).\(UUID().uuidString).tmp") }
+        for u in VaultFiles.retired.map(dir.appendingPathComponent) + tmps { try Data([1, 2, 3]).write(to: u) }
+        let kept = dir.appendingPathComponent(".\(VaultFiles.account).\(UUID().uuidString).tmp")
+        try Data([1]).write(to: kept)
+        // A directory in place of the approvals file: `unlink` refuses it.
+        let stuck = dir.appendingPathComponent(VaultFiles.approvals)
+        try fm.removeItem(at: stuck)
+        try fm.createDirectory(at: stuck.appendingPathComponent("x"), withIntermediateDirectories: true)
+        try await phone.restart()
+        try await m.refresh()
+        #expect(!m.retiredRemoved && fm.fileExists(atPath: stuck.path))
+        #expect(!fm.fileExists(atPath: dir.appendingPathComponent(VaultFiles.connections).path))
+        #expect(tmps.allSatisfy { !fm.fileExists(atPath: $0.path) } && fm.fileExists(atPath: kept.path))
+        m.removeRetiredFiles()
+        #expect(!m.retiredRemoved && fm.fileExists(atPath: stuck.path))
+        try fm.removeItem(at: stuck)
+        try Data([1, 2, 3]).write(to: stuck)
+        m.removeRetiredFiles()
+        #expect(m.retiredRemoved && !fm.fileExists(atPath: stuck.path))
+        try fm.removeItem(at: kept)
+        #expect(try await m.unlock(pin: pin) == .success)
     }
 
     /// Nothing the vault sends is taken into the lists while a lock is pending (as vettid-android): a request that

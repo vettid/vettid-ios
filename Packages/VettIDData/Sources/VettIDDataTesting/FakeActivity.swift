@@ -81,6 +81,13 @@ public final class FakeApprovals: ApprovalsRepository {
     public var fail: [String: VaultFailure] = [:]
     public var listed: [PendingApproval] = []
     public let connections: FakeConnections
+    public private(set) var forgetCount = 0
+
+    /// What a lock or a hold does to ``ApprovalsManager``: every approval dropped from memory.
+    public func forgetOpenVault() {
+        listed = []
+        forgetCount += 1
+    }
     /// What ``approveCriticalUse(_:password:)`` returns.
     public var criticalStatus: String? = "ok"
     /// The payload ``loadCriticalUse(_:)`` fills in (standard base64).

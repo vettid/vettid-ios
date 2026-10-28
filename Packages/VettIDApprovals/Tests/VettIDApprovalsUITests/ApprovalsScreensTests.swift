@@ -125,7 +125,9 @@ import VettIDUI
         unsuitable.criticalResult = "unsuitable"
         var gone = out[0]
         gone.gone = true
-        out += [failing, backoff, limit, result, unsuitable, gone, ApprovalDetailState(key: "none")]
+        var notHeld = ApprovalDetailState(key: "auth:a9")
+        notHeld.notHeld = true
+        out += [failing, backoff, limit, result, unsuitable, gone, notHeld, ApprovalDetailState(key: "none")]
         out += [AuthenticationPurpose.signin, .approval].map { p in
             var s = out[4]
             s.approval = Samples.auth("a\(p)", purpose: p)

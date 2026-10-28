@@ -169,6 +169,10 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored var halted = false
     /// A wipe's marker left at the start was looked at (once, after the first-run cleanup).
     @ObservationIgnored private var wipeResumed = false
+    /// The reads of every list (``refreshListsQuietly()``) begun, and the last one, which the end of a hold waits for.
+    @ObservationIgnored var listsReads = 0
+    @ObservationIgnored var listsRead: Task<Void, Never>?
+    @ObservationIgnored var retiredRemoved = false // the files of VaultFiles.retired are gone (removeRetiredFiles)
     @ObservationIgnored let moveFlags = MoveFlags() // the move to another phone, and the rotate offer (VaultManager+MoveState)
     /// The tasks that follow the open session's events and refusals.
     @ObservationIgnored var observers: [Task<Void, Never>] = []
@@ -222,9 +226,9 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
         locking = LockSequence(sleep: timing.sleep)
         ownerChecks = Self.ownerCheckManager(config, ref, rec, scale)
         profiles = Self.profiles(ref, checks: ownerChecks, record: rec)
-        connections = Self.connectionsManager(config, ref, rec)
+        connections = Self.connectionsManager(config, ref)
         (messages, attachments) = Self.messageManagers(ref, connections)
-        (feed, approvals, history, historyExport) = Self.activityManagers(config, ref, rec, connections, ownerChecks)
+        (feed, approvals, history, historyExport) = Self.activityManagers(config, ref, connections, ownerChecks)
         wiper = config.wipeTargets.map { LocalWipe(targets: $0, hooks: [{ await ref.manager?.runWipeHooks() }]) }
         ref.manager = self
         lockPorts.manager = self
@@ -289,12 +293,11 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     func prepared() throws {
         try config.prepare()
         resumePendingWipe()
+        removeRetiredFiles()
         try record.refuseWhileClosed()
         try record.load()
         ownerChecks.loadIfNeeded()
         canary.loadIfNeeded()
-        connections.loadIfNeeded()
-        approvals.loadIfNeeded()
         memberVault.set(recorded: record.value.vaultID)
         if account == nil { publishAccount() }
         if !moveFlags.book.lockResumed {
@@ -412,12 +415,6 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// How long the keys of an enrollment with an unknown outcome are kept from a start-over: a provisional vault not
     /// confirmed within 24 h may be replaced (§11.3), plus an hour's margin (chosen; not in the spec).
     static let unknownEnrollmentKept: TimeInterval = 25 * 3600
-
-    /// Whether this phone may hold a vault, even a provisional one: paired, a vault pinned by `vault.enrolled`, or an
-    /// enrollment request whose outcome is not known (a lost answer, a crash mid-request) started less than
-    /// ``unknownEnrollmentKept`` ago. Its keys are then never forgotten by a start-over (chosen; not in the spec:
-    /// vettid-android forgets an unpaired device's).
-    func mayHoldVault(_ d: VaultDevice?) -> Bool { startOverRefusal(d) != nil }
 
     /// The refusal of a start-over (or of another vault's code) while the phone may hold a vault: kind
     /// ``FailureKind/enrollmentStarted``, code ``codeEnrollmentStarted``, and, for an unknown outcome, the seconds until

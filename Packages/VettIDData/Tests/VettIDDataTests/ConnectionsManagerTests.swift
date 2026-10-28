@@ -82,26 +82,17 @@ final class FakeConnectionOps: ConnectionOps, @unchecked Sendable {
     func connectionAsksResume(_ connectionID: String) async throws { try call("resume:\(connectionID)") }
 }
 
-/// TEST ONLY. The encrypted file of ``ConnectionsManager``, in memory.
-@MainActor
-final class MemoryFile {
-    var bytes: [UInt8]?
-}
-
 /// The connections manager over its vault calls: invitations, accepting every form of link, the outgoing request that
 /// waits for its handshake, the requests' events and decisions, the owner's metadata and asks. Mirrors the connection
 /// parts of vettid-android `SocialManager`'s tests.
 @MainActor
 @Suite struct ConnectionsManagerTests {
     let ops = FakeConnectionOps()
-    let file = MemoryFile()
     let now = Date(timeIntervalSince1970: 1_791_115_200)
 
     func manager(ops override: FakeConnectionOps? = nil) -> ConnectionsManager {
-        let ops = override ?? ops, file = file, now = now
-        let m = ConnectionsManager(ops: { ops }, load: { file.bytes }, persist: { file.bytes = $0.isEmpty ? nil : $0 }, now: { now })
-        m.loadIfNeeded()
-        return m
+        let ops = override ?? ops, now = now
+        return ConnectionsManager(ops: { ops }, now: { now })
     }
 
     func event(_ type: String, _ body: String) -> VaultMessage {
@@ -277,7 +268,9 @@ final class MemoryFile {
         #expect(m.connections.isEmpty && ops.calls.suffix(2) == ["remove:c1", "block:c2"])
     }
 
-    /// Locked: what was read from the vault goes; what the phone keeps stays. A wipe forgets everything.
+    /// Locked or held (IOS-PLAN §6.9: both ``ConnectionsManager/forgetOpenVault()``): what was read from the vault goes,
+    /// and what this phone learnt of the requests (their names, the other member's declines) with it. Dropping the
+    /// requests alone keeps the connections. A wipe forgets everything.
     @Test func lockingForgetsTheListsAndAWipeEverything() async throws {
         ops.connections = [Self.connection("c1")]
         let m = manager()
@@ -285,10 +278,46 @@ final class MemoryFile {
         m.onEvent(event("connection.request.outgoing", #"{"connection_id":"c2","sas":"111111","name":"Sam"}"#))
         m.onEvent(event("sync.event", #"{"kind":"connection.request","connection_id":"c2","state":"peer_declined"}"#))
         m.onEvent(event("connection.request.pending", #"{"pending_id":"p1","sas":"042817"}"#))
+        #expect(m.peerDeclines.count == 1 && m.local.requestNames.keys.sorted() == [])
+        m.onEvent(event("connection.request.pending", #"{"pending_id":"p2","sas":"042817","profile":{"first_name":"Alex","last_name":"Kim"}}"#))
+        #expect(m.local.requestNames.keys.sorted() == ["p2"])
+        m.forgetRequests()
+        #expect(m.connections.map(\.id) == ["c1"] && m.requests.isEmpty && m.peerDeclines.isEmpty && m.local == .init())
+        m.onEvent(event("connection.request.pending", #"{"pending_id":"p3","sas":"042817"}"#))
         m.forgetOpenVault()
-        #expect(m.connections.isEmpty && m.requests.isEmpty && m.peerDeclines.count == 1)
+        #expect(m.connections.isEmpty && m.requests.isEmpty && m.peerDeclines.isEmpty && m.local == .init())
+        // A late `failed` for a decline already told does not tell it again.
+        m.onEvent(event("connection.event", #"{"connection_id":"c2","event":"failed","reason":"declined"}"#))
+        #expect(m.peerDeclines.isEmpty)
         m.clear()
-        #expect(m.peerDeclines.isEmpty && m.requestEnds.isEmpty && file.bytes == nil)
+        #expect(m.peerDeclines.isEmpty && m.requestEnds.isEmpty)
+    }
+
+    /// The requests have their own generation: dropping them drops a read of the requests on its way, never a read of the
+    /// connections.
+    @Test func droppingTheRequestsKeepsAConnectionsReadOnItsWay() async throws {
+        ops.connections = [Self.connection("c1")]
+        let gate = TestDeferred<Void>()
+        ops.listGate = gate
+        let m = manager()
+        let reading = Task { try await m.refresh() }
+        #expect(await eventually { ops.calls == ["list"] })
+        m.forgetRequests()
+        gate.complete(())
+        try await reading.value
+        #expect(m.connections.map(\.id) == ["c1"])
+        ops.requests = #"{"incoming":[{"pending_id":"p1","sas":"042817","state":"pending"}],"outgoing":[]}"#
+        let requestGate = TestDeferred<Void>()
+        ops.requestGate = requestGate
+        let requests = Task { try await m.refreshRequests() }
+        #expect(await eventually { ops.calls == ["list", "requestList"] })
+        m.forgetRequests()
+        requestGate.complete(())
+        try await requests.value
+        #expect(m.requests.isEmpty && m.connections.map(\.id) == ["c1"])
+        ops.requestGate = nil
+        try await m.refreshRequests()
+        #expect(m.requests.map(\.id) == ["p1"])
     }
 
     /// A list read before the vault was locked is not published after (chosen; not in the spec).

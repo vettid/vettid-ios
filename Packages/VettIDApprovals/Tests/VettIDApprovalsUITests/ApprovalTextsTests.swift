@@ -18,7 +18,7 @@ import VettIDApprovals
             .appendingPathComponent("Sources/VettIDApprovalsUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 148)
+        #expect(keys.count == 150)
         let missing = "\u{0}missing"
         for key in keys {
             let text = ApprovalsStrings.bundle.localizedString(forKey: key, value: missing, table: nil)
@@ -51,15 +51,28 @@ import VettIDApprovals
         #expect(ApprovalTexts.title(Samples.device()) == "Request from a device" && ApprovalTexts.title(Samples.device("device.session.pending")) == "Access session request")
     }
 
+    /// The row's parts, each bidi-isolated (§10.8), as ``ApprovalTexts/supporting(_:name:)`` joins them.
+    private func row(_ parts: String...) -> String { parts.map(AccountNames.isolate).joined(separator: " · ") }
+
+    /// A challenge's context comes from the other side: its row shows only the first line, and the text cannot reorder
+    /// the name beside it.
+    @Test func aRowShowsTheContextsFirstLineIsolated() {
+        let ctx = PendingApproval.authentication(
+            AuthenticationRequest(requestID: "m1", connectionID: "c1", context: "Pay \u{202E}fake\nsecond line", receivedAt: Date(), exp: nil, purpose: .signin)
+        )
+        #expect(ApprovalTexts.supporting(ctx, name: "Sam Lee") == row("Sam Lee", "Pay \u{202E}fake"))
+        #expect(!ApprovalTexts.supporting(ctx, name: "Sam Lee").contains("second line"))
+    }
+
     @Test func aRowSaysWhoAndWhat() {
-        #expect(ApprovalTexts.supporting(.connection(Samples.incoming()), name: nil) == "Ada Lovelace · code 042817")
-        #expect(ApprovalTexts.supporting(.connection(Samples.incoming(state: .approved)), name: nil) == "Ada Lovelace · code 042817 · waiting for them to approve")
-        #expect(ApprovalTexts.supporting(.connection(Samples.outgoing(sas: nil)), name: nil) == "Grace Hopper · waiting for their vault")
-        #expect(ApprovalTexts.supporting(Samples.auth(), name: "Sam Lee") == "Sam Lee · Sign-in")
-        #expect(ApprovalTexts.supporting(Samples.grant(), name: nil) == "A connection · 3 items")
-        #expect(ApprovalTexts.supporting(Samples.critical(), name: "Sam Lee") == "Sam Lee · Signing key · Seed")
-        #expect(ApprovalTexts.supporting(Samples.share(), name: nil) == "2 items")
-        #expect(ApprovalTexts.supporting(Samples.device(), name: nil) == "Laptop · sign")
+        #expect(ApprovalTexts.supporting(.connection(Samples.incoming()), name: nil) == row("Ada Lovelace", "code 042817"))
+        #expect(ApprovalTexts.supporting(.connection(Samples.incoming(state: .approved)), name: nil) == row("Ada Lovelace", "code 042817 · waiting for them to approve"))
+        #expect(ApprovalTexts.supporting(.connection(Samples.outgoing(sas: nil)), name: nil) == row("Grace Hopper", "waiting for their vault"))
+        #expect(ApprovalTexts.supporting(Samples.auth(), name: "Sam Lee") == row("Sam Lee", "Sign-in"))
+        #expect(ApprovalTexts.supporting(Samples.grant(), name: nil) == row("A connection", "3 items"))
+        #expect(ApprovalTexts.supporting(Samples.critical(), name: "Sam Lee") == row("Sam Lee", "Signing key · Seed"))
+        #expect(ApprovalTexts.supporting(Samples.share(), name: nil) == row("2 items"))
+        #expect(ApprovalTexts.supporting(Samples.device(), name: nil) == row("Laptop", "sign"))
     }
 
     @Test func aDecisionSaysWhatItDoes() {
@@ -91,7 +104,7 @@ import VettIDApprovals
         #expect(ApprovalTexts.title(signin, name: "Sam Lee") == "Sign in to \(sam)?" && ApprovalTexts.title(signin) == "Sign in to a connection?")
         #expect(ApprovalTexts.body(signin, name: "Sam Lee") == "Only approve if you are signing in right now.")
         #expect(ApprovalTexts.approveLabel(signin) == "Approve" && ApprovalTexts.denyLabel(signin) == "Not me")
-        #expect(ApprovalTexts.supporting(signin, name: "Sam Lee") == "Sam Lee · Sign-in")
+        #expect(ApprovalTexts.supporting(signin, name: "Sam Lee") == row("Sam Lee", "Sign-in"))
         #expect(ApprovalTexts.title(approval, name: "Sam Lee") == "\(sam) asks you to approve" && ApprovalTexts.title(approval) == "A connection asks you to approve")
         #expect(ApprovalTexts.body(approval, name: "Sam Lee") == nil && ApprovalTexts.summary(approval) == "Sign-in")
         #expect(ApprovalTexts.approveLabel(approval) == "Approve" && ApprovalTexts.denyLabel(approval) == "Deny")

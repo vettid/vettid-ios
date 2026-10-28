@@ -27,10 +27,28 @@ extension VaultManager {
         )
     }
 
-    /// The connections over this manager's session, what only this phone learns kept in their encrypted file.
-    static func connectionsManager(_ config: VaultManagerConfig, _ ref: ManagerRef, _ rec: AccountRecord) -> ConnectionsManager {
-        let file = config.file(VaultFiles.connections)
-        return ConnectionsManager(
+    /// Whether this phone may hold a vault, even a provisional one: paired, a vault pinned by `vault.enrolled`, or an
+    /// enrollment request whose outcome is not known (a lost answer, a crash mid-request) started less than
+    /// ``unknownEnrollmentKept`` ago. Its keys are then never forgotten by a start-over (chosen; not in the spec:
+    /// vettid-android forgets an unpaired device's).
+    func mayHoldVault(_ d: VaultDevice?) -> Bool { startOverRefusal(d) != nil }
+
+    /// The files earlier builds wrote and this one no longer does (``VaultFiles/retired``), with the temporary files an
+    /// interrupted write of them left, are deleted, once per process once it succeeds (IOS-PLAN §6.9): a file already gone
+    /// is not an error, and one that could not be deleted is tried again at the next call, and at every start until it is
+    /// gone. Nothing of them is read.
+    func removeRetiredFiles() {
+        guard !retiredRemoved else { return }
+        var left = false
+        for name in VaultFiles.retired {
+            do { try config.file(name).clearRetired() } catch { left = true }
+        }
+        retiredRemoved = !left
+    }
+
+    /// The connections over this manager's session, in memory only (nothing of them is written to the phone).
+    static func connectionsManager(_ config: VaultManagerConfig, _ ref: ManagerRef) -> ConnectionsManager {
+        ConnectionsManager(
             // Nothing goes to a vault whose lock is pending, and no session is opened for it.
             ops: {
                 guard let m = ref.manager else { throw VaultFailure(.other, code: "session_dropped") }
@@ -44,12 +62,6 @@ extension VaultManager {
                     throw VaultFailure(.other, code: "session_dropped")
                 }
                 return try m.openApi(s)
-            },
-            load: { try file.load() },
-            // Nothing is written while a wipe runs or after one that did not finish.
-            persist: { b in
-                guard !rec.closed else { return }
-                if b.isEmpty { try file.clear() } else { try file.save(b) }
             },
             now: config.now
         )
@@ -94,12 +106,7 @@ extension VaultManager {
     /// messages and their photos, the items and tags, the feed, the approvals' lists, History and the member's own profile).
     func forgetOpenLists() {
         forgetOwnProfile()
-        items.clear()
-        sharing.clear()
-        connections.forgetOpenVault()
-        messages.forgetOpenVault()
-        attachments.clear()
-        forgetActivity()
+        forgetHeld()
     }
 
     /// The vault opened, or an owner check passed (§3.6.3: nothing held back is replayed as events): the member's own
@@ -107,8 +114,8 @@ extension VaultManager {
     /// that expire are not kept waiting behind them) and the items are read again, one after the other; failures are left
     /// for the screens.
     func refreshListsQuietly() {
-        items.listsReadPending = true
-        Task { [weak self] in
+        listsReads += 1
+        listsRead = Task { [weak self] in
             guard let self else { return }
             profiles.refreshQuietly()
             try? await connections.refresh(quietly: true)
@@ -118,7 +125,6 @@ extension VaultManager {
             await messages.refreshConversationsQuietly()
             // The items last (chosen; not in the spec: vettid-android reads them beside the others): nothing that expires
             // waits behind them, and no screen needs them before the member opens the Vault.
-            items.listsReadPending = false
             try? await items.refresh(quietly: true)
         }
     }

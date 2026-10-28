@@ -42,6 +42,10 @@ public protocol ApprovalsRepository: ConnectionRequestsRepository {
     /// Everything waiting, newest first; expired requests are left out. The connection requests are ``requests``.
     var approvals: [PendingApproval] { get }
 
+    /// Counts the times every approval was dropped from memory (a lock, a hold, a wipe; IOS-PLAN §6.9), so that an
+    /// approval gone from ``approvals`` is not taken to be decided when it was only dropped.
+    var forgetCount: Int { get }
+
     /// Re-reads what the vault lists (the connection requests, the grant and critical-item requests) and drops expired
     /// and decided requests kept from events.
     func refreshApprovals() async throws

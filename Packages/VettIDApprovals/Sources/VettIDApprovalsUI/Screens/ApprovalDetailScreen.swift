@@ -30,7 +30,8 @@ public struct DecisionActions {
 
 /// One approval (ANDROID-PLAN §4 Approvals): what is asked and by whom, then approve or deny, with the credential password
 /// on the secret field of IOS-PLAN §6.5 for the critical actions. "Already decided" once it left the list without a
-/// decision here; a critical use's result before the screen closes. Mirrors vettid-android `ApprovalDetailScreen`.
+/// decision here, "No longer on this phone" when it was not held when the screen opened (IOS-PLAN §6.9); a critical use's
+/// result before the screen closes. Mirrors vettid-android `ApprovalDetailScreen`.
 public struct ApprovalDetailScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     let state: ApprovalDetailState
@@ -53,6 +54,8 @@ public struct ApprovalDetailScreen: View {
                 } else {
                     decision(a, now: Date())
                 }
+            } else if state.notHeld {
+                notHeld
             } else {
                 gone
             }
@@ -73,6 +76,16 @@ public struct ApprovalDetailScreen: View {
         ) { EmptyView() }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("approval_gone")
+    }
+
+    /// Not on this phone since a lock or a restart, and never said to be decided or expired (chosen; not in the spec).
+    private var notHeld: some View {
+        FormScaffold(
+            title: ApprovalsStrings.notHeldTitle, message: ApprovalsStrings.notHeldBody, primaryLabel: ApprovalsStrings.back,
+            onPrimary: actions.onBack, onBack: actions.onBack
+        ) { EmptyView() }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("approval_not_held")
     }
 
     @ViewBuilder private func live(_ a: PendingApproval, now: Date) -> some View {

@@ -87,23 +87,20 @@ final class FakeApprovalOps: ApprovalOps, @unchecked Sendable {
 }
 
 /// The approvals over their vault calls (VAULT-MESSAGING §10.4, §10.12, §10.13, §6.8; ANDROID-PLAN §4 Approvals): the
-/// events kept in their file, the lists, each decision and its feed item, and the connection requests listed with them.
+/// events kept in memory only, the lists, each decision and its feed item, and the connection requests listed with them.
 /// Mirrors the approval parts of vettid-android `SocialManager`'s tests and `ApprovalParserTest`.
 @MainActor
 @Suite struct ApprovalsManagerTests {
     let ops = FakeApprovalOps()
     let connOps = FakeConnectionOps()
-    let file = MemoryFile()
     let now = Date(timeIntervalSince1970: 1_791_115_200)
     static let payload = Base64s.encodeStd(Array("sign me".utf8))
     static let sha = Base64s.encodeStd(Bytes.sha256(Array("sign me".utf8)))
 
     func manager(unlocked: @escaping @MainActor (String) async throws -> Void = { _ in }) -> ApprovalsManager {
-        let ops = ops, connOps = connOps, file = file, now = now
+        let ops = ops, connOps = connOps, now = now
         let c = ConnectionsManager(ops: { connOps }, now: { now })
-        let m = ApprovalsManager(connections: c, ops: { ops }, openUnlockWindow: unlocked, load: { file.bytes }, persist: { file.bytes = $0.isEmpty ? nil : $0 }, now: { now })
-        m.loadIfNeeded()
-        return m
+        return ApprovalsManager(connections: c, ops: { ops }, openUnlockWindow: unlocked, now: { now })
     }
 
     func event(_ type: String, _ body: String) -> VaultMessage {
@@ -132,14 +129,31 @@ final class FakeApprovalOps: ApprovalOps, @unchecked Sendable {
         guard case .grant(let g)? = m.approvals.first(where: { $0.key == "grant:g1" }) else { throw CocoaError(.featureUnsupported) }
         #expect(g.grantable == [0] && g.entries[0].labels?.first?.fieldID == "f1" && g.entries[1].labels == nil && g.uses == 1)
 
-        // Kept in the file: a new manager reads them back.
-        #expect(manager().approvals.count == 4)
+        // In memory only: a new manager (a new start) has none of them.
+        #expect(manager().approvals.isEmpty)
         m.onEvent(event("sync.event", #"{"kind":"grant.request.decided","request_id":"g1","approved":true}"#))
         m.onEvent(event("sync.event", #"{"kind":"approval.decided","approval_id":"d1"}"#))
         m.onEvent(event("sync.event", #"{"kind":"connection.authenticate.decided","request_id":"a1"}"#))
         #expect(m.approvals.map(\.key) == ["device:device.session.pending:s1"])
         m.clear()
-        #expect(m.approvals.isEmpty && file.bytes == nil)
+        #expect(m.approvals.isEmpty)
+    }
+
+    /// In memory only: a lock (or a hold) drops every approval, the events kept as well as the lists, and a read of the
+    /// lists brings back what the vault still lists; one that arrived only as an event does not come back.
+    @Test func aLockDropsEveryApprovalAndTheListsBringThemBack() async throws {
+        let m = manager()
+        m.onEvent(event("connection.authenticate.pending", #"{"request_id":"a1","connection_id":"c1","exp":"\#(exp)"}"#))
+        ops.grants = #"{"pending":[{"request_id":"g1","connection_id":"c1","items":[],"uses":1,"expires_in":60,"exp":"\#(exp)"}]}"#
+        connOps.requests = #"{"incoming":[{"pending_id":"p1","invite_id":"i1","sas":"042817","remote":false,"state":"pending","peer_approved":false,"created_at":"2026-10-04T11:00:00.000Z","exp":"\#(exp)","profile":{"first_name":"Alex","last_name":"Kim"}}],"outgoing":[]}"#
+        try await m.refreshApprovals()
+        #expect(Set(m.approvals.map(\.key)) == ["auth:a1", "grant:g1", "connection:p1"])
+        m.forgetOpenVault()
+        m.connections.forgetOpenVault()
+        #expect(m.approvals.isEmpty && m.connections.requests.isEmpty)
+        try await m.refreshApprovals()
+        #expect(Set(m.approvals.map(\.key)) == ["grant:g1", "connection:p1"])
+        #expect(m.connections.requests.map(\.sas) == ["042817"], "the safety code comes back with the list")
     }
 
     @Test func shareQuestionsAddUpAndLeaveAsTheyAreDecided() throws {
@@ -205,7 +219,6 @@ final class FakeApprovalOps: ApprovalOps, @unchecked Sendable {
             }.sorted()
         }
         #expect(purposes(m) == ["a1:signin", "a2:absent"])
-        #expect(purposes(manager()) == ["a1:signin", "a2:absent"])
         try await m.denyAuthentication("a1")
         #expect(ops.calls == ["authDeny:a1"] && m.approvals.map(\.key) == ["auth:a2"])
     }
@@ -262,7 +275,7 @@ final class FakeApprovalOps: ApprovalOps, @unchecked Sendable {
         #expect(m.approvals.map(\.key) == ["grant:g2"])
     }
 
-    /// A payload fetched before a wipe is not written to the file after it.
+    /// A payload fetched before a wipe is not kept after it.
     @Test func aPayloadFromBeforeAWipeIsNotKept() async throws {
         let m = manager()
         ops.criticalBody = #"{"request_id":"k1","connection_id":"c1","payload":"\#(Self.payload)","payload_sha256":"\#(Self.sha)","exp":"\#(exp)"}"#
@@ -273,7 +286,7 @@ final class FakeApprovalOps: ApprovalOps, @unchecked Sendable {
         m.clear()
         gate.complete(())
         try await load.value
-        #expect(m.approvals.isEmpty && file.bytes == nil)
+        #expect(m.approvals.isEmpty)
     }
 
     /// `share.decide` falls back to the old form only for a request the new form would accept; one that is malformed in
