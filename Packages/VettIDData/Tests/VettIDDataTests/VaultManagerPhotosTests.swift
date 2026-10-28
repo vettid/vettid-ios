@@ -210,11 +210,14 @@ enum TestPhotos {
         #expect(att.cleared >= 1 && att.thumbs.count == 0 && att.photos.count == 0 && att.pending.isEmpty)
         #expect(pending.isWiped && !SharedPhotos.shared.live(token) && msgs.messages(id).isEmpty)
 
-        let needles: [[UInt8]] = [
+        let theirJpeg = [UInt8](theirs.jpeg.copy()), theirThumb = [UInt8](theirs.thumb.copy())
+        var needles: [[UInt8]] = [
             Array(jpeg[(jpeg.count / 2)..<(jpeg.count / 2 + 64)]), Array(thumb[(thumb.count / 2)..<(thumb.count / 2 + 32)]),
-            Array(theirs.jpeg.copy()[100..<164]),
-            Array(jpeg[0..<32]), Array(thumb[0..<32]), Array(theirs.jpeg.copy()[0..<32]), Array(theirs.thumb.copy()[0..<32]),
-        ] + (service.photoAttIDs + service.deviceBlobsDeleted).map { Array($0.utf8) }
+            Array(theirJpeg[100..<164]),
+        ]
+        // The start of each image, its signature with the bytes after it.
+        needles += [Array(jpeg[0..<32]), Array(thumb[0..<32]), Array(theirJpeg[0..<32]), Array(theirThumb[0..<32])]
+        needles += (service.photoAttIDs + service.deviceBlobsDeleted).map { Array($0.utf8) }
         let files = FileManager.default.enumerator(at: phone.directory, includingPropertiesForKeys: [.isRegularFileKey])?
             .compactMap { $0 as? URL }.filter { (try? $0.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true } ?? []
         #expect(!files.isEmpty, "the phone keeps its encrypted files there")
