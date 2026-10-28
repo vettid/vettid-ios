@@ -453,6 +453,28 @@
         }
       }
     },
+    "approvals_not_held_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No longer on this phone"
+          }
+        }
+      }
+    },
+    "approvals_not_held_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This request is no longer shown on this phone. If it is still needed, it has to be asked for again."
+          }
+        }
+      }
+    },
     "approvals_deny": {
       "extractionState": "manual",
       "localizations": {

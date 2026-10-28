@@ -34,6 +34,11 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
     public var done = false
     /// It left the list without a decision here (decided on another device, or expired).
     public var gone = false
+    /// Not held in memory since the screen opened, and the vault never said it was decided or expired: an approval that
+    /// arrived only as an event is not read again after a lock or a restart (IOS-PLAN §6.9; no vault list names it), so
+    /// its feed item opens this rather than "Already decided" (chosen; not in the spec). One that arrives meanwhile (a
+    /// list read on its way) is shown.
+    public var notHeld = false
     public var error: FailureKind?
     /// A share decision's items the member unticked: declined, the rest included (§10.12).
     public var shareExcluded: Set<String> = []
@@ -106,7 +111,7 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
     }
 
     public var description: String {
-        "ApprovalDetailState(busy: \(busy), done: \(done), gone: \(gone), error: \(error.map { "\($0)" } ?? "nil"))"
+        "ApprovalDetailState(busy: \(busy), done: \(done), gone: \(gone), notHeld: \(notHeld), error: \(error.map { "\($0)" } ?? "nil"))"
     }
     public var debugDescription: String { description }
     public var customMirror: Mirror { Mirror(self, children: [:]) }
@@ -167,6 +172,7 @@ public final class ApprovalDetailViewModel {
         let now = repo.approvals.first { $0.key == local.key }
         s.approval = now ?? local.approval
         s.gone = now == nil && local.approval != nil && !local.done && !local.busy && local.criticalResult == nil
+        s.notHeld = now == nil && local.approval == nil
         s.connectionName = s.approval.flatMap { a -> String? in
             guard let id = Self.connectionID(a), let n = connections?.connections.first(where: { $0.id == id })?.displayName,
                   !n.isEmpty else { return nil }
