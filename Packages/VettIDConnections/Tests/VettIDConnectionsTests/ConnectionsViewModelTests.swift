@@ -123,8 +123,9 @@ import VettIDDataTesting
         let invite = OutstandingInvite(inviteID: "i1", exp: nil, remote: false)
         fake.outstanding = [invite]
         vault.ownerCheck = OwnerCheckView(state: .ok, deadline: Date(), hold: false)
+        // The view model follows the check on a later turn of the main actor (``until``).
+        #expect(await until { m.state.error == nil && m.state.invites == [invite] })
         await m.settle()
-        #expect(m.state.error == nil && m.state.invites == [invite])
         fake.fail["refresh"] = VaultFailure(.network)
         m.refresh()
         await m.settle()

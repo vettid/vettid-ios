@@ -170,8 +170,9 @@ import VettIDVault
         let m = await model(log, owner: owner)
         #expect(m.state.error == .ownerCheckRequired && !m.state.loading)
         owner.ownerCheck = OwnerCheckView(state: .ok, deadline: Date(), hold: true)
+        // The view model follows the check on a later turn of the main actor.
+        #expect(await eventually { m.state.error == nil && m.state.entries.map(\.seq) == [900] && log.calls.count == 2 })
         await m.settle()
-        #expect(m.state.error == nil && m.state.entries.map(\.seq) == [900] && log.calls.count == 2)
     }
 
     @Test func aFailureIsShownNotSpunOnAndRetried() async {
