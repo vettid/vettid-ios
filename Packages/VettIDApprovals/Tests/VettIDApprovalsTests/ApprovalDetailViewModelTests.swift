@@ -101,6 +101,16 @@ import VettIDDataTesting
         #expect(m.state.gone && !m.state.notHeld)
     }
 
+    /// A hold or a lock that drops an open approval (IOS-PLAN §6.9) leaves it "No longer on this phone", never "Already
+    /// decided": the vault did not say it was decided (chosen; not in the spec).
+    @Test func anApprovalDroppedWhileOpenIsNotSaidToBeDecided() async {
+        fake.listed = [Samples.auth()]
+        let m = await model("auth:a1")
+        #expect(!m.state.notHeld && !m.state.gone && m.state.approval?.key == "auth:a1")
+        fake.forgetOpenVault()
+        #expect(m.state.notHeld && !m.state.gone && m.state.approval == nil && !m.state.canApprove())
+    }
+
     @Test func authenticationTakesThePasswordAndClearsIt() async {
         fake.listed = [Samples.auth()]
         connections.connections = [Samples.connection("c1")]

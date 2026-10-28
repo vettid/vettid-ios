@@ -28,6 +28,7 @@ public final class ApprovalsManager: ApprovalsRepository {
     var listed: [PendingApproval] = []
     /// Bumped on every change of the stored events, so that ``approvals`` is observed to change.
     private var storedVersion = 0
+    public private(set) var forgetCount = 0
 
     @ObservationIgnored let connections: ConnectionsManager
     @ObservationIgnored let ops: @MainActor () async throws -> any ApprovalOps
@@ -154,6 +155,7 @@ public final class ApprovalsManager: ApprovalsRepository {
     /// the lists again. A read on its way is not published.
     public func forgetOpenVault() {
         generation += 1
+        forgetCount += 1
         listed = []
         if !stored.isEmpty {
             stored = []
