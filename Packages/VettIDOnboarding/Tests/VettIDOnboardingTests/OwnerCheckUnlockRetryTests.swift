@@ -177,6 +177,8 @@ import VettIDDataTesting
         .failed(.rotationRequired, code: "rotation_required"),
         .failed(.unauthorized, code: nil),
         .failed(.other, code: nil),
+        .failed(.vaultUnavailable, code: VaultManager.codeVaultDeleting),
+        .failed(.vaultUnavailable, code: VaultManager.codeReleaseNotRouted),
     ])
     func aRefusalOrAnUnknownCountDropsThePin(r: OwnerCheckOutcome) async throws {
         let vm = try await heldScreen([.badPassword(checksLeft: 7), r, .passed])

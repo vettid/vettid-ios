@@ -413,13 +413,16 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
         switch r {
         case .badPassword(let left): (left ?? 0) > 0
         case .backoff: true
-        case .failed(let kind, _): transient.contains(kind)
+        case .failed(let kind, let code): transient.contains(kind) && !notTransient.contains(code ?? "")
         default: false
         }
     }
 
     /// The failures that pass by themselves (vettid-android's `TRANSIENT`).
     static let transient: Set<FailureKind> = [.network, .noResponse, .rateLimited, .vaultUnavailable, .servicePaused]
+    /// Unavailable, but not on Android's list: a vault being deleted, and the wait for an update's route (vettid-android's
+    /// `NOT_SUPPORTED` and `ROUTE_PENDING`).
+    static let notTransient: Set<String> = [VaultManager.codeVaultDeleting, VaultManager.codeReleaseNotRouted]
 
     static func message(_ r: OwnerCheckOutcome) -> OwnerCheckMessage? {
         switch r {
