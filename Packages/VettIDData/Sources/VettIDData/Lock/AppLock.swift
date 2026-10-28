@@ -44,7 +44,8 @@ public struct AppLockPreferences: Codable, Equatable, Sendable {
 public protocol AppLockStore: Sendable {
     func preferences() throws -> AppLockPreferences
     func setPreferences(_ p: AppLockPreferences) throws
-    /// Deletes, unread, the sealed data key earlier builds kept beside the preferences; nothing when it is gone already.
+    /// Deletes, unread, the sealed data key earlier builds kept beside the preferences, with the temporary files an
+    /// interrupted write of it left; nothing when they are gone already.
     func deleteRetired() throws
 }
 
@@ -77,7 +78,7 @@ public struct FileAppLockStore: AppLockStore {
     }
 
     public func setPreferences(_ p: AppLockPreferences) throws { try settings.save(Array(try JSONEncoder().encode(p))) }
-    public func deleteRetired() throws { try sealed.clear() }
+    public func deleteRetired() throws { try sealed.clearRetired() }
 }
 
 /// How an app-lock prompt ended. Mirrors vettid-android `PromptOutcome`.
@@ -115,11 +116,13 @@ public final class UnlockPromptGate {
     public func newLock() { endedWithoutSuccess = false }
 }
 
-/// The app lock (ANDROID-PLAN D6; IOS-PLAN ID17): a gate in front of the app's screens. When on, opening the app, and
-/// returning to it after the timeout, asks for Face ID or Touch ID, or for the iPhone passcode only (``AppLockMethod``):
-/// a fresh random challenge is sealed to the Secure Enclave key, and the lock opens when the key, after the prompt,
-/// opens it again. No data key is kept, sealed or in memory: nothing on the phone is encrypted under the lock (chosen;
-/// not in the spec: earlier builds sealed a data key that nothing used; its file is deleted at the start). A
+/// The app lock (ANDROID-PLAN D6; IOS-PLAN ID17): a UI gate in front of the app's screens that protects no data at rest
+/// (ID17, §6.9). When on, opening the app, and returning to it after the timeout, asks for Face ID or Touch ID, or for the
+/// iPhone passcode only (``AppLockMethod``): a fresh random challenge is sealed to the Secure Enclave key, and the lock
+/// opens when the key, after the prompt, opens it again (chosen: §6.9 lists this key, `.biometryCurrentSet` or
+/// `.devicePasscode`, while ID17 says no key stands behind the lock; the key is what tells a new face or finger). No
+/// data key is kept, sealed or in memory: nothing on the phone is encrypted under the lock (IOS-PLAN 0.1.44: the unused
+/// app-lock data key is removed; the file earlier builds sealed it in is deleted at the start). A
 /// convenience layer only: it never replaces the vault PIN or the credential password, and nothing of the vault depends
 /// on it. A key that no longer opens (a new face or finger with Face ID or Touch ID) turns the lock off and says so
 /// ([invalidated]); one that stops opening with the passcode method (the passcode turned off) turns it off without that

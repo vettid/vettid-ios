@@ -51,6 +51,42 @@ final class MemoryAppLockStore: AppLockStore, @unchecked Sendable {
 
 /// The app lock (ANDROID-PLAN D6; IOS-PLAN ID17) with a software stand-in for the Secure Enclave key. Mirrors
 /// vettid-android `AppLockTest`, test for test, with the prompt inside the key's use as on iOS.
+/// The software app-lock key with two faults: a seal that throws [sealError], and an open that answers other bytes than
+/// were sealed ([otherBytes]).
+final class FaultyAppLockKeys: AppLockKeys, @unchecked Sendable {
+    let inner: SoftwareAppLockKeys
+    private let lock = NSLock()
+    private var sealErrorValue: (any Error)?
+    private var otherBytesValue = false
+
+    init(_ inner: SoftwareAppLockKeys) { self.inner = inner }
+
+    var sealError: (any Error)? {
+        get { lock.withLock { sealErrorValue } }
+        set { lock.withLock { sealErrorValue = newValue } }
+    }
+
+    var otherBytes: Bool {
+        get { lock.withLock { otherBytesValue } }
+        set { lock.withLock { otherBytesValue = newValue } }
+    }
+
+    func create(_ method: AppLockMethod) throws { try inner.create(method) }
+    func exists() throws -> Bool { try inner.exists() }
+
+    func seal(_ plaintext: [UInt8]) throws -> [UInt8] {
+        if let e = sealError { throw e }
+        return try inner.seal(plaintext)
+    }
+
+    func open(_ sealed: [UInt8], reason: String) async throws -> [UInt8] {
+        let b = try await inner.open(sealed, reason: reason)
+        return otherBytes ? b.map { $0 ^ 0x01 } : b
+    }
+
+    func delete() throws { try inner.delete() }
+}
+
 @MainActor
 @Suite struct AppLockTests {
     final class Clock: @unchecked Sendable {
@@ -61,9 +97,9 @@ final class MemoryAppLockStore: AppLockStore, @unchecked Sendable {
     let keys = SoftwareAppLockKeys()
     let clock = Clock()
 
-    func lock() -> AppLock {
+    func lock(_ keys: (any AppLockKeys)? = nil) -> AppLock {
         let clock = clock
-        return AppLock(store: store, keys: keys) { clock.t }
+        return AppLock(store: store, keys: keys ?? self.keys) { clock.t }
     }
 
     func enabled(_ m: AppLockMethod = .biometrics) async throws -> AppLock {
@@ -106,17 +142,23 @@ final class MemoryAppLockStore: AppLockStore, @unchecked Sendable {
         #expect(store.retired == nil && again.state == .locked)
     }
 
-    /// The file of the sealed data key an earlier build left is deleted by the file store, and a second deletion is no
-    /// error.
+    /// The file of the sealed data key an earlier build left, and the temporary file of an interrupted write of it, are
+    /// deleted by the file store, and a second deletion is no error.
     @Test func theFileStoreDeletesTheRetiredFile() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
         let file = dir.appendingPathComponent(FileAppLockStore.sealedFile)
         try Data([1, 2, 3]).write(to: file)
+        // An interrupted write of it by an earlier build; the settings' own temporary file is not its.
+        let tmp = dir.appendingPathComponent(".\(FileAppLockStore.sealedFile).\(UUID().uuidString).tmp")
+        let settingsTmp = dir.appendingPathComponent(".\(FileAppLockStore.settingsFile).\(UUID().uuidString).tmp")
+        try Data([4]).write(to: tmp)
+        try Data([5]).write(to: settingsTmp)
         let s = FileAppLockStore(directory: dir, keys: InMemoryFileKeyHolder(), protectedData: ProtectedDataFlag(available: true))
         try s.deleteRetired()
-        #expect(!FileManager.default.fileExists(atPath: file.path))
+        #expect(!FileManager.default.fileExists(atPath: file.path) && !FileManager.default.fileExists(atPath: tmp.path))
+        #expect(FileManager.default.fileExists(atPath: settingsTmp.path))
         try s.deleteRetired()
     }
 
@@ -172,6 +214,35 @@ final class MemoryAppLockStore: AppLockStore, @unchecked Sendable {
         keys.invalidate() // a new face or finger
         #expect(await !l.unlock(reason: "Unlock VettID"))
         #expect(l.state == .disabled && l.invalidated && !store.current.enabled)
+    }
+
+    /// A key that opens to other bytes than the challenge sealed to it no longer opens: the lock turns itself off, with
+    /// the notice, and the key goes.
+    @Test func aKeyThatOpensToOtherBytesTurnsTheLockOff() async throws {
+        let faulty = FaultyAppLockKeys(keys)
+        let l = lock(faulty)
+        l.start()
+        #expect(try await l.enable(.biometrics, reason: "Unlock VettID"))
+        l.lockNow()
+        faulty.otherBytes = true
+        #expect(await !l.unlock(reason: "Unlock VettID"))
+        #expect(try l.state == .disabled && l.invalidated && !store.current.enabled && !keys.exists())
+    }
+
+    /// A seal that fails because the key cannot be read now (`unavailable`) is no lock that cannot open: the lock stays
+    /// on, without the notice and without a prompt, and opens at the next try.
+    @Test func aSealThatIsUnavailableKeepsTheLockOn() async throws {
+        let faulty = FaultyAppLockKeys(keys)
+        let l = lock(faulty)
+        l.start()
+        #expect(try await l.enable(.biometrics, reason: "Unlock VettID"))
+        l.lockNow()
+        faulty.sealError = KeysError.unavailable("app lock key")
+        #expect(await !l.unlock(reason: "Unlock VettID"))
+        #expect(try l.state == .locked && !l.invalidated && store.current.enabled && keys.exists() && keys.opens == 1)
+        faulty.sealError = nil
+        #expect(await l.unlock(reason: "Unlock VettID"))
+        #expect(l.state == .unlocked)
     }
 
     /// The key gone (deleted outside the app lock): the lock cannot open and turns itself off, with the notice.

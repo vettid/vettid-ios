@@ -25,9 +25,10 @@ public enum AppLockKeyError: Error, Equatable, Sendable {
     case failed
 }
 
-/// The app-lock key (IOS-PLAN §6.1 "App-lock key", ID17): the gate of a convenience layer in front of the app's screens,
-/// which opens a random challenge sealed to it at each prompt, never in place of the PIN or the password, and the only
-/// key of the app bound to biometry or the passcode.
+/// The app-lock key (IOS-PLAN §6.9 "App lock"; chosen: ID17 says no key stands behind the lock, §6.9 lists this one):
+/// the gate of a convenience layer in front of the app's screens, which opens a random challenge sealed to it at each
+/// prompt and protects no data at rest, never in place of the PIN or the password, and the only key of the app bound to
+/// biometry or the passcode.
 /// On the iPhone a Secure Enclave key with `.biometryCurrentSet` or `.devicePasscode` per the member's choice
 /// (``SecureEnclaveAppLockKeys``); a software stand-in in VettIDKeysTesting for the simulator's tests. Mirrors
 /// vettid-android `AppLockKeys`, with the prompt inside ``open(_:reason:)`` (iOS shows it when the private key is used).
