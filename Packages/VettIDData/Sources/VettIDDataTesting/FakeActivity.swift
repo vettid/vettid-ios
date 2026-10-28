@@ -79,15 +79,22 @@ public final class FakeFeed: FeedRepository {
 public final class FakeApprovals: ApprovalsRepository {
     public var calls: [String] = []
     public var fail: [String: VaultFailure] = [:]
-    public var listed: [PendingApproval] = []
+    public var listed: [PendingApproval] = [] {
+        didSet { arrived.formUnion(listed.map(\.key)) }
+    }
     public let connections: FakeConnections
     public private(set) var forgetCount = 0
+    /// The approvals listed since the last ``forgetOpenVault()``.
+    private var arrived: Set<String> = []
 
     /// What a lock or a hold does to ``ApprovalsManager``: every approval dropped from memory.
     public func forgetOpenVault() {
         listed = []
+        arrived = []
         forgetCount += 1
     }
+
+    public func mayHaveBeenDropped(_ key: String) -> Bool { PendingApproval.eventOnly(key: key) && !arrived.contains(key) }
     /// What ``approveCriticalUse(_:password:)`` returns.
     public var criticalStatus: String? = "ok"
     /// The payload ``loadCriticalUse(_:)`` fills in (standard base64).

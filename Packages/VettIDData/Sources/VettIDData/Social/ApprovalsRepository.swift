@@ -46,6 +46,11 @@ public protocol ApprovalsRepository: ConnectionRequestsRepository {
     /// approval gone from ``approvals`` is not taken to be decided when it was only dropped.
     var forgetCount: Int { get }
 
+    /// Whether the approval [key], missing from ``approvals``, may only have been dropped from memory rather than decided
+    /// or expired (IOS-PLAN §6.9): an ask that only events bring (``PendingApproval/eventOnly(key:)``) and that has not
+    /// arrived since the approvals were last dropped. A request a vault list names is read again, so missing means ended.
+    func mayHaveBeenDropped(_ key: String) -> Bool
+
     /// Re-reads what the vault lists (the connection requests, the grant and critical-item requests) and drops expired
     /// and decided requests kept from events.
     func refreshApprovals() async throws
