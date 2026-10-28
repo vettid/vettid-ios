@@ -128,6 +128,8 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var ownerCheck: OwnerCheckView?
     public var lockedByOwnerCheck = false
     public var unlockCheckOutcome: OwnerCheckOutcome?
+    public private(set) var inFront = true
+    var unlockPin: String?
     public var notices: [OwnerCheckNotice] = []
     public var presenceUnrecorded = false
     public var checkAfterCancel = false
@@ -390,8 +392,26 @@ extension FakeVaultRepository: OwnerCheckRepository {
     }
 
     /// The outcome of the check an unlock past the deadline sent (``unlockWithCheck(pin:password:approve:cancelRecovery:)``).
-    func checkAfterUnlock() {
-        unlockCheckOutcome = checkResults.isEmpty ? passed() : checkResults.removeFirst()
+    func checkAfterUnlock(pin: String) {
+        let o = checkResults.isEmpty ? passed() : checkResults.removeFirst()
+        unlockCheckOutcome = o
+        // As the manager: the tenth failed check locks the vault, whether or not `vault.locking` has arrived.
+        let left: Int? = switch o {
+        case .badPassword(let n), .badPin(let n): n
+        default: nil
+        }
+        if left == 0 { lockedByOwnerCheck = true }
+        unlockPin = OwnerCheckManager.keepsPin(o) && inFront && !lockedByOwnerCheck ? pin : nil
+    }
+
+    public func takeUnlockPin() -> String? {
+        defer { unlockPin = nil }
+        return unlockPin
+    }
+
+    public func setForeground(_ front: Bool) {
+        inFront = front
+        if !front { unlockPin = nil }
     }
 }
 

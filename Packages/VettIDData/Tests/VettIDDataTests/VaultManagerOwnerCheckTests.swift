@@ -148,6 +148,61 @@ import VettIDDataTesting
         #expect(checks.ownerCheck?.gated(Date()) == false)
     }
 
+    /// (IOS-PLAN §6.6; VAULT-MESSAGING §3.6.5) A wrong password after the PIN: the app opens (held), the answer waits for the
+    /// check screen, and the accepted PIN is kept for the password-only retry until the app leaves the front, also while
+    /// the unlock and its check are on their way.
+    @Test func theKeptPinGoesWhenTheAppLeavesTheFront() async throws {
+        defer { phone.close() }
+        try await setUp()
+        try await m.lock()
+        service.advanceVaultClock(pastDeadline)
+        #expect(try await m.unlockWithCheck(pin: pin, password: "wrong horse") == .success)
+        #expect(m.phase == .unlocked)
+        #expect(checks.takeUnlockPin() == pin)
+        // The check screen retries with it: a pass.
+        #expect(try await checks.check(pin: pin, password: password) == .passed)
+        // The app leaves the front (after the screen was shown, a restart of the screen: nothing is kept).
+        try await m.lock()
+        service.advanceVaultClock(pastDeadline)
+        #expect(try await m.unlockWithCheck(pin: pin, password: "wrong horse") == .success)
+        await m.onBackground()
+        #expect(checks.takeUnlockPin() == nil)
+        #expect(checks.unlockCheckOutcome != nil, "the spent try still shows as the ordinary failure")
+        m.onForeground()
+    }
+
+    /// The same when the app leaves the front before the unlock's answer lands, and when the collection stops.
+    @Test func theKeptPinGoesWithAStopOfTheCollection() async throws {
+        defer { phone.close() }
+        try await setUp()
+        try await m.lock()
+        service.advanceVaultClock(pastDeadline)
+        #expect(try await m.unlockWithCheck(pin: pin, password: "wrong horse") == .success)
+        m.stopCollecting()
+        #expect(checks.takeUnlockPin() == nil)
+    }
+
+    /// A backoff through the manager: five wrong passwords, then the sixth unlock's check waits; no try is used, the vault
+    /// is open and the PIN kept for the password-only retry.
+    @Test func aBackoffAfterTheUnlockKeepsThePinAndUsesNoTry() async throws {
+        defer { phone.close() }
+        try await pastTheDeadline()
+        for _ in 0..<5 {
+            guard case .badPassword = try await checks.check(pin: pin, password: "wrong horse") else {
+                Issue.record("a wrong password is a failed check")
+                return
+            }
+        }
+        try await m.lock()
+        #expect(try await m.unlockWithCheck(pin: pin, password: password) == .success)
+        guard case .backoff(let wait)? = checks.unlockCheckOutcome else {
+            Issue.record("the check after the unlock waits")
+            return
+        }
+        #expect(wait > 0 && m.phase == .unlocked && service.ownerCheckFailures == 5)
+        #expect(checks.takeUnlockPin() == pin)
+    }
+
     /// Before the deadline the unlock sends no check, even with the password.
     @Test func beforeTheDeadlineTheUnlockSendsNoCheck() async throws {
         defer { phone.close() }

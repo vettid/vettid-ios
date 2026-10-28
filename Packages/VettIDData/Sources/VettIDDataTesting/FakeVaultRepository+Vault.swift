@@ -121,7 +121,9 @@ extension FakeVaultRepository: VaultRepository {
         lastPassword = password
         let r = try await unlock(pin: pin, approve: approve, cancelRecovery: cancelRecovery)
         calls.append("unlockWithCheck")
-        if r == .success { checkAfterUnlock() }
+        // As the vault manager: the check also follows an open whose update the vault refused.
+        if r == .success { checkAfterUnlock(pin: pin) }
+        if case .updateRefused = r { checkAfterUnlock(pin: pin) }
         return r
     }
 

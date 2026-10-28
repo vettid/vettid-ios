@@ -109,12 +109,14 @@ public struct OwnerCheckScreen: View {
     }
 
     private var canSubmit: Bool {
-        state.entriesAllowed && pin.count >= OwnerCheckScreenState.minPin && !state.password.isEmpty
+        // The PIN kept for the password-only retry is in the state, not on the keypad.
+        if state.pinKept { return state.submitAllowed }
+        return state.entriesAllowed && pin.count >= OwnerCheckScreenState.minPin && !state.password.isEmpty
     }
 
     private func submit() {
         guard canSubmit else { return }
-        actions.setPin(pin.take())
+        if !state.pinKept { actions.setPin(pin.take()) }
         actions.submit()
     }
 
@@ -134,7 +136,9 @@ public struct OwnerCheckScreen: View {
         FormScaffold(
             title: title,
             message: body0,
-            primaryLabel: state.mode == .holdOff ? OnboardingStrings.ownerCheckSubmitHoldOff : OnboardingStrings.ownerCheckSubmit,
+            primaryLabel: state.pinKept
+                ? OnboardingStrings.unlockCheckIn
+                : state.mode == .holdOff ? OnboardingStrings.ownerCheckSubmitHoldOff : OnboardingStrings.ownerCheckSubmit,
             primaryEnabled: canSubmit,
             busy: state.busy || state.locking,
             secondaryLabel: state.mode == .gated ? OnboardingStrings.ownerCheckLock : OnboardingStrings.ownerCheckCancel,
@@ -151,6 +155,7 @@ public struct OwnerCheckScreen: View {
                 SmallNote(state.stagingNote)
                 if state.presenceUnrecorded { PresenceNotice(scaledQuiet: state.scaledQuietText) }
                 if let card = WaitingCardModel.of(state.mode, state.view, now: now) { WaitingCard(model: card) }
+                unlockLines
                 // (Release L, §3.6.8) The held and daily-check screens say when the vault locks itself.
                 if let at = idleLockAtOf(state.mode, state.view, now: now) {
                     Text(OnboardingStrings.ownerCheckIdleLockAt(at.formatted(date: .abbreviated, time: .shortened)))
@@ -181,16 +186,41 @@ public struct OwnerCheckScreen: View {
         .accessibilityIdentifier("owner_check")
     }
 
-    /// The keypad and the password (§3.6.5: one screen for both).
+    /// (IOS-PLAN §6.6; VAULT-MESSAGING §3.6.5 "Ask only for what is used") After an unlock whose check failed: directly under
+    /// the counts, the approved lines. The tenth failure locked the vault: the existing lock text, no retry.
+    @ViewBuilder private var unlockLines: some View {
+        if state.locked {
+            NoticeCard(
+                .urgent, title: OnboardingStrings.unlockOwnerCheckLockedTitle, message: OnboardingStrings.unlockOwnerCheckLockedBody
+            )
+            .accessibilityIdentifier("owner_check_locked")
+        }
+        if let left = state.unlockedWrong, !state.locked {
+            Text(OnboardingStrings.unlockCheckPasswordWrong(left))
+                .vettIDFont(.bodyMedium)
+                .accessibilityAddTraits(.updatesFrequently)
+                .accessibilityIdentifier("owner_check_unlocked_wrong")
+        }
+        if state.unlockedOpen, !state.locked {
+            // (chosen; not in the spec) The approved wording of the backoff state; Android uses the same words.
+            Text(OnboardingStrings.unlockCheckOpenWaiting)
+                .vettIDFont(.bodyMedium)
+                .accessibilityIdentifier("owner_check_unlocked_open")
+        }
+    }
+
+    /// The keypad (not after an unlock whose PIN was kept) and the password (§3.6.5: one screen for both).
     @ViewBuilder private var entries: some View {
-        PinEntry(
-            label: OnboardingStrings.ownerCheckPinLabel,
-            buffer: pin,
-            error: badPin && pin.count == 0 ? OnboardingStrings.ownerCheckBadPin : nil,
-            identifier: "owner_check_pin"
-        )
-        .disabled(!state.entriesAllowed)
-        .padding(.top, Spacing.s)
+        if !state.pinKept {
+            PinEntry(
+                label: OnboardingStrings.ownerCheckPinLabel,
+                buffer: pin,
+                error: badPin && pin.count == 0 ? OnboardingStrings.ownerCheckBadPin : nil,
+                identifier: "owner_check_pin"
+            )
+            .disabled(!state.entriesAllowed)
+            .padding(.top, Spacing.s)
+        }
         SecretField(
             OnboardingStrings.ownerCheckPasswordLabel,
             text: Binding(get: { state.password }, set: { actions.setPassword($0) }),
@@ -214,7 +244,8 @@ struct OwnerCheckMessageView: View {
     @Environment(\.vettIDColors) private var colors
 
     var body: some View {
-        if let left = state.checksLeft {
+        // The approved line says the tries left itself, and the lock text needs no count beside it.
+        if let left = state.checksLeft, state.unlockedWrong == nil, !state.locked {
             Text(OnboardingStrings.ownerCheckChecksLeft(left))
                 .vettIDFont(.bodyMedium)
                 .foregroundStyle(left <= OwnerCheckScreen.warnLeft ? colors.error : colors.onSurfaceVariant)

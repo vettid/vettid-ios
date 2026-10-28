@@ -50,6 +50,26 @@ import VettIDUI
         #expect(height(OwnerCheckScreen(state: s, actions: NoOwnerCheckActions(), now: now)) > 0)
     }
 
+    /// (IOS-PLAN §6.6; VAULT-MESSAGING §3.6.5) After an unlock whose check failed: the PIN is kept, no keypad, the password's
+    /// secret field only; the wrong-password line, the backoff's, and the lock text render.
+    @Test func theRetryAfterTheUnlockAsksOnlyForThePassword() throws {
+        var s = held
+        s.pinKept = true
+        s.pin = "975310"
+        s.unlockedWrong = 7
+        let window = host(OwnerCheckScreen(state: s, actions: NoOwnerCheckActions(), now: now))
+        let field = try #require(textFields(in: window).first)
+        #expect(textFields(in: window).count == 1 && field.isSecureTextEntry)
+        window.isHidden = true
+        var wait = s
+        wait.unlockedWrong = nil
+        wait.unlockedOpen = true
+        wait.waitSeconds = 272
+        var locked = held
+        locked.locked = true
+        for state in [wait, locked, s] { #expect(height(OwnerCheckScreen(state: state, actions: NoOwnerCheckActions(), now: now)) > 0) }
+    }
+
     @Test func everyStateRenders() {
         var states: [OwnerCheckScreenState] = [held, OwnerCheckScreenState(mode: .voluntary), OwnerCheckScreenState(mode: .holdOff)]
         for m in [OwnerCheckMessage.badPin(checksLeft: 2), .badPassword(checksLeft: 8), .backoff, .failed(.network, code: nil)] {

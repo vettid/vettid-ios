@@ -46,6 +46,7 @@ extension VaultManager {
         foregrounds += 1
         moveFlags.book.lifecycle += 1
         backgrounded = false
+        ownerChecks.setForeground(true)
         guard phase != .signedOut else { return }
         // A pending lock is tried again at once (the app's retry at every start and every return to the foreground), unless
         // an attempt runs or just began, and without using up the member's "Try again" (``LockKeeper/retryOnForeground()``).
@@ -77,8 +78,10 @@ extension VaultManager {
     public func onBackground(budget: Duration = .seconds(25)) async {
         let began = foregrounds
         moveFlags.book.lifecycle += 1
-        // IOS-PLAN §6.3: the PIN kept for the pairing goes with the other secrets (§4.9).
+        // IOS-PLAN §6.3: the PIN kept for the pairing goes with the other secrets (§4.9), and so does the one kept for the
+        // check's retry (VAULT-MESSAGING §3.6.5), also while an unlock and its check are on their way.
         forgetPairingPin()
+        ownerChecks.setForeground(false)
         let work = Task { @MainActor [weak self] in
             guard let self else { return }
             await lockGuard.keeper.firstAttemptDone()

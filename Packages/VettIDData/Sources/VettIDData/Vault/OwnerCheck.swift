@@ -220,6 +220,17 @@ public protocol OwnerCheckRepository: AnyObject, Observable, Sendable {
     /// The answer to the check sent right after an unlock past the deadline, for the check screen to show.
     var unlockCheckOutcome: OwnerCheckOutcome? { get }
 
+    /// (IOS-PLAN §6.6; VAULT-MESSAGING §3.6.5) The PIN the unlock had accepted when its check failed on the password (or backed
+    /// off), once: the check screen then asks for the password only. Nil when the app left the front meanwhile, the vault
+    /// locked or was wiped, or nothing is kept. Default: nil.
+    func takeUnlockPin() -> String?
+
+    /// The app is in front or not; the PIN kept for the retry is dropped when it is not. Default: nothing.
+    func setForeground(_ front: Bool)
+
+    /// Whether the app is in front (the app, not a screen). Default: true.
+    var inFront: Bool { get }
+
     /// Unread `owner_check.*` feed items. Default: none.
     var notices: [OwnerCheckNotice] { get }
 
@@ -264,6 +275,9 @@ public extension OwnerCheckRepository {
     func refreshIdleLockSetting() async throws {}
     func setIdleLockAfter(seconds: Int64) async throws {}
 
+    func takeUnlockPin() -> String? { nil }
+    func setForeground(_ front: Bool) {}
+    var inFront: Bool { true }
     var notices: [OwnerCheckNotice] { [] }
     var presenceUnrecorded: Bool { false }
     var checkAfterCancel: Bool { false }
