@@ -34,6 +34,11 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
     public var done = false
     /// It left the list without a decision here (decided on another device, or expired).
     public var gone = false
+    /// Not held in memory since the screen opened, and the vault never said it was decided or expired: an approval that
+    /// arrived only as an event is not read again after a lock or a restart (IOS-PLAN §6.9; no vault list names it), so
+    /// its feed item opens this rather than "Already decided" (chosen; not in the spec). One that arrives meanwhile (a
+    /// list read on its way) is shown.
+    public var notHeld = false
     public var error: FailureKind?
     /// A share decision's items the member unticked: declined, the rest included (§10.12).
     public var shareExcluded: Set<String> = []
@@ -106,7 +111,7 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
     }
 
     public var description: String {
-        "ApprovalDetailState(busy: \(busy), done: \(done), gone: \(gone), error: \(error.map { "\($0)" } ?? "nil"))"
+        "ApprovalDetailState(busy: \(busy), done: \(done), gone: \(gone), notHeld: \(notHeld), error: \(error.map { "\($0)" } ?? "nil"))"
     }
     public var debugDescription: String { description }
     public var customMirror: Mirror { Mirror(self, children: [:]) }
@@ -125,6 +130,8 @@ public final class ApprovalDetailViewModel {
     @ObservationIgnored private let work = Work()
     @ObservationIgnored private let follows = TaskBag()
     private var local: ApprovalDetailState
+    /// The repository's ``ApprovalsRepository/forgetCount`` when the screen opened.
+    @ObservationIgnored private let forgetCountAtOpen: Int
 
     /// [key]: the approval's ``PendingApproval/key``. [connections]: for the requester's name. [items]: the member's items a
     /// category entry can be answered with; [vault] in its place: the Vault list, read quietly when it has not been read
@@ -134,6 +141,7 @@ public final class ApprovalDetailViewModel {
         vault: (any ItemsRepository)? = nil
     ) {
         repo = approvals
+        forgetCountAtOpen = approvals.forgetCount
         self.connections = connections
         self.vault = vault
         vault?.readIfNotLoaded()
@@ -166,7 +174,12 @@ public final class ApprovalDetailViewModel {
         if let vault { s.items = Self.answers(vault.items) }
         let now = repo.approvals.first { $0.key == local.key }
         s.approval = now ?? local.approval
-        s.gone = now == nil && local.approval != nil && !local.done && !local.busy && local.criticalResult == nil
+        // Dropped by a lock or a hold while open, it is no longer held, not decided (IOS-PLAN §6.9).
+        let dropped = repo.forgetCount != forgetCountAtOpen
+        let left = now == nil && local.approval != nil && !local.done && !local.busy && local.criticalResult == nil
+        s.gone = left && !dropped
+        s.notHeld = now == nil && (local.approval == nil || left && dropped)
+        if left && dropped { s.approval = nil }
         s.connectionName = s.approval.flatMap { a -> String? in
             guard let id = Self.connectionID(a), let n = connections?.connections.first(where: { $0.id == id })?.displayName,
                   !n.isEmpty else { return nil }

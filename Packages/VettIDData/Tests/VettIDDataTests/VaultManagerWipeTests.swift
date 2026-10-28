@@ -167,10 +167,12 @@ import VettIDDataTesting
         try expectFresh()
     }
 
-    /// An unreadable answer is no proof: nothing is erased (``VaultManagerUnlockTests``); the member's erase is.
+    /// An unreadable answer is no proof: nothing is erased (``VaultManagerUnlockTests``); the member's erase is, with the
+    /// files earlier builds wrote (``VaultFiles/retired``) when one is still there.
     @Test func theMembersEraseWipesThePhone() async throws {
         defer { phone.close() }
         try await lockedVault()
+        for name in VaultFiles.retired { try Data([1]).write(to: phone.directory.appendingPathComponent(name)) }
         service.unlockAnswers(.unreadable)
         #expect(try await m.unlock(pin: pin) == .failed(.other, code: "unreadable_result"))
         #expect(!files.isEmpty && m.phase == .locked)

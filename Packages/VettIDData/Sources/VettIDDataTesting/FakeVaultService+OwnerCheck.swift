@@ -81,6 +81,18 @@ extension FakeVaultService {
         }
     }
 
+    /// Another device of the owner passed the check (§3.6.3): the deadline moves, a hold ends, and this phone gets
+    /// `sync.event{owner_check}` with the new deadline. The blob is not rotated (the other device is not this phone).
+    public func otherDevicePassesCheck() throws {
+        try locked {
+            startCheckClock()
+            checkGate = ""
+            waitingCounts = [0, 0, 0, 0]
+            let deadline = checkDeadline.map(Timestamps.formatMillis) ?? ""
+            try reply("sync.event", JsonBuilder().string("kind", "owner_check").string("deadline", deadline).build())
+        }
+    }
+
     /// The vault's owner-check state at its clock: "ok", "due" or "held" (`ownerCheckState`). Callers hold ``cond``.
     func checkState() -> String {
         guard hasCredential, let deadline = checkDeadline, vaultNow >= deadline else { return "ok" }

@@ -76,6 +76,21 @@ public final class EncryptedFileStore: @unchecked Sendable {
         try lock.withLock { try FileIO.remove(url) }
     }
 
+    /// Removes a retired file, one this build never writes, unread, with the temporary files an interrupted write of it by
+    /// an earlier build may have left (`.<name>.<uuid>.tmp`, ``FileIO/atomicWrite(_:to:)``). Crash-safe and idempotent:
+    /// each is one `unlink`, and one already gone is not an error. When one cannot be removed, the others are still tried
+    /// and it throws ``KeysError/unavailable(_:)``, so that a later call tries again.
+    public func clearRetired() throws {
+        try lock.withLock {
+            var left = false
+            do { try FileIO.remove(url) } catch { left = true }
+            for t in try FileIO.temporaries(of: url) {
+                do { try FileIO.remove(t) } catch { left = true }
+            }
+            if left { throw KeysError.unavailable(url.lastPathComponent) }
+        }
+    }
+
     private var aad: [UInt8] { Array(Self.label.utf8) + [0] + Array(purpose.utf8) }
 }
 
@@ -179,6 +194,33 @@ enum FileIO {
         if dfd >= 0 {
             fsync(dfd)
             Darwin.close(dfd)
+        }
+    }
+
+    /// The temporary files of [url]'s writes (``atomicWrite(_:to:)``: `.<name>.<uuid>.tmp` beside it); none when its
+    /// directory does not exist. Throws ``KeysError/unavailable(_:)`` when the directory cannot be read.
+    static func temporaries(of url: URL) throws -> [URL] {
+        let dir = url.deletingLastPathComponent()
+        guard let d = opendir(dir.path) else {
+            if errno == ENOENT { return [] }
+            throw KeysError.unavailable(url.lastPathComponent)
+        }
+        defer { closedir(d) }
+        let prefix = ".\(url.lastPathComponent).", suffix = ".tmp"
+        var found: [URL] = []
+        while true {
+            errno = 0
+            guard let entry = readdir(d) else {
+                if errno != 0 { throw KeysError.unavailable(url.lastPathComponent) }
+                return found
+            }
+            let length = Int(entry.pointee.d_namlen)
+            guard let name = withUnsafeBytes(of: entry.pointee.d_name, { String(bytes: $0.prefix(length), encoding: .utf8) }) else {
+                continue
+            }
+            if name.count > prefix.count + suffix.count, name.hasPrefix(prefix), name.hasSuffix(suffix) {
+                found.append(dir.appendingPathComponent(name))
+            }
         }
     }
 

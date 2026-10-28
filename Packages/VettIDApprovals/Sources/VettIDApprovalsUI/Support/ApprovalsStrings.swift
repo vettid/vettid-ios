@@ -237,6 +237,21 @@ enum ApprovalsStrings {
         )
     }
 
+    // An approval not held on this phone that the vault never said was decided or expired (IOS-PLAN §6.9: one that
+    // arrived only as an event is not read again after a lock or a restart). Text and keys chosen (chosen; not in the
+    // spec), named for vettid-android to use the same.
+    static var notHeldTitle: String {
+        String(localized: "approvals_not_held_title", defaultValue: "No longer on this phone", bundle: .module)
+    }
+
+    static var notHeldBody: String {
+        String(
+            localized: "approvals_not_held_body",
+            defaultValue: "This request is no longer shown on this phone. If it is still needed, it has to be asked for again.",
+            bundle: .module
+        )
+    }
+
     static var deny: String { String(localized: "approvals_deny", defaultValue: "Deny", bundle: .module) }
 
     static var shareDecline: String { String(localized: "approvals_share_decline", defaultValue: "Do not share", bundle: .module) }

@@ -13,17 +13,14 @@ import VettIDVault
 /// `PeerDeclineTest`.
 @MainActor
 @Suite struct PeerDeclineTests {
-    let file = MemoryFile()
     let now = Date(timeIntervalSince1970: 1_791_201_600)
 
     /// No vault: the list refreshes fail quietly.
     func manager() -> ConnectionsManager {
         let ops = FakeConnectionOps()
         ops.failing = ["list"]
-        let file = file, now = now
-        let m = ConnectionsManager(ops: { ops }, load: { file.bytes }, persist: { file.bytes = $0.isEmpty ? nil : $0 }, now: { now })
-        m.loadIfNeeded()
-        return m
+        let now = now
+        return ConnectionsManager(ops: { ops }, now: { now })
     }
 
     func event(_ type: String, _ body: String) -> VaultMessage {
@@ -64,18 +61,16 @@ import VettIDVault
         #expect(m.requestEnds["c1"] == .peerDeclined && m.requestEnds["c2"] == .peerDeclined)
     }
 
-    @Test func theInviterIsToldWithTheRequestsNameUntilDismissedAndItSurvivesARestart() {
+    @Test func theInviterIsToldWithTheRequestsNameUntilDismissedInMemoryOnly() {
         let m = manager()
         incoming(m, "p1", "Alex", "Kim")
         sync(m, "pending_id", "p1", "peer_declined")
         #expect(m.requests.isEmpty)
         #expect(m.peerDeclines == [PeerDecline(requestID: "p1", name: "Alex Kim", outgoing: false, at: now)])
-        // Kept (encrypted file) until the member dismisses it.
-        let again = manager()
-        #expect(again.peerDeclines == [PeerDecline(requestID: "p1", name: "Alex Kim", outgoing: false, at: now)])
-        again.dismissPeerDecline("p1")
-        #expect(again.peerDeclines.isEmpty)
+        // Kept in memory until the member dismisses it; a new start has none.
         #expect(manager().peerDeclines.isEmpty)
+        m.dismissPeerDecline("p1")
+        #expect(m.peerDeclines.isEmpty)
     }
 
     @Test func theNameIsKeptAfterTheRequestLeftTheList() {

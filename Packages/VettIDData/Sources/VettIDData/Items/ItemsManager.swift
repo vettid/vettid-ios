@@ -25,9 +25,6 @@ public final class ItemsManager: ItemsRepository {
     @ObservationIgnored let gate: @MainActor () async throws -> Void
     @ObservationIgnored let debounce: Duration
     @ObservationIgnored var pending: Task<Void, Never>?
-    /// Set while the vault manager's reading of every list (``VaultManager/refreshListsQuietly()``) has yet to reach the
-    /// items: a read asked for meanwhile (another device's owner check) is left to it.
-    @ObservationIgnored public var listsReadPending = false
 
     /// `item.list`'s largest page (§10.7: 1–500).
     nonisolated static let page = 500

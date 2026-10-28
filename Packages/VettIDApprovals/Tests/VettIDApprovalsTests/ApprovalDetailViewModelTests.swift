@@ -82,7 +82,33 @@ import VettIDDataTesting
         fake.listed = []
         #expect(a.state.gone && a.state.approval != nil)
         let none = await model("auth:none")
-        #expect(none.state.approval == nil && !none.state.canApprove())
+        #expect(none.state.approval == nil && !none.state.canApprove() && none.state.notHeld && !none.state.gone)
+    }
+
+    /// After a lock or a restart, an approval that arrived only as an event is not held (IOS-PLAN §6.9), and the vault
+    /// never said it was decided or expired: its feed item opens "No longer on this phone", never "Already decided"
+    /// (chosen; not in the spec). One that a read brings meanwhile is shown, and only one that then leaves is gone.
+    @Test func anApprovalNotHeldIsNotSaidToBeDecided() async {
+        let m = await model("auth:a1")
+        #expect(m.state.notHeld && !m.state.gone && m.state.approval == nil && !m.state.canApprove())
+        fake.listed = [Samples.auth()]
+        await m.settle()
+        #expect(!m.state.notHeld && !m.state.gone && m.state.approval?.key == "auth:a1")
+        // The screen follows the list (``follow``) and keeps what it showed.
+        try? await Task.sleep(for: .milliseconds(50))
+        fake.listed = []
+        for _ in 0..<200 where !m.state.gone { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(m.state.gone && !m.state.notHeld)
+    }
+
+    /// A hold or a lock that drops an open approval (IOS-PLAN §6.9) leaves it "No longer on this phone", never "Already
+    /// decided": the vault did not say it was decided (chosen; not in the spec).
+    @Test func anApprovalDroppedWhileOpenIsNotSaidToBeDecided() async {
+        fake.listed = [Samples.auth()]
+        let m = await model("auth:a1")
+        #expect(!m.state.notHeld && !m.state.gone && m.state.approval?.key == "auth:a1")
+        fake.forgetOpenVault()
+        #expect(m.state.notHeld && !m.state.gone && m.state.approval == nil && !m.state.canApprove())
     }
 
     @Test func authenticationTakesThePasswordAndClearsIt() async {
