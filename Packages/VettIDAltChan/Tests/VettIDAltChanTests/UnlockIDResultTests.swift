@@ -25,6 +25,26 @@ import Testing
         #expect(try EnrollResult.parse(Array(#"{"ok":true,"vault_id":"abc","unlock_id":""}"#.utf8)).unlockID == nil)
         #expect(UnlockIds.of(nil) == nil && UnlockIds.of(id) == id)
     }
+
+    /// (VAULT-MESSAGING 0.67.0 §11.4) `invitation_recovery_id`: kept when a string beside `vault_bundle`; absent (an older vault),
+    /// "", not a string, or without `vault_bundle`: none, and the rest of the result stands.
+    @Test func theInvitationRecoveryIDIsOptional() throws {
+        let pcr = FakeEnclave.pcr0
+        let head = #"{"ok":true,"state_seq":3,"header_seq":2,"token":"t","release":"\#(pcr)","release_number":3,"release_status":"active","manifest_serial":7"#
+        let bundled = head + #","vault_bundle":"AAEC""#
+        #expect(try UnlockResult.parse(Array((bundled + "}").utf8)).invitationRecoveryID == nil)
+        let named = try UnlockResult.parse(Array((bundled + #","invitation_recovery_id":"01J0RECOVERY"}"#).utf8))
+        #expect(named.invitationRecoveryID == "01J0RECOVERY" && named.ok && named.stateSeq == 3)
+        for v in [#""""#, "7", "true"] {
+            let r = try UnlockResult.parse(Array((bundled + #","invitation_recovery_id":\#(v)}"#).utf8))
+            #expect(r.invitationRecoveryID == nil && r.ok, "\(v)")
+        }
+        // Present only under the condition of `vault_bundle`: alone it is ignored.
+        let alone = try UnlockResult.parse(Array((head + #","invitation_recovery_id":"01J0RECOVERY"}"#).utf8))
+        #expect(alone.invitationRecoveryID == nil && alone.ok)
+        // A refusal carries none.
+        #expect(try UnlockResult.parse(Array(#"{"ok":false,"code":"bad_pin","header_seq":2}"#.utf8)).invitationRecoveryID == nil)
+    }
 }
 
 // swiftlint:enable line_length

@@ -123,6 +123,12 @@ extension VaultDevice: AltParty {
                 // Any unlock that carries the bundle while recovering counts, the one with this phone's own key after an unanswered
                 // handshake too (chosen; not in the spec).
                 if r.vaultBundle != nil, st.recovery != nil { st.recovery?.lostOk = true }
+                // (IOS-PLAN 0.1.40 §4.9) The invitation the vault named, in the same save: each `ok` replaces the one before, and a
+                // result without the member leaves none (the walk).
+                if st.recovery != nil {
+                    st.recovery?.invitation = r.invitationRecoveryID
+                    st.recovery?.invitationSent = nil
+                }
                 // §11.11.5 step 1 (0.10.6): whether the password can recover the credential; kept across a restart.
                 if st.recovery != nil, let backup = r.credentialBackup { st.recovery?.credentialBackup = backup }
                 if let t = r.token, let exp = heldFromVault(t), st.vault != nil, Self.ms(exp) > st.vault?.tokenExpMs ?? 0 {

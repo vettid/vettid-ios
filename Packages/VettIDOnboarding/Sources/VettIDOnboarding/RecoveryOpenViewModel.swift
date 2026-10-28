@@ -55,8 +55,10 @@ public final class RecoveryOpenViewModel {
     public func setPassword(_ v: String) { state.password = v }
 
     /// The app left the foreground, or the iPhone locked (IOS-PLAN §6.3): the PIN and the password typed so far are dropped,
-    /// also those of the check ("This is what will be sent"), which goes back to the fields. Nothing under way is touched.
+    /// also those of the check ("This is what will be sent"), which goes back to the fields. Nothing under way is touched, but
+    /// the PIN the pairing keeps for a lost-ok unlock sent again is forgotten (IOS-PLAN 0.1.40 §4.9): it is asked for again.
     public func forgetSecrets() {
+        move.forgetPairingPin()
         switch state.step {
         case .sending, .done: return
         case .check: state.step = .enter
@@ -113,6 +115,17 @@ public final class RecoveryOpenViewModel {
 
     /// The vault's answer (or this phone's own unlock while finishing an `ok` recovery).
     private func answered(_ out: RecoveryOpenOutcome) {
+        if out.code == VaultManager.codePinNeeded {
+            // IOS-PLAN 0.1.40 §4.9: the pairing needs the lost-ok unlock again and the PIN kept for it was forgotten: the PIN
+            // step again, with nothing said beside it (its text already asks for the PIN; chosen; not in the spec).
+            state.step = .finish
+            state.outcome = nil
+            state.failure = nil
+            state.failureCode = nil
+            state.pin = ""
+            state.password = ""
+            return
+        }
         if out.code == UnlockEpoch.transferIncomplete {
             // IOS-PLAN 0.1.38 §4.9: the state is still under `DEK_0`; only an open repeats the recovery. While its recovery shows
             // `registered` the phone opens again (the fields come back); otherwise the rule applies (``refreshStage()``).

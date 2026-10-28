@@ -126,6 +126,10 @@ public struct UnlockResult: Equatable, Sendable {
     /// ``token``); nil when absent or not of the form (``UnlockIds``). Its absence tells the app that the vault's release is
     /// from before L and that its locks are not bound.
     public var unlockID: String?
+    /// (VAULT-MESSAGING 0.67.0 §11.4, §11.14.6 "Pairing") `invitation_recovery_id`: the `ctx` (a `recovery_id`) of the
+    /// first-handshake invitation the unlock leaves and renews, present under the condition of ``vaultBundle``. Nil when absent
+    /// (an older vault), empty, or in a result without ``vaultBundle``.
+    public var invitationRecoveryID: String?
 
     public init(ok: Bool, code: String? = nil) {
         self.ok = ok
@@ -165,6 +169,11 @@ public struct UnlockResult: Equatable, Sendable {
             r.vaultBundle = bundle
             r.credentialBackup = o.has("credential_backup") ? try o.bool("credential_backup") : nil
             r.unlockID = UnlockIds.of(try o.optString("unlock_id"))
+            // Present only beside `vault_bundle` (§11.4): elsewhere it is ignored as absent, and so is a member that is not a string
+            // (it only names which `ctx` to try first; chosen; not in the spec).
+            if bundle != nil {
+                r.invitationRecoveryID = (try? o.optString("invitation_recovery_id")).flatMap { $0.isEmpty ? nil : $0 }
+            }
             return r
         }
     }

@@ -228,6 +228,32 @@ import VettIDDataTesting
         #expect(!vm.state.lostOk)
     }
 
+    /// (IOS-PLAN 0.1.40 §4.9) The pairing keeps the PIN only while it is in front: leaving the foreground while it runs forgets
+    /// it, and a pairing that then needs the lost-ok unlock again comes back to the PIN, which finishes it.
+    @Test func aPinForgottenDuringThePairingIsAskedForAgain() async throws {
+        vault.fail["recoveryOpen"] = VaultFailure(.other, code: "unreadable_result")
+        let vm = await model()
+        await enterAndSend(vm)
+        vault.fail["recoveryOpen"] = nil
+        vm.finishLostOk()
+        vault.lostOkOutcomes = [RecoveryOpenOutcome(VaultManager.codePinNeeded, opened: true, attemptUsed: false)]
+        vm.setPin("975310")
+        vm.send()
+        #expect(vm.state.step == .sending)
+        // The app leaves the foreground while the pairing runs: nothing under way is touched, the kept PIN is forgotten.
+        vm.forgetSecrets()
+        #expect(vm.state.step == .sending && vault.calls.contains("forgetPairingPin"))
+        await vm.settle()
+        #expect(vm.state.step == .finish && vm.state.lostOk && vm.state.outcome == nil && vm.state.failure == nil)
+        #expect(vm.state.pin.isEmpty && vm.state.password.isEmpty)
+        // The PIN entered again finishes it.
+        vm.setPin("975310")
+        vm.send()
+        await vm.settle()
+        #expect(vm.state.step == .done && vault.lastPin == "975310")
+        #expect(vault.calls.filter { $0 == "resumeLostOk" }.count == 2)
+    }
+
     /// "The last attempt was right but could not be completed": only after an open that got no answer.
     @Test func rightButIncompleteOnlyAfterAnUnansweredOpen() async throws {
         let at = Date(timeIntervalSince1970: 1_792_497_600)

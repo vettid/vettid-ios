@@ -100,6 +100,12 @@ struct RecoveryRecord: Codable, Sendable {
     var lostOk: Bool?
     /// The `ctx` of the last `hs.init` sent after the `ok`, saved with it.
     var pairing: String?
+    /// (IOS-PLAN 0.1.40 §4.9, VAULT-MESSAGING 0.67.0 §11.14.6 "Pairing") The `invitation_recovery_id` of the last unlock's `ok`
+    /// while recovering, nil when it had none (an older vault), saved with that result.
+    var invitation: String?
+    /// The `hs.init` with [invitation] as `ctx` was sent, or is about to be (saved before its deposit): it is not sent again until a
+    /// new unlock names one.
+    var invitationSent: Bool?
 
     /// The `recovery_id`s registered for before this one, oldest first. A state from a build before [earlier] names only the one
     /// this registration replaced (older ones were never recorded).
