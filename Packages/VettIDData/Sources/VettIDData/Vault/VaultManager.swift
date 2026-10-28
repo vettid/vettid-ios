@@ -494,6 +494,7 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     /// Stops the mailbox collection (the app leaving the foreground, IOS-PLAN §6.6; the end of a test). The next
     /// operation that needs the vault starts it again.
     public func stopCollecting() {
+        ownerChecks.forgetUnlockPin()
         session?.device.stop()
         session = nil
         sessionGeneration += 1

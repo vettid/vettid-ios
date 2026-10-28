@@ -49,8 +49,13 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     }
     /// Told when the vault becomes held or due (true) and when it is no longer (false), as the state says (§3.6.3).
     @ObservationIgnored public var onHeldChange: @MainActor (_ held: Bool) -> Void = { _ in }
-    public private(set) var lockedByOwnerCheck = false
-    public private(set) var unlockCheckOutcome: OwnerCheckOutcome?
+    public internal(set) var lockedByOwnerCheck = false
+    public internal(set) var unlockCheckOutcome: OwnerCheckOutcome?
+    /// The app is in front or not (the app, not a screen); ``setForeground(_:)``.
+    public internal(set) var inFront = true
+    /// How many times the app left the front: an answer compares it with the count at its request, so that a quick
+    /// out-and-back is not missed.
+    public internal(set) var leftFront = 0
     public private(set) var notices: [OwnerCheckNotice] = []
     public private(set) var presenceUnrecorded = false
     public private(set) var checkAfterCancel = false
@@ -68,7 +73,7 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     @ObservationIgnored private var clears = 0
     @ObservationIgnored private let onPassed: @MainActor () -> Void
     @ObservationIgnored private let onRecoveryStatus: @MainActor (RecoveryStatus?, Int) -> Void
-    @ObservationIgnored private let now: @Sendable () -> Date
+    @ObservationIgnored let now: @Sendable () -> Date
     @ObservationIgnored private let mark: @MainActor () -> Int
     @ObservationIgnored private let sleep: LockSleep
     /// The vault's time scale now (STAGING-TIME-SCALE §5.2; ``LocalAccount/timeScale``).
@@ -90,6 +95,15 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     /// (Release L) The vault locked for a reason other than the idle lock since it last opened (the member locked it on this
     /// phone, or a notice named another reason): the time of `idle_lock_at` does not say why it is locked then.
     @ObservationIgnored private var lockedHere = false
+    /// (IOS-PLAN §6.6; VAULT-MESSAGING §3.6.5 "Ask only for what is used") The PIN the unlock had accepted when its check
+    /// failed on the password (or backed off): kept in memory only for the password-only retry on the check screen, taken
+    /// once (``takeUnlockPin()``). A Swift `String` cannot be zeroized: it is dropped, not wiped.
+    @ObservationIgnored var unlockPin: String?
+    /// Bumped by everything that ends the kept PIN (the app leaving the front, any `vault.locking`, a lock made here, a
+    /// wipe, another check): a PIN is kept only if it did not move between the unlock's start and its answer.
+    @ObservationIgnored var pinEpoch = 0
+    /// Bumped by another unlock, a lock made here and a wipe: the answer of an unlock's check sent before it is dropped.
+    @ObservationIgnored var unlockEpoch = 0
 
     /// [ops] the vault's operations, opened when needed; [load] and [persist] the kept state, read by ``loadIfNeeded()``
     /// (never before the first-run cleanup and a pending wipe); [onPassed] the catch-up after a passed check (§3.6.3);
@@ -155,6 +169,8 @@ public final class OwnerCheckManager: OwnerCheckRepository {
 
     /// Events the manager follows: `vault.held`, `sync.event{owner_check}`, `vault.locking{reason: "owner_check"}`.
     func onEvent(_ m: VaultMessage) {
+        // A lock of any reason (idle, a desktop's, owner_check) ends the kept PIN (VAULT-MESSAGING §3.6.5).
+        if m.type == "vault.locking" { forgetUnlockPin() }
         switch m.type {
         case "vault.held": onHeld(m)
         case "sync.event":
@@ -232,21 +248,12 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     }
 
     /// The vault is open again: it no longer is locked by itself.
-    private func endIdleLocked() {
+    func endIdleLocked() {
         loadIfNeeded()
         if idleLocked == nil, !lockedHere { return }
         idleLocked = nil
         lockedHere = false
         saveFlags()
-    }
-
-    /// The unlock of a vault that may be past its deadline (§3.6.5): reads `vault.status` and, if the vault is held or
-    /// due, sends the check with the same entries; the answer waits in ``unlockCheckOutcome``.
-    func afterUnlock(pin: String, password: String) async {
-        lockedByOwnerCheck = false
-        endIdleLocked()
-        let v = try? await readStatus().view
-        if let v, v.gated(now()) { unlockCheckOutcome = await checkOutcome(pin: pin, password: password, holdOff: nil) }
     }
 
     /// (Release R, ANDROID-PLAN "Other screens") Right after an unlock that cancelled a recovery: the owner check at once,
@@ -270,7 +277,7 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     }
 
     /// `vault.status`: the view it gives, and whether it is a fresh one (false: the vault sent no `owner_check`).
-    private func readStatus() async throws -> (view: OwnerCheckView?, fresh: Bool) {
+    func readStatus() async throws -> (view: OwnerCheckView?, fresh: Bool) {
         let since = mark()
         let cleared = clears
         let (st0, recovery) = try await vault { try await self.ops().statusAndRecovery() }
@@ -301,10 +308,11 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     }
 
     public func check(pin: String, password: String, holdOff: HoldOff?) async throws -> OwnerCheckOutcome {
-        await checkOutcome(pin: pin, password: password, holdOff: holdOff)
+        forgetUnlockPin()
+        return await checkOutcome(pin: pin, password: password, holdOff: holdOff)
     }
 
-    private func checkOutcome(pin: String, password: String, holdOff: HoldOff?) async -> OwnerCheckOutcome {
+    func checkOutcome(pin: String, password: String, holdOff: HoldOff?) async -> OwnerCheckOutcome {
         let until = holdOff?.until.map(clampHoldOff)
         let cleared = clears
         do {
@@ -350,6 +358,16 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     /// A failed check counts (§3.6.4): `failures` is read again, for at most ``statusAfterFailure`` (the tenth locks the
     /// vault, and then nothing answers); without a fresh status the count kept here goes up by one.
     private func checksLeftAfterFailure() async -> Int? {
+        let (left, fresh) = await checksLeftAfterFailureRead()
+        // The tenth failure locks the vault (§3.6.4), whether or not `vault.locking` has arrived yet: the app says so at once,
+        // from the vault's own count only (a count guessed here could show an open vault as locked).
+        // (chosen; not in the spec) Also when this answer is stale (a newer unlock cleared the flag): the vault did lock.
+        if fresh, let left, left <= 0 { lockedByOwnerCheck = true }
+        return left
+    }
+
+    /// The checks left, and whether the vault said so (a fresh `vault.status`) rather than the count kept here.
+    private func checksLeftAfterFailureRead() async -> (Int?, Bool) {
         let before = ownerCheck
         let wait = KickableWait()
         let read = FreshStatus()
@@ -358,11 +376,11 @@ public final class OwnerCheckManager: OwnerCheckRepository {
             wait.kick()
         }
         await wait.wait(Self.statusAfterFailure, sleep: sleep)
-        if let after = read.view { return after.checksLeft }
-        guard var b = before else { return nil }
+        if let after = read.view { return (after.checksLeft, true) }
+        guard var b = before else { return (nil, false) }
         b.failures += 1
         set(b)
-        return b.checksLeft
+        return (b.checksLeft, false)
     }
 
     private func clampHoldOff(_ until: Date) -> Date {
@@ -390,6 +408,8 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     }
 
     public func onLockedHere() {
+        forgetUnlockPin()
+        unlockEpoch += 1
         loadIfNeeded()
         lockedHere = true
         saveFlags()
@@ -485,6 +505,8 @@ public final class OwnerCheckManager: OwnerCheckRepository {
 
     /// Forgets everything (a wipe, a deleted vault); an answer on its way is not kept.
     func clear() {
+        forgetUnlockPin()
+        unlockEpoch += 1
         clears += 1
         loaded = true
         ownerCheck = nil

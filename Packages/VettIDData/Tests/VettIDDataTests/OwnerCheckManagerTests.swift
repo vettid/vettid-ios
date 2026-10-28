@@ -54,6 +54,14 @@ final class FakeOwnerCheckOps: OwnerCheckOps, @unchecked Sendable {
         set { lock.withLock { answerDeadlineValue = newValue } }
     }
 
+    /// Runs while a check is on its way, after it was recorded and its answer chosen; its argument counts the checks.
+    var onCheck: (@Sendable (Int) async -> Void)? {
+        get { lock.withLock { onCheckValue } }
+        set { lock.withLock { onCheckValue = newValue } }
+    }
+
+    private var onCheckValue: (@Sendable (Int) async -> Void)?
+
     /// Each check's pin, password, hold and hold_off_until.
     var checks: [[String?]] { lock.withLock { checksValue } }
     var sets: [[String: String]] { lock.withLock { setsValue } }
@@ -65,10 +73,12 @@ final class FakeOwnerCheckOps: OwnerCheckOps, @unchecked Sendable {
     }
 
     func check(pin: String, password: String, hold: Bool?, holdOffUntil: String?) async throws -> OwnerCheckPassed {
-        let (err, recorded, deadline) = lock.withLock {
+        let (err, recorded, deadline, index, hook) = lock.withLock {
             checksValue.append([pin, password, hold.map { String($0) }, holdOffUntil])
-            return (checkErrorValue, presentRecordedValue, answerDeadlineValue)
+            return (checkErrorValue, presentRecordedValue, answerDeadlineValue, checksValue.count, onCheckValue)
         }
+        // A test's hook: what happens while this check is on its way (1 for the first).
+        await hook?(index)
         if let err { throw VaultFailure(VaultFailures.opFailure(err.code), code: err.code, retryAfterSeconds: err.retryAfter) }
         var o = #"{"interval_seconds":86400,"hold":\#(hold ?? true)"#
         if let deadline { o += #","deadline":"\#(deadline)""# }
@@ -269,6 +279,19 @@ final class StoredBytes {
         ops.status = nil
         ops.checkError = ("bad_password", 0)
         #expect(try await m.check(pin: "975310", password: "nope") == .badPassword(checksLeft: 1))
+    }
+
+    /// The count kept here reaching zero does not mark the lock: only the vault's own count does (an open vault never shows
+    /// as locked on a guess).
+    @Test func aGuessedLastFailureDoesNotMarkTheLock() async throws {
+        let ops = FakeOwnerCheckOps()
+        ops.status = #"{"state":"held","deadline":"2026-10-06T11:00:00Z","interval_seconds":86400,"failures":9}"#
+        let m = manager(ops)
+        try await m.refreshOwnerCheck()
+        ops.status = nil
+        ops.checkError = ("bad_password", 0)
+        #expect(try await m.check(pin: "975310", password: "nope") == .badPassword(checksLeft: 0))
+        #expect(!m.lockedByOwnerCheck)
     }
 
     @Test func aRefusedRequestGatesAndTheUnlockSendsTheCheck() async throws {

@@ -25,7 +25,7 @@ public struct LockedNotification: Equatable, Sendable {
             String(
                 format: text(
                     "notify_idle_locked_body",
-                    "You hadn’t checked in for %@, so your vault locked. Unlock it with your PIN to carry on. "
+                    "You hadn't checked in for %@, so your vault locked. Unlock it with your PIN and your credential password to carry on. "
                         + "New messages wait for up to 14 days."
                 ),
                 IdleLockText.duration(after)
@@ -33,7 +33,8 @@ public struct LockedNotification: Equatable, Sendable {
         } else {
             text(
                 "notify_idle_locked_body_unknown",
-                "You hadn’t checked in, so your vault locked. Unlock it with your PIN to carry on. New messages wait for up to 14 days."
+                "You hadn't checked in, so your vault locked. Unlock it with your PIN and your credential password to carry on. "
+                    + "New messages wait for up to 14 days."
             )
         }
         return LockedNotification(title: text("notify_idle_locked_title", "Your vault locked itself"), body: body, publicTitle: publicTitle)

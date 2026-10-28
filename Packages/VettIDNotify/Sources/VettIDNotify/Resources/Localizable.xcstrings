@@ -7,7 +7,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "You hadn’t checked in for %@, so your vault locked. Unlock it with your PIN to carry on. New messages wait for up to 14 days."
+            "value": "You hadn't checked in for %@, so your vault locked. Unlock it with your PIN and your credential password to carry on. New messages wait for up to 14 days."
           }
         }
       }
@@ -18,7 +18,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "You hadn’t checked in, so your vault locked. Unlock it with your PIN to carry on. New messages wait for up to 14 days."
+            "value": "You hadn't checked in, so your vault locked. Unlock it with your PIN and your credential password to carry on. New messages wait for up to 14 days."
           }
         }
       }

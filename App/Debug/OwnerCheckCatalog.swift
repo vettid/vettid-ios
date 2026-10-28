@@ -50,6 +50,18 @@ enum OwnerCheckCatalog {
             s.password = "correct horse"
             s.message = .badPassword(checksLeft: 2)
         }
+        add("unlocked_wrong", "Unlocked, the password was wrong: Check in") { s in
+            s.pinKept = true
+            s.pin = "975310"
+            s.unlockedWrong = 7
+        }
+        add("unlocked_backoff", "Unlocked, a backoff: Check in waits") { s in
+            s.pinKept = true
+            s.pin = "975310"
+            s.unlockedOpen = true
+            s.waitSeconds = 272
+        }
+        add("unlocked_locked", "Locked after ten wrong checks") { $0.locked = true }
         add("backoff", "Too many wrong entries") { s in
             s.message = .backoff
             s.waitSeconds = 272

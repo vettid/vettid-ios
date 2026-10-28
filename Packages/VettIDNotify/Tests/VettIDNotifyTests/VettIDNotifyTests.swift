@@ -15,12 +15,14 @@ import VettIDData
         #expect(plain.title == "Your vault is locked" && plain.body == "You won’t be notified until you unlock it")
         let n = LockedNotification.of(idle: IdleLocked(afterSeconds: 604_800))
         #expect(n.title == "Your vault locked itself")
-        #expect(n.body == "You hadn’t checked in for 7 days, so your vault locked. Unlock it with your PIN to carry on. "
-            + "New messages wait for up to 14 days.")
+        #expect(n.body == "You hadn't checked in for 7 days, so your vault locked. Unlock it with your PIN and your credential "
+            + "password to carry on. New messages wait for up to 14 days.")
         #expect(n.publicTitle == "VettID needs your attention")
         // Staging (24): 7 days run as 7 hours; and a time not known.
-        #expect(LockedNotification.of(idle: IdleLocked(afterSeconds: 25_200)).body.hasPrefix("You hadn’t checked in for 7 hours,"))
-        #expect(LockedNotification.of(idle: IdleLocked(afterSeconds: nil)).body.hasPrefix("You hadn’t checked in, so"))
-        #expect(LockedNotification.of(idle: IdleLocked(afterSeconds: 86_400)).body.hasPrefix("You hadn’t checked in for 1 day,"))
+        #expect(LockedNotification.of(idle: IdleLocked(afterSeconds: 25_200)).body.hasPrefix("You hadn't checked in for 7 hours,"))
+        #expect(LockedNotification.of(idle: IdleLocked(afterSeconds: nil)).body
+            == "You hadn't checked in, so your vault locked. Unlock it with your PIN and your credential password to carry on. "
+            + "New messages wait for up to 14 days.")
+        #expect(LockedNotification.of(idle: IdleLocked(afterSeconds: 86_400)).body.hasPrefix("You hadn't checked in for 1 day,"))
     }
 }

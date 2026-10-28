@@ -122,12 +122,13 @@ import VettIDUI
     @Test func anIdleLockIsSaidAndItsTextsAreAndroids() {
         #expect(OnboardingStrings.unlockIdleLockedTitle == "Your vault locked itself")
         #expect(OnboardingStrings.unlockIdleLocked(604_800)
-            == "You hadn't checked in for 7 days, so your vault locked. Unlock it with your PIN to carry on. "
-            + "New messages wait for up to 14 days.")
+            == "You hadn't checked in for 7 days, so your vault locked. Unlock it with your PIN and your credential password "
+            + "to carry on. New messages wait for up to 14 days.")
         #expect(OnboardingStrings.unlockIdleLocked(86_400).hasPrefix("You hadn't checked in for 1 day, so"))
         #expect(OnboardingStrings.unlockIdleLocked(25_200).hasPrefix("You hadn't checked in for 7 hours, so"))
         #expect(OnboardingStrings.unlockIdleLocked(nil)
-            == "You hadn't checked in, so your vault locked. Unlock it with your PIN to carry on. New messages wait for up to 14 days.")
+            == "You hadn't checked in, so your vault locked. Unlock it with your PIN and your credential password to carry on. "
+            + "New messages wait for up to 14 days.")
         #expect(OnboardingStrings.ownerCheckIdleLockAt("Oct 13, 2026 at 11:00 AM")
             == "Your vault locks itself on Oct 13, 2026 at 11:00 AM if you don't check in.")
         for (after, scale) in [(Int64?.some(604_800), UInt64(1)), (25_200, 24), (nil, 1)] {
@@ -137,6 +138,24 @@ import VettIDUI
             s.timeScale = scale
             #expect(height(UnlockScreen(state: s, actions: NoUnlockActions())) > 0)
         }
+    }
+
+    /// (VAULT-MESSAGING §3.6.5 "Ask only for what is used"; IOS-PLAN §6.6) The approved texts of the PIN and password screen and of
+    /// the password-only retry, with Android's keys.
+    @Test func theCheckInTextsAreTheApprovedOnes() {
+        #expect(OnboardingStrings.unlockOwnerCheckTitle == "Unlock and check in")
+        #expect(OnboardingStrings.unlockOwnerCheckBody
+            == "Your daily check is due, so your vault needs your PIN and your credential password.")
+        #expect(OnboardingStrings.unlockCheckIn == "Check in")
+        #expect(OnboardingStrings.unlockCheckPasswordWrong(7)
+            == "Your vault is unlocked, but the credential password was wrong, so your daily check didn't pass. "
+            + "7 tries left before your vault locks again.")
+        #expect(OnboardingStrings.unlockCheckPasswordWrong(1)
+            == "Your vault is unlocked, but the credential password was wrong, so your daily check didn't pass. "
+            + "1 try left before your vault locks again.")
+        #expect(OnboardingStrings.unlockOwnerCheckLockedBody
+            == "Your vault locked itself after ten wrong daily checks in a row. Unlock it with your PIN and your credential password.")
+        #expect(OnboardingStrings.unlockCheckOpenWaiting == "Your vault is unlocked. Enter your credential password to check in.")
     }
 
     @Test func theTextsAreAndroids() {

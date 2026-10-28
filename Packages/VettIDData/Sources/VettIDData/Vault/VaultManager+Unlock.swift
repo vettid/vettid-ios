@@ -91,8 +91,10 @@ extension VaultManager {
     /// A locked vault past its owner-check deadline (§3.6.5): the unlock, then the check with [pin] and [password] before
     /// the app opens, so that the member types both once (``OwnerCheckManager/afterUnlock(pin:password:)``).
     public func unlockWithCheck(pin: String, password: String, approve: ReleaseView?, cancelRecovery: Bool) async throws -> UnlockAttempt {
-        await unlockStep(pin: pin, options: Self.options(approve, cancelRecovery: cancelRecovery)) { [weak self] in
-            await self?.ownerChecks.afterUnlock(pin: pin, password: password)
+        // Taken before the request: the app leaving the front while the unlock itself is on its way drops the PIN too.
+        let left = ownerChecks.startUnlockPin()
+        return await unlockStep(pin: pin, options: Self.options(approve, cancelRecovery: cancelRecovery)) { [weak self] in
+            await self?.ownerChecks.afterUnlock(pin: pin, password: password, left: left)
         }
     }
 
@@ -253,7 +255,14 @@ extension VaultManager {
         guard locks == lockGeneration, rec == record.generation, !lockGuard.lockedWhatever(unlocked: true) else { return }
         // The same for one that came during the steps before the open app.
         if rereads != marks.rereads { return await rereadPhase() }
+        openApp(s)
+    }
+
+    /// The phase of the opened vault. The check screen is shown only by the open app: a PIN kept for its retry does not wait
+    /// while setup or a credential comes first.
+    private func openApp(_ s: VaultSession) {
         phase = afterUnlocked(s)
+        if phase != .unlocked { ownerChecks.forgetUnlockPin() }
     }
 
     private func rereadPhase() async { try? await refresh() }
