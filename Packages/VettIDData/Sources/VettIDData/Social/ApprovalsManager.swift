@@ -43,6 +43,8 @@ public final class ApprovalsManager: ApprovalsRepository {
     /// before that neither brings back one that left nor drops one that arrived (chosen; not in the spec).
     @ObservationIgnored private var changes = 0
     @ObservationIgnored private var changedAt: [String: Int] = [:]
+    /// The approvals that arrived as events since the approvals were last dropped (``mayHaveBeenDropped(_:)``).
+    @ObservationIgnored private var arrivedSinceForget: Set<String> = []
     /// When each approval was dropped (decided, or `not_found` on a decision): a share question dropped during a read is
     /// not taken from its list (VAULT-MESSAGING 0.55.7 §10.12 rule 3).
     @ObservationIgnored private var droppedAt: [String: Int] = [:]
@@ -156,6 +158,7 @@ public final class ApprovalsManager: ApprovalsRepository {
     public func forgetOpenVault() {
         generation += 1
         forgetCount += 1
+        arrivedSinceForget = []
         listed = []
         if !stored.isEmpty {
             stored = []
@@ -163,6 +166,10 @@ public final class ApprovalsManager: ApprovalsRepository {
         }
         decidedLog = []
         batchLog = []
+    }
+
+    public func mayHaveBeenDropped(_ key: String) -> Bool {
+        PendingApproval.eventOnly(key: key) && !arrivedSinceForget.contains(key)
     }
 
     /// Forgets everything (a wipe, or a deleted vault).
@@ -184,6 +191,7 @@ public final class ApprovalsManager: ApprovalsRepository {
         let at = now()
         changes += 1
         changedAt[p.key] = changes
+        arrivedSinceForget.insert(p.key)
         if case .share(let s) = p, !readSinces.isEmpty {
             batchLog.append(ShareBatch(at: changes, key: p.key, items: s.items))
             if batchLog.count > Self.maxDecidedLog { batchLog.removeFirst(batchLog.count - Self.maxDecidedLog) }

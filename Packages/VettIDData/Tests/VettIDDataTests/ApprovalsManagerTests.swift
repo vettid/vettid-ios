@@ -139,6 +139,18 @@ final class FakeApprovalOps: ApprovalOps, @unchecked Sendable {
         #expect(m.approvals.isEmpty)
     }
 
+    /// An ask that only events bring and that is missing may only have been dropped (IOS-PLAN §6.9) unless it arrived
+    /// since the last drop; a request a vault list names never is: missing means it ended.
+    @Test func onlyAnEventOnlyAskNotSeenSinceTheDropMayHaveBeenDropped() {
+        let m = manager()
+        #expect(m.mayHaveBeenDropped("auth:a1") && m.mayHaveBeenDropped("device:approval:d1"))
+        #expect(!m.mayHaveBeenDropped("grant:g1") && !m.mayHaveBeenDropped("connection:p1") && !m.mayHaveBeenDropped("share:r1"))
+        m.onEvent(event("connection.authenticate.pending", #"{"request_id":"a1","connection_id":"c1","exp":"\#(exp)"}"#))
+        #expect(!m.mayHaveBeenDropped("auth:a1"))
+        m.forgetOpenVault()
+        #expect(m.mayHaveBeenDropped("auth:a1"))
+    }
+
     /// In memory only: a lock (or a hold) drops every approval, the events kept as well as the lists, and a read of the
     /// lists brings back what the vault still lists; one that arrived only as an event does not come back.
     @Test func aLockDropsEveryApprovalAndTheListsBringThemBack() async throws {

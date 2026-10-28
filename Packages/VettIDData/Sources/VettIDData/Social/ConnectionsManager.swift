@@ -33,8 +33,9 @@ public final class ConnectionsManager: ConnectionsRepository, ConnectionRequests
     /// Bumped whenever the connections read from the open vault are dropped: a list read before is not published (chosen;
     /// not in the spec).
     @ObservationIgnored var generation = 0
-    /// The same for the requests (``forgetRequests()``), apart, so that dropping the requests never drops a read of the
-    /// connections on its way.
+    /// The same for the requests (``forgetRequests()``), apart from the connections'. Today the requests are dropped only
+    /// with everything else (``forgetOpenVault()`` advances both), so the two move together; apart, a later drop of the
+    /// requests alone would keep a read of the connections on its way.
     @ObservationIgnored var requestGeneration = 0
     /// Told of every connection that is gone (removed, blocked, or removed by the peer): its messages go with it.
     @ObservationIgnored public var onForget: @MainActor (String) -> Void = { _ in }

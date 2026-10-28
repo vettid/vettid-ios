@@ -4,7 +4,7 @@ import VettIDVault
 // The member's items and tags (VAULT-MESSAGING §10.7, §10.8) over this manager's session, with the rules of the other lists
 // (``VaultManager+Features``): nothing goes to a vault whose lock is pending, a read nobody asked for never opens a
 // session, and the list is dropped whenever the vault is not open, held or due, and at a wipe (``forgetOpenLists()``,
-// ``activityHeld()``, ``clearLists()``). Mirrors vettid-android `VaultManager.items`.
+// ``forgetHeld()``, ``clearLists()``). Mirrors vettid-android `VaultManager.items`.
 extension VaultManager {
     /// The items over the member's calls. A critical item's operations pass the gate of every credential operation
     /// before anything is opened or sent (``decideFirst(carriesPin:)``: refused at once while a change of PIN or password

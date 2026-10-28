@@ -196,6 +196,10 @@ public enum PendingApproval: Equatable, Sendable {
     case share(ShareDecision)
     case device(DeviceRequest)
 
+    /// Whether the approval of [key] is of a kind no vault list names (VAULT-MESSAGING §10.4): a member authentication or a
+    /// desktop's or agent's request, which only events bring.
+    public static func eventOnly(key: String) -> Bool { key.hasPrefix("auth:") || key.hasPrefix("device:") }
+
     public var key: String {
         switch self {
         case .connection(let r): r.key

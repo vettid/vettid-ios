@@ -101,6 +101,17 @@ import VettIDDataTesting
         #expect(m.state.gone && !m.state.notHeld)
     }
 
+    /// An ask decided on another device before the screen opened, while this phone held it, is "Already decided"; so is a
+    /// request a vault list names, which is read again after a lock and so is never only dropped.
+    @Test func anApprovalThatEndedThisSessionIsDecidedNotDropped() async {
+        fake.listed = [Samples.auth()]
+        fake.listed = []
+        let m = await model("auth:a1")
+        #expect(!m.state.notHeld && m.state.approval == nil && !m.state.canApprove())
+        let grant = await model("grant:g9")
+        #expect(!grant.state.notHeld && grant.state.approval == nil)
+    }
+
     /// A hold or a lock that drops an open approval (IOS-PLAN §6.9) leaves it "No longer on this phone", never "Already
     /// decided": the vault did not say it was decided (chosen; not in the spec).
     @Test func anApprovalDroppedWhileOpenIsNotSaidToBeDecided() async {

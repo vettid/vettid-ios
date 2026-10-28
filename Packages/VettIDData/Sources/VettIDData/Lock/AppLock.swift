@@ -119,8 +119,8 @@ public final class UnlockPromptGate {
 /// The app lock (ANDROID-PLAN D6; IOS-PLAN ID17): a UI gate in front of the app's screens that protects no data at rest
 /// (ID17, §6.9). When on, opening the app, and returning to it after the timeout, asks for Face ID or Touch ID, or for the
 /// iPhone passcode only (``AppLockMethod``): a fresh random challenge is sealed to the Secure Enclave key, and the lock
-/// opens when the key, after the prompt, opens it again (chosen: §6.9 lists this key, `.biometryCurrentSet` or
-/// `.devicePasscode`, while ID17 says no key stands behind the lock; the key is what tells a new face or finger). No
+/// opens when the key, after the prompt, opens it again (ID17, §6.9: the key, `.biometryCurrentSet` or `.devicePasscode`,
+/// gates the prompt and is what tells a new face or finger). No
 /// data key is kept, sealed or in memory: nothing on the phone is encrypted under the lock (IOS-PLAN 0.1.44: the unused
 /// app-lock data key is removed; the file earlier builds sealed it in is deleted at the start). A
 /// convenience layer only: it never replaces the vault PIN or the credential password, and nothing of the vault depends

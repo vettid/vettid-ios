@@ -178,7 +178,9 @@ public final class ApprovalDetailViewModel {
         let dropped = repo.forgetCount != forgetCountAtOpen
         let left = now == nil && local.approval != nil && !local.done && !local.busy && local.criticalResult == nil
         s.gone = left && !dropped
-        s.notHeld = now == nil && (local.approval == nil || left && dropped)
+        // Missing at the opening: not held only when it may have been dropped; one decided elsewhere stays "Already decided".
+        let missing = local.approval == nil && repo.mayHaveBeenDropped(local.key)
+        s.notHeld = now == nil && (missing || left && dropped)
         if left && dropped { s.approval = nil }
         s.connectionName = s.approval.flatMap { a -> String? in
             guard let id = Self.connectionID(a), let n = connections?.connections.first(where: { $0.id == id })?.displayName,

@@ -25,7 +25,8 @@ public enum AppLockKeyError: Error, Equatable, Sendable {
     case failed
 }
 
-/// The app-lock key (IOS-PLAN §6.9 "App lock"; chosen: ID17 says no key stands behind the lock, §6.9 lists this one):
+/// The app-lock key (IOS-PLAN ID17, §6.9 "App lock": no data key, but a Secure Enclave key gates the prompt, as
+/// vettid-android's prompt key does):
 /// the gate of a convenience layer in front of the app's screens, which opens a random challenge sealed to it at each
 /// prompt and protects no data at rest, never in place of the PIN or the password, and the only key of the app bound to
 /// biometry or the passcode.
