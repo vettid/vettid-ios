@@ -385,7 +385,9 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
             do {
                 try await vault.lock()
             } catch {
+                // The lines that went with the kept PIN go too: the screen asks for both, with "Check" on once they are typed.
                 state.locking = false
+                state.unlockedWrong = nil
             }
         }
     }
@@ -403,16 +405,21 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
         return false
     }
 
-    /// Whether the kept PIN stays after the answer [r] to a retry: a wrong password with a try left (or no count), a backoff,
-    /// or a failure that is not the vault's verdict on the entries. None left: the vault locked (§3.6.4), whether or not the
-    /// lock flag has come yet.
+    /// Whether the kept PIN stays after the answer [r] to a retry, only where trying again can help: a wrong password with a
+    /// try left (an unknown count counts as none: the vault may have locked, §3.6.4), a backoff, or a failure that passes
+    /// (no answer, the network, a limit, the vault or the service unavailable; `utk_invalid` and `stale_credential` count
+    /// nothing, §3.6.1, and read as no answer). Any other refusal drops it. As vettid-android `OwnerCheckViewModel`.
     static func keepsPin(_ r: OwnerCheckOutcome) -> Bool {
         switch r {
-        case .badPassword(let left): left.map { $0 > 0 } ?? true
-        case .backoff, .failed: true
+        case .badPassword(let left): (left ?? 0) > 0
+        case .backoff: true
+        case .failed(let kind, _): transient.contains(kind)
         default: false
         }
     }
+
+    /// The failures that pass by themselves (vettid-android's `TRANSIENT`).
+    static let transient: Set<FailureKind> = [.network, .noResponse, .rateLimited, .vaultUnavailable, .servicePaused]
 
     static func message(_ r: OwnerCheckOutcome) -> OwnerCheckMessage? {
         switch r {
