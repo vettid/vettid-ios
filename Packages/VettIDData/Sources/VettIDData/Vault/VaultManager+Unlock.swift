@@ -92,9 +92,9 @@ extension VaultManager {
     /// the app opens, so that the member types both once (``OwnerCheckManager/afterUnlock(pin:password:)``).
     public func unlockWithCheck(pin: String, password: String, approve: ReleaseView?, cancelRecovery: Bool) async throws -> UnlockAttempt {
         // Taken before the request: the app leaving the front while the unlock itself is on its way drops the PIN too.
-        let kept = ownerChecks.startUnlockPin()
+        let left = ownerChecks.startUnlockPin()
         return await unlockStep(pin: pin, options: Self.options(approve, cancelRecovery: cancelRecovery)) { [weak self] in
-            await self?.ownerChecks.afterUnlock(pin: pin, password: password, kept: kept)
+            await self?.ownerChecks.afterUnlock(pin: pin, password: password, left: left)
         }
     }
 

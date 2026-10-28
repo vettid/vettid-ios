@@ -6,12 +6,15 @@ extension OwnerCheckManager {
     /// due, sends the check with the same entries; the answer waits in ``unlockCheckOutcome``. After a wrong password with
     /// tries left, or a backoff, the accepted [pin] is kept for the check screen's password-only retry
     /// (``takeUnlockPin()``), unless the app left the front, or the vault locked or was wiped, or another unlock began,
-    /// meanwhile. An answer to a check sent before another unlock, a lock made here or a wipe is dropped. [kept]: what
-    /// ``startUnlockPin()`` returned before the unlock request was sent (nil: taken now).
-    func afterUnlock(pin: String, password: String, kept: Int? = nil) async {
-        let kept = kept ?? startUnlockPin()
+    /// meanwhile. An answer to a check sent before another unlock, a lock made here or a wipe is dropped. [left]: what
+    /// ``startUnlockPin()`` returned before the unlock request was sent (nil: taken now): leaving the front from then on
+    /// drops the PIN; anything else that ends it counts from here, once the vault opened (a `vault.locking` that arrives
+    /// while the unlock request is on its way is the late notice of an earlier lock).
+    func afterUnlock(pin: String, password: String, left: Int? = nil) async {
+        let left = left ?? startUnlockPin()
+        forgetUnlockPin()
         unlockEpoch += 1
-        let unlock = unlockEpoch
+        let (unlock, kept) = (unlockEpoch, pinEpoch)
         lockedByOwnerCheck = false
         endIdleLocked()
         let v = try? await readStatus().view
@@ -19,7 +22,7 @@ extension OwnerCheckManager {
         let r = await checkOutcome(pin: pin, password: password, holdOff: nil)
         guard unlock == unlockEpoch else { return }
         unlockCheckOutcome = r
-        if Self.keepsPin(r), kept == pinEpoch, inFront, !lockedByOwnerCheck { unlockPin = pin }
+        if Self.keepsPin(r), kept == pinEpoch, left == leftFront, inFront, !lockedByOwnerCheck { unlockPin = pin }
     }
 
     /// Whether the check screen asks for the password only, with the unlock's PIN: a wrong password with a try left, or a
@@ -37,11 +40,11 @@ extension OwnerCheckManager {
         return unlockPin
     }
 
-    /// Called before an unlock that may keep its PIN is sent: drops a PIN kept earlier, and returns the mark that anything
-    /// ending the kept PIN from now on (the app leaving the front included, during the unlock request itself) moves.
+    /// Called before an unlock that may keep its PIN is sent: drops a PIN kept earlier, and returns the count of the app's
+    /// leaves, so that leaving the front during the unlock request itself drops the PIN too.
     func startUnlockPin() -> Int {
         forgetUnlockPin()
-        return pinEpoch
+        return leftFront
     }
 
     /// The app entered the foreground or left it (IOS-PLAN §6.6; ``VaultManager/onForeground()``,

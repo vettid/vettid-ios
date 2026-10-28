@@ -175,13 +175,24 @@ final class CheckGate: @unchecked Sendable {
     /// and every leave is counted.
     @Test func leavingTheFrontBeforeTheUnlockAnswersDropsThePin() async {
         let m = manager(heldOps())
-        let kept = m.startUnlockPin()
+        let left = m.startUnlockPin()
         m.setForeground(false)
         m.setForeground(true)
         #expect(m.leftFront == 1)
-        await m.afterUnlock(pin: pin, password: "nope", kept: kept)
+        await m.afterUnlock(pin: pin, password: "nope", left: left)
         #expect(Self.isBadPassword(m.unlockCheckOutcome))
         #expect(m.takeUnlockPin() == nil)
+    }
+
+    /// The late notice of an earlier lock, arriving while the unlock request is on its way: the vault was locked then, so
+    /// the PIN the check after the opening leaves is kept.
+    @Test func aLateLockNoticeDuringTheUnlockRequestKeepsThePin() async {
+        let m = manager(heldOps())
+        let left = m.startUnlockPin()
+        m.onEvent(event("vault.locking", #"{"reason":"member"}"#))
+        await m.afterUnlock(pin: pin, password: "nope", left: left)
+        #expect(Self.isBadPassword(m.unlockCheckOutcome))
+        #expect(m.takeUnlockPin() == pin)
     }
 
     /// A second unlock while the first one's check is on its way: the first answer opens nothing and shows nothing.

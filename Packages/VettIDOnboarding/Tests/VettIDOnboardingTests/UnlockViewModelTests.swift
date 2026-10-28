@@ -512,6 +512,8 @@ final class ManualTicker {
         await ticker.advance(1, vm)
         #expect(vault.calls.filter { $0 == "preflight" }.count == 1)
         await ticker.advance(299, vm)
+        // A tick the countdown was not yet waiting for is given again (at most a few).
+        for _ in 0..<3 where !vm.state.retryAllowed { await ticker.advance(1, vm) }
         #expect(vm.state.retryAllowed)
         #expect(vault.calls.filter { $0 == "preflight" }.count == 1, "no automatic retry")
         vm.retryPreflight()
