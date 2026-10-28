@@ -136,6 +136,15 @@ final class FakeRelay: @unchecked Sendable {
         }
     }
 
+    /// Drops the deposits waiting, without waiting for more; returns their count.
+    @discardableResult
+    func dropDeposits() -> Int {
+        lock.withLock {
+            defer { deposits.removeAll() }
+            return deposits.count
+        }
+    }
+
     func noDeposit(within: TimeInterval) async -> Bool {
         try? await Task.sleep(nanoseconds: UInt64(within * 1e9))
         return lock.withLock { deposits.isEmpty }
