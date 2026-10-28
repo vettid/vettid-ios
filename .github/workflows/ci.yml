@@ -19,9 +19,10 @@ jobs:
   ios:
     # Lint, the pure packages' tests on macOS, the app and package tests on a
     # simulator, and the release check. Touches no signing material: the
-    # Release and Staging archives are built unsigned.
+    # Release and Staging archives are built unsigned. The run takes about an
+    # hour on the hosted runner; the limit leaves room above that.
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: toolchain
