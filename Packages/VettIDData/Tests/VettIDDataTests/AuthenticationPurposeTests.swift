@@ -45,7 +45,8 @@ import VettIDVault
         }
         return FeedNames(
             connections: ["c1": sam, "c2": unnamed],
-            approvals: ["auth:s1": auth("s1", "c1", .signin), "auth:p1": auth("p1", "c1", .approval), "auth:n1": auth("n1", "c1", .absent), "auth:s2": auth("s2", "c2", .signin), "auth:p2": auth("p2", "c2", .approval)]
+            approvals: ["auth:s1": auth("s1", "c1", .signin), "auth:p1": auth("p1", "c1", .approval), "auth:n1": auth("n1", "c1", .absent), "auth:s2": auth("s2", "c2", .signin), "auth:p2": auth("p2", "c2", .approval),
+                        "auth:s3": auth("s3", "c3", .signin), "auth:p3": auth("p3", "c3", .approval)]
         )
     }()
 
@@ -68,10 +69,13 @@ import VettIDVault
         #expect(FeedKinds.title(Self.item("s1"), Self.names, details: false) == "Sign in to \(sam)?")
     }
 
-    /// A connection without a name: never "Sign in to A connection?".
+    /// A connection without a name, or one no longer listed: "a connection" for either purpose, never "Sign in to A
+    /// connection?" and never one purpose naming a removed connection when the other does not.
     @Test func aMissingNameFallsBack() {
         #expect(FeedKinds.title(Self.item("s2", connection: "c2"), Self.names) == "Sign in to a connection?")
         #expect(FeedKinds.title(Self.item("p2", connection: "c2"), Self.names) == "A connection asks you to approve")
+        #expect(FeedKinds.title(Self.item("s3", connection: "c3"), Self.names) == "Sign in to a connection?")
+        #expect(FeedKinds.title(Self.item("p3", connection: "c3"), Self.names) == "A connection asks you to approve")
     }
 
     /// A §10.4.1 batch led by a challenge says how many asks, whatever the first one's purpose.
