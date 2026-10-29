@@ -136,6 +136,19 @@ public final class FakeVaultRepository: CustomStringConvertible {
     public var notices: [OwnerCheckNotice] = []
     public var presenceUnrecorded = false
     public var checkAfterCancel = false
+    /// (VAULT-MESSAGING 0.73.0 §3.6.5) A lock found by a read, cause unknown; the relay reconnects (``reconnectRelay()``).
+    public var lockCauseUnknown = false
+    public private(set) var relayReconnects = 0
+    /// Scripted answers to ``probeVault(lockCauseKnown:)`` (default: no answer); a ``VaultProbe/locked`` sets the lock flags
+    /// as the manager does.
+    public var probeResults: [VaultProbe] = []
+    /// A test's hook: what happens while the member's lock is on its way.
+    public var onLock: (@MainActor () async -> Void)?
+    /// A test's hook: what happens while a read of the vault's state is on its way.
+    public var onProbe: (@MainActor () async -> Void)?
+    /// The most reads of the vault's state that ran at once.
+    public private(set) var maxConcurrentProbes = 0
+    @ObservationIgnored private var probing = 0
     /// (Release L) The vault locked itself; the idle-lock setting (nil: a vault before L).
     public var idleLocked: IdleLocked?
     /// How long past the deadline the vault locks itself as last read before the deadline; locked for another reason.
@@ -386,6 +399,23 @@ extension FakeVaultRepository: OwnerCheckRepository {
 
     public func onLockedHere() { lockedHere = true }
 
+    /// The relay connection came back.
+    public func reconnectRelay() { relayReconnects += 1 }
+
+    public func probeVault(lockCauseKnown: Bool) async -> VaultProbe {
+        _ = try? call("probeVault")
+        probing += 1
+        maxConcurrentProbes = max(maxConcurrentProbes, probing)
+        await onProbe?()
+        probing -= 1
+        let r = probeResults.isEmpty ? VaultProbe.noAnswer : probeResults.removeFirst()
+        if r == .locked {
+            lockCauseUnknown = !lockCauseKnown
+            lockedByOwnerCheck = true
+        }
+        return r
+    }
+
     public func consumeUnlockCheckOutcome() { unlockCheckOutcome = nil }
 
     public func consumeCheckAfterCancel() { checkAfterCancel = false }
@@ -400,8 +430,9 @@ extension FakeVaultRepository: OwnerCheckRepository {
         let o = checkResults.isEmpty ? passed() : checkResults.removeFirst()
         unlockCheckOutcome = o
         // As the manager: the tenth failed check locks the vault, whether or not `vault.locking` has arrived.
+        // Only from the vault's own count, never from the app's estimate (VAULT-MESSAGING 0.73.0 §3.6.5).
         let left: Int? = switch o {
-        case .badPassword(let n), .badPin(let n): n
+        case .badPassword(let n, false), .badPin(let n, false): n
         default: nil
         }
         if left == 0 { lockedByOwnerCheck = true }

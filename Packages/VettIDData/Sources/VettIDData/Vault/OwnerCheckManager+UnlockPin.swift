@@ -15,7 +15,9 @@ extension OwnerCheckManager {
         forgetUnlockPin()
         unlockEpoch += 1
         let (unlock, kept) = (unlockEpoch, pinEpoch)
-        lockedByOwnerCheck = false
+        markOpen()
+        forgetEstimate()
+        countReadAtUnlock = true
         endIdleLocked()
         let v = try? await readStatus().view
         guard unlock == unlockEpoch, let v, v.gated(now()) else { return }
@@ -29,7 +31,7 @@ extension OwnerCheckManager {
     /// backoff (no try used).
     public nonisolated static func keepsPin(_ r: OwnerCheckOutcome) -> Bool {
         switch r {
-        case .badPassword(let left): (left ?? 0) > 0
+        case .badPassword(let left, _): (left ?? 0) > 0
         case .backoff: true
         default: false
         }

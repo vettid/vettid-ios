@@ -263,7 +263,9 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
             now: config.now,
             mark: { rec.generation },
             sleep: config.lockTiming.sleep, timeScale: { scale.value },
-            notes: Self.failureNotes(ref)
+            notes: Self.failureNotes(ref),
+            // (VAULT-MESSAGING 0.73.0 §3.6.5) The member API's word on the vault, and the lock it finds.
+            memberState: { try? await ref.manager?.vaultStatus()?.state }, onFoundLocked: { ref.manager?.lockedByProbe() }
         )
     }
 

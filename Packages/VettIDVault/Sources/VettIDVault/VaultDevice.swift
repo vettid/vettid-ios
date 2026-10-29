@@ -168,6 +168,10 @@ public final class VaultDevice: @unchecked Sendable {
     let ownerCheckBroadcast = Broadcast<String>()
     let refusalBroadcast = Broadcast<Int>()
     let sasBroadcast = Broadcast<String>()
+    let countedBroadcast = Broadcast<String>()
+    let reconnectBroadcast = Broadcast<Int>()
+    /// How many times the collection came back (``relayReconnects()``).
+    var reconnects = 0
     var isPaired: Bool
     var sas: String?
     var refusals = 0
@@ -384,7 +388,8 @@ public final class VaultDevice: @unchecked Sendable {
             let source = RelayMailbox(client: own, transport: cfg.transport)
             let c = MailboxCollector(
                 source: source, mode: cfg.collectMode, wait: cfg.pollWait, now: cfg.now,
-                onRequest: { [weak self] out in self?.mem.withLock { self?.collectSince = out ? Date() : nil } }
+                onRequest: { [weak self] out in self?.mem.withLock { self?.collectSince = out ? Date() : nil } },
+                onRecovered: { [weak self] in self?.relayCameBack() }
             )
             do {
                 try await c.run { m in try await self.handle(m) }
@@ -405,6 +410,15 @@ public final class VaultDevice: @unchecked Sendable {
             return false
         }
         if cancel { task.cancel() }
+    }
+
+    /// A collect round succeeded after failed ones: the relay connection is back.
+    func relayCameBack() {
+        let n: Int = mem.withLock {
+            reconnects += 1
+            return reconnects
+        }
+        reconnectBroadcast.emit(n)
     }
 
     /// Starts the collection again if it is not running (it ended, or never ran) after a ``start()``; nothing after

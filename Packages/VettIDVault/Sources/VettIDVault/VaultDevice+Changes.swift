@@ -59,18 +59,24 @@ extension VaultDevice {
         let d = OneShot<Inner>()
         mem.withLock { pending[held.id] = d }
         defer { mem.withLock { _ = pending.removeValue(forKey: held.id) } }
+        var sent = false
         for _ in 0..<sends where vaultNow() < held.exp {
+            sent = true
             // A failed deposit is a send without an answer; a halted or quieted device refuses at once.
             do {
                 _ = try await lock.withLock { try await sendOnceLocked(id: held.id, type: held.type, body: held.body, exp: held.exp) }
             } catch let e as VaultStateError where e == Self.haltedError || e == Self.quietedError {
                 throw e
             } catch {}
-            if let inner = await d.wait(timeout: timeout ?? cfg.requestTimeout(for: held.type)) { return VaultMessage(inner: inner) }
+            if let inner = await d.wait(timeout: timeout ?? cfg.requestTimeout(for: held.type)) {
+                return VaultMessage(inner: countingAnswer(held.type, inner))
+            }
             try Task.checkCancellation()
             // No answer: the collection may have ended (the answer would then wait in the mailbox unread).
             ensureCollecting()
         }
+        // Never sent (its `exp` had passed): it cannot have counted.
+        if sent { countingNoAnswer(held.type) }
         throw VaultStateError(message: "\(held.type): no response")
     }
 }

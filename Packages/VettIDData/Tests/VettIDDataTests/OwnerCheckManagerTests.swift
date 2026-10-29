@@ -20,6 +20,20 @@ final class FakeOwnerCheckOps: OwnerCheckOps, @unchecked Sendable {
     private var checksValue: [[String?]] = []
     private var setsValue: [[String: String]] = []
     private var settingsValue: [String: String] = [:]
+    private var statusFailsValue = false
+    private var checkUnansweredValue = false
+
+    /// `vault.status` gets no answer (VAULT-MESSAGING 0.73.0 §3.6.5: the read after a failure did not come).
+    var statusFails: Bool {
+        get { lock.withLock { statusFailsValue } }
+        set { lock.withLock { statusFailsValue = newValue } }
+    }
+
+    /// The next checks get no answer.
+    var checkUnanswered: Bool {
+        get { lock.withLock { checkUnansweredValue } }
+        set { lock.withLock { checkUnansweredValue = newValue } }
+    }
 
     /// `vault.status`'s `owner_check` as its JSON text, or nil (a vault that sends none).
     var status: String? {
@@ -67,18 +81,20 @@ final class FakeOwnerCheckOps: OwnerCheckOps, @unchecked Sendable {
     var sets: [[String: String]] { lock.withLock { setsValue } }
 
     func statusAndRecovery() async throws -> (OwnerCheckStatus?, RecoveryStatus?) {
-        let (st, at, counter) = lock.withLock { (statusJSON, presentRecordedAtValue, counterValue) }
+        let (st, at, counter, fails) = lock.withLock { (statusJSON, presentRecordedAtValue, counterValue, statusFailsValue) }
+        if fails { throw VaultFailure(.noResponse) }
         let recovery = try VaultJSON.decode(RecoveryStatus.self, Array((#"{"state":"armed","counter":"\#(counter)""# + (at.map { #","present_recorded_at":"\#($0)""# } ?? "") + "}").utf8))
         return (try st.map { try VaultJSON.decode(OwnerCheckStatus.self, Array($0.utf8)) }, recovery)
     }
 
     func check(pin: String, password: String, hold: Bool?, holdOffUntil: String?) async throws -> OwnerCheckPassed {
-        let (err, recorded, deadline, index, hook) = lock.withLock {
+        let (err, recorded, deadline, index, hook, unanswered) = lock.withLock {
             checksValue.append([pin, password, hold.map { String($0) }, holdOffUntil])
-            return (checkErrorValue, presentRecordedValue, answerDeadlineValue, checksValue.count, onCheckValue)
+            return (checkErrorValue, presentRecordedValue, answerDeadlineValue, checksValue.count, onCheckValue, checkUnansweredValue)
         }
         // A test's hook: what happens while this check is on its way (1 for the first).
         await hook?(index)
+        if unanswered { throw VaultFailure(.noResponse) }
         if let err { throw VaultFailure(VaultFailures.opFailure(err.code), code: err.code, retryAfterSeconds: err.retryAfter) }
         var o = #"{"interval_seconds":86400,"hold":\#(hold ?? true)"#
         if let deadline { o += #","deadline":"\#(deadline)""# }
@@ -121,17 +137,24 @@ final class StoredBytes {
         var count = 0
     }
 
-    func manager(_ ops: FakeOwnerCheckOps, onRecoveryStatus: @escaping @MainActor (RecoveryStatus?, Int) -> Void = { _, _ in }) -> OwnerCheckManager {
+    /// [sleep]: the waits for a status (at once by default; ``waitForStatus`` lets a status that answers come first).
+    func manager(
+        _ ops: FakeOwnerCheckOps, onRecoveryStatus: @escaping @MainActor (RecoveryStatus?, Int) -> Void = { _, _ in },
+        sleep: @escaping LockSleep = { _ in }
+    ) -> OwnerCheckManager {
         let stored = stored
         let passed = passed
         let now = now
         let m = OwnerCheckManager(
             ops: { ops }, load: { stored.bytes }, persist: { stored.bytes = $0 }, onPassed: { passed.count += 1 },
-            onRecoveryStatus: onRecoveryStatus, now: { now }, sleep: { _ in }
+            onRecoveryStatus: onRecoveryStatus, now: { now }, sleep: sleep
         )
         m.loadIfNeeded()
         return m
     }
+
+    /// A wait for a status that a status answering ends first.
+    static let waitForStatus: LockSleep = { _ in try await Task.sleep(for: .seconds(30)) }
 
     func event(_ type: String, _ body: String, ts: Date? = nil) -> VaultMessage {
         VaultMessage(inner: Inner(id: Ulid.new(), type: type, ts: ts ?? now, body: Array(body.utf8)))
@@ -253,7 +276,7 @@ final class StoredBytes {
     @Test func failedChecksSayWhichEntryAndHowManyAreLeft() async throws {
         let ops = FakeOwnerCheckOps()
         ops.status = #"{"state":"held","deadline":"2026-10-06T11:00:00Z","interval_seconds":86400,"failures":0}"#
-        let m = manager(ops)
+        let m = manager(ops, sleep: Self.waitForStatus)
         try await m.refreshOwnerCheck()
         ops.checkError = ("bad_pin", 0)
         ops.status = #"{"state":"held","deadline":"2026-10-06T11:00:00Z","interval_seconds":86400,"failures":1}"#
@@ -263,22 +286,28 @@ final class StoredBytes {
         #expect(try await m.check(pin: "975310", password: "nope") == .badPassword(checksLeft: 8))
         ops.checkError = ("backoff", 300)
         #expect(try await m.check(pin: "975310", password: "pw") == .backoff(retryAfterSeconds: 300))
+        // `utk_invalid` counts nothing (§3.6.1) but reads as no answer (as vettid-android): the estimate is spent.
         ops.checkError = ("utk_invalid", 0)
-        #expect(try await m.check(pin: "975310", password: "pw") == .failed(VaultFailures.opFailure("utk_invalid"), code: "utk_invalid"))
+        #expect(
+            try await m.check(pin: "975310", password: "pw")
+                == .failed(VaultFailures.opFailure("utk_invalid"), code: "utk_invalid", estimatedLeft: 7)
+        )
         // Ten failures lock the vault (§3.6.4).
         m.onEvent(event("vault.locking", #"{"reason":"owner_check"}"#))
         #expect(m.lockedByOwnerCheck)
     }
 
-    /// The tenth failure locks the vault and then nothing answers the status: the count kept here goes up by one.
-    @Test func withoutAStatusTheCountKeptHereGoesUp() async throws {
+    /// The tenth failure locks the vault and then nothing answers the status: the estimate goes down by one
+    /// (VAULT-MESSAGING 0.73.0 §3.6.5), and only the vault's own count is kept in the view.
+    @Test func withoutAStatusTheEstimateGoesDown() async throws {
         let ops = FakeOwnerCheckOps()
         ops.status = #"{"state":"held","deadline":"2026-10-06T11:00:00Z","interval_seconds":86400,"failures":8}"#
         let m = manager(ops)
         try await m.refreshOwnerCheck()
         ops.status = nil
         ops.checkError = ("bad_password", 0)
-        #expect(try await m.check(pin: "975310", password: "nope") == .badPassword(checksLeft: 1))
+        #expect(try await m.check(pin: "975310", password: "nope") == .badPassword(checksLeft: 1, estimated: true))
+        #expect(m.ownerCheck?.failures == 8)
     }
 
     /// The count kept here reaching zero does not mark the lock: only the vault's own count does (an open vault never shows
@@ -290,7 +319,7 @@ final class StoredBytes {
         try await m.refreshOwnerCheck()
         ops.status = nil
         ops.checkError = ("bad_password", 0)
-        #expect(try await m.check(pin: "975310", password: "nope") == .badPassword(checksLeft: 0))
+        #expect(try await m.check(pin: "975310", password: "nope") == .badPassword(checksLeft: 0, estimated: true))
         #expect(!m.lockedByOwnerCheck)
     }
 

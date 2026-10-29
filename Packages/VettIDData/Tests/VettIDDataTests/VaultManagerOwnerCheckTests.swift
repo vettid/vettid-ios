@@ -111,7 +111,7 @@ import VettIDDataTesting
         for i in 1...10 {
             // Past each of the password's waits, so that every check counts.
             service.advanceVaultClock(3_601)
-            guard case .badPassword(let left) = try await checks.check(pin: pin, password: "wrong horse") else {
+            guard case .badPassword(let left, _) = try await checks.check(pin: pin, password: "wrong horse") else {
                 Issue.record("check \(i) is a failed check")
                 return
             }

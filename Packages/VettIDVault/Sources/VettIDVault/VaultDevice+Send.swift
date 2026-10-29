@@ -41,12 +41,13 @@ extension VaultDevice {
         let d = OneShot<Inner>()
         mem.withLock { pending[id] = d }
         defer { mem.withLock { _ = pending.removeValue(forKey: id) } }
-        _ = try await lock.withLock { try await sendOnceLocked(id: id, type: type, body: body, exp: exp) }
+        _ = try await countingSend(type) { try await lock.withLock { try await sendOnceLocked(id: id, type: type, body: body, exp: exp) } }
         guard let inner = await d.wait(timeout: timeout ?? cfg.requestTimeout(for: type)) else {
             try Task.checkCancellation()
+            countingNoAnswer(type)
             throw VaultStateError(message: "\(type): no response")
         }
-        return VaultMessage(inner: inner)
+        return VaultMessage(inner: countingAnswer(type, inner))
     }
 
     /// ``requestOnce(_:body:timeout:exp:)``, returning the body of an ok response or throwing ``VaultOpError``.
@@ -171,9 +172,13 @@ extension VaultDevice {
         let d = OneShot<Inner>()
         mem.withLock { pending[id] = d }
         defer { mem.withLock { _ = pending.removeValue(forKey: id) } }
-        _ = try await lock.withLock { try await sendLocked(id: id, type: type, body: body, re: nil, status: nil, exp: exp) }
+        _ = try await countingSend(type) {
+            try await lock.withLock { try await sendLocked(id: id, type: type, body: body, re: nil, status: nil, exp: exp) }
+        }
         for attempt in 0...retries {
-            if let inner = await d.wait(timeout: timeout ?? cfg.requestTimeout(for: type)) { return VaultMessage(inner: inner) }
+            if let inner = await d.wait(timeout: timeout ?? cfg.requestTimeout(for: type)) {
+                return VaultMessage(inner: countingAnswer(type, inner))
+            }
             // Cancelled: not sent again (a copy already deposited may still reach the vault).
             try Task.checkCancellation()
             // Halted or quieted (its wait ended at once): not sent again either.
@@ -181,9 +186,12 @@ extension VaultDevice {
             // No answer: the collection may have ended (the answer would then wait in the mailbox unread).
             ensureCollecting()
             if attempt < retries {
-                _ = try await lock.withLock { try await sendLocked(id: id, type: type, body: body, re: nil, status: nil, exp: exp) }
+                _ = try await countingSend(type) {
+                    try await lock.withLock { try await sendLocked(id: id, type: type, body: body, re: nil, status: nil, exp: exp) }
+                }
             }
         }
+        countingNoAnswer(type)
         throw VaultStateError(message: "\(type): no response")
     }
 

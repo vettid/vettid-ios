@@ -135,6 +135,8 @@ public struct MailboxCollector: Sendable {
     /// Called with true when a collect request goes out (a long-poll round, or a stream opened) and with false when it
     /// ended. A long poll answers at once when messages wait, so one that has been out a while found the mailbox empty.
     let onRequest: @Sendable (Bool) -> Void
+    /// Called when a collect round succeeded after failed ones: the relay connection is back.
+    let onRecovered: @Sendable () -> Void
 
     public init(
         source: MailboxSource,
@@ -144,7 +146,8 @@ public struct MailboxCollector: Sendable {
         now: @escaping @Sendable () -> Date = { Date() },
         sleep: @escaping @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1e9)) },
         random: @escaping @Sendable (ClosedRange<TimeInterval>) -> TimeInterval = { TimeInterval.random(in: $0) },
-        onRequest: @escaping @Sendable (Bool) -> Void = { _ in }
+        onRequest: @escaping @Sendable (Bool) -> Void = { _ in },
+        onRecovered: @escaping @Sendable () -> Void = {}
     ) {
         self.source = source
         self.mode = mode
@@ -154,6 +157,7 @@ public struct MailboxCollector: Sendable {
         self.sleep = sleep
         self.random = random
         self.onRequest = onRequest
+        self.onRecovered = onRecovered
     }
 
     /// Runs until cancelled or a terminal relay error.
@@ -165,6 +169,7 @@ public struct MailboxCollector: Sendable {
             let useSocket = mode == .webSocket && now() > pollUntil
             do {
                 try await round(useSocket: useSocket, handle)
+                if failures > 0 { onRecovered() }
                 failures = 0
             } catch let e as RelayError {
                 guard e.retryable else { throw e }

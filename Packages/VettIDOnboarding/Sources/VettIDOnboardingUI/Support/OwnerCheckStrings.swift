@@ -156,6 +156,37 @@ extension OnboardingStrings {
     static var ownerCheckCancel: String {
         String(localized: "ownercheck_cancel", defaultValue: "Cancel", bundle: .module)
     }
+    /// (VAULT-MESSAGING 0.73.0 §3.6.5) The estimate of tries left is 0: the vault has probably locked and the app checks
+    /// (approved by the owner 2026-10-28; IOS-PLAN 0.1.49, ANDROID-PLAN 0.1.95), under vettid-android's keys.
+    static var ownerCheckProbablyLockedChecking: String {
+        String(
+            localized: "ownercheck_probably_locked_checking",
+            defaultValue: "Your daily check didn't pass, and your vault has probably locked itself. Checking with your vault…",
+            bundle: .module
+        )
+    }
+    /// The reads ended with no answer (approved by the owner 2026-10-28).
+    static var ownerCheckProbablyLockedSilent: String {
+        String(
+            localized: "ownercheck_probably_locked_silent",
+            defaultValue: "Your vault isn't answering. It has probably locked itself after ten wrong daily checks in a row.",
+            bundle: .module
+        )
+    }
+    static var ownerCheckCheckAgain: String {
+        String(localized: "ownercheck_check_again", defaultValue: "Check again", bundle: .module)
+    }
+    /// A check got no answer and may have counted; [atLeast]: the fewest tries that may remain (approved by the owner
+    /// 2026-10-28; VAULT-MESSAGING 0.73.2, ANDROID-PLAN 0.1.97).
+    static func unlockCheckMaybeCounted(_ atLeast: Int) -> String {
+        String(
+            localized: "unlock_check_maybe_counted",
+            defaultValue: """
+                Your vault didn't answer, so that check may have counted. At least \(atLeast) tries left before your vault locks.
+                """,
+            bundle: .module
+        )
+    }
     static var ownerCheckPresenceTitle: String {
         String(localized: "ownercheck_presence_title", defaultValue: "Your vault could not record that you were here.", bundle: .module)
     }

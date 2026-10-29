@@ -147,13 +147,42 @@ public struct IdleLockSetting: Equatable, Sendable {
 /// The answer to a check (§3.6.1). Mirrors vettid-android `OwnerCheckOutcome`.
 public enum OwnerCheckOutcome: Equatable, Sendable {
     case passed
-    /// The PIN was wrong ([checksLeft] before the vault locks, when known).
-    case badPin(checksLeft: Int?)
-    /// The PIN was right and the password wrong.
-    case badPassword(checksLeft: Int?)
+    /// The PIN was wrong ([checksLeft] before the vault locks, when known). [estimated]: (VAULT-MESSAGING 0.73.0 §3.6.5) the
+    /// count is the app's estimate, the `vault.status` read after the failure having not come, not a count the vault gave.
+    case badPin(checksLeft: Int?, estimated: Bool = false)
+    /// The PIN was right and the password wrong; [estimated] as for ``badPin(checksLeft:estimated:)``.
+    case badPassword(checksLeft: Int?, estimated: Bool = false)
     /// A PIN or password backoff runs; [retryAfterSeconds] 0 when the vault did not say how long.
     case backoff(retryAfterSeconds: Int64)
-    case failed(FailureKind, code: String?)
+    /// [estimatedLeft]: (VAULT-MESSAGING 0.73.0 §3.6.5) set only when the check went unanswered (``isUnanswered``): the
+    /// app's estimate of the tries left, which already counts this check (it may have counted at the vault).
+    case failed(FailureKind, code: String?, estimatedLeft: Int? = nil)
+
+    /// (VAULT-MESSAGING 0.73.1 §3.6.5) The vault did not answer the check (no answer, the network, the vault unavailable,
+    /// rate limited, the service paused): it may have reached the vault and counted, and the same check may be sent again
+    /// with the kept PIN. `utk_invalid` and `stale_credential` count nothing (§3.6.1) and read as no answer. As
+    /// vettid-android `OwnerCheckOutcome.Failed.unanswered`.
+    public var isUnanswered: Bool {
+        guard case .failed(let kind, let code, _) = self else { return false }
+        return Self.unanswered.contains(kind) && !Self.notUnanswered.contains(code ?? "")
+    }
+
+    /// The failures that leave the check unanswered (vettid-android's `UNANSWERED`).
+    static let unanswered: Set<FailureKind> = [.network, .noResponse, .rateLimited, .vaultUnavailable, .servicePaused]
+    /// Unavailable, but not on Android's list: a vault being deleted, and the wait for an update's route (vettid-android's
+    /// `NOT_SUPPORTED` and `ROUTE_PENDING`).
+    static let notUnanswered: Set<String> = [VaultManager.codeVaultDeleting, VaultManager.codeReleaseNotRouted]
+}
+
+/// (VAULT-MESSAGING 0.73.0 §3.6.5) What one read of the vault's state found, with no check sent (no try used):
+/// `vault.status` through the relay, then the member API's `GET /api/vault/status`. Mirrors vettid-android `VaultProbe`.
+public enum VaultProbe: Equatable, Sendable {
+    /// `vault.status` answered: the vault is open, and ``OwnerCheckRepository/ownerCheck`` has the count from the answer.
+    case open
+    /// A `vault.locking` came, or the member API said `state: locked`; ``OwnerCheckRepository/lockedByOwnerCheck`` is set.
+    case locked
+    /// Neither answered, or the member API said `unlocked` (which is not an answer from the vault).
+    case noAnswer
 }
 
 /// An `owner_check.*` activity-feed item (§3.6.4, §3.6.7) the app shows once the vault is open. The feed that fills them
@@ -269,6 +298,20 @@ public protocol OwnerCheckRepository: AnyObject, Observable, Sendable {
 
     /// Marks the notices read.
     func dismissNotices() async throws
+
+    /// (VAULT-MESSAGING 0.73.0 §3.6.5) ``lockedByOwnerCheck`` was set by a read that found the vault locked without knowing
+    /// why (a check with no answer while tries were estimated to be left): the locked screen, not the "ten wrong checks"
+    /// text. Default: false.
+    var lockCauseUnknown: Bool { get }
+
+    /// (VAULT-MESSAGING 0.73.0) How many times the relay connection came back (a reconnect starts a read while the vault is
+    /// probably locked). Default: 0.
+    var relayReconnects: Int { get }
+
+    /// (VAULT-MESSAGING 0.73.0 §3.6.5) Reads the vault's state without sending a check (no try used). [lockCauseKnown]: an
+    /// estimate of 0 names the cause (ten wrong checks); otherwise a lock found is of unknown cause (``lockCauseUnknown``).
+    /// Default: no answer.
+    func probeVault(lockCauseKnown: Bool) async -> VaultProbe
 }
 
 public extension OwnerCheckRepository {
@@ -288,8 +331,15 @@ public extension OwnerCheckRepository {
     var timeScale: UInt64 { 1 }
     func consumeCheckAfterCancel() {}
     func dismissNotices() async throws {}
+    var lockCauseUnknown: Bool { false }
+    var relayReconnects: Int { 0 }
+    func probeVault(lockCauseKnown: Bool) async -> VaultProbe { .noAnswer }
 
     func check(pin: String, password: String) async throws -> OwnerCheckOutcome {
         try await check(pin: pin, password: password, holdOff: nil)
     }
+
+    /// Locked after ten wrong checks, as far as the app knows: (VAULT-MESSAGING 0.73.0 §3.6.5) a lock found by a read
+    /// without a known cause is not, and is not a check that is due (only what is used is asked for).
+    var lockedByChecks: Bool { lockedByOwnerCheck && !lockCauseUnknown }
 }

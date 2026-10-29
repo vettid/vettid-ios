@@ -70,6 +70,41 @@ import VettIDUI
         for state in [wait, locked, s] { #expect(height(OwnerCheckScreen(state: state, actions: NoOwnerCheckActions(), now: now)) > 0) }
     }
 
+    /// (VAULT-MESSAGING 0.73.0 §3.6.5) Probably locked: no fields while the reads run or after them; a lock of unknown
+    /// cause and an unanswered check above 0 render.
+    @Test func probablyLockedHasNoFields() {
+        for watch in [LockWatch.checking, .silent] {
+            for mode in [OwnerCheckMode.gated, .voluntary] {
+                var s = held
+                s.mode = mode
+                s.watch = watch
+                let window = host(OwnerCheckScreen(state: s, actions: NoOwnerCheckActions(), now: now))
+                #expect(textFields(in: window).isEmpty)
+                window.isHidden = true
+            }
+        }
+        var unknown = held
+        unknown.locked = true
+        unknown.lockCauseUnknown = true
+        var maybe = held
+        maybe.message = .maybeCounted(atLeast: 1)
+        for s in [unknown, maybe] { #expect(height(OwnerCheckScreen(state: s, actions: NoOwnerCheckActions(), now: now)) > 0) }
+    }
+
+    /// The approved texts (owner, 2026-10-28; VAULT-MESSAGING 0.73.0, 0.73.2).
+    @Test func theProbablyLockedTextsAreTheApprovedOnes() {
+        #expect(OnboardingStrings.ownerCheckProbablyLockedChecking
+            == "Your daily check didn't pass, and your vault has probably locked itself. Checking with your vault…")
+        #expect(OnboardingStrings.ownerCheckProbablyLockedSilent
+            == "Your vault isn't answering. It has probably locked itself after ten wrong daily checks in a row.")
+        #expect(OnboardingStrings.ownerCheckCheckAgain == "Check again")
+        #expect(OnboardingStrings.unlockCheckMaybeCounted(1)
+            == "Your vault didn't answer, so that check may have counted. At least 1 try left before your vault locks.")
+        #expect(OnboardingStrings.unlockCheckMaybeCounted(4)
+            == "Your vault didn't answer, so that check may have counted. At least 4 tries left before your vault locks.")
+        #expect(OnboardingStrings.unlockLockConfirmed == "Your vault is locked.")
+    }
+
     @Test func everyStateRenders() {
         var states: [OwnerCheckScreenState] = [held, OwnerCheckScreenState(mode: .voluntary), OwnerCheckScreenState(mode: .holdOff)]
         for m in [OwnerCheckMessage.badPin(checksLeft: 2), .badPassword(checksLeft: 8), .backoff, .failed(.network, code: nil)] {

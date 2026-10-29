@@ -12,6 +12,39 @@
         }
       }
     },
+    "ownercheck_check_again": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check again"
+          }
+        }
+      }
+    },
+    "ownercheck_probably_locked_checking": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your daily check didn't pass, and your vault has probably locked itself. Checking with your vault…"
+          }
+        }
+      }
+    },
+    "ownercheck_probably_locked_silent": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vault isn't answering. It has probably locked itself after ten wrong daily checks in a row."
+          }
+        }
+      }
+    },
     "recover_could_not_tell": {
       "extractionState": "manual",
       "localizations": {
@@ -1306,6 +1339,29 @@
           "stringUnit": {
             "state": "translated",
             "value": "Enter the vault PIN for %@."
+          }
+        }
+      }
+    },
+    "unlock_check_maybe_counted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Your vault didn't answer, so that check may have counted. At least %lld try left before your vault locks."
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Your vault didn't answer, so that check may have counted. At least %lld tries left before your vault locks."
+                }
+              }
+            }
           }
         }
       }

@@ -57,7 +57,9 @@ public final class UnlockViewModel: UnlockActions {
             followers.add(follow(
                 ownerCheck,
                 read: {
-                    OwnerCheckFlags(due: $0.ownerCheck?.gated(now()) == true, locked: $0.lockedByOwnerCheck, idle: $0.idleLockedNow(now()))
+                    OwnerCheckFlags(
+                        due: $0.ownerCheck?.gated(now()) == true, locked: $0.lockedByChecks, idle: $0.idleLockedNow(now())
+                    )
                 },
                 apply: { [weak self] _, f in self?.ownerCheck(due: f.due, lockedByChecks: f.locked, idleLocked: f.idle) }
             ))
@@ -71,7 +73,7 @@ public final class UnlockViewModel: UnlockActions {
                     }
                     guard let self, let repo = ownerCheck else { return }
                     self.ownerCheck(
-                        due: repo.ownerCheck?.gated(now()) == true, lockedByChecks: repo.lockedByOwnerCheck,
+                        due: repo.ownerCheck?.gated(now()) == true, lockedByChecks: repo.lockedByChecks,
                         idleLocked: repo.idleLockedNow(now())
                     )
                 }

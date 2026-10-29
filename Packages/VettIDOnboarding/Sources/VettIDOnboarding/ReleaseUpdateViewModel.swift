@@ -64,7 +64,7 @@ public final class ReleaseUpdateViewModel {
         followers.add(follow(self, read: { $0.updates.changeHold }, apply: { $0.state.changeHold = $1 }))
         if let ownerCheck {
             followers.add(follow(
-                ownerCheck, read: { $0.ownerCheck?.gated(now()) == true || $0.lockedByOwnerCheck },
+                ownerCheck, read: { $0.ownerCheck?.gated(now()) == true || $0.lockedByChecks },
                 apply: { [weak self] _, due in self?.state.checkDue = due }
             ))
         }
