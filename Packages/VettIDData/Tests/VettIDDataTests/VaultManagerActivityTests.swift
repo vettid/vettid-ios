@@ -100,10 +100,11 @@ import VettIDVault
     }
 
     /// Locked, the feed and every approval are dropped from memory (nothing of them is written to the phone); the unlock
-    /// reads the vault's lists again, and what only an event brought (a member authentication) does not come back. While
-    /// a lock is pending nothing is taken in or sent.
+    /// reads the vault's lists again, and from a vault without `pending.list` (before VAULT-MESSAGING 0.70.0) what only an
+    /// event brought (a member authentication) does not come back. While a lock is pending nothing is taken in or sent.
     @Test func approvalsAndTheFeedFollowTheLock() async throws {
         defer { phone.close() }
+        service.setPendingListSupported(false)
         let id = try await connected()
         let auth = try service.peerAsksAuthentication(id)
         let grant = try service.peerAsksForItems(id, [AskedItem(ref: "01JITEM000000000000000000A", label: "Passport")])
@@ -122,6 +123,78 @@ import VettIDVault
         #expect(m.lockPending)
         #expect(await kind { try await approvals.denyAuthentication(auth) } == .other, "nothing goes to a vault whose lock is pending")
         #expect(service.asksAnswered.isEmpty)
+    }
+
+    /// VAULT-MESSAGING 0.70.0 §10.4.2: the asks that arrive only as events (a member authentication, a desktop's approval and
+    /// session request) come back from `pending.list` after a lock and an unlock; one that went meanwhile (decided on
+    /// another device, expired) does not, and is not taken for lost.
+    @Test func openAsksSurviveALockAndAnUnlock() async throws {
+        defer { phone.close() }
+        let id = try await connected()
+        let auth = try service.peerAsksAuthentication(id)
+        let approval = try service.deviceAsksApproval()
+        let session = try service.deviceAsksSession(deviceID: "dev-3")
+        let keys: Set = ["auth:\(auth)", "device:approval.pending:\(approval)", "device:device.session.pending:\(session)"]
+        #expect(await eventually { Set(approvals.approvals.map(\.key)) == keys })
+        try await m.lock()
+        #expect(approvals.approvals.isEmpty && approvals.mayHaveBeenDropped("auth:\(auth)"))
+        #expect(try await m.unlock(pin: pin) == .success)
+        #expect(await eventually { Set(approvals.approvals.map(\.key)) == keys }, "read again at the opening")
+        #expect(keys.allSatisfy { !approvals.mayHaveBeenDropped($0) })
+
+        try await m.lock()
+        service.openAskGoes(approval)
+        #expect(try await m.unlock(pin: pin) == .success)
+        #expect(await eventually { Set(approvals.approvals.map(\.key)) == keys.subtracting(["device:approval.pending:\(approval)"]) })
+        #expect(!approvals.mayHaveBeenDropped("device:approval.pending:\(approval)"), "decided or expired, not lost")
+        // Decided on another device while open: the closing event, and the next read agrees.
+        try service.otherDeviceDecidesOpenAsk(session, approved: true)
+        try service.otherDeviceDecidesOpenAsk(auth)
+        #expect(await eventually { approvals.approvals.isEmpty })
+    }
+
+    /// The same after a hold: this phone's own passed owner check reads the list again, once.
+    @Test func openAsksComeBackAfterAPassedOwnerCheck() async throws {
+        defer { phone.close() }
+        let id = try await connected()
+        let auth = try service.peerAsksAuthentication(id)
+        let approval = try service.deviceAsksApproval()
+        let keys: Set = ["auth:\(auth)", "device:approval.pending:\(approval)"]
+        #expect(await eventually { Set(approvals.approvals.map(\.key)) == keys })
+        #expect(await eventually { service.pendingListPagesAnswered >= 1 }, "the opening's read")
+        service.advanceVaultClock(86_401)
+        try await m.ownerChecks.refreshOwnerCheck()
+        #expect(m.ownerChecks.ownerCheck?.state != .ok)
+        #expect(approvals.approvals.isEmpty)
+        let before = service.pendingListPagesAnswered
+        #expect(try await m.ownerChecks.check(pin: pin, password: password) == .passed)
+        #expect(await eventually { Set(approvals.approvals.map(\.key)) == keys })
+        // Read by the check's own catch-up; the end of the hold may add a second read (harmless), never none.
+        #expect(await eventually { service.pendingListPagesAnswered >= before + 1 })
+    }
+
+    /// A vault before 0.70.0 answers `unsupported_type`: today's behaviour, and the list is asked for again after the next
+    /// unlock, not after a passed owner check.
+    @Test func anOlderVaultIsAskedForTheListOnlyAfterAnUnlock() async throws {
+        defer { phone.close() }
+        service.setPendingListSupported(false)
+        let id = try await connected()
+        let auth = try service.peerAsksAuthentication(id)
+        let asked = { service.requestsSeen.filter { $0 == "pending.list" }.count }
+        #expect(await eventually { approvals.approvals.map(\.key) == ["auth:\(auth)"] })
+        let atOpening = asked()
+        #expect(atOpening >= 1)
+        service.advanceVaultClock(86_401)
+        try await m.ownerChecks.refreshOwnerCheck()
+        #expect(try await m.ownerChecks.check(pin: pin, password: password) == .passed)
+        #expect(await eventually { service.requestsSeen.filter { $0 == "grant.list" }.count >= 2 })
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(asked() == atOpening, "not asked again after the check")
+        #expect(approvals.mayHaveBeenDropped("auth:\(auth)"))
+        service.setPendingListSupported(true)
+        try await m.lock()
+        #expect(try await m.unlock(pin: pin) == .success)
+        #expect(await eventually { asked() > atOpening })
     }
 
     /// The opening and a passed owner check read the feed and the approvals' lists; in the background a read nobody

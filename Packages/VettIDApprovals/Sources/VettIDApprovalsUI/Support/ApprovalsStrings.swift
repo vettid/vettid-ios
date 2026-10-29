@@ -21,6 +21,14 @@ enum ApprovalsStrings {
 
     static var errorTitle: String { String(localized: "approvals_error_title", defaultValue: "Could not load approvals", bundle: .module) }
 
+    static var openAsksErrorTitle: String {
+        String(localized: "approvals_open_asks_error_title", defaultValue: "Couldn't check for open requests", bundle: .module)
+    }
+
+    static var openAsksHeldTitle: String {
+        String(localized: "approvals_open_asks_held_title", defaultValue: "Open requests are on hold", bundle: .module)
+    }
+
     static var retry: String { String(localized: "approvals_retry", defaultValue: "Try again", bundle: .module) }
 
     static func peerDeclinedOutgoing(_ value: String) -> String {

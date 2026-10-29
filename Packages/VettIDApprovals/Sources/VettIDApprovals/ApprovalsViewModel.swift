@@ -11,6 +11,9 @@ public struct ApprovalsState: Equatable, Sendable, CustomStringConvertible, Cust
     /// Requests the other member declined (0.10.5): told once, until dismissed (here or on Connections).
     public var peerDeclines: [PeerDecline] = []
     public var error: FailureKind?
+    /// Why the last read of the open asks (`pending.list`, VAULT-MESSAGING 0.70.0 §10.4.2) failed: the screen says so, with
+    /// Retry; ``FailureKind/ownerCheckRequired`` says the vault is on hold, without Retry.
+    public var openAsksError: FailureKind?
     /// Connections whose asks are paused after several declines (0.23.0 §10.4.1): resume, or remove the connection.
     public var paused: [ConnectionInfo] = []
     /// A paused connection the member asked to remove (confirmed first).
@@ -79,6 +82,7 @@ public final class ApprovalsViewModel {
         var s = local
         s.approvals = approvals.approvals
         s.peerDeclines = approvals.peerDeclines
+        s.openAsksError = approvals.openAsksError
         let all = connections.connections
         s.paused = all.filter { $0.asks?.paused == true }
         s.connections = Dictionary(all.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
@@ -86,7 +90,7 @@ public final class ApprovalsViewModel {
     }
 
     private func onOwnerCheck(_ v: OwnerCheckView?) {
-        guard v?.state == .ok, local.error == .ownerCheckRequired else { return }
+        guard v?.state == .ok, local.error == .ownerCheckRequired || approvals.openAsksError == .ownerCheckRequired else { return }
         refresh()
     }
 

@@ -22,6 +22,8 @@ public protocol ApprovalOps: Sendable {
     func sharePendingPage(after: String?, limit: Int?) async throws -> JsonObject
     /// One page of `share.rule.list` from [after]: the rules' tags and the subject's other rules.
     func shareRulePage(after: String?) async throws -> JsonObject
+    /// One page of `pending.list` (VAULT-MESSAGING 0.70.0 §10.4.2) from [after], with the vault's time.
+    func pendingListPage(after: String?, limit: Int?) async throws -> PendingListPage
 }
 
 extension VaultApi: ApprovalOps {
@@ -50,6 +52,11 @@ public protocol ApprovalsRepository: ConnectionRequestsRepository {
     /// or expired (IOS-PLAN §6.9): an ask that only events bring (``PendingApproval/eventOnly(key:)``) and that has not
     /// arrived since the approvals were last dropped. A request a vault list names is read again, so missing means ended.
     func mayHaveBeenDropped(_ key: String) -> Bool
+
+    /// Why the last read of the asks that arrive only as events (`pending.list`, VAULT-MESSAGING 0.70.0 §10.4.2) failed;
+    /// ``FailureKind/ownerCheckRequired`` when the vault is held; nil when it was answered, or the vault does not know it.
+    /// The screen says so, with Retry unless held; the quiet reads themselves stay quiet.
+    var openAsksError: FailureKind? { get }
 
     /// Re-reads what the vault lists (the connection requests, the grant and critical-item requests) and drops expired
     /// and decided requests kept from events.

@@ -45,6 +45,28 @@
         }
       }
     },
+    "approvals_open_asks_error_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't check for open requests"
+          }
+        }
+      }
+    },
+    "approvals_open_asks_held_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open requests are on hold"
+          }
+        }
+      }
+    },
     "approvals_retry": {
       "extractionState": "manual",
       "localizations": {

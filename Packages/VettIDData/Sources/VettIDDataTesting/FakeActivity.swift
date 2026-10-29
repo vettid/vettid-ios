@@ -91,10 +91,18 @@ public final class FakeApprovals: ApprovalsRepository {
     public func forgetOpenVault() {
         listed = []
         arrived = []
+        pendingListAnswered = false
         forgetCount += 1
     }
 
-    public func mayHaveBeenDropped(_ key: String) -> Bool { PendingApproval.eventOnly(key: key) && !arrived.contains(key) }
+    /// `pending.list` has been read through since the last drop (VAULT-MESSAGING 0.70.0 §10.4.2): a test sets it.
+    public var pendingListAnswered = false
+    /// Why the last `pending.list` read failed (VAULT-MESSAGING 0.70.0 §10.4.2); a test sets it.
+    public var openAsksError: FailureKind?
+
+    public func mayHaveBeenDropped(_ key: String) -> Bool {
+        PendingApproval.eventOnly(key: key) && !arrived.contains(key) && !pendingListAnswered
+    }
     /// What ``approveCriticalUse(_:password:)`` returns.
     public var criticalStatus: String? = "ok"
     /// The payload ``loadCriticalUse(_:)`` fills in (standard base64).

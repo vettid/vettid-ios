@@ -129,6 +129,9 @@ extension VaultManager {
     /// The vault opened (an unlock, the end of onboarding, a start while open): the account is read again.
     func onOpened() {
         Task { [weak self] in await self?.refreshAccount() }
+        // (VAULT-MESSAGING 0.70.0 §10.4.2) A vault that did not know `pending.list` is asked again after each unlock, not
+        // after a passed owner check.
+        approvals.vaultOpened()
         refreshListsQuietly()
         // §10.5.1 "Compatibility": once after each unlock.
         Task { [weak self] in await self?.attachments.probe() }

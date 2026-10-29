@@ -103,7 +103,8 @@ public enum ApprovalParser {
         guard let id = VaultJSON.string(o, approval ? "approval_id" : "request_id") else { return nil }
         return DeviceRequest(
             type: type, id: id, deviceName: VaultJSON.string(o, "name"), role: VaultJSON.string(o, "role"),
-            requestType: approval ? VaultJSON.string(o, "type") : nil, receivedAt: at, exp: instant(VaultJSON.string(o, "exp"))
+            requestType: approval ? VaultJSON.string(o, "type") : nil, receivedAt: at, exp: instant(VaultJSON.string(o, "exp")),
+            deviceID: VaultJSON.string(o, "device_id")
         )
     }
 }

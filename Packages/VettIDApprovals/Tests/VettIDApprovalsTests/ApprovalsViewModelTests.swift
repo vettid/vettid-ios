@@ -34,6 +34,22 @@ import VettIDDataTesting
         #expect(m.state.approvals.first?.key == "connection:p1" && m.state.approvals.count == 3 && !m.state.nothing)
     }
 
+    /// The open asks (`pending.list`, VAULT-MESSAGING 0.70.0 §10.4.2) that could not be read are told, not hidden: a failure,
+    /// or a vault on hold; the screen's Retry reads again, and a read that is answered clears it.
+    @Test func aFailedReadOfTheOpenAsksIsToldAndRetried() async {
+        let m = await model()
+        #expect(m.state.openAsksError == nil)
+        fake.openAsksError = .network
+        #expect(m.state.openAsksError == .network && m.state.error == nil)
+        fake.openAsksError = .ownerCheckRequired
+        #expect(m.state.openAsksError == .ownerCheckRequired)
+        let before = fake.calls.count
+        fake.openAsksError = nil
+        m.refresh()
+        await m.settle()
+        #expect(fake.calls.count == before + 1 && m.state.openAsksError == nil)
+    }
+
     @Test func nothingWaitingIsTheEmptyState() async {
         let m = await model()
         #expect(m.state.nothing && !m.state.loading && m.state.error == nil && m.state.entries.isEmpty)

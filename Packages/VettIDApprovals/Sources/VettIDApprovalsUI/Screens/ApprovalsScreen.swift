@@ -60,16 +60,37 @@ public struct ApprovalsScreen: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .accessibilityIdentifier("approvals_error")
         } else if state.nothing {
-            EmptyState(icon: .approvals, title: ApprovalsStrings.emptyTitle, message: ApprovalsStrings.emptyBody)
-                .accessibilityIdentifier("approvals_empty")
+            VStack(spacing: 0) {
+                openAsksNotice
+                EmptyState(icon: .approvals, title: ApprovalsStrings.emptyTitle, message: ApprovalsStrings.emptyBody)
+                    .accessibilityIdentifier("approvals_empty")
+            }
         } else {
             list
+        }
+    }
+
+    /// The open asks (`pending.list`, VAULT-MESSAGING 0.70.0 §10.4.2) could not be read: a vault on hold is said to be on
+    /// hold, not failed, and offers no Retry (the list is read again by itself when the daily check passes). Mirrors
+    /// vettid-android's `OpenAsksNotice`.
+    @ViewBuilder private var openAsksNotice: some View {
+        if let error = state.openAsksError {
+            let held = error == .ownerCheckRequired
+            NoticeCard(
+                held ? .info : .warning, title: held ? ApprovalsStrings.openAsksHeldTitle : ApprovalsStrings.openAsksErrorTitle,
+                message: error.message(timeScale: timeScale)
+            ) {
+                if !held { NoticeAction(label: ApprovalsStrings.retry, identifier: "open_asks_retry", action: actions.onRetry) }
+            }
+            .accessibilityIdentifier("open_asks_notice")
+            .padding(.horizontal, Spacing.gutter).padding(.vertical, Spacing.s)
         }
     }
 
     private var list: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
+                openAsksNotice
                 // The other member declined a request (0.10.5): it has left the list; told once.
                 ForEach(state.peerDeclines, id: \.requestID) { d in
                     NoticeCard(.info, title: ApprovalTexts.peerDeclined(d), message: ApprovalsStrings.peerDeclinedBody) {

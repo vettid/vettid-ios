@@ -182,6 +182,8 @@ public struct DeviceRequest: Equatable, Sendable {
     public var requestType: String?
     public var receivedAt: Date
     public var exp: Date?
+    /// The device that asked (`device_id`); a closing `sync.event` `device.session` names it (VAULT-MESSAGING 0.70.0 §10.4.2).
+    public var deviceID: String?
 }
 
 /// Something that waits for the member's decision (ANDROID-PLAN §4 Approvals). [key] is stable and unique across the

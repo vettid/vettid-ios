@@ -122,6 +122,31 @@ import VettIDDataTesting
         #expect(m.state.notHeld && !m.state.gone && m.state.approval == nil && !m.state.canApprove())
     }
 
+    /// VAULT-MESSAGING 0.70.0 §10.4.2: once `pending.list` has been answered since the lock, an ask the lock dropped from an
+    /// open screen is either held again (the list brought it back: shown as before), or was decided, expired or withdrawn
+    /// ("Already decided"). The screen follows the end of the read.
+    @Test func aDroppedAskIsDecidedOrBackOnceThePendingListIsAnswered() async {
+        fake.listed = [Samples.auth()]
+        let gone = await model("auth:a1")
+        let back = await model("auth:a1")
+        fake.forgetOpenVault()
+        #expect(gone.state.notHeld && back.state.notHeld, "before the list is answered")
+        fake.pendingListAnswered = true
+        #expect(gone.state.gone && !gone.state.notHeld)
+        fake.listed = [Samples.auth()]
+        for _ in 0..<200 where back.state.approval == nil { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(back.state.approval?.key == "auth:a1" && !back.state.gone && !back.state.notHeld && back.state.needs == .password)
+    }
+
+    /// An older vault (or a read that failed) never answers the list: "No longer on this phone" stays.
+    @Test func aDroppedAskStaysNotHeldWhenThePendingListIsNotAnswered() async {
+        fake.listed = [Samples.auth()]
+        let m = await model("auth:a1")
+        fake.forgetOpenVault()
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(m.state.notHeld && !m.state.gone && m.state.approval == nil)
+    }
+
     @Test func authenticationTakesThePasswordAndClearsIt() async {
         fake.listed = [Samples.auth()]
         connections.connections = [Samples.connection("c1")]
