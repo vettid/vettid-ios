@@ -39,6 +39,8 @@ import VettIDRelay
         service.refuse("pin.change", with: "bad_pin", times: 1)
         _ = await vaultFailure { try await m.changePin(pin: "111111", newPin: "518293", password: password) }
         #expect(await eventually { checks.estimate == OwnerCheckView.maxFailures - 1 })
+        await settle()
+        #expect(checks.estimate == OwnerCheckView.maxFailures - 1, "counted once")
     }
 
     /// Only `bad_pin` and `bad_password` count among the answers.
@@ -61,7 +63,7 @@ import VettIDRelay
         #expect(checks.relayReconnects == 0)
         // The relay client tries each call again itself: one more failure than its attempts fails a collect round.
         service.failNextCollects(RelayClient.defaultAttempts + 1)
-        // A request collects its answer: the collection fails, then comes back with it.
+        // The collection fails, then comes back, and the request's answer with it.
         try await checks.refreshOwnerCheck()
         #expect(await eventually { checks.relayReconnects == 1 })
     }
