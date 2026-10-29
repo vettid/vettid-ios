@@ -43,8 +43,17 @@ import VettIDUI
         #expect(ConnectStrings.scanPermissionBody
             == "VettID uses the camera only to read the code; nothing is recorded or stored. You can paste a link instead.")
         #expect(ChooseTtl.label(.tenMinutes) == "In person · 10 minutes" && ChooseTtl.label(.sevenDays) == "Link · 7 days")
-        #expect(PeerDeclineText.title(outgoing: true, name: "Ada") == "Ada declined your connection request")
+        #expect(PeerDeclineText.title(outgoing: true, name: "Ada") == "\u{2068}Ada\u{2069} declined your connection request")
         #expect(PeerDeclineText.title(outgoing: false, name: " ") == "Someone declined the connection")
+        // A hostile name (PDI then RLO) is cleaned: one isolate, no override (VAULT-MESSAGING §10.8; mirrors vettid-android #220).
+        let declined = PeerDeclineText.title(outgoing: false, name: "Bank\u{2069}\u{202E}")
+        #expect(declined == "\u{2068}Bank\u{2069} declined the connection" && declined.filter { $0 == "\u{2069}" }.count == 1)
+        #expect(PeerDeclineText.title(outgoing: false, name: "\u{2069}\u{202E}") == "Someone declined the connection")
+        // A name of nothing visible reads as no name.
+        #expect(ConnectedScreen.body("\u{200B}\u{202E}") == ConnectStrings.connectedBodyUnnamed)
+        #expect(ConnectedScreen.body("\u{3000}") == ConnectStrings.connectedBodyUnnamed)
+        #expect(ConnectionRequestContent.named("\u{200B}\u{202E}") == ConnectStrings.requestSomeone)
+        #expect(ConnectionRequestContent.named("Bank\u{2069}\u{202E}") == "\u{2068}Bank\u{2069}")
         #expect(ConnectedScreen.body(nil) == "You can now message each other through your vaults.")
         #expect(ConnectedScreen.body("Ada") == "You and \u{2068}Ada\u{2069} can now message each other through your vaults.")
         #expect(AcceptScreen.endedBody(.expired) == "The request expired before both of you approved.")

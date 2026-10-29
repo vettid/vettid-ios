@@ -102,7 +102,7 @@ import VettIDVault
         let names = FeedNames(connections: ["c1": sam])
         #expect(NotificationsScreen.deleteMessage(Self.item("m"), names: names) == "Delete this notification on all your devices?")
         #expect(NotificationsScreen.deleteMessage(Self.item("g", "grant.request", connection: "c1"), names: names)
-            == "Delete this notification on all your devices?\n\nLater requests from Sam will start a new notification.")
+            == "Delete this notification on all your devices?\n\nLater requests from \u{2068}Sam\u{2069} will start a new notification.")
     }
 
     /// No bell while held or due; the feed's count otherwise.

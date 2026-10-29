@@ -276,22 +276,28 @@ public final class HistoryExportViewModel {
 
     private func row(_ r: AuditRecord, _ c: ExportContext, _ devices: HistoryDevices?) -> ExportRow {
         // As vettid-android writes it: the connection's name as held ("" before it arrived), "Removed connection" once gone.
-        let connection = r.entry.connectionID.map { c.connectionNames[$0] ?? HistoryStrings.connectionRemoved }
+        // Names go into the file cleaned of every control and format character, never isolated (VAULT-MESSAGING §10.8;
+        // mirrors vettid-android #220).
+        let connection = r.entry.connectionID.map { id in
+            c.connectionNames[id].map { AccountNames.cleaned($0) ?? "" } ?? HistoryStrings.connectionRemoved
+        }
         let itemID = AuditKinds.itemOf(r.kind, r.entry.ref)
-        let item = itemID.flatMap { id in c.itemNames.map { $0[id] ?? HistoryStrings.itemDeleted } }
+        let item = itemID.flatMap { id in c.itemNames.map { AccountNames.cleaned($0[id]) ?? HistoryStrings.itemDeleted } }
         let names = EntryNames(
-            connection: r.entry.connectionID.flatMap { c.connectionNames[$0] }.flatMap { $0.isEmpty ? nil : $0 },
+            connection: r.entry.connectionID.flatMap { AccountNames.cleaned(c.connectionNames[$0]) },
             device: devices?.device(r.entry.deviceID)?.rowName,
             item: itemID.flatMap { c.itemNames?[$0] }
         )
         return ExportRow(
-            record: r, label: HistoryText.title(r.kind, r.entry.ref, names: names), connectionName: connection,
+            record: r, label: HistoryText.title(r.kind, r.entry.ref, names: names, isolate: false), connectionName: connection,
             deviceName: HistoryText.deviceName(r.entry.deviceID, devices), itemName: item
         )
     }
 
     private func exportFilters(_ c: ExportContext) -> ExportFilters {
-        ExportFilters(c.filter, connectionName: c.filter.connectionID.map { c.connectionNames[$0] ?? HistoryStrings.connectionRemoved })
+        ExportFilters(c.filter, connectionName: c.filter.connectionID.map {
+            c.connectionNames[$0].map { AccountNames.cleaned($0) ?? "" } ?? HistoryStrings.connectionRemoved
+        })
     }
 
     static func refusal(_ e: VaultFailure?) -> ExportRefusal? {

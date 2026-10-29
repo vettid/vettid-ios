@@ -106,7 +106,7 @@ public struct ConnectionSharingScreen: View {
         .accessibilityIdentifier("connection_sharing")
         .confirmDialog(
             isPresented: Binding(get: { state.confirmRevoke != nil }, set: { if !$0 { actions.onAskRevoke(nil) } }),
-            title: ItemsStrings.sharingRevokeTitle(state.confirmRevoke?.name ?? ""),
+            title: ItemsStrings.sharingRevokeTitle(AccountNames.isolateOrNull(state.confirmRevoke?.name) ?? ItemsStrings.deletedItem),
             message: state.confirmRevoke?.ruleID != nil ? ItemsStrings.sharingRevokeBodyRule(name) : ItemsStrings.sharingRevokeBody(name),
             confirmLabel: ItemsStrings.sharingRevoke, destructive: true, onConfirm: actions.onRevoke
         )
@@ -203,7 +203,7 @@ struct GrantRow: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 0) {
-                Text(grant.name.isEmpty ? ItemsStrings.deletedItem : grant.name).vettIDFont(.bodyLarge)
+                Text(AccountNames.isolateOrNull(grant.name) ?? ItemsStrings.deletedItem).vettIDFont(.bodyLarge)
                 Text(ItemsText.givenLine(grant)).vettIDFont(.bodySmall).foregroundStyle(colors.onSurfaceVariant)
             }
             .frame(maxWidth: .infinity, alignment: .leading)

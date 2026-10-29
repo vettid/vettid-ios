@@ -67,7 +67,7 @@ public struct TransferOutContent: View {
             ) { actions.reject() }
             .confirmDialog(
                 isPresented: Binding(get: { state.confirmApprove }, set: { if !$0 { actions.askApprove(false) } }),
-                title: TransferStrings.transferApproveConfirmTitle(state.pending?.name ?? ""),
+                title: TransferStrings.transferApproveConfirmTitle(pendingName),
                 message: TransferStrings.transferApproveConfirmBody,
                 confirmLabel: TransferStrings.transferApproveConfirm,
                 destructive: true
@@ -139,7 +139,7 @@ public struct TransferOutContent: View {
     private var compare: some View {
         FormScaffold(
             title: TransferStrings.transferCompareTitle,
-            message: TransferStrings.transferCompareBody(state.pending?.name ?? ""),
+            message: TransferStrings.transferCompareBody(pendingName),
             primaryLabel: TransferStrings.transferMatch, busy: state.busy, secondaryLabel: TransferStrings.transferReject,
             onPrimary: actions.codesMatch, onSecondary: { actions.askReject(true) }, onBack: leave
         ) {
@@ -177,7 +177,7 @@ public struct TransferOutContent: View {
     private var approve: some View {
         FormScaffold(
             title: TransferStrings.transferApproveTitle,
-            message: TransferStrings.transferApproveBody(state.pending?.name ?? ""),
+            message: TransferStrings.transferApproveBody(pendingName),
             primaryLabel: TransferStrings.transferApprove, primaryEnabled: canApprove, busy: state.busy, destructive: true,
             secondaryLabel: TransferStrings.transferReject, onPrimary: askApprove, onSecondary: { actions.askReject(true) },
             onBack: leave
@@ -215,7 +215,7 @@ public struct TransferOutContent: View {
             title: TransferStrings.transferMovedTitle,
             message: state.keptKeys
                 ? TransferStrings.transferMovedKeptBody
-                : TransferStrings.transferMovedBody(state.pending?.name ?? ""),
+                : TransferStrings.transferMovedBody(pendingName),
             primaryLabel: SettingsStrings.done, onPrimary: leave, onBack: leave
         ) {
             if state.keptKeys { SmallNote(state.stagingNote) }
@@ -274,6 +274,12 @@ public struct TransferOutContent: View {
 }
 
 extension TransferOutContent {
+    /// The new phone's name as it sits in a sentence, cleaned and bidi-isolated (VAULT-MESSAGING §10.8; mirrors
+    /// vettid-android #220); "The other phone" when nothing is left of it.
+    static func pendingName(_ name: String?) -> String { AccountNames.isolateOrNull(name) ?? TransferStrings.transferUnnamedDevice }
+
+    var pendingName: String { Self.pendingName(state.pending?.name) }
+
     /// The lines the pasted link shows (vettid-android `LINK_LINES`).
     static let linkLines = 3
 

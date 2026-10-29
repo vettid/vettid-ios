@@ -38,9 +38,9 @@ import VettIDUI
         var c = Self.connection("c1")
         #expect(ConnectionItem.supporting(c) == "Connected")
         c.name = "Countess"
-        #expect(ConnectionItem.supporting(c) == "Countess")
+        #expect(ConnectionItem.supporting(c) == "\u{2068}Countess\u{2069}")
         c.state = .pending
-        #expect(ConnectionItem.supporting(c) == "Waiting for approval · Countess")
+        #expect(ConnectionItem.supporting(c) == "Waiting for approval · \u{2068}Countess\u{2069}")
     }
 
     @Test func everyListStateRenders() {

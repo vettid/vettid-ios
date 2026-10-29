@@ -18,7 +18,9 @@ public struct EntryNames: Equatable, Sendable {
 /// The member-facing title and detail lines of an audit entry (``AuditKinds``), for the screens, the search on the phone
 /// and the export's labels. Mirrors vettid-android `HistoryText`.
 public enum HistoryText {
-    public static func title(_ kind: String, _ ref: String? = nil, names: EntryNames = EntryNames()) -> String {
+    /// [isolate] false for a file (an export): the names are cleaned but carry no bidi controls at all. Otherwise a name is
+    /// cleaned and bidi-isolated where it sits in the sentence (VAULT-MESSAGING §10.8; mirrors vettid-android #220).
+    public static func title(_ kind: String, _ ref: String? = nil, names: EntryNames = EntryNames(), isolate: Bool = true) -> String {
         switch AuditKinds.title(kind, ref) {
         case .known(let key): HistoryKindTexts.text(key)
         case .summary(let key): HistoryStrings.kindSummary(HistoryKindTexts.text(key))
@@ -27,7 +29,11 @@ public enum HistoryText {
         case .counted(let key, let n, let of): HistoryKindTexts.text(key, Int64(n), Int64(of))
         case .named(let key, let any, let who):
             // Without the name (gone or not known), the title drops it.
-            if let name = name(who, names) { HistoryKindTexts.text(key, name) } else { HistoryKindTexts.text(any) }
+            if let name = name(who, names).flatMap({ isolate ? AccountNames.isolateOrNull($0) : AccountNames.cleaned($0) }) {
+                HistoryKindTexts.text(key, name)
+            } else {
+                HistoryKindTexts.text(any)
+            }
         }
     }
 
@@ -42,12 +48,12 @@ public enum HistoryText {
     /// An entry's detail lines (IOS-PLAN §4.1). A duration the vault's time scale divides is said in real time at
     /// scale 1, else as the vault runs it.
     public static func details(_ kind: String, _ ref: String?, outcome: AuditKinds.Outcome, timeScale: UInt64 = 1) -> [String] {
-        AuditKinds.details(kind, ref, outcome: outcome).map { d in
+        AuditKinds.details(kind, ref, outcome: outcome).compactMap { d in
             switch d {
             case .line(let key): HistoryKindTexts.text(key)
             case .scaled(let key, let scaled, let seconds):
                 TimeScales.scaledText(seconds, by: timeScale).map { HistoryKindTexts.text(scaled, $0) } ?? HistoryKindTexts.text(key)
-            case .named(let key, let name): HistoryKindTexts.text(key, name)
+            case .named(let key, let name): AccountNames.isolateOrNull(name).map { HistoryKindTexts.text(key, $0) }
             }
         }
     }

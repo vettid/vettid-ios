@@ -115,7 +115,7 @@ public final class HistoryEntryViewModel {
         s.loading = false
         s.missing = e == nil
         let c = e?.entry.connectionID.flatMap { id in connections?.connections.first { $0.id == id } }
-        s.connectionName = c.flatMap { $0.displayName.isEmpty ? nil : $0.displayName }
+        s.connectionName = AccountNames.cleaned(c?.displayName)
         s.connectionExists = c != nil
         Self.named(&s, itemNames?())
         let id = e?.entry.deviceID

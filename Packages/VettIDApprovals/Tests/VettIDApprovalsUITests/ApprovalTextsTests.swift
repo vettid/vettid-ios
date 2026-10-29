@@ -60,8 +60,20 @@ import VettIDApprovals
         let ctx = PendingApproval.authentication(
             AuthenticationRequest(requestID: "m1", connectionID: "c1", context: "Pay \u{202E}fake\nsecond line", receivedAt: Date(), exp: nil, purpose: .signin)
         )
-        #expect(ApprovalTexts.supporting(ctx, name: "Sam Lee") == row("Sam Lee", "Pay \u{202E}fake"))
+        #expect(ApprovalTexts.supporting(ctx, name: "Sam Lee") == row("Sam Lee", "Pay fake"))
         #expect(!ApprovalTexts.supporting(ctx, name: "Sam Lee").contains("second line"))
+        // The first visible line, after the cleaning: a context that starts with a break or invisible characters.
+        let leading = PendingApproval.authentication(
+            AuthenticationRequest(requestID: "m2", connectionID: "c1", context: "\u{202E}\n\u{2028}  Pay\nmore", receivedAt: Date(), exp: nil, purpose: .signin)
+        )
+        #expect(ApprovalTexts.supporting(leading, name: "Sam Lee") == row("Sam Lee", "Pay"))
+    }
+
+    /// A request's name of only invisible characters reads as not shared, never as an empty part (§10.8).
+    @Test func anInvisibleRequestNameReadsAsNotShared() {
+        var r = ConnectionRequest(pendingID: "p9", sas: "042817", remote: false, name: "\u{200B}\u{202E}", receivedAt: Date(), exp: nil)
+        r.state = .pending
+        #expect(ApprovalTexts.supporting(.connection(.incoming(r)), name: nil) == row("Name not shared yet", "code 042817"))
     }
 
     @Test func aRowSaysWhoAndWhat() {
@@ -76,12 +88,12 @@ import VettIDApprovals
     }
 
     @Test func aDecisionSaysWhatItDoes() {
-        #expect(ApprovalTexts.body(.connection(Samples.incoming()), name: nil) == "Ada Lovelace used your invitation. Compare this code with Ada Lovelace: it must match the code on their phone.")
+        #expect(ApprovalTexts.body(.connection(Samples.incoming()), name: nil) == "\u{2068}Ada Lovelace\u{2069} used your invitation. Compare this code with \u{2068}Ada Lovelace\u{2069}: it must match the code on their phone.")
         #expect(ApprovalTexts.body(.connection(Samples.outgoing(sas: nil)), name: nil) == "Your vault is still setting up a secure session with theirs. The safety code appears here once it is done.")
-        #expect(ApprovalTexts.body(.connection(Samples.outgoing()), name: nil)?.hasPrefix("You accepted Grace Hopper's invitation link.") == true)
-        #expect(ApprovalTexts.body(Samples.auth(), name: "Sam Lee") == "Sam Lee asks you to prove it is you. Approving signs their challenge with your credential key.")
+        #expect(ApprovalTexts.body(.connection(Samples.outgoing()), name: nil)?.hasPrefix("You accepted \u{2068}Grace Hopper\u{2069}'s invitation link.") == true)
+        #expect(ApprovalTexts.body(Samples.auth(), name: "Sam Lee") == "\u{2068}Sam Lee\u{2069} asks you to prove it is you. Approving signs their challenge with your credential key.")
         #expect(ApprovalTexts.body(Samples.grant(), name: nil) == "A connection asks to see items from your vault.")
-        #expect(ApprovalTexts.body(Samples.share(), name: "Sam Lee") == "A share rule asks whether to share these items with Sam Lee.")
+        #expect(ApprovalTexts.body(Samples.share(), name: "Sam Lee") == "A share rule asks whether to share these items with \u{2068}Sam Lee\u{2069}.")
         #expect(ApprovalTexts.body(Samples.device(), name: nil) == "A desktop or agent of yours asks for a decision.")
         #expect(ApprovalTexts.approveLabel(.connection(Samples.incoming())) == "The codes match: connect")
         #expect(ApprovalTexts.approveLabel(.connection(Samples.incoming(state: .approved))) == nil)
@@ -111,7 +123,7 @@ import VettIDApprovals
         // Without a purpose (absent or unknown, read as absent): as before 0.65.0, even with a name.
         let none = Samples.auth()
         #expect(ApprovalTexts.title(none, name: "Sam Lee") == "Authenticate to a connection" && ApprovalTexts.approveLabel(none) == "Authenticate")
-        #expect(ApprovalTexts.body(none, name: "Sam Lee") == "Sam Lee asks you to prove it is you. Approving signs their challenge with your credential key.")
+        #expect(ApprovalTexts.body(none, name: "Sam Lee") == "\u{2068}Sam Lee\u{2069} asks you to prove it is you. Approving signs their challenge with your credential key.")
         #expect(ApprovalTexts.denyLabel(none) == "Deny")
     }
 
@@ -129,8 +141,8 @@ import VettIDApprovals
     }
 
     @Test func grantsSharesAndChoices() {
-        #expect(ApprovalTexts.grantEntry(Samples.entry("i1")) == "Passport")
-        #expect(ApprovalTexts.grantEntry(Samples.entry("i2", available: false)) == "Their words (not in your vault)")
+        #expect(ApprovalTexts.grantEntry(Samples.entry("i1")) == "\u{2068}Passport\u{2069}")
+        #expect(ApprovalTexts.grantEntry(Samples.entry("i2", available: false)) == "\u{2068}Their words\u{2069} (not in your vault)")
         #expect(ApprovalTexts.grantEntry(GrantEntry(kind: "category", ref: "health_card", label: nil, available: false)) == "Any Health card item (you choose which)")
         #expect(ApprovalTexts.usesOptions(requested: 3) == [nil, 1, 10] && ApprovalTexts.usesOptions(requested: nil) == [nil, 3, 10])
         #expect(ApprovalTexts.expiryOptions(requested: nil) == [nil, 86_400, 2_592_000])
@@ -148,9 +160,39 @@ import VettIDApprovals
         #expect(ApprovalTexts.shareLine(lines[0], in: d, names: names, who: "Sam") == "Also covered by your “medical” rule, which asks you first")
         #expect(ApprovalTexts.shareLine(.alsoCovered(ruleID: "r3"), in: d, names: names, who: "Sam") == "Also covered by your “id + travel” rule")
         #expect(ApprovalTexts.peerDeclined(PeerDecline(requestID: "r", name: nil, outgoing: true, at: Date())) == "Someone declined your connection request")
-        #expect(ApprovalTexts.peerDeclined(PeerDecline(requestID: "r", name: "Ada", outgoing: false, at: Date())) == "Ada declined the connection")
+        #expect(ApprovalTexts.peerDeclined(PeerDecline(requestID: "r", name: "Ada", outgoing: false, at: Date())) == "\u{2068}Ada\u{2069} declined the connection")
         #expect(ApprovalTexts.pausedTitle(ConnectionInfo(id: "c", name: "", state: .active)) == "A connection’s requests are paused")
         #expect(ApprovalTexts.batchTitle(asks: 2, name: nil) == "A connection asks for 2 things")
+    }
+
+    /// A received name that closes the isolation and reverses what follows (PDI then RLO) is cleaned first (VAULT-MESSAGING
+    /// §10.8; mirrors vettid-android #220): the bodies and the batch title hold one isolate and no RLO.
+    @Test func aHostileNameCannotReverseTheWordsAroundIt() {
+        let hostile = "Bank\u{2069}\u{202E}"
+        let safe = "\u{2068}Bank\u{2069}"
+        #expect(ApprovalTexts.body(Samples.auth(), name: hostile) == "\(safe) asks you to prove it is you. Approving signs their challenge with your credential key.")
+        #expect(ApprovalTexts.body(Samples.grant(), name: hostile) == "\(safe) asks to see items from your vault.")
+        #expect(ApprovalTexts.batchTitle(asks: 2, name: hostile) == "\(safe) asks for 2 things")
+        #expect(ApprovalTexts.peerDeclined(PeerDecline(requestID: "r", name: hostile, outgoing: false, at: Date())) == "\(safe) declined the connection")
+        #expect(ApprovalTexts.peerDeclined(PeerDecline(requestID: "r", name: "\u{2069}\u{202E}", outgoing: false, at: Date())) == "Someone declined the connection")
+        for t in [ApprovalTexts.body(Samples.auth(), name: hostile), ApprovalTexts.batchTitle(asks: 2, name: hostile)] {
+            #expect(t?.filter { $0 == "\u{2069}" }.count == 1 && t?.contains("\u{202E}") == false)
+        }
+    }
+
+    /// The sign-in and approval titles: a hostile name keeps one isolate and no override; a name of nothing visible reads
+    /// "a connection" (VAULT-MESSAGING §10.8; mirrors vettid-android #220).
+    @Test func theChallengeTitlesCleanTheirName() {
+        let signin = Samples.auth(purpose: .signin), approval = Samples.auth(purpose: .approval)
+        let hostile = "Bank\u{2069}\u{202E}"
+        #expect(ApprovalTexts.title(signin, name: hostile) == ApprovalsStrings.authSigninTitle("\u{2068}Bank\u{2069}"))
+        #expect(ApprovalTexts.title(approval, name: hostile) == ApprovalsStrings.authApprovalTitle("\u{2068}Bank\u{2069}"))
+        for t in [ApprovalTexts.title(signin, name: hostile), ApprovalTexts.title(approval, name: hostile)] {
+            #expect(t.filter { $0 == "\u{2069}" }.count == 1 && !t.contains("\u{202E}"))
+        }
+        let invisible = "\u{200B}\u{202E}"
+        #expect(ApprovalTexts.title(signin, name: invisible) == ApprovalsStrings.authSigninTitle(ApprovalsStrings.aConnectionInline))
+        #expect(ApprovalTexts.title(approval, name: invisible) == ApprovalsStrings.authApprovalTitle(ApprovalsStrings.aConnection))
     }
 }
 

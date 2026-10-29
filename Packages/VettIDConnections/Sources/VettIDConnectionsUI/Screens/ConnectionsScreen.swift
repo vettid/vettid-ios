@@ -128,7 +128,8 @@ struct ConnectionItem: View {
     var body: some View {
         let c = connection
         ConnectionRow(
-            name: c.displayName.isEmpty ? ConnectStrings.nameNotShared : c.displayName,
+            name: AccountNames.cleaned(c.displayName) ?? ConnectStrings.nameNotShared,
+            labelName: AccountNames.isolateOrNull(c.displayName) ?? ConnectStrings.nameNotShared,
             favorite: c.favorite,
             supporting: Self.supporting(c),
             meta: c.lastActiveAt.map { ConnectTimes.short($0) },
@@ -141,7 +142,7 @@ struct ConnectionItem: View {
 
     /// The state (unless active) and the display name, joined; "Connected" when neither has anything to say.
     static func supporting(_ c: ConnectionInfo) -> String {
-        let parts = [ConnectStrings.stateLabel(c.state), c.secondaryName].compactMap { $0 }
+        let parts = [ConnectStrings.stateLabel(c.state), AccountNames.isolateOrNull(c.secondaryName)].compactMap { $0 }
         return parts.isEmpty ? ConnectStrings.stateActive : parts.joined(separator: " · ")
     }
 }

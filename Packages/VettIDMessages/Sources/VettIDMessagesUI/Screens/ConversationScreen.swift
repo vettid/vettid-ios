@@ -43,14 +43,11 @@ public struct ConversationScreen: View {
         self.actions = actions
     }
 
-    /// The connection's name as the title shows it.
-    var name: String {
-        guard let c = state.connection, !c.displayName.isEmpty else { return MessagesStrings.nameNotShared }
-        return c.displayName
-    }
+    /// The connection's name, cleaned and bidi-isolated (VAULT-MESSAGING §10.8; mirrors vettid-android #220): the title and
+    /// every sentence take it as it is.
+    var name: String { AccountNames.isolateOrNull(state.connection?.displayName) ?? MessagesStrings.nameNotShared }
 
-    /// In sentences the name is bidi-isolated (VAULT-MESSAGING §10.8); the title takes it as is.
-    var isolated: String { AccountNames.isolate(name) }
+    var isolated: String { name }
 
     public var body: some View {
         DetailScaffold(onBack: actions.onBack) {

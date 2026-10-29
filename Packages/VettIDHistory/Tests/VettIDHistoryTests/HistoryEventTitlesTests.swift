@@ -63,18 +63,29 @@ import VettIDVault
         #expect(HistoryStrings.categoryVaultAccess == "Unlocks and daily checks")
     }
 
+    /// A received name that closes the isolation and reverses what follows (PDI then RLO) is cleaned; in a file it is cleaned
+    /// and not isolated (VAULT-MESSAGING §10.8; mirrors vettid-android #220).
+    @Test func aHostileNameCannotReverseTheTitle() {
+        let n = EntryNames(connection: "Bank\u{2069}\u{202E}")
+        let title = HistoryText.title("call.permission_off", names: n)
+        #expect(title == "Calls from \u{2068}Bank\u{2069} turned off")
+        #expect(title.filter { $0 == "\u{2069}" }.count == 1 && !title.contains("\u{202E}"))
+        #expect(HistoryText.title("call.permission_off", names: n, isolate: false) == "Calls from Bank turned off")
+        #expect(HistoryText.title("call.permission_off", names: EntryNames(connection: "\u{2069}\u{202E}")) == "Calls turned off")
+    }
+
     @Test func namedTitlesShowTheConnectionDeviceOrItem() {
         let n = EntryNames(connection: "Sam Lee", device: "Pixel 7", item: "GitHub token")
-        #expect(HistoryText.title("identity.rotate_conflict", names: n) == "Connection with Sam Lee paused")
-        #expect(HistoryText.title("identity.rotate_resolved", "fp", names: n) == "Connection with Sam Lee checked and resumed")
-        #expect(HistoryText.title("call.permission_off", names: n) == "Calls from Sam Lee turned off")
-        #expect(HistoryText.title("call.permission_on", names: n) == "Calls from Sam Lee turned on")
-        #expect(HistoryText.title("push.registered", "fcm", names: n) == "Notifications turned on for Pixel 7")
-        #expect(HistoryText.title("push.unregistered", "app", names: n) == "Notifications turned off for Pixel 7")
-        #expect(HistoryText.title("push.token_gone", "token_gone", names: n) == "Notifications stopped reaching Pixel 7")
-        #expect(HistoryText.title("leash.item.run", "01ITEM", names: n) == "An agent used GitHub token")
-        #expect(HistoryText.title("leash.item.proxy", "01ITEM", names: n) == "An agent used GitHub token")
-        #expect(HistoryText.title("leash.item.changed", "01ITEM", names: n) == "You changed how an agent may use GitHub token")
+        #expect(HistoryText.title("identity.rotate_conflict", names: n) == "Connection with \u{2068}Sam Lee\u{2069} paused")
+        #expect(HistoryText.title("identity.rotate_resolved", "fp", names: n) == "Connection with \u{2068}Sam Lee\u{2069} checked and resumed")
+        #expect(HistoryText.title("call.permission_off", names: n) == "Calls from \u{2068}Sam Lee\u{2069} turned off")
+        #expect(HistoryText.title("call.permission_on", names: n) == "Calls from \u{2068}Sam Lee\u{2069} turned on")
+        #expect(HistoryText.title("push.registered", "fcm", names: n) == "Notifications turned on for \u{2068}Pixel 7\u{2069}")
+        #expect(HistoryText.title("push.unregistered", "app", names: n) == "Notifications turned off for \u{2068}Pixel 7\u{2069}")
+        #expect(HistoryText.title("push.token_gone", "token_gone", names: n) == "Notifications stopped reaching \u{2068}Pixel 7\u{2069}")
+        #expect(HistoryText.title("leash.item.run", "01ITEM", names: n) == "An agent used \u{2068}GitHub token\u{2069}")
+        #expect(HistoryText.title("leash.item.proxy", "01ITEM", names: n) == "An agent used \u{2068}GitHub token\u{2069}")
+        #expect(HistoryText.title("leash.item.changed", "01ITEM", names: n) == "You changed how an agent may use \u{2068}GitHub token\u{2069}")
         // Without the name (gone or not known), the title drops it.
         #expect(HistoryText.title("identity.rotate_conflict") == "Connection paused")
         #expect(HistoryText.title("identity.rotate_resolved") == "Connection checked and resumed")
@@ -109,7 +120,7 @@ import VettIDVault
         #expect(lines("recovery.generation_closed", "4/rollback") == ["A host may have served an older copy of your vault's recovery record, one on which recovery attempts had already been used. Your vault moved past it. If you did not try to recover your vault, change your PIN and your password now, and contact VettID."])
         #expect(lines("recovery.generation_closed", "4/stale").isEmpty)
         // The attempting phone's self-reported name, only in that form; nothing without one.
-        #expect(lines("recovery.attempt", attempt, .matched("wrong", phoneName: "Pixel 7")) == [notYou, "Wrong PIN or password.", "From a phone that calls itself “Pixel 7”."])
+        #expect(lines("recovery.attempt", attempt, .matched("wrong", phoneName: "Pixel 7")) == [notYou, "Wrong PIN or password.", "From a phone that calls itself “\u{2068}Pixel 7\u{2069}”."])
         #expect(lines("recovery.attempt", attempt, .matched("wrong")) == [notYou, "Wrong PIN or password."])
         #expect(HistoryText.title("recovery.attempt", attempt) == "Recovery attempt 3 of 10")
         #expect(lines("recovery.attempts_used", "2/4") == ["If that was not you, change your password now, and your PIN as well."])
