@@ -71,7 +71,8 @@ public struct ApprovalsScreen: View {
     }
 
     /// The open asks (`pending.list`, VAULT-MESSAGING 0.70.0 §10.4.2) could not be read: a vault on hold is said to be on
-    /// hold, not failed. Mirrors vettid-android's `OpenAsksNotice`.
+    /// hold, not failed, and offers no Retry (the list is read again by itself when the daily check passes). Mirrors
+    /// vettid-android's `OpenAsksNotice`.
     @ViewBuilder private var openAsksNotice: some View {
         if let error = state.openAsksError {
             let held = error == .ownerCheckRequired
@@ -79,7 +80,7 @@ public struct ApprovalsScreen: View {
                 held ? .info : .warning, title: held ? ApprovalsStrings.openAsksHeldTitle : ApprovalsStrings.openAsksErrorTitle,
                 message: error.message(timeScale: timeScale)
             ) {
-                NoticeAction(label: ApprovalsStrings.retry, identifier: "open_asks_retry", action: actions.onRetry)
+                if !held { NoticeAction(label: ApprovalsStrings.retry, identifier: "open_asks_retry", action: actions.onRetry) }
             }
             .accessibilityIdentifier("open_asks_notice")
             .padding(.horizontal, Spacing.gutter).padding(.vertical, Spacing.s)
