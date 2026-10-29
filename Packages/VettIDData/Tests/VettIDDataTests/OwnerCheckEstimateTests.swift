@@ -181,6 +181,55 @@ import VettIDVault
         #expect(!m.lockedByOwnerCheck)
     }
 
+    /// The unlock reads the status before the vault opens: the opening keeps that count (VAULT-MESSAGING 0.73.0 §3.6.5: 0 only
+    /// with no count read since the unlock).
+    @Test func theUnlocksCountSurvivesTheOpening() async throws {
+        let ops = FakeOwnerCheckOps()
+        // Not due: the unlock reads the status and sends no check.
+        ops.status = #"{"state":"ok","deadline":"2026-10-07T11:00:00Z","interval_seconds":86400,"failures":4}"#
+        let m = manager(ops)
+        await m.afterUnlock(pin: "975310", password: "pw")
+        #expect(m.estimate == 6)
+        ops.statusFails = true
+        m.onOpened()
+        await settle()
+        #expect(m.estimate == 6)
+        // A later opening (a start while open) with no count read: none is known.
+        m.onOpened()
+        await settle()
+        #expect(m.estimate == 0)
+    }
+
+    @Test func aCancelledRecoverysCheckStartsFromNoCount() async throws {
+        let ops = opsAt(failures: 0)
+        let m = manager(ops)
+        try await m.refreshOwnerCheck()
+        ops.checkUnanswered = true
+        await m.afterCancelledRecovery(pin: "975310", password: "pw")
+        #expect(m.unlockCheckOutcome == .failed(.noResponse, code: nil, estimatedLeft: 0))
+    }
+
+    /// A lock of any reason drops a read that finishes after it.
+    @Test func aProbeThatFinishesAfterAnyLockIsDropped() async throws {
+        let ops = opsAt(failures: 9)
+        ops.statusFails = true
+        let m = manager(ops)
+        found.memberState = "locked"
+        found.onMember = { m.onEvent(event("vault.locking", #"{"reason":"idle"}"#)) }
+        #expect(await m.probeVault(lockCauseKnown: true) == .noAnswer)
+        #expect(!m.lockedByOwnerCheck && found.locked == 0)
+    }
+
+    @Test func aProbeThatFinishesAfterAnUnlockIsDropped() async throws {
+        let ops = opsAt(failures: 9)
+        ops.statusFails = true
+        let m = manager(ops)
+        found.memberState = "locked"
+        found.onMember = { m.forgetEstimate() }
+        #expect(await m.probeVault(lockCauseKnown: true) == .noAnswer)
+        #expect(!m.lockedByOwnerCheck)
+    }
+
     @Test func relayReconnectsAreCounted() {
         let m = manager(opsAt(failures: 0))
         m.onRelayReconnected()

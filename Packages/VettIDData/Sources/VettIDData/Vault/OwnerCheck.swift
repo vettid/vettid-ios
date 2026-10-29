@@ -338,4 +338,8 @@ public extension OwnerCheckRepository {
     func check(pin: String, password: String) async throws -> OwnerCheckOutcome {
         try await check(pin: pin, password: password, holdOff: nil)
     }
+
+    /// Locked after ten wrong checks, as far as the app knows: (VAULT-MESSAGING 0.73.0 §3.6.5) a lock found by a read
+    /// without a known cause is not, and is not a check that is due (only what is used is asked for).
+    var lockedByChecks: Bool { lockedByOwnerCheck && !lockCauseUnknown }
 }

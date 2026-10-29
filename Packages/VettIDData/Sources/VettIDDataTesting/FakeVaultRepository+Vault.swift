@@ -141,6 +141,7 @@ extension FakeVaultRepository: VaultRepository {
 
     public func lock() async throws {
         try call("lock")
+        await onLock?()
         phase = .locked
     }
 

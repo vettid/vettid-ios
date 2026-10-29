@@ -10,8 +10,8 @@ extension VaultDevice {
     /// take), or that was answered `bad_pin` or `bad_password`.
     public func countedEnds() -> AsyncStream<String> { countedBroadcast.stream() }
 
-    /// Each time the relay connection came back: the mailbox collection started again after it had ended, or a collect
-    /// round succeeded after failed ones.
+    /// Each time the relay connection came back: a collect round succeeded after failed ones. (A collection started again
+    /// is not one: a request restarts it whether or not the relay can be reached.)
     public func relayReconnects() -> AsyncStream<Int> { reconnectBroadcast.stream() }
 
     /// Runs the deposit of a request of [type]: a failure of the relay or the network is a send without an answer.

@@ -224,6 +224,62 @@ final class ReadWaits: @unchecked Sendable {
         #expect(vm.state.watch == .silent)
     }
 
+    /// The member's lock on its way: no read starts (it could find the member's own lock and name the wrong cause).
+    @Test func noTriggerReadWhileTheMembersLockIsOnItsWay() async {
+        waits.stopAfter = 1
+        let vm = await sendCheck(.badPassword(checksLeft: 0, estimated: true))
+        vault.onLock = { [vault] in
+            vault.reconnectRelay()
+            for _ in 0..<20 { await Task.yield() }
+        }
+        vm.lockVault()
+        #expect(vm.state.watch == .none)
+        await vm.settle()
+        #expect(probes == 1)
+    }
+
+    @Test func triggerReadsAreBounded() async {
+        waits.stopAfter = 1
+        var first = true
+        vault.onProbe = { [vault] in
+            guard first else { return }
+            first = false
+            // Three triggers while the scheduled read is out: one read waits behind it, no more.
+            vault.reconnectRelay()
+            vault.reconnectRelay()
+            vault.reconnectRelay()
+            for _ in 0..<20 { await Task.yield() }
+        }
+        let vm = await sendCheck(.badPassword(checksLeft: 0, estimated: true))
+        #expect(probes == 2)
+        #expect(vm.state.watch == .checking)
+    }
+
+    @Test func aScreenThatWentAwayEndsTheReads() async {
+        weak var gone: OwnerCheckViewModel?
+        let readsBefore: Int
+        do {
+            waits.stopAfter = nil
+            let hold = Holder()
+            vault.onProbe = { await hold.wait() }
+            vault.checkResults = [.badPassword(checksLeft: 0, estimated: true)]
+            var vm: OwnerCheckViewModel? = model()
+            vm?.start(.gated)
+            vm?.setPin("975310")
+            vm?.setPassword("nope")
+            vm?.submit()
+            for _ in 0..<50 { await Task.yield() }
+            gone = vm
+            vm = nil
+            readsBefore = probes
+            vault.onProbe = nil
+            hold.release()
+        }
+        for _ in 0..<200 { await Task.yield() }
+        #expect(gone == nil)
+        #expect(probes == readsBefore, "no read after the screen went")
+    }
+
     @Test func cancelStopsTheReads() async {
         let box = ModelBox()
         vault.onProbe = { box.vm?.cancel() }
@@ -281,6 +337,24 @@ final class ReadWaits: @unchecked Sendable {
         #expect(!OwnerCheckViewModel.keepsPin(.failed(.noResponse, code: nil, estimatedLeft: 0)))
         #expect(!OwnerCheckViewModel.keepsPin(.badPassword(checksLeft: 0, estimated: true)))
         #expect(!OwnerCheckViewModel.keepsPin(.failed(.vaultUnavailable, code: VaultManager.codeVaultDeleting)))
+    }
+}
+
+/// Holds a read until released.
+@MainActor
+final class Holder {
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    private var open = false
+
+    func wait() async {
+        if open { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func release() {
+        open = true
+        for w in waiters { w.resume() }
+        waiters = []
     }
 }
 

@@ -84,26 +84,33 @@ extension OwnerCheckViewModel {
     func runReads() {
         watchTask?.cancel()
         state.watch = .checking
-        watchTask = launch { [self] in
+        let wait = readWait
+        // Held weakly between the reads: a screen that went away ends them (``deinit``).
+        watchTask = launch { [weak self] in
             for gap in Self.readGaps {
                 do {
-                    try await readWait(gap)
+                    try await wait(gap)
                 } catch {
                     return
                 }
-                if Task.isCancelled { return }
+                guard let self, !Task.isCancelled else { return }
                 if await readOnce() { return }
             }
-            if !Task.isCancelled, state.watch == .checking { state.watch = .silent }
+            guard let self, !Task.isCancelled, state.watch == .checking else { return }
+            state.watch = .silent
         }
     }
 
     /// A reconnect or a return to the foreground: one read now, or after the one running. Never more than one waits.
+    /// Not while the member's lock is on its way.
     func readNowIfWatching() {
-        guard state.watch != .none, triggerTask == nil else { return }
-        triggerTask = launch { [self] in
-            _ = await readOnce()
-            triggerTask = nil
+        guard state.watch != .none, !state.locking, triggerTask == nil else { return }
+        triggers += 1
+        let mine = triggers
+        triggerTask = launch { [weak self] in
+            _ = await self?.readOnce()
+            // A newer trigger's handle (after ``stopReads()``) stays.
+            if let self, triggers == mine { triggerTask = nil }
         }
     }
 

@@ -112,9 +112,10 @@ extension VaultManager {
         }
     }
 
-    /// The owner check is due or held (§3.6.5), or the vault locked after ten failed checks.
+    /// The owner check is due or held (§3.6.5), or the vault locked after ten failed checks (not a lock of unknown cause,
+    /// VAULT-MESSAGING 0.73.0).
     func ownerCheckGates() -> Bool {
-        ownerChecks.ownerCheck?.gated(config.now()) == true || ownerChecks.lockedByOwnerCheck
+        ownerChecks.ownerCheck?.gated(config.now()) == true || ownerChecks.lockedByChecks
     }
 
     /// The update's lock: the member's lock, and an update moves on only from a vault known to be locked; then a bounded

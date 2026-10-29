@@ -372,7 +372,15 @@ public final class VaultDevice: @unchecked Sendable {
     /// Starts collecting from the device's mailbox and flushes the outbox; does nothing while a collection runs. A
     /// terminal relay error ends the collection (``collectionEnded``); start it again to go on.
     public func start() {
-        guard beginCollecting() else { return }
+        let begin: Bool = mem.withLock {
+            // A quieted device collects nothing again (``quiet()``): its answers could not be sent.
+            if quieted { return false }
+            stopped = false
+            if collector != nil, collectEnded == nil { return false }
+            collectEnded = nil
+            return true
+        }
+        guard begin else { return }
         let task = Task { [weak self] in
             guard let self else { return }
             let flush = Task { await self.flushOutbox() }
@@ -402,23 +410,6 @@ public final class VaultDevice: @unchecked Sendable {
             return false
         }
         if cancel { task.cancel() }
-    }
-
-    /// Whether a collection starts now (not while one runs, nor on a quieted device); one that had ended and starts again
-    /// is a relay reconnect (``relayReconnects()``).
-    private func beginCollecting() -> Bool {
-        let (begin, back): (Bool, Int?) = mem.withLock {
-            // A quieted device collects nothing again (``quiet()``): its answers could not be sent.
-            if quieted { return (false, nil) }
-            stopped = false
-            if collector != nil, collectEnded == nil { return (false, nil) }
-            let ended = collectEnded != nil
-            if ended { reconnects += 1 }
-            collectEnded = nil
-            return (true, ended ? reconnects : nil)
-        }
-        if let back { reconnectBroadcast.emit(back) }
-        return begin
     }
 
     /// A collect round succeeded after failed ones: the relay connection is back.

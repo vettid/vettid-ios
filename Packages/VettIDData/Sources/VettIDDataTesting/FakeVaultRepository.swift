@@ -142,6 +142,8 @@ public final class FakeVaultRepository: CustomStringConvertible {
     /// Scripted answers to ``probeVault(lockCauseKnown:)`` (default: no answer); a ``VaultProbe/locked`` sets the lock flags
     /// as the manager does.
     public var probeResults: [VaultProbe] = []
+    /// A test's hook: what happens while the member's lock is on its way.
+    public var onLock: (@MainActor () async -> Void)?
     /// A test's hook: what happens while a read of the vault's state is on its way.
     public var onProbe: (@MainActor () async -> Void)?
     /// The most reads of the vault's state that ran at once.

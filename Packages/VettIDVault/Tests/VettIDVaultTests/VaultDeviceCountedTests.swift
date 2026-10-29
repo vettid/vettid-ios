@@ -7,18 +7,20 @@ import VettIDTesting
 
 // (VAULT-MESSAGING §3.6.4, 0.73.0 §3.6.5) What the device reports for the owner check's estimate of tries left.
 extension VaultDeviceTests {
-    /// (VAULT-MESSAGING 0.73.0 §3.6.5) A collection that ended and starts again is a relay reconnect.
-    @Test func aCollectionThatStartsAgainIsAReconnect() async throws {
-        let (d, _) = try await pairedDevice()
-        var reconnects = d.relayReconnects().makeAsyncIterator()
-        relay.refuseCollect = RelayError.signatureInvalid
-        d.start()
-        for _ in 0..<500 where d.collectionEnded == nil { try await Task.sleep(nanoseconds: 10_000_000) }
-        relay.refuseCollect = nil
-        relay.serveMailbox = true
-        #expect(d.ensureCollecting())
-        #expect(await reconnects.next() == 1)
-        d.stop()
+    /// A counted request whose deposit the relay refuses may still have counted: it is reported once; a request re-sent
+    /// with no answer is reported once, not per send.
+    @Test func aRefusedSendIsReportedOnceAndRetriesAreNotCountedTwice() async throws {
+        let (d, _) = try await pairedDevice(cfg: config(InMemoryDeviceStateStore(), timeout: 0.1))
+        var counted = d.countedEnds().makeAsyncIterator()
+        relay.refuseStatus = 503
+        relay.refuseDeposits = RelayError.internalError
+        await #expect(throws: RelayError.self) { _ = try await d.requestOnce("pin.change") }
+        #expect(await counted.next() == "pin.change")
+        relay.refuseDeposits = nil
+        await #expect(throws: VaultStateError.self) { _ = try await d.request("vault.delete") }
+        await #expect(throws: VaultStateError.self) { _ = try await d.requestOnce("item.reveal") }
+        #expect(await counted.next() == "vault.delete")
+        #expect(await counted.next() == "item.reveal", "the re-sends were not reported")
     }
 
     /// (VAULT-MESSAGING §3.6.4, 0.73.0 §3.6.5) A request with no answer is reported with its type (it may have counted at

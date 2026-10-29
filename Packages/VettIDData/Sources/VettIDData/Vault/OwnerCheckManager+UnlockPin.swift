@@ -17,6 +17,7 @@ extension OwnerCheckManager {
         let (unlock, kept) = (unlockEpoch, pinEpoch)
         markOpen()
         forgetEstimate()
+        countReadAtUnlock = true
         endIdleLocked()
         let v = try? await readStatus().view
         guard unlock == unlockEpoch, let v, v.gated(now()) else { return }

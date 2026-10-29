@@ -153,7 +153,6 @@ public struct OwnerCheckScreen: View {
                 pin.clear()
                 if state.lockOffered { actions.lockVault() } else { onCancel() }
             },
-            onBack: state.cancelBesideLock ? { pin.clear(); onCancel() } : nil,
             header: {
                 VettIDSymbol.verifiedUser.image.font(.system(size: 36)).padding(.top, Spacing.l).accessibilityHidden(true)
             },

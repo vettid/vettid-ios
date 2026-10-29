@@ -115,6 +115,8 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     @ObservationIgnored var estimate = 0
     /// Bumped by a lock made here, a wipe and an unlock: a read of the vault's state that finishes after one is dropped.
     @ObservationIgnored var probeEpoch = 0
+    /// The unlock read the status before the vault opened (``onOpened(afterUnlock:)`` keeps its count).
+    @ObservationIgnored var countReadAtUnlock = false
     /// (VAULT-MESSAGING 0.73.0) The member API's `GET /api/vault/status` `state`; nil: no answer.
     @ObservationIgnored let memberState: @MainActor () async -> String?
     /// (VAULT-MESSAGING 0.73.0) A read found the vault locked: the app moves to its locked screen, as for a `vault.locking`.
@@ -188,8 +190,12 @@ public final class OwnerCheckManager: OwnerCheckRepository {
 
     /// Events the manager follows: `vault.held`, `sync.event{owner_check}`, `vault.locking{reason: "owner_check"}`.
     func onEvent(_ m: VaultMessage) {
-        // A lock of any reason (idle, a desktop's, owner_check) ends the kept PIN (VAULT-MESSAGING §3.6.5).
-        if m.type == "vault.locking" { forgetUnlockPin() }
+        // A lock of any reason ends the kept PIN and drops a read finishing after it (VAULT-MESSAGING §3.6.5, 0.73.0).
+        if m.type == "vault.locking" {
+            forgetUnlockPin()
+            probeEpoch += 1
+            countReadAtUnlock = false
+        }
         switch m.type {
         case "vault.held": onHeld(m)
         case "sync.event":
@@ -264,7 +270,9 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     /// The vault opened (an unlock, or the app started with it unlocked): the check is read again. [afterUnlock] false: a
     /// return to the foreground, which keeps the estimate of tries left.
     func onOpened(afterUnlock: Bool = true) {
-        if afterUnlock { forgetEstimate() }
+        // The unlock's own status read (``afterUnlock(pin:password:left:)``) counts: the vault opens after it.
+        if afterUnlock, !countReadAtUnlock { forgetEstimate() }
+        countReadAtUnlock = false
         endIdleLocked()
         refreshQuietly()
     }
@@ -283,6 +291,7 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     /// that does not pass waits in ``unlockCheckOutcome``, and ``checkAfterCancel`` asks for the check screen.
     func afterCancelledRecovery(pin: String, password: String) async {
         markOpen()
+        forgetEstimate()
         let r = await checkOutcome(pin: pin, password: password, holdOff: nil)
         if r != .passed {
             unlockCheckOutcome = r
@@ -399,6 +408,7 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         unlockEpoch += 1
         // A read that finishes after the member's own lock does not mark it.
         probeEpoch += 1
+        countReadAtUnlock = false
         loadIfNeeded()
         lockedHere = true
         saveFlags()
@@ -498,6 +508,7 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         unlockEpoch += 1
         clears += 1
         probeEpoch += 1
+        countReadAtUnlock = false
         estimate = 0
         loaded = true
         ownerCheck = nil
