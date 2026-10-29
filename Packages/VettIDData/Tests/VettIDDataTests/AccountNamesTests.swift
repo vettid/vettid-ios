@@ -123,4 +123,20 @@ import VettIDData
         #expect(AccountNames.isolateOrNull("\u{200B}\u{202E}\u{FEFF}") == nil)
         #expect(AccountNames.cleaned("\u{200B}\u{202E}\u{FEFF}") == nil)
     }
+
+    /// All Unicode white space trims, as Kotlin's `trim()` does: NBSP, EM SPACE and IDEOGRAPHIC SPACE alone leave nothing.
+    @Test func aNameOfOnlyUnicodeWhiteSpaceIsNil() {
+        for blank in ["\u{00A0}", "\u{2003}", "\u{3000}", " \u{00A0}\u{2003}\u{3000}\t"] {
+            #expect(AccountNames.isolateOrNull(blank) == nil && AccountNames.cleaned(blank) == nil, "\(blank.unicodeScalars.map(\.value))")
+        }
+        #expect(AccountNames.cleaned("\u{3000}Ada\u{00A0}") == "Ada")
+    }
+
+    /// The auth context keeps its lines (§10.4, shown in full) but loses every control and format character.
+    @Test func theAuthContextKeepsItsLinesAndLosesTheOverrides() {
+        let note = "Sign in\r\nto Bank\u{2069}\u{202E}\u{2028}now\t!"
+        #expect(AuthContext.plain(note) == "Sign in\nto Bank\nnow !")
+        #expect(AuthContext.isolated(note) == "\(fsi)Sign in\nto Bank\nnow !\(pdi)")
+        #expect(AuthContext.isolated("\u{200B}\u{202E}\n ") == nil)
+    }
 }

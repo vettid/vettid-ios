@@ -156,7 +156,7 @@ public final class HistoryViewModel {
         let item = AuditKinds.itemOf(r.kind, r.entry.ref).flatMap { local.itemNames?[$0] }
         let device = local.devices?.device(r.entry.deviceID)?.rowName
         let name = AccountNames.cleaned(c?.displayName)
-        let title = HistoryText.title(r.kind, r.entry.ref, names: EntryNames(connection: name, device: device, item: item))
+        let title = HistoryText.title(r.kind, r.entry.ref, names: EntryNames(connection: name, device: device, item: item), isolate: false)
         let names = [c?.name, c?.firstName, c?.lastName, c?.accountName, item].map { AccountNames.cleaned($0) }
         return AuditFilter.kindText(r.kind) + ([title] + names + [device]).compactMap { $0 }
     }

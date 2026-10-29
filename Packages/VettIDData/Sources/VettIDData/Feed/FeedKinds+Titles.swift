@@ -48,7 +48,7 @@ public extension FeedKinds {
     private static func knownName(_ item: FeedItem, _ names: FeedNames) -> String? {
         let c = item.connectionID.flatMap { names.connections[$0] }
         let sender = FeedAsks.approvalKey(item.kind, ref: item.ref).flatMap { names.approvals[$0] }.flatMap(senderOf)
-        return AccountNames.isolateOrNull(c?.accountName ?? c.flatMap { $0.name.isEmpty ? nil : $0.name } ?? sender)
+        return [c?.accountName, c?.name, sender].lazy.compactMap { AccountNames.isolateOrNull($0) }.first
     }
 
     private static func senderOf(_ a: PendingApproval) -> String? {

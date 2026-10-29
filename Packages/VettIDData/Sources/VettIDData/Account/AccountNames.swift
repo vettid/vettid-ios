@@ -71,7 +71,8 @@ public enum AccountNames {
                 out.append(u)
             }
         }
-        let t = trimSpaces(String(out))
+        // All Unicode white space, as Kotlin's `trim()` (NBSP, U+2003, U+3000 included).
+        let t = String(out).trimmingCharacters(in: .whitespacesAndNewlines)
         return t.isEmpty ? nil : t
     }
 

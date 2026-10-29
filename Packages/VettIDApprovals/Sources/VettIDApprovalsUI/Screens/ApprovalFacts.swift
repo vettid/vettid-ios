@@ -48,9 +48,9 @@ struct Facts: View {
                 FactLabel(ApprovalsStrings.from)
                 FactValue(AccountNames.isolateOrNull(name) ?? ApprovalsStrings.aConnection)
                 // The challenger's claim (§10.4), in full whatever the purpose.
-                if let c = x.context {
+                if let c = x.context.flatMap(AuthContext.isolated) {
                     FactLabel(ApprovalsStrings.context)
-                    FactValue(AccountNames.isolate(c)).accessibilityIdentifier("auth_context")
+                    FactValue(c).accessibilityIdentifier("auth_context")
                 }
                 expires(x.exp)
             case .critical(let c): CriticalFacts(use: c, name: name)
@@ -77,9 +77,9 @@ struct Facts: View {
         FactLabel(ApprovalsStrings.nameGiven)
         Text(AccountNames.isolateOrNull(r.name) ?? ApprovalsStrings.nameNotShared)
             .vettIDFont(.titleLarge, weight: .semibold).accessibilityIdentifier("request_name")
-        if r.name != nil { FactNote(text: ApprovalsStrings.namesNote) }
-        if let d = r.displayName {
-            Text(ApprovalsStrings.displayName(AccountNames.isolate(d))).vettIDFont(.bodyMedium).padding(.top, Spacing.s)
+        if AccountNames.cleaned(r.name) != nil { FactNote(text: ApprovalsStrings.namesNote) }
+        if let d = AccountNames.isolateOrNull(r.displayName) {
+            Text(ApprovalsStrings.displayName(d)).vettIDFont(.bodyMedium).padding(.top, Spacing.s)
             FactNote(text: ApprovalsStrings.selfAsserted)
         }
         if r.introducedBy != nil { Text(ApprovalsStrings.introduced).vettIDFont(.bodyMedium).padding(.top, Spacing.s) }
@@ -142,9 +142,9 @@ struct CriticalFacts: View {
         suitability
         FactLabel(ApprovalsStrings.criticalOperation)
         FactValue(ApprovalTexts.operation(use.operation))
-        if let c = use.context {
+        if let c = use.context.flatMap(AuthContext.isolated) {
             FactLabel(ApprovalsStrings.context)
-            FactValue(AccountNames.isolate(c))
+            FactValue(c)
         }
         payload
         if let exp = use.exp { Text(ApprovalsStrings.expires(ApprovalTimes.full(exp))).vettIDFont(.bodySmall).padding(.top, Spacing.s) }

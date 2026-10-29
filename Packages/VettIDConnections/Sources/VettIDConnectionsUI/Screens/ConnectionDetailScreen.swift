@@ -66,7 +66,7 @@ public struct ConnectionDetailScreen: View {
         AccountNames.cleaned(state.connection?.displayName) ?? ConnectStrings.nameNotShared
     }
 
-    /// In sentences the name is bidi-isolated (VAULT-MESSAGING §10.8); the heading and the tile take it as is.
+    /// In sentences the name is bidi-isolated (VAULT-MESSAGING §10.8); the heading and the tile take the cleaned name, without the isolation.
     private var isolated: String { AccountNames.isolateOrNull(state.connection?.displayName) ?? ConnectStrings.nameNotShared }
 
     public var body: some View {
@@ -98,7 +98,7 @@ public struct ConnectionDetailScreen: View {
         .confirmDialog(
             isPresented: Binding(get: { state.deleteRule != nil }, set: { if !$0 { actions.onAskDeleteRule(nil) } }),
             title: ConnectStrings.shareRuleDeleteTitle,
-            message: state.connection?.sharingName.map { ConnectStrings.shareRuleDeleteBody(AccountNames.isolate($0)) }
+            message: AccountNames.isolateOrNull(state.connection?.sharingName).map(ConnectStrings.shareRuleDeleteBody)
                 ?? ConnectStrings.shareRuleDeleteUnnamed,
             confirmLabel: ConnectStrings.shareRuleDelete,
             destructive: true,
@@ -137,7 +137,7 @@ struct DetailContent: View {
         let c = connection
         // A connection's asks (0.23.0 §10.4.1): paused or muted comes first, with the action that ends it.
         let asks = c.state == .active ? AsksView.of(c.asks) : nil
-        let asksName = c.sharingName.map(AccountNames.isolate)
+        let asksName = AccountNames.isolateOrNull(c.sharingName)
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.m) {
                 header
@@ -242,8 +242,8 @@ struct ProfileCard: View {
             if c.accountName == nil && !hasName && c.sharedItems.isEmpty {
                 Text(ConnectStrings.detailProfileNone).foregroundStyle(colors.onSurfaceVariant)
             }
-            if let account = c.accountName {
-                InfoLine(label: ConnectStrings.detailAccountName, value: AccountNames.cleaned(account) ?? account)
+            if let account = AccountNames.cleaned(c.accountName) {
+                InfoLine(label: ConnectStrings.detailAccountName, value: account)
                 note(ConnectStrings.namesNote).padding(.bottom, Spacing.s)
             }
             if hasName || !c.sharedItems.isEmpty {

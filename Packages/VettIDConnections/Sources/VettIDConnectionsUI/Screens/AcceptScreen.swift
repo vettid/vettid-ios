@@ -34,7 +34,7 @@ public struct AcceptScreen: View {
     }
 
     private var who: String {
-        (state.name ?? state.connectionName).map(AccountNames.isolate) ?? ConnectStrings.requestThem
+        AccountNames.isolateOrNull(state.name ?? state.connectionName) ?? ConnectStrings.requestThem
     }
 
     public var body: some View {
@@ -88,7 +88,7 @@ public struct AcceptScreen: View {
 
     private var waiting: some View {
         FormScaffold(
-            title: state.name.map { ConnectStrings.waitingTitle(AccountNames.isolate($0)) } ?? ConnectStrings.waitingTitleUnnamed,
+            title: AccountNames.isolateOrNull(state.name).map(ConnectStrings.waitingTitle) ?? ConnectStrings.waitingTitleUnnamed,
             message: ConnectStrings.waitingBody,
             primaryLabel: ConnectStrings.done,
             busy: state.busy,

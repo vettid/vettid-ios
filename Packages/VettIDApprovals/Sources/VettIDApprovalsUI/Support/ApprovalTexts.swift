@@ -10,9 +10,9 @@ enum ApprovalTexts {
     static func title(_ a: PendingApproval, name: String? = nil) -> String {
         switch a {
         case .authentication(let x) where x.purpose == .signin:
-            ApprovalsStrings.authSigninTitle(name.map(AccountNames.isolate) ?? ApprovalsStrings.aConnectionInline)
+            ApprovalsStrings.authSigninTitle(AccountNames.isolateOrNull(name) ?? ApprovalsStrings.aConnectionInline)
         case .authentication(let x) where x.purpose == .approval:
-            ApprovalsStrings.authApprovalTitle(name.map(AccountNames.isolate) ?? ApprovalsStrings.aConnection)
+            ApprovalsStrings.authApprovalTitle(AccountNames.isolateOrNull(name) ?? ApprovalsStrings.aConnection)
         case .connection(.incoming(let r)): r.remote ? ApprovalsStrings.typeConnectionRemote : ApprovalsStrings.typeConnection
         case .connection(.outgoing): ApprovalsStrings.typeOutgoing
         case .authentication: ApprovalsStrings.typeAuthentication

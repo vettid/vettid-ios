@@ -72,9 +72,7 @@ public extension ConnectionInfo {
     /// The name the sharing and asks texts use: the first name on the peer's account, else its full name; nil before the
     /// names arrived (vettid-android `sharingName`).
     var sharingName: String? {
-        if let f = firstName?.trimmingCharacters(in: .whitespacesAndNewlines), !f.isEmpty { return f }
-        guard let a = accountName, !a.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-        return a
+        AccountNames.cleaned(firstName) ?? AccountNames.cleaned(accountName)
     }
 }
 

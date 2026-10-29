@@ -167,6 +167,21 @@ import VettIDApprovals
             #expect(t?.filter { $0 == "\u{2069}" }.count == 1 && t?.contains("\u{202E}") == false)
         }
     }
+
+    /// The sign-in and approval titles: a hostile name keeps one isolate and no override; a name of nothing visible reads
+    /// "a connection" (VAULT-MESSAGING §10.8; mirrors vettid-android #220).
+    @Test func theChallengeTitlesCleanTheirName() {
+        let signin = Samples.auth(purpose: .signin), approval = Samples.auth(purpose: .approval)
+        let hostile = "Bank\u{2069}\u{202E}"
+        #expect(ApprovalTexts.title(signin, name: hostile) == ApprovalsStrings.authSigninTitle("\u{2068}Bank\u{2069}"))
+        #expect(ApprovalTexts.title(approval, name: hostile) == ApprovalsStrings.authApprovalTitle("\u{2068}Bank\u{2069}"))
+        for t in [ApprovalTexts.title(signin, name: hostile), ApprovalTexts.title(approval, name: hostile)] {
+            #expect(t.filter { $0 == "\u{2069}" }.count == 1 && !t.contains("\u{202E}"))
+        }
+        let invisible = "\u{200B}\u{202E}"
+        #expect(ApprovalTexts.title(signin, name: invisible) == ApprovalsStrings.authSigninTitle(ApprovalsStrings.aConnectionInline))
+        #expect(ApprovalTexts.title(approval, name: invisible) == ApprovalsStrings.authApprovalTitle(ApprovalsStrings.aConnection))
+    }
 }
 
 // swiftlint:enable line_length
