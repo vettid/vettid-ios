@@ -187,9 +187,8 @@ public final class ApprovalDetailViewModel {
         s.notHeld = now == nil && (missing || left && lost)
         if left && lost { s.approval = nil }
         s.connectionName = s.approval.flatMap { a -> String? in
-            guard let id = Self.connectionID(a), let n = connections?.connections.first(where: { $0.id == id })?.displayName,
-                  !n.isEmpty else { return nil }
-            return n
+            guard let id = Self.connectionID(a) else { return nil }
+            return AccountNames.cleaned(connections?.connections.first(where: { $0.id == id })?.displayName)
         }
         return s
     }

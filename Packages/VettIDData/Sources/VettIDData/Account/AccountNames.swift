@@ -47,8 +47,50 @@ public enum AccountNames {
         return "\(first) \(last)"
     }
 
-    /// [s] in Unicode bidirectional isolation (FSI … PDI), for names shown next to other text (§10.8).
-    public static func isolate(_ s: String) -> String { "\u{2068}\(s)\u{2069}" }
+    /// A received name made safe to sit in a sentence, next to fixed wording, or alone (§10.8): every control and format
+    /// character removed (a PDI or an RLO in it cannot close the isolation or reverse the words around it) except ZWJ and
+    /// ZWNJ, which emoji sequences and Persian or Indic shaping need; line breaks (U+2028, U+2029 and U+0085 included) and
+    /// tabs as spaces; trimmed; then in bidirectional isolation (FSI … PDI). Nil when nothing is left. The one cleaning
+    /// step for every name another member controls. Mirrors vettid-android `AccountNames.isolateOrNull`.
+    public static func isolateOrNull(_ s: String?) -> String? { cleaned(s).map(wrapIsolated) }
+
+    /// ``isolateOrNull(_:)`` for a name that must be shown: an empty result is an empty isolate, never the raw text.
+    public static func isolate(_ s: String) -> String { isolateOrNull(s) ?? wrapIsolated("") }
+
+    /// ``isolateOrNull(_:)`` without the isolation (an initial, a search key); an isolate it is given is stripped too.
+    public static func cleaned(_ s: String?) -> String? {
+        guard let s else { return nil }
+        var out = String.UnicodeScalarView()
+        var afterCR = false
+        for u in s.unicodeScalars {
+            defer { afterCR = u == "\r" }
+            if u == "\n", afterCR { continue } // CRLF: one break
+            if isBreak(u.value) {
+                out.append(" ")
+            } else if !isInvisible(u) {
+                out.append(u)
+            }
+        }
+        // All Unicode white space, as Kotlin's `trim()` (NBSP, U+2003, U+3000 included).
+        let t = String(out).trimmingCharacters(in: .whitespacesAndNewlines)
+        return t.isEmpty ? nil : t
+    }
+
+    /// [s], already cleaned by the caller, in isolation as it is (a note's line breaks stay).
+    public static func wrapIsolated(_ s: String) -> String { "\u{2068}\(s)\u{2069}" }
+
+    private static func isBreak(_ cp: UInt32) -> Bool {
+        cp == 0x09 || cp == 0x0A || cp == 0x0D || cp == 0x85 || cp == 0x2028 || cp == 0x2029
+    }
+
+    /// Control and format characters (bidi controls, zero-width characters, BOM, tags), except ZWJ and ZWNJ.
+    private static func isInvisible(_ u: Unicode.Scalar) -> Bool {
+        if u.value == 0x200C || u.value == 0x200D { return false }
+        switch u.properties.generalCategory {
+        case .control, .format: return true
+        default: return false
+        }
+    }
 
     private static func trimSpaces(_ s: String) -> String {
         var scalars = Substring.UnicodeScalarView(s.unicodeScalars)

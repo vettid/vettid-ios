@@ -13,7 +13,13 @@ public extension HistoryState {
     /// connection" once it is gone.
     func connectionLabel(_ id: String) -> String {
         guard let name = connectionNames[id] else { return HistoryStrings.connectionRemoved }
-        return name.isEmpty ? HistoryStrings.connectionUnnamed : name
+        return AccountNames.isolateOrNull(name) ?? HistoryStrings.connectionUnnamed
+    }
+
+    /// ``connectionLabel(_:)`` without the isolation: for the export's confirm words, which go into a file's description.
+    func connectionWords(_ id: String) -> String {
+        guard let name = connectionNames[id] else { return HistoryStrings.connectionRemoved }
+        return AccountNames.cleaned(name) ?? HistoryStrings.connectionUnnamed
     }
 
     /// A connection's "First Last" for a title; nil before the names arrived or once it is gone: the title drops it (IOS-PLAN
@@ -27,7 +33,7 @@ public extension HistoryState {
         let e = r.entry
         let connection = e.connectionID.map(connectionLabel)
         let itemID = AuditKinds.itemOf(r.kind, e.ref)
-        let item = itemID.flatMap { id in itemNames.map { $0[id] ?? HistoryStrings.itemDeleted } }
+        let item = itemID.flatMap { id in itemNames.map { AccountNames.isolateOrNull($0[id]) ?? HistoryStrings.itemDeleted } }
             ?? HistoryText.exportSummary(r.kind, e.ref)
             ?? AuditKinds.signerDetail(r.kind, e.ref).map(HistoryText.signer)
         let device = HistoryText.deviceName(e.deviceID, devices)
@@ -47,7 +53,7 @@ public extension HistoryState {
     func filterWords(dates: String?) -> String {
         let f = filter
         let parts = [
-            f.category.map(AuditKinds.categoryLabel), f.connectionID.map(connectionLabel),
+            f.category.map(AuditKinds.categoryLabel), f.connectionID.map(connectionWords),
             f.since != nil || f.until != nil ? dates : nil, f.q.map(HistoryStrings.exportSearch),
         ].compactMap { $0 }
         return parts.isEmpty ? HistoryStrings.exportFiltersNone : parts.joined(separator: " · ")
@@ -87,11 +93,12 @@ public extension HistoryEntryState {
 
     /// The connection's line: its name, "Name not shared yet", or "Removed connection".
     var connectionLabel: String {
-        connectionName ?? (connectionExists ? HistoryStrings.connectionUnnamed : HistoryStrings.connectionRemoved)
+        AccountNames.isolateOrNull(connectionName)
+            ?? (connectionExists ? HistoryStrings.connectionUnnamed : HistoryStrings.connectionRemoved)
     }
 
     /// The item's line: its name, "Deleted item" once it is gone; nil while the app holds no item list.
-    var itemLabel: String? { itemName ?? (itemsKnown ? HistoryStrings.itemDeleted : nil) }
+    var itemLabel: String? { AccountNames.isolateOrNull(itemName) ?? (itemsKnown ? HistoryStrings.itemDeleted : nil) }
 
     /// The lines under the title, in vettid-android's order: when, the group, the details (IOS-PLAN §4.1), then the
     /// connection, the item, the signer, the direction, the kind, the device, the reference and the chain fields. The

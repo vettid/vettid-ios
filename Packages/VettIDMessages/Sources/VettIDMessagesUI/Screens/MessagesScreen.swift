@@ -112,7 +112,7 @@ struct ConversationItem: View {
             title: name,
             supporting: Self.supporting(summary),
             meta: summary.last.map { MessageTimes.short($0.sentAt) },
-            tileName: name,
+            tileName: Self.tileName(c),
             tileStyle: c.favorite ? .favorite : .connection,
             emphasized: summary.unread > 0,
             tilePhoto: ProfilePhotos.decode(c.photo),
@@ -121,7 +121,11 @@ struct ConversationItem: View {
         .accessibilityIdentifier("conversation_\(c.id)")
     }
 
-    static func name(_ c: ConnectionInfo) -> String { c.displayName.isEmpty ? MessagesStrings.nameNotShared : c.displayName }
+    /// The connection's name, cleaned and bidi-isolated (VAULT-MESSAGING §10.8; mirrors vettid-android #220).
+    static func name(_ c: ConnectionInfo) -> String { AccountNames.isolateOrNull(c.displayName) ?? MessagesStrings.nameNotShared }
+
+    /// The name for the avatar's initial: cleaned, not isolated.
+    static func tileName(_ c: ConnectionInfo) -> String { AccountNames.cleaned(c.displayName) ?? MessagesStrings.nameNotShared }
 
     /// The latest message's first line, with the unread count before it when there is any.
     static func supporting(_ s: ConversationSummary) -> String {

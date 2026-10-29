@@ -63,12 +63,11 @@ public struct ConnectionDetailScreen: View {
     }
 
     private var title: String {
-        guard let c = state.connection, !c.displayName.isEmpty else { return ConnectStrings.nameNotShared }
-        return c.displayName
+        AccountNames.cleaned(state.connection?.displayName) ?? ConnectStrings.nameNotShared
     }
 
-    /// In sentences the name is bidi-isolated (VAULT-MESSAGING §10.8); the heading and the tile take it as is.
-    private var isolated: String { AccountNames.isolate(title) }
+    /// In sentences the name is bidi-isolated (VAULT-MESSAGING §10.8); the heading and the tile take the cleaned name, without the isolation.
+    private var isolated: String { AccountNames.isolateOrNull(state.connection?.displayName) ?? ConnectStrings.nameNotShared }
 
     public var body: some View {
         DetailScaffold(onBack: actions.onBack) {
@@ -99,7 +98,7 @@ public struct ConnectionDetailScreen: View {
         .confirmDialog(
             isPresented: Binding(get: { state.deleteRule != nil }, set: { if !$0 { actions.onAskDeleteRule(nil) } }),
             title: ConnectStrings.shareRuleDeleteTitle,
-            message: state.connection?.sharingName.map { ConnectStrings.shareRuleDeleteBody(AccountNames.isolate($0)) }
+            message: AccountNames.isolateOrNull(state.connection?.sharingName).map(ConnectStrings.shareRuleDeleteBody)
                 ?? ConnectStrings.shareRuleDeleteUnnamed,
             confirmLabel: ConnectStrings.shareRuleDelete,
             destructive: true,
@@ -112,7 +111,7 @@ public struct ConnectionDetailScreen: View {
     /// Message (once the messages are there), favourite, History, remove.
     func pill(_ c: ConnectionInfo) -> [PillAction] {
         // The connection's own name, as vettid-android's pill (its name from the shown connection).
-        let named = AccountNames.isolate(c.displayName.isEmpty ? ConnectStrings.nameNotShared : c.displayName)
+        let named = AccountNames.isolateOrNull(c.displayName) ?? ConnectStrings.nameNotShared
         var list: [PillAction] = []
         if let onMessage = actions.onMessage, c.state == .active {
             list.append(PillAction(.messages, label: ConnectStrings.detailMessage(named), action: onMessage))
@@ -138,7 +137,7 @@ struct DetailContent: View {
         let c = connection
         // A connection's asks (0.23.0 §10.4.1): paused or muted comes first, with the action that ends it.
         let asks = c.state == .active ? AsksView.of(c.asks) : nil
-        let asksName = c.sharingName.map(AccountNames.isolate)
+        let asksName = AccountNames.isolateOrNull(c.sharingName)
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.m) {
                 header
@@ -236,23 +235,26 @@ struct ProfileCard: View {
 
     var body: some View {
         let c = connection
-        let hasName = !c.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let profileName = AccountNames.cleaned(c.name)
+        let hasName = profileName != nil
         DetailCard {
             CardTitle(text: ConnectStrings.detailProfile)
             if c.accountName == nil && !hasName && c.sharedItems.isEmpty {
                 Text(ConnectStrings.detailProfileNone).foregroundStyle(colors.onSurfaceVariant)
             }
-            if let account = c.accountName {
+            if let account = AccountNames.cleaned(c.accountName) {
                 InfoLine(label: ConnectStrings.detailAccountName, value: account)
                 note(ConnectStrings.namesNote).padding(.bottom, Spacing.s)
             }
             if hasName || !c.sharedItems.isEmpty {
-                if hasName { InfoLine(label: ConnectStrings.detailProfileName, value: c.name) }
+                if let profileName { InfoLine(label: ConnectStrings.detailProfileName, value: profileName) }
                 if !c.sharedItems.isEmpty {
                     Text(ConnectStrings.detailSharedItems).vettIDFont(.labelLarge).padding(.top, Spacing.s)
                     ForEach(c.sharedItems, id: \.itemID) { item in
-                        Text(item.name).fontWeight(.semibold).padding(.top, Spacing.xs)
-                        ForEach(Array(item.fields.enumerated()), id: \.offset) { _, f in InfoLine(label: f.label, value: f.value) }
+                        Text(AccountNames.cleaned(item.name) ?? "").fontWeight(.semibold).padding(.top, Spacing.xs)
+                        ForEach(Array(item.fields.enumerated()), id: \.offset) { _, f in
+                            InfoLine(label: AccountNames.cleaned(f.label) ?? "", value: AccountNames.cleaned(f.value) ?? "")
+                        }
                     }
                 }
                 note(ConnectStrings.selfAsserted).padding(.top, Spacing.s)

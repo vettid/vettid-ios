@@ -396,6 +396,15 @@ enum ApprovalsStrings {
     /// A `signin` challenge's decline: it sends `connection.authenticate.deny`, as "Deny" does.
     static var authSigninDeny: String { String(localized: "approvals_auth_signin_deny", defaultValue: "Not me", bundle: .module) }
 
+    /// A `signin` or `approval` challenge without a context, or with nothing left of it after cleaning (owner-approved
+    /// 2026-10-29; the key vettid-android's).
+    static var authNoDetails: String {
+        String(
+            localized: "approvals_auth_no_details", defaultValue: "No details were given. Only approve if you know what this is for.",
+            bundle: .module
+        )
+    }
+
     /// An `approval` challenge's title.
     static func authApprovalTitle(_ value: String) -> String {
         String(localized: "approvals_auth_approval_title", defaultValue: "\(value) asks you to approve", bundle: .module)

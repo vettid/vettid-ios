@@ -10,9 +10,9 @@ enum ApprovalTexts {
     static func title(_ a: PendingApproval, name: String? = nil) -> String {
         switch a {
         case .authentication(let x) where x.purpose == .signin:
-            ApprovalsStrings.authSigninTitle(name.map(AccountNames.isolate) ?? ApprovalsStrings.aConnectionInline)
+            ApprovalsStrings.authSigninTitle(AccountNames.isolateOrNull(name) ?? ApprovalsStrings.aConnectionInline)
         case .authentication(let x) where x.purpose == .approval:
-            ApprovalsStrings.authApprovalTitle(name.map(AccountNames.isolate) ?? ApprovalsStrings.aConnection)
+            ApprovalsStrings.authApprovalTitle(AccountNames.isolateOrNull(name) ?? ApprovalsStrings.aConnection)
         case .connection(.incoming(let r)): r.remote ? ApprovalsStrings.typeConnectionRemote : ApprovalsStrings.typeConnection
         case .connection(.outgoing): ApprovalsStrings.typeOutgoing
         case .authentication: ApprovalsStrings.typeAuthentication
@@ -23,11 +23,11 @@ enum ApprovalTexts {
         }
     }
 
-    /// Who asks: the request's name, the connection, the device, or an agent.
+    /// Who asks: the request's name, the connection, the device, or an agent; received names cleaned (§10.8).
     static func who(_ a: PendingApproval, name: String?) -> String? {
         switch a {
-        case .connection(let r): r.name ?? ApprovalsStrings.nameNotShared
-        case .device(let d): d.deviceName
+        case .connection(let r): AccountNames.cleaned(r.name) ?? ApprovalsStrings.nameNotShared
+        case .device(let d): AccountNames.cleaned(d.deviceName)
         case .share(let s): name ?? (s.subjectAgentID != nil ? ApprovalsStrings.anAgent : nil)
         default: name ?? ApprovalsStrings.aConnection
         }
@@ -52,31 +52,40 @@ enum ApprovalTexts {
     /// The row's second line: who and the summary, joined, each bidi-isolated (§10.8) since either can come from the
     /// other side.
     static func supporting(_ a: PendingApproval, name: String?) -> String {
-        [who(a, name: name), summary(a)].compactMap { $0.map(AccountNames.isolate) }.joined(separator: " · ")
+        [who(a, name: name), summary(a)].compactMap { AccountNames.isolateOrNull($0) }.joined(separator: " · ")
     }
 
-    /// [s] up to its first line break: a row shows one line.
-    static func firstLine(_ s: String) -> String { String(s.prefix { !$0.isNewline }) }
+    /// A challenge's note on its screen: the connection's own words in full (lines kept, isolated, §10.4); without them,
+    /// a `signin` or `approval` challenge says no details were given, and one without a purpose shows nothing.
+    static func contextNote(_ x: AuthenticationRequest) -> String? {
+        x.context.flatMap(AuthContext.isolated) ?? (x.purpose == .absent ? nil : ApprovalsStrings.authNoDetails)
+    }
+
+    /// [s] cleaned (``AuthContext/plain(_:)``), from its first visible line up to the next line break: a row shows one line.
+    static func firstLine(_ s: String) -> String {
+        String(AuthContext.plain(s).drop { $0.isWhitespace }.prefix { !$0.isNewline })
+    }
 
     /// The decision screen's body. An `approval` challenge has none: its title says who asks, and its note follows in full
     /// (chosen; not in the spec).
     static func body(_ a: PendingApproval, name: String?) -> String? {
-        let conn = name ?? ApprovalsStrings.aConnection
+        let conn = AccountNames.isolateOrNull(name) ?? ApprovalsStrings.aConnection
         switch a {
         case .authentication(let x) where x.purpose == .signin: return ApprovalsStrings.authSigninBody
         case .authentication(let x) where x.purpose == .approval: return nil
         case .connection(.incoming(let r)):
-            let n = r.name ?? ApprovalsStrings.someone
+            let n = AccountNames.isolateOrNull(r.name) ?? ApprovalsStrings.someone
             return r.remote ? ApprovalsStrings.connectionBodyRemote(n) : ApprovalsStrings.connectionBody(n)
         case .connection(.outgoing(let r)):
             guard r.sas != nil else { return ApprovalsStrings.outgoingWaiting }
-            let n = r.name ?? ApprovalsStrings.them
+            let n = AccountNames.isolateOrNull(r.name) ?? ApprovalsStrings.them
             return r.remote ? ApprovalsStrings.outgoingBodyRemote(n) : ApprovalsStrings.outgoingBody(n)
         case .authentication: return ApprovalsStrings.authBody(conn)
         case .grant: return ApprovalsStrings.grantBody(conn)
         case .critical: return ApprovalsStrings.criticalBody(conn)
         case .share(let s):
-            return ApprovalsStrings.shareBody(name ?? (s.subjectAgentID != nil ? ApprovalsStrings.anAgent : ApprovalsStrings.aConnection))
+            let fallback = s.subjectAgentID != nil ? ApprovalsStrings.anAgent : ApprovalsStrings.aConnection
+            return ApprovalsStrings.shareBody(AccountNames.isolateOrNull(name) ?? fallback)
         case .device: return ApprovalsStrings.deviceBody
         }
     }
@@ -104,7 +113,7 @@ enum ApprovalTexts {
     }
 
     /// A requester's name inside a sentence (bidi-isolated, §10.8), or "them".
-    static func them(_ name: String?) -> String { name.map(AccountNames.isolate) ?? ApprovalsStrings.them }
+    static func them(_ name: String?) -> String { AccountNames.isolateOrNull(name) ?? ApprovalsStrings.them }
 
     /// A refusal in words: a named limit (§10.1) says which; a password backoff counts down to [retryUntil] at [now].
     static func failure(_ kind: FailureKind, retryUntil: Date?, limit: VaultLimit?, now: Date, timeScale: UInt64 = 1) -> String {
@@ -144,9 +153,9 @@ enum ApprovalTexts {
 
     /// A grant entry's line: a category the member answers, a named item, or one missing from the vault.
     static func grantEntry(_ e: GrantEntry) -> String {
-        if e.kind == "category" { return ApprovalsStrings.grantCategory(e.label ?? humanize(e.ref)) }
-        if e.available, let n = e.name { return n }
-        return ApprovalsStrings.grantItemMissing(e.label ?? e.ref)
+        if e.kind == "category" { return ApprovalsStrings.grantCategory(AccountNames.isolateOrNull(e.label) ?? humanize(e.ref)) }
+        if e.available, let n = AccountNames.isolateOrNull(e.name) { return n }
+        return ApprovalsStrings.grantItemMissing(AccountNames.isolateOrNull(e.label) ?? AccountNames.isolate(e.ref))
     }
 
     /// A category identifier in words: underscores as spaces, the first letter capitalized (chosen; not in the spec: the
@@ -213,19 +222,21 @@ enum ApprovalTexts {
 
     /// "<First>'s requests are paused", or without a name.
     static func pausedTitle(_ c: ConnectionInfo) -> String {
-        c.displayName.isEmpty ? ApprovalsStrings.pausedTitleUnnamed : ApprovalsStrings.pausedTitle(AccountNames.isolate(c.displayName))
+        AccountNames.isolateOrNull(c.displayName).map(ApprovalsStrings.pausedTitle) ?? ApprovalsStrings.pausedTitleUnnamed
     }
 
     static func removeTitle(_ c: ConnectionInfo) -> String {
-        ApprovalsStrings.removeTitle(AccountNames.isolate(c.displayName.isEmpty ? ApprovalsStrings.aConnection : c.displayName))
+        ApprovalsStrings.removeTitle(AccountNames.isolateOrNull(c.displayName) ?? ApprovalsStrings.aConnection)
     }
 
     /// The other member's decline (0.10.5): the accepter "<name> declined your connection request", the inviter "<name>
     /// declined the connection".
     static func peerDeclined(_ d: PeerDecline) -> String {
-        let name = d.name.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 } ?? ApprovalsStrings.peerDeclinedSomeone
+        let name = AccountNames.isolateOrNull(d.name) ?? ApprovalsStrings.peerDeclinedSomeone
         return d.outgoing ? ApprovalsStrings.peerDeclinedOutgoing(name) : ApprovalsStrings.peerDeclinedIncoming(name)
     }
 
-    static func batchTitle(asks: Int, name: String?) -> String { ApprovalsStrings.batchTitle(name ?? ApprovalsStrings.aConnection, asks) }
+    static func batchTitle(asks: Int, name: String?) -> String {
+        ApprovalsStrings.batchTitle(AccountNames.isolateOrNull(name) ?? ApprovalsStrings.aConnection, asks)
+    }
 }

@@ -64,8 +64,8 @@ import VettIDVault
         let sam = AccountNames.isolate("Sam Lee")
         #expect(title("s1") == "Sign in to \(sam)?" && line("s1") == "Only approve if you are signing in right now.")
         #expect(title("p1") == "\(sam) asks you to approve" && line("p1") == nil)
-        #expect(title("n1") == "Sam Lee asks you to confirm it is you" && line("n1") == nil)
-        #expect(title("gone") == "Sam Lee asks you to confirm it is you" && line("gone") == nil)
+        #expect(title("n1") == "\u{2068}Sam Lee\u{2069} asks you to confirm it is you" && line("n1") == nil)
+        #expect(title("gone") == "\u{2068}Sam Lee\u{2069} asks you to confirm it is you" && line("gone") == nil)
         #expect(FeedKinds.title(Self.item("s1"), Self.names, details: false) == "Sign in to \(sam)?")
     }
 
@@ -82,7 +82,7 @@ import VettIDVault
     @Test func aBatchLedByASignInIsABatch() {
         for ref in ["s1", "p1", "n1"] {
             let batch = Self.item(ref, count: 3)
-            #expect(FeedKinds.title(batch, Self.names) == "Sam asks for 3 things", "\(ref)")
+            #expect(FeedKinds.title(batch, Self.names) == "\u{2068}Sam\u{2069} asks for 3 things", "\(ref)")
             #expect(FeedKinds.supporting(batch, Self.names) == "3 things", "\(ref)")
         }
     }

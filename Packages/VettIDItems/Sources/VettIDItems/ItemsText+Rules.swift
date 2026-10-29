@@ -6,7 +6,7 @@ import VettIDData
 public extension ItemsText {
     /// The connection's name inside a sentence (bidi-isolated, §10.8), or a neutral placeholder.
     static func sharingName(_ name: String?) -> String {
-        name.map(AccountNames.isolate) ?? ItemsStrings.sharingThisConnection
+        AccountNames.isolateOrNull(name) ?? ItemsStrings.sharingThisConnection
     }
 
     /// A calendar day as lists show it (vettid-android `Times.dayLabel`), in [zone].

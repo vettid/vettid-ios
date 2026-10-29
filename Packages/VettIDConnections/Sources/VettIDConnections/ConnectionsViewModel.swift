@@ -39,7 +39,8 @@ public extension ConnectionInfo {
     func matches(_ query: String) -> Bool {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return true }
-        return displayName.range(of: q, options: .caseInsensitive) != nil || name.range(of: q, options: .caseInsensitive) != nil
+        // Cleaned keys: a hidden control character in a name neither hides a match nor makes one (VAULT-MESSAGING §10.8).
+        return [displayName, name].contains { AccountNames.cleaned($0)?.range(of: q, options: .caseInsensitive) != nil }
     }
 }
 
@@ -123,10 +124,12 @@ public final class ConnectionsViewModel {
     static func listed(_ all: [ConnectionInfo], query: String) -> [ConnectionInfo] {
         all.filter { $0.matches(query) }.enumerated().sorted { a, b in
             if a.element.favorite != b.element.favorite { return a.element.favorite }
-            let (x, y) = (a.element.displayName.lowercased(), b.element.displayName.lowercased())
+            let (x, y) = (sortKey(a.element), sortKey(b.element))
             return x != y ? x < y : a.offset < b.offset
         }.map(\.element)
     }
+
+    private static func sortKey(_ c: ConnectionInfo) -> String { (AccountNames.cleaned(c.displayName) ?? "").lowercased() }
 
     /// Reads the connections and the outstanding invitations again.
     public func refresh() {

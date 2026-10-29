@@ -19,7 +19,7 @@ struct OutgoingSharingCard: View {
     let onManage: @MainActor () -> Void
     let onDeleteRule: @MainActor (ShareRule) -> Void
 
-    private var name: String? { first.map(AccountNames.isolate) }
+    private var name: String? { AccountNames.isolateOrNull(first) }
 
     var body: some View {
         DirectionCard(
@@ -75,7 +75,7 @@ struct IncomingSharingCard: View {
     let onAsk: @MainActor () -> Void
     let onOpen: @MainActor () -> Void
 
-    private var name: String? { first.map(AccountNames.isolate) }
+    private var name: String? { AccountNames.isolateOrNull(first) }
 
     var body: some View {
         DirectionCard(

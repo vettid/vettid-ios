@@ -39,28 +39,29 @@ public extension FeedKinds {
 
     /// The connection's first name (the short labels), else as ``connectionName(_:_:)``.
     static func firstName(_ item: FeedItem, _ names: FeedNames) -> String {
-        if let first = item.connectionID.flatMap({ names.connections[$0] })?.firstName, !first.isEmpty { return first }
+        if let first = AccountNames.isolateOrNull(item.connectionID.flatMap({ names.connections[$0] })?.firstName) { return first }
         return connectionName(item, names)
     }
 
-    /// The connection's "First Last" or the request's sender; nil when neither is known.
+    /// The connection's "First Last" or the request's sender, cleaned and bidi-isolated (VAULT-MESSAGING §10.8; mirrors
+    /// vettid-android #220); nil when neither is known or nothing is left of it.
     private static func knownName(_ item: FeedItem, _ names: FeedNames) -> String? {
         let c = item.connectionID.flatMap { names.connections[$0] }
         let sender = FeedAsks.approvalKey(item.kind, ref: item.ref).flatMap { names.approvals[$0] }.flatMap(senderOf)
-        return c?.accountName ?? c.flatMap { $0.name.isEmpty ? nil : $0.name } ?? sender
+        return [c?.accountName, c?.name, sender].lazy.compactMap { AccountNames.isolateOrNull($0) }.first
     }
 
     private static func senderOf(_ a: PendingApproval) -> String? {
         guard case .connection(let r) = a else { return nil }
         var name = r.name
         if name == nil, case .incoming(let x) = r { name = x.displayName }
-        return name.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
+        return name
     }
 
     /// "Deleted item": a revealed item that is no longer in the vault (the detail sheet's Item line).
     static var deletedItem: String { DataStrings.feedDeletedItem }
 
-    /// The item's name (never a value), when the item or the ask names one.
+    /// The item's name (never a value), cleaned and bidi-isolated, when the item or the ask names one.
     static func itemName(_ item: FeedItem, _ names: FeedNames) -> String? {
         let ask = FeedAsks.approvalKey(item.kind, ref: item.ref).flatMap { names.approvals[$0] }
         let name: String?
@@ -70,7 +71,7 @@ public extension FeedKinds {
         case ("critical-secret.use.request", .critical(let c)?): name = c.itemName
         default: name = nil
         }
-        return name.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
+        return AccountNames.isolateOrNull(name)
     }
 
     /// The row's title. [details] false (a notification with names only, ANDROID-PLAN §4 Notification modes 8): the
@@ -115,7 +116,7 @@ public extension FeedKinds {
     /// (chosen; not in the spec).
     private static func authenticationTitle(_ item: FeedItem, _ names: FeedNames) -> String {
         if let n = item.count, n > 1 { return DataStrings.feedGrantRequestBatch(firstName(item, names), n) }
-        let known = knownName(item, names).map(AccountNames.isolate)
+        let known = knownName(item, names)
         switch authenticationPurpose(item, names) {
         case .signin: return DataStrings.feedAuthenticateSignin(known ?? DataStrings.feedAConnectionInline)
         case .approval: return DataStrings.feedAuthenticateApproval(known ?? DataStrings.feedNameNotShared)

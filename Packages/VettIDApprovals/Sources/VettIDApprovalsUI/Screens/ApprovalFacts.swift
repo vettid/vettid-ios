@@ -46,11 +46,11 @@ struct Facts: View {
             case .connection(.outgoing(let r)): outgoing(r)
             case .authentication(let x):
                 FactLabel(ApprovalsStrings.from)
-                FactValue(name ?? ApprovalsStrings.aConnection)
-                // The challenger's claim (§10.4), in full whatever the purpose.
-                if let c = x.context {
+                FactValue(AccountNames.isolateOrNull(name) ?? ApprovalsStrings.aConnection)
+                // The challenger's claim (§10.4), in full whatever the purpose; a fixed line when a purpose comes without one.
+                if let c = ApprovalTexts.contextNote(x) {
                     FactLabel(ApprovalsStrings.context)
-                    FactValue(AccountNames.isolate(c)).accessibilityIdentifier("auth_context")
+                    FactValue(c).accessibilityIdentifier("auth_context")
                 }
                 expires(x.exp)
             case .critical(let c): CriticalFacts(use: c, name: name)
@@ -69,16 +69,17 @@ struct Facts: View {
 
     /// The device's name and role, or "?".
     static func deviceLine(_ d: DeviceRequest) -> String {
-        let parts = [d.deviceName, d.role].compactMap { $0 }
+        let parts = [AccountNames.isolateOrNull(d.deviceName), d.role].compactMap { $0 }
         return parts.isEmpty ? "?" : parts.joined(separator: " · ")
     }
 
     @ViewBuilder private func incoming(_ r: ConnectionRequest) -> some View {
         FactLabel(ApprovalsStrings.nameGiven)
-        Text(r.name ?? ApprovalsStrings.nameNotShared).vettIDFont(.titleLarge, weight: .semibold).accessibilityIdentifier("request_name")
-        if r.name != nil { FactNote(text: ApprovalsStrings.namesNote) }
-        if let d = r.displayName {
-            Text(ApprovalsStrings.displayName(AccountNames.isolate(d))).vettIDFont(.bodyMedium).padding(.top, Spacing.s)
+        Text(AccountNames.isolateOrNull(r.name) ?? ApprovalsStrings.nameNotShared)
+            .vettIDFont(.titleLarge, weight: .semibold).accessibilityIdentifier("request_name")
+        if AccountNames.cleaned(r.name) != nil { FactNote(text: ApprovalsStrings.namesNote) }
+        if let d = AccountNames.isolateOrNull(r.displayName) {
+            Text(ApprovalsStrings.displayName(d)).vettIDFont(.bodyMedium).padding(.top, Spacing.s)
             FactNote(text: ApprovalsStrings.selfAsserted)
         }
         if r.introducedBy != nil { Text(ApprovalsStrings.introduced).vettIDFont(.bodyMedium).padding(.top, Spacing.s) }
@@ -90,7 +91,7 @@ struct Facts: View {
 
     @ViewBuilder private func outgoing(_ r: OutgoingRequest) -> some View {
         FactLabel(ApprovalsStrings.outgoingName)
-        Text(r.name ?? ApprovalsStrings.nameNotShared).vettIDFont(.titleLarge, weight: .semibold)
+        Text(AccountNames.isolateOrNull(r.name) ?? ApprovalsStrings.nameNotShared).vettIDFont(.titleLarge, weight: .semibold)
         if let code = r.sas { sas(code) }
         if r.state == .approved { waiting(r.name) }
         expires(r.exp)
@@ -131,7 +132,7 @@ struct CriticalFacts: View {
 
     var body: some View {
         FactLabel(ApprovalsStrings.from)
-        FactValue(name ?? ApprovalsStrings.aConnection)
+        FactValue(AccountNames.isolateOrNull(name) ?? ApprovalsStrings.aConnection)
         FactLabel(ApprovalsStrings.criticalItem)
         FactValue("\(use.itemName) · \(use.fieldLabel)")
         if let k = use.kind {
@@ -141,9 +142,9 @@ struct CriticalFacts: View {
         suitability
         FactLabel(ApprovalsStrings.criticalOperation)
         FactValue(ApprovalTexts.operation(use.operation))
-        if let c = use.context {
+        if let c = use.context.flatMap(AuthContext.isolated) {
             FactLabel(ApprovalsStrings.context)
-            FactValue(AccountNames.isolate(c))
+            FactValue(c)
         }
         payload
         if let exp = use.exp { Text(ApprovalsStrings.expires(ApprovalTimes.full(exp))).vettIDFont(.bodySmall).padding(.top, Spacing.s) }
@@ -193,7 +194,7 @@ struct GrantFacts: View {
 
     var body: some View {
         FactLabel(ApprovalsStrings.from)
-        FactValue(state.connectionName ?? ApprovalsStrings.aConnection)
+        FactValue(AccountNames.isolateOrNull(state.connectionName) ?? ApprovalsStrings.aConnection)
         if let r = request.reason {
             FactLabel(ApprovalsStrings.reason)
             FactValue(r)
@@ -241,7 +242,7 @@ struct GrantFacts: View {
             .accessibilityAddTraits(on ? .isSelected : [])
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 Text(ApprovalTexts.grantEntry(e)).vettIDFont(.bodyLarge)
-                if e.kind == "item", e.available, e.name != nil, let theirs = e.label {
+                if e.kind == "item", e.available, e.name != nil, let theirs = AccountNames.isolateOrNull(e.label) {
                     FactNote(text: ApprovalsStrings.grantTheirWords(theirs))
                 }
                 if e.kind == "item", e.available, let fields = e.labels, !fields.isEmpty {
@@ -284,7 +285,7 @@ struct ShareFacts: View {
     let onToggle: @MainActor (String) -> Void
 
     private var who: String {
-        name.map(AccountNames.isolate) ?? (decision.subjectAgentID != nil ? ApprovalsStrings.anAgent : ApprovalsStrings.aConnection)
+        AccountNames.isolateOrNull(name) ?? (decision.subjectAgentID != nil ? ApprovalsStrings.anAgent : ApprovalsStrings.aConnection)
     }
 
     var body: some View {

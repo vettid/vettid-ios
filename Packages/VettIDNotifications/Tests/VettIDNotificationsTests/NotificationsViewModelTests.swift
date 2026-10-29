@@ -247,7 +247,7 @@ import VettIDVault
         m.setUnreadOnly(true)
         #expect(m.state.sections().flatMap { $0.items.map(\.itemID) } == ["b"])
         #expect(m.state.names.connections["c1"] != nil)
-        #expect(FeedKinds.title(feed.items[0], m.state.names) == "New message from Sam Lee")
+        #expect(FeedKinds.title(feed.items[0], m.state.names) == "New message from \u{2068}Sam Lee\u{2069}")
     }
 
     /// The state never shows the feed's content in a log or a dump.

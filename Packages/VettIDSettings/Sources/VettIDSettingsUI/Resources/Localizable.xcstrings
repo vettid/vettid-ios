@@ -4801,6 +4801,17 @@
         }
       }
     },
+    "settings_transfer_unnamed_device": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The other phone"
+          }
+        }
+      }
+    },
     "settings_transfer_approve_confirm_body": {
       "extractionState": "manual",
       "localizations": {

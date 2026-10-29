@@ -86,6 +86,23 @@ import VettIDDataTesting
         #expect(!m.state.searching && m.state.connections.count == 2)
     }
 
+    /// The search and the order read the cleaned names: a hidden control character neither hides a match nor makes one
+    /// (VAULT-MESSAGING §10.8; mirrors vettid-android #220).
+    @Test func theSearchAndTheOrderReadCleanedNames() async {
+        fake.connections = [
+            Self.connection("c1", "Ada", "Love\u{200B}lace"), Self.connection("c2", "\u{202E}Abe", "Zed", name: "Ada\u{2069}"),
+        ]
+        let m = await model()
+        m.setQuery("lovelace")
+        #expect(m.state.connections.map(\.id) == ["c1"])
+        m.setQuery("")
+        #expect(m.state.connections.map(\.id) == ["c2", "c1"])
+        #expect(AccountNames.cleaned("Bank\u{2069}\u{202E}") == "Bank")
+        // The secondary name is compared and returned cleaned.
+        #expect(Self.connection("c3", "Ada", "Lovelace", name: "Ada\u{202E} Lovelace").secondaryName == nil)
+        #expect(Self.connection("c3", "Ada", "Lovelace", name: "\u{2069}Countess\u{202E}").secondaryName == "Countess")
+    }
+
     @Test func anInvitationIsCancelledOnceConfirmed() async {
         let invite = OutstandingInvite(inviteID: "i1", exp: Date().addingTimeInterval(600), remote: true)
         fake.outstanding = [invite]

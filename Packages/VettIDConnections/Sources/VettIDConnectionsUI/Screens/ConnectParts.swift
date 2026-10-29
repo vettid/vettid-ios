@@ -91,7 +91,7 @@ struct WaitingRow: View {
 /// `peerDeclineText`.
 enum PeerDeclineText {
     static func title(outgoing: Bool, name: String?) -> String {
-        let who = name.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 } ?? ConnectStrings.peerDeclinedSomeone
+        let who = AccountNames.isolateOrNull(name) ?? ConnectStrings.peerDeclinedSomeone
         return outgoing ? ConnectStrings.peerDeclinedOutgoing(who) : ConnectStrings.peerDeclinedIncoming(who)
     }
 }
@@ -122,8 +122,7 @@ struct ConnectedScreen: View {
     }
 
     static func body(_ name: String?) -> String {
-        guard let name, !name.trimmingCharacters(in: .whitespaces).isEmpty else { return ConnectStrings.connectedBodyUnnamed }
-        return ConnectStrings.connectedBody(AccountNames.isolate(name))
+        AccountNames.isolateOrNull(name).map(ConnectStrings.connectedBody) ?? ConnectStrings.connectedBodyUnnamed
     }
 }
 
@@ -149,10 +148,13 @@ struct ConnectionRequestContent: View {
     var error: FailureKind?
     let actions: RequestActions
 
-    private var who: String { request.name.map(AccountNames.isolate) ?? ConnectStrings.requestThem }
+    private var who: String { AccountNames.isolateOrNull(request.name) ?? ConnectStrings.requestThem }
+
+    /// The requester in the body sentence: cleaned and isolated, "Someone" when nothing visible is left of the name.
+    static func named(_ name: String?) -> String { AccountNames.isolateOrNull(name) ?? ConnectStrings.requestSomeone }
 
     var body: some View {
-        let named = request.name.map(AccountNames.isolate) ?? ConnectStrings.requestSomeone
+        let named = Self.named(request.name)
         FormScaffold(
             title: ConnectStrings.requestTitle,
             message: request.remote ? ConnectStrings.requestBodyRemote(named) : ConnectStrings.requestBody(named),
@@ -188,14 +190,14 @@ struct ConnectionRequestContent: View {
 
     @ViewBuilder private var names: some View {
         Text(ConnectStrings.requestNameLabel).vettIDFont(.labelLarge)
-        Text(request.name ?? ConnectStrings.requestNoName)
+        Text(AccountNames.cleaned(request.name) ?? ConnectStrings.requestNoName)
             .vettIDFont(.titleLarge)
             .accessibilityIdentifier("request_name")
-        if request.name != nil {
+        if AccountNames.cleaned(request.name) != nil {
             Text(ConnectStrings.namesNote).vettIDFont(.bodySmall).foregroundStyle(colors.onSurfaceVariant)
         }
-        if let display = request.displayName {
-            Text(ConnectStrings.requestDisplayName(AccountNames.isolate(display)))
+        if let display = AccountNames.isolateOrNull(request.displayName) {
+            Text(ConnectStrings.requestDisplayName(display))
                 .vettIDFont(.bodyMedium).padding(.top, Spacing.s)
             Text(ConnectStrings.selfAsserted).vettIDFont(.bodySmall).foregroundStyle(colors.onSurfaceVariant)
         }
