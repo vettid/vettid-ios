@@ -26,6 +26,18 @@ final class FakeApprovalOps: ApprovalOps, @unchecked Sendable {
     var shareAnswer = "{}"
     /// When set, `share.pending.list` waits for it once it has its page (a read on its way).
     var pendingGate: TestDeferred<Void>?
+    /// `pending.list` (VAULT-MESSAGING 0.70.0 §10.4.2): `unsupported_type` unless [pendingSupported]; the open asks, as `{kind,
+    /// body}` entries, in [pendingPageSize] pages whose cursor is the index of the next entry; every page answered with
+    /// [pendingTs] as the vault's time. The cursors asked are in [pendingCalls]. [pendingError] fails every call.
+    var pendingSupported = false
+    var pendingAsks: [(kind: String, body: String)] = []
+    var pendingPageSize = 50
+    var pendingTs = Date(timeIntervalSince1970: 1_791_115_200)
+    var pendingError: VaultOpError?
+    var pendingCalls: [String] = []
+    /// When set, a call for a page from index [gateFrom] on waits for it (a read on its way).
+    var listGate: TestDeferred<Void>?
+    var gateFrom = 0
 
     private func call(_ name: String) throws {
         calls.append(name)
@@ -78,6 +90,19 @@ final class FakeApprovalOps: ApprovalOps, @unchecked Sendable {
         shareCalls.append("rules:\(after ?? "nil")")
         guard !rulePages.isEmpty else { throw Self.error("unsupported_type") }
         return try StrictJson.parseObject(rulePages.removeFirst())
+    }
+    func pendingListPage(after: String?, limit: Int?) async throws -> PendingListPage {
+        pendingCalls.append(after ?? "nil")
+        if let pendingError { throw pendingError }
+        guard pendingSupported else { throw Self.error("unsupported_type") }
+        let from = after.flatMap(Int.init) ?? 0
+        let page = pendingAsks.dropFirst(from).prefix(pendingPageSize)
+        let entries = page.map { JsonBuilder().string("kind", $0.kind).raw("body", $0.body).build() }
+        let body = JsonBuilder().raw("asks", JsonBuilder.array(entries))
+        if from + page.count < pendingAsks.count { body.string("next", String(from + page.count)) }
+        let answer = PendingListPage(body: try StrictJson.parseObject(body.build()), ts: pendingTs)
+        if let listGate, from >= gateFrom { try await listGate.value() }
+        return answer
     }
     func sessionDeny(_ requestID: String) async throws { try call("sessionDeny:\(requestID)") }
     func approvalDecide(_ approvalID: String, approve: Bool) async throws -> String? {

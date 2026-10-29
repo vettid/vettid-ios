@@ -9,8 +9,10 @@ import VettIDVault
 /// and what the lists leave out (a critical-item request's payload) is kept as the vault sent it until it is decided,
 /// expires, or a list shows it gone. All of it lives in memory only, like every other vault content (IOS-PLAN §6.9):
 /// nothing is written to the phone, and it is dropped when the vault locks, at a hold and at a wipe
-/// (``forgetOpenVault()``). An approval that arrived only as an event and was not decided before then is not shown again
-/// (no vault list names it). The connection requests are the ``ConnectionsManager``'s, listed here with the others.
+/// (``forgetOpenVault()``). An approval that arrived only as an event and was not decided before then is read back by
+/// `pending.list` (VAULT-MESSAGING 0.70.0 §10.4.2, ``readPendingAsks(_:generation:)``) when the vault answers it; from a
+/// vault before it, it is not shown again (no other vault list names it). The connection requests are the
+/// ``ConnectionsManager``'s, listed here with the others.
 /// Nothing here touches transport or crypto beyond the typed calls. Mirrors the approvals part of vettid-android
 /// `SocialManager`.
 @MainActor
@@ -38,13 +40,26 @@ public final class ApprovalsManager: ApprovalsRepository {
     /// The items by id, to name what a vault before 0.21.0 asks about (``SharePending``); empty when not known.
     @ObservationIgnored let itemNames: @MainActor () -> [String: ShareItem]
     /// Bumped whenever what was read from the open vault is dropped: a list read before is not published.
-    @ObservationIgnored private var generation = 0
+    @ObservationIgnored var generation = 0
     /// Counts the approvals that arrived or left (decided here or on another device), and when each did: a list read
     /// before that neither brings back one that left nor drops one that arrived (chosen; not in the spec).
     @ObservationIgnored private var changes = 0
     @ObservationIgnored private var changedAt: [String: Int] = [:]
     /// The approvals that arrived as events since the approvals were last dropped (``mayHaveBeenDropped(_:)``).
     @ObservationIgnored private var arrivedSinceForget: Set<String> = []
+    /// The vault's time at the first page of the last `pending.list` read since the vault was last forgotten: an event of
+    /// the kinds it lists (``pendingTypes``) that is not later than this is ignored, since the list already says whether the
+    /// ask is open (VAULT-MESSAGING 0.70.0 §10.4.2). Nil: none read, every event is applied.
+    @ObservationIgnored var pendingListTs: Date?
+    /// Whether `pending.list` has been read through since the vault was last forgotten (``mayHaveBeenDropped(_:)``).
+    /// Observed: a screen showing a dropped ask is told when the read ends (``mayHaveBeenDropped(_:)``).
+    var pendingListAnswered = false
+    /// The vault answered `unsupported_type` to `pending.list`: it is not asked again until the next unlock
+    /// (``vaultOpened()``), not after a passed owner check (§10.4.2 "Older vaults").
+    @ObservationIgnored var pendingListUnsupported = false
+    /// The change at which each device's session request was closed (`sync.event` `device.session`): a `pending.list` read
+    /// before it does not bring the request back.
+    @ObservationIgnored var sessionClosedAt: [String: Int] = [:]
     /// When each approval was dropped (decided, or `not_found` on a decision): a share question dropped during a read is
     /// not taken from its list (VAULT-MESSAGING 0.55.7 §10.12 rule 3).
     @ObservationIgnored private var droppedAt: [String: Int] = [:]
@@ -144,7 +159,7 @@ public final class ApprovalsManager: ApprovalsRepository {
     // MARK: - Local state
 
     /// Changes the kept events (in memory only).
-    private func edit(_ f: (inout [StoredEvent]) -> Void) {
+    func edit(_ f: (inout [StoredEvent]) -> Void) {
         var next = stored
         f(&next)
         guard next != stored else { return }
@@ -159,6 +174,9 @@ public final class ApprovalsManager: ApprovalsRepository {
         generation += 1
         forgetCount += 1
         arrivedSinceForget = []
+        pendingListTs = nil
+        pendingListAnswered = false
+        sessionClosedAt = [:]
         listed = []
         if !stored.isEmpty {
             stored = []
@@ -169,7 +187,9 @@ public final class ApprovalsManager: ApprovalsRepository {
     }
 
     public func mayHaveBeenDropped(_ key: String) -> Bool {
-        PendingApproval.eventOnly(key: key) && !arrivedSinceForget.contains(key)
+        // Once `pending.list` has been read through since the last drop, an ask it does not list was decided, expired or
+        // withdrawn, not lost (VAULT-MESSAGING 0.70.0 §10.4.2); every event-only ask is of the kinds it lists.
+        PendingApproval.eventOnly(key: key) && !arrivedSinceForget.contains(key) && !pendingListAnswered
     }
 
     /// Forgets everything (a wipe, or a deleted vault).
@@ -180,13 +200,16 @@ public final class ApprovalsManager: ApprovalsRepository {
     /// One event of the vault (§9.1): an approval to keep, or another device's decision.
     public func onEvent(_ m: VaultMessage) {
         if ApprovalParser.types.contains(m.type) {
-            keep(m.type, m.object)
+            keep(m.type, m.object, ts: m.ts)
         } else if m.type == "sync.event" {
             onSync(m.object)
         }
     }
 
-    private func keep(_ type: String, _ o: JsonObject) {
+    /// [ts] the event's inner `ts`; nil for a body read from a request.
+    private func keep(_ type: String, _ o: JsonObject, ts: Date? = nil) {
+        // A creation event as old as the list read, or older, is ignored (VAULT-MESSAGING 0.70.0 §10.4.2, §8.4).
+        if let ts, let cut = pendingListTs, Self.pendingTypes.contains(type), ts <= cut { return }
         guard let p = ApprovalParser.parse(type, o, at: now()) else { return }
         let at = now()
         changes += 1
@@ -214,6 +237,10 @@ public final class ApprovalsManager: ApprovalsRepository {
         edit { events in
             let old = events.first { parsed($0)?.key == p.key }
             events.removeAll { parsed($0)?.key == p.key }
+            // A device has at most one session request, and a newer one replaces the older (§6.8).
+            if case .device(let d) = p, d.type == Self.sessionType, let id = d.deviceID {
+                events.removeAll { if case .device(let o)? = parsed($0) { o.type == Self.sessionType && o.deviceID == id } else { false } }
+            }
             // Several `share.pending` batches of one rule add up (§10.12).
             let body = if case .share = p, let old { Self.mergedShare(old.body, o) } else { o.raw }
             events.append(StoredEvent(type: type, body: body, at: at))
@@ -238,6 +265,7 @@ public final class ApprovalsManager: ApprovalsRepository {
         if kind == "share.decided", let id = VaultJSON.string(o, "rule_id") {
             return shareDecided(id, VaultJSON.strings(o, "included") + VaultJSON.strings(o, "declined"))
         }
+        if kind == "device.session", let device = VaultJSON.string(o, "device_id") { return sessionClosed(device) }
         guard let (prefix, member) = Self.decidedKinds[kind], let id = VaultJSON.string(o, member) else { return }
         drop(prefix + id)
     }
@@ -247,6 +275,17 @@ public final class ApprovalsManager: ApprovalsRepository {
         "connection.authenticate.decided": ("auth:", "request_id"), "grant.request.decided": ("grant:", "request_id"),
         "critical-secret-use.decided": ("critical:", "request_id"), "approval.decided": ("device:approval.pending:", "approval_id"),
     ]
+
+    /// `sync.event` `device.session`: the device's session request is closed (granted, denied or ended, §6.8); a device has at
+    /// most one. Held or not, the read in progress is told (VAULT-MESSAGING 0.70.0 §10.4.2).
+    private func sessionClosed(_ deviceID: String) {
+        changes += 1
+        sessionClosedAt[deviceID] = changes
+        let all = stored.compactMap(parsed) + listed
+        for case .device(let d) in all where d.type == Self.sessionType && d.deviceID == deviceID {
+            drop(PendingApproval.device(d).key)
+        }
+    }
 
     /// The items decided (here or on another device) leave the questions of the rule and of the subject's other rules, where
     /// they wait too (one answer per item and subject, §10.12); a question with none left goes. Kept events and the list.
@@ -327,6 +366,7 @@ public final class ApprovalsManager: ApprovalsRepository {
         if requests { try? await connections.refreshRequests(quietly: quietly) }
         let o = try await guarded { quietly ? try await quietOps() : try await ops() }
         let lists = await readLists(o, at: t)
+        let pending = await readPendingAsks(o, generation: g)
         guard g == generation else { return }
         let changed = { (key: String) in (self.changedAt[key] ?? 0) > since }
         // A list the vault did not answer covers nothing: what was known of it stays (VAULT-MESSAGING 0.55.7 §10.12).
@@ -345,6 +385,7 @@ public final class ApprovalsManager: ApprovalsRepository {
                 return Self.withItems(e, batched[p.key] ?? [])
             }
         }
+        if case .answered(let asks) = pending { mergePendingAsks(asks, at: t, since: since, changed: changed) }
     }
 
     /// The ids of the items each share question's batches brought after change [since].

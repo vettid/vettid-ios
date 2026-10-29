@@ -80,6 +80,19 @@ extension VaultApi {
         return try await approvalOp("share.decide", b)
     }
 
+    // MARK: - Open asks that arrive only as events (§10.4.2)
+
+    /// One page of `pending.list` (VAULT-MESSAGING 0.70.0 §10.4.2) from [after]: `{asks: [{kind, body}], next?}`, with the
+    /// vault's time (the response's inner `ts`), which the caller compares with the events it receives. `limit` is 1-100
+    /// (nil: the vault's 50). A vault before the release answers `unsupported_type`; while held, `owner_check_required`.
+    public func pendingListPage(after: String? = nil, limit: Int? = nil) async throws -> PendingListPage {
+        let b = JsonBuilder()
+        if let after { b.string("after", after) }
+        if let limit { b.uint("limit", UInt64(max(limit, 0))) }
+        let r = try await device.request("pending.list", body: b.bytes())
+        return PendingListPage(body: VaultJSON.object(try VaultDevice.okBody("pending.list", r)), ts: r.ts)
+    }
+
     // MARK: - Critical-item uses (§10.13)
 
     /// `critical-secret-use.list`: `{incoming: [{request_id, connection_id, item_id, field_id, name, label, kind?,
@@ -139,5 +152,16 @@ public struct GrantAnswer: Equatable, Sendable {
         self.index = index
         self.itemID = itemID
         self.fields = fields
+    }
+}
+
+/// A page of `pending.list` (VAULT-MESSAGING 0.70.0 §10.4.2): the response body and the vault's time when it answered.
+public struct PendingListPage: Sendable {
+    public var body: JsonObject
+    public var ts: Date
+
+    public init(body: JsonObject, ts: Date) {
+        self.body = body
+        self.ts = ts
     }
 }

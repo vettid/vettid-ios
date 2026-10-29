@@ -22,6 +22,8 @@ public protocol ApprovalOps: Sendable {
     func sharePendingPage(after: String?, limit: Int?) async throws -> JsonObject
     /// One page of `share.rule.list` from [after]: the rules' tags and the subject's other rules.
     func shareRulePage(after: String?) async throws -> JsonObject
+    /// One page of `pending.list` (VAULT-MESSAGING 0.70.0 §10.4.2) from [after], with the vault's time.
+    func pendingListPage(after: String?, limit: Int?) async throws -> PendingListPage
 }
 
 extension VaultApi: ApprovalOps {

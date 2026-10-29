@@ -133,6 +133,28 @@ import VettIDCrypto
         #expect(try pt.string("payload_sha256") == Base64s.encodeStd(Bytes.sha256(Array("x".utf8))))
         #expect(try await approve.value == "ok")
     }
+
+    /// §10.4.2 (0.70.0): `pending.list{after?, limit?}` sends only what is given, and answers the page with the vault's time
+    /// (the response's inner `ts`); an older vault answers `unsupported_type`.
+    @Test func pendingListPagesWithTheVaultsTime() async throws {
+        let (d, v) = try await ops.base.pairedDevice()
+        let api = VaultApi(device: d)
+        let first = Task { try await api.pendingListPage() }
+        var req = try await ops.answer(v, d, "pending.list", #"{"asks":[{"kind":"authenticate","body":{"request_id":"a1","connection_id":"c1","exp":"2026-10-29T12:00:00.000Z"}}],"next":"k1"}"#)
+        #expect(body(req) == "{}")
+        let page = try await first.value
+        #expect(abs(page.ts.timeIntervalSinceNow) < 30)
+        #expect(VaultJSON.objects(page.body, "asks").count == 1 && VaultJSON.string(page.body, "next") == "k1")
+
+        let next = Task { try await api.pendingListPage(after: "k1", limit: 100) }
+        req = try await ops.answer(v, d, "pending.list", #"{"asks":[]}"#)
+        #expect(body(req) == #"{"after":"k1","limit":100}"#)
+        #expect(VaultJSON.string(try await next.value.body, "next") == nil)
+
+        let old = Task { try await api.pendingListPage() }
+        _ = try await ops.answer(v, d, "pending.list", code: "unsupported_type", errorBody: "{}")
+        await #expect(throws: VaultOpError.self) { _ = try await old.value }
+    }
 }
 
 // swiftlint:enable line_length

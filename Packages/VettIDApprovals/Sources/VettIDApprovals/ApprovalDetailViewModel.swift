@@ -174,14 +174,18 @@ public final class ApprovalDetailViewModel {
         if let vault { s.items = Self.answers(vault.items) }
         let now = repo.approvals.first { $0.key == local.key }
         s.approval = now ?? local.approval
-        // Dropped by a lock or a hold while open, it is no longer held, not decided (IOS-PLAN §6.9).
+        // Dropped by a lock or a hold while open, it is no longer held, not decided (IOS-PLAN §6.9). Of the kinds
+        // `pending.list` returns (VAULT-MESSAGING 0.70.0 §10.4.2), once the list has been answered since the drop, one
+        // that is not held again was decided, expired or withdrawn: "Already decided". "No longer on this phone" stays
+        // while the list has not been answered (an older vault, or the read failed or is on its way).
         let dropped = repo.forgetCount != forgetCountAtOpen
         let left = now == nil && local.approval != nil && !local.done && !local.busy && local.criticalResult == nil
-        s.gone = left && !dropped
+        let lost = dropped && (!PendingApproval.eventOnly(key: local.key) || repo.mayHaveBeenDropped(local.key))
+        s.gone = left && !lost
         // Missing at the opening: not held only when it may have been dropped; one decided elsewhere stays "Already decided".
         let missing = local.approval == nil && repo.mayHaveBeenDropped(local.key)
-        s.notHeld = now == nil && (missing || left && dropped)
-        if left && dropped { s.approval = nil }
+        s.notHeld = now == nil && (missing || left && lost)
+        if left && lost { s.approval = nil }
         s.connectionName = s.approval.flatMap { a -> String? in
             guard let id = Self.connectionID(a), let n = connections?.connections.first(where: { $0.id == id })?.displayName,
                   !n.isEmpty else { return nil }
