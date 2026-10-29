@@ -16,7 +16,8 @@ changed.
   from server code. Where a finding depends on that, it says "per spec".
 - **App Store and TestFlight rules** (area 7) are stated from Apple's published guidelines, not from the repository:
   confirm each in App Store Connect before acting on it.
-- **Paths** are repository-relative. Each area states its own shortened form at its top.
+- **Paths** are repository-relative. Areas 1 and 3 state their shortened forms at their top; elsewhere a bare file
+  name is unique in the repository, or the path is given in full.
 
 ## How to read the findings
 
@@ -84,7 +85,7 @@ Audited commit `79c06ba`. Paths are shortened: `UI/X.swift` is `Packages/VettIDU
 is `Packages/VettIDShell/Sources/VettIDShellUI/X.swift`; `App/X.swift` is in the app target. A path into a package's
 logic target names it in full.
 
-**What the plan requires.** IOS-PLAN ID5: VoiceOver labels required in review. IOS-PLAN §3: Dynamic Type up to the
+**What the plan requires.** IOS-PLAN ID5: VoiceOver labels are required. IOS-PLAN §3: Dynamic Type up to the
 accessibility sizes. IOS-PLAN §8 I0.2: "Dynamic Type at the largest size does not clip"; I3.1: typing, the keyboard and
 VoiceOver work inside the secure container; I4: a VoiceOver and Dynamic Type pass on every screen. IOS-PLAN §4.12 (the
 approvals indicator): `updatesFrequently` while urgent, a 44 pt target, announcements at 2 minutes and 1 minute.
@@ -684,14 +685,14 @@ long poll, not the WebSocket that IOS-PLAN §6.6 names (P1).
 |---|---|---|---|---|---|
 | N2 | The device lock is held across network I/O, and nothing bounds a relay call except the system's 60 s idle timeout. | `send`, `request` and the resends hold `lock` around `sendLocked` → `deliver` → `deposit` (`VaultDevice+Send.swift:10,176,190`). So does the flush, entry by entry (`:148-151`). `handle()` takes the same lock for every incoming message (`VaultDevice+Receive.swift:11`), and inside it may deposit `hs.fin`, an `hs.resp` or a token refresh (`VaultDevice+Enroll.swift:121`; `VaultDevice+Receive.swift:118,171,236,240`). `RelayClient.execute` retries `timedOut` 3 times (`RelayClient.swift:210-215`). The session has no `timeoutIntervalForRequest` of its own (`AppComposition.swift:50`). The plain `AsyncLock.acquire()` cannot be cancelled (`Concurrency.swift:24-36`). | On a link that stalls (a weak cell edge, a captive network), one deposit can hold the lock for about 3 minutes. Meanwhile no answer is processed, every other request times out behind it (30 s × 3), and the lists read at unlock fail together. | M: seal and persist under the lock, deposit outside it. Set `timeoutIntervalForRequest` (for example 20 s) and keep 60 s for the long poll only. | V; effect S |
 | N3 | The unlock's, the enrolment's and the recovery open's slot polls have no client deadline and cannot be cancelled. A cold start is not explained. | `poll(_:atMost:)` loops without `atMost` (`MemberApiClient.swift:328-337`), called from `postAndPoll` (`AltChannelFlow.swift:190-200`) and `recoveryOpen` (`:430`). The unlock screen's route has no `onStarting` (`VaultManager+Unlock.swift:133-138`, `UnlockRoute()` at `:21-35`). Only the release update wires it (`VaultManager+ReleaseUpdate.swift:153-155`). `enclaveWait` waits up to 10 min (`MemberApiClient.swift:268-281`). The unlock screen shows a spinner with "checking" while it loads (`UnlockScreen.swift:229-235`) and nothing that ends the wait. | With a cold host, or a slot the host never answers, the member watches a busy keypad for minutes. Only the slot's 15-minute TTL (per spec §11.5) ends it. | S: a client deadline (about 3 min) with "Your vault is starting… this can take a minute or two" after 10 s, as in the update flow, and a Cancel. | V; timing S |
-| N4 | A wrong phone clock is recognised only on a member-API 401. Every other symptom is shown as a network or "no answer" failure. | `clock_skew` comes only from a 401 whose `Date` is more than 240 s off (`MemberApiClient.swift:119-126`; `MemberApiModels.swift:12`). A relay `timestamp_stale` (more than 90 s off, RELAY-PROTOCOL §4.1) is retried 3 times, re-signed with the same wrong clock, and then becomes `.network` (`RelayClient.swift:43,48`; `VaultFailures.swift:39`). A phone more than 5 minutes behind drops every vault answer as "from the future" (`VaultDevice+Receive.swift:77-83`), and the `droppedForTime()` stream that reports it has no subscriber outside its package (`VaultDevice.swift:233-234`): "Your vault did not answer in time". A transfer code is checked against the phone's clock (`VaultDevice+Transfer.swift:42`). | Between 90 s and 4 minutes off, the unlock works and then every relay action says "check your connection". Further off, the answers vanish. The member is sent after the wrong cause. | M: take the skew from the relay's and the API's `Date` headers. Say "Check the date and time" when it is large. Subscribe to `droppedForTime()`. | V |
+| N4 | A wrong phone clock is recognised only on a member-API 401. Every other symptom is shown as a network or "no answer" failure. | `clock_skew` comes only from a 401 whose `Date` is more than 240 s off (`MemberApiClient.swift:119-126`; `MemberApiModels.swift:12`). A relay `timestamp_stale` (more than 90 s off, RELAY-PROTOCOL §4.1) is retried 3 times, re-signed with the same wrong clock, and then becomes `.network` (`RelayClient.swift:43,48`; `VaultFailures.swift:41`). A phone more than 5 minutes behind drops every vault answer as "from the future" (`VaultDevice+Receive.swift:77-83`), and the `droppedForTime()` stream that reports it has no subscriber outside its package (`VaultDevice.swift:233-234`): "Your vault did not answer in time". A transfer code is checked against the phone's clock (`VaultDevice+Transfer.swift:42`). | Between 90 s and 4 minutes off, the unlock works and then every relay action says "check your connection". Further off, the answers vanish. The member is sent after the wrong cause. | M: take the skew from the relay's and the API's `Date` headers. Say "Check the date and time" when it is large. Subscribe to `droppedForTime()`. | V |
 
 ### Polish
 
 | ID | Finding | Evidence | Fix | Status |
 |---|---|---|---|---|
 | N5 | No connectivity awareness. | `NetworkGate`'s comment says the app passes one backed by `NWPathMonitor` (`Transport.swift:4-5`). The app passes nothing, so it is `.always` (`AppComposition.swift:50`), and the 8 s wait for the network after a wake never happens. `notConnectedToInternet` is retried only for GETs (`Transport.swift:154-159`), so an unlock or lock POST right after the phone wakes or changes network fails at once. No offline banner. The root "cannot connect" screen is re-read only for `.starting` and a locked iPhone (`App/VettIDApp.swift:224-235`), not when the app comes back to the foreground or the network returns. | S: pass an `NWPathMonitor` gate. Re-read an `.unreachable(.network)` phase on `.active` and when a path becomes satisfied. Optionally a small offline banner. | V |
-| N6 | Every relay error is shown as the network text. | `case let r as RelayError: VaultFailure(.network, …)` (`VaultFailures.swift:39`) covers `quota_exceeded` (outside photos), `payload_too_large`, `token_revoked`, `rate_limited` and every `http_4xx`. | S: map `rate_limited`, the quotas and the stale signature (N4) to their own kinds. | V |
+| N6 | Every relay error is shown as the network text. | `case let r as RelayError: VaultFailure(.network, …)` (`VaultFailures.swift:41`) covers `quota_exceeded` (outside photos), `payload_too_large`, `token_revoked`, `rate_limited` and every `http_4xx`. | S: map `rate_limited`, the quotas and the stale signature (N4) to their own kinds. | V |
 | N7 | A lost `hs.fin` burns a pairing or a transfer code. | `handleResp` deposits `hs.fin` once (`VaultDevice+Enroll.swift:121`). A failure is swallowed and the message acked (`VaultDevice+Receive.swift:28-32`). | S: keep `hs.fin` and retry its deposit. | V |
 | N8 | A lost `credential.ack` reports a successful operation as failed. | `keep` stores the blob and then awaits `credential.ack` as an ordinary request; its failure throws out of the operation (`CredentialOps.swift:35-54`). Safe: the blob is stored first. | S: send the ack best effort (and again at the next operation). | V |
 | N9 | Nothing keeps the screen on during the long waits. | No `isIdleTimerDisabled` anywhere. The waits are the transfer comparison (up to 11 min), the enrolment's `vault.enrolled`, a cold start and the release update. The auto-lock puts the app in the background, the collection stops after 25 s (`VaultManager+Events.swift:95-124`), and the member-API poll is suspended. | S: disable the idle timer while these screens wait. The transfer and the enrolment already resume, so this only avoids a failure text on return. | V; effect S |
@@ -745,7 +746,7 @@ long poll, not the WebSocket that IOS-PLAN §6.6 names (P1).
 no text of its own is shown as "Something went wrong (code: …)". The code must match `[a-z0-9_]{1,40}`; anything else is
 shown as `unknown` (`VettIDData/Vault/VaultFailures.swift:177-185`).
 
-**What the code does.** There are 68 failure kinds, each with its own sentence. All failures from the layers below pass
+**What the code does.** There are 67 failure kinds, each with its own sentence. All failures from the layers below pass
 through one mapper (`VaultFailures.map`, `VettIDData/Vault/VaultFailures.swift:21-49`).
 
 - **Nothing raw reaches a screen.** No `localizedDescription`, exception text, URL or stack trace is shown. The only codes
@@ -780,7 +781,7 @@ No blocker was found in this area.
   - `refreshApprovals` throws only when the operations object cannot be made, which is local, so offline it returns normally.
     After an unlock with the relay unreachable, the screen therefore shows the empty state "Nothing to approve", not its
     error card.
-  - Requests known from an earlier read are kept (`listed.filter { !lists.covers($0) }`, `:332`), so the problem is the
+  - Requests known from an earlier read are kept (`listed.filter { !lists.covers($0) }`, `:333`), so the problem is the
     first read and new requests.
   - Separately, `act` (Resume requests, Remove connection) sets `local.error`. The screen renders `state.error` only when
     `state.nothing` (`ApprovalsScreen.swift:55`). Both actions exist only on a row of a paused connection, so the list is
@@ -1586,8 +1587,8 @@ App Store Connect refuses the upload, so no TestFlight build can reach the owner
   both need sign-in information. Per spec, the vault accepts the App Attest attestation only for an App ID its release
   pins (IOS-PLAN §6.2, VA2 for `com.vettid.app.staging`); a reviewer's iPhone produces a real production attestation,
   so that works once the staging image pins the Staging App ID.
-- **Suggested fix:** a reviewer membership on staging, a fresh setup code issued for each review (ENROLLMENT-CODES),
-  written steps (code, PIN rules, the password), and a note that Staging shows "1 day = 1 hour" (STAGING-TIME-SCALE).
+- **Suggested fix:** a reviewer membership on staging, a fresh setup code issued for each review (ENROLLMENT-CODES §3),
+  written steps (code, PIN rules, the password), and a note that Staging shows "1 day = 1 hour" (STAGING-TIME-SCALE §5.2).
 
 ### G8. The build number is fixed at 1
 
