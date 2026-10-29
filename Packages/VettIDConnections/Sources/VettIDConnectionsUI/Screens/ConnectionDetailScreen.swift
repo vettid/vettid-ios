@@ -254,8 +254,13 @@ struct ProfileCard: View {
                         // Empty received text is left out with its label, never shown as a blank (§10.8 step 4).
                         if let n = AccountNames.cleaned(item.name) { Text(n).fontWeight(.semibold).padding(.top, Spacing.xs) }
                         ForEach(Array(item.fields.enumerated()), id: \.offset) { _, f in
-                            if let label = AccountNames.cleaned(f.label), let value = AccountNames.cleaned(f.value) {
-                                InfoLine(label: label, value: value)
+                            // A value whose label has nothing to show is shown without it, as in Shared with you.
+                            if let value = AccountNames.cleaned(f.value) {
+                                if let label = AccountNames.cleaned(f.label) {
+                                    InfoLine(label: label, value: value)
+                                } else {
+                                    Text(value).vettIDFont(.bodyMedium)
+                                }
                             }
                         }
                     }
