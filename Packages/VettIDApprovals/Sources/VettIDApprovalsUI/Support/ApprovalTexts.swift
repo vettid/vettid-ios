@@ -27,7 +27,7 @@ enum ApprovalTexts {
     static func who(_ a: PendingApproval, name: String?) -> String? {
         switch a {
         case .connection(let r): AccountNames.cleaned(r.name) ?? ApprovalsStrings.nameNotShared
-        case .device(let d): AccountNames.cleaned(d.deviceName)
+        case .device(let d): AccountNames.cleaned(d.deviceName) ?? deviceKind(d)
         case .share(let s): name ?? (s.subjectAgentID != nil ? ApprovalsStrings.anAgent : nil)
         default: name ?? ApprovalsStrings.aConnection
         }
@@ -41,29 +41,58 @@ enum ApprovalTexts {
         case .connection(.outgoing(let r)):
             r.sas.map { r.state == .approved ? ApprovalsStrings.summaryWaitingPeer($0) : ApprovalsStrings.summarySas($0) }
                 ?? ApprovalsStrings.summaryHandshake
-        case .authentication(let x): x.context.map(firstLine)
+        case .authentication(let x): x.context.flatMap(AccountNames.firstLineIsolated)
         case .grant(let g): ApprovalsStrings.summaryItems(g.entries.count)
-        case .critical(let c): "\(c.itemName) · \(c.fieldLabel)"
+        case .critical(let c): criticalItem(c)
         case .share(let s): ApprovalsStrings.summaryItems(s.items.count)
-        case .device(let d): d.requestType
+        case .device(let d): d.requestType.flatMap(AccountNames.firstLineIsolated)
         }
     }
 
     /// The row's second line: who and the summary, joined, each bidi-isolated (§10.8) since either can come from the
-    /// other side.
+    /// other side. A summary of received text (a context's first line that shows something, a critical item, a device's
+    /// request, §10.8 step 6) is isolated by ``summary(_:)`` itself.
     static func supporting(_ a: PendingApproval, name: String?) -> String {
-        [who(a, name: name), summary(a)].compactMap { AccountNames.isolateOrNull($0) }.joined(separator: " · ")
+        let received: Bool = switch a {
+        case .authentication, .critical, .device: true
+        default: false
+        }
+        let rest = received ? summary(a) : summary(a).flatMap { AccountNames.isolateOrNull($0) }
+        return [who(a, name: name).flatMap { AccountNames.isolateOrNull($0) }, rest].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    /// "item · field", each cleaned and isolated; nil when neither shows anything (§10.8 step 4: left out with its label).
+    static func criticalItem(_ c: CriticalUse) -> String? {
+        let parts = [AccountNames.isolateOrNull(c.itemName), AccountNames.isolateOrNull(c.fieldLabel)].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// The device's name and role, or "?" (VAULT-MESSAGING 0.76.0 §10.8 step 4). With a name: "name · role". Without one:
+    /// its kind once ("A desktop"), never "a desktop · desktop".
+    static func deviceLine(_ d: DeviceRequest) -> String {
+        let line: String
+        if let named = AccountNames.isolateOrNull(d.deviceName) {
+            line = [named, AccountNames.isolateOrNull(d.role)].compactMap { $0 }.joined(separator: " · ")
+        } else {
+            line = deviceKind(d) ?? AccountNames.isolateOrNull(d.role) ?? ""
+        }
+        return line.isEmpty ? "?" : line
+    }
+
+    /// The kind of a desktop or agent request ("A desktop", "An agent"), or nil for a kind this app does not name (§10.8
+    /// step 4).
+    static func deviceKind(_ d: DeviceRequest) -> String? {
+        switch AccountNames.cleaned(d.role)?.lowercased() {
+        case "agent": ApprovalsStrings.anAgent
+        case "desktop": ApprovalsStrings.aDesktop
+        default: nil
+        }
     }
 
     /// A challenge's note on its screen: the connection's own words in full (lines kept, isolated, §10.4); without them,
     /// a `signin` or `approval` challenge says no details were given, and one without a purpose shows nothing.
     static func contextNote(_ x: AuthenticationRequest) -> String? {
         x.context.flatMap(AuthContext.isolated) ?? (x.purpose == .absent ? nil : ApprovalsStrings.authNoDetails)
-    }
-
-    /// [s] cleaned (``AuthContext/plain(_:)``), from its first visible line up to the next line break: a row shows one line.
-    static func firstLine(_ s: String) -> String {
-        String(AuthContext.plain(s).drop { $0.isWhitespace }.prefix { !$0.isNewline })
     }
 
     /// The decision screen's body. An `approval` challenge has none: its title says who asks, and its note follows in full
@@ -84,7 +113,7 @@ enum ApprovalTexts {
         case .grant: return ApprovalsStrings.grantBody(conn)
         case .critical: return ApprovalsStrings.criticalBody(conn)
         case .share(let s):
-            let fallback = s.subjectAgentID != nil ? ApprovalsStrings.anAgent : ApprovalsStrings.aConnection
+            let fallback = s.subjectAgentID != nil ? ApprovalsStrings.anAgentInline : ApprovalsStrings.aConnectionInline
             return ApprovalsStrings.shareBody(AccountNames.isolateOrNull(name) ?? fallback)
         case .device: return ApprovalsStrings.deviceBody
         }
@@ -153,7 +182,9 @@ enum ApprovalTexts {
 
     /// A grant entry's line: a category the member answers, a named item, or one missing from the vault.
     static func grantEntry(_ e: GrantEntry) -> String {
-        if e.kind == "category" { return ApprovalsStrings.grantCategory(AccountNames.isolateOrNull(e.label) ?? humanize(e.ref)) }
+        if e.kind == "category" {
+            return ApprovalsStrings.grantCategory(AccountNames.isolateOrNull(e.label) ?? AccountNames.isolate(humanize(e.ref)))
+        }
         if e.available, let n = AccountNames.isolateOrNull(e.name) { return n }
         return ApprovalsStrings.grantItemMissing(AccountNames.isolateOrNull(e.label) ?? AccountNames.isolate(e.ref))
     }

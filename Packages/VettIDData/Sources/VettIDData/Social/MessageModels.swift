@@ -19,7 +19,7 @@ public enum AttachmentState: String, Sendable, CaseIterable {
 }
 
 /// A message's photo as the vault describes it (the device view: never a blob key or id). [mime] is the type the vault
-/// sniffed, once stored; [name] the sender's, sanitized for showing and never used as a file name; [width] and [height]
+/// sniffed, once stored; [name] the sender's, cleaned for showing (VAULT-MESSAGING 0.76.0 §10.8) and never used as a file name; [width] and [height]
 /// the sender's claim, for a placeholder only. The thumbnail and the photo live in memory only (``AttachmentsRepository``),
 /// never here. Mirrors vettid-android `AttachmentInfo`.
 public struct AttachmentInfo: Equatable, Sendable {
@@ -49,11 +49,20 @@ public struct AttachmentInfo: Equatable, Sendable {
     /// Whether the photo can be fetched (`message.attachment.get` serves only a stored attachment).
     public var viewable: Bool { state == .stored || state == .sending || state == .delivered }
 
-    /// The device view of an attachment (§10.5.1); the thumbnail is not kept here, the name is sanitized.
+    /// A file name as shown: ``AccountNames/cleanedCapped(_:max:)``, then path separators and leading dots removed as before
+    /// (chosen; not in the spec: the name is never a file name, this is belt and braces).
+    static func shownName(_ raw: String?) -> String? {
+        guard var c = AccountNames.cleaned(raw) else { return nil }
+        c.removeAll { $0 == "/" || $0 == "\\" }
+        while c.hasPrefix(".") { c.removeFirst() }
+        return AccountNames.cleanedCapped(c, max: PhotoLimits.nameMaxChars)
+    }
+
+    /// The device view of an attachment (§10.5.1); the thumbnail is not kept here, the name is cleaned for showing (VAULT-MESSAGING 0.76.0 §10.8) and never used as a file name.
     public static func of(_ a: AttachmentView) -> AttachmentInfo {
         AttachmentInfo(
             attID: a.attID, state: .of(a.state), reason: a.reason, mime: a.mime, size: a.size, width: a.width, height: a.height,
-            name: AttachmentNames.sanitize(a.name)
+            name: shownName(a.name)
         )
     }
 }

@@ -172,14 +172,17 @@ struct PhotoBubble: View {
         return min(max(CGFloat(a.width) / CGFloat(a.height), minRatio), maxRatio)
     }
 
+    /// The caption as the bubble shows it (§10.8): cleaned, each line isolated; "" when nothing shows.
+    private var caption: String { AuthContext.bubble(message.text) }
+
     var body: some View {
         if let a = message.attachment {
             let status = PhotoStatus.of(a, outgoing: message.outgoing)
             let statusText = status.map { photoStatusText($0, name) }
             VStack(alignment: message.outgoing ? .trailing : .leading, spacing: Spacing.xxs) {
                 picture(a, statusText)
-                if !message.text.isEmpty {
-                    Text(message.text).vettIDFont(.bodyLarge).accessibilityHidden(true)
+                if !caption.isEmpty {
+                    Text(caption).vettIDFont(.bodyLarge).accessibilityHidden(true)
                 }
                 if let statusText {
                     Text(statusText).vettIDFont(.labelSmall)
@@ -213,7 +216,7 @@ struct PhotoBubble: View {
         .buttonStyle(.plain)
         .disabled(!a.viewable)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(photoLabel(head, message.text, statusText))
+        .accessibilityLabel(photoLabel(head, AccountNames.cleanedMessage(message.text), statusText))
         .accessibilityAddTraits(a.viewable ? .isButton : [])
         .accessibilityIdentifier("photo_\(message.messageID)")
         .accessibilityValue(thumb == nil ? "" : "shown")

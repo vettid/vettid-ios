@@ -805,6 +805,28 @@
         }
       }
     },
+    "approvals_a_desktop": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A desktop"
+          }
+        }
+      }
+    },
+    "approvals_an_agent_inline": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "an agent"
+          }
+        }
+      }
+    },
     "approvals_from": {
       "extractionState": "manual",
       "localizations": {
