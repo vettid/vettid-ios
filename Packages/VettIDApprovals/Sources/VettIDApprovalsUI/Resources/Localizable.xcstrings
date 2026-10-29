@@ -739,6 +739,17 @@
         }
       }
     },
+    "approvals_auth_no_details": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No details were given. Only approve if you know what this is for."
+          }
+        }
+      }
+    },
     "approvals_auth_approval_title": {
       "extractionState": "manual",
       "localizations": {

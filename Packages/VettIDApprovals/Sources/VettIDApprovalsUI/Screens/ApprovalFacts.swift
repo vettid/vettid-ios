@@ -47,8 +47,8 @@ struct Facts: View {
             case .authentication(let x):
                 FactLabel(ApprovalsStrings.from)
                 FactValue(AccountNames.isolateOrNull(name) ?? ApprovalsStrings.aConnection)
-                // The challenger's claim (§10.4), in full whatever the purpose.
-                if let c = x.context.flatMap(AuthContext.isolated) {
+                // The challenger's claim (§10.4), in full whatever the purpose; a fixed line when a purpose comes without one.
+                if let c = ApprovalTexts.contextNote(x) {
                     FactLabel(ApprovalsStrings.context)
                     FactValue(c).accessibilityIdentifier("auth_context")
                 }
