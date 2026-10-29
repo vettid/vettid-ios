@@ -63,12 +63,11 @@ public struct ConnectionDetailScreen: View {
     }
 
     private var title: String {
-        guard let c = state.connection, !c.displayName.isEmpty else { return ConnectStrings.nameNotShared }
-        return c.displayName
+        AccountNames.cleaned(state.connection?.displayName) ?? ConnectStrings.nameNotShared
     }
 
     /// In sentences the name is bidi-isolated (VAULT-MESSAGING §10.8); the heading and the tile take it as is.
-    private var isolated: String { AccountNames.isolate(title) }
+    private var isolated: String { AccountNames.isolateOrNull(state.connection?.displayName) ?? ConnectStrings.nameNotShared }
 
     public var body: some View {
         DetailScaffold(onBack: actions.onBack) {
@@ -112,7 +111,7 @@ public struct ConnectionDetailScreen: View {
     /// Message (once the messages are there), favourite, History, remove.
     func pill(_ c: ConnectionInfo) -> [PillAction] {
         // The connection's own name, as vettid-android's pill (its name from the shown connection).
-        let named = AccountNames.isolate(c.displayName.isEmpty ? ConnectStrings.nameNotShared : c.displayName)
+        let named = AccountNames.isolateOrNull(c.displayName) ?? ConnectStrings.nameNotShared
         var list: [PillAction] = []
         if let onMessage = actions.onMessage, c.state == .active {
             list.append(PillAction(.messages, label: ConnectStrings.detailMessage(named), action: onMessage))
@@ -236,23 +235,26 @@ struct ProfileCard: View {
 
     var body: some View {
         let c = connection
-        let hasName = !c.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let profileName = AccountNames.cleaned(c.name)
+        let hasName = profileName != nil
         DetailCard {
             CardTitle(text: ConnectStrings.detailProfile)
             if c.accountName == nil && !hasName && c.sharedItems.isEmpty {
                 Text(ConnectStrings.detailProfileNone).foregroundStyle(colors.onSurfaceVariant)
             }
             if let account = c.accountName {
-                InfoLine(label: ConnectStrings.detailAccountName, value: account)
+                InfoLine(label: ConnectStrings.detailAccountName, value: AccountNames.cleaned(account) ?? account)
                 note(ConnectStrings.namesNote).padding(.bottom, Spacing.s)
             }
             if hasName || !c.sharedItems.isEmpty {
-                if hasName { InfoLine(label: ConnectStrings.detailProfileName, value: c.name) }
+                if let profileName { InfoLine(label: ConnectStrings.detailProfileName, value: profileName) }
                 if !c.sharedItems.isEmpty {
                     Text(ConnectStrings.detailSharedItems).vettIDFont(.labelLarge).padding(.top, Spacing.s)
                     ForEach(c.sharedItems, id: \.itemID) { item in
-                        Text(item.name).fontWeight(.semibold).padding(.top, Spacing.xs)
-                        ForEach(Array(item.fields.enumerated()), id: \.offset) { _, f in InfoLine(label: f.label, value: f.value) }
+                        Text(AccountNames.cleaned(item.name) ?? "").fontWeight(.semibold).padding(.top, Spacing.xs)
+                        ForEach(Array(item.fields.enumerated()), id: \.offset) { _, f in
+                            InfoLine(label: AccountNames.cleaned(f.label) ?? "", value: AccountNames.cleaned(f.value) ?? "")
+                        }
                     }
                 }
                 note(ConnectStrings.selfAsserted).padding(.top, Spacing.s)

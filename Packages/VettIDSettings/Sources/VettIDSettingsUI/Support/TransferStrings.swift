@@ -184,6 +184,12 @@ enum TransferStrings {
         String(localized: "settings_transfer_approve", defaultValue: "Move to the new phone", bundle: .module)
     }
 
+    /// The new phone in a sentence when its name is nothing but invisible characters (chosen; not in the spec; mirrors
+    /// vettid-android `settings_transfer_unnamed_device`).
+    static var transferUnnamedDevice: String {
+        String(localized: "settings_transfer_unnamed_device", defaultValue: "The other phone", bundle: .module)
+    }
+
     static func transferApproveConfirmTitle(_ a: String) -> String {
         String(localized: "settings_transfer_approve_confirm_title", defaultValue: "Move VettID to \(a)?", bundle: .module)
     }

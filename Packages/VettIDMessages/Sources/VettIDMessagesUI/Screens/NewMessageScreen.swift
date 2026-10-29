@@ -56,8 +56,8 @@ public struct NewMessageScreen: View {
                         let name = ConversationItem.name(c)
                         VettIDListRow(
                             title: name,
-                            supporting: c.secondaryName,
-                            tileName: name,
+                            supporting: AccountNames.isolateOrNull(c.secondaryName),
+                            tileName: ConversationItem.tileName(c),
                             tileStyle: c.favorite ? .favorite : .connection,
                             tilePhoto: ProfilePhotos.decode(c.photo),
                             onTap: { onPick(c.id) }

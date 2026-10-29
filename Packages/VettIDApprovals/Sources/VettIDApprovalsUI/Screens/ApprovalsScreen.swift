@@ -116,7 +116,7 @@ struct ApprovalRow: View {
             title: ApprovalTexts.title(approval, name: name),
             supporting: ApprovalTexts.supporting(approval, name: name),
             meta: ApprovalTimes.short(approval.receivedAt),
-            tileName: who ?? "?",
+            tileName: AccountNames.cleaned(who) ?? "?",
             emphasized: approval.needsDecision,
             onTap: { onOpen(approval.key) }
         )
@@ -141,7 +141,7 @@ struct BatchRow: View {
                 title: ApprovalTexts.batchTitle(asks: asks.count, name: name),
                 supporting: Self.kinds(asks, name: name),
                 meta: ApprovalTimes.short(receivedAt),
-                tileName: name ?? ApprovalsStrings.aConnection,
+                tileName: AccountNames.cleaned(name) ?? ApprovalsStrings.aConnection,
                 emphasized: true,
                 onTap: onToggle
             )

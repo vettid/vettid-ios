@@ -141,7 +141,8 @@ public struct SharedWithYouScreen: View {
         .closesWhenCovered { if state.ask != nil { actions.onOpenAsk(false) } }
         .confirmDialog(
             isPresented: Binding(get: { state.confirmGiveUp != nil }, set: { if !$0 { actions.onAskGiveUp(nil) } }),
-            title: ItemsStrings.sharedGiveUpTitle(state.confirmGiveUp?.name ?? ""), message: ItemsStrings.sharedGiveUpBody(name),
+            title: ItemsStrings.sharedGiveUpTitle(AccountNames.isolateOrNull(state.confirmGiveUp?.name) ?? ItemsStrings.deletedItem),
+            message: ItemsStrings.sharedGiveUpBody(name),
             confirmLabel: ItemsStrings.sharedGiveUp, destructive: true, onConfirm: actions.onGiveUp
         )
     }
@@ -161,14 +162,15 @@ struct ReceivedCard: View {
         let g = grant, id = grant.grantID
         let content = state.opened[id]
         DetailCard {
-            Text(content?.name ?? g.name).vettIDFont(.titleMedium, weight: .semibold)
+            Text(AccountNames.isolateOrNull(content?.name ?? g.name) ?? ItemsStrings.deletedItem)
+                .vettIDFont(.titleMedium, weight: .semibold)
             Text(ItemsText.receivedLabel(g, category: content?.category, name: name))
                 .vettIDFont(.bodySmall)
                 .foregroundStyle(colors.onSurfaceVariant)
                 .accessibilityIdentifier("received_label_\(id)")
             // What the grant holds, as the connection's vault described it (`grant.list` labels, 0.21.0), before a fetch.
             if content == nil && !g.labels.isEmpty {
-                Text(ItemsStrings.sharedHolds(g.labels.map(\.label).joined(separator: ", ")))
+                Text(ItemsStrings.sharedHolds(g.labels.compactMap { AccountNames.cleaned($0.label) }.joined(separator: ", ")))
                     .vettIDFont(.bodyMedium)
                     .accessibilityIdentifier("received_fields_\(id)")
             }
@@ -222,7 +224,7 @@ struct SharedFields: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(content.fields.enumerated()), id: \.offset) { _, f in
-                Text(f.label).vettIDFont(.labelMedium).foregroundStyle(colors.onSurfaceVariant)
+                Text(AccountNames.cleaned(f.label) ?? "").vettIDFont(.labelMedium).foregroundStyle(colors.onSurfaceVariant)
                 let text = Self.text(f)
                 Text(text.isEmpty ? ItemsStrings.emptyValue : text)
                     .vettIDFont(.bodyLarge)

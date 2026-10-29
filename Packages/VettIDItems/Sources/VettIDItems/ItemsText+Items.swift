@@ -104,8 +104,7 @@ public extension ItemsText {
     /// What saving does to sharing with one connection (§10.7 Dry run; §10.12 Overlapping rules). Names are isolated
     /// (bidirectional isolation, as every name next to other text).
     static func impact(_ i: ShareImpact) -> String {
-        let name = i.connectionName.trimmingCharacters(in: .whitespaces).isEmpty ? ItemsStrings.sharingThisConnection : i.connectionName
-        let who = AccountNames.isolate(name)
+        let who = sharingName(i.connectionName)
         if i.withdrawn { return ItemsStrings.impactWithdrawn(who) }
         if i.usableOnly { return ItemsStrings.impactUsable(who) }
         // 0.23.0: `ask` wins — an `auto` rule asks first while an `ask` rule of the same connection holds the item.

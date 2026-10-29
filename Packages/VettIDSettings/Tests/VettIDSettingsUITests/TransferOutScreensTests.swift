@@ -25,12 +25,21 @@ import VettIDUI
             .appendingPathComponent("Sources/VettIDSettingsUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 451)
+        #expect(keys.count == 452)
         let missing = "\u{0}missing"
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)
             #expect(!text.isEmpty && text != key && text != missing, "\(key)")
         }
+    }
+
+    /// The new phone's name in a sentence is cleaned and isolated; one that is nothing visible reads "The other phone"
+    /// (VAULT-MESSAGING §10.8; mirrors vettid-android #220).
+    @Test func aHostileDeviceNameCannotReverseTheSentence() {
+        let body = TransferStrings.transferCompareBody(TransferOutContent.pendingName("Bank\u{2069}\u{202E}"))
+        #expect(body == "\u{2068}Bank\u{2069} wants to take over your vault. Continue only if it shows the same code.")
+        #expect(body.filter { $0 == "\u{2069}" }.count == 1 && !body.contains("\u{202E}"))
+        #expect(TransferOutContent.pendingName("\u{2069}\u{202E}") == "The other phone" && TransferOutContent.pendingName(nil) == "The other phone")
     }
 
     @Test func theTextsAreAndroids() {

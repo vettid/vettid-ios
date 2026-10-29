@@ -28,7 +28,7 @@ import VettIDVault
 
     @Test func rowsNameTheirDeviceAfterWhatTheyAlreadyShow() {
         let s = state()
-        #expect(s.row(Self.rec(5, "message.sent", device: "d-desk", conn: "c1")).supporting == "Ada Lovelace · Desktop")
+        #expect(s.row(Self.rec(5, "message.sent", device: "d-desk", conn: "c1")).supporting == "\u{2068}Ada Lovelace\u{2069} · Desktop")
         let unlocked = s.row(Self.rec(4, "vault.unlocked", device: "d-pixel"))
         #expect(unlocked.title == "Vault unlocked" && unlocked.supporting == "Pixel 10 Pro" && unlocked.category == .vaultAccess)
         #expect(s.row(Self.rec(3, "vault.locked", device: "d-gone")).supporting == "Removed device")
@@ -40,14 +40,14 @@ import VettIDVault
     @Test func withoutTheDeviceListRowsNameNoDevice() {
         let s = state(devices: nil)
         #expect(s.row(Self.rec(4, "vault.unlocked", device: "d-pixel")).supporting == "Unlocks and daily checks")
-        #expect(s.row(Self.rec(5, "message.sent", device: "d-desk", conn: "c1")).supporting == "Ada Lovelace")
+        #expect(s.row(Self.rec(5, "message.sent", device: "d-desk", conn: "c1")).supporting == "\u{2068}Ada Lovelace\u{2069}")
     }
 
     @Test func connectionsItemsExportsAndSigners() {
         let s = state(items: ["it1": "Passport"])
         #expect(s.row(Self.rec(1, "message.received", conn: "c2")).supporting == "Name not shared yet")
         #expect(s.row(Self.rec(1, "message.received", conn: "c9")).supporting == "Removed connection")
-        #expect(s.row(Self.rec(1, "item.revealed", ref: "it1")).supporting == "Passport")
+        #expect(s.row(Self.rec(1, "item.revealed", ref: "it1")).supporting == "\u{2068}Passport\u{2069}")
         #expect(s.row(Self.rec(1, "item.revealed", ref: "it2")).supporting == "Deleted item")
         // Before the app holds the Vault list, no item is named.
         #expect(state().row(Self.rec(1, "item.revealed", ref: "it2")).supporting == "Vault (items, sharing, wallet)")
@@ -58,12 +58,12 @@ import VettIDVault
     /// IOS-PLAN §4.1: a title names the connection, device or item, and drops a name gone or not known.
     @Test func titlesNameOnlyWhatIsKnown() {
         let s = state(items: ["it1": "GitHub token"])
-        #expect(s.row(Self.rec(1, "identity.rotate_conflict", conn: "c1")).title == "Connection with Ada Lovelace paused")
+        #expect(s.row(Self.rec(1, "identity.rotate_conflict", conn: "c1")).title == "Connection with \u{2068}Ada Lovelace\u{2069} paused")
         #expect(s.row(Self.rec(1, "identity.rotate_conflict", conn: "c2")).title == "Connection paused")
         #expect(s.row(Self.rec(1, "identity.rotate_conflict", conn: "c9")).title == "Connection paused")
-        #expect(s.row(Self.rec(1, "push.registered", device: "d-pixel", ref: "apns")).title == "Notifications turned on for Pixel 10 Pro")
+        #expect(s.row(Self.rec(1, "push.registered", device: "d-pixel", ref: "apns")).title == "Notifications turned on for \u{2068}Pixel 10 Pro\u{2069}")
         #expect(s.row(Self.rec(1, "push.registered", device: "d-gone", ref: "apns")).title == "Notifications turned on")
-        #expect(s.row(Self.rec(1, "leash.item.run", ref: "it1")).title == "An agent used GitHub token")
+        #expect(s.row(Self.rec(1, "leash.item.run", ref: "it1")).title == "An agent used \u{2068}GitHub token\u{2069}")
         #expect(s.row(Self.rec(1, "leash.item.run", ref: "it9")).title == "An agent used an item")
     }
 
@@ -108,7 +108,7 @@ import VettIDVault
         let f = s.fields()
         #expect(f.map(\.label) == ["When", "Category", "Details", "Connection", "Direction", "Event type", "Reference", "Entry number", "Entry ID", "Entry hash"])
         #expect(f[2].value == "Not successful. If this was not you, change your PIN or your password now.\nWrong PIN or password.")
-        #expect(f[3].value == "Ada Lovelace" && f[4].value == "Incoming" && f[5].value == "recovery.attempt" && f[5].mono)
+        #expect(f[3].value == "\u{2068}Ada Lovelace\u{2069}" && f[4].value == "Incoming" && f[5].value == "recovery.attempt" && f[5].mono)
         #expect(s.title == "Recovery attempt 3 of 10")
         let gone = entry(Self.rec(7, "message.sent", conn: "c9")) { _ in }
         #expect(gone.connectionLabel == "Removed connection")

@@ -62,9 +62,11 @@ public struct ConnectionInfo: Equatable, Sendable, Identifiable {
     public var displayName: String { accountName ?? "" }
 
     /// The peer's display name when it adds something to the title (non-empty and different), for secondary text.
+    /// Cleaned of control and format characters, and compared cleaned (VAULT-MESSAGING §10.8; mirrors vettid-android #220);
+    /// the screens isolate it where it sits in a row.
     public var secondaryName: String? {
-        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return n.isEmpty || name == displayName || name == accountName ? nil : name
+        guard let n = AccountNames.cleaned(name) else { return nil }
+        return n == AccountNames.cleaned(displayName) || n == AccountNames.cleaned(accountName) ? nil : n
     }
 }
 

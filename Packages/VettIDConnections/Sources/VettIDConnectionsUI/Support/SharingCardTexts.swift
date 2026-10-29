@@ -76,12 +76,12 @@ enum SharingCardTexts {
         ].compactMap { $0 }.joined(separator: " · ")
     }
 
-    private static func blank(_ s: String) -> Bool { s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-
     /// A given item's name: "Deleted item" when the vault no longer has it.
-    static func givenName(_ g: GrantView) -> String { blank(g.name) ? ConnectStrings.shareDeletedItem : g.name }
+    static func givenName(_ g: GrantView) -> String { AccountNames.isolateOrNull(g.name) ?? ConnectStrings.shareDeletedItem }
 
     /// A received item's name, else the label it was shared under, else "Deleted item".
-    static func receivedName(_ g: GrantView) -> String { blank(g.name) ? (g.label ?? ConnectStrings.shareDeletedItem) : g.name }
+    static func receivedName(_ g: GrantView) -> String {
+        AccountNames.isolateOrNull(g.name) ?? AccountNames.isolateOrNull(g.label) ?? ConnectStrings.shareDeletedItem
+    }
 }
 #endif

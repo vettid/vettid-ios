@@ -32,8 +32,11 @@ public struct HistoryState: Equatable, Sendable, CustomStringConvertible, Custom
     /// The connections the filter offers, by name.
     public var connections: [ConnectionOption] {
         connectionNames.keys.map { ConnectionOption(id: $0, name: connectionLabel($0)) }
-            .sorted { $0.name.lowercased() == $1.name.lowercased() ? $0.id < $1.id : $0.name.lowercased() < $1.name.lowercased() }
+            .sorted { sortKey($0) == sortKey($1) ? $0.id < $1.id : sortKey($0) < sortKey($1) }
     }
+
+    /// A connection option's sort key: its name cleaned and lower-cased (the isolation is not part of the order).
+    private func sortKey(_ o: ConnectionOption) -> String { (AccountNames.cleaned(o.name) ?? "").lowercased() }
 
     /// The entries the list shows: [entries] without the hidden kinds (IOS-PLAN §4.1), which stay in [entries] for the
     /// chain check.
@@ -127,7 +130,9 @@ public final class HistoryViewModel {
 
     private func onConnections(_ list: [ConnectionInfo]) {
         known = Dictionary(list.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        local.connectionNames = Dictionary(list.map { ($0.id, $0.displayName) }, uniquingKeysWith: { a, _ in a })
+        local.connectionNames = Dictionary(
+            list.map { ($0.id, AccountNames.cleaned($0.displayName) ?? "") }, uniquingKeysWith: { a, _ in a }
+        )
     }
 
     /// The daily check passed (or the hold ended): a list refused because it was due reads again by itself.
@@ -150,9 +155,10 @@ public final class HistoryViewModel {
         let c = r.entry.connectionID.flatMap { known[$0] }
         let item = AuditKinds.itemOf(r.kind, r.entry.ref).flatMap { local.itemNames?[$0] }
         let device = local.devices?.device(r.entry.deviceID)?.rowName
-        let name = c.flatMap { $0.displayName.isEmpty ? nil : $0.displayName }
+        let name = AccountNames.cleaned(c?.displayName)
         let title = HistoryText.title(r.kind, r.entry.ref, names: EntryNames(connection: name, device: device, item: item))
-        return AuditFilter.kindText(r.kind) + [title, c?.name, c?.firstName, c?.lastName, c?.accountName, item, device].compactMap { $0 }
+        let names = [c?.name, c?.firstName, c?.lastName, c?.accountName, item].map { AccountNames.cleaned($0) }
+        return AuditFilter.kindText(r.kind) + ([title] + names + [device]).compactMap { $0 }
     }
 
     public func setCategory(_ c: AuditCategory?) { setFilter(HistoryFilters.category(local.filter, c)) }

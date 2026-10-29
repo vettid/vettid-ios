@@ -35,8 +35,9 @@ public extension ConversationSummary {
     func matches(_ query: String) -> Bool {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return true }
-        return [connection.displayName, connection.name, last?.text].compactMap { $0 }
-            .contains { $0.range(of: q, options: .caseInsensitive) != nil }
+        // The names are searched cleaned (VAULT-MESSAGING §10.8); the message text as it is.
+        let keys = [AccountNames.cleaned(connection.displayName), AccountNames.cleaned(connection.name), last?.text]
+        return keys.compactMap { $0 }.contains { $0.range(of: q, options: .caseInsensitive) != nil }
     }
 }
 
@@ -102,6 +103,8 @@ public final class MessagesViewModel {
 
     public func dismissError() { local.error = nil }
 
+    private static func sortKey(_ c: ConnectionInfo) -> String { (AccountNames.cleaned(c.displayName) ?? "").lowercased() }
+
     /// TEST ONLY: returns once the work started has run.
     func settle() async { await work.settle() }
 }
@@ -156,10 +159,12 @@ public final class NewMessageViewModel {
     static func listed(_ all: [ConnectionInfo]) -> [ConnectionInfo] {
         all.filter { $0.state == .active }.enumerated().sorted { a, b in
             if a.element.favorite != b.element.favorite { return a.element.favorite }
-            let (x, y) = (a.element.displayName.lowercased(), b.element.displayName.lowercased())
+            let (x, y) = (sortKey(a.element), sortKey(b.element))
             return x != y ? x < y : a.offset < b.offset
         }.map(\.element)
     }
+
+    private static func sortKey(_ c: ConnectionInfo) -> String { (AccountNames.cleaned(c.displayName) ?? "").lowercased() }
 
     /// TEST ONLY: returns once the work started has run.
     func settle() async { await work.settle() }

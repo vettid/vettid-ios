@@ -91,7 +91,7 @@ struct WaitingRow: View {
 /// `peerDeclineText`.
 enum PeerDeclineText {
     static func title(outgoing: Bool, name: String?) -> String {
-        let who = name.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 } ?? ConnectStrings.peerDeclinedSomeone
+        let who = AccountNames.isolateOrNull(name) ?? ConnectStrings.peerDeclinedSomeone
         return outgoing ? ConnectStrings.peerDeclinedOutgoing(who) : ConnectStrings.peerDeclinedIncoming(who)
     }
 }
@@ -188,7 +188,7 @@ struct ConnectionRequestContent: View {
 
     @ViewBuilder private var names: some View {
         Text(ConnectStrings.requestNameLabel).vettIDFont(.labelLarge)
-        Text(request.name ?? ConnectStrings.requestNoName)
+        Text(AccountNames.cleaned(request.name) ?? ConnectStrings.requestNoName)
             .vettIDFont(.titleLarge)
             .accessibilityIdentifier("request_name")
         if request.name != nil {

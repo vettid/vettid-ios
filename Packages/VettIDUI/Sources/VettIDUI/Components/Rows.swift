@@ -122,6 +122,7 @@ public struct VettIDListRow<Below: View>: View {
 /// Mirrors vettid-android `ConnectionRow`.
 public struct ConnectionRow: View {
     let name: String
+    let labelName: String
     let favorite: Bool
     let supporting: String?
     let meta: String?
@@ -130,8 +131,10 @@ public struct ConnectionRow: View {
     let onFavoriteChange: @MainActor (Bool) -> Void
     let onTap: (@MainActor () -> Void)?
 
+    /// [labelName]: the name as it sits in the star's spoken sentence (bidi-isolated by the caller); [name] when absent.
     public init(
         name: String,
+        labelName: String? = nil,
         favorite: Bool,
         supporting: String? = nil,
         meta: String? = nil,
@@ -141,6 +144,7 @@ public struct ConnectionRow: View {
         onTap: (@MainActor () -> Void)? = nil
     ) {
         self.name = name
+        self.labelName = labelName ?? name
         self.favorite = favorite
         self.supporting = supporting
         self.meta = meta
@@ -165,7 +169,7 @@ public struct ConnectionRow: View {
             emphasized: emphasized,
             action: RowAction(
                 icon: favorite ? .star : .starOutline,
-                label: Self.favoriteLabel(name, favorite: favorite),
+                label: Self.favoriteLabel(labelName, favorite: favorite),
                 active: favorite
             ) { onFavoriteChange(!favorite) },
             tilePhoto: photo,
