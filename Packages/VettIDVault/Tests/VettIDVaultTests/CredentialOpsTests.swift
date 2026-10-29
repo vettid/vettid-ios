@@ -26,14 +26,14 @@ import VettIDCrypto
 
     /// Answers the next request, which must be of [type], with [body] (or an error [code] with [errorBody]).
     @discardableResult
-    func answer(_ v: FakeVault, _ d: VaultDevice, _ type: String, _ body: String = "{}", code: String? = nil, errorBody: String? = nil) async throws -> Inner {
+    func answer(_ v: FakeVault, _ d: VaultDevice, _ type: String, _ body: String = "{}", code: String? = nil, errorBody: String? = nil, ts: Date = Date()) async throws -> Inner {
         let req = try v.open(try await base.relay.nextDeposit().payload)
         #expect(req.type == type)
         let inner: Inner
         if let code {
-            inner = Inner(id: Ulid.new(), type: type, ts: Date(), re: req.id, status: Inner.statusError, error: InnerError(code), body: Array((errorBody ?? "").utf8))
+            inner = Inner(id: Ulid.new(), type: type, ts: ts, re: req.id, status: Inner.statusError, error: InnerError(code), body: Array((errorBody ?? "").utf8))
         } else {
-            inner = Inner(id: Ulid.new(), type: type, ts: Date(), re: req.id, status: Inner.statusOK, body: Array(body.utf8))
+            inner = Inner(id: Ulid.new(), type: type, ts: ts, re: req.id, status: Inner.statusOK, body: Array(body.utf8))
         }
         try await d.handle(v.msg(try #require(v.keyring.current()).seal(inner)))
         return req

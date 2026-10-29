@@ -23,6 +23,8 @@ public final class ApprovalsManager: ApprovalsRepository {
         var type: String
         var body: String
         var at: Date
+        /// The event's inner `ts` (the vault's time), nil for a body read from a request (VAULT-MESSAGING 0.70.0 §10.4.2).
+        var ts: Date?
     }
 
     @ObservationIgnored var stored: [StoredEvent] = []
@@ -47,10 +49,18 @@ public final class ApprovalsManager: ApprovalsRepository {
     @ObservationIgnored private var changedAt: [String: Int] = [:]
     /// The approvals that arrived as events since the approvals were last dropped (``mayHaveBeenDropped(_:)``).
     @ObservationIgnored private var arrivedSinceForget: Set<String> = []
-    /// The vault's time at the first page of the last `pending.list` read since the vault was last forgotten: an event of
-    /// the kinds it lists (``pendingTypes``) that is not later than this is ignored, since the list already says whether the
-    /// ask is open (VAULT-MESSAGING 0.70.0 §10.4.2). Nil: none read, every event is applied.
-    @ObservationIgnored var pendingListTs: Date?
+    /// The first page's `ts` of each `pending.list` read on its way, by read (``readPendingAsks(_:generation:)``).
+    @ObservationIgnored var pendingReadTs: [Int: Date] = [:]
+    /// The first page's `ts` of the newest list merged since the vault was last forgotten.
+    @ObservationIgnored var mergedListTs: Date?
+    @ObservationIgnored var pendingReadCount = 0
+    /// Creation events ignored for being no later than the list's time while a read was on its way: if that read does not
+    /// merge, they are applied after all (``finishPendingRead(_:)``).
+    @ObservationIgnored var ignoredDuringRead: [IgnoredEvent] = []
+    /// The time an event of the kinds `pending.list` returns must be later than to be applied: the newest first page's
+    /// `ts` of the lists merged or on their way (never lowered by a read that fails), VAULT-MESSAGING 0.70.0 §10.4.2.
+    /// Nil: no list read, every event is applied.
+    var pendingListTs: Date? { ([mergedListTs] + pendingReadTs.values.map { Optional($0) }).compactMap { $0 }.max() }
     /// Whether `pending.list` has been read through since the vault was last forgotten (``mayHaveBeenDropped(_:)``).
     /// Observed: a screen showing a dropped ask is told when the read ends (``mayHaveBeenDropped(_:)``).
     var pendingListAnswered = false
@@ -59,7 +69,7 @@ public final class ApprovalsManager: ApprovalsRepository {
     @ObservationIgnored var pendingListUnsupported = false
     /// The change at which each device's session request was closed (`sync.event` `device.session`): a `pending.list` read
     /// before it does not bring the request back.
-    @ObservationIgnored var sessionClosedAt: [String: Int] = [:]
+    @ObservationIgnored var sessionClosedAt: [String: (change: Int, ts: Date)] = [:]
     /// When each approval was dropped (decided, or `not_found` on a decision): a share question dropped during a read is
     /// not taken from its list (VAULT-MESSAGING 0.55.7 §10.12 rule 3).
     @ObservationIgnored private var droppedAt: [String: Int] = [:]
@@ -174,7 +184,9 @@ public final class ApprovalsManager: ApprovalsRepository {
         generation += 1
         forgetCount += 1
         arrivedSinceForget = []
-        pendingListTs = nil
+        pendingReadTs = [:]
+        mergedListTs = nil
+        ignoredDuringRead = []
         pendingListAnswered = false
         sessionClosedAt = [:]
         listed = []
@@ -202,14 +214,13 @@ public final class ApprovalsManager: ApprovalsRepository {
         if ApprovalParser.types.contains(m.type) {
             keep(m.type, m.object, ts: m.ts)
         } else if m.type == "sync.event" {
-            onSync(m.object)
+            onSync(m.object, ts: m.ts)
         }
     }
 
     /// [ts] the event's inner `ts`; nil for a body read from a request.
-    private func keep(_ type: String, _ o: JsonObject, ts: Date? = nil) {
-        // A creation event as old as the list read, or older, is ignored (VAULT-MESSAGING 0.70.0 §10.4.2, §8.4).
-        if let ts, let cut = pendingListTs, Self.pendingTypes.contains(type), ts <= cut { return }
+    func keep(_ type: String, _ o: JsonObject, ts: Date? = nil) {
+        if ignoredByPendingList(type, o, ts: ts) { return }
         guard let p = ApprovalParser.parse(type, o, at: now()) else { return }
         let at = now()
         changes += 1
@@ -243,7 +254,7 @@ public final class ApprovalsManager: ApprovalsRepository {
             }
             // Several `share.pending` batches of one rule add up (§10.12).
             let body = if case .share = p, let old { Self.mergedShare(old.body, o) } else { o.raw }
-            events.append(StoredEvent(type: type, body: body, at: at))
+            events.append(StoredEvent(type: type, body: body, at: at, ts: ts))
         }
     }
 
@@ -260,12 +271,15 @@ public final class ApprovalsManager: ApprovalsRepository {
     }
 
     /// `sync.event`: another device decided (§10.1).
-    private func onSync(_ o: JsonObject) {
+    private func onSync(_ o: JsonObject, ts: Date) {
         let kind = VaultJSON.string(o, "kind") ?? ""
+        // A closing event no later than the list read is ignored too: the list already says whether the ask is open
+        // (VAULT-MESSAGING 0.70.0 §10.4.2).
+        if let cut = pendingListTs, Self.pendingClosing.contains(kind), ts <= cut { return }
         if kind == "share.decided", let id = VaultJSON.string(o, "rule_id") {
             return shareDecided(id, VaultJSON.strings(o, "included") + VaultJSON.strings(o, "declined"))
         }
-        if kind == "device.session", let device = VaultJSON.string(o, "device_id") { return sessionClosed(device) }
+        if kind == "device.session", let device = VaultJSON.string(o, "device_id") { return sessionClosed(device, ts: ts) }
         guard let (prefix, member) = Self.decidedKinds[kind], let id = VaultJSON.string(o, member) else { return }
         drop(prefix + id)
     }
@@ -278,12 +292,12 @@ public final class ApprovalsManager: ApprovalsRepository {
 
     /// `sync.event` `device.session`: the device's session request is closed (granted, denied or ended, §6.8); a device has at
     /// most one. Held or not, the read in progress is told (VAULT-MESSAGING 0.70.0 §10.4.2).
-    private func sessionClosed(_ deviceID: String) {
+    private func sessionClosed(_ deviceID: String, ts: Date) {
         changes += 1
-        sessionClosedAt[deviceID] = changes
-        let all = stored.compactMap(parsed) + listed
-        for case .device(let d) in all where d.type == Self.sessionType && d.deviceID == deviceID {
-            drop(PendingApproval.device(d).key)
+        sessionClosedAt[deviceID] = (changes, ts)
+        // Only a request made no later than the close: a newer one of the device (made after it ended) stays.
+        for e in stored where e.type == Self.sessionType && (e.ts ?? .distantPast) <= ts {
+            if case .device(let d)? = parsed(e), d.deviceID == deviceID { drop(PendingApproval.device(d).key) }
         }
     }
 
@@ -367,6 +381,7 @@ public final class ApprovalsManager: ApprovalsRepository {
         let o = try await guarded { quietly ? try await quietOps() : try await ops() }
         let lists = await readLists(o, at: t)
         let pending = await readPendingAsks(o, generation: g)
+        defer { finishPendingRead(pending, generation: g) }
         guard g == generation else { return }
         let changed = { (key: String) in (self.changedAt[key] ?? 0) > since }
         // A list the vault did not answer covers nothing: what was known of it stays (VAULT-MESSAGING 0.55.7 §10.12).
@@ -385,7 +400,9 @@ public final class ApprovalsManager: ApprovalsRepository {
                 return Self.withItems(e, batched[p.key] ?? [])
             }
         }
-        if case .answered(let asks) = pending { mergePendingAsks(asks, at: t, since: since, changed: changed) }
+        if case .answered(let asks, let readTs) = pending.result {
+            mergePendingAsks(asks, readTs: readTs, at: t, since: since, changed: changed)
+        }
     }
 
     /// The ids of the items each share question's batches brought after change [since].

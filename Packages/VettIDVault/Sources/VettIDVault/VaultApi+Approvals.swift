@@ -88,7 +88,7 @@ extension VaultApi {
     public func pendingListPage(after: String? = nil, limit: Int? = nil) async throws -> PendingListPage {
         let b = JsonBuilder()
         if let after { b.string("after", after) }
-        if let limit { b.uint("limit", UInt64(max(limit, 0))) }
+        if let limit { b.uint("limit", UInt64(min(max(limit, 1), 100))) }
         let r = try await device.request("pending.list", body: b.bytes())
         return PendingListPage(body: VaultJSON.object(try VaultDevice.okBody("pending.list", r)), ts: r.ts)
     }
