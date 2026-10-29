@@ -80,6 +80,10 @@ import VettIDVault
         #expect(HistoryText.title("identity.rotate_resolved", "fp", names: n) == "Connection with \u{2068}Sam Lee\u{2069} checked and resumed")
         #expect(HistoryText.title("call.permission_off", names: n) == "Calls from \u{2068}Sam Lee\u{2069} turned off")
         #expect(HistoryText.title("call.permission_on", names: n) == "Calls from \u{2068}Sam Lee\u{2069} turned on")
+        // VAULT-MESSAGING 0.77.0 §6.8: a denied session request names the device.
+        #expect(HistoryText.title("device.session.denied", "req1", names: n) == "Session request from \u{2068}Pixel 7\u{2069} denied")
+        #expect(HistoryText.title("device.session.denied", "req1") == "Session request denied")
+        #expect(HistoryText.title("device.session.granted", "s1", names: n) == "Desktop session granted")
         #expect(HistoryText.title("push.registered", "fcm", names: n) == "Notifications turned on for \u{2068}Pixel 7\u{2069}")
         #expect(HistoryText.title("push.unregistered", "app", names: n) == "Notifications turned off for \u{2068}Pixel 7\u{2069}")
         #expect(HistoryText.title("push.token_gone", "token_gone", names: n) == "Notifications stopped reaching \u{2068}Pixel 7\u{2069}")

@@ -3183,6 +3183,28 @@
         }
       }
     },
+    "history_kind_device_session_denied": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Session request from %@ denied"
+          }
+        }
+      }
+    },
+    "history_kind_device_session_denied_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Session request denied"
+          }
+        }
+      }
+    },
     "history_kind_push_registered": {
       "extractionState": "manual",
       "localizations": {

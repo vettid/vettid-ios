@@ -128,6 +128,21 @@ extension ApprovalsManager {
         }
     }
 
+    /// Drops every open ask of the device [deviceID] (its session request and its held approvals) and marks their feed
+    /// items read. The vault sends `approval.decided` and `sync.event` `device.session` to the member's other devices only
+    /// (§10.1), so the app that ended the device's access or unlinked it calls this itself, once the vault has answered
+    /// (VAULT-MESSAGING 0.77.0 §6.8). A denied session request is not this: it ends only that request, which
+    /// ``declineDeviceRequest(_:)`` drops, and the device's held approvals stay.
+    public func dropAsks(ofDevice deviceID: String) {
+        let keys = (stored.compactMap { parsed($0) } + listed).compactMap { p -> String? in
+            if case .device(let d) = p, d.deviceID == deviceID { p.key } else { nil }
+        }
+        for key in Set(keys).sorted() {
+            drop(key)
+            decided(key)
+        }
+    }
+
     // MARK: - ConnectionRequestsRepository, through the connections
 
     public var requests: [PendingConnection] { connections.requests }

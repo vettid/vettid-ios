@@ -275,6 +275,9 @@ public enum AuditKinds {
         "identity.rotate_resolved": .named("history_kind_rotate_resolved", any: "history_kind_rotate_resolved_any", who: .connection),
         "call.permission_off": .named("history_kind_call_permission_off", any: "history_kind_call_permission_off_any", who: .connection),
         "call.permission_on": .named("history_kind_call_permission_on", any: "history_kind_call_permission_on_any", who: .connection),
+        // VAULT-MESSAGING 0.77.0 §6.8, §10.9: a denied session request (`device_id`, `ref` = `request_id`). Android has no
+        // key for it; the texts are chosen (not in the spec beyond "Session request from <device> denied").
+        "device.session.denied": .named("history_kind_device_session_denied", any: "history_kind_device_session_denied_any", who: .device),
         "push.registered": .named("history_kind_push_registered", any: "history_kind_push_registered_any", who: .device),
         "push.unregistered": .named("history_kind_push_unregistered", any: "history_kind_push_unregistered_any", who: .device),
         "push.token_gone": .named("history_kind_push_token_gone", any: "history_kind_push_token_gone_any", who: .device),
