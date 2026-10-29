@@ -60,7 +60,7 @@ public final class DevStack: CustomStringConvertible, Sendable {
         var r = URLRequest(url: url)
         r.timeoutInterval = 3
         do {
-            let (_, resp) = try await transport.session.data(for: r)
+            let (_, resp) = try await transport.session.data(for: transport.prepared(r))
             return (resp as? HTTPURLResponse)?.statusCode == 200
         } catch {
             return false
