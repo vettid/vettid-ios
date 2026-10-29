@@ -45,7 +45,7 @@ public final class ApprovalsManager: ApprovalsRepository {
     @ObservationIgnored var generation = 0
     /// Counts the approvals that arrived or left (decided here or on another device), and when each did: a list read
     /// before that neither brings back one that left nor drops one that arrived (chosen; not in the spec).
-    @ObservationIgnored private var changes = 0
+    @ObservationIgnored var changes = 0
     @ObservationIgnored private var changedAt: [String: Int] = [:]
     /// The approvals that arrived as events since the approvals were last dropped (``mayHaveBeenDropped(_:)``).
     @ObservationIgnored private var arrivedSinceForget: Set<String> = []
@@ -55,7 +55,7 @@ public final class ApprovalsManager: ApprovalsRepository {
     @ObservationIgnored var mergedListTs: Date?
     @ObservationIgnored var pendingReadCount = 0
     /// Creation events ignored for being no later than the list's time while a read was on its way: if that read does not
-    /// merge, they are applied after all (``finishPendingRead(_:)``).
+    /// merge, they are applied after all (``finishPendingRead(_:generation:)``).
     @ObservationIgnored var ignoredDuringRead: [IgnoredEvent] = []
     /// The time an event of the kinds `pending.list` returns must be later than to be applied: the newest first page's
     /// `ts` of the lists merged or on their way (never lowered by a read that fails), VAULT-MESSAGING 0.70.0 §10.4.2.
@@ -72,7 +72,7 @@ public final class ApprovalsManager: ApprovalsRepository {
     @ObservationIgnored var sessionClosedAt: [String: (change: Int, ts: Date)] = [:]
     /// When each approval was dropped (decided, or `not_found` on a decision): a share question dropped during a read is
     /// not taken from its list (VAULT-MESSAGING 0.55.7 §10.12 rule 3).
-    @ObservationIgnored private var droppedAt: [String: Int] = [:]
+    @ObservationIgnored var droppedAt: [String: Int] = [:]
     /// The share items decided, and at which change: a list read before does not bring them back.
     @ObservationIgnored private var decidedLog: [ShareDecidedMark] = []
     /// The `share.pending` batches, and at which change: a list read before keeps them, and only them.
@@ -218,10 +218,30 @@ public final class ApprovalsManager: ApprovalsRepository {
         }
     }
 
+    /// Whether [p] is a session request older than one kept for the same device: a device has at most one, and an older
+    /// one that arrives after a newer one is dropped (§6.8).
+    private func supersededSession(_ p: PendingApproval, ts: Date?) -> Bool {
+        guard case .device(let d) = p, d.type == Self.sessionType, let id = d.deviceID, let ts else { return false }
+        return stored.contains { e in
+            guard case .device(let o)? = parsed(e) else { return false }
+            return o.type == Self.sessionType && o.deviceID == id && (e.ts ?? .distantPast) > ts
+        }
+    }
+
+    /// Removes the kept session requests of the device of [p], a session request.
+    private func removeSessions(ofSameDeviceAs p: PendingApproval, from events: inout [StoredEvent]) {
+        guard case .device(let d) = p, d.type == Self.sessionType, let id = d.deviceID else { return }
+        events.removeAll { e in
+            guard case .device(let o)? = parsed(e) else { return false }
+            return o.type == Self.sessionType && o.deviceID == id
+        }
+    }
+
     /// [ts] the event's inner `ts`; nil for a body read from a request.
     func keep(_ type: String, _ o: JsonObject, ts: Date? = nil) {
         if ignoredByPendingList(type, o, ts: ts) { return }
         guard let p = ApprovalParser.parse(type, o, at: now()) else { return }
+        if supersededSession(p, ts: ts) { return }
         let at = now()
         changes += 1
         changedAt[p.key] = changes
@@ -249,9 +269,7 @@ public final class ApprovalsManager: ApprovalsRepository {
             let old = events.first { parsed($0)?.key == p.key }
             events.removeAll { parsed($0)?.key == p.key }
             // A device has at most one session request, and a newer one replaces the older (§6.8).
-            if case .device(let d) = p, d.type == Self.sessionType, let id = d.deviceID {
-                events.removeAll { if case .device(let o)? = parsed($0) { o.type == Self.sessionType && o.deviceID == id } else { false } }
-            }
+            removeSessions(ofSameDeviceAs: p, from: &events)
             // Several `share.pending` batches of one rule add up (§10.12).
             let body = if case .share = p, let old { Self.mergedShare(old.body, o) } else { o.raw }
             events.append(StoredEvent(type: type, body: body, at: at, ts: ts))
@@ -275,7 +293,9 @@ public final class ApprovalsManager: ApprovalsRepository {
         let kind = VaultJSON.string(o, "kind") ?? ""
         // A closing event no later than the list read is ignored too: the list already says whether the ask is open
         // (VAULT-MESSAGING 0.70.0 §10.4.2).
-        if let cut = pendingListTs, Self.pendingClosing.contains(kind), ts <= cut { return }
+        // Only against a list already merged, not a read on its way: that read may still fail, and a close applied is
+        // protected by the merge (``mergePendingAsks``), not undone by it.
+        if let cut = mergedListTs, Self.pendingClosing.contains(kind), ts <= cut { return }
         if kind == "share.decided", let id = VaultJSON.string(o, "rule_id") {
             return shareDecided(id, VaultJSON.strings(o, "included") + VaultJSON.strings(o, "declined"))
         }

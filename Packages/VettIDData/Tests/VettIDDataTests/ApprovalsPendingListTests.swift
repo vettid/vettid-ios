@@ -389,6 +389,65 @@ import VettIDDataTesting
         try await read.value
         #expect(Set(m.approvals.map(\.key)) == ["auth:a1", "auth:a6"], "a6 is later than the list")
     }
+
+    /// A read on its way that then fails: [during] runs while it waits on its second page, and the read fails.
+    func failingRead(on m: ApprovalsManager, during: () async throws -> Void) async throws {
+        ops.pendingPageSize = 1
+        listed([("authenticate", auth("a1")), ("authenticate", auth("a2"))], ts: 10)
+        let gate = TestDeferred<Void>()
+        ops.listGate = gate
+        ops.gateFrom = 1
+        let read = Task { try await m.refreshApprovals() }
+        try await waitForCalls(2)
+        try await during()
+        gate.fail(FakeApprovalOps.error("retry"))
+        try await read.value
+    }
+
+    /// An ask created and decided during a read that fails stays gone: the replay of the creation sees the decision.
+    @Test func anAskCreatedAndDecidedDuringAFailedReadStaysGone() async throws {
+        let m = manager()
+        try await failingRead(on: m) {
+            m.onEvent(event("connection.authenticate.pending", auth("x"), ts: later(5)))
+            m.onEvent(event("sync.event", #"{"kind":"connection.authenticate.decided","request_id":"x","approved":true}"#, ts: later(6)))
+        }
+        #expect(m.approvals.isEmpty)
+    }
+
+    /// A held ask decided on another device during a read that fails is gone, though the read said nothing.
+    @Test func aHeldAskDecidedDuringAFailedReadIsGone() async throws {
+        let m = manager()
+        m.onEvent(event("connection.authenticate.pending", auth("a1")))
+        try await failingRead(on: m) {
+            m.onEvent(event("sync.event", #"{"kind":"connection.authenticate.decided","request_id":"a1","approved":false}"#, ts: later(5)))
+        }
+        #expect(m.approvals.isEmpty)
+    }
+
+    /// A session request ignored during a read that fails does not replace the newer one of its device that was applied.
+    @Test func aReplayedOlderSessionDoesNotReplaceANewerOne() async throws {
+        let m = manager()
+        try await failingRead(on: m) {
+            m.onEvent(event("device.session.pending", session("r1", device: "dev-1"), ts: later(5)))
+            m.onEvent(event("device.session.pending", session("r2", device: "dev-1"), ts: later(20)))
+        }
+        #expect(m.approvals.map(\.key) == ["device:device.session.pending:r2"])
+        // Reordered outside any read: the older one that arrives last is dropped.
+        let n = manager()
+        n.onEvent(event("device.session.pending", session("r4", device: "dev-2"), ts: later(40)))
+        n.onEvent(event("device.session.pending", session("r3", device: "dev-2"), ts: later(30)))
+        #expect(n.approvals.map(\.key) == ["device:device.session.pending:r4"])
+    }
+
+    /// A decision made on this phone after the event was ignored is not undone by the replay.
+    @Test func aReplayDoesNotBringBackWhatWasDecidedHere() async throws {
+        let m = manager()
+        try await failingRead(on: m) {
+            m.onEvent(event("connection.authenticate.pending", auth("x"), ts: later(5)))
+            try await m.denyAuthentication("x")
+        }
+        #expect(m.approvals.isEmpty)
+    }
 }
 
 // swiftlint:enable line_length

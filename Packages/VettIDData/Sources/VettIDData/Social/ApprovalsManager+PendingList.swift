@@ -39,6 +39,8 @@ extension ApprovalsManager {
         var type: String
         var body: JsonObject
         var ts: Date
+        /// ``changes`` when it was ignored: a drop made after it is not undone by the replay.
+        var mark: Int
     }
 
     /// Whether the creation event [ts] of [type] is ignored: as old as the list read, or older (VAULT-MESSAGING 0.70.0
@@ -46,7 +48,7 @@ extension ApprovalsManager {
     func ignoredByPendingList(_ type: String, _ o: JsonObject, ts: Date?) -> Bool {
         guard let ts, let cut = pendingListTs, Self.pendingTypes.contains(type), ts <= cut else { return false }
         if !pendingReadTs.isEmpty {
-            ignoredDuringRead.append(IgnoredEvent(type: type, body: o, ts: ts))
+            ignoredDuringRead.append(IgnoredEvent(type: type, body: o, ts: ts, mark: changes))
             if ignoredDuringRead.count > Self.maxIgnoredDuringRead { ignoredDuringRead.removeFirst() }
         }
         return true
@@ -125,7 +127,15 @@ extension ApprovalsManager {
         guard pendingReadTs.isEmpty else { return }
         let replay = ignoredDuringRead
         ignoredDuringRead = []
-        for e in replay { keep(e.type, e.body, ts: e.ts) }
+        for e in replay where !closedSince(e) { keep(e.type, e.body, ts: e.ts) }
+    }
+
+    /// Whether the ask of [e] was decided, dropped or closed after it was ignored (here or on another device).
+    private func closedSince(_ e: IgnoredEvent) -> Bool {
+        guard let p = ApprovalParser.parse(e.type, e.body, at: now()) else { return true }
+        if (droppedAt[p.key] ?? 0) > e.mark { return true }
+        guard case .device(let d) = p, let id = d.deviceID, let closed = sessionClosedAt[id] else { return false }
+        return closed.change > e.mark && closed.ts >= e.ts
     }
 
     /// Replaces the kept events of the listed kinds with [asks], the list of the read whose first page had [readTs],
