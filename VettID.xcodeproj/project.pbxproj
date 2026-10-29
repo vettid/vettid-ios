@@ -34,6 +34,7 @@
 		2B7C58D7CD92999F58FB865D /* SettingsFlowsCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93AFC9E49CAEEB5D0ABC86DF /* SettingsFlowsCatalog.swift */; };
 		2DB59791D7D6903F1DE6E8CB /* VettIDAltChan in Frameworks */ = {isa = PBXBuildFile; productRef = 2022889C73B639A3FEDD0CBE /* VettIDAltChan */; };
 		2ED9F7D436AE5EBE6EC6A918 /* VettIDCrypto in Frameworks */ = {isa = PBXBuildFile; productRef = 2628100D3340AAA9869F33DF /* VettIDCrypto */; };
+		3038151F076162BD2127BC3F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AB0B96F2AA5C25C8DBAE14D6 /* Assets.xcassets */; };
 		34D5AD803AA496D57470232B /* VaultUITestCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 461CF475BEF16D6D464D6ECE /* VaultUITestCase.swift */; };
 		3BDC50D1B60B3C9D8BFF60CF /* OnboardingCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F75EB86F0AEDA6ABA253BBC1 /* OnboardingCatalog.swift */; };
 		3DA939459B79AF971E911C98 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18D27D877D6472CB1E622763 /* AppDelegate.swift */; };
@@ -54,6 +55,7 @@
 		73BB80548EC5E12691B5059B /* SecureHardware.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BC7B2415F948B243F5CAD54 /* SecureHardware.swift */; };
 		7937027AB4FC817D3718C1D3 /* vettid_urgent.caf in Resources */ = {isa = PBXBuildFile; fileRef = 7D7EDC35DFC7C75093301E1B /* vettid_urgent.caf */; };
 		79EF40CF165A7802AA53B55D /* AppComposition.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9AE8109566BB532DFAC5A50 /* AppComposition.swift */; };
+		7A9EB1B9D72CFBDEBFEEA40C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AB0B96F2AA5C25C8DBAE14D6 /* Assets.xcassets */; };
 		7E153901143C2E137C50D8BB /* VettIDOnboarding in Frameworks */ = {isa = PBXBuildFile; productRef = DDE00D69B69BBE5573334D60 /* VettIDOnboarding */; };
 		7FDA2FA6D29A4D5E40F58219 /* VettIDItems in Frameworks */ = {isa = PBXBuildFile; productRef = 9B5BE2F91F3508F341AB3F05 /* VettIDItems */; };
 		8216EC5366C9E37FFD6DCD23 /* AppComposition.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9AE8109566BB532DFAC5A50 /* AppComposition.swift */; };
@@ -72,6 +74,7 @@
 		947B90F626615FBFDC4AB60F /* VettIDMessages in Frameworks */ = {isa = PBXBuildFile; productRef = 29121F6C29BAE98F04C4EFAC /* VettIDMessages */; };
 		952798E17BA70F638B502377 /* DevStackWiring.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF184030262E43FB151252EE /* DevStackWiring.swift */; };
 		9677BF2DC1585290382C8F93 /* StagingTests+Transfer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9812A6CD3A1425C23018950A /* StagingTests+Transfer.swift */; };
+		9AB9CC38BC79E190CC822002 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 5419A46086305A3A71AFECC8 /* PrivacyInfo.xcprivacy */; };
 		9AC6E6766E388B3332491622 /* VettIDMessages in Frameworks */ = {isa = PBXBuildFile; productRef = E159DF0BD64E08CD3DE1DD88 /* VettIDMessages */; };
 		9AFDE19700D4376ECAACFF6B /* OwnerCheckCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABB2FC11CCF6AAD6F6399524 /* OwnerCheckCatalog.swift */; };
 		9C686D12D46144D0CF1890A9 /* VettIDHistory in Frameworks */ = {isa = PBXBuildFile; productRef = C5A65DAFD3B8EBAB52757B9E /* VettIDHistory */; };
@@ -104,6 +107,7 @@
 		CA07610D628893FD4E928A2C /* VettIDAltChanTesting in Frameworks */ = {isa = PBXBuildFile; productRef = 5A3EEF226DB58AF9D30CC799 /* VettIDAltChanTesting */; };
 		CAA0E28A24397037F4AD5CB6 /* ItemsCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDD69AF1283FBA35B9C2E65B /* ItemsCatalog.swift */; };
 		CC9EEF03E7D81A1EEBAA10C2 /* VettIDApprovals in Frameworks */ = {isa = PBXBuildFile; productRef = 7878205240D15E4858E8CD77 /* VettIDApprovals */; };
+		CEF943BBC7A1EA02A3326719 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 5419A46086305A3A71AFECC8 /* PrivacyInfo.xcprivacy */; };
 		CFBE64FEEE60DFB5A0D4D48D /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 412ACBC39A6E3761D83FDE48 /* AppEnvironment.swift */; };
 		D39F8F4D752750849F93CF4F /* OpenedLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 651F1FB251573B18571FE4F0 /* OpenedLinks.swift */; };
 		D4845078E7AA2C525E8E979A /* VettIDMedia in Frameworks */ = {isa = PBXBuildFile; productRef = 175F65451CA4BCACD57D04D5 /* VettIDMedia */; };
@@ -168,6 +172,7 @@
 		461CF475BEF16D6D464D6ECE /* VaultUITestCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultUITestCase.swift; sourceTree = "<group>"; };
 		4CEC8D115B6CD5EAB8C1F445 /* Staging.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Staging.xcconfig; sourceTree = "<group>"; };
 		4DAFB636C365A57D892BA212 /* NoSecureHardware.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoSecureHardware.swift; sourceTree = "<group>"; };
+		5419A46086305A3A71AFECC8 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		55434C49B97C4353C6D68569 /* UnlockCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnlockCatalogTests.swift; sourceTree = "<group>"; };
 		58F10BFB096BF7C87801B737 /* vettid_ringtone.caf */ = {isa = PBXFileReference; path = vettid_ringtone.caf; sourceTree = "<group>"; };
 		5A09BECE73601964F78B7870 /* VettIDNotify */ = {isa = PBXFileReference; lastKnownFileType = folder; name = VettIDNotify; path = Packages/VettIDNotify; sourceTree = SOURCE_ROOT; };
@@ -204,6 +209,7 @@
 		A34C0ED8CB57521C8F3EF6D6 /* StagingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StagingTests.swift; sourceTree = "<group>"; };
 		A84B69E505CEC2E1129233E9 /* StagingTests+Connect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StagingTests+Connect.swift"; sourceTree = "<group>"; };
 		A95A3D47EF72656899839626 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		AB0B96F2AA5C25C8DBAE14D6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		ABB2FC11CCF6AAD6F6399524 /* OwnerCheckCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OwnerCheckCatalog.swift; sourceTree = "<group>"; };
 		ABC062C8E50CF3A935F64F87 /* OnboardingCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingCatalogTests.swift; sourceTree = "<group>"; };
 		B0D14B2DBE5EF0620ED73CEC /* SecureEnclaveDeviceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureEnclaveDeviceTests.swift; sourceTree = "<group>"; };
@@ -403,9 +409,11 @@
 				18D27D877D6472CB1E622763 /* AppDelegate.swift */,
 				412ACBC39A6E3761D83FDE48 /* AppEnvironment.swift */,
 				5CBB4C9A8E482B333CED7362 /* AppLockGate.swift */,
+				AB0B96F2AA5C25C8DBAE14D6 /* Assets.xcassets */,
 				7F2EA67554B107444FF813EF /* CanaryManifestFiles.swift */,
 				E19B16C3C80D7D44FEA75D72 /* InstalledFromBuild.swift */,
 				651F1FB251573B18571FE4F0 /* OpenedLinks.swift */,
+				5419A46086305A3A71AFECC8 /* PrivacyInfo.xcprivacy */,
 				B5C81B56C71C53452A052D2A /* VettIDApp.swift */,
 			);
 			path = App;
@@ -676,6 +684,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3038151F076162BD2127BC3F /* Assets.xcassets in Resources */,
+				9AB9CC38BC79E190CC822002 /* PrivacyInfo.xcprivacy in Resources */,
 				1AD4A3C73EBCF4A4AB0D09B2 /* vettid_general.caf in Resources */,
 				12C9FFD09BFCEEF0B69132C9 /* vettid_message.caf in Resources */,
 				E9141891D026B7012D946A1F /* vettid_ringtone.caf in Resources */,
@@ -687,6 +697,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7A9EB1B9D72CFBDEBFEEA40C /* Assets.xcassets in Resources */,
+				CEF943BBC7A1EA02A3326719 /* PrivacyInfo.xcprivacy in Resources */,
 				B08D183DB53F898A53BB256A /* vettid_general.caf in Resources */,
 				BCDA2651E192F50CFFC6029A /* vettid_message.caf in Resources */,
 				DA6800A3D7DE982F9F6229FB /* vettid_ringtone.caf in Resources */,
@@ -857,7 +869,7 @@
 		0E7217B6D310F76F145E12ED /* Staging */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "$(VETTID_APP_ICON)";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -887,14 +899,13 @@
 		1742EEC4E9BDFA0EC50CB122 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "$(VETTID_APP_ICON)";
 				CODE_SIGN_ENTITLEMENTS = "Config/VettID-production.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "$(VETTID_DISPLAY_NAME)";
-				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera to scan QR codes, such as your setup code or an invitation, and to take photos you send. Nothing is recorded, and a photo stays in memory until you send it.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "VettID uses Face ID only to open the app when you turn on the app lock.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "VettID adds a photo to your library only when you choose Save to phone.";
@@ -914,7 +925,7 @@
 		1F3F5FBDFE17797B5F06A521 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "$(VETTID_APP_ICON)";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1005,7 +1016,7 @@
 		3B28DE23EFA5E8015D03AAC6 /* DevStack */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "$(VETTID_APP_ICON)";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1176,7 +1187,7 @@
 		94968B6381DE14DDF541B3BC /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "$(VETTID_APP_ICON)";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1254,14 +1265,13 @@
 		CD0E26D49AD5DC2388F82003 /* DevStack */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "$(VETTID_APP_ICON)";
 				CODE_SIGN_ENTITLEMENTS = "Config/VettID-production.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "$(VETTID_DISPLAY_NAME)";
-				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera to scan QR codes, such as your setup code or an invitation, and to take photos you send. Nothing is recorded, and a photo stays in memory until you send it.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "VettID uses Face ID only to open the app when you turn on the app lock.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "VettID adds a photo to your library only when you choose Save to phone.";
@@ -1281,14 +1291,13 @@
 		D2B65ADEAFF5916CE8F2CF27 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "$(VETTID_APP_ICON)";
 				CODE_SIGN_ENTITLEMENTS = "Config/VettID-production.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "$(VETTID_DISPLAY_NAME)";
-				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera to scan QR codes, such as your setup code or an invitation, and to take photos you send. Nothing is recorded, and a photo stays in memory until you send it.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "VettID uses Face ID only to open the app when you turn on the app lock.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "VettID adds a photo to your library only when you choose Save to phone.";
@@ -1439,14 +1448,13 @@
 		E657D085724CDCF38E51C505 /* Staging */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "$(VETTID_APP_ICON)";
 				CODE_SIGN_ENTITLEMENTS = "Config/VettID-production.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "$(VETTID_DISPLAY_NAME)";
-				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "VettID uses the camera to scan QR codes, such as your setup code or an invitation, and to take photos you send. Nothing is recorded, and a photo stays in memory until you send it.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "VettID uses Face ID only to open the app when you turn on the app lock.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "VettID adds a photo to your library only when you choose Save to phone.";

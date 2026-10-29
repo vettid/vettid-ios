@@ -2,6 +2,7 @@
 #include "Base.xcconfig"
 
 VETTID_APP_BUNDLE_ID = com.vettid.app.staging
+VETTID_APP_ICON = AppIcon-NonProduction
 VETTID_DISPLAY_NAME = VettID Staging
 VETTID_ENVIRONMENT = staging
 VETTID_ACCOUNT_HOST = account.staging.vettid.org

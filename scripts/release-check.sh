@@ -15,7 +15,9 @@
 #   - the VAULT-MESSAGING §16 TEST manifest key (a canary manifest is
 #     accepted only under the keys the build pins),
 # or lacks its own account host, the Secure Enclave phone key or the JSON
-# document type a canary manifest is opened with, or has another bundle id,
+# document type a canary manifest is opened with, or its configuration's app
+# icon or the privacy manifest (what App Store Connect needs), or has another
+# bundle id,
 # or is not signed for App Attest's production environment. The archives
 # must hold the VettID app alone; the VettID and VettIDStagingUITests
 # schemes must not name the VettIDDevStack app or its UI tests (IOS-PLAN
@@ -136,6 +138,54 @@ check_staging() {
 }
 
 app_of() { echo "${OUT}/$1.xcarchive/Products/Applications/VettID.app"; }
+
+# What App Store Connect needs in an upload (IOS-PLAN §8 I4): the configuration's app icon, compiled into the asset
+# catalog, and the privacy manifest with the reasons for the required-reason APIs the app uses and the data it
+# collects.
+check_store_files() {
+  local app=$1 icon=$2 actual problems=()
+  actual=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' "${app}/Info.plist" 2>/dev/null || true)
+  [[ "${actual}" == "${icon}" ]] || problems+=("CFBundleIconName '${actual}', expected ${icon}")
+  if [[ -f "${app}/Assets.car" ]]; then
+    xcrun assetutil --info "${app}/Assets.car" 2>/dev/null | grep -qF "\"${icon}\"" || problems+=("Assets.car without ${icon}")
+  else
+    problems+=("no Assets.car")
+  fi
+  # Each category with its own reason (the entries of NSPrivacyAccessedAPITypes, in any order).
+  local manifest="${app}/PrivacyInfo.xcprivacy" pairs="" i=0 category
+  if [[ -f "${manifest}" ]]; then
+    while category=$(/usr/libexec/PlistBuddy -c "Print :NSPrivacyAccessedAPITypes:${i}:NSPrivacyAccessedAPIType" "${manifest}" 2>/dev/null); do
+      pairs+="${category}=$(/usr/libexec/PlistBuddy -c "Print :NSPrivacyAccessedAPITypes:${i}:NSPrivacyAccessedAPITypeReasons" "${manifest}" 2>/dev/null | tr -d ' \n')"$'\n'
+      i=$((i + 1))
+    done
+    for pair in NSPrivacyAccessedAPICategoryUserDefaults=CA92.1 NSPrivacyAccessedAPICategoryFileTimestamp=C617.1; do
+      grep -q "^${pair%%=*}=Array{.*${pair#*=}.*}$" <<<"${pairs}" || problems+=("privacy manifest without ${pair%%=*} reason ${pair#*=}")
+    done
+    # The data the member API can read (email, account ids, the app key), declared as the App Privacy answers say.
+    local collected
+    collected=$(plutil -extract NSPrivacyCollectedDataTypes xml1 -o - "${manifest}" 2>/dev/null || true)
+    for t in EmailAddress UserID DeviceID; do
+      grep -qF "<string>NSPrivacyCollectedDataType${t}</string>" <<<"${collected}" ||
+        problems+=("privacy manifest does not declare NSPrivacyCollectedDataType${t}")
+    done
+    # Each declared type linked to the member and never used for tracking.
+    i=0
+    while category=$(/usr/libexec/PlistBuddy -c "Print :NSPrivacyCollectedDataTypes:${i}:NSPrivacyCollectedDataType" "${manifest}" 2>/dev/null); do
+      [[ $(/usr/libexec/PlistBuddy -c "Print :NSPrivacyCollectedDataTypes:${i}:NSPrivacyCollectedDataTypeTracking" "${manifest}" 2>/dev/null) == false ]] ||
+        problems+=("privacy manifest: ${category} not declared as untracked")
+      [[ $(/usr/libexec/PlistBuddy -c "Print :NSPrivacyCollectedDataTypes:${i}:NSPrivacyCollectedDataTypeLinked" "${manifest}" 2>/dev/null) == true ]] ||
+        problems+=("privacy manifest: ${category} not declared as linked")
+      i=$((i + 1))
+    done
+  else
+    problems+=("no PrivacyInfo.xcprivacy")
+  fi
+  if [[ ${#problems[@]} -gt 0 ]]; then
+    for p in "${problems[@]}"; do echo "${app}: ${p}" >&2; done
+    return 1
+  fi
+  echo "${app}: icon ${icon} and the privacy manifest present"
+}
 
 # An archive holds the VettID app alone: never the VettIDDevStack app (SKIP_INSTALL, and not in the VettID scheme).
 check_archive_products() {
@@ -282,6 +332,8 @@ check_archive_products Release
 check_archive_products Staging
 check_release "$(app_of Release)"
 check_staging "$(app_of Staging)"
+check_store_files "$(app_of Release)" AppIcon
+check_store_files "$(app_of Staging)" AppIcon-NonProduction
 
 # Every object file the two archives compiled (the app's and every package's, before the linker strips unused code)
 # is free of the TEST markers too.
@@ -414,6 +466,35 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
     unplant Release check_release "${key}"
     unplant Staging check_staging "${key}"
   done
+  # A copy of each app changed by <command> (run inside the copy) must fail check_store_files.
+  unstore() {
+    local config=$1 icon=$2 what=$3 command=$4
+    local copy="${OUT}/planted/${config}-store/VettID.app"
+    rm -rf "${OUT}/planted/${config}-store"
+    mkdir -p "$(dirname "${copy}")"
+    cp -R "$(app_of "${config}")" "${copy}"
+    (cd "${copy}" && eval "${command}")
+    if check_store_files "${copy}" "${icon}" 2>/dev/null; then
+      echo "self-test FAILED: ${config} accepted an app ${what}" >&2
+      exit 1
+    fi
+    echo "self-test: ${config} refuses an app ${what}"
+  }
+  for c in "Release AppIcon" "Staging AppIcon-NonProduction"; do
+    read -r config icon <<<"${c}"
+    unstore "${config}" "${icon}" "without its privacy manifest" "rm PrivacyInfo.xcprivacy"
+    unstore "${config}" "${icon}" "without the UserDefaults reason" "plutil -remove NSPrivacyAccessedAPITypes.0 PrivacyInfo.xcprivacy"
+    unstore "${config}" "${icon}" "without the file timestamp reason" "plutil -remove NSPrivacyAccessedAPITypes.1 PrivacyInfo.xcprivacy"
+    unstore "${config}" "${icon}" "without Assets.car" "rm Assets.car"
+    unstore "${config}" "${icon}" "without the collected email address" \
+      "plutil -remove NSPrivacyCollectedDataTypes.0 PrivacyInfo.xcprivacy"
+    unstore "${config}" "${icon}" "with a collected type used for tracking" \
+      "plutil -replace NSPrivacyCollectedDataTypes.1.NSPrivacyCollectedDataTypeTracking -bool true PrivacyInfo.xcprivacy"
+  done
+  unstore Release AppIcon "with the non-production icon name" \
+    "plutil -replace CFBundleIcons.CFBundlePrimaryIcon.CFBundleIconName -string AppIcon-NonProduction Info.plist"
+  unstore Staging AppIcon-NonProduction "with the production icon name" \
+    "plutil -replace CFBundleIcons.CFBundlePrimaryIcon.CFBundleIconName -string AppIcon Info.plist"
 fi
 
 echo "release check passed"
