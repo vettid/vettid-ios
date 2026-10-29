@@ -127,11 +127,20 @@ struct ConversationItem: View {
     /// The name for the avatar's initial: cleaned, not isolated.
     static func tileName(_ c: ConnectionInfo) -> String { AccountNames.cleaned(c.displayName) ?? MessagesStrings.nameNotShared }
 
-    /// The latest message's first line, with the unread count before it when there is any.
+    /// The latest message's first line that shows something, cleaned and isolated (VAULT-MESSAGING 0.76.0 §10.8 step 6), with
+    /// the unread count before it when there is any. A photo with nothing to show says "Photo"; any other text with nothing
+    /// to show leaves out the line and its "You: " label (step 4), the unread count standing alone.
     static func supporting(_ s: ConversationSummary) -> String {
-        let preview = s.last.map { $0.outgoing ? MessagesStrings.previewYou($0.text) : $0.text } ?? MessagesStrings.previewNone
-        let line = preview.components(separatedBy: .newlines).first ?? ""
-        return s.unread > 0 ? MessagesStrings.rowUnread(s.unread, line) : line
+        guard let last = s.last else { return s.unread > 0 ? MessagesStrings.rowUnreadBare(s.unread) : MessagesStrings.previewNone }
+        let line = previewLine(last.text, outgoing: last.outgoing, hasPhoto: last.attachment != nil)
+        if s.unread > 0 { return line.isEmpty ? MessagesStrings.rowUnreadBare(s.unread) : MessagesStrings.rowUnread(s.unread, line) }
+        return line
+    }
+
+    /// A conversation row's preview line: "" when nothing shows.
+    static func previewLine(_ text: String, outgoing: Bool, hasPhoto: Bool) -> String {
+        guard let line = AccountNames.firstLineIsolated(text) ?? (hasPhoto ? MessagesStrings.previewPhoto : nil) else { return "" }
+        return outgoing ? MessagesStrings.previewYou(line) : line
     }
 }
 

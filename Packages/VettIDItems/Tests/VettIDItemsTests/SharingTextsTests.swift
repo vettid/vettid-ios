@@ -83,6 +83,13 @@ import VettIDData
         #expect(ItemsText.matchNote(RuleMatch(itemID: "i4", name: "Library card", category: "membership", sensitivity: .data), rules: [], names: [:]) == nil)
     }
 
+    /// VAULT-MESSAGING 0.76.0 §10.8: a custom category is the sender's text, so it is isolated in the line.
+    @Test func aReceivedCustomCategoryIsIsolatedARecommendedOneIsNot() {
+        let custom = GrantView(grantID: "g7", connectionID: "c1", direction: .received, itemRef: "x3", name: "Card", category: "home_lab")
+        #expect(ItemsText.receivedLabel(custom, category: nil, name: "Dana Lee").hasPrefix("\u{2068}Home lab\u{2069} · "))
+        #expect(ItemsText.receivedLabel(custom, category: "insurance", name: "Dana Lee").hasPrefix("\u{2068}") == false)
+    }
+
     @Test func aReceivedGrantShowsItsLimitsAndARefusalWhenToTryAgain() {
         let g = GrantView(grantID: "g6", connectionID: "c1", direction: .received, itemRef: "x2", name: "Card", category: "insurance", perHour: 5, perDay: 1)
         let label = ItemsText.receivedLabel(g, category: nil, name: "Dana Lee")

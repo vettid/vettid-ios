@@ -47,45 +47,120 @@ public enum AccountNames {
         return "\(first) \(last)"
     }
 
-    /// A received name made safe to sit in a sentence, next to fixed wording, or alone (§10.8): every control and format
-    /// character removed (a PDI or an RLO in it cannot close the isolation or reverse the words around it) except ZWJ and
-    /// ZWNJ, which emoji sequences and Persian or Indic shaping need; line breaks (U+2028, U+2029 and U+0085 included) and
-    /// tabs as spaces; trimmed; then in bidirectional isolation (FSI … PDI). Nil when nothing is left. The one cleaning
-    /// step for every name another member controls. Mirrors vettid-android `AccountNames.isolateOrNull`.
+    /// A received name made safe to sit in a sentence, next to fixed wording, or alone (VAULT-MESSAGING 0.76.0 §10.8
+    /// "Showing received text"): ``cleaned(_:)``, then in bidirectional isolation (FSI … PDI). Nil when it is empty
+    /// (step 4). The one cleaning step for every string another party controls. Mirrors vettid-android
+    /// `AccountNames.isolateOrNull`.
     public static func isolateOrNull(_ s: String?) -> String? { cleaned(s).map(wrapIsolated) }
 
     /// ``isolateOrNull(_:)`` for a name that must be shown: an empty result is an empty isolate, never the raw text.
     public static func isolate(_ s: String) -> String { isolateOrNull(s) ?? wrapIsolated("") }
 
-    /// ``isolateOrNull(_:)`` without the isolation (an initial, a search key); an isolate it is given is stripped too.
+    /// ``isolateOrNull(_:)`` without the isolation (an initial, a search key): steps 1-4 as one line (every break and tab a
+    /// space; Cc and Cf removed but ZWJ and ZWNJ; White_Space trimmed). Nil when nothing is left once
+    /// Default_Ignorable_Code_Point and White_Space code points are set aside. Also strips an isolate it is given.
     public static func cleaned(_ s: String?) -> String? {
+        s.map { scrub($0, keepLines: false, keepMarks: false, wholeText: false) }.flatMap { isEmptyText($0) ? nil : $0 }
+    }
+
+    /// ``cleaned(_:)``, cut at [max] code points (never inside a grapheme cluster) and cleaned again, so that the cut cannot
+    /// leave trailing white space or an empty-looking name. Nil when empty. For a received file name (§10.5.1).
+    public static func cleanedCapped(_ s: String?, max: Int) -> String? {
+        guard let c = cleaned(s) else { return nil }
+        guard c.unicodeScalars.count > max else { return c }
+        var kept = ""
+        var n = 0
+        for ch in c {
+            n += ch.unicodeScalars.count
+            if n > max { break }
+            kept.append(ch)
+        }
+        return cleaned(kept)
+    }
+
+    /// Steps 1-3 for text whose lines are kept (a context, a note): every break one LF, each line trimmed, no empty line at
+    /// either end. Nil when empty (step 4). Not isolated: see ``isolateLines(_:)``.
+    public static func cleanedLines(_ s: String?) -> String? {
+        s.map { scrub($0, keepLines: true, keepMarks: false, wholeText: false) }.flatMap { isEmptyText($0) ? nil : $0 }
+    }
+
+    /// A message's full text for its own bubble: as ``cleanedLines(_:)`` but LRM, RLM and ALM are kept and only the ends of
+    /// the whole text are trimmed (a line's indentation stays). Not isolated: see ``isolateLines(_:)``. Empty string when
+    /// nothing shows.
+    public static func cleanedMessage(_ s: String?) -> String {
+        guard let s else { return "" }
+        let t = scrub(s, keepLines: false, keepMarks: true, wholeText: true)
+        return isEmptyText(t) ? "" : t
+    }
+
+    /// [s] (already cleaned) with every line in its own isolate: an isolate ends at a line break (§10.8 step 5).
+    public static func isolateLines(_ s: String) -> String {
+        s.split(separator: "\n", omittingEmptySubsequences: false).map { wrapIsolated(String($0)) }.joined(separator: "\n")
+    }
+
+    /// True when [s] shows nothing: only Default_Ignorable_Code_Point and White_Space code points remain (step 4).
+    public static func isEmptyText(_ s: String) -> Bool {
+        !s.unicodeScalars.contains { !$0.properties.isWhitespace && !$0.properties.isDefaultIgnorableCodePoint }
+    }
+
+    /// The first line of [s] (steps 1-3, lines kept) that is not empty by step 4, isolated; nil when there is none (step 6:
+    /// a one-line summary of a multi-line text).
+    public static func firstLineIsolated(_ s: String?) -> String? {
         guard let s else { return nil }
+        return scrub(s, keepLines: true, keepMarks: false, wholeText: false)
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .first { !isEmptyText(String($0)) }
+            .map { wrapIsolated(String($0)) }
+    }
+
+    /// [s], already cleaned by the caller, in isolation as it is.
+    public static func wrapIsolated(_ s: String) -> String { "\u{2068}\(s)\u{2069}" }
+
+    /// Steps 1-3 of §10.8 (a Swift string cannot hold a lone surrogate: decoding already replaced it with U+FFFD, which is
+    /// kept). The breaks are read in the text as received: CR immediately followed by LF is one break, CR, ZWSP, LF is two.
+    private static func scrub(_ s: String, keepLines: Bool, keepMarks: Bool, wholeText: Bool) -> String {
+        let brk: Unicode.Scalar = keepLines || wholeText ? "\n" : " "
         var out = String.UnicodeScalarView()
         var afterCR = false
         for u in s.unicodeScalars {
             defer { afterCR = u == "\r" }
-            if u == "\n", afterCR { continue } // CRLF: one break
-            if isBreak(u.value) {
-                out.append(" ")
-            } else if !isInvisible(u) {
-                out.append(u)
+            switch u.value {
+            case 0x0A where afterCR: continue // CRLF: one break
+            case 0x0A, 0x0B, 0x0C, 0x0D, 0x85, 0x2028, 0x2029: out.append(brk)
+            case 0x09: out.append(" ")
+            case 0x200C, 0x200D: out.append(u)
+            default: if !isInvisible(u) || (keepMarks && isDirectionalMark(u)) { out.append(u) }
             }
         }
-        // All Unicode white space, as Kotlin's `trim()` (NBSP, U+2003, U+3000 included).
-        let t = String(out).trimmingCharacters(in: .whitespacesAndNewlines)
-        return t.isEmpty ? nil : t
+        return keepLines ? String(trimLines(out)) : String(trimWhiteSpace(out[...]))
     }
 
-    /// [s], already cleaned by the caller, in isolation as it is (a note's line breaks stay).
-    public static func wrapIsolated(_ s: String) -> String { "\u{2068}\(s)\u{2069}" }
-
-    private static func isBreak(_ cp: UInt32) -> Bool {
-        cp == 0x09 || cp == 0x0A || cp == 0x0D || cp == 0x85 || cp == 0x2028 || cp == 0x2029
+    /// Each line trimmed, and no empty line at either end.
+    private static func trimLines(_ v: String.UnicodeScalarView) -> String.UnicodeScalarView {
+        var lines = v.split(separator: "\n", omittingEmptySubsequences: false).map { trimWhiteSpace($0) }
+        while lines.first?.isEmpty == true { lines.removeFirst() }
+        while lines.last?.isEmpty == true { lines.removeLast() }
+        var joined = String.UnicodeScalarView()
+        for (i, l) in lines.enumerated() {
+            if i > 0 { joined.append("\n") }
+            joined.append(contentsOf: l)
+        }
+        return joined
     }
 
-    /// Control and format characters (bidi controls, zero-width characters, BOM, tags), except ZWJ and ZWNJ.
+    /// LRM, RLM and ALM: they set no direction for the text around them (kept in a message's bubble).
+    private static func isDirectionalMark(_ u: Unicode.Scalar) -> Bool { u.value == 0x061C || u.value == 0x200E || u.value == 0x200F }
+
+    /// The Unicode White_Space property, at both ends.
+    private static func trimWhiteSpace(_ v: Substring.UnicodeScalarView) -> Substring.UnicodeScalarView {
+        var v = v
+        while let f = v.first, f.properties.isWhitespace { v.removeFirst() }
+        while let l = v.last, l.properties.isWhitespace { v.removeLast() }
+        return v
+    }
+
+    /// Control and format characters (bidi controls, zero-width characters, BOM, tags); the callers keep ZWJ and ZWNJ.
     private static func isInvisible(_ u: Unicode.Scalar) -> Bool {
-        if u.value == 0x200C || u.value == 0x200D { return false }
         switch u.properties.generalCategory {
         case .control, .format: return true
         default: return false

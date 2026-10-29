@@ -36,7 +36,7 @@ public extension HistoryState {
         let item = itemID.flatMap { id in itemNames.map { AccountNames.isolateOrNull($0[id]) ?? HistoryStrings.itemDeleted } }
             ?? HistoryText.exportSummary(r.kind, e.ref)
             ?? AuditKinds.signerDetail(r.kind, e.ref).map(HistoryText.signer)
-        let device = HistoryText.deviceName(e.deviceID, devices)
+        let device = HistoryText.deviceName(e.deviceID, devices, isolate: true)
         let names = EntryNames(
             connection: connectionTitleName(e.connectionID), device: devices?.device(e.deviceID)?.rowName,
             item: itemID.flatMap { itemNames?[$0] }
@@ -79,7 +79,7 @@ public extension HistoryEntryState {
     var deviceLabel: String? {
         guard entry?.entry.deviceID != nil else { return nil }
         let removed = devicesKnown && !deviceUnnamed
-        let name = deviceName ?? (removed ? HistoryStrings.deviceRemoved : nil)
+        let name = AccountNames.isolateOrNull(deviceName) ?? (removed ? HistoryStrings.deviceRemoved : nil)
         if thisDevice { return name.map(HistoryStrings.deviceThisPhone) ?? HistoryStrings.deviceThisPhoneAlone }
         return name
     }

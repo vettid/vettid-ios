@@ -32,7 +32,7 @@ import VettIDUI
             .appendingPathComponent("Sources/VettIDMessagesUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 93)
+        #expect(keys.count == 95)
         let missing = "\u{0}missing"
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)
@@ -62,9 +62,9 @@ import VettIDUI
         let c = Self.connection("c1")
         #expect(ConversationItem.supporting(ConversationSummary(connection: c, last: nil, unread: 0)) == "No messages yet")
         let own = Self.message("m1", outgoing: true, text: "See you\nat noon")
-        #expect(ConversationItem.supporting(ConversationSummary(connection: c, last: own, unread: 0)) == "You: See you")
+        #expect(ConversationItem.supporting(ConversationSummary(connection: c, last: own, unread: 0)) == "You: \u{2068}See you\u{2069}")
         let theirs = Self.message("m2", text: "Hi")
-        #expect(ConversationItem.supporting(ConversationSummary(connection: c, last: theirs, unread: 2)) == "2 unread · Hi")
+        #expect(ConversationItem.supporting(ConversationSummary(connection: c, last: theirs, unread: 2)) == "2 unread · \u{2068}Hi\u{2069}")
         #expect(ConversationItem.name(Self.connection("c2", first: nil)) == "Name not shared yet")
     }
 
@@ -100,6 +100,43 @@ import VettIDUI
         for s in [NewMessageState(), empty, full] {
             #expect(height(NewMessageScreen(state: s, onBack: {}, onPick: { _ in }, onInvite: {})) > 0, "\(s)")
         }
+    }
+
+    /// VAULT-MESSAGING 0.76.0 §10.8 steps 4 and 6: the preview is the first line that shows something, isolated; a photo with
+    /// nothing to show says "Photo"; any other text with nothing to show leaves out the line and its "You: " label.
+    @Test func aPreviewTakesTheFirstLineThatShowsSomething() {
+        let c = Self.connection("c1")
+        func row(_ text: String, outgoing: Bool = false, unread: Int = 0, photo: Bool = false) -> String {
+            var m = Self.message("m", outgoing: outgoing, text: text)
+            if photo {
+                m.attachment = AttachmentInfo(attID: "a", state: .stored, reason: nil, mime: nil, size: 1, width: 1, height: 1, name: nil)
+            }
+            return ConversationItem.supporting(ConversationSummary(connection: c, last: m, unread: unread))
+        }
+        #expect(row("\u{3164}\n\u{202E} hi \nmore") == "\u{2068}hi\u{2069}")
+        #expect(row("hi", outgoing: true) == "You: \u{2068}hi\u{2069}")
+        #expect(row("\u{200D}\u{000B}\u{000C}  x") == "\u{2068}x\u{2069}")
+        for empty in ["\u{200B}\u{3164}", "\u{200D}", "\u{00A0}", "\r\u{200B}\n", "\u{000B}\u{000C}"] {
+            #expect(row(empty) == "" && row(empty, outgoing: true) == "")
+            #expect(row(empty, unread: 3) == "3 unread")
+            #expect(row(empty, photo: true) == "Photo" && row(empty, outgoing: true, photo: true) == "You: Photo")
+        }
+    }
+
+    /// §10.8 step 7: a search matches the cleaned text without the isolates, across a name and the words around it.
+    @Test func aSearchMatchesTheCleanedText() {
+        let c = Self.connection("c1", first: "Ada\u{202E}")
+        let s = ConversationSummary(connection: c, last: Self.message("m", text: "pay\u{2029}\u{200B}now \u{2068}x\u{2069}"), unread: 0)
+        #expect(s.matches("ada lovelace") && s.matches("pay now x") && !s.matches("\u{2068}"))
+    }
+
+    /// §10.8 "more lightly": a bubble keeps LRM, RLM and ALM, drops the rest, isolates each line, and links are found in what
+    /// it shows.
+    @Test func aBubbleIsCleanedLightlyAndIsolatedPerLine() {
+        let a = BubbleText.message("\n a\u{200F}\u{202E}b https://example.org/x\r\u{200B}\n\u{3000}c \u{2028}")
+        #expect(String(a.characters) == "\u{2068}a\u{200F}b https://example.org/x\u{2069}\n\u{2068}\u{2069}\n\u{2068}\u{3000}c\u{2069}")
+        #expect(a.runs.compactMap(\.link).map(\.absoluteString) == ["https://example.org/x"])
+        #expect(String(BubbleText.message("\u{3164}\u{200B}").characters).isEmpty)
     }
 
     /// An outgoing message says read, delivered or sent; an incoming one nothing.

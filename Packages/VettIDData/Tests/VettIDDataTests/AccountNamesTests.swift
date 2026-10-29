@@ -136,7 +136,7 @@ import VettIDData
     @Test func theAuthContextKeepsItsLinesAndLosesTheOverrides() {
         let note = "Sign in\r\nto Bank\u{2069}\u{202E}\u{2028}now\t!"
         #expect(AuthContext.plain(note) == "Sign in\nto Bank\nnow !")
-        #expect(AuthContext.isolated(note) == "\(fsi)Sign in\nto Bank\nnow !\(pdi)")
+        #expect(AuthContext.isolated(note) == "\(fsi)Sign in\(pdi)\n\(fsi)to Bank\(pdi)\n\(fsi)now !\(pdi)")
         #expect(AuthContext.isolated("\u{200B}\u{202E}\n ") == nil)
     }
 }

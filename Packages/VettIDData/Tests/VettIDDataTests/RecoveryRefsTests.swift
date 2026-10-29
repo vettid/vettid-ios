@@ -91,6 +91,7 @@ import VettIDCrypto
         #expect(named(String(repeating: "a", count: 64) + "b") == String(repeating: "a", count: 64))
         #expect(named(String(repeating: "a", count: 63) + " b") == String(repeating: "a", count: 63))
         #expect(named(String(repeating: "\u{200B}", count: 10) + String(repeating: "é", count: 70)) == String(repeating: "é", count: 64))
+        for empty in ["\u{3164}", "\u{200D}\u{00A0}", "\u{202E}"] { #expect(RecoveryRefs.cleanName(empty) == nil) }
         #expect(RecoveryRefs.cleanName(String(repeating: phone, count: 64))?.unicodeScalars.count == 64)
     }
 

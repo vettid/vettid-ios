@@ -60,6 +60,15 @@ enum MessagesStrings {
         String(localized: "messages_row_unread", defaultValue: "\(count) unread · \(preview)", bundle: .module)
     }
 
+    /// A conversation row's preview for a photo with nothing to show (VAULT-MESSAGING 0.76.0 §10.8 step 4); the same key as
+    /// vettid-android's `messages_preview_photo`.
+    static var previewPhoto: String { String(localized: "messages_preview_photo", defaultValue: "Photo", bundle: .module) }
+
+    /// The unread count alone, when the preview shows nothing (§10.8 step 4: the text is left out with its label).
+    static func rowUnreadBare(_ count: Int) -> String {
+        String(localized: "messages_row_unread_bare", defaultValue: "\(count) unread", bundle: .module)
+    }
+
     static var errorTitle: String { String(localized: "messages_error_title", defaultValue: "Could not load messages", bundle: .module) }
 
     static var retry: String { String(localized: "messages_retry", defaultValue: "Try again", bundle: .module) }

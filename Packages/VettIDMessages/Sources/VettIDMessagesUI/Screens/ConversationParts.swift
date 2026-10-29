@@ -71,11 +71,11 @@ struct MessageList: View {
         let time = MessageTimes.time(m.sentAt)
         let status = Self.status(m)
         return MessageBubble(
-            BubbleText.attributed(m.text),
+            BubbleText.message(m.text),
             outgoing: m.outgoing,
             meta: status.map { "\(time) · \($0)" } ?? time,
-            accessibilityLabel: status.map { MessagesStrings.outgoingLabel(m.text, time, $0) }
-                ?? MessagesStrings.incomingLabel(name, m.text, time),
+            accessibilityLabel: status.map { MessagesStrings.outgoingLabel(AccountNames.cleanedMessage(m.text), time, $0) }
+                ?? MessagesStrings.incomingLabel(name, AccountNames.cleanedMessage(m.text), time),
             links: BubbleLinks(name: BubbleText.linkName, open: actions.onLink),
             delete: (label: MessagesStrings.deleteConfirm, action: { actions.onAskDelete(m) })
         )
@@ -166,6 +166,20 @@ struct OlderRow: View {
 enum BubbleText {
     /// A link's name for VoiceOver: the host the question shows, lower case and ASCII.
     static func linkName(_ url: URL) -> String { MessageLinks.link(url.absoluteString)?.host ?? "" }
+
+    /// A message's full text for its bubble (VAULT-MESSAGING 0.76.0 §10.8, "more lightly"): cleaned with LRM, RLM and ALM
+    /// kept, then each line in its own isolate (FSI … PDI); the links are found in the cleaned text, so a tap opens what the
+    /// bubble shows.
+    static func message(_ raw: String) -> AttributedString {
+        var out = AttributedString()
+        let cleaned = AccountNames.cleanedMessage(raw)
+        guard !cleaned.isEmpty else { return out }
+        for (i, line) in cleaned.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
+            if i > 0 { out += AttributedString("\n") }
+            out += AttributedString("\u{2068}") + attributed(String(line)) + AttributedString("\u{2069}")
+        }
+        return out
+    }
 
     static func attributed(_ text: String) -> AttributedString {
         var out = AttributedString()

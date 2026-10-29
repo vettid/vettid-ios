@@ -121,7 +121,9 @@ public enum RecoveryRefs {
         var capped = String.UnicodeScalarView()
         capped.append(contentsOf: trimmed.unicodeScalars.prefix(maxNameCodePoints))
         let out = String(capped).trimmingCharacters(in: .whitespacesAndNewlines)
-        return out.isEmpty ? nil : out
+        // Nothing to show once Default_Ignorable and White_Space code points are set aside (VAULT-MESSAGING 0.76.0 §10.8
+        // step 4): no name. A shown name is isolated where it sits in a sentence (``AccountNames/isolateOrNull(_:)``).
+        return AccountNames.isEmptyText(out) ? nil : out
     }
 
     private static let quotes: Set<UInt32> = [0x201C, 0x201D, 0x22]

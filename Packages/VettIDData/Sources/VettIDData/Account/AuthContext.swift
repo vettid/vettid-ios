@@ -1,33 +1,23 @@
 import Foundation
 
-/// A challenge's `context` is the connection's own words (VAULT-MESSAGING §10.4, shown in full): text that cannot reorder or
-/// hide anything. Unlike a name it keeps its line breaks. Mirrors vettid-android `AuthContext`.
+/// A challenge's `context`, a note, a memo or a reason is another party's own words (VAULT-MESSAGING §10.4, shown in full):
+/// cleaned by ``AccountNames`` (VAULT-MESSAGING 0.76.0 §10.8 "Showing received text") so that it cannot reorder or hide
+/// anything. Unlike a name it keeps its line breaks. Mirrors vettid-android `AuthContext`.
 public enum AuthContext {
-    /// [s] with control and format characters removed (bidi controls, zero-width ones; ZWJ and ZWNJ stay), tabs as spaces, and
-    /// line breaks (CR, CRLF as one, U+2028, U+2029, U+0085) kept as "\n", so that a note's lines stay visible.
-    public static func plain(_ s: String) -> String {
-        var out = String.UnicodeScalarView()
-        var afterCR = false
-        for u in s.unicodeScalars {
-            defer { afterCR = u == "\r" }
-            switch u.value {
-            case 0x0A: if !afterCR { out.append("\n") }
-            case 0x0D, 0x85, 0x2028, 0x2029: out.append("\n")
-            case 0x09: out.append(" ")
-            case 0x200C, 0x200D: out.append(u)
-            default:
-                switch u.properties.generalCategory {
-                case .control, .format: break
-                default: out.append(u)
-                }
-            }
-        }
-        return String(out)
-    }
+    /// [s] with every break one LF, Cc and Cf removed (ZWJ and ZWNJ stay), tabs as spaces, each line trimmed and no empty
+    /// line at either end; "" when nothing shows.
+    public static func plain(_ s: String) -> String { AccountNames.cleanedLines(s) ?? "" }
 
-    /// ``plain(_:)`` in bidirectional isolation (FSI … PDI, §10.8), for next to other text; nil when nothing is left.
-    public static func isolated(_ s: String) -> String? {
-        let t = plain(s)
-        return t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : AccountNames.wrapIsolated(t)
+    /// ``plain(_:)`` with each line in its own isolate (FSI … PDI, §10.8 step 5), for next to other text; nil when nothing
+    /// shows.
+    public static func isolated(_ s: String) -> String? { AccountNames.cleanedLines(s).map(AccountNames.isolateLines) }
+
+    /// The first line that shows something, isolated, for a list row's second line (§10.8 step 6); nil when none does.
+    public static func firstLineIsolated(_ s: String) -> String? { AccountNames.firstLineIsolated(s) }
+
+    /// A message's full text for its bubble: breaks as LF, LRM, RLM and ALM kept, each line isolated; "" when empty.
+    public static func bubble(_ s: String) -> String {
+        let t = AccountNames.cleanedMessage(s)
+        return t.isEmpty ? t : AccountNames.isolateLines(t)
     }
 }

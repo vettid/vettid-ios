@@ -46,7 +46,7 @@ struct Facts: View {
             case .connection(.outgoing(let r)): outgoing(r)
             case .authentication(let x):
                 FactLabel(ApprovalsStrings.from)
-                FactValue(AccountNames.isolateOrNull(name) ?? ApprovalsStrings.aConnection)
+                FactValue(AccountNames.isolateOrNull(name) ?? ApprovalsStrings.aConnectionInline)
                 // The challenger's claim (§10.4), in full whatever the purpose; a fixed line when a purpose comes without one.
                 if let c = ApprovalTexts.contextNote(x) {
                     FactLabel(ApprovalsStrings.context)
@@ -56,8 +56,8 @@ struct Facts: View {
             case .critical(let c): CriticalFacts(use: c, name: name)
             case .device(let d):
                 FactLabel(ApprovalsStrings.device)
-                FactValue(Self.deviceLine(d))
-                if let t = d.requestType {
+                FactValue(ApprovalTexts.deviceLine(d))
+                if let t = d.requestType.flatMap(AuthContext.isolated) {
                     FactLabel(ApprovalsStrings.request)
                     FactValue(t)
                 }
@@ -65,12 +65,6 @@ struct Facts: View {
             case .grant, .share: EmptyView()
             }
         }
-    }
-
-    /// The device's name and role, or "?".
-    static func deviceLine(_ d: DeviceRequest) -> String {
-        let parts = [AccountNames.isolateOrNull(d.deviceName), d.role].compactMap { $0 }
-        return parts.isEmpty ? "?" : parts.joined(separator: " · ")
     }
 
     @ViewBuilder private func incoming(_ r: ConnectionRequest) -> some View {
@@ -132,9 +126,11 @@ struct CriticalFacts: View {
 
     var body: some View {
         FactLabel(ApprovalsStrings.from)
-        FactValue(AccountNames.isolateOrNull(name) ?? ApprovalsStrings.aConnection)
-        FactLabel(ApprovalsStrings.criticalItem)
-        FactValue("\(use.itemName) · \(use.fieldLabel)")
+        FactValue(AccountNames.isolateOrNull(name) ?? ApprovalsStrings.aConnectionInline)
+        if let item = ApprovalTexts.criticalItem(use) {
+            FactLabel(ApprovalsStrings.criticalItem)
+            FactValue(item)
+        }
         if let k = use.kind {
             FactLabel(ApprovalsStrings.criticalKind)
             FactValue(ApprovalTexts.kind(k))
@@ -194,8 +190,8 @@ struct GrantFacts: View {
 
     var body: some View {
         FactLabel(ApprovalsStrings.from)
-        FactValue(AccountNames.isolateOrNull(state.connectionName) ?? ApprovalsStrings.aConnection)
-        if let r = request.reason {
+        FactValue(AccountNames.isolateOrNull(state.connectionName) ?? ApprovalsStrings.aConnectionInline)
+        if let r = request.reason.flatMap(AuthContext.isolated) {
             FactLabel(ApprovalsStrings.reason)
             FactValue(r)
         }
@@ -245,8 +241,9 @@ struct GrantFacts: View {
                 if e.kind == "item", e.available, e.name != nil, let theirs = AccountNames.isolateOrNull(e.label) {
                     FactNote(text: ApprovalsStrings.grantTheirWords(theirs))
                 }
-                if e.kind == "item", e.available, let fields = e.labels, !fields.isEmpty {
-                    FactNote(text: ApprovalsStrings.grantFields(fields.map(\.label).joined(separator: ", ")))
+                if e.kind == "item", e.available, let fields = e.labels?.compactMap({ AccountNames.isolateOrNull($0.label) }),
+                   !fields.isEmpty {
+                    FactNote(text: ApprovalsStrings.grantFields(fields.joined(separator: ", ")))
                         .accessibilityIdentifier("grant_fields_\(i)")
                 }
                 if e.kind == "category" { picker(i, category: e.ref, chosen: answer?.name) }
@@ -263,9 +260,11 @@ struct GrantFacts: View {
         let options = state.answerable.sorted { ($0.category == category ? 0 : 1) < ($1.category == category ? 0 : 1) }
         return Menu {
             if options.isEmpty { Text(ApprovalsStrings.grantAnswerNone) }
-            ForEach(options) { item in Button(item.name) { actions.onAnswerGrant(i, item.id) } }
+            ForEach(options) { item in
+                Button(AccountNames.isolateOrNull(item.name) ?? ApprovalsStrings.shareUnnamed) { actions.onAnswerGrant(i, item.id) }
+            }
         } label: {
-            Text(chosen.map { ApprovalsStrings.grantAnswerChosen($0) } ?? ApprovalsStrings.grantAnswer)
+            Text(chosen.map { ApprovalsStrings.grantAnswerChosen(AccountNames.isolate($0)) } ?? ApprovalsStrings.grantAnswer)
                 .vettIDFont(.labelLarge, weight: .semibold)
                 .foregroundStyle(colors.primary)
                 .frame(minHeight: Spacing.touchTarget)
@@ -285,13 +284,15 @@ struct ShareFacts: View {
     let onToggle: @MainActor (String) -> Void
 
     private var who: String {
-        AccountNames.isolateOrNull(name) ?? (decision.subjectAgentID != nil ? ApprovalsStrings.anAgent : ApprovalsStrings.aConnection)
+        AccountNames.isolateOrNull(name)
+            ?? (decision.subjectAgentID != nil ? ApprovalsStrings.anAgentInline : ApprovalsStrings.aConnectionInline)
     }
 
     var body: some View {
-        if !decision.tags.isEmpty {
+        let tags = decision.tags.compactMap { AccountNames.isolateOrNull($0) }
+        if !tags.isEmpty {
             FactLabel(ApprovalsStrings.shareTags)
-            FactValue(decision.tags.joined(separator: ", "))
+            FactValue(tags.joined(separator: ", "))
         }
         if let r = decision.reason {
             Text(r == "rule" ? ApprovalsStrings.shareReasonRule : ApprovalsStrings.shareReasonTagged)
@@ -313,7 +314,7 @@ struct ShareFacts: View {
                 (on ? VettIDSymbol.checkBox : VettIDSymbol.checkBoxOutline).image.foregroundStyle(colors.primary)
                     .frame(width: 24, height: Spacing.touchTarget)
                 VStack(alignment: .leading, spacing: Spacing.xs) {
-                    Text(i.name.isEmpty ? ApprovalsStrings.shareUnnamed : i.name).vettIDFont(.bodyLarge)
+                    Text(AccountNames.isolateOrNull(i.name) ?? ApprovalsStrings.shareUnnamed).vettIDFont(.bodyLarge)
                     if i.sensitivity == "critical" { FactNote(text: ApprovalsStrings.shareUsable) }
                     ForEach(Array(ShareExplanations.of(i, decision).enumerated()), id: \.offset) { _, line in
                         FactNote(

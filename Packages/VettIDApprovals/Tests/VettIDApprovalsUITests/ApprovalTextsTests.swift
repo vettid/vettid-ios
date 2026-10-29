@@ -18,7 +18,7 @@ import VettIDApprovals
             .appendingPathComponent("Sources/VettIDApprovalsUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 153)
+        #expect(keys.count == 155)
         let missing = "\u{0}missing"
         for key in keys {
             let text = ApprovalsStrings.bundle.localizedString(forKey: key, value: missing, table: nil)
@@ -82,7 +82,7 @@ import VettIDApprovals
         #expect(ApprovalTexts.supporting(.connection(Samples.outgoing(sas: nil)), name: nil) == row("Grace Hopper", "waiting for their vault"))
         #expect(ApprovalTexts.supporting(Samples.auth(), name: "Sam Lee") == row("Sam Lee", "Sign-in"))
         #expect(ApprovalTexts.supporting(Samples.grant(), name: nil) == row("A connection", "3 items"))
-        #expect(ApprovalTexts.supporting(Samples.critical(), name: "Sam Lee") == row("Sam Lee", "Signing key · Seed"))
+        #expect(ApprovalTexts.supporting(Samples.critical(), name: "Sam Lee") == row("Sam Lee") + " · " + row("Signing key", "Seed"))
         #expect(ApprovalTexts.supporting(Samples.share(), name: nil) == row("2 items"))
         #expect(ApprovalTexts.supporting(Samples.device(), name: nil) == row("Laptop", "sign"))
     }
@@ -118,7 +118,7 @@ import VettIDApprovals
         #expect(ApprovalTexts.approveLabel(signin) == "Approve" && ApprovalTexts.denyLabel(signin) == "Not me")
         #expect(ApprovalTexts.supporting(signin, name: "Sam Lee") == row("Sam Lee", "Sign-in"))
         #expect(ApprovalTexts.title(approval, name: "Sam Lee") == "\(sam) asks you to approve" && ApprovalTexts.title(approval) == "A connection asks you to approve")
-        #expect(ApprovalTexts.body(approval, name: "Sam Lee") == nil && ApprovalTexts.summary(approval) == "Sign-in")
+        #expect(ApprovalTexts.body(approval, name: "Sam Lee") == nil && ApprovalTexts.summary(approval) == AccountNames.isolate("Sign-in"))
         #expect(ApprovalTexts.approveLabel(approval) == "Approve" && ApprovalTexts.denyLabel(approval) == "Deny")
         // Without a purpose (absent or unknown, read as absent): as before 0.65.0, even with a name.
         let none = Samples.auth()
@@ -143,7 +143,7 @@ import VettIDApprovals
     @Test func grantsSharesAndChoices() {
         #expect(ApprovalTexts.grantEntry(Samples.entry("i1")) == "\u{2068}Passport\u{2069}")
         #expect(ApprovalTexts.grantEntry(Samples.entry("i2", available: false)) == "\u{2068}Their words\u{2069} (not in your vault)")
-        #expect(ApprovalTexts.grantEntry(GrantEntry(kind: "category", ref: "health_card", label: nil, available: false)) == "Any Health card item (you choose which)")
+        #expect(ApprovalTexts.grantEntry(GrantEntry(kind: "category", ref: "health_card", label: nil, available: false)) == "Any \u{2068}Health card\u{2069} item (you choose which)")
         #expect(ApprovalTexts.usesOptions(requested: 3) == [nil, 1, 10] && ApprovalTexts.usesOptions(requested: nil) == [nil, 3, 10])
         #expect(ApprovalTexts.expiryOptions(requested: nil) == [nil, 86_400, 2_592_000])
         #expect(ApprovalTexts.expiryLabel(nil, requested: 3_600) == "1 day" && ApprovalTexts.usesLabel(nil, requested: 3) == "They can read it 3 times.")
@@ -206,11 +206,56 @@ import VettIDApprovals
             #expect(ApprovalTexts.contextNote(ask(nil, purpose)) == none)
             #expect(ApprovalTexts.contextNote(ask("", purpose)) == none)
             #expect(ApprovalTexts.contextNote(ask("\u{200B}\u{202E}\n ", purpose)) == none)
-            #expect(ApprovalTexts.contextNote(ask("Pay\nInvoice 12", purpose)) == "\u{2068}Pay\nInvoice 12\u{2069}")
+            #expect(ApprovalTexts.contextNote(ask("Pay\nInvoice 12", purpose)) == "\u{2068}Pay\u{2069}\n\u{2068}Invoice 12\u{2069}")
         }
         #expect(ApprovalTexts.contextNote(ask(nil, .absent)) == nil)
         #expect(ApprovalTexts.contextNote(ask("\u{202E}", .absent)) == nil)
         #expect(ApprovalTexts.contextNote(ask("Sign-in", .absent)) == "\u{2068}Sign-in\u{2069}")
+    }
+
+    /// VAULT-MESSAGING 0.76.0 §10.8 step 4: text with nothing to show gets its placeholder, or is left out with its label.
+    @Test func emptyReceivedTextShowsItsPlaceholderOrIsLeftOut() {
+        let hostile = ["\u{3164}", "\u{200D}", "\u{00A0}", "\u{000B}\u{000C}", "\r\u{200B}\n", "\u{202E}"]
+        func device(_ name: String?, _ role: String?, _ request: String? = nil) -> DeviceRequest {
+            DeviceRequest(type: "approval.pending", id: "d", deviceName: name, role: role, requestType: request, receivedAt: Date(), exp: nil)
+        }
+        func crit(_ item: String, _ field: String) -> CriticalUse {
+            CriticalUse(
+                requestID: "k", connectionID: "c1", itemName: item, fieldLabel: field, operation: "sign", payload: "", payloadSha256: "",
+                context: nil, receivedAt: Date(), exp: nil, kind: nil
+            )
+        }
+        for h in hostile {
+            // A desktop or agent without a usable name shows its kind once, in the row and on its screen.
+            #expect(ApprovalTexts.deviceLine(device(h, "desktop")) == "A desktop")
+            #expect(ApprovalTexts.deviceLine(device(h, "agent")) == "An agent")
+            #expect(ApprovalTexts.who(.device(device(h, "agent")), name: nil) == "An agent")
+            #expect(ApprovalTexts.deviceLine(device(nil, h)) == "?")
+            // No usable request type: no summary, and the row says only who.
+            #expect(ApprovalTexts.summary(.device(device("Laptop", "desktop", h))) == nil)
+            // A critical item or field with nothing to show is left out; the other part stays.
+            #expect(ApprovalTexts.criticalItem(crit(h, h)) == nil)
+            #expect(ApprovalTexts.criticalItem(crit(h, "Seed")) == AccountNames.isolate("Seed"))
+            // A name in a sentence reads "a connection" (inline) or "an agent".
+            #expect(ApprovalTexts.them(h) == "them")
+        }
+        #expect(ApprovalTexts.deviceLine(device("Laptop", "desktop")) == "\(AccountNames.isolate("Laptop")) · \(AccountNames.isolate("desktop"))")
+        #expect(ApprovalTexts.deviceLine(device(nil, nil)) == "?")
+        #expect(ApprovalsStrings.aDesktop == "A desktop" && ApprovalsStrings.anAgentInline == "an agent" && ApprovalsStrings.aConnectionInline == "a connection")
+        #expect(ApprovalTexts.body(Samples.share(), name: nil) == "A share rule asks whether to share these items with a connection.")
+    }
+
+    /// §10.8 step 6: a row's summary of a context is the first line that shows something, whatever sits above it.
+    @Test func aContextSummaryTakesTheFirstLineThatShowsSomething() {
+        let ctx = PendingApproval.authentication(
+            AuthenticationRequest(requestID: "m3", connectionID: "c1", context: "\u{3164}\n\u{200D}\u{000B} Pay\u{000C}more", receivedAt: Date(), exp: nil, purpose: .signin)
+        )
+        #expect(ApprovalTexts.summary(ctx) == AccountNames.isolate("Pay"))
+        let blank = PendingApproval.authentication(
+            AuthenticationRequest(requestID: "m4", connectionID: "c1", context: "\u{3164}\n\u{200D}", receivedAt: Date(), exp: nil, purpose: .signin)
+        )
+        #expect(ApprovalTexts.summary(blank) == nil)
+        #expect(ApprovalTexts.supporting(blank, name: "Sam Lee") == row("Sam Lee"))
     }
 }
 

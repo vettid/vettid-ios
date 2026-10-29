@@ -35,8 +35,8 @@ public extension ConversationSummary {
     func matches(_ query: String) -> Bool {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return true }
-        // The names are searched cleaned (VAULT-MESSAGING §10.8); the message text as it is.
-        let keys = [AccountNames.cleaned(connection.displayName), AccountNames.cleaned(connection.name), last?.text]
+        // Searched as cleaned, without the isolates (VAULT-MESSAGING 0.76.0 §10.8 step 7): names and the message text alike.
+        let keys = [AccountNames.cleaned(connection.displayName), AccountNames.cleaned(connection.name), AccountNames.cleaned(last?.text)]
         return keys.compactMap { $0 }.contains { $0.range(of: q, options: .caseInsensitive) != nil }
     }
 }

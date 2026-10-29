@@ -82,10 +82,11 @@ public enum HistoryText {
     /// The name of an entry's device as a row's second line and the export show it (ANDROID-PLAN §4 History): the listed
     /// name, "Removed device" for one no longer listed; nil without a device, while the list is not known, or for a
     /// listed device without a name (this phone's own app among them). Mirrors vettid-android `HistoryDevice.name`.
-    public static func deviceName(_ deviceID: String?, _ devices: HistoryDevices?) -> String? {
+    /// [isolate]: the name in bidirectional isolation, for a row's line (§10.8 step 5); an export passes false.
+    public static func deviceName(_ deviceID: String?, _ devices: HistoryDevices?, isolate: Bool = false) -> String? {
         guard let devices else { return nil }
         switch devices.device(deviceID) {
-        case .named(let n): return n
+        case .named(let n): return isolate ? AccountNames.isolate(n) : n
         case .removed: return HistoryStrings.deviceRemoved
         case .thisPhone, .unnamed, nil: return nil
         }
