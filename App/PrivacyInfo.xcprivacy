@@ -5,10 +5,11 @@
      wipe, App/Composition/AppWipeTargets.swift): CA92.1. File metadata of files in the app's own container: the size
      of a state file (fstat, VettIDKeys EncryptedFileStore; libsodium also imports fstat) and the age of copied-in canary manifests
      (App/CanaryManifestFiles.swift): C617.1.
-     Collected (what VettID's member API can read; everything sealed to the member's vault is end to end and is not):
-     the email address typed with a setup code (VettIDAltChan MemberApiClient.redeemTyped), the account identifiers
-     the member API assigns and the requests carry (the vault id and user guid), and this installation's app key, a
-     public key that authenticates its requests. Each is linked to the member, used for the app's functionality only,
+     Collected (what VettID's member API and relay can read; everything sealed to the member's vault is end to end and
+     is not): the email address typed with a setup code (VettIDAltChan MemberApiClient.redeemTyped), the account
+     identifiers the member API assigns and the requests carry (the vault id and user guid) and the relay mailbox's id
+     (User ID), and this installation's keys that authenticate its requests: the app key and the relay mailbox's key
+     (Device ID). Each is linked to the member, used for the app's functionality only,
      never for tracking. The App Privacy answers in App Store Connect must say the same. -->
 <plist version="1.0">
 <dict>

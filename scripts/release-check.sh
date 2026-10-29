@@ -168,6 +168,15 @@ check_store_files() {
       grep -qF "<string>NSPrivacyCollectedDataType${t}</string>" <<<"${collected}" ||
         problems+=("privacy manifest does not declare NSPrivacyCollectedDataType${t}")
     done
+    # Each declared type linked to the member and never used for tracking.
+    i=0
+    while category=$(/usr/libexec/PlistBuddy -c "Print :NSPrivacyCollectedDataTypes:${i}:NSPrivacyCollectedDataType" "${manifest}" 2>/dev/null); do
+      [[ $(/usr/libexec/PlistBuddy -c "Print :NSPrivacyCollectedDataTypes:${i}:NSPrivacyCollectedDataTypeTracking" "${manifest}" 2>/dev/null) == false ]] ||
+        problems+=("privacy manifest: ${category} not declared as untracked")
+      [[ $(/usr/libexec/PlistBuddy -c "Print :NSPrivacyCollectedDataTypes:${i}:NSPrivacyCollectedDataTypeLinked" "${manifest}" 2>/dev/null) == true ]] ||
+        problems+=("privacy manifest: ${category} not declared as linked")
+      i=$((i + 1))
+    done
   else
     problems+=("no PrivacyInfo.xcprivacy")
   fi
@@ -479,6 +488,8 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
     unstore "${config}" "${icon}" "without Assets.car" "rm Assets.car"
     unstore "${config}" "${icon}" "without the collected email address" \
       "plutil -remove NSPrivacyCollectedDataTypes.0 PrivacyInfo.xcprivacy"
+    unstore "${config}" "${icon}" "with a collected type used for tracking" \
+      "plutil -replace NSPrivacyCollectedDataTypes.1.NSPrivacyCollectedDataTypeTracking -bool true PrivacyInfo.xcprivacy"
   done
   unstore Release AppIcon "with the non-production icon name" \
     "plutil -replace CFBundleIcons.CFBundlePrimaryIcon.CFBundleIconName -string AppIcon-NonProduction Info.plist"
