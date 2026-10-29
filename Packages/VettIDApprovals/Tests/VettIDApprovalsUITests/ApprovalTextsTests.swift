@@ -18,7 +18,7 @@ import VettIDApprovals
             .appendingPathComponent("Sources/VettIDApprovalsUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 150)
+        #expect(keys.count == 151)
         let missing = "\u{0}missing"
         for key in keys {
             let text = ApprovalsStrings.bundle.localizedString(forKey: key, value: missing, table: nil)
@@ -193,6 +193,24 @@ import VettIDApprovals
         let invisible = "\u{200B}\u{202E}"
         #expect(ApprovalTexts.title(signin, name: invisible) == ApprovalsStrings.authSigninTitle(ApprovalsStrings.aConnectionInline))
         #expect(ApprovalTexts.title(approval, name: invisible) == ApprovalsStrings.authApprovalTitle(ApprovalsStrings.aConnection))
+    }
+
+    /// A sign-in or approval challenge without a context, or with nothing visible left of it, says no details were given;
+    /// one without a purpose shows nothing; a context is shown in full, its lines kept (§10.4, owner-approved 2026-10-29).
+    @Test func aChallengeWithoutDetailsSaysSo() {
+        func ask(_ context: String?, _ purpose: AuthenticationPurpose) -> AuthenticationRequest {
+            AuthenticationRequest(requestID: "a1", connectionID: "c1", context: context, receivedAt: Date(), exp: nil, purpose: purpose)
+        }
+        let none = "No details were given. Only approve if you know what this is for."
+        for purpose in [AuthenticationPurpose.signin, .approval] {
+            #expect(ApprovalTexts.contextNote(ask(nil, purpose)) == none)
+            #expect(ApprovalTexts.contextNote(ask("", purpose)) == none)
+            #expect(ApprovalTexts.contextNote(ask("\u{200B}\u{202E}\n ", purpose)) == none)
+            #expect(ApprovalTexts.contextNote(ask("Pay\nInvoice 12", purpose)) == "\u{2068}Pay\nInvoice 12\u{2069}")
+        }
+        #expect(ApprovalTexts.contextNote(ask(nil, .absent)) == nil)
+        #expect(ApprovalTexts.contextNote(ask("\u{202E}", .absent)) == nil)
+        #expect(ApprovalTexts.contextNote(ask("Sign-in", .absent)) == "\u{2068}Sign-in\u{2069}")
     }
 }
 

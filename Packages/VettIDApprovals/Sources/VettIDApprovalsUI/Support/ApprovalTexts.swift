@@ -55,6 +55,12 @@ enum ApprovalTexts {
         [who(a, name: name), summary(a)].compactMap { AccountNames.isolateOrNull($0) }.joined(separator: " · ")
     }
 
+    /// A challenge's note on its screen: the connection's own words in full (lines kept, isolated, §10.4); without them,
+    /// a `signin` or `approval` challenge says no details were given, and one without a purpose shows nothing.
+    static func contextNote(_ x: AuthenticationRequest) -> String? {
+        x.context.flatMap(AuthContext.isolated) ?? (x.purpose == .absent ? nil : ApprovalsStrings.authNoDetails)
+    }
+
     /// [s] cleaned (``AuthContext/plain(_:)``), from its first visible line up to the next line break: a row shows one line.
     static func firstLine(_ s: String) -> String {
         String(AuthContext.plain(s).drop { $0.isWhitespace }.prefix { !$0.isNewline })
