@@ -12,7 +12,7 @@ public struct ApprovalsState: Equatable, Sendable, CustomStringConvertible, Cust
     public var peerDeclines: [PeerDecline] = []
     public var error: FailureKind?
     /// Why the last read of the open asks (`pending.list`, VAULT-MESSAGING 0.70.0 §10.4.2) failed: the screen says so, with
-    /// Retry; ``FailureKind/ownerCheckRequired`` says the vault is on hold.
+    /// Retry; ``FailureKind/ownerCheckRequired`` says the vault is on hold, without Retry.
     public var openAsksError: FailureKind?
     /// Connections whose asks are paused after several declines (0.23.0 §10.4.1): resume, or remove the connection.
     public var paused: [ConnectionInfo] = []
