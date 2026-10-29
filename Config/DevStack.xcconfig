@@ -2,6 +2,7 @@
 #include "Base.xcconfig"
 
 VETTID_APP_BUNDLE_ID = com.vettid.app.devstack
+VETTID_APP_ICON = AppIcon-NonProduction
 VETTID_DISPLAY_NAME = VettID Dev Stack
 VETTID_ENVIRONMENT = devstack
 VETTID_ACCOUNT_HOST = 127.0.0.1:18081
