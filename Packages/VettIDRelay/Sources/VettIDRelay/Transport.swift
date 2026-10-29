@@ -11,6 +11,24 @@ public struct NetworkGate: Sendable {
     public static let always = NetworkGate { true }
 }
 
+/// What the app tells every host about itself (VAULT-MESSAGING 0.75.0 §13.6 "Device details"): exactly `VettID-iOS`,
+/// with nothing appended (no app or OS version, model or build), in place of the system's `CFNetwork/x Darwin/y`, on
+/// every request the app's own code sends: the member API, the relay (long-polls, WebSocket upgrades, blobs) and any other
+/// host. `Accept-Language` is sent empty: the system would otherwise add the phone's languages and region, and the Android
+/// app sends no such header (owner decision 2026-10-29, to match Android; the system adds it back when the header is
+/// removed, so an empty value is the nearest).
+public enum ClientIdentity {
+    public static let userAgent = "VettID-iOS"
+
+    /// [r] with the fixed `User-Agent`, replacing any other, and an empty `Accept-Language`.
+    public static func identified(_ r: URLRequest) -> URLRequest {
+        var r = r
+        r.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        r.setValue("", forHTTPHeaderField: "Accept-Language")
+        return r
+    }
+}
+
 /// An HTTP answer: status, headers and at most the requested number of body bytes.
 public struct HTTPAnswer: Sendable {
     public let status: Int
@@ -93,7 +111,7 @@ public struct HTTPTransport: Sendable {
             var r = try build()
             if let timeout { r.timeoutInterval = timeout }
             do {
-                return try await once(mapped(r), maxBody: maxBody)
+                return try await once(prepared(r), maxBody: maxBody)
             } catch let e as URLError {
                 try Task.checkCancellation()
                 guard attempt < maxRetries, Self.retryable(e, policy) else { throw e }
@@ -133,6 +151,9 @@ public struct HTTPTransport: Sendable {
         }
         return waited
     }
+
+    /// [r] as it is sent: to its mapped origin (``mapped(_:)``), with the fixed `User-Agent` (``ClientIdentity``).
+    public func prepared(_ r: URLRequest) -> URLRequest { ClientIdentity.identified(mapped(r)) }
 
     /// [r] sent to the origin the dev stack's map names for it (unchanged without a map or a match).
     public func mapped(_ r: URLRequest) -> URLRequest {

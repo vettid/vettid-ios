@@ -19,6 +19,13 @@ import Testing
 
     // MARK: - The URL rules
 
+    /// The log's GET says only `VettID-iOS` (VAULT-MESSAGING 0.75.0 §13.6).
+    @Test func theFetchSaysOnlyVettIDiOS() throws {
+        let r = ReleaseLogFetcher.request(try #require(URL(string: "https://example.org/log.json")))
+        #expect(r.value(forHTTPHeaderField: "User-Agent") == "VettID-iOS" && r.httpMethod == "GET")
+        #expect(r.value(forHTTPHeaderField: "Accept-Language") == "")
+    }
+
     @Test func theLogUrlIsTheOnlyNotesThatFetch() {
         #expect(ReleaseLog.indexURL(prod, target: rel(5)) == "https://vettid.org/security/releases/index.json")
         #expect(ReleaseLog.indexURL(staging, target: rel(9, "https://staging.vettid.org/security/releases/9/")) == "https://staging.vettid.org/security/releases/index.json")
