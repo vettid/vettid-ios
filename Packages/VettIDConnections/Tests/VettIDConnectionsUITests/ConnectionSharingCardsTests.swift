@@ -94,7 +94,7 @@ import VettIDUI
         #expect(SharingCardTexts.givenLine(oneOff) == "Shared once · 2 uses left")
         var gone = outGrant
         gone.name = " "
-        #expect(SharingCardTexts.givenName(gone) == "Deleted item" && SharingCardTexts.givenName(outGrant) == "Allergies")
+        #expect(SharingCardTexts.givenName(gone) == "Deleted item" && SharingCardTexts.givenName(outGrant) == "\u{2068}Allergies\u{2069}")
         #expect(SharingCardTexts.receivedLine(inGrant, name: ada) == "\(ada)’s")
         #expect(SharingCardTexts.receivedLine(inGrant, name: nil) == "Theirs")
         var limited = inGrant
@@ -104,7 +104,7 @@ import VettIDUI
         var labelled = inGrant
         labelled.name = ""
         labelled.label = "Their words"
-        #expect(SharingCardTexts.receivedName(labelled) == "Their words")
+        #expect(SharingCardTexts.receivedName(labelled) == "\u{2068}Their words\u{2069}")
         labelled.label = nil
         #expect(SharingCardTexts.receivedName(labelled) == "Deleted item")
     }
