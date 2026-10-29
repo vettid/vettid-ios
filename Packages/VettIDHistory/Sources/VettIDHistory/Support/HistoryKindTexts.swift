@@ -196,6 +196,8 @@ public enum HistoryKindTexts {
         "history_kind_rotate_resolved_any": "Connection checked and resumed",
         "history_kind_connection_request_approved": "You accepted a connection request",
         "history_kind_connection_request_declined": "You declined a connection request",
+        "history_kind_device_session_denied": "Session request from %@ denied",
+        "history_kind_device_session_denied_any": "Session request denied",
         "history_kind_push_registered": "Notifications turned on for %@",
         "history_kind_push_registered_any": "Notifications turned on",
         "history_kind_push_unregistered": "Notifications turned off for %@",

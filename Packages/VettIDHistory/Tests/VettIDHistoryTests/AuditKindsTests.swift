@@ -179,7 +179,7 @@ import VettIDVault
             .appendingPathComponent("Sources/VettIDHistory/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 347)
+        #expect(keys.count == 349)
         let missing = "\u{0}missing"
         for key in keys {
             let text = HistoryKindTexts.bundle.localizedString(forKey: key, value: missing, table: nil)
@@ -187,7 +187,7 @@ import VettIDVault
             #expect(key.hasPrefix("history_"), "\(key)")
         }
         // The kinds' table in the code is the same as the bundle's.
-        #expect(Set(HistoryKindTexts.english.keys).isSubset(of: Set(keys)) && HistoryKindTexts.english.count == 234)
+        #expect(Set(HistoryKindTexts.english.keys).isSubset(of: Set(keys)) && HistoryKindTexts.english.count == 236)
         let named = AuditKinds.named.values.flatMap { t -> [String] in if case .named(let a, let b, _) = t { [a, b] } else { [] } }
         for key in Array(AuditKinds.titles.values) + named {
             #expect(HistoryKindTexts.english[key] != nil, "\(key)")

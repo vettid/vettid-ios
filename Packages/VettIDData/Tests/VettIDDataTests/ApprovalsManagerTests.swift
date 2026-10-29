@@ -295,6 +295,30 @@ final class FakeApprovalOps: ApprovalOps, @unchecked Sendable {
         #expect(read == ["connection.authenticate.requested:a1", "grant.request:g1", "grant.request:g2", "share.pending:r1", "device.session.pending:s1"])
     }
 
+    /// VAULT-MESSAGING 0.77.0 §6.8: the app that ended or unlinked a device drops that device's asks itself; a denied
+    /// session request ends only itself.
+    @Test func theAppThatEndsADeviceDropsItsAsks() async throws {
+        let m = manager()
+        var read: [String] = []
+        m.onDecided = { kinds, ref in read.append("\(kinds.first ?? ""):\(ref)") }
+        m.onEvent(event("device.session.pending", #"{"request_id":"s1","device_id":"d1","name":"Laptop","exp":"\#(exp)"}"#))
+        m.onEvent(event("approval.pending", #"{"approval_id":"p1","device_id":"d1","name":"Laptop","type":"item.reveal","exp":"\#(exp)"}"#))
+        m.onEvent(event("approval.pending", #"{"approval_id":"p2","device_id":"d1","name":"Laptop","type":"item.reveal","exp":"\#(exp)"}"#))
+        m.onEvent(event("approval.pending", #"{"approval_id":"p3","device_id":"d2","name":"Agent","type":"item.run","exp":"\#(exp)"}"#))
+        m.onEvent(event("connection.authenticate.pending", #"{"request_id":"a1","connection_id":"c1","exp":"\#(exp)"}"#))
+        // A denied request: only that request goes; the device's held approvals stay.
+        try await m.declineDeviceRequest("device:device.session.pending:s1")
+        #expect(Set(m.approvals.map(\.key)) == ["device:approval.pending:p1", "device:approval.pending:p2", "device:approval.pending:p3", "auth:a1"])
+        m.onEvent(event("device.session.pending", #"{"request_id":"s2","device_id":"d1","name":"Laptop","exp":"\#(exp)"}"#))
+        read = []
+        // An end or an unlink: everything of that device, nothing of another device or kind.
+        m.dropAsks(ofDevice: "d1")
+        #expect(Set(m.approvals.map(\.key)) == ["device:approval.pending:p3", "auth:a1"])
+        #expect(Set(read) == ["approval.pending:p1", "approval.pending:p2", "device.session.pending:s2"])
+        m.dropAsks(ofDevice: "d9")
+        #expect(m.approvals.count == 2)
+    }
+
     @Test func aRequestTheVaultNoLongerKnowsLeaves() async throws {
         let m = manager()
         m.onEvent(event("connection.authenticate.pending", #"{"request_id":"a1","connection_id":"c1","exp":"\#(exp)"}"#))
