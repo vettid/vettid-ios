@@ -23,11 +23,11 @@ enum ApprovalTexts {
         }
     }
 
-    /// Who asks: the request's name, the connection, the device, or an agent.
+    /// Who asks: the request's name, the connection, the device, or an agent; received names cleaned (§10.8).
     static func who(_ a: PendingApproval, name: String?) -> String? {
         switch a {
-        case .connection(let r): r.name ?? ApprovalsStrings.nameNotShared
-        case .device(let d): d.deviceName
+        case .connection(let r): AccountNames.cleaned(r.name) ?? ApprovalsStrings.nameNotShared
+        case .device(let d): AccountNames.cleaned(d.deviceName)
         case .share(let s): name ?? (s.subjectAgentID != nil ? ApprovalsStrings.anAgent : nil)
         default: name ?? ApprovalsStrings.aConnection
         }
@@ -52,11 +52,13 @@ enum ApprovalTexts {
     /// The row's second line: who and the summary, joined, each bidi-isolated (§10.8) since either can come from the
     /// other side.
     static func supporting(_ a: PendingApproval, name: String?) -> String {
-        [who(a, name: name), summary(a)].compactMap { $0.map(AccountNames.isolate) }.joined(separator: " · ")
+        [who(a, name: name), summary(a)].compactMap { AccountNames.isolateOrNull($0) }.joined(separator: " · ")
     }
 
-    /// [s] up to its first line break: a row shows one line.
-    static func firstLine(_ s: String) -> String { String(s.prefix { !$0.isNewline }) }
+    /// [s] cleaned (``AuthContext/plain(_:)``), from its first visible line up to the next line break: a row shows one line.
+    static func firstLine(_ s: String) -> String {
+        String(AuthContext.plain(s).drop { $0.isWhitespace }.prefix { !$0.isNewline })
+    }
 
     /// The decision screen's body. An `approval` challenge has none: its title says who asks, and its note follows in full
     /// (chosen; not in the spec).

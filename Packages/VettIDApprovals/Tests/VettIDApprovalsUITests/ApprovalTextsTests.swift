@@ -60,8 +60,20 @@ import VettIDApprovals
         let ctx = PendingApproval.authentication(
             AuthenticationRequest(requestID: "m1", connectionID: "c1", context: "Pay \u{202E}fake\nsecond line", receivedAt: Date(), exp: nil, purpose: .signin)
         )
-        #expect(ApprovalTexts.supporting(ctx, name: "Sam Lee") == row("Sam Lee", "Pay \u{202E}fake"))
+        #expect(ApprovalTexts.supporting(ctx, name: "Sam Lee") == row("Sam Lee", "Pay fake"))
         #expect(!ApprovalTexts.supporting(ctx, name: "Sam Lee").contains("second line"))
+        // The first visible line, after the cleaning: a context that starts with a break or invisible characters.
+        let leading = PendingApproval.authentication(
+            AuthenticationRequest(requestID: "m2", connectionID: "c1", context: "\u{202E}\n\u{2028}  Pay\nmore", receivedAt: Date(), exp: nil, purpose: .signin)
+        )
+        #expect(ApprovalTexts.supporting(leading, name: "Sam Lee") == row("Sam Lee", "Pay"))
+    }
+
+    /// A request's name of only invisible characters reads as not shared, never as an empty part (§10.8).
+    @Test func anInvisibleRequestNameReadsAsNotShared() {
+        var r = ConnectionRequest(pendingID: "p9", sas: "042817", remote: false, name: "\u{200B}\u{202E}", receivedAt: Date(), exp: nil)
+        r.state = .pending
+        #expect(ApprovalTexts.supporting(.connection(.incoming(r)), name: nil) == row("Name not shared yet", "code 042817"))
     }
 
     @Test func aRowSaysWhoAndWhat() {
