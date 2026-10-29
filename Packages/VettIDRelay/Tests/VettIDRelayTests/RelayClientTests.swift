@@ -84,6 +84,23 @@ final class Recorder<T: Sendable>: @unchecked Sendable {
         #expect(r4.method == "DELETE" && r4.path == "/v1/mailbox/01A")
     }
 
+    /// Every request carries exactly `VettID-iOS` as its User-Agent, never the system's `CFNetwork/x Darwin/y`, and so does
+    /// the WebSocket upgrade (VAULT-MESSAGING 0.75.0 §13.6).
+    @Test func everyRequestSaysOnlyVettIDiOS() async throws {
+        let c = client()
+        server.enqueue(.json(201, #"{"mailbox_id":"\#(c.mailboxID)","limits":\#(Self.limits)}"#), .json(503, #"{"code":"internal","message":"x"}"#), .json(201, #"{"msg_id":"01M"}"#))
+        _ = try await c.register()
+        _ = try await c.deposit(mailboxID: "m1", token: "t", payload: [1])
+        #expect(server.requests.count == 3)
+        for r in server.requests { #expect(r.header("User-Agent") == "VettID-iOS") }
+        let transport = HTTPTransport(session: server.session)
+        let upgrade = RelayClient.webSocket(transport.prepared(try c.streamRequest()))
+        #expect(upgrade.value(forHTTPHeaderField: "User-Agent") == "VettID-iOS")
+        var other = URLRequest(url: try #require(URL(string: server.baseURL)))
+        other.setValue("CFNetwork/1 Darwin/2", forHTTPHeaderField: "User-Agent")
+        #expect(ClientIdentity.identified(other).value(forHTTPHeaderField: "User-Agent") == "VettID-iOS")
+    }
+
     @Test func retriesFiveHundredsResigningEachAttempt() async throws {
         server.enqueue(.json(503, #"{"code":"internal","message":"x"}"#), .json(201, #"{"msg_id":"01M"}"#))
         #expect(try await client().deposit(mailboxID: "mbx", token: "tok", payload: [1]) == "01M")

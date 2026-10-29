@@ -1,4 +1,5 @@
 import Foundation
+import VettIDRelay
 
 /// How urgent updating is, as the release log says (RELEASE-UPDATES §5). Information only. Mirrors vettid-android
 /// `ReleaseSecurity`.
@@ -215,10 +216,16 @@ final class ReleaseLogFetcher: NSObject, URLSessionTaskDelegate, Sendable {
         super.init()
     }
 
-    func get(_ url: URL) async -> [UInt8]? {
+    /// The GET for [url]: JSON, with the app's fixed `User-Agent` (VAULT-MESSAGING 0.75.0 §13.6).
+    static func request(_ url: URL) -> URLRequest {
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
         req.setValue("application/json", forHTTPHeaderField: "Accept")
+        return ClientIdentity.identified(req)
+    }
+
+    func get(_ url: URL) async -> [UInt8]? {
+        let req = Self.request(url)
         do {
             let (bytes, response) = try await session.bytes(for: req, delegate: self)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200, Self.isJSON(http.mimeType),

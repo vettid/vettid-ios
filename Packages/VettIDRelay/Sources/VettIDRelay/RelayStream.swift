@@ -96,7 +96,7 @@ public struct RelayMailbox: MailboxSource {
     public func collect(wait: TimeInterval, max: Int) async throws -> [RelayMessage] { try await client.collect(wait: wait, max: max) }
     public func ack(_ msgID: String) async throws { try await client.ack(msgID) }
     public func openStream() throws -> CollectStream {
-        RelayStream(session: transport.session, request: RelayClient.webSocket(transport.mapped(try client.streamRequest())))
+        RelayStream(session: transport.session, request: RelayClient.webSocket(transport.prepared(try client.streamRequest())))
     }
 }
 
