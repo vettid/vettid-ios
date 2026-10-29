@@ -284,6 +284,10 @@ public final class TestVaultPhone {
     /// tries on a loaded machine (1 s a try was not).
     public static let roomyRequestTimeout: TimeInterval = 5
 
+    /// How many times longer than the app's 5 s the owner check waits for the status read after a failed check while the
+    /// vault answers.
+    static let roomyStatusWaitFactor = 12
+
     /// [requestTimeout]: how long a request waits for its answer before it is sent again (§8.6), for a request of a type
     /// whose answers the test makes go missing (``FakeVaultService/unanswered(_:)``); any other waits at least
     /// ``roomyRequestTimeout``. [wipes]: false for a build that cannot wipe. [lockStatusWait]: how long "Lock it now" waits for the status
@@ -371,6 +375,13 @@ public final class TestVaultPhone {
         let short = waits.requestTimeout, roomy = max(waits.requestTimeout, roomyRequestTimeout)
         // Weak: the device outlives the test (its collection and requests end later), and must not keep the fake running.
         c.requestTimeoutOf = { [weak service] in service?.unanswered($0) ?? true ? short : roomy }
+        // The owner check's wait for the status read after a failed check (5 s) is roomy while the vault answers: the read
+        // ends the wait at once, so a loaded machine cannot turn a slow answer into the app's estimate (§3.6.5). It stays
+        // 5 s when the vault is closed or the test makes the status go missing.
+        c.ownerCheckSleep = { [weak service] d in
+            let silent = service?.unanswered("vault.status") ?? true
+            try await Task.sleep(for: silent ? d : d * Self.roomyStatusWaitFactor)
+        }
         let pauses = waits.pauses
         c.changeCheckSleep = { try await pauses.sleep($0) }
         let changeWaits = waits.changeWaits

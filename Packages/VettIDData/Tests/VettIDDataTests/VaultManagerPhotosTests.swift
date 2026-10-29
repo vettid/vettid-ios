@@ -135,7 +135,10 @@ enum TestPhotos {
         #expect(await eventually { msgs.messages(id).last?.messageID == inID && msgs.messages(id).last?.attachment?.state == .stored })
         let incoming = try #require(msgs.messages(id).last?.attachment)
         #expect(incoming.state == .stored && incoming.name == "xgpj.png" && incoming.width == 800 && incoming.viewable)
-        #expect(att.cachedThumbnail(id, messageID: inID) == theirs.thumb.copy(), "the thumbnail of message.new, in memory")
+        #expect(
+            await eventually { att.cachedThumbnail(id, messageID: inID) == theirs.thumb.copy() },
+            "the thumbnail of message.new, in memory"
+        )
         let photo = try await att.photo(id, messageID: inID)
         let shown = try Photos.decodeReceived(photo.bytes.copy(), targetLongEdge: 1_080)
         #expect(shown.width == 800 && shown.height == 600)
