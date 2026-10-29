@@ -140,7 +140,8 @@ check_staging() {
 app_of() { echo "${OUT}/$1.xcarchive/Products/Applications/VettID.app"; }
 
 # What App Store Connect needs in an upload (IOS-PLAN §8 I4): the configuration's app icon, compiled into the asset
-# catalog, and the privacy manifest with the reasons for the required-reason APIs the app uses.
+# catalog, and the privacy manifest with the reasons for the required-reason APIs the app uses and the data it
+# collects.
 check_store_files() {
   local app=$1 icon=$2 actual problems=()
   actual=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' "${app}/Info.plist" 2>/dev/null || true)
@@ -159,6 +160,13 @@ check_store_files() {
     done
     for pair in NSPrivacyAccessedAPICategoryUserDefaults=CA92.1 NSPrivacyAccessedAPICategoryFileTimestamp=C617.1; do
       grep -q "^${pair%%=*}=Array{.*${pair#*=}.*}$" <<<"${pairs}" || problems+=("privacy manifest without ${pair%%=*} reason ${pair#*=}")
+    done
+    # The data the member API can read (email, account ids, the app key), declared as the App Privacy answers say.
+    local collected
+    collected=$(plutil -extract NSPrivacyCollectedDataTypes xml1 -o - "${manifest}" 2>/dev/null || true)
+    for t in EmailAddress UserID DeviceID; do
+      grep -qF "<string>NSPrivacyCollectedDataType${t}</string>" <<<"${collected}" ||
+        problems+=("privacy manifest does not declare NSPrivacyCollectedDataType${t}")
     done
   else
     problems+=("no PrivacyInfo.xcprivacy")
@@ -469,6 +477,8 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
     unstore "${config}" "${icon}" "without the UserDefaults reason" "plutil -remove NSPrivacyAccessedAPITypes.0 PrivacyInfo.xcprivacy"
     unstore "${config}" "${icon}" "without the file timestamp reason" "plutil -remove NSPrivacyAccessedAPITypes.1 PrivacyInfo.xcprivacy"
     unstore "${config}" "${icon}" "without Assets.car" "rm Assets.car"
+    unstore "${config}" "${icon}" "without the collected email address" \
+      "plutil -remove NSPrivacyCollectedDataTypes.0 PrivacyInfo.xcprivacy"
   done
   unstore Release AppIcon "with the non-production icon name" \
     "plutil -replace CFBundleIcons.CFBundlePrimaryIcon.CFBundleIconName -string AppIcon-NonProduction Info.plist"

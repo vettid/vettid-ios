@@ -4,8 +4,12 @@
      UserDefaults for the app's own settings (the theme, App/VettIDApp.swift, VettIDData ThemeSetting; cleared by the
      wipe, App/Composition/AppWipeTargets.swift): CA92.1. File metadata of files in the app's own container: the size
      of a state file (fstat, VettIDKeys EncryptedFileStore; libsodium also imports fstat) and the age of copied-in canary manifests
-     (App/CanaryManifestFiles.swift): C617.1. The collected data types are left to the App Privacy answers in App Store
-     Connect, which the owner gives. -->
+     (App/CanaryManifestFiles.swift): C617.1.
+     Collected (what VettID's member API can read; everything sealed to the member's vault is end to end and is not):
+     the email address typed with a setup code (VettIDAltChan MemberApiClient.redeemTyped), the account identifiers
+     the member API assigns and the requests carry (the vault id and user guid), and this installation's app key, a
+     public key that authenticates its requests. Each is linked to the member, used for the app's functionality only,
+     never for tracking. The App Privacy answers in App Store Connect must say the same. -->
 <plist version="1.0">
 <dict>
 	<key>NSPrivacyTracking</key>
@@ -13,7 +17,44 @@
 	<key>NSPrivacyTrackingDomains</key>
 	<array/>
 	<key>NSPrivacyCollectedDataTypes</key>
-	<array/>
+	<array>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeEmailAddress</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeUserID</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeDeviceID</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSPrivacyAccessedAPITypes</key>
 	<array>
 		<dict>
