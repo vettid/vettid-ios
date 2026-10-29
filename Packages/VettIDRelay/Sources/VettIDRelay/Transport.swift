@@ -14,14 +14,17 @@ public struct NetworkGate: Sendable {
 /// What the app tells every host about itself (VAULT-MESSAGING 0.75.0 §13.6 "Device details"): exactly `VettID-iOS`,
 /// with nothing appended (no app or OS version, model or build), in place of the system's `CFNetwork/x Darwin/y`, on
 /// every request the app's own code sends: the member API, the relay (long-polls, WebSocket upgrades, blobs) and any other
-/// host.
+/// host. `Accept-Language` is sent empty: the system would otherwise add the phone's languages and region, and the Android
+/// app sends no such header (owner decision 2026-10-29, to match Android; the system adds it back when the header is
+/// removed, so an empty value is the nearest).
 public enum ClientIdentity {
     public static let userAgent = "VettID-iOS"
 
-    /// [r] with the fixed `User-Agent`, replacing any other.
+    /// [r] with the fixed `User-Agent`, replacing any other, and an empty `Accept-Language`.
     public static func identified(_ r: URLRequest) -> URLRequest {
         var r = r
         r.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        r.setValue("", forHTTPHeaderField: "Accept-Language")
         return r
     }
 }

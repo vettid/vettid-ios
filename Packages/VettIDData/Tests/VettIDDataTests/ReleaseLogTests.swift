@@ -23,6 +23,7 @@ import Testing
     @Test func theFetchSaysOnlyVettIDiOS() throws {
         let r = ReleaseLogFetcher.request(try #require(URL(string: "https://example.org/log.json")))
         #expect(r.value(forHTTPHeaderField: "User-Agent") == "VettID-iOS" && r.httpMethod == "GET")
+        #expect(r.value(forHTTPHeaderField: "Accept-Language") == "")
     }
 
     @Test func theLogUrlIsTheOnlyNotesThatFetch() {

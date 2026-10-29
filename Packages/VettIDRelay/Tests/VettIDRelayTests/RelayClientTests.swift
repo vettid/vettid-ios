@@ -92,10 +92,10 @@ final class Recorder<T: Sendable>: @unchecked Sendable {
         _ = try await c.register()
         _ = try await c.deposit(mailboxID: "m1", token: "t", payload: [1])
         #expect(server.requests.count == 3)
-        for r in server.requests { #expect(r.header("User-Agent") == "VettID-iOS") }
+        for r in server.requests { #expect(r.header("User-Agent") == "VettID-iOS" && r.header("Accept-Language") == "") }
         let transport = HTTPTransport(session: server.session)
         let upgrade = RelayClient.webSocket(transport.prepared(try c.streamRequest()))
-        #expect(upgrade.value(forHTTPHeaderField: "User-Agent") == "VettID-iOS")
+        #expect(upgrade.value(forHTTPHeaderField: "User-Agent") == "VettID-iOS" && upgrade.value(forHTTPHeaderField: "Accept-Language") == "")
         var other = URLRequest(url: try #require(URL(string: server.baseURL)))
         other.setValue("CFNetwork/1 Darwin/2", forHTTPHeaderField: "User-Agent")
         #expect(ClientIdentity.identified(other).value(forHTTPHeaderField: "User-Agent") == "VettID-iOS")
