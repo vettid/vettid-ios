@@ -66,11 +66,14 @@ extension VaultDevice {
             } catch let e as VaultStateError where e == Self.haltedError || e == Self.quietedError {
                 throw e
             } catch {}
-            if let inner = await d.wait(timeout: timeout ?? cfg.requestTimeout(for: held.type)) { return VaultMessage(inner: inner) }
+            if let inner = await d.wait(timeout: timeout ?? cfg.requestTimeout(for: held.type)) {
+                return VaultMessage(inner: countingAnswer(held.type, inner))
+            }
             try Task.checkCancellation()
             // No answer: the collection may have ended (the answer would then wait in the mailbox unread).
             ensureCollecting()
         }
+        countingNoAnswer(held.type)
         throw VaultStateError(message: "\(held.type): no response")
     }
 }

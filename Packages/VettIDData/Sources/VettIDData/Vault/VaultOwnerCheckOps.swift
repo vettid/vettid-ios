@@ -5,6 +5,8 @@ import VettIDVault
 @MainActor
 final class FreshStatus {
     var view: OwnerCheckView?
+    /// `vault.status` answered (with or without an `owner_check`).
+    var answered = false
 }
 
 /// ``OwnerCheckOps`` over the vault client. Mirrors vettid-android `VaultOwnerCheckOps`.

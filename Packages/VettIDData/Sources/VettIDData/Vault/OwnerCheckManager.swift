@@ -50,6 +50,11 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     /// Told when the vault becomes held or due (true) and when it is no longer (false), as the state says (§3.6.3).
     @ObservationIgnored public var onHeldChange: @MainActor (_ held: Bool) -> Void = { _ in }
     public internal(set) var lockedByOwnerCheck = false
+    /// (VAULT-MESSAGING 0.73.0 §3.6.5) ``lockedByOwnerCheck`` came from a read that found the vault locked without a known
+    /// cause.
+    public internal(set) var lockCauseUnknown = false
+    /// How many times the relay connection came back (``onRelayReconnected()``).
+    public internal(set) var relayReconnects = 0
     public internal(set) var unlockCheckOutcome: OwnerCheckOutcome?
     /// The app is in front or not (the app, not a screen); ``setForeground(_:)``.
     public internal(set) var inFront = true
@@ -75,7 +80,7 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     @ObservationIgnored private let onRecoveryStatus: @MainActor (RecoveryStatus?, Int) -> Void
     @ObservationIgnored let now: @Sendable () -> Date
     @ObservationIgnored private let mark: @MainActor () -> Int
-    @ObservationIgnored private let sleep: LockSleep
+    @ObservationIgnored let sleep: LockSleep
     /// The vault's time scale now (STAGING-TIME-SCALE §5.2; ``LocalAccount/timeScale``).
     @ObservationIgnored private let scaleNow: @MainActor () -> UInt64
     /// What a failure shows beyond the check's screen (``VaultManager/noted(_:since:resend:)``: `credential_required`'s root
@@ -104,6 +109,16 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     @ObservationIgnored var pinEpoch = 0
     /// Bumped by another unlock, a lock made here and a wipe: the answer of an unlock's check sent before it is dropped.
     @ObservationIgnored var unlockEpoch = 0
+    /// (VAULT-MESSAGING 0.73.0 §3.6.5) The tries left as the app counts them: the count of the last `vault.status` read, less
+    /// one for each failed check answered since and for each check sent since that got no answer. With no count read since
+    /// the unlock or since the app started it is 0 (it never assumes tries it did not read). Memory only.
+    @ObservationIgnored var estimate = 0
+    /// Bumped by a lock made here, a wipe and an unlock: a read of the vault's state that finishes after one is dropped.
+    @ObservationIgnored var probeEpoch = 0
+    /// (VAULT-MESSAGING 0.73.0) The member API's `GET /api/vault/status` `state`; nil: no answer.
+    @ObservationIgnored let memberState: @MainActor () async -> String?
+    /// (VAULT-MESSAGING 0.73.0) A read found the vault locked: the app moves to its locked screen, as for a `vault.locking`.
+    @ObservationIgnored let onFoundLocked: @MainActor () -> Void
 
     /// [ops] the vault's operations, opened when needed; [load] and [persist] the kept state, read by ``loadIfNeeded()``
     /// (never before the first-run cleanup and a pending wipe); [onPassed] the catch-up after a passed check (§3.6.3);
@@ -118,7 +133,9 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         mark: @escaping @MainActor () -> Int = { 0 },
         sleep: @escaping LockSleep = realLockSleep,
         timeScale: @escaping @MainActor () -> UInt64 = { 1 },
-        notes: FailureNotes = .none
+        notes: FailureNotes = .none,
+        memberState: @escaping @MainActor () async -> String? = { nil },
+        onFoundLocked: @escaping @MainActor () -> Void = {}
     ) {
         self.ops = ops
         self.load = load
@@ -130,6 +147,8 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         self.sleep = sleep
         scaleNow = timeScale
         self.notes = notes
+        self.memberState = memberState
+        self.onFoundLocked = onFoundLocked
     }
 
     /// The vault's time scale as this phone last learnt it (STAGING-TIME-SCALE §5.2), for the screens.
@@ -180,6 +199,7 @@ public final class OwnerCheckManager: OwnerCheckRepository {
                 // A passed check: the idle lock's time moved with the deadline (the vault says it again), and a longer
                 // idle-lock value set before it is in force now (§3.6.8).
                 checkPassedForIdleLock()
+                estimate = OwnerCheckView.maxFailures
                 update { v in
                     v.state = .ok
                     v.deadline = Self.instant(VaultJSON.string(m.object, "deadline")) ?? v.deadline
@@ -200,7 +220,7 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         loadIfNeeded()
         switch reason {
         case Self.reasonOwnerCheck:
-            lockedByOwnerCheck = true
+            markLocked(causeKnown: true)
             lockedHere = true
             saveFlags()
         // (Release L, §3.6.8) It locked itself: said on the unlock screen, with how long past the deadline that was, as the
@@ -241,8 +261,10 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         refreshQuietly()
     }
 
-    /// The vault opened (an unlock, or the app started with it unlocked): the check is read again.
-    func onOpened() {
+    /// The vault opened (an unlock, or the app started with it unlocked): the check is read again. [afterUnlock] false: a
+    /// return to the foreground, which keeps the estimate of tries left.
+    func onOpened(afterUnlock: Bool = true) {
+        if afterUnlock { forgetEstimate() }
         endIdleLocked()
         refreshQuietly()
     }
@@ -260,7 +282,7 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     /// with the same entries, whatever the deadline, because it records that the member is present (§11.14.5). A check
     /// that does not pass waits in ``unlockCheckOutcome``, and ``checkAfterCancel`` asks for the check screen.
     func afterCancelledRecovery(pin: String, password: String) async {
-        lockedByOwnerCheck = false
+        markOpen()
         let r = await checkOutcome(pin: pin, password: password, holdOff: nil)
         if r != .passed {
             unlockCheckOutcome = r
@@ -286,6 +308,7 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         presenceFromStatus(recovery)
         onRecoveryStatus(recovery, since)
         guard let st = st0 else { return (ownerCheck, false) }
+        estimate = max(OwnerCheckView.maxFailures - (st.failures ?? 0), 0)
         let state: OwnerCheckState = switch st.state {
         case "held": .held
         case "due": .due
@@ -322,7 +345,9 @@ public final class OwnerCheckManager: OwnerCheckRepository {
                 )
             }
             guard cleared == clears else { return .failed(.other, code: nil) }
-            lockedByOwnerCheck = false
+            markOpen()
+            // A passed check ends the run of failures.
+            estimate = OwnerCheckView.maxFailures
             heldTs = nil
             idleLocked = nil
             lockedHere = false
@@ -343,44 +368,6 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         } catch {
             return .failed(.other, code: nil)
         }
-    }
-
-    private func failed(_ e: VaultFailure) async -> OwnerCheckOutcome {
-        switch e.code {
-        case Self.codeBadPin: .badPin(checksLeft: await checksLeftAfterFailure())
-        case Self.codeBadPassword: .badPassword(checksLeft: await checksLeftAfterFailure())
-        // A backoff's wait: the error body's `retry_after` (VAULT-MESSAGING 0.17.0 §3.6.1, §10.1); 0 from older vaults.
-        case Self.codeBackoff: .backoff(retryAfterSeconds: e.retryAfterSeconds)
-        default: .failed(e.kind, code: e.code)
-        }
-    }
-
-    /// A failed check counts (§3.6.4): `failures` is read again, for at most ``statusAfterFailure`` (the tenth locks the
-    /// vault, and then nothing answers); without a fresh status the count kept here goes up by one.
-    private func checksLeftAfterFailure() async -> Int? {
-        let (left, fresh) = await checksLeftAfterFailureRead()
-        // The tenth failure locks the vault (§3.6.4), whether or not `vault.locking` has arrived yet: the app says so at once,
-        // from the vault's own count only (a count guessed here could show an open vault as locked).
-        // (chosen; not in the spec) Also when this answer is stale (a newer unlock cleared the flag): the vault did lock.
-        if fresh, let left, left <= 0 { lockedByOwnerCheck = true }
-        return left
-    }
-
-    /// The checks left, and whether the vault said so (a fresh `vault.status`) rather than the count kept here.
-    private func checksLeftAfterFailureRead() async -> (Int?, Bool) {
-        let before = ownerCheck
-        let wait = KickableWait()
-        let read = FreshStatus()
-        Task { @MainActor [weak self] in
-            if let r = try? await self?.readStatus(), r.fresh { read.view = r.view }
-            wait.kick()
-        }
-        await wait.wait(Self.statusAfterFailure, sleep: sleep)
-        if let after = read.view { return (after.checksLeft, true) }
-        guard var b = before else { return (nil, false) }
-        b.failures += 1
-        set(b)
-        return (b.checksLeft, false)
     }
 
     private func clampHoldOff(_ until: Date) -> Date {
@@ -410,6 +397,8 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     public func onLockedHere() {
         forgetUnlockPin()
         unlockEpoch += 1
+        // A read that finishes after the member's own lock does not mark it.
+        probeEpoch += 1
         loadIfNeeded()
         lockedHere = true
         saveFlags()
@@ -508,9 +497,11 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         forgetUnlockPin()
         unlockEpoch += 1
         clears += 1
+        probeEpoch += 1
+        estimate = 0
         loaded = true
         ownerCheck = nil
-        lockedByOwnerCheck = false
+        markOpen()
         unlockCheckOutcome = nil
         notices = []
         heldTs = nil

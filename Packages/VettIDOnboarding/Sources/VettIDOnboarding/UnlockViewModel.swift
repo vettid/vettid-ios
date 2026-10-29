@@ -57,7 +57,9 @@ public final class UnlockViewModel: UnlockActions {
             followers.add(follow(
                 ownerCheck,
                 read: {
-                    OwnerCheckFlags(due: $0.ownerCheck?.gated(now()) == true, locked: $0.lockedByOwnerCheck, idle: $0.idleLockedNow(now()))
+                    OwnerCheckFlags(
+                        due: $0.ownerCheck?.gated(now()) == true, locked: Self.lockedByChecks($0), idle: $0.idleLockedNow(now())
+                    )
                 },
                 apply: { [weak self] _, f in self?.ownerCheck(due: f.due, lockedByChecks: f.locked, idleLocked: f.idle) }
             ))
@@ -71,7 +73,7 @@ public final class UnlockViewModel: UnlockActions {
                     }
                     guard let self, let repo = ownerCheck else { return }
                     self.ownerCheck(
-                        due: repo.ownerCheck?.gated(now()) == true, lockedByChecks: repo.lockedByOwnerCheck,
+                        due: repo.ownerCheck?.gated(now()) == true, lockedByChecks: Self.lockedByChecks(repo),
                         idleLocked: repo.idleLockedNow(now())
                     )
                 }
@@ -84,6 +86,10 @@ public final class UnlockViewModel: UnlockActions {
         countdowns.cancelAll()
         notesTask?.cancel()
     }
+
+    /// Locked after ten wrong checks, as far as the app knows: (VAULT-MESSAGING 0.73.0 §3.6.5) a lock found by a read
+    /// without a known cause is not, and is not a check that is due (only what is used is asked for).
+    static func lockedByChecks(_ repo: any OwnerCheckRepository) -> Bool { repo.lockedByOwnerCheck && !repo.lockCauseUnknown }
 
     /// The owner check's state, from its repository (the vault past its deadline, locked after ten checks, or (release L,
     /// §3.6.8) locked by itself because no check was passed in time: said here, with the unlock and the check on one screen).

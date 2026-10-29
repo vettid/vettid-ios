@@ -132,23 +132,39 @@ public struct OwnerCheckScreen: View {
         }
     }
 
+    private var primaryLabel: String {
+        if state.watch == .silent { return OnboardingStrings.ownerCheckCheckAgain }
+        if state.pinKept { return OnboardingStrings.unlockCheckIn }
+        return state.mode == .holdOff ? OnboardingStrings.ownerCheckSubmitHoldOff : OnboardingStrings.ownerCheckSubmit
+    }
+
     private var form: some View {
+        // (VAULT-MESSAGING 0.73.0 §3.6.5) While the vault is probably locked "Lock vault" stays offered in every mode; it
+        // takes the place of Cancel there, which stays in the navigation bar for a check that can be left.
         FormScaffold(
             title: title,
             message: body0,
-            primaryLabel: state.pinKept
-                ? OnboardingStrings.unlockCheckIn
-                : state.mode == .holdOff ? OnboardingStrings.ownerCheckSubmitHoldOff : OnboardingStrings.ownerCheckSubmit,
-            primaryEnabled: canSubmit,
+            primaryLabel: primaryLabel,
+            primaryEnabled: canSubmit || (state.watch == .silent && !state.locking),
             busy: state.busy || state.locking,
-            secondaryLabel: state.mode == .gated ? OnboardingStrings.ownerCheckLock : OnboardingStrings.ownerCheckCancel,
-            onPrimary: submit,
+            secondaryLabel: state.lockOffered ? OnboardingStrings.ownerCheckLock : OnboardingStrings.ownerCheckCancel,
+            onPrimary: { if state.watch == .silent { actions.checkAgain() } else { submit() } },
             onSecondary: {
                 pin.clear()
-                if state.mode == .gated { actions.lockVault() } else { onCancel() }
+                if state.lockOffered { actions.lockVault() } else { onCancel() }
             },
+            onBack: state.cancelBesideLock ? { pin.clear(); onCancel() } : nil,
             header: {
                 VettIDSymbol.verifiedUser.image.font(.system(size: 36)).padding(.top, Spacing.l).accessibilityHidden(true)
+            },
+            topActions: {
+                if state.cancelBesideLock {
+                    TopBarTextAction(OnboardingStrings.ownerCheckCancel) {
+                        pin.clear()
+                        onCancel()
+                    }
+                    .accessibilityIdentifier("owner_check_cancel")
+                }
             }
         ) {
             VStack(alignment: .leading, spacing: Spacing.m) {
@@ -176,9 +192,12 @@ public struct OwnerCheckScreen: View {
             }
         }
         .onDisappear { forgetSecrets() }
-        // Locked: digits typed on the hidden keypad do not wait in its buffer.
+        // Locked, or probably locked: digits typed on the hidden keypad do not wait in its buffer.
         .onChange(of: state.locked) { _, locked in
             if locked { pin.clear() }
+        }
+        .onChange(of: state.watch) { _, watch in
+            if watch != .none { pin.clear() }
         }
         .onChange(of: scenePhase) { _, now in
             // IOS-PLAN §6.3: typed secrets are dropped when the app leaves the foreground, and when the iPhone locks.
@@ -193,7 +212,24 @@ public struct OwnerCheckScreen: View {
     /// (IOS-PLAN §6.6; VAULT-MESSAGING §3.6.5 "Ask only for what is used") After an unlock whose check failed: directly under
     /// the counts, the approved lines. The tenth failure locked the vault: the existing lock text, no retry.
     @ViewBuilder private var unlockLines: some View {
-        if state.locked {
+        // (VAULT-MESSAGING 0.73.0 §3.6.5) A lock found by a read without a known cause: the locked line, not the ten-checks
+        // text.
+        if state.locked, state.lockCauseUnknown {
+            Text(OnboardingStrings.unlockLockConfirmed)
+                .vettIDFont(.bodyMedium)
+                .accessibilityIdentifier("owner_check_locked_unknown")
+        }
+        // Probably locked: the approved lines; the fields are not offered.
+        if state.watch != .none, !state.locked {
+            Text(
+                state.watch == .checking
+                    ? OnboardingStrings.ownerCheckProbablyLockedChecking : OnboardingStrings.ownerCheckProbablyLockedSilent
+            )
+            .vettIDFont(.bodyMedium)
+            .accessibilityAddTraits(.updatesFrequently)
+            .accessibilityIdentifier("owner_check_probably_locked")
+        }
+        if state.locked, !state.lockCauseUnknown {
             NoticeCard(
                 .urgent, title: OnboardingStrings.unlockOwnerCheckLockedTitle, message: OnboardingStrings.unlockOwnerCheckLockedBody
             )
@@ -216,7 +252,7 @@ public struct OwnerCheckScreen: View {
     /// The keypad (not after an unlock whose PIN was kept) and the password (§3.6.5: one screen for both); neither once the
     /// vault locked.
     @ViewBuilder private var entries: some View {
-        if !state.locked {
+        if !state.locked, state.watch == .none {
             entryFields
         }
     }
@@ -256,7 +292,7 @@ struct OwnerCheckMessageView: View {
 
     var body: some View {
         // The approved line says the tries left itself, and the lock text needs no count beside it.
-        if let left = state.checksLeft, state.unlockedWrong == nil, !state.locked {
+        if let left = state.checksLeft, state.unlockedWrong == nil, !state.locked, state.watch == .none {
             Text(OnboardingStrings.ownerCheckChecksLeft(left))
                 .vettIDFont(.bodyMedium)
                 .foregroundStyle(left <= OwnerCheckScreen.warnLeft ? colors.error : colors.onSurfaceVariant)
@@ -268,6 +304,12 @@ struct OwnerCheckMessageView: View {
                 .accessibilityIdentifier("owner_check_wait")
         } else if state.message == .backoff {
             Text(OnboardingStrings.ownerCheckBackoff).vettIDFont(.bodyMedium)
+        } else if case .maybeCounted(let atLeast)? = state.message {
+            // (VAULT-MESSAGING 0.73.2 §3.6.5) The check may have counted: the fewest tries that may remain.
+            Text(OnboardingStrings.unlockCheckMaybeCounted(atLeast))
+                .vettIDFont(.bodyMedium)
+                .accessibilityAddTraits(.updatesFrequently)
+                .accessibilityIdentifier("owner_check_maybe_counted")
         } else if case .failed(let kind, _)? = state.message {
             NoticeCard(.urgent, title: kind.title(or: title), message: kind.message(timeScale: state.timeScale))
                 .accessibilityIdentifier("owner_check_failed")

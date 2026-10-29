@@ -441,6 +441,17 @@ enum SourceStep { case messages([RelayMessage]), error(Error) }
         #expect(log.all == ["out", "ended", "backoff", "out", "handle 01S", "ended", "out", "ended"])
     }
 
+    /// (VAULT-MESSAGING 0.73.0 §3.6.5) A round that succeeds after failed ones says the relay connection is back, once.
+    @Test func saysWhenTheConnectionIsBack() async throws {
+        let e503 = RelayError(status: 503, code: RelayError.internalError)
+        let src = FakeSource([.messages([]), .error(e503), .error(e503), .messages([Self.msg("01R")]), .messages([])])
+        let log = Recorder<String>()
+        await #expect(throws: RelayError.self) {
+            try await MailboxCollector(source: src, sleep: { _ in }, onRecovered: { log.add("back") }).run { log.add("handle \($0.msgID)") }
+        }
+        #expect(log.all == ["handle 01R", "back"])
+    }
+
     /// WebSocket: messages are handled and acked on the socket; a 4404 close ends the collector with `mailbox_unknown`.
     @Test func webSocketCollectAndAck() async throws {
         let stream = FakeStream([Self.msg("01W")], end: RelayError(status: 404, code: RelayError.mailboxUnknown))

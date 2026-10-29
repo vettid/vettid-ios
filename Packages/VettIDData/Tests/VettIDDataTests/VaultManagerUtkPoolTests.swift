@@ -36,7 +36,7 @@ import VettIDDataTesting
     /// The check refused `forbidden`.
     func forbiddenCheck() async throws {
         let outcome = try await m.ownerChecks.check(pin: pin, password: password)
-        guard case .failed(_, code: "forbidden") = outcome else {
+        guard case .failed(_, code: "forbidden", _) = outcome else {
             Issue.record("not refused forbidden: \(outcome)")
             return
         }

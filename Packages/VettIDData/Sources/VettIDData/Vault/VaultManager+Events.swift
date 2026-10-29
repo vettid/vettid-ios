@@ -16,7 +16,23 @@ extension VaultManager {
         let events = s.device.events()
         let counts = s.device.vaultRefusalCounts()
         let required = s.device.ownerCheckRequired()
+        let reconnects = s.device.relayReconnects()
+        let counted = s.device.countedEnds()
         observers = [
+            // (VAULT-MESSAGING 0.73.0 §3.6.5) A reconnect reads the vault's state again while it is probably locked, and the
+            // operations that count as failed checks (§3.6.4) spend the owner check's estimate of tries left.
+            Task { @MainActor [weak self] in
+                for await _ in reconnects {
+                    guard let self else { return }
+                    ownerChecks.onRelayReconnected()
+                }
+            },
+            Task { @MainActor [weak self] in
+                for await type in counted {
+                    guard let self else { return }
+                    ownerChecks.countedEnded(type: type)
+                }
+            },
             Task { @MainActor [weak self] in
                 for await _ in required {
                     guard let self else { return }
@@ -61,7 +77,8 @@ extension VaultManager {
         resumeKeptTransfer()
         // A vault past its owner-check deadline, or near it, is read again: the check screen shows what is waiting.
         let t = config.now()
-        if phase == .unlocked, let v = ownerChecks.ownerCheck, v.gated(t) || v.warning(t) { ownerChecks.onOpened() }
+        // A return to the foreground keeps the estimate of tries left (VAULT-MESSAGING 0.73.0 §3.6.5).
+        if phase == .unlocked, let v = ownerChecks.ownerCheck, v.gated(t) || v.warning(t) { ownerChecks.onOpened(afterUnlock: false) }
         if phase == .unlocked { Task { [weak self] in await self?.releaseUpdate.refreshOffer() } }
         Task { [weak self] in
             guard let self, let s = try? await storedSession() else { return }
@@ -161,6 +178,16 @@ extension VaultManager {
     private func locking(_ m: VaultMessage) {
         unlockWindow = nil
         if lockNotices.confirms(m, bound: lockGuard.keeper.boundUnlockID) { lockGuard.keeper.confirmed() }
+        switch phase {
+        case .unlocked, .setup: phase = .locked
+        default: break
+        }
+    }
+
+    /// (VAULT-MESSAGING 0.73.0 §3.6.5) A read of the vault's state found it locked (the member API's `state: locked`): the
+    /// app moves to its locked screen, as for a `vault.locking`.
+    func lockedByProbe() {
+        unlockWindow = nil
         switch phase {
         case .unlocked, .setup: phase = .locked
         default: break

@@ -62,6 +62,20 @@ enum OwnerCheckCatalog {
             s.waitSeconds = 272
         }
         add("unlocked_locked", "Locked after ten wrong checks") { $0.locked = true }
+        // (VAULT-MESSAGING 0.73.0 §3.6.5) The estimate of tries left at 0, and an unanswered check above it.
+        add("probably_locked_checking", "Probably locked: checking") { $0.watch = .checking }
+        add("probably_locked_silent", "Probably locked: not answering") { $0.watch = .silent }
+        add("probably_locked_voluntary", "Probably locked, a voluntary check: Cancel and Lock vault", mode: .voluntary) {
+            $0.watch = .checking
+        }
+        add("locked_cause_unknown", "Locked, cause not known") { s in
+            s.locked = true
+            s.lockCauseUnknown = true
+        }
+        add("maybe_counted", "No answer: the check may have counted") { s in
+            s.view?.failures = 6
+            s.message = .maybeCounted(atLeast: 3)
+        }
         add("backoff", "Too many wrong entries") { s in
             s.message = .backoff
             s.waitSeconds = 272
