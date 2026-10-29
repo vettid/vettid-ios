@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		01AF98BA1A9A48F4D0B40B20 /* VettIDNotifications in Frameworks */ = {isa = PBXBuildFile; productRef = 14A670CF662E7189011EDFDB /* VettIDNotifications */; };
 		01B22EFC531F1254BBFF19EC /* VettIDMedia in Frameworks */ = {isa = PBXBuildFile; productRef = 119A448A26B03C3DFE1408E4 /* VettIDMedia */; };
+		0312DA9D2B04CA6C9CCBA677 /* StagingTests+SignIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E64F5D58939E907529DC4FA /* StagingTests+SignIn.swift */; };
 		0386ED9C399A68C00F474BBD /* VettIDShell in Frameworks */ = {isa = PBXBuildFile; productRef = 107C0901CAA734BF084319C3 /* VettIDShell */; };
 		039C435319F2F8D86814A15A /* VettIDUI in Frameworks */ = {isa = PBXBuildFile; productRef = 0C260A66FF726563F6333AFA /* VettIDUI */; };
 		07487421CFD203C6665CF8A6 /* KeychainTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B4477541F907F6E92A131BB /* KeychainTests.swift */; };
@@ -160,6 +161,7 @@
 		1AFE8FE46F7ABE0D9CA0684B /* StagingTests+Photos.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StagingTests+Photos.swift"; sourceTree = "<group>"; };
 		1DD0D11876110A4C2EEEAF0E /* VettIDDevStack.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = VettIDDevStack.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1E1921FE67777CBB6E43F45E /* vettid_general.caf */ = {isa = PBXFileReference; path = vettid_general.caf; sourceTree = "<group>"; };
+		1E64F5D58939E907529DC4FA /* StagingTests+SignIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StagingTests+SignIn.swift"; sourceTree = "<group>"; };
 		230165DE55462B18B29FACFD /* DevStackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevStackTests.swift; sourceTree = "<group>"; };
 		27784FA957AF2CC5794ED472 /* SecureInputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureInputTests.swift; sourceTree = "<group>"; };
 		2AA52F91061EA0543A5AE9B8 /* VettIDTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = VettIDTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -332,6 +334,7 @@
 				9506AF3AA287477B16E8612D /* StagingTests+Mesh.swift */,
 				2D4DA90211D97D9417FAC02C /* StagingTests+Messages.swift */,
 				1AFE8FE46F7ABE0D9CA0684B /* StagingTests+Photos.swift */,
+				1E64F5D58939E907529DC4FA /* StagingTests+SignIn.swift */,
 				9812A6CD3A1425C23018950A /* StagingTests+Transfer.swift */,
 				73029356B90552AC0C29EE9F /* StagingUITests.xctestplan */,
 				461CF475BEF16D6D464D6ECE /* VaultUITestCase.swift */,
@@ -805,6 +808,7 @@
 				EB2DE1A4E67EB0C6E529D097 /* StagingTests+Mesh.swift in Sources */,
 				0E4BA253AB8E8655B797C7F6 /* StagingTests+Messages.swift in Sources */,
 				92ABE83488BD43FFAE0F21B4 /* StagingTests+Photos.swift in Sources */,
+				0312DA9D2B04CA6C9CCBA677 /* StagingTests+SignIn.swift in Sources */,
 				9677BF2DC1585290382C8F93 /* StagingTests+Transfer.swift in Sources */,
 				16CC7F1AD834271FC0C79440 /* StagingTests.swift in Sources */,
 				34D5AD803AA496D57470232B /* VaultUITestCase.swift in Sources */,

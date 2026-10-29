@@ -13,7 +13,7 @@
 #                     testStagingConnectAccept, testStagingConnectApprove, testStagingMessageSend,
 #                     testStagingMessageReceive, testStagingPhotoSend, testStagingPhotoReceive, testStagingInvite,
 #                     testStagingApproveRequest, testStagingRotate, testStagingSendAll, testStagingWaitMessage,
-#                     testStagingTransferIn, testStagingTransferOut, testStagingLook or testStagingCheck
+#                     testStagingTransferIn, testStagingTransferOut, testStagingSignIn, testStagingLook or testStagingCheck
 #   --inputs <file>   a private file outside the repository (chmod 600) with lines NAME=value for
 #                     VETTID_STAGING_EMAIL, VETTID_STAGING_CODE, VETTID_STAGING_PIN, VETTID_STAGING_PASSWORD and, for
 #                     the connect tests, VETTID_STAGING_LINK and VETTID_STAGING_SAFETY_CODE, and for the message
@@ -121,6 +121,15 @@
 #                                        (Look); Connections, the conversation with VETTID_STAGING_PEER_NAME,
 #                                        Connections again and History (Check). Use --keep-result to read them.
 #
+#   testStagingSignIn                    Approvals -> the "Sign in to <name>?" request whose screen shows
+#                                        VETTID_STAGING_MATCH_CODE, with "Only approve if you are signing in right now.",
+#                                        approved (VAULT-MESSAGING §10.4); the member site's sign-in is started by
+#                                        scripts/staging-signin-test.sh, which passes the match code. With
+#                                        VETTID_STAGING_SIGNIN_LOCK=1 the vault is locked and unlocked first and the
+#                                        request must still be listed (pending.list, §10.4.2); prints
+#                                        "SIGNIN_INDICATOR: shown|none", "SIGNIN_AFTER_LOCK: listed|missing" and
+#                                        "SIGNIN_STATE: approved|not_approved|not_opened|wrong_screen|missing".
+#
 # Inputs per test: testStagingEnroll needs all four of EMAIL, CODE, PIN and PASSWORD; every other test PIN and PASSWORD;
 # testStagingConnectAccept also VETTID_STAGING_LINK; VETTID_STAGING_SAFETY_CODE is optional (testStagingConnectApprove);
 # testStagingMessageSend also VETTID_STAGING_PEER_NAME and VETTID_STAGING_MESSAGE, testStagingMessageReceive
@@ -130,7 +139,8 @@
 # arrival; 180 without it). testStagingInvite, testStagingRotate and testStagingLook need only PIN and PASSWORD;
 # testStagingApproveRequest also VETTID_STAGING_SAFETY_CODE; testStagingSendAll VETTID_STAGING_PEER_NAME,
 # VETTID_STAGING_MESSAGE and VETTID_STAGING_EXPECT; testStagingWaitMessage VETTID_STAGING_PEER_NAME and
-# VETTID_STAGING_EXPECT; testStagingCheck VETTID_STAGING_PEER_NAME. VETTID_STAGING_WAIT (seconds) is optional for
+# VETTID_STAGING_EXPECT; testStagingSignIn VETTID_STAGING_MATCH_CODE, with VETTID_STAGING_SIGNIN_LOCK=1 optional;
+# testStagingCheck VETTID_STAGING_PEER_NAME. VETTID_STAGING_WAIT (seconds) is optional for
 # testStagingWaitMessage (600), testStagingSendAll (300) and testStagingLook (10).
 #
 # Inputs of the transfer tests: testStagingTransferOut needs PIN and PASSWORD; testStagingTransferIn needs PIN and
@@ -169,7 +179,8 @@ REPO=$(pwd -P)
 NAMES=(VETTID_STAGING_EMAIL VETTID_STAGING_CODE VETTID_STAGING_PIN VETTID_STAGING_PASSWORD)
 # The connect, message and photo tests' inputs: optional, never counted as missing for the others.
 OPTIONAL=(VETTID_STAGING_LINK VETTID_STAGING_TRANSFER_CODE VETTID_STAGING_TRANSFER_TIMEOUT VETTID_STAGING_SAFETY_CODE VETTID_STAGING_PEER_NAME VETTID_STAGING_MESSAGE VETTID_STAGING_EXPECT
-  VETTID_STAGING_PHOTO_TIMEOUT VETTID_STAGING_PHOTO_EXISTING VETTID_STAGING_WAIT)
+  VETTID_STAGING_PHOTO_TIMEOUT VETTID_STAGING_PHOTO_EXISTING VETTID_STAGING_WAIT VETTID_STAGING_MATCH_CODE
+  VETTID_STAGING_SIGNIN_LOCK)
 ALL=("${NAMES[@]}" "${OPTIONAL[@]}")
 BUNDLE_ID=com.vettid.app.staging
 
@@ -195,13 +206,14 @@ case "${TEST}" in
   testStagingWrongPinInPasswordChange|testStagingConnectAccept|testStagingConnectApprove) ;;
   testStagingMessageSend|testStagingMessageReceive|testStagingPhotoSend|testStagingPhotoReceive) ;;
   testStagingInvite|testStagingApproveRequest|testStagingRotate|testStagingSendAll|testStagingWaitMessage) ;;
-  testStagingTransferIn|testStagingTransferOut) ;;
+  testStagingTransferIn|testStagingTransferOut|testStagingSignIn) ;;
   testStagingLook|testStagingCheck) ;;
   *) echo "--test must be testStagingEnroll, testStagingUnlockLock, testStagingApproveUpdate," \
        "testStagingApproveUpdateAtUnlock, testStagingCheckNow, testStagingWrongPinInPasswordChange," \
        "testStagingConnectAccept, testStagingConnectApprove, testStagingMessageSend, testStagingMessageReceive," \
        "testStagingPhotoSend, testStagingPhotoReceive, testStagingInvite, testStagingApproveRequest," \
        "testStagingRotate, testStagingSendAll, testStagingWaitMessage, testStagingTransferIn, testStagingTransferOut," \
+       "testStagingSignIn,"  \
        "testStagingLook or testStagingCheck" >&2
      usage ;;
 esac
@@ -228,6 +240,7 @@ case "${TEST}" in
   testStagingApproveRequest) NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_SAFETY_CODE) ;;
   testStagingSendAll)
     NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_PEER_NAME VETTID_STAGING_MESSAGE VETTID_STAGING_EXPECT) ;;
+  testStagingSignIn) NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_MATCH_CODE) ;;
   testStagingTransferIn) NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_TRANSFER_CODE) ;;
   testStagingCheck) NEEDED=(VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_PEER_NAME) ;;
   testStagingPhotoSend|testStagingPhotoReceive)
@@ -352,7 +365,8 @@ xcodebuild test-without-building \
       @s = sort { length($b) <=> length($a) } grep { length }
         map { my $v = $ENV{"TEST_RUNNER_$_"} // ""; ($v, ($_ eq "VETTID_STAGING_PEER_NAME" ? map { my $n = (split /=/, $_, 2)[0]; $n =~ s/^\s+|\s+$//g; $n } split(/;/, $v) : ())) }
         qw(VETTID_STAGING_EMAIL VETTID_STAGING_CODE VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_LINK
-           VETTID_STAGING_TRANSFER_CODE VETTID_STAGING_PEER_NAME VETTID_STAGING_MESSAGE VETTID_STAGING_EXPECT)
+           VETTID_STAGING_TRANSFER_CODE VETTID_STAGING_PEER_NAME VETTID_STAGING_MESSAGE VETTID_STAGING_EXPECT
+           VETTID_STAGING_MATCH_CODE)
     }
     # The connect, message and photo tests report lines: the code, the state or the answer alone, never anything else of the
     # line.
@@ -374,6 +388,9 @@ xcodebuild test-without-building \
       $_ = "TRANSFER_OPERATOR: compare the safety codes on both phones and tap on this iPhone\n"; next
     }
     if (/TRANSFER_SIGNER: shown\s*$/) { $_ = "TRANSFER_SIGNER: shown\n"; next }
+    if (/SIGNIN_INDICATOR: (shown|none)\s*$/) { $_ = "SIGNIN_INDICATOR: $1\n"; next }
+    if (/SIGNIN_AFTER_LOCK: (listed|missing)\s*$/) { $_ = "SIGNIN_AFTER_LOCK: $1\n"; next }
+    if (/SIGNIN_STATE: ([a-z_]+)\s*$/) { $_ = "SIGNIN_STATE: $1\n"; next }
     if (/ROTATE_STATE: (done|failed|none)\s*$/) { $_ = "ROTATE_STATE: $1\n"; next }
     if (/PHOTO_STATE: (none|sending|delivered|failed)\s*$/) { $_ = "PHOTO_STATE: $1\n"; next }
     if (/PHOTO_RECEIVED: (yes|no)\s*$/) { $_ = "PHOTO_RECEIVED: $1\n"; next }
