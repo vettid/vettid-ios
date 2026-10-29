@@ -49,6 +49,12 @@ extension FakeVaultService {
         }
         if r.path == "/v1/mailbox", r.method == "GET" {
             if locked({ transfer.collectRefused }) { return .json(403, #"{"code":"mailbox_unknown","message":""}"#) }
+            let fails: Bool = locked {
+                guard transfer.collectFailures > 0 else { return false }
+                transfer.collectFailures -= 1
+                return true
+            }
+            if fails { return .json(503, #"{"code":"unavailable","message":""}"#) }
             return collect()
         }
         if r.path.hasPrefix("/v1/blob/") { return deviceBlob(r) }
