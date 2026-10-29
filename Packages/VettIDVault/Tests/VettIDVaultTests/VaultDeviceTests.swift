@@ -254,16 +254,16 @@ import VettIDTesting
         let (d, v) = try await pairedDevice(store: store)
         relay.refuseStatus = 401
         relay.refuseDeposits = RelayError.timestampStale
-        await #expect(throws: RelayError.self) { try await d.send("message.send", body: JsonBuilder().string("text", "hi").bytes()) }
+        await #expect(throws: RelayError.self) { try await d.send("relay.token.refresh") }
         #expect(relay.refused == RelayClient.defaultAttempts) // each attempt signed afresh, then kept
         #expect(try savedState(store).outbox.count == 1)
         relay.refuseDeposits = nil
         await d.flushOutbox()
-        #expect(try v.open(try await relay.nextDeposit().payload).type == "message.send")
+        #expect(try v.open(try await relay.nextDeposit().payload).type == "relay.token.refresh")
         #expect(try savedState(store).outbox.isEmpty)
         relay.refuseStatus = 403
         relay.refuseDeposits = RelayError.tokenInvalid
-        _ = try? await d.send("message.send", body: JsonBuilder().string("text", "again").bytes())
+        _ = try? await d.send("relay.token.refresh")
         #expect(try savedState(store).outbox.isEmpty)
     }
 
@@ -346,14 +346,13 @@ import VettIDTesting
         relay.refuseDeposits = "unavailable"
         await #expect(throws: (any Error).self) { try await api.lock(timeout: 0.5) }
         #expect(try savedState(store).outbox.isEmpty)
-        _ = try? await d.send("vault.lock")
-        _ = try? await d.send("message.send", body: JsonBuilder().string("text", "hi").bytes())
-        #expect(try savedState(store).outbox.map(\.type) == ["vault.lock", "message.send"])
-        #expect(try await d.dropFromOutbox("vault.lock") == 1)
-        #expect(try savedState(store).outbox.map(\.type) == ["message.send"])
+        // Nothing but the standing tokens goes into the outbox.
+        await #expect(throws: VaultStateError.self) { try await d.send("vault.lock") }
+        _ = try? await d.send("relay.token.refresh")
+        #expect(try savedState(store).outbox.map(\.type) == ["relay.token.refresh"])
         relay.refuseDeposits = nil
         await d.flushOutbox()
-        #expect(try v.open(try await relay.nextDeposit().payload).type == "message.send")
+        #expect(try v.open(try await relay.nextDeposit().payload).type == "relay.token.refresh")
         #expect(await relay.noDeposit(within: 0.3))
     }
 
@@ -430,12 +429,12 @@ import VettIDTesting
         let (d, v) = try await pairedDevice(store: store)
         relay.refuseStatus = 429
         relay.refuseDeposits = RelayError.quotaExceeded
-        await #expect(throws: RelayError.self) { try await d.send("message.send", body: JsonBuilder().string("text", "hi").bytes()) }
+        await #expect(throws: RelayError.self) { try await d.send("relay.token.refresh") }
         #expect(relay.refused == 1) // not retried at once
         #expect(try savedState(store).outbox.count == 1)
         relay.refuseDeposits = nil
         await d.flushOutbox()
-        #expect(try v.open(try await relay.nextDeposit().payload).type == "message.send")
+        #expect(try v.open(try await relay.nextDeposit().payload).type == "relay.token.refresh")
     }
 
     /// After forget() the device keeps nothing and writes nothing.
@@ -444,7 +443,7 @@ import VettIDTesting
         let (d, _) = try await pairedDevice(store: store)
         try await d.forget()
         #expect(store.load() == nil && !d.hasVault)
-        await #expect(throws: VaultStateError.self) { try await d.send("message.send") }
+        await #expect(throws: VaultStateError.self) { try await d.send("relay.token.refresh") }
         #expect(store.load() == nil)
     }
 
@@ -465,7 +464,7 @@ import VettIDTesting
         await #expect(throws: VaultStateError.self) {
             try await d.handle(try v.seal("vault.status", "{}", re: req.id, status: Inner.statusOK))
         }
-        await #expect(throws: VaultStateError.self) { try await d.send("message.send") }
+        await #expect(throws: VaultStateError.self) { try await d.send("relay.token.refresh") }
         await #expect(throws: VaultStateError.self) { try await d.awaitEvent("message.new", timeout: 60) }
         let resent = Date()
         let held = HeldRequest(type: "pin.change", id: Ulid.new(), exp: Date().addingTimeInterval(600), body: VaultJSON.empty)
@@ -486,7 +485,7 @@ import VettIDTesting
         let (d, v) = try await pairedDevice(cfg: config(store, timeout: 0.3))
         relay.refuseStatus = 429
         relay.refuseDeposits = RelayError.quotaExceeded
-        await #expect(throws: RelayError.self) { try await d.send("message.send") }
+        await #expect(throws: RelayError.self) { try await d.send("relay.token.refresh") }
         relay.refuseDeposits = nil
         let started = Date()
         let status = Task { try await d.op("vault.status", timeout: 60) }
@@ -500,7 +499,7 @@ import VettIDTesting
         await #expect(throws: VaultStateError.self) { _ = try await status.value }
         #expect(Date().timeIntervalSince(started) < 30, "ended by the quiet, not by its timeout")
         await #expect(throws: VaultStateError.self) { _ = try await blocked.value }
-        await #expect(throws: VaultStateError.self) { try await d.send("message.send") }
+        await #expect(throws: VaultStateError.self) { try await d.send("relay.token.refresh") }
         await #expect(throws: VaultStateError.self) { try await d.sendOnce("vault.lock") }
         let held = HeldRequest(type: "pin.change", id: Ulid.new(), exp: Date().addingTimeInterval(600), body: VaultJSON.empty)
         await #expect(throws: VaultStateError.self) { _ = try await d.resend(held, timeout: 60) }
