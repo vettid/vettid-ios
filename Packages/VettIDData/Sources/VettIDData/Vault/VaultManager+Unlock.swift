@@ -154,6 +154,8 @@ extension VaultManager {
     private func unlockOnce(
         pin: String, options: UnlockOptions, route: UnlockRoute, beforeOpen: @MainActor () async -> Void
     ) async -> UnlockStepOutcome {
+        // A count the owner check read belongs to this unlock only (VAULT-MESSAGING 0.73.0 §3.6.5).
+        ownerChecks.countReadAtUnlock = false
         do {
             try prepared()
         } catch {

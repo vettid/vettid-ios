@@ -115,7 +115,8 @@ public final class OwnerCheckManager: OwnerCheckRepository {
     @ObservationIgnored var estimate = 0
     /// Bumped by a lock made here, a wipe and an unlock: a read of the vault's state that finishes after one is dropped.
     @ObservationIgnored var probeEpoch = 0
-    /// The unlock read the status before the vault opened (``onOpened(afterUnlock:)`` keeps its count).
+    /// The unlock under way read the status before the vault opened (``onOpened(afterUnlock:)`` keeps its count); every
+    /// unlock attempt starts with it false (``VaultManager``), so it never outlives the unlock that set it.
     @ObservationIgnored var countReadAtUnlock = false
     /// (VAULT-MESSAGING 0.73.0) The member API's `GET /api/vault/status` `state`; nil: no answer.
     @ObservationIgnored let memberState: @MainActor () async -> String?
@@ -194,7 +195,6 @@ public final class OwnerCheckManager: OwnerCheckRepository {
         if m.type == "vault.locking" {
             forgetUnlockPin()
             probeEpoch += 1
-            countReadAtUnlock = false
         }
         switch m.type {
         case "vault.held": onHeld(m)

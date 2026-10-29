@@ -455,7 +455,6 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
         // The member's lock ends the reads: a result that came after it must not say the vault locked for another reason.
         stopReads()
         let watching = state.watch != .none
-        state.watch = .none
         launch { [self] in
             do {
                 try await vault.lock()
@@ -464,7 +463,7 @@ public final class OwnerCheckViewModel: OwnerCheckActions {
                 state.locking = false
                 state.unlockedWrong = nil
                 // Still probably locked: the reads go on.
-                if watching { runReads() }
+                if watching, !state.locked { runReads() }
             }
         }
     }

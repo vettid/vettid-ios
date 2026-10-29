@@ -200,6 +200,32 @@ import VettIDVault
         #expect(m.estimate == 0)
     }
 
+    /// The late notice of an earlier lock, between the unlock's read and the opening, does not forget the count.
+    @Test func aLateLockNoticeKeepsTheUnlocksCount() async throws {
+        let ops = FakeOwnerCheckOps()
+        ops.status = #"{"state":"ok","deadline":"2026-10-07T11:00:00Z","interval_seconds":86400,"failures":4}"#
+        let m = manager(ops)
+        await m.afterUnlock(pin: "975310", password: "pw")
+        m.onEvent(event("vault.locking", #"{"reason":"owner"}"#))
+        ops.statusFails = true
+        m.onOpened()
+        await settle()
+        #expect(m.estimate == 6)
+    }
+
+    /// A new unlock attempt starts without the earlier one's count (``VaultManager`` clears the mark).
+    @Test func anotherUnlocksOpeningStartsFromNoCount() async throws {
+        let ops = FakeOwnerCheckOps()
+        ops.status = #"{"state":"ok","deadline":"2026-10-07T11:00:00Z","interval_seconds":86400,"failures":4}"#
+        let m = manager(ops)
+        await m.afterUnlock(pin: "975310", password: "pw")
+        m.countReadAtUnlock = false // the next unlock attempt begins
+        ops.statusFails = true
+        m.onOpened()
+        await settle()
+        #expect(m.estimate == 0)
+    }
+
     @Test func aCancelledRecoverysCheckStartsFromNoCount() async throws {
         let ops = opsAt(failures: 0)
         let m = manager(ops)

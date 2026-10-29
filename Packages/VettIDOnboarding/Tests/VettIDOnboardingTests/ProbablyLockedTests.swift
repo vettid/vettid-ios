@@ -228,13 +228,15 @@ final class ReadWaits: @unchecked Sendable {
     @Test func noTriggerReadWhileTheMembersLockIsOnItsWay() async {
         waits.stopAfter = 1
         let vm = await sendCheck(.badPassword(checksLeft: 0, estimated: true))
+        var during: (locking: Bool, watch: LockWatch)?
         vault.onLock = { [vault] in
             vault.reconnectRelay()
             for _ in 0..<20 { await Task.yield() }
+            during = (vm.state.locking, vm.state.watch)
         }
         vm.lockVault()
-        #expect(vm.state.watch == .none)
         await vm.settle()
+        #expect(during?.locking == true && during?.watch == .checking, "the screen stays as it was while locking")
         #expect(probes == 1)
     }
 
