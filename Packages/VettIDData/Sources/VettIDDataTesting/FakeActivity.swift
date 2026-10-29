@@ -97,6 +97,8 @@ public final class FakeApprovals: ApprovalsRepository {
 
     /// `pending.list` has been read through since the last drop (VAULT-MESSAGING 0.70.0 §10.4.2): a test sets it.
     public var pendingListAnswered = false
+    /// Why the last `pending.list` read failed (VAULT-MESSAGING 0.70.0 §10.4.2); a test sets it.
+    public var openAsksError: FailureKind?
 
     public func mayHaveBeenDropped(_ key: String) -> Bool {
         PendingApproval.eventOnly(key: key) && !arrived.contains(key) && !pendingListAnswered

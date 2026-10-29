@@ -53,6 +53,11 @@ public protocol ApprovalsRepository: ConnectionRequestsRepository {
     /// arrived since the approvals were last dropped. A request a vault list names is read again, so missing means ended.
     func mayHaveBeenDropped(_ key: String) -> Bool
 
+    /// Why the last read of the asks that arrive only as events (`pending.list`, VAULT-MESSAGING 0.70.0 §10.4.2) failed;
+    /// ``FailureKind/ownerCheckRequired`` when the vault is held; nil when it was answered, or the vault does not know it.
+    /// The screen says so, with Retry; the quiet reads themselves stay quiet.
+    var openAsksError: FailureKind? { get }
+
     /// Re-reads what the vault lists (the connection requests, the grant and critical-item requests) and drops expired
     /// and decided requests kept from events.
     func refreshApprovals() async throws

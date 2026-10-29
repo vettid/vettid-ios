@@ -66,9 +66,9 @@ extension ApprovalsManager {
         case answered([OpenAsk], ts: Date)
         /// Not asked, or the vault answered `unsupported_type`: nothing is covered and nothing dropped.
         case unsupported
-        /// A page failed (the network, `owner_check_required` while held, ...): nothing is covered, what is known stays,
-        /// and the next refresh tries again.
-        case failed
+        /// A page failed (the network, `owner_check_required` while held, ...), or the listing never ended or restarted
+        /// twice: nothing is merged, what is known stays, and the next refresh tries again. [kind] is what the screen says.
+        case failed(FailureKind)
     }
 
     /// A read and its number, for ``finishPendingRead(_:generation:)``.
@@ -77,46 +77,70 @@ extension ApprovalsManager {
         var result: PendingRead
     }
 
+    /// How one pass over the pages ended.
+    private enum PagesEnd {
+        case complete([OpenAsk], ts: Date)
+        /// A stale cursor started the listing again from the beginning (VAULT-MESSAGING 0.70.0 §10.4.2): an ask came twice.
+        case restarted
+        /// `next` repeated the cursor asked for, or the pages never ended: the list is partial.
+        case incomplete
+    }
+
     /// The vault was opened (an unlock, not a passed owner check after a hold, which only drops and reads again): a vault
     /// that did not know `pending.list` is asked again (VAULT-MESSAGING 0.70.0 §10.4.2 "Older vaults").
     public func vaultOpened() { pendingListUnsupported = false }
 
     /// Reads every page of `pending.list` ([g] the generation the read began in). The first page's `ts` counts from then on
     /// (``pendingListTs``), so that events processed during the read are judged by it too, until the read ends
-    /// (``finishPendingRead(_:generation:)``): a read that does not merge leaves no cut behind.
+    /// (``finishPendingRead(_:generation:)``): a read that does not merge leaves no cut behind. A list is merged only when
+    /// it is complete: `next` absent or empty. A cursor gone stale starts the listing again, which shows as an ask listed
+    /// twice; the read then starts once more with a fresh first page, and fails if that is not complete either.
     func readPendingAsks(_ o: any ApprovalOps, generation g: Int) async -> PendingReading {
         guard !pendingListUnsupported else { return PendingReading(id: nil, result: .unsupported) }
         pendingReadCount += 1
         let id = pendingReadCount
-        var asks: [OpenAsk] = []
-        var after: String?
-        var first: Date?
         do {
-            for page in 0..<Self.maxPendingPages {
-                let answer = try await o.pendingListPage(after: after, limit: nil)
-                if page == 0 {
-                    first = answer.ts
-                    if g == generation { pendingReadTs[id] = answer.ts }
+            for _ in 0..<2 {
+                switch try await readPendingPages(o, id: id, generation: g) {
+                case .complete(let asks, let ts): return PendingReading(id: id, result: .answered(asks, ts: ts))
+                case .restarted: continue
+                case .incomplete: return PendingReading(id: id, result: .failed(.other))
                 }
-                for entry in VaultJSON.objects(answer.body, "asks") {
-                    // Other kinds (`action`, `location`, and any a later release adds) are skipped.
-                    guard let kind = VaultJSON.string(entry, "kind"), let type = Self.pendingKinds[kind],
-                          let body = VaultJSON.obj(entry, "body") else { continue }
-                    asks.append(OpenAsk(type: type, body: body.raw))
-                }
-                guard let next = VaultJSON.string(answer.body, "next"), !next.isEmpty, next != after else {
-                    return PendingReading(id: id, result: .answered(asks, ts: first ?? answer.ts))
-                }
-                after = next
             }
+            return PendingReading(id: id, result: .failed(.other))
         } catch {
-            guard g == generation, (VaultFailures.map(error) as? VaultFailure)?.kind == .notSupported else {
-                return PendingReading(id: id, result: .failed)
-            }
+            let kind = (VaultFailures.map(error) as? VaultFailure)?.kind ?? .other
+            guard g == generation, kind == .notSupported else { return PendingReading(id: id, result: .failed(kind)) }
             pendingListUnsupported = true
             return PendingReading(id: id, result: .unsupported)
         }
-        return PendingReading(id: id, result: .failed)
+    }
+
+    private func readPendingPages(_ o: any ApprovalOps, id: Int, generation g: Int) async throws -> PagesEnd {
+        var asks: [OpenAsk] = []
+        var seen = Set<String>()
+        var after: String?
+        var first = Date.distantPast
+        for page in 0..<Self.maxPendingPages {
+            let answer = try await o.pendingListPage(after: after, limit: nil)
+            if page == 0 {
+                first = answer.ts
+                if g == generation { pendingReadTs[id] = answer.ts }
+            }
+            for entry in VaultJSON.objects(answer.body, "asks") {
+                let kind = VaultJSON.string(entry, "kind") ?? ""
+                guard let body = VaultJSON.obj(entry, "body") else { continue }
+                // An ask's id is unique: one listed twice means the listing started again.
+                let ask = ["approval_id", "request_id", "invocation_id"].lazy.compactMap { VaultJSON.string(body, $0) }.first
+                if let ask, !seen.insert("\(kind):\(ask)").inserted { return .restarted }
+                // Other kinds (`action`, `location`, and any a later release adds) are skipped.
+                if let type = Self.pendingKinds[kind] { asks.append(OpenAsk(type: type, body: body.raw)) }
+            }
+            guard let next = VaultJSON.string(answer.body, "next"), !next.isEmpty else { return .complete(asks, ts: first) }
+            if next == after { return .incomplete }
+            after = next
+        }
+        return .incomplete
     }
 
     /// The end of a read (merged or not): its cut goes unless a list was merged with it, and when no read is left on its
@@ -151,6 +175,9 @@ extension ApprovalsManager {
         let listed = listedAsks(asks, readTs: readTs, at: t, since: since)
         let (order, byKey, deviceOf) = (listed.order, listed.byKey, listed.deviceOf)
         pendingListAnswered = true
+        // Closes no later than the list are for the list to judge now (and creations that old are ignored).
+        closedAsks.removeAll { ($0.ts ?? .distantFuture) <= readTs }
+        sessionClosedAt = sessionClosedAt.filter { $0.value.ts > readTs }
         edit { events in
             var kept: [StoredEvent] = []
             var have = Set<String>()

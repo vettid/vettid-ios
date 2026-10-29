@@ -38,6 +38,10 @@ final class FakeApprovalOps: ApprovalOps, @unchecked Sendable {
     /// When set, a call for a page from index [gateFrom] on waits for it (a read on its way).
     var listGate: TestDeferred<Void>?
     var gateFrom = 0
+    /// The next calls that ask for a page after the first start the listing again from the beginning (a stale cursor).
+    var pendingRestarts = 0
+    /// A page after the first names the cursor it was asked for as `next`, so the listing never ends.
+    var pendingStuck = false
 
     private func call(_ name: String) throws {
         calls.append(name)
@@ -95,11 +99,16 @@ final class FakeApprovalOps: ApprovalOps, @unchecked Sendable {
         pendingCalls.append(after ?? "nil")
         if let pendingError { throw pendingError }
         guard pendingSupported else { throw Self.error("unsupported_type") }
-        let from = after.flatMap(Int.init) ?? 0
+        var from = after.flatMap(Int.init) ?? 0
+        if after != nil, pendingRestarts > 0 {
+            pendingRestarts -= 1
+            from = 0
+        }
         let page = pendingAsks.dropFirst(from).prefix(pendingPageSize)
         let entries = page.map { JsonBuilder().string("kind", $0.kind).raw("body", $0.body).build() }
-        let body = JsonBuilder().raw("asks", JsonBuilder.array(entries))
+        var body = JsonBuilder().raw("asks", JsonBuilder.array(entries))
         if from + page.count < pendingAsks.count { body.string("next", String(from + page.count)) }
+        if pendingStuck, let after { body = JsonBuilder().raw("asks", JsonBuilder.array(entries)).string("next", after) }
         let answer = PendingListPage(body: try StrictJson.parseObject(body.build()), ts: pendingTs)
         if let listGate, from >= gateFrom { try await listGate.value() }
         return answer

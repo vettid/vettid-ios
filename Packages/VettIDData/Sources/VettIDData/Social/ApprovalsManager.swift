@@ -73,12 +73,28 @@ public final class ApprovalsManager: ApprovalsRepository {
     /// When each approval was dropped (decided, or `not_found` on a decision): a share question dropped during a read is
     /// not taken from its list (VAULT-MESSAGING 0.55.7 §10.12 rule 3).
     @ObservationIgnored var droppedAt: [String: Int] = [:]
+    /// The asks of the kinds `pending.list` returns that were closed or decided, with the close's `ts` (nil: decided here),
+    /// so that a creation event that arrives after its close (events come in no order, §8.4) is not kept. An ask's id is
+    /// unique, so a close is final within a generation (VAULT-MESSAGING 0.70.0 §10.4.2); the oldest go past
+    /// ``maxClosedAsks``, and a merged list takes those it already judges.
+    @ObservationIgnored var closedAsks: [ClosedAsk] = []
+    /// Why the last `pending.list` read failed, nil when it was answered (or the vault does not know it): the Approvals
+    /// screen says so, with Retry; ``FailureKind/ownerCheckRequired`` is a vault held, not a failure
+    /// (VAULT-MESSAGING 0.70.0 §10.4.2). Cleared at a drop.
+    public private(set) var openAsksError: FailureKind?
     /// The share items decided, and at which change: a list read before does not bring them back.
     @ObservationIgnored private var decidedLog: [ShareDecidedMark] = []
     /// The `share.pending` batches, and at which change: a list read before keeps them, and only them.
     @ObservationIgnored private var batchLog: [ShareBatch] = []
     /// Where the reads on their way began.
     @ObservationIgnored private var readSinces: [Int] = []
+
+    struct ClosedAsk {
+        var key: String
+        var ts: Date?
+    }
+
+    static let maxClosedAsks = 512
 
     /// Share items decided for one subject, and at which change.
     struct ShareDecidedMark {
@@ -186,6 +202,8 @@ public final class ApprovalsManager: ApprovalsRepository {
         arrivedSinceForget = []
         pendingReadTs = [:]
         mergedListTs = nil
+        closedAsks = []
+        openAsksError = nil
         ignoredDuringRead = []
         pendingListAnswered = false
         sessionClosedAt = [:]
@@ -218,6 +236,23 @@ public final class ApprovalsManager: ApprovalsRepository {
         }
     }
 
+    /// Whether the creation of [p] came after its close: an ask closed or decided is final (its id is unique), and a
+    /// session request is refused when its device's session request was closed at or after it (VAULT-MESSAGING 0.70.0 §10.4.2).
+    private func closedAsk(_ p: PendingApproval, ts: Date?) -> Bool {
+        guard Self.isOpenAskKey(p.key) else { return false }
+        if closedAsks.contains(where: { $0.key == p.key }) { return true }
+        guard case .device(let d) = p, d.type == Self.sessionType, let id = d.deviceID, let ts, let closed = sessionClosedAt[id]
+        else { return false }
+        return closed.ts >= ts
+    }
+
+    /// Whether [key] is an ask of the kinds `pending.list` returns.
+    static func isOpenAskKey(_ key: String) -> Bool {
+        key.hasPrefix("auth:") || key.hasPrefix("device:\(approvalType):") || key.hasPrefix("device:\(sessionType):")
+    }
+
+    static let approvalType = "approval.pending"
+
     /// Whether [p] is a session request older than one kept for the same device: a device has at most one, and an older
     /// one that arrives after a newer one is dropped (§6.8).
     private func supersededSession(_ p: PendingApproval, ts: Date?) -> Bool {
@@ -237,11 +272,13 @@ public final class ApprovalsManager: ApprovalsRepository {
         }
     }
 
-    /// [ts] the event's inner `ts`; nil for a body read from a request.
+    /// [ts] the event's inner `ts`; nil for a body read from a request. This and ``onSync(_:ts:)``, the merge and the replay
+    /// run on the main actor with no `await` between a decision on the cut or a close and the write it allows, so nothing can
+    /// move the cut or prune in between.
     func keep(_ type: String, _ o: JsonObject, ts: Date? = nil) {
         if ignoredByPendingList(type, o, ts: ts) { return }
         guard let p = ApprovalParser.parse(type, o, at: now()) else { return }
-        if supersededSession(p, ts: ts) { return }
+        if closedAsk(p, ts: ts) || supersededSession(p, ts: ts) { return }
         let at = now()
         changes += 1
         changedAt[p.key] = changes
@@ -301,7 +338,7 @@ public final class ApprovalsManager: ApprovalsRepository {
         }
         if kind == "device.session", let device = VaultJSON.string(o, "device_id") { return sessionClosed(device, ts: ts) }
         guard let (prefix, member) = Self.decidedKinds[kind], let id = VaultJSON.string(o, member) else { return }
-        drop(prefix + id)
+        drop(prefix + id, closedAt: ts)
     }
 
     /// The `sync.event` kinds of another device's decision: the approval key's prefix and the member naming the request.
@@ -369,7 +406,11 @@ public final class ApprovalsManager: ApprovalsRepository {
     func holds(_ key: String) -> Bool { listed.contains { $0.key == key } || stored.contains { parsed($0)?.key == key } }
 
     /// Drops the approval [key] from the kept events and the lists.
-    func drop(_ key: String) {
+    func drop(_ key: String, closedAt ts: Date? = nil) {
+        if Self.isOpenAskKey(key) {
+            closedAsks.append(ClosedAsk(key: key, ts: ts))
+            if closedAsks.count > Self.maxClosedAsks { closedAsks.removeFirst() }
+        }
         changes += 1
         changedAt[key] = changes
         droppedAt[key] = changes
@@ -403,6 +444,10 @@ public final class ApprovalsManager: ApprovalsRepository {
         let pending = await readPendingAsks(o, generation: g)
         defer { finishPendingRead(pending, generation: g) }
         guard g == generation else { return }
+        switch pending.result {
+        case .failed(let kind): openAsksError = kind
+        case .answered, .unsupported: openAsksError = nil
+        }
         let changed = { (key: String) in (self.changedAt[key] ?? 0) > since }
         // A list the vault did not answer covers nothing: what was known of it stays (VAULT-MESSAGING 0.55.7 §10.12).
         let next = mergedWithChanges(lists.approvals(at: t), since: since, changed: changed) + listed.filter { !lists.covers($0) }

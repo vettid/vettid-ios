@@ -448,6 +448,98 @@ import VettIDDataTesting
         }
         #expect(m.approvals.isEmpty)
     }
+
+    /// A close that arrives before its creation (events come in no order, §8.4) is remembered: outside any read, in both
+    /// orders, the ask is not shown; a decision made here is remembered too.
+    @Test func aCloseBeforeTheCreationKeepsTheAskOut() async throws {
+        let m = manager()
+        m.onEvent(event("sync.event", #"{"kind":"connection.authenticate.decided","request_id":"a1","approved":true}"#, ts: later(5)))
+        m.onEvent(event("connection.authenticate.pending", auth("a1"), ts: later(4)))
+        m.onEvent(event("sync.event", #"{"kind":"approval.decided","approval_id":"d1","approved":false}"#, ts: later(5)))
+        m.onEvent(event("approval.pending", approval("d1"), ts: later(4)))
+        #expect(m.approvals.isEmpty)
+        // The other order.
+        m.onEvent(event("connection.authenticate.pending", auth("a2"), ts: later(4)))
+        m.onEvent(event("sync.event", #"{"kind":"connection.authenticate.decided","request_id":"a2","approved":true}"#, ts: later(5)))
+        #expect(m.approvals.isEmpty)
+        try await m.denyAuthentication("a3")
+        m.onEvent(event("connection.authenticate.pending", auth("a3"), ts: later(4)))
+        #expect(m.approvals.isEmpty, "decided here")
+        // A session request: refused when its device's close is at or after it, taken when it is later.
+        m.onEvent(event("sync.event", #"{"kind":"device.session","device_id":"dev-1"}"#, ts: later(5)))
+        m.onEvent(event("device.session.pending", session("s1", device: "dev-1"), ts: later(3)))
+        m.onEvent(event("device.session.pending", session("s2", device: "dev-1"), ts: later(5)))
+        #expect(m.approvals.isEmpty)
+        m.onEvent(event("device.session.pending", session("s3", device: "dev-1"), ts: later(6)))
+        #expect(m.approvals.map(\.key) == ["device:device.session.pending:s3"])
+    }
+
+    /// A merged list takes the closes it already judges.
+    @Test func aMergedListPrunesTheClosesItJudges() async throws {
+        let m = manager()
+        m.onEvent(event("sync.event", #"{"kind":"connection.authenticate.decided","request_id":"a1","approved":true}"#, ts: later(5)))
+        m.onEvent(event("sync.event", #"{"kind":"connection.authenticate.decided","request_id":"a2","approved":true}"#, ts: later(50)))
+        m.onEvent(event("sync.event", #"{"kind":"device.session","device_id":"dev-1"}"#, ts: later(5)))
+        try await m.denyAuthentication("a3")
+        listed([], ts: 10)
+        try await m.refreshApprovals()
+        #expect(Set(m.closedAsks.map(\.key)) == ["auth:a2", "auth:a3"] && m.sessionClosedAt.isEmpty)
+    }
+
+    /// A list is merged only when complete: a `next` that repeats the cursor asked for leaves it partial, nothing is merged
+    /// and the screen is told.
+    @Test func aListThatNeverEndsIsNotMerged() async throws {
+        let m = manager()
+        m.onEvent(event("connection.authenticate.pending", auth("a1")))
+        ops.pendingPageSize = 1
+        ops.pendingStuck = true
+        listed([("authenticate", auth("a2")), ("authenticate", auth("a3")), ("authenticate", auth("a4"))], ts: 10)
+        try await m.refreshApprovals()
+        #expect(m.approvals.map(\.key) == ["auth:a1"] && m.openAsksError == .other && m.mayHaveBeenDropped("auth:zz"))
+        #expect(m.pendingListTs == nil)
+    }
+
+    /// A stale cursor starts the listing again (§10.4.2): the read starts once more with a fresh first page; if that restarts
+    /// too, the read fails.
+    @Test func aStaleCursorRestartsTheReadOnceThenFails() async throws {
+        let m = manager()
+        ops.pendingPageSize = 1
+        ops.pendingRestarts = 1
+        listed([("authenticate", auth("a1")), ("authenticate", auth("a2")), ("authenticate", auth("a3"))], ts: 10)
+        try await m.refreshApprovals()
+        #expect(ops.pendingCalls == ["nil", "1", "nil", "1", "2"])
+        #expect(Set(m.approvals.map(\.key)) == ["auth:a1", "auth:a2", "auth:a3"] && m.openAsksError == nil)
+
+        let n = manager()
+        n.onEvent(event("connection.authenticate.pending", auth("a9")))
+        ops.pendingRestarts = 2
+        try await n.refreshApprovals()
+        #expect(n.approvals.map(\.key) == ["auth:a9"] && n.openAsksError == .other, "nothing merged")
+    }
+
+    /// Why the read failed is kept for the screen: a vault on hold is said to be, a failure is one; an answered read and a
+    /// drop clear it.
+    @Test func theFailureOfTheReadIsKeptUntilAnAnswerOrADrop() async throws {
+        let m = manager()
+        ops.pendingError = FakeApprovalOps.error("owner_check_required")
+        try await m.refreshApprovals()
+        #expect(m.openAsksError == .ownerCheckRequired)
+        ops.pendingError = FakeApprovalOps.error("retry")
+        try await m.refreshApprovals()
+        #expect(m.openAsksError != nil && m.openAsksError != .ownerCheckRequired)
+        ops.pendingError = nil
+        try await m.refreshApprovals()
+        #expect(m.openAsksError == nil)
+        ops.pendingError = FakeApprovalOps.error("retry")
+        try await m.refreshApprovals()
+        m.forgetOpenVault()
+        #expect(m.openAsksError == nil)
+        // An older vault is not a failure.
+        ops.pendingError = nil
+        ops.pendingSupported = false
+        try await m.refreshApprovals()
+        #expect(m.openAsksError == nil)
+    }
 }
 
 // swiftlint:enable line_length
