@@ -239,7 +239,7 @@ import VettIDVault
         #expect(await eventually { m.phase == .deleting })
         try await m.eraseThisPhone()
         try expectWiped()
-        _ = try? await device.send("message.attachment.get")
+        _ = try? await device.send("relay.token.refresh")
         try expectWiped()
     }
 

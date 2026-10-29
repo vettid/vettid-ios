@@ -4,10 +4,14 @@ import VettIDRelay
 
 // Sending (VAULT-MESSAGING §8): sealing, the outbox, requests and their retries.
 extension VaultDevice {
-    /// Seals a message in the current epoch and deposits it (through the outbox). Returns the inner id.
+    /// Seals a message in the current epoch and deposits it through the outbox: a deposit that fails in transport goes out
+    /// at a later flush. Only for messages that are no request and still mean the same later (``outboxTypes``: the
+    /// standing tokens of §7.2); a request is deposited once from memory, and any other type is refused. Returns the inner
+    /// id.
     @discardableResult
     public func send(_ type: String, body: [UInt8] = VaultJSON.empty, id: String? = nil) async throws -> String {
-        try await lock.withLock { try await sendLocked(id: id, type: type, body: body, re: nil, status: nil, exp: nil) }
+        guard Self.outboxTypes.contains(type) else { throw VaultStateError(message: "\(type): not kept in the outbox") }
+        return try await lock.withLock { try await sendLocked(id: id, type: type, body: body, re: nil, status: nil, exp: nil) }
     }
 
     /// Seals a message and hands it to the relay client **once**: never written to the outbox, so not sent again by a
@@ -142,6 +146,10 @@ extension VaultDevice {
         }
     }
 
+    /// The only types the outbox keeps (``send(_:body:id:)``): the standing tokens given to the vault and the refresh
+    /// (§7.2), which mean the same when they arrive late. Anything else an earlier version left there is dropped at load.
+    static let outboxTypes: Set<String> = ["relay.token.issued", "relay.token.refresh"]
+
     /// Re-deposits what the outbox still holds (after a restart or a transport failure).
     public func flushOutbox() async {
         let entries = mem.withLock { st.outbox }
@@ -154,9 +162,10 @@ extension VaultDevice {
 
     /// Sends a request and waits for its response (§8.1). Without an answer within the request timeout, the same
     /// envelope id is re-sent at most twice (§8.6); the vault answers a duplicate from its response cache. [innerID]:
-    /// for a request the member retries as the same request (§8.2). A request that throws may still be delivered from
-    /// the outbox later: a caller that tries again does so with the same [innerID] (``newRequestID()``), never a fresh
-    /// one, or the vault may act twice.
+    /// for a request the member retries as the same request (§8.2). Each deposit is handed to the relay from memory, never
+    /// through the outbox: a request whose deposit fails is reported as failed and is not sent later, nor after a restart.
+    /// One that throws after a deposit may still have reached the vault: a caller that tries again does so with the same
+    /// [innerID] (``newRequestID()``), never a fresh one, or the vault may act twice.
     /// [exp]: the vault drops the request after it, unanswered (§5.3).
     public func request(
         _ type: String, body: [UInt8] = VaultJSON.empty, timeout: TimeInterval? = nil, innerID: String? = nil, exp: Date? = nil
@@ -173,7 +182,7 @@ extension VaultDevice {
         mem.withLock { pending[id] = d }
         defer { mem.withLock { _ = pending.removeValue(forKey: id) } }
         _ = try await countingSend(type) {
-            try await lock.withLock { try await sendLocked(id: id, type: type, body: body, re: nil, status: nil, exp: exp) }
+            try await lock.withLock { try await sendOnceLocked(id: id, type: type, body: body, exp: exp) }
         }
         for attempt in 0...retries {
             if let inner = await d.wait(timeout: timeout ?? cfg.requestTimeout(for: type)) {
@@ -187,7 +196,7 @@ extension VaultDevice {
             ensureCollecting()
             if attempt < retries {
                 _ = try await countingSend(type) {
-                    try await lock.withLock { try await sendLocked(id: id, type: type, body: body, re: nil, status: nil, exp: exp) }
+                    try await lock.withLock { try await sendOnceLocked(id: id, type: type, body: body, exp: exp) }
                 }
             }
         }

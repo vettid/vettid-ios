@@ -97,8 +97,9 @@ public struct DeviceConfig: Sendable {
 ///   only by sender and recipient kid (§13.6), decrypted, applied and persisted before the relay ack (§8.3).
 /// - Responses complete the request that awaits them; events go to ``events()`` and to an inbox that
 ///   ``awaitEvent(_:timeout:match:)`` searches first.
-/// - Outgoing messages are sealed in the current epoch and kept in a persisted outbox until the relay accepts them; a
-///   request that gets no answer is re-sent with the same inner id at most twice (§8.6).
+/// - Outgoing messages are sealed in the current epoch. A request is deposited from memory and re-sent with the same
+///   inner id at most twice when it gets no answer (§8.6); only the standing tokens (``outboxTypes``) are kept in a
+///   persisted outbox until the relay accepts them.
 /// - Tokens are refreshed in both directions (§7.2), vault-initiated rekeys answered (§6.5) and identity rotations
 ///   followed (§3.4).
 ///
@@ -222,7 +223,15 @@ public final class VaultDevice: @unchecked Sendable {
     /// Restores a device from its store; nil if the store is empty.
     public static func load(_ cfg: DeviceConfig, secrets: DeviceSecrets) throws -> VaultDevice? {
         guard let b = try cfg.store.load() else { return nil }
-        return try VaultDevice(cfg: cfg, secrets: secrets, st: JSONDecoder().decode(DeviceState.self, from: Data(b)))
+        let st = try JSONDecoder().decode(DeviceState.self, from: Data(b))
+        // Requests an earlier version kept in the outbox are dropped unsent: the member was told they failed. A credential
+        // request among them stays unsettled until its `exp` (§11.14.9 step 1), as it was recorded before its send.
+        let before = st.outbox.count
+        st.outbox.removeAll { !outboxTypes.contains($0.type) }
+        let d = try VaultDevice(cfg: cfg, secrets: secrets, st: st)
+        // Saved with the next change if this write fails: the outbox in memory is already clean.
+        if st.outbox.count != before { try? d.save() }
+        return d
     }
 
     // MARK: - Observed state

@@ -211,8 +211,8 @@ struct CredentialOps: Sendable {
         do {
             r = try await device.request(type, body: body, innerID: id, exp: exp)
         } catch {
-            // From the deposit on, the request may have reached the vault (a deposit that failed may still go out from
-            // the outbox).
+            // From the deposit on, the request may have reached the vault (a deposit the relay did not confirm may still
+            // have been stored).
             guard options.unanswered, !(error is CancellationError) else { throw error }
             throw RequestUnanswered(type: type)
         }
@@ -539,7 +539,7 @@ struct CredOpOptions: Sendable {
 }
 
 /// A credential operation whose answer did not arrive once its request may have gone out (no answer to the automatic
-/// resends of §8.6, or a deposit that failed and may still go out from the outbox): the vault may have acted on it.
+/// resends of §8.6, or a deposit whose outcome the relay did not report): the vault may have acted on it.
 public struct RequestUnanswered: Error, Sendable, CustomStringConvertible {
     public let type: String
 
