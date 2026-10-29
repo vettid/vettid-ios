@@ -170,7 +170,7 @@ struct ReceivedCard: View {
                 .accessibilityIdentifier("received_label_\(id)")
             // What the grant holds, as the connection's vault described it (`grant.list` labels, 0.21.0), before a fetch.
             if content == nil && !g.labels.isEmpty {
-                Text(ItemsStrings.sharedHolds(g.labels.compactMap { AccountNames.cleaned($0.label) }.joined(separator: ", ")))
+                Text(ItemsStrings.sharedHolds(g.labels.compactMap { AccountNames.isolateOrNull($0.label) }.joined(separator: ", ")))
                     .vettIDFont(.bodyMedium)
                     .accessibilityIdentifier("received_fields_\(id)")
             }
@@ -224,26 +224,33 @@ struct SharedFields: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(content.fields.enumerated()), id: \.offset) { _, f in
-                Text(AccountNames.cleaned(f.label) ?? "").vettIDFont(.labelMedium).foregroundStyle(colors.onSurfaceVariant)
+                // An empty label is left out, not shown as a blank line (VAULT-MESSAGING 0.76.0 §10.8 step 4).
+                if let label = AccountNames.cleaned(f.label) {
+                    Text(label).vettIDFont(.labelMedium).foregroundStyle(colors.onSurfaceVariant)
+                }
                 let text = Self.text(f)
                 Text(text.isEmpty ? ItemsStrings.emptyValue : text)
                     .vettIDFont(.bodyLarge)
                     .padding(.bottom, Spacing.s)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            if let notes = content.notes {
+            if let notes = AccountNames.cleanedLines(content.notes) {
                 Text(ItemsStrings.notes).vettIDFont(.labelMedium)
                 Text(notes).vettIDFont(.bodyLarge).frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
 
-    /// A field's value as shown.
+    /// A field's value as shown, cleaned (VAULT-MESSAGING 0.76.0 §10.8): one line, except a multi-line field and an address,
+    /// whose lines are kept (chosen; not in the spec). "" when nothing shows.
     static func text(_ f: ItemFieldView) -> String {
         switch f.value {
-        case .text(let t)?: f.kind == FieldKinds.phone ? PhoneInput.display(t) : t
-        case .address(let a)?: a.lines.joined(separator: "\n")
-        case nil: ""
+        case .text(let t)?:
+            if f.kind == FieldKinds.multiline { return AccountNames.cleanedLines(t) ?? "" }
+            let one = AccountNames.cleaned(t) ?? ""
+            return f.kind == FieldKinds.phone ? PhoneInput.display(one) : one
+        case .address(let a)?: return AccountNames.cleanedLines(a.lines.joined(separator: "\n")) ?? ""
+        case nil: return ""
         }
     }
 }

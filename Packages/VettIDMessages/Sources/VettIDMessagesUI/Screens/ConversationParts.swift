@@ -172,7 +172,9 @@ enum BubbleText {
     /// bubble shows.
     static func message(_ raw: String) -> AttributedString {
         var out = AttributedString()
-        for (i, line) in AccountNames.cleanedMessage(raw).split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
+        let cleaned = AccountNames.cleanedMessage(raw)
+        guard !cleaned.isEmpty else { return out }
+        for (i, line) in cleaned.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
             if i > 0 { out += AttributedString("\n") }
             out += AttributedString("\u{2068}") + attributed(String(line)) + AttributedString("\u{2069}")
         }

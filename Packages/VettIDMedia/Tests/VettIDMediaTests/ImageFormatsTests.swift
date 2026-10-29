@@ -49,22 +49,6 @@ import Testing
         #expect(JpegSegments.hasMetadata(TestImages.withMpf(TestImages.minimalJpegHeader(8, 8))))
     }
 
-    @Test func namesAreSanitized() throws {
-        #expect(AttachmentNames.sanitize("../../etc/passwd") == "etcpasswd")
-        #expect(AttachmentNames.sanitize("../etc/passwd") == "etcpasswd")
-        #expect(AttachmentNames.sanitize("photo\u{202E}gpj.exe") == "photogpj.exe")
-        #expect(AttachmentNames.sanitize("a\u{0}\u{7}\nb") == "ab")
-        #expect(AttachmentNames.sanitize("...hidden") == "hidden")
-        #expect(AttachmentNames.sanitize("a\u{200B} \u{2066}b\u{2069}") == "a b")
-        #expect(AttachmentNames.sanitize("windows\\file") == "windowsfile")
-        #expect(AttachmentNames.sanitize("\u{202E}/\\..") == nil)
-        #expect(AttachmentNames.sanitize(nil) == nil)
-        #expect(try #require(AttachmentNames.sanitize(String(repeating: "x", count: 300))).count == PhotoLimits.nameMaxChars)
-        // Characters, not UTF-16 units: an emoji counts once and is never cut in half.
-        let emoji = try #require(AttachmentNames.sanitize(String(repeating: "📷", count: 70)))
-        #expect(emoji.unicodeScalars.count == PhotoLimits.nameMaxChars)
-    }
-
     final class Box {
         var bytes: [UInt8]
         init(_ b: [UInt8]) { bytes = b }

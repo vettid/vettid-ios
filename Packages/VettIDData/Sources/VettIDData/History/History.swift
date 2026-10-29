@@ -230,9 +230,13 @@ public struct HistoryDevices: Equatable, Sendable {
         self.selfID = selfID
     }
 
-    /// `device.list`'s entries, names trimmed; a blank name stays as "" (the device is known, not removed).
+    /// The most of a device's name History keeps, in code points (as vettid-android `DeviceWire.MAX_NAME`).
+    public static let maxNameLength = 64
+
+    /// `device.list`'s entries, names cleaned and cut (VAULT-MESSAGING 0.76.0 §10.8: a desktop's or agent's name is another
+    /// party's text); a name with nothing to show stays as "" (the device is known, not removed).
     public init(_ list: [DeviceEntry], selfID: String?) {
-        let pairs = list.map { ($0.id, ($0.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)) }
+        let pairs = list.map { ($0.id, AccountNames.cleanedCapped($0.name, max: Self.maxNameLength) ?? "") }
         self.init(names: Dictionary(pairs, uniquingKeysWith: { a, _ in a }), selfID: selfID)
     }
 

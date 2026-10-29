@@ -260,9 +260,11 @@ struct GrantFacts: View {
         let options = state.answerable.sorted { ($0.category == category ? 0 : 1) < ($1.category == category ? 0 : 1) }
         return Menu {
             if options.isEmpty { Text(ApprovalsStrings.grantAnswerNone) }
-            ForEach(options) { item in Button(item.name) { actions.onAnswerGrant(i, item.id) } }
+            ForEach(options) { item in
+                Button(AccountNames.isolateOrNull(item.name) ?? ApprovalsStrings.shareUnnamed) { actions.onAnswerGrant(i, item.id) }
+            }
         } label: {
-            Text(chosen.map { ApprovalsStrings.grantAnswerChosen($0) } ?? ApprovalsStrings.grantAnswer)
+            Text(chosen.map { ApprovalsStrings.grantAnswerChosen(AccountNames.isolate($0)) } ?? ApprovalsStrings.grantAnswer)
                 .vettIDFont(.labelLarge, weight: .semibold)
                 .foregroundStyle(colors.primary)
                 .frame(minHeight: Spacing.touchTarget)

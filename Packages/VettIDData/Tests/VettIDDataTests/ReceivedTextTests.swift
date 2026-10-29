@@ -1,5 +1,6 @@
 import Testing
-import VettIDData
+@testable import VettIDData
+@testable import VettIDVault
 
 /// VAULT-MESSAGING 0.76.0 §10.8 "Showing received text": breaks, trimming, empty text, summaries and the message bubble.
 /// Mirrors vettid-android `AccountNamesTest` (0.76.0 section).
@@ -105,5 +106,25 @@ import VettIDData
         #expect(AccountNames.cleanedCapped("\u{202E}x\u{202E}x", max: 64) == "xx")
         #expect(AccountNames.cleanedCapped("\u{3164}", max: 64) == nil)
         #expect(AccountNames.cleanedCapped("photo\u{202E}gpj.exe\r\n", max: 64) == "photogpj.exe")
+    }
+
+    /// An attachment's name (§10.5.1) as the device view shows it: cleaned and cut at 64, and, chosen (not in the spec),
+    /// without path separators or leading dots.
+    @Test func anAttachmentNameIsShownCleanedWithoutPathParts() {
+        func shown(_ name: String?) -> String? {
+            AttachmentInfo.of(AttachmentView(
+                attID: "a", kind: "photo", mime: nil, size: 1, width: 1, height: 1, name: name, state: "stored", reason: nil, thumb: nil
+            )).name
+        }
+        #expect(shown("../../etc/passwd") == "etcpasswd")
+        #expect(shown("photo\u{202E}gpj.exe") == "photogpj.exe")
+        #expect(shown("...hidden") == "hidden")
+        #expect(shown("windows\\file") == "windowsfile")
+        #expect(shown("a\u{0}\u{7}\nb") == "a b")
+        #expect(shown("\u{202E}/\\..") == nil)
+        #expect(shown("\u{3164}") == nil && shown(nil) == nil)
+        #expect(shown(String(repeating: "x", count: 300))?.count == 64)
+        // Code points, never cut inside a grapheme cluster.
+        #expect(shown(String(repeating: "\u{1F4F7}", count: 70))?.unicodeScalars.count == 64)
     }
 }

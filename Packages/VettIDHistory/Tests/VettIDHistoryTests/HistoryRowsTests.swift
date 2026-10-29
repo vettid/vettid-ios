@@ -28,9 +28,9 @@ import VettIDVault
 
     @Test func rowsNameTheirDeviceAfterWhatTheyAlreadyShow() {
         let s = state()
-        #expect(s.row(Self.rec(5, "message.sent", device: "d-desk", conn: "c1")).supporting == "\u{2068}Ada Lovelace\u{2069} · Desktop")
+        #expect(s.row(Self.rec(5, "message.sent", device: "d-desk", conn: "c1")).supporting == "\u{2068}Ada Lovelace\u{2069} · \u{2068}Desktop\u{2069}")
         let unlocked = s.row(Self.rec(4, "vault.unlocked", device: "d-pixel"))
-        #expect(unlocked.title == "Vault unlocked" && unlocked.supporting == "Pixel 10 Pro" && unlocked.category == .vaultAccess)
+        #expect(unlocked.title == "Vault unlocked" && unlocked.supporting == "\u{2068}Pixel 10 Pro\u{2069}" && unlocked.category == .vaultAccess)
         #expect(s.row(Self.rec(3, "vault.locked", device: "d-gone")).supporting == "Removed device")
         // No device, this phone's own app (listed without a name): the group, no placeholder.
         #expect(s.row(Self.rec(2, "vault.locked")).supporting == "Unlocks and daily checks")
@@ -85,12 +85,30 @@ import VettIDVault
         return s
     }
 
+    /// VAULT-MESSAGING 0.76.0 §10.8: a desktop's or agent's name is another party's text, cleaned when the list is read and
+    /// isolated where it joins a sentence; a name with nothing to show is a listed device without a name.
+    @Test func aHostileDeviceNameIsCleanedIsolatedOrEmpty() throws {
+        let list = try VaultJSON.decode([DeviceEntry].self, Array(
+            #"[{"id":"d1","kind":"desktop","state":"active","name":"Lap\u2028top\u202E"},{"id":"d2","kind":"desktop","state":"active","name":"\u3164"},{"id":"d3","kind":"agent","state":"active","name":"\u200D\u00A0"}]"#.utf8
+        ))
+        let devices = HistoryDevices(list, selfID: nil)
+        #expect(devices.names == ["d1": "Lap top", "d2": "", "d3": ""])
+        let s = state(devices: devices)
+        #expect(s.row(Self.rec(1, "vault.unlocked", device: "d1")).supporting == "\u{2068}Lap top\u{2069}")
+        #expect(s.row(Self.rec(2, "vault.unlocked", device: "d2")).supporting == "Unlocks and daily checks")
+        #expect(s.row(Self.rec(3, "vault.unlocked", device: "d3")).supporting == "Unlocks and daily checks")
+        let longList = try VaultJSON.decode([DeviceEntry].self, Array(
+            #"[{"id":"d","kind":"desktop","state":"active","name":"\#(String(repeating: "y", count: 80))"}]"#.utf8
+        ))
+        #expect(HistoryDevices(longList, selfID: nil).names["d"]?.count == 64)
+    }
+
     @Test func theEntryPageNamesTheDeviceAndMarksThisPhone() {
         let mine = entry(Self.rec(4, "vault.unlocked", device: "d-pixel")) { $0.deviceName = "Pixel 10 Pro"; $0.devicesKnown = true; $0.thisDevice = true }
-        #expect(mine.deviceLabel == "Pixel 10 Pro (this phone)")
+        #expect(mine.deviceLabel == "\u{2068}Pixel 10 Pro\u{2069} (this phone)")
         #expect(mine.fields().contains(HistoryField(label: "Device ID", value: "d-pixel", mono: true)))
         let other = entry(Self.rec(4, "vault.unlocked", device: "d-desk")) { $0.deviceName = "Desktop"; $0.devicesKnown = true }
-        #expect(other.deviceLabel == "Desktop")
+        #expect(other.deviceLabel == "\u{2068}Desktop\u{2069}")
         let removed = entry(Self.rec(3, "vault.locked", device: "d-gone")) { $0.devicesKnown = true }
         #expect(removed.deviceLabel == "Removed device")
         let selfUnnamed = entry(Self.rec(4, "owner_check.passed", device: "d-self")) { $0.devicesKnown = true; $0.deviceUnnamed = true; $0.thisDevice = true }

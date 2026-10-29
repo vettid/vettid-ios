@@ -125,13 +125,19 @@ public extension ItemsText {
     /// A received grant's line: its category, whose it is, uses left, the rule's rate limits (0.23.0) and its end.
     static func receivedLabel(_ g: GrantView, category: String?, name: String, zone: TimeZone = .current) -> String {
         [
-            Self.category(category ?? g.category),
+            receivedCategory(category ?? g.category),
             ItemsStrings.sharedBy(name),
             g.usesLeft.map(ItemsStrings.grantUsesLeft),
             g.perHour.map(ItemsStrings.grantPerHour),
             g.perDay.map(ItemsStrings.grantPerDay),
             g.expiresAt.map { ItemsStrings.ruleUntil(fullTime($0, zone: zone)) },
         ].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    /// A received grant's category: a recommended one's label, else the sender's custom category humanized and isolated
+    /// (VAULT-MESSAGING 0.76.0 §10.8 step 5: it comes from another party and sits in a line of other text).
+    static func receivedCategory(_ id: String) -> String {
+        ItemTemplates.category(id)?.label ?? AccountNames.isolate(ItemTemplates.customLabel(id))
     }
 
     /// An entry as the member asked for it (§10.12 `requested`, 0.21.0: exactly as sent): their own words, else the category.

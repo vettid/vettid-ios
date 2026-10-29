@@ -44,33 +44,6 @@ public enum PhotoLimits {
     public static let thumbCacheBytes = 8 * 1_024 * 1_024
 }
 
-/// A peer's `name` made safe to show; it is never used as a file name. Mirrors vettid-android `AttachmentNames`.
-public enum AttachmentNames {
-    private static let bidi: Set<UInt32> = Set([0x061C, 0x200E, 0x200F] + Array(0x202A...0x202E) + Array(0x2066...0x2069))
-
-    /// Removes control and bidirectional formatting characters (and every other format character, zero-width ones
-    /// included), path separators and leading dots; trims; at most ``PhotoLimits/nameMaxChars`` characters (Unicode
-    /// scalars, never cut in half). Nil when nothing is left.
-    public static func sanitize(_ name: String?) -> String? {
-        guard let name else { return nil }
-        var kept = String.UnicodeScalarView()
-        for s in name.unicodeScalars where !drops(s) { kept.append(s) }
-        var s = String(kept).trimmingCharacters(in: .whitespacesAndNewlines)
-        while s.hasPrefix(".") { s.removeFirst() }
-        s = s.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !s.isEmpty else { return nil }
-        guard s.unicodeScalars.count > PhotoLimits.nameMaxChars else { return s }
-        return String(String.UnicodeScalarView(s.unicodeScalars.prefix(PhotoLimits.nameMaxChars)))
-    }
-
-    private static func drops(_ s: Unicode.Scalar) -> Bool {
-        switch s.properties.generalCategory {
-        case .control, .format, .unassigned, .lineSeparator, .paragraphSeparator: return true
-        default: return bidi.contains(s.value) || s == "/" || s == "\\"
-        }
-    }
-}
-
 /// A memory-only cache bounded by bytes, least recently used out first (ANDROID-PLAN "Memory only, wiped at lock"):
 /// thumbnails, photos and prepared uploads never go to a file, a database, the defaults or an image library's disk
 /// cache. ``clear()`` runs at lock, on entering the hold or the due state, at a wipe and at an unlink; [onEvict] zeroes

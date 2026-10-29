@@ -251,9 +251,12 @@ struct ProfileCard: View {
                 if !c.sharedItems.isEmpty {
                     Text(ConnectStrings.detailSharedItems).vettIDFont(.labelLarge).padding(.top, Spacing.s)
                     ForEach(c.sharedItems, id: \.itemID) { item in
-                        Text(AccountNames.cleaned(item.name) ?? "").fontWeight(.semibold).padding(.top, Spacing.xs)
+                        // Empty received text is left out with its label, never shown as a blank (§10.8 step 4).
+                        if let n = AccountNames.cleaned(item.name) { Text(n).fontWeight(.semibold).padding(.top, Spacing.xs) }
                         ForEach(Array(item.fields.enumerated()), id: \.offset) { _, f in
-                            InfoLine(label: AccountNames.cleaned(f.label) ?? "", value: AccountNames.cleaned(f.value) ?? "")
+                            if let label = AccountNames.cleaned(f.label), let value = AccountNames.cleaned(f.value) {
+                                InfoLine(label: label, value: value)
+                            }
                         }
                     }
                 }
