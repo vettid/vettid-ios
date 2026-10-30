@@ -333,14 +333,11 @@ public final class FeedManager: FeedRepository {
         for id in ids { markReadQuietly(id) }
     }
 
-    /// An ask its challenger withdrew (VAULT-MESSAGING 0.80.0 §10.4 "Closing"): the vault leaves its item as it is. The
-    /// item [ref] names is marked read unless it stands for a batch (`count` from 2) of connection [connectionID] with
-    /// another ask still open ([othersOpen]); once none is open, every ask item of the connection is (a later ask of a
-    /// batch has no item of its own, the batch's first ask's being the one shown).
-    public func askWithdrawn(ref: String, connectionID: String, othersOpen: Bool) {
+    /// A withdrawn ask's item, or the item of a batch none of whose asks is open, by its [ref] (VAULT-MESSAGING 0.80.0
+    /// §10.4 "Closing": the vault leaves it as it is). [onlySingle]: only an item that stands for no batch (`count` below 2).
+    public func markAskRead(ref: String, onlySingle: Bool) {
         let ids = byID.values.filter { i in
-            guard i.status == Self.statusActive, FeedAsks.askKinds.contains(i.kind), i.connectionID == connectionID else { return false }
-            return !othersOpen || i.ref == ref && (i.count ?? 1) < 2
+            i.status == Self.statusActive && FeedAsks.askKinds.contains(i.kind) && i.ref == ref && (!onlySingle || (i.count ?? 1) < 2)
         }.map(\.itemID)
         for id in ids { markReadQuietly(id) }
     }

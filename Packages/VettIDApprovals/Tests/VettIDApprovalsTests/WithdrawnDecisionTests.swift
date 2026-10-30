@@ -109,6 +109,54 @@ import VettIDDataTesting
         fake.withdraw("auth:a1")
         m.askMute(true)
         await m.settle()
-        #expect(m.state.withdrawn && !m.state.asksMuted && m.state.error == .network && !m.state.busy)
+        #expect(m.state.withdrawn && !m.state.asksMuted && m.state.muteError == .network && !m.state.muting)
+    }
+
+    /// The notice stays while the mute is on its way: no decision, no "Already decided" (the mute is not the decision's
+    /// progress).
+    @Test func theNoticeStaysWhileTheMuteIsOnItsWay() async {
+        connections.connections = [Samples.connection("c1")]
+        fake.listed = [Samples.auth("a1")]
+        let m = await model()
+        fake.withdraw("auth:a1")
+        m.mute()
+        #expect(m.state.muting && m.state.withdrawn && !m.state.gone && !m.state.busy)
+        await m.settle()
+        #expect(m.state.withdrawn && m.state.asksMuted && !m.state.muting)
+    }
+
+    /// Once withdrawn, a decision's failure (a wrong password, a backoff) is no longer said: only the notice.
+    @Test func aDecisionsFailureGoesOnceWithdrawn() async {
+        fake.listed = [Samples.auth("a1")]
+        fake.fail["approveAuthentication"] = VaultFailure(.badPassword)
+        let m = await model()
+        m.setPassword("pw")
+        m.approve()
+        await m.settle()
+        #expect(m.state.error == .badPassword)
+        fake.withdraw("auth:a1")
+        #expect(m.state.withdrawn && m.state.error == nil && m.state.retryUntil == nil)
+    }
+
+    /// A connection not yet known (the connections not read) may be a service: its mute is confirmed too.
+    @Test func anUnknownConnectionsMuteIsConfirmed() async {
+        fake.listed = [Samples.auth("a1", conn: "c9")]
+        let m = await model()
+        fake.withdraw("auth:a1")
+        m.askMute(true)
+        #expect(!m.state.connectionKnown && m.state.confirmMute && !connections.calls.contains { $0.hasPrefix("asksMute") })
+    }
+
+    /// "Not me" in flight answered `not_found` waits for the flag as an approve does.
+    @Test func aDenyAnsweredNotFoundWaitsForTheFlag() async throws {
+        fake.listed = [Samples.auth("a1", purpose: .signin)]
+        fake.fail["denyAuthentication"] = VaultFailure(.notFound)
+        let m = await model()
+        m.deny()
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(m.state.busy && !m.state.gone)
+        fake.withdrawn.insert("auth:a1")
+        await m.settle()
+        #expect(m.state.withdrawn && !m.state.busy && !m.state.gone)
     }
 }

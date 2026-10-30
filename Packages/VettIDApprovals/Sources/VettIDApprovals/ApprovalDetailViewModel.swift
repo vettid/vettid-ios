@@ -39,10 +39,16 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
     public var withdrawn = false
     /// The requesting connection is a service (VAULT-MESSAGING 0.69.0 §6.4): muting its asks is confirmed first.
     public var connectionIsService = false
+    /// The requesting connection is in the connections list, so whether it is a service is known.
+    public var connectionKnown = false
     /// The requesting connection's asks are muted (§10.4.1): the withdrawn notice no longer offers the mute.
     public var asksMuted = false
-    /// The mute's confirmation is showing (a service connection's).
+    /// The mute's confirmation is showing (a service connection's, or one not yet known).
     public var confirmMute = false
+    /// The mute is on its way: the notice stays, its action waits.
+    public var muting = false
+    /// Why the mute failed; the only failure a withdrawn request's screen shows.
+    public var muteError: FailureKind?
     /// Not held in memory since the screen opened, and the vault never said it was decided or expired: an approval that
     /// arrived only as an event is not read again after a lock or a restart (IOS-PLAN §6.9; no vault list names it), so
     /// its feed item opens this rather than "Already decided" (chosen; not in the spec). One that arrives meanwhile (a
@@ -199,17 +205,19 @@ public final class ApprovalDetailViewModel {
         let missing = local.approval == nil && repo.mayHaveBeenDropped(local.key)
         s.notHeld = now == nil && (missing || left && lost)
         if left && lost { s.approval = nil }
-        // Withdrawn by its challenger (0.80.0 §10.4): the screen keeps its place and says so, with no error and no countdown.
+        // Withdrawn by its challenger (0.80.0 §10.4): the screen keeps its place and says so, with no decision's failure and
+        // no countdown (only a failed mute is said). A decision in flight is answered first (``waitForWithdrawal(_:)``).
         if repo.wasWithdrawn(local.key), local.approval != nil, !local.done, !local.busy, local.criticalResult == nil {
             s.withdrawn = true
             s.gone = false
             s.notHeld = false
-            // The decision's `not_found` is the withdrawal itself, not a failure; a failed mute is still said.
-            if s.error == .notFound { s.error = nil }
+            s.error = nil
+            s.retryUntil = nil
             s.approval = now ?? local.approval
         }
         let connection = s.approval.flatMap(Self.connectionID).flatMap { id in connections?.connections.first { $0.id == id } }
         s.connectionName = AccountNames.cleaned(connection?.displayName)
+        s.connectionKnown = connection != nil
         s.connectionIsService = connection?.isService ?? false
         s.asksMuted = local.asksMuted || connection?.asks?.muted == true
         return s
@@ -234,26 +242,29 @@ public final class ApprovalDetailViewModel {
     public func askBlock(_ show: Bool) { local.confirmBlock = show }
 
     /// "Mute requests from …" on a withdrawn request (ANDROID-PLAN 0.1.101): a service connection's is confirmed first
-    /// (superseded sign-ins are routine for a service), a person's is muted at once.
+    /// (superseded sign-ins are routine for a service), a person's is muted at once. One whose kind is not known yet (the
+    /// connections not read) is confirmed too (chosen; not in the spec).
     public func askMute(_ show: Bool) {
         guard show else { return local.confirmMute = false }
-        if state.connectionIsService { local.confirmMute = true } else { mute() }
+        let s = state
+        if s.connectionIsService || !s.connectionKnown { local.confirmMute = true } else { mute() }
     }
 
-    /// Mutes the requesting connection's asks (`connection.asks.mute`, §10.4.1), as its detail does.
+    /// Mutes the requesting connection's asks (`connection.asks.mute`, §10.4.1), as its detail does. Its own progress, not
+    /// the decision's: the withdrawn notice stays meanwhile.
     public func mute() {
         local.confirmMute = false
-        guard let id = state.approval.flatMap(Self.connectionID), let connections, !local.busy else { return }
-        local.busy = true
-        local.error = nil
+        guard let id = state.approval.flatMap(Self.connectionID), let connections, !local.muting else { return }
+        local.muting = true
+        local.muteError = nil
         work.launch { [weak self] in
             do {
                 try await connections.setAsksMuted(id, muted: true)
                 self?.local.asksMuted = true
             } catch {
-                self?.local.error = failureKind(error)
+                self?.local.muteError = failureKind(error)
             }
-            self?.local.busy = false
+            self?.local.muting = false
         }
     }
 
@@ -369,12 +380,13 @@ public final class ApprovalDetailViewModel {
 
     /// A member authentication answered `not_found` (unknown, decided, expired or withdrawn alike, 0.80.0 §10.4): the
     /// screen keeps showing progress while it waits up to ``withdrawnWait`` for the withdrawn flag, then says withdrawn, or
-    /// that the request left. A flag that comes later still turns the screen to withdrawn (``state``).
+    /// that the request left. A flag that comes later still turns the screen to withdrawn (``state``). Only a member
+    /// authentication can be withdrawn, so no other kind waits (chosen; not in the spec).
     private func waitForWithdrawal(_ error: any Error) async {
         guard (error as? VaultFailure)?.kind == .notFound, local.key.hasPrefix("auth:") else { return }
         let clock = ContinuousClock()
         let end = clock.now.advanced(by: withdrawnWait)
-        while !repo.wasWithdrawn(local.key), clock.now < end {
+        while !repo.wasWithdrawn(local.key), clock.now < end, !Task.isCancelled {
             try? await Task.sleep(for: .milliseconds(50))
         }
     }

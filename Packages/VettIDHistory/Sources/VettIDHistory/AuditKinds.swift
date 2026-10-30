@@ -160,7 +160,7 @@ public enum AuditKinds {
         case scaled(String, scaled: String, realSeconds: TimeInterval)
         /// A line with a name the vault recorded.
         case named(String, name: String)
-        /// A line with the entry's connection's "First Last", left out without it.
+        /// A line with the entry's connection's "First Last", left out without it (chosen; not in the spec).
         case connection(String)
     }
 

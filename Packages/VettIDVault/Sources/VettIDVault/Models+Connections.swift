@@ -28,7 +28,7 @@ public struct Connection: Sendable {
     /// The connection's asks (VAULT-MESSAGING 0.23.0 §10.4.1); nil from an older vault.
     public let asks: ConnectionAsks?
     /// `peer_kind` (VAULT-MESSAGING 0.69.0 §6.4 "Service connections"): `"service"` for a service, nil for a person.
-    public var peerKind: String?
+    public let peerKind: String?
 
     /// A `<connection>` object; nil without its `id` or `state`.
     public static func of(_ o: JsonObject) -> Connection? {

@@ -133,18 +133,25 @@ import VettIDUI
             s.approval = Samples.auth("a\(p)", purpose: p)
             return s
         }
-        // Withdrawn by its challenger (0.80.0 §10.4): the notice with the mute, the mute's confirmation, a failed mute, muted.
-        var withdrawn = out[4]
+        out += withdrawnStates(out[4])
+        return out
+    }
+
+    /// Withdrawn by its challenger (0.80.0 §10.4): the notice with the mute, the mute's confirmation, a failed mute, the
+    /// mute on its way, muted.
+    private func withdrawnStates(_ base: ApprovalDetailState) -> [ApprovalDetailState] {
+        var withdrawn = base
         withdrawn.withdrawn = true
         var confirming = withdrawn
         confirming.connectionIsService = true
         confirming.confirmMute = true
         var failedMute = withdrawn
-        failedMute.error = .network
+        failedMute.muteError = .network
+        var muting = withdrawn
+        muting.muting = true
         var muted = withdrawn
         muted.asksMuted = true
-        out += [withdrawn, confirming, failedMute, muted]
-        return out
+        return [withdrawn, confirming, failedMute, muting, muted]
     }
 
     private func height(_ view: some View) -> CGFloat {

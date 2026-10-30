@@ -99,21 +99,22 @@ public struct ApprovalDetailScreen: View {
 
     /// Withdrawn by its challenger (VAULT-MESSAGING 0.80.0 §10.4; ANDROID-PLAN 0.1.101): the request stays where it was,
     /// with the notice and Close in place of the decision, in a neutral style (never an error, never "declined"), and the
-    /// existing mute as a secondary action until the connection's asks are muted.
+    /// existing mute as a secondary action until the connection's asks are muted. Without the connection's names the
+    /// notice says "A connection", and the mute's confirmation is titled with the action's words (chosen; not in the spec).
     private func withdrawn(_ a: PendingApproval) -> some View {
         let who = AccountNames.isolateOrNull(state.connectionName) ?? ApprovalsStrings.aConnection
         return FormScaffold(
-            title: ApprovalTexts.title(a, name: state.connectionName), primaryLabel: ApprovalsStrings.withdrawnClose, busy: state.busy,
+            title: ApprovalTexts.title(a, name: state.connectionName), primaryLabel: ApprovalsStrings.withdrawnClose,
             onPrimary: actions.onBack, onBack: actions.onBack
         ) {
             VStack(alignment: .leading, spacing: Spacing.m) {
-                NoticeCard(.info, title: ApprovalsStrings.withdrawnNotice(who), message: "", announce: .polite)
+                NoticeCard(.info, title: ApprovalsStrings.withdrawnNotice(who), announce: .polite)
                     .accessibilityIdentifier("approval_withdrawn")
                 if !state.asksMuted, a.connectionID != nil {
                     NoticeAction(label: ApprovalsStrings.withdrawnMute(who), identifier: "withdrawn_mute") { actions.onAskMute(true) }
-                        .disabled(state.busy)
+                        .disabled(state.muting)
                 }
-                if let text = state.error.map({ ApprovalTexts.failure($0, retryUntil: nil, limit: nil, now: Date()) }) {
+                if let text = state.muteError.map({ ApprovalTexts.failure($0, retryUntil: nil, limit: nil, now: Date()) }) {
                     Text(text).vettIDFont(.bodyMedium).announced(text, .assertive).accessibilityIdentifier("withdrawn_error")
                 }
                 Facts(approval: a, name: state.connectionName)

@@ -115,11 +115,13 @@ public final class ApprovalsManager: ApprovalsRepository {
     static func subjectKey(_ d: ShareDecision) -> String { ShareQuestions.subject(d) ?? "rule:\(d.ruleID)" }
     /// Told of each decided ask, with its feed item's kinds and `ref` (``FeedAsks``): the item is marked read.
     @ObservationIgnored public var onDecided: @MainActor (_ kinds: Set<String>, _ ref: String) -> Void = { _, _ in }
-    /// Told of each ask held here that its challenger withdrew (VAULT-MESSAGING 0.80.0 §10.4): its `request_id`, its
-    /// connection, and whether another ask of that connection is still open, for its feed item (``FeedAsks``).
-    @ObservationIgnored public var onWithdrawn: @MainActor (_ ref: String, _ connection: String, _ others: Bool) -> Void = { _, _, _ in }
-    /// The asks closed as withdrawn (`sync.event{connection.authenticate.decided, withdrawn: true}`), newest last, at most
-    /// ``maxClosedAsks``: a screen showing one says so, also after the vault answered its decision `not_found`.
+    /// Told of a withdrawn ask's feed item to mark read, by its `ref` (VAULT-MESSAGING 0.80.0 §10.4 "Closing"): [onlySingle]
+    /// for an ask this phone does not hold, whose item is read only if it stands for no batch.
+    @ObservationIgnored public var onAskRead: @MainActor (_ ref: String, _ onlySingle: Bool) -> Void = { _, _ in }
+    /// The batches whose first ask was withdrawn while others were open, by its `ref` (``batchAskClosed(_:)``).
+    @ObservationIgnored var withdrawnBatches: [String: Set<String>] = [:]
+    /// The asks closed as withdrawn (`decided{withdrawn: true}`), newest last, at most ``maxClosedAsks``, for a screen
+    /// showing one; dropped with the vault's content (chosen; not in the spec).
     var withdrawnKeys: [String] = []
 
     /// [ops] the vault's calls, opened when needed; [quietOps] those of the background reads (nil: [ops]);
@@ -221,6 +223,7 @@ public final class ApprovalsManager: ApprovalsRepository {
         decidedLog = []
         batchLog = []
         withdrawnKeys = []
+        withdrawnBatches = [:]
     }
 
     public func mayHaveBeenDropped(_ key: String) -> Bool {
@@ -335,10 +338,10 @@ public final class ApprovalsManager: ApprovalsRepository {
     /// `sync.event`: another device decided (§10.1).
     private func onSync(_ o: JsonObject, ts: Date) {
         let kind = VaultJSON.string(o, "kind") ?? ""
-        // Withdrawn by its challenger (0.80.0 §10.4): noted whether or not a list already closed the ask, so that a screen
-        // showing it says so rather than "Already decided".
+        // Withdrawn by its challenger (0.80.0 §10.4): noted whether or not a list already judged the ask, so that a screen
+        // showing it says so rather than "Already decided"; closed here like any other close.
         if kind == "connection.authenticate.decided", VaultJSON.bool(o, "withdrawn") == true, let id = VaultJSON.string(o, "request_id") {
-            withdrawn("auth:\(id)", ts: ts)
+            return withdrawn("auth:\(id)", ts: ts, apply: mergedListTs.map { ts > $0 } ?? true)
         }
         // A closing event no later than the list read is ignored too: the list already says whether the ask is open
         // (VAULT-MESSAGING 0.70.0 §10.4.2).
@@ -430,6 +433,7 @@ public final class ApprovalsManager: ApprovalsRepository {
         batchLog.removeAll { $0.key == key }
         edit { $0.removeAll { parsed($0)?.key == key } }
         listed.removeAll { $0.key == key }
+        batchAskClosed(key)
     }
 
     // MARK: - Reads
