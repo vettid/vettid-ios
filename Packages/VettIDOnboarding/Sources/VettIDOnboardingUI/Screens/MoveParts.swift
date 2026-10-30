@@ -37,6 +37,9 @@ struct WaitingRow: View {
     @Environment(\.vettIDColors) private var colors
     let text: String
     var identifier = "waiting"
+    /// A wait with a deadline: its seconds left and what VoiceOver says instead of [text] (the time in words), with the
+    /// window's warnings.
+    var timeLeft: (seconds: Int64, spoken: String)?
 
     var body: some View {
         HStack(spacing: Spacing.m) {
@@ -44,8 +47,19 @@ struct WaitingRow: View {
             Text(text).vettIDFont(.bodyMedium)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.updatesFrequently)
+        // Said when it appears, not re-read at each tick of a time left.
+        .modifier(TimeLeftLine(timeLeft: timeLeft))
+        .announcedOnce(timeLeft?.spoken ?? text)
         .accessibilityIdentifier(identifier)
+    }
+}
+
+/// A row's time left, where it has one.
+private struct TimeLeftLine: ViewModifier {
+    let timeLeft: (seconds: Int64, spoken: String)?
+
+    func body(content: Content) -> some View {
+        if let timeLeft { content.timeLeft(timeLeft.seconds, spoken: timeLeft.spoken) } else { content }
     }
 }
 #endif

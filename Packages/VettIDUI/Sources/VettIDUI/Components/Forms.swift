@@ -301,7 +301,8 @@ public struct UrgentBanner: View {
 /// The state of one ``StepList`` step.
 public enum StepState: Sendable { case pending, active, done, failed }
 
-/// A vertical list of steps with their state (the enrollment progress). Mirrors vettid-android `StepList`.
+/// A vertical list of steps with their state (the enrollment progress). The step that becomes active is spoken to
+/// VoiceOver as it does, and a step that fails at once. Mirrors vettid-android `StepList`.
 public struct StepList: View {
     @Environment(\.vettIDColors) private var colors
     let steps: [(String, StepState)]
@@ -327,11 +328,15 @@ public struct StepList: View {
                 }
                 .frame(minHeight: 32)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(step.0): \(Self.stateLabel(step.1))")
+                .accessibilityLabel(Self.spoken(step))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .announced(steps.first { $0.1 == .active }.map(Self.spoken))
+        .announced(steps.first { $0.1 == .failed }.map(Self.spoken), .assertive)
     }
+
+    static func spoken(_ step: (String, StepState)) -> String { "\(step.0): \(stateLabel(step.1))" }
 
     static func stateLabel(_ state: StepState) -> String {
         switch state {

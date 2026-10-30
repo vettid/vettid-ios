@@ -82,7 +82,7 @@ struct WaitingRow: View {
             Text(text).vettIDFont(.bodyMedium)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.updatesFrequently)
+        .announcedOnce(text)
         .accessibilityIdentifier(identifier)
     }
 }

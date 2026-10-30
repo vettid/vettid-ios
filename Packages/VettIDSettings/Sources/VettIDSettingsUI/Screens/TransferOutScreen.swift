@@ -195,7 +195,8 @@ public struct TransferOutContent: View {
                         .vettIDFont(.bodySmall)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
-                        .announcedOnce(TransferStrings.transferWait(Self.mmss(state.waitSeconds)))
+                        .accessibilityLabel(TransferStrings.transferWait(spokenDuration(state.waitSeconds)))
+                .announcedOnce(TransferStrings.transferWait(spokenDuration(state.waitSeconds)))
                         .accessibilityIdentifier("transfer_wait")
                 }
                 SecretField(
@@ -241,6 +242,7 @@ public struct TransferOutContent: View {
                         .vettIDFont(.bodyMedium)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
+                        .timeLeft(state.secondsLeft, spoken: TransferStrings.transferExpires(spokenDuration(state.secondsLeft)))
                         .accessibilityIdentifier("transfer_expires")
                     WaitingRow(text: TransferStrings.transferWaiting, identifier: "waiting_new_phone")
                     Text(TransferStrings.transferLinkLabel).vettIDFont(.labelLarge).padding(.top, Spacing.s)
@@ -302,6 +304,7 @@ private struct Window: View {
             .vettIDFont(.bodyMedium)
             .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity)
+            .timeLeft(secondsLeft, spoken: TransferStrings.transferWindow(spokenDuration(secondsLeft)))
             .accessibilityIdentifier("transfer_window")
     }
 }

@@ -173,6 +173,7 @@ private struct UpdateProgressScreen: View {
             VStack(alignment: .leading, spacing: Spacing.l) {
                 if returning {
                     CheckingLine(label: OnboardingStrings.releaseUpdateStepReturn(from))
+                        .announced(OnboardingStrings.releaseUpdateStepReturn(from))
                 } else {
                     StepList(steps)
                 }
@@ -180,6 +181,8 @@ private struct UpdateProgressScreen: View {
                     Text(OnboardingStrings.releaseUpdateStarting(p.step == .approving ? from : to))
                         .vettIDFont(.bodyMedium)
                         .foregroundStyle(colors.onSurfaceVariant)
+                        // A cold start of the vault: said when it is known (as vettid-android).
+                        .announced(OnboardingStrings.releaseUpdateStarting(p.step == .approving ? from : to))
                         .accessibilityIdentifier("release_update_starting")
                 }
                 Text(OnboardingStrings.releaseUpdateKeepOpen).vettIDFont(.bodySmall).foregroundStyle(colors.onSurfaceVariant)
@@ -262,7 +265,8 @@ private struct UpdatePin: View {
             Text(OnboardingStrings.unlockWait(formatWait(state.waitSeconds)))
                 .vettIDFont(.bodySmall)
                 .frame(maxWidth: .infinity)
-                .announcedOnce(OnboardingStrings.unlockWait(formatWait(state.waitSeconds)))
+                .accessibilityLabel(OnboardingStrings.unlockWait(spokenDuration(state.waitSeconds)))
+                .announcedOnce(OnboardingStrings.unlockWait(spokenDuration(state.waitSeconds)))
                 .accessibilityIdentifier("release_update_wait")
         }
     }

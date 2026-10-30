@@ -306,7 +306,8 @@ struct OwnerCheckMessageView: View {
             Text(OnboardingStrings.ownerCheckBackoffWait(formatWait(state.waitSeconds)))
                 .vettIDFont(.bodyMedium)
                 // Said once when the wait starts, never at each tick.
-                .announcedOnce(OnboardingStrings.ownerCheckBackoffWait(formatWait(state.waitSeconds)))
+                .accessibilityLabel(OnboardingStrings.ownerCheckBackoffWait(spokenDuration(state.waitSeconds)))
+                .announcedOnce(OnboardingStrings.ownerCheckBackoffWait(spokenDuration(state.waitSeconds)))
                 .accessibilityIdentifier("owner_check_wait")
         } else if state.message == .backoff {
             Text(OnboardingStrings.ownerCheckBackoff).vettIDFont(.bodyMedium).announced(OnboardingStrings.ownerCheckBackoff)

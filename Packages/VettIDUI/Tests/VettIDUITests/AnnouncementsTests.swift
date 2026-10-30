@@ -72,6 +72,45 @@ import UIKit
         #expect(events.filter { $0 == .screenChanged }.count == 1)
     }
 
+    @Test func aDurationIsSpokenInWordsNotAsAClockTime() {
+        #expect(spokenDuration(299) == "4 minutes, 59 seconds")
+        #expect(spokenDuration(120) == "2 minutes")
+        #expect(spokenDuration(30) == "30 seconds")
+        #expect(spokenDuration(0) == "0 seconds")
+        #expect(spokenDuration(-5) == "0 seconds")
+        #expect(spokenDuration(3_661) == "1 hour, 1 minute, 1 second")
+        #expect(spokenDuration(90_061) == "1 day, 1 hour, 1 minute, 1 second")
+    }
+
+    @Test func aWindowWarnsAtTwoMinutesAndAtThirtySecondsOnly() async {
+        let model = Ticks(seconds: 122)
+        let events = await recording {
+            let window = host(Window(model: model))
+            for s in stride(from: Int64(121), through: 28, by: -1) {
+                model.seconds = s
+                try? await Task.sleep(for: .milliseconds(5))
+            }
+            #expect(await eventually { $0.contains(.announcement("30 seconds left", .polite)) })
+            window.isHidden = true
+        }
+        let spoken = events.compactMap { if case .announcement(let t, _) = $0, t.hasSuffix(" left") { t } else { nil } }
+        #expect(spoken == ["2 minutes left", "30 seconds left"])
+    }
+
+    @Test func theStepThatBecomesActiveIsSpokenAndAFailedOneAtOnce() async {
+        let model = Live(text: "one")
+        let events = await recording {
+            let window = host(Progress(model: model))
+            #expect(await eventually { $0.contains(.announcement("Lock: \(UIStrings.stepActive)", .polite)) })
+            model.text = "two"
+            #expect(await eventually { $0.contains(.announcement("Move: \(UIStrings.stepActive)", .polite)) })
+            model.text = "failed"
+            #expect(await eventually { $0.contains(.announcement("Move: \(UIStrings.stepFailed)", .assertive)) })
+            window.isHidden = true
+        }
+        #expect(events.filter { $0 == .announcement("Lock: \(UIStrings.stepActive)", .polite) }.count == 1)
+    }
+
     @Test func anEmptyTextIsNotSpoken() async {
         let events = await recording { Announcer.announce("") }
         #expect(events.isEmpty)
@@ -132,6 +171,31 @@ private struct Countdown: View {
         NoticeCard(
             .urgent, title: "Failed", message: model.text ?? "", announce: .assertive, announcement: "Failed. Too many tries."
         )
+    }
+}
+
+@MainActor @Observable
+private final class Ticks {
+    var seconds: Int64
+    init(seconds: Int64) { self.seconds = seconds }
+}
+
+private struct Window: View {
+    let model: Ticks
+    var body: some View {
+        Text("\(model.seconds)").timeLeft(model.seconds, spoken: "\(spokenDuration(model.seconds)) left")
+    }
+}
+
+private struct Progress: View {
+    let model: Live
+    var body: some View {
+        let at = model.text == "one" ? 0 : 1
+        let failed = model.text == "failed"
+        StepList([
+            ("Lock", at == 0 ? .active : .done),
+            ("Move", failed ? .failed : at == 1 ? .active : .pending),
+        ])
     }
 }
 

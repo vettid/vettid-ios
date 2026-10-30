@@ -239,7 +239,8 @@ struct ChangeNameConfirmStep: View {
         if state.waitSeconds > 0 {
             Text(NameStrings.wait(SettingsTimes.wait(state.waitSeconds)))
                 .vettIDFont(.bodyMedium)
-                .announcedOnce(NameStrings.wait(SettingsTimes.wait(state.waitSeconds)))
+                .accessibilityLabel(NameStrings.wait(spokenDuration(state.waitSeconds)))
+                .announcedOnce(NameStrings.wait(spokenDuration(state.waitSeconds)))
                 .accessibilityIdentifier("name_wait")
         } else if state.message == .backoff {
             Text(NameStrings.backoff).vettIDFont(.bodyMedium)
