@@ -153,7 +153,10 @@ public struct TransferInContent: View {
         ) {
             VStack(alignment: .leading, spacing: Spacing.l) {
                 if let sas = state.sas { SasBox(sas: sas) }
-                WaitingRow(text: MoveStrings.transferInWaiting(formatWait(state.secondsLeft)), identifier: "waiting_old_phone")
+                WaitingRow(
+                    text: MoveStrings.transferInWaiting(formatWait(state.secondsLeft)), identifier: "waiting_old_phone",
+                    timeLeft: (state.secondsLeft, MoveStrings.transferInWaiting(spokenDuration(state.secondsLeft)))
+                )
             }
         }
         .accessibilityElement(children: .contain)

@@ -2,9 +2,10 @@ import SwiftUI
 import UIKit
 
 /// How a spoken change ranks against what VoiceOver is already saying. Mirrors vettid-android's `LiveRegionMode`:
-/// [polite] waits its turn, [assertive] (the result of an attempt, a failure) interrupts.
+/// [polite] waits its turn, [assertive] (the result of an attempt, a failure) interrupts; [queued] is said after what
+/// VoiceOver is reading (a line that appears with a new screen, which VoiceOver is reading then).
 public enum Announce: Sendable, Equatable {
-    case polite, assertive
+    case polite, assertive, queued
 }
 
 /// Everything the app tells VoiceOver by itself: a text that appeared or changed without the member's focus on it, and a
@@ -37,7 +38,11 @@ public enum Announcer {
             switch event {
             case let .announcement(text, priority):
                 var spoken = AttributedString(text)
-                spoken.accessibilitySpeechAnnouncementPriority = priority == .assertive ? .high : .default
+                spoken.accessibilitySpeechAnnouncementPriority = switch priority {
+                case .assertive: .high
+                case .polite: .default
+                case .queued: .low
+                }
                 AccessibilityNotification.Announcement(spoken).post()
             case .screenChanged:
                 UIAccessibility.post(notification: .screenChanged, argument: nil)

@@ -144,12 +144,14 @@ public struct NoticeCard<Actions: View>: View {
     let message: String
     let announce: Announce?
     let announcement: String?
+    let spokenMessage: String?
     let actions: Actions
 
     public init(
         _ kind: NoticeKind, title: String, message: String, announce: Announce? = nil, announcement: String? = nil,
-        @ViewBuilder actions: () -> Actions = { EmptyView() }
+        spokenMessage: String? = nil, @ViewBuilder actions: () -> Actions = { EmptyView() }
     ) {
+        self.spokenMessage = spokenMessage
         self.kind = kind
         self.title = title
         self.message = message
@@ -158,8 +160,11 @@ public struct NoticeCard<Actions: View>: View {
         self.actions = actions()
     }
 
+    /// The notice's title and message as one VoiceOver element.
+    static func label(_ title: String, _ message: String) -> String { message.isEmpty ? title : "\(title). \(message)" }
+
     /// What VoiceOver says when the notice is announced.
-    var spoken: String { announcement ?? (message.isEmpty ? title : "\(title). \(message)") }
+    var spoken: String { announcement ?? Self.label(title, spokenMessage ?? message) }
 
     public var body: some View {
         let (accent, icon): (ThemeColor, VettIDSymbol) = switch kind {
@@ -176,6 +181,7 @@ public struct NoticeCard<Actions: View>: View {
                     Text(message).vettIDFont(.bodyMedium).foregroundStyle(colors.onSurfaceVariant)
                 }
                 .accessibilityElement(children: .combine)
+                .accessibilityLabel(Self.label(title, spokenMessage ?? message))
                 HStack(spacing: Spacing.s) { actions }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -301,7 +307,9 @@ public struct UrgentBanner: View {
 /// The state of one ``StepList`` step.
 public enum StepState: Sendable { case pending, active, done, failed }
 
-/// A vertical list of steps with their state (the enrollment progress). Mirrors vettid-android `StepList`.
+/// A vertical list of steps with their state (the enrollment progress). The step that becomes active is spoken to
+/// VoiceOver as it does (after the screen, when it opens with it); a failure is the notice's to say. Mirrors
+/// vettid-android `StepList`.
 public struct StepList: View {
     @Environment(\.vettIDColors) private var colors
     let steps: [(String, StepState)]
@@ -327,11 +335,14 @@ public struct StepList: View {
                 }
                 .frame(minHeight: 32)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(step.0): \(Self.stateLabel(step.1))")
+                .accessibilityLabel(Self.spoken(step))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .announced(steps.first { $0.1 == .active }.map(Self.spoken), .queued)
     }
+
+    static func spoken(_ step: (String, StepState)) -> String { "\(step.0): \(stateLabel(step.1))" }
 
     static func stateLabel(_ state: StepState) -> String {
         switch state {

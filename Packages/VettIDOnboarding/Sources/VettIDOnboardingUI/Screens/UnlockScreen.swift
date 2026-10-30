@@ -180,7 +180,8 @@ public struct UnlockScreen: View {
                 .vettIDFont(.bodySmall)
                 .frame(maxWidth: .infinity)
                 // Said once when the wait starts, never at each tick.
-                .announcedOnce(OnboardingStrings.unlockWait(formatWait(state.waitSeconds)))
+                .accessibilityLabel(OnboardingStrings.unlockWait(spokenDuration(state.waitSeconds)))
+                .announcedOnce(OnboardingStrings.unlockWait(spokenDuration(state.waitSeconds)))
                 .accessibilityIdentifier("unlock_wait")
         }
         if state.checkDue {
@@ -259,7 +260,8 @@ struct UnlockNotices: View {
         if state.serviceWaitSeconds > 0 {
             Text(OnboardingStrings.unlockServiceWait(formatWait(state.serviceWaitSeconds)))
                 .vettIDFont(.bodyMedium)
-                .announcedOnce(OnboardingStrings.unlockServiceWait(formatWait(state.serviceWaitSeconds)))
+                .accessibilityLabel(OnboardingStrings.unlockServiceWait(spokenDuration(state.serviceWaitSeconds)))
+                .announcedOnce(OnboardingStrings.unlockServiceWait(spokenDuration(state.serviceWaitSeconds)))
                 .accessibilityIdentifier("unlock_service_wait")
         }
         if let p = state.preflight {

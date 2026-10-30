@@ -343,6 +343,9 @@ private struct OpenAnswer: View {
                 if let at = o.retryAt, waiting {
                     Text(RecoveryOpenStrings.onboardingOpenCountdown(openCountdown(until: at, now: now)))
                         .vettIDFont(.bodyMedium)
+                        .accessibilityLabel(
+                            RecoveryOpenStrings.onboardingOpenCountdown(spokenDuration(Int64(max(at.timeIntervalSince(now), 0))))
+                        )
                         .accessibilityIdentifier("open_countdown")
                 }
                 if o.code == "no_recovery" && o.afterUnanswered {

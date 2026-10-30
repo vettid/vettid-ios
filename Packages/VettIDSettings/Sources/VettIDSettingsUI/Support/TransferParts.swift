@@ -32,7 +32,7 @@ struct SasBox: View {
     }
 }
 
-/// A spinner and what is awaited, announced when it appears. Mirrors vettid-android `Waiting`.
+/// A spinner and what is awaited, announced when it appears (after the screen it comes with). Mirrors vettid-android `Waiting`.
 struct WaitingRow: View {
     @Environment(\.vettIDColors) private var colors
     let text: String
@@ -44,7 +44,7 @@ struct WaitingRow: View {
             Text(text).vettIDFont(.bodyMedium)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.updatesFrequently)
+        .announcedOnce(text, .queued)
         .accessibilityIdentifier(identifier)
     }
 }
