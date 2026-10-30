@@ -110,7 +110,8 @@ struct ItemFieldRow: View {
 }
 
 /// The current one-time code of an `otp` seed (§10.7: apps show codes, RFC 6238), with the seconds it has left and a
-/// button that copies the code current at that moment (never the seed). Mirrors vettid-android `OtpCode`.
+/// button that copies the code current at that moment (never the seed). VoiceOver reads the code digit by digit and the
+/// time left in words, never re-reading either as it changes. Mirrors vettid-android `OtpCode`.
 struct OtpCode: View {
     @Environment(\.vettIDColors) private var colors
     let seed: String
@@ -125,9 +126,11 @@ struct OtpCode: View {
                     Text(Self.grouped(totp.code(now)))
                         .font(.title2.monospaced().weight(.semibold))
                         .foregroundStyle(colors.primary)
+                        .accessibilityLabel(Self.spoken(totp.code(now)))
                     Text(ItemsStrings.otpLeft(Int(totp.secondsLeft(now))))
                         .vettIDFont(.bodySmall)
                         .foregroundStyle(colors.onSurfaceVariant)
+                        .accessibilityLabel(ItemsStrings.iosOtpLeftSpoken(Int(totp.secondsLeft(now))))
                         .frame(maxWidth: .infinity, alignment: .leading)
                     IconButton(.contentCopy, label: ItemsStrings.cdCopyCode(label)) {
                         onCopy(totp.code(Int64(Date().timeIntervalSince1970)))
@@ -140,6 +143,10 @@ struct OtpCode: View {
             Text(ItemsStrings.otpUnreadable).vettIDFont(.bodySmall).foregroundStyle(colors.error)
         }
     }
+
+    /// The code as VoiceOver should read it, one digit at a time ("1 2 3 4 5 6", not "123 456" as two numbers), as
+    /// ``SafetyCode`` does.
+    static func spoken(_ code: String) -> String { code.map(String.init).joined(separator: " ") }
 
     /// The code in groups of three ("123 456").
     static func grouped(_ code: String) -> String {

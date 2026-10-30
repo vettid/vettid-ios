@@ -73,6 +73,9 @@ import VettIDUI
 
     @Test func theOneTimeCodeIsInGroupsOfThree() {
         #expect(OtpCode.grouped("123456") == "123 456" && OtpCode.grouped("12345678") == "123 456 78")
+        // VoiceOver: the digits one by one, the time left in words.
+        #expect(OtpCode.spoken("123456") == "1 2 3 4 5 6")
+        #expect(ItemsStrings.iosOtpLeftSpoken(12) == "12 seconds left" && ItemsStrings.iosOtpLeftSpoken(1) == "1 second left")
     }
 
     @Test func thePasswordStepRendersWithAWrongPasswordAndABackoff() {

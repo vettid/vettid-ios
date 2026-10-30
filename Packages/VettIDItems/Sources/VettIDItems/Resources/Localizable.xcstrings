@@ -3378,6 +3378,29 @@
         }
       }
     },
+    "ios_items_otp_left_spoken": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld second left"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld seconds left"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "items_tag_items": {
       "extractionState": "manual",
       "localizations": {
