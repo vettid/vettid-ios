@@ -103,7 +103,7 @@ struct GuidanceNotice: View {
 /// `TypedCodeTransformation` draws it. The canonical characters are the model's; separators typed or pasted are dropped by
 /// the model's own reading of them.
 enum TypedCodeFormat {
-    static let groupsPerRow = 4
+    static let fullRow = 4
 
     /// The groups to a row that fit a line [width] wide in the monospaced [font]: four, else (at the larger text sizes) two,
     /// else one, so a row never wraps on its own into a ragged 3 + 1 and each row is a whole row, or half of one, of the
@@ -113,11 +113,11 @@ enum TypedCodeFormat {
         let fits = { (groups: Int) in
             (CGFloat(groups * (RecoverState.codeGroup + 1) - 1) * character).rounded(.up) <= width.rounded(.down)
         }
-        return [groupsPerRow, 2].first(where: fits) ?? 1
+        return [fullRow, 2].first(where: fits) ?? 1
     }
 
     /// [canonical] in groups, [perRow] groups to a row.
-    static func grouped(_ canonical: String, perRow: Int = groupsPerRow) -> String {
+    static func grouped(_ canonical: String, perRow: Int = fullRow) -> String {
         var out = ""
         var group = 0
         var index = canonical.startIndex

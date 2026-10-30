@@ -169,7 +169,7 @@ public struct RecoverContent: View {
         let perRow = codeWidth.map { width in
             let traits = UITraitCollection(preferredContentSizeCategory: UIContentSizeCategory(typeSize))
             return TypedCodeFormat.groupsPerRow(fitting: width, font: SecretTextEditor.font(monospaced: true, compatibleWith: traits))
-        } ?? TypedCodeFormat.groupsPerRow
+        } ?? (typeSize.isAccessibilitySize ? 2 : TypedCodeFormat.fullRow) // until the field is laid out
         return FormScaffold(
             title: RecoveryScreenStrings.recoverTypeTitle, message: RecoveryScreenStrings.recoverTypeBody,
             primaryLabel: OnboardingStrings.continueLabel, primaryEnabled: state.typedComplete, busy: state.busy,

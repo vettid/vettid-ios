@@ -24,7 +24,7 @@ public struct SecretTextEditor: View {
     /// what was typed, and keeps the cursor after the same characters when the text is drawn again (a text in groups); [keeps] says
     /// which characters the model keeps (default: those that are not whitespace). [onSubmit]: the Return key calls it instead of
     /// adding a line (and is labelled Done). [monospaced]: every character as wide as the next (a code, as vettid-android
-    /// draws it). [onTextWidth]: told the width a line of text has, as it changes (a text in rows can choose what fits).
+    /// draws it; read when the editor is made). [onTextWidth]: told the width a line of text has, as it changes (a text in rows can choose what fits).
     public init(
         _ label: String, text: Binding<String>, placeholder: String? = nil, isError: Bool = false, focus: Bool = false,
         pasteOnly: Bool = false, onSubmit: (() -> Void)? = nil,

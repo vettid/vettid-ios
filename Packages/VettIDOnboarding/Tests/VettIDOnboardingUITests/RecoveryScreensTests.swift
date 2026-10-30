@@ -60,11 +60,14 @@ import VettIDDataTesting
     @Test func theCodeGridStaysWholeAtLargeSizes() async throws {
         var state = RecoverState(step: .type, accountHost: "account.vettid.org")
         state.typed = "7ZK3M9QX2HTDCDEFGHJKMNPQRSTVWXYZ0123456789ABV3A1"
-        let sizes: [(DynamicTypeSize, CGFloat, Int?)] = [
-            (.large, 390, 4), (.large, 320, 4), (.xxxLarge, 390, 4),
-            (.accessibility3, 390, nil), (.accessibility5, 390, nil), (.accessibility5, 320, nil),
+        struct Case { let size: DynamicTypeSize, width: CGFloat, perRow: Int? }
+        let cases = [
+            Case(size: .large, width: 390, perRow: 4), Case(size: .large, width: 320, perRow: 4),
+            Case(size: .xxxLarge, width: 390, perRow: 4), Case(size: .accessibility3, width: 390, perRow: 2),
+            Case(size: .accessibility5, width: 390, perRow: nil), Case(size: .accessibility5, width: 320, perRow: nil),
         ]
-        for (size, width, expected) in sizes {
+        for c in cases {
+            let (size, width, expected) = (c.size, c.width, c.perRow)
             let window = UIWindow(frame: CGRect(x: 0, y: 0, width: width, height: 844))
             window.rootViewController = UIHostingController(rootView: RecoverContent(state: state).environment(\.dynamicTypeSize, size).vettIDTheme())
             window.isHidden = false
