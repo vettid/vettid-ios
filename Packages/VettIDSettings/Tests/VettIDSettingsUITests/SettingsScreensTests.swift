@@ -142,10 +142,6 @@ import VettIDUI
     @Test func theStatusLines() {
         #expect(VaultStatusContent.stateText("unlocked") == "Unlocked" && VaultStatusContent.stateText("x") == "Unknown")
         #expect(VaultStatusContent.grouped("0123456789abcdef01", 8) == "01234567 89abcdef 01")
-        // A fingerprint is compared in groups of 8; one already grouped is kept as it is.
-        #expect(AttestationContent.fingerprintText("0123456789abcdef0123") == "01234567 89abcdef 0123")
-        #expect(AttestationContent.fingerprintText("aaaa bbbb") == "aaaa bbbb")
-        #expect(AttestationContent.fingerprintText(nil) == "-" && AttestationContent.fingerprintText("") == "-")
         #expect(VaultStatusContent.yesNo(nil) == "Unknown" && VaultStatusContent.yesNo(true) == "Yes")
         let notice = ReleaseInfoView(number: 3, status: "active", endsAt: nil, newestActive: 4, notice: "update_available")
         #expect(VaultStatusContent.releaseNotice(notice)?.hasPrefix("An update is available: release 4.") == true)

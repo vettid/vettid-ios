@@ -51,6 +51,17 @@ import VettIDData
         #expect(await eventually { Self.recorded.filter { $0 == .announcement("Check the item: 1 problem", .queued) }.count == 2 } != nil)
     }
 
+    /// The scroll waits for the first problem's place: the list of the others appears with the refusal, so its place is
+    /// known only after the form's next layout. Then it is taken once.
+    @Test func theScrollWaitsForTheProblemsPlace() {
+        var scroll = ProblemScroll(pending: .summary)
+        #expect(scroll.take([.name: .zero]) == nil && scroll.pending == .summary)
+        #expect(scroll.take([.name: .zero, .summary: CGRect(x: 0, y: 900, width: 300, height: 80)]) == .summary)
+        #expect(scroll.pending == nil && scroll.take([.summary: .zero]) == nil)
+        var none = ProblemScroll()
+        #expect(none.take([.name: .zero]) == nil)
+    }
+
     private func eventually<T>(_ value: @MainActor () -> T?) async -> T? {
         let clock = ContinuousClock()
         let end = clock.now.advanced(by: .seconds(5))

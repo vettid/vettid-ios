@@ -95,13 +95,24 @@ struct EditFixture {
         var s = ItemEditState()
         s.showErrors = true
         s.check = DraftCheck(problems: [.notesTooLong, .tooManyTags], fieldProblems: [3: [.labelEmpty], 1: [.valueInvalid, .labelEmpty]])
-        #expect(s.firstProblem == .field(1) && s.problemCount == 5)
+        // One per field that has problems (a field shows one text), the notes and the tags in the list.
+        #expect(s.firstProblem == .field(1) && s.problemCount == 4)
         s.check.fieldProblems = [:]
         #expect(s.firstProblem == .notes && s.problemCount == 2)
         s.check.problems = [.tooLarge]
         #expect(s.firstProblem == .summary && s.problemCount == 1)
         s.showErrors = false
         #expect(s.firstProblem == nil)
+    }
+
+    /// Only the list of the others has problems: the first refusal points to the list, which appears with it.
+    @Test func aRefusalWithOnlyTheListPointsToTheList() async {
+        let vm = f.vm()
+        vm.setName("Card")
+        for i in 0...ItemChecks.maxFields { vm.addField("Line \(i)", kind: FieldKinds.text) }
+        vm.save()
+        await vm.settle()
+        #expect(vm.state.refusedSaves == 1 && vm.state.firstProblem == .summary && vm.state.problemCount == 1)
     }
 
     @Test func aStandardItemIsCreated() async throws {

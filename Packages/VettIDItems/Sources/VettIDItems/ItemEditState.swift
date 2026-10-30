@@ -100,12 +100,13 @@ public struct ItemEditState: Equatable, Sendable, CustomStringConvertible, Custo
         return p.subtracting(ProblemPlace.inline).isEmpty ? nil : .summary
     }
 
-    /// How many problems are shown: the name's, each field's, the notes' and the others in the list.
+    /// How many problems are shown: one under the name, one under each field that has any (a field shows one text), one
+    /// under the notes, and each in the list of the others.
     public var problemCount: Int {
         let p = check.problems
         let name = p.isDisjoint(with: ProblemPlace.nameProblems) ? 0 : 1
         let notes = p.contains(.notesTooLong) ? 1 : 0
-        return name + notes + check.fieldProblems.values.reduce(0) { $0 + $1.count } + p.subtracting(ProblemPlace.inline).count
+        return name + notes + check.fieldProblems.values.count(where: { !$0.isEmpty }) + p.subtracting(ProblemPlace.inline).count
     }
 
     public var description: String { "ItemEditState(\(itemID ?? "new"), busy: \(busy), error: \(error.map { "\($0)" } ?? "nil"))" }

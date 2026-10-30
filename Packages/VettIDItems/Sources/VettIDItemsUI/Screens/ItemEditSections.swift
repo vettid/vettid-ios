@@ -10,6 +10,8 @@ struct OutlinedInput<Input: View>: View {
     let caption: String
     let supporting: String?
     var isError = false
+    /// Where VoiceOver's cursor goes to the error when a save is refused.
+    var problem: ProblemFocus?
     @ViewBuilder let input: () -> Input
 
     var body: some View {
@@ -18,8 +20,22 @@ struct OutlinedInput<Input: View>: View {
             input()
             if let supporting {
                 Text(supporting).vettIDFont(.bodySmall).foregroundStyle(isError ? colors.error : colors.onSurfaceVariant)
+                    .problemFocus(isError ? problem : nil)
             }
         }
+    }
+}
+
+/// A problem's place and the form's VoiceOver focus, given to the view that shows the problem's text.
+struct ProblemFocus {
+    let binding: AccessibilityFocusState<ProblemPlace?>.Binding
+    let place: ProblemPlace
+}
+
+extension View {
+    /// VoiceOver's cursor lands here, on the problem's own text, when [problem] is the first one of a refused save.
+    @ViewBuilder func problemFocus(_ problem: ProblemFocus?) -> some View {
+        if let problem { accessibilityFocused(problem.binding, equals: problem.place) } else { self }
     }
 }
 
@@ -52,14 +68,15 @@ struct PlainField: View {
 struct NameInput: View {
     let state: ItemEditState
     let actions: ItemEditActions
+    var problem: ProblemFocus?
 
     var body: some View {
-        let problem = [DraftProblem.nameEmpty, .nameTooLong].first { state.check.problems.contains($0) }
-        let shown = state.showErrors ? problem : nil
+        let nameProblem = [DraftProblem.nameEmpty, .nameTooLong].first { state.check.problems.contains($0) }
+        let shown = state.showErrors ? nameProblem : nil
         let hint = state.nameHint
         let supporting = shown.map { ItemsText.problem($0) }
             ?? (hint != nil && state.draft.name.trimmingCharacters(in: .whitespaces).isEmpty ? hint.map(ItemsStrings.nameDefault) : nil)
-        OutlinedInput(caption: ItemsStrings.name, supporting: supporting, isError: shown != nil) {
+        OutlinedInput(caption: ItemsStrings.name, supporting: supporting, isError: shown != nil, problem: problem) {
             PlainField(placeholder: hint, text: state.draft.name, isError: shown != nil) {
                 actions.onName($0.replacingOccurrences(of: "\n", with: ""))
             }
@@ -256,6 +273,7 @@ struct NotesInput: View {
     let state: ItemEditState
     let secret: Bool
     let actions: ItemEditActions
+    var problem: ProblemFocus?
 
     var body: some View {
         let d = state.draft
@@ -264,7 +282,7 @@ struct NotesInput: View {
         let binding = Binding(get: { d.notes }, set: { actions.onNotes($0) })
         let placeholder = d.keepNotes ? ItemsStrings.notesKeptPlaceholder : nil
         VStack(alignment: .leading, spacing: Spacing.xs) {
-            OutlinedInput(caption: ItemsStrings.notes, supporting: supporting, isError: tooLong) {
+            OutlinedInput(caption: ItemsStrings.notes, supporting: supporting, isError: tooLong, problem: problem) {
                 if secret {
                     SecretTextEditor(ItemsStrings.notes, text: binding, placeholder: placeholder, isError: tooLong)
                 } else {

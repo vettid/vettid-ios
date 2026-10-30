@@ -19,6 +19,8 @@ struct FieldEditor: View {
     /// A secret or critical item: no keyboard learning, no AutoFill, for every value a text keyboard would take.
     let secret: Bool
     let actions: ItemEditActions
+    /// Where VoiceOver's cursor goes to the error when a save is refused.
+    var problem: ProblemFocus?
 
     private var kindName: String { ItemsText.kindName(field) }
 
@@ -39,6 +41,7 @@ struct FieldEditor: View {
                 Text(error ?? hint)
                     .vettIDFont(.bodySmall)
                     .foregroundStyle(error == nil ? colors.onSurfaceVariant : colors.error)
+                    .problemFocus(error == nil ? nil : problem)
                     .accessibilityIdentifier(field.kept ? "item_edit_field_kept_\(index)" : "item_edit_field_hint_\(index)")
             }
             FieldMenu(index: index, count: count, field: field, caption: caption, actions: actions)

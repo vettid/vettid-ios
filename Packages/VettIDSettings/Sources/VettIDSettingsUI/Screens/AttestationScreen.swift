@@ -90,11 +90,6 @@ public struct AttestationContent: View {
         return SettingsStrings.attestationReleaseValue(Int(a.lastRelease), a.lastReleaseFingerprint ?? "-")
     }
 
-    /// A fingerprint as it is compared: in groups of 8 (as vettid-android groups a digest), unless it is already grouped.
-    static func fingerprintText(_ fp: String?) -> String {
-        guard let fp, !fp.isEmpty else { return "-" }
-        return fp.contains(" ") ? fp : VaultStatusContent.grouped(fp, 8)
-    }
 }
 
 /// The canary manifest installed on this phone (VAULT-RELEASES §10.1 step 9): its serial and key, the releases it lists,
@@ -155,9 +150,7 @@ private struct AndroidDeviceRows: View {
             SettingsDivider()
             SettingsInfoRow(SettingsStrings.attestationLocked, value: VaultStatusContent.yesNo(a.deviceLocked), icon: .lock)
             SettingsDivider()
-            SettingsInfoRow(
-                SettingsStrings.attestationBootKey, value: AttestationContent.fingerprintText(a.bootKeyFingerprint), icon: .key, code: true
-            )
+            SettingsInfoRow(SettingsStrings.attestationBootKey, value: a.bootKeyFingerprint ?? "-", icon: .key, code: true)
         }
     }
 }

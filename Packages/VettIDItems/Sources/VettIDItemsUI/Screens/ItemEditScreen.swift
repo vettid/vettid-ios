@@ -151,6 +151,8 @@ public struct ItemEditScreen: View {
     let actions: ItemEditActions
     /// Where the form shows each problem, in its own space (the form may be hosted apart, out of captures).
     @State private var places: [ProblemPlace: CGRect] = [:]
+    /// The first problem of a refused save, until its place is known.
+    @State private var scroll = ProblemScroll()
 
     public init(state: ItemEditState, actions: ItemEditActions) {
         self.state = state
@@ -203,15 +205,33 @@ public struct ItemEditScreen: View {
                     }
                     ProblemAnchors(places: places)
                 }
+                // The first problem may appear with the refusal (the list of the others): the scroll waits for its place.
                 .onChange(of: state.refusedSaves) {
-                    if let first = state.firstProblem { withAnimation { proxy.scrollTo(first, anchor: .top) } }
-                    // Queued: VoiceOver reads the problem it moves to first.
-                    Announcer.announce(ItemsStrings.iosSaveRefused(state.problemCount), .queued)
+                    scroll.pending = state.firstProblem
+                    scrollIfPlaced(proxy)
                 }
+                .onChange(of: places) { scrollIfPlaced(proxy) }
             }
         }
         .accessibilityIdentifier("item_edit")
         .modifier(ItemEditDialogs(state: state, actions: actions))
+    }
+
+    private func scrollIfPlaced(_ proxy: ScrollViewProxy) {
+        guard let target = scroll.take(places) else { return }
+        withAnimation { proxy.scrollTo(target, anchor: .top) }
+    }
+}
+
+/// The first problem of a refused save, held until the form has said where it is.
+struct ProblemScroll: Equatable {
+    var pending: ProblemPlace?
+
+    /// The pending problem once [places] has it, cleared; nil while its place is not known.
+    mutating func take(_ places: [ProblemPlace: CGRect]) -> ProblemPlace? {
+        guard let p = pending, places[p] != nil else { return nil }
+        pending = nil
+        return p
     }
 }
 
@@ -221,8 +241,8 @@ struct ItemEditForm: View {
     @Environment(\.vettIDColors) private var colors
     let state: ItemEditState
     let actions: ItemEditActions
-    /// Told where each problem's place is, in the form's space.
-    var onPlace: (ProblemPlace, CGRect) -> Void = { _, _ in }
+    /// Told where each problem's place is, in the form's space; nil once it is gone.
+    var onPlace: (ProblemPlace, CGRect?) -> Void = { _, _ in }
     /// VoiceOver's cursor, moved to the first problem when a save is refused.
     @AccessibilityFocusState private var focused: ProblemPlace?
 
@@ -236,7 +256,8 @@ struct ItemEditForm: View {
         let secret = d.sensitivity != .data || state.protection != .data
         VStack(alignment: .leading, spacing: Spacing.m) {
             notices
-            NameInput(state: state, actions: actions).problemPlace(.name, focus: $focused, onPlace: onPlace)
+            NameInput(state: state, actions: actions, problem: ProblemFocus(binding: $focused, place: .name))
+                .problemPlace(.name, onPlace: onPlace)
             CategoryPicker(category: d.category, customs: state.pickerCustoms, actions: actions)
             SensitivitySection(state: state, actions: actions)
             TagsSection(state: state, actions: actions)
@@ -248,18 +269,22 @@ struct ItemEditForm: View {
             ForEach(Array(d.fields.enumerated()), id: \.offset) { i, f in
                 FieldEditor(
                     index: i, count: d.fields.count, field: f, problems: show ? state.check.fieldProblems[i] ?? [] : [],
-                    focus: state.focusField == i, secret: secret, actions: actions
+                    focus: state.focusField == i, secret: secret, actions: actions,
+                    problem: ProblemFocus(binding: $focused, place: .field(i))
                 )
-                .problemPlace(.field(i), focus: $focused, onPlace: onPlace)
+                .problemPlace(.field(i), onPlace: onPlace)
             }
             AddFieldButton(enabled: d.fields.count < ItemChecks.maxFields, onAdd: actions.onAskAddField)
-            NotesInput(state: state, secret: secret, actions: actions).problemPlace(.notes, focus: $focused, onPlace: onPlace)
+            NotesInput(state: state, secret: secret, actions: actions, problem: ProblemFocus(binding: $focused, place: .notes))
+                .problemPlace(.notes, onPlace: onPlace)
             let other = problems.subtracting(ProblemPlace.inline)
             if show && !other.isEmpty {
                 let lines = other.map { ItemsText.problem($0) }.sorted().joined(separator: "\n")
                 // Not announced on its own: a refused save says how many problems there are and moves VoiceOver to the first.
                 NoticeCard(.warning, title: ItemsStrings.problemsTitle, message: lines)
-                    .problemPlace(.summary, focus: $focused, onPlace: onPlace)
+                    .accessibilityElement(children: .combine)
+                    .problemFocus(ProblemFocus(binding: $focused, place: .summary))
+                    .problemPlace(.summary, onPlace: onPlace)
                     .accessibilityIdentifier("item_edit_problems")
             }
             if let size = ItemsText.sizeNote(state.check) {
@@ -269,8 +294,21 @@ struct ItemEditForm: View {
             }
         }
         .coordinateSpace(.named(Self.space))
-        .onChange(of: state.refusedSaves) { focused = state.firstProblem }
+        // After the refusal's own update (the list of the others may appear with it), VoiceOver's cursor moves to the
+        // first problem's text, then hears how many there are, after the move so that the move does not cut it off.
+        .task(id: state.refusedSaves) {
+            guard state.refusedSaves > 0 else { return }
+            try? await Task.sleep(for: Self.focusDelay)
+            guard !Task.isCancelled else { return }
+            focused = state.firstProblem
+            try? await Task.sleep(for: Self.focusDelay)
+            guard !Task.isCancelled else { return }
+            Announcer.announce(ItemsStrings.iosSaveRefused(state.problemCount), .queued)
+        }
     }
+
+    /// How long the form waits after a refused save's update before moving VoiceOver, and again before speaking.
+    static let focusDelay = Duration.milliseconds(250)
 
     @ViewBuilder private var notices: some View {
         if let e = state.error {
@@ -311,12 +349,10 @@ private struct ProblemAnchors: View {
 }
 
 private extension View {
-    /// Marks a problem's [place]: where it is in the form, and VoiceOver's cursor when it is the first one.
-    func problemPlace(
-        _ place: ProblemPlace, focus: AccessibilityFocusState<ProblemPlace?>.Binding, onPlace: @escaping (ProblemPlace, CGRect) -> Void
-    ) -> some View {
-        accessibilityFocused(focus, equals: place)
-            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(ItemEditForm.space)) } action: { onPlace(place, $0) }
+    /// Marks where a problem's [place] is in the form, and that it is gone when it leaves.
+    func problemPlace(_ place: ProblemPlace, onPlace: @escaping (ProblemPlace, CGRect?) -> Void) -> some View {
+        onGeometryChange(for: CGRect.self) { $0.frame(in: .named(ItemEditForm.space)) } action: { onPlace(place, $0) }
+            .onDisappear { onPlace(place, nil) }
     }
 }
 #endif
