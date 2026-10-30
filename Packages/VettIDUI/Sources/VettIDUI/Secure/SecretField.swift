@@ -42,6 +42,7 @@ public struct SecretField: View {
     private let errorPriority: Announce
     private let supporting: String?
     private let onSubmit: () -> Void
+    private let next: Bool
     private let focus: Bool
     @State private var shown = false
     @Environment(\.vettIDColors) private var colors
@@ -49,10 +50,12 @@ public struct SecretField: View {
     /// [focus]: the field takes the keyboard (once, each time it turns true). The error is spoken to VoiceOver when it
     /// appears or changes, politely as on vettid-android (a check made while typing must not cut off the typing's echo);
     /// [errorPriority] `.assertive` for the result of an attempt. [spokenError]: what is said instead of an error that
-    /// changes by itself (a backoff counting down), so that it is said once.
+    /// changes by itself (a backoff counting down), so that it is said once. [next]: the first of several fields: Return is
+    /// "Next" and gives the keyboard to the field below (as vettid-android's `ImeAction.Next`), instead of [onSubmit].
     public init(
         _ label: String, text: Binding<String>, error: String? = nil, spokenError: String? = nil,
-        errorPriority: Announce = .polite, supporting: String? = nil, focus: Bool = false, onSubmit: @escaping () -> Void = {}
+        errorPriority: Announce = .polite, supporting: String? = nil, focus: Bool = false, next: Bool = false,
+        onSubmit: @escaping () -> Void = {}
     ) {
         self.label = label
         _text = text
@@ -61,13 +64,14 @@ public struct SecretField: View {
         self.errorPriority = errorPriority
         self.supporting = supporting
         self.focus = focus
+        self.next = next
         self.onSubmit = onSubmit
     }
 
     public var body: some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
             HStack(spacing: Spacing.s) {
-                SecretTextInput(text: $text, placeholder: label, visible: shown, focus: focus, onSubmit: onSubmit)
+                SecretTextInput(text: $text, placeholder: label, visible: shown, focus: focus, next: next, onSubmit: onSubmit)
                     .frame(minHeight: Spacing.touchTarget)
                     .accessibilityLabel(label)
                 Button { shown.toggle() } label: {
@@ -156,6 +160,8 @@ public struct SecretTextInput: UIViewRepresentable {
     let visible: Bool
     var style: Style?
     var focus = false
+    /// Return is "Next" and moves to the field below (``SecretFocus/next(after:)``) instead of calling [onSubmit].
+    var next = false
     var accept: Accept?
     let onSubmit: () -> Void
 
@@ -176,7 +182,7 @@ public struct SecretTextInput: UIViewRepresentable {
         }
 
         public func textFieldShouldReturn(_ field: UITextField) -> Bool {
-            parent.onSubmit()
+            if parent.next { SecretFocus.next(after: field) } else { parent.onSubmit() }
             return true
         }
     }
@@ -205,6 +211,7 @@ public struct SecretTextInput: UIViewRepresentable {
                 f.adjustsFontForContentSizeCategory = true
             }
         }
+        if next { f.returnKeyType = .next }
         f.delegate = context.coordinator
         f.addTarget(context.coordinator, action: #selector(Coordinator.changed(_:)), for: .editingChanged)
         f.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -234,5 +241,24 @@ enum SecretFocus {
         guard !given else { return }
         given = true
         DispatchQueue.main.async { [weak view] in view?.becomeFirstResponder() }
+    }
+
+    /// Gives the keyboard to the editable text input that comes after [view] in its form (its scroll view, else its
+    /// window): the nearest one below it, the leftmost of a row. Without one, the keyboard closes.
+    static func next(after view: UIView) {
+        guard let window = view.window else { return }
+        var form: UIView? = view.superview
+        while let v = form, !(v is UIScrollView) { form = v.superview }
+        let top = view.convert(view.bounds, to: window).minY
+        func inputs(_ v: UIView) -> [UIView] {
+            guard !v.isHidden, v.alpha > 0, v.isUserInteractionEnabled else { return [] }
+            let editable = (v as? UITextField)?.isEnabled ?? (v as? UITextView)?.isEditable ?? false
+            return (editable && v !== view ? [v] : []) + v.subviews.flatMap(inputs)
+        }
+        let below = inputs(form ?? window)
+            .map { ($0, $0.convert($0.bounds, to: window)) }
+            .filter { $0.1.minY > top }
+            .min { ($0.1.minY, $0.1.minX) < ($1.1.minY, $1.1.minX) }
+        if let below { below.0.becomeFirstResponder() } else { view.resignFirstResponder() }
     }
 }

@@ -125,7 +125,7 @@ public struct NewPasswordFields: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            SecretField(OnboardingStrings.passwordLabel, text: password).accessibilityIdentifier("password")
+            SecretField(OnboardingStrings.passwordLabel, text: password, next: true).accessibilityIdentifier("password")
             PasswordRuleText(rule: verdict.rule, refused: verdict.refused).padding(.top, Spacing.s).accessibilityIdentifier("password_rule")
             SecretField(
                 OnboardingStrings.passwordConfirmLabel,
