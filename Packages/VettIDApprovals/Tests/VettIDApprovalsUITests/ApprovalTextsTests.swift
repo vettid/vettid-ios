@@ -18,7 +18,7 @@ import VettIDApprovals
             .appendingPathComponent("Sources/VettIDApprovalsUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 155)
+        #expect(keys.count == 158)
         let missing = "\u{0}missing"
         for key in keys {
             let text = ApprovalsStrings.bundle.localizedString(forKey: key, value: missing, table: nil)
@@ -257,6 +257,28 @@ import VettIDApprovals
         #expect(ApprovalTexts.summary(blank) == nil)
         #expect(ApprovalTexts.supporting(blank, name: "Sam Lee") == row("Sam Lee"))
     }
+
+    /// A sign-in's match code (VAULT-MESSAGING 0.79.0 §10.4, IOS-PLAN §4.14): the draft texts word for word, the digits
+    /// spelled out to VoiceOver, and the sign-in's warning moved under the note when a code is shown.
+    @Test func theMatchCodeSaysItsDraftTexts() {
+        #expect(ApprovalsStrings.matchCodeLabel == "Match code")
+        #expect(ApprovalsStrings.matchCodeInstruction("42") == "Check that the sign-in screen shows the same number: 42")
+        let spoken = MatchCodeBlock.spoken("07")
+        #expect(String(spoken.characters) == "Match code 0 7")
+        for digit in ["0", "7"] {
+            #expect(spoken.range(of: digit).map { spoken[$0].accessibilitySpeechSpellsOutCharacters } == true, "\(digit)")
+        }
+        #expect(spoken.range(of: "0 7").map { spoken[$0].runs.count } == 3, "the space between the digits is not spelled out")
+        #expect(spoken.range(of: "Match code").map { spoken[$0].accessibilitySpeechSpellsOutCharacters } == .some(nil))
+        let coded = Samples.auth(purpose: .signin, matchCode: "42")
+        #expect(ApprovalTexts.body(coded, name: "Sam") == nil)
+        #expect(ApprovalTexts.body(Samples.auth(purpose: .signin), name: "Sam") == ApprovalsStrings.authSigninBody)
+        // No "verified" wording anywhere in the block's texts.
+        for text in [ApprovalsStrings.matchCodeLabel, ApprovalsStrings.matchCodeInstruction("42"), ApprovalsStrings.matchCodeSpoken("4 2")] {
+            #expect(!text.lowercased().contains("verif") && !text.lowercased().contains("safe") && !text.lowercased().contains("secure"))
+        }
+    }
+
 }
 
 // swiftlint:enable line_length

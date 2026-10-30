@@ -133,7 +133,23 @@ import VettIDUI
             s.approval = Samples.auth("a\(p)", purpose: p)
             return s
         }
+        var coded = out[4]
+        coded.approval = Samples.auth("am", purpose: .signin, matchCode: "07")
+        out.append(coded)
         return out
+    }
+
+    /// A sign-in with a match code: its block adds to the screen, and the digits are never cut at the largest text size.
+    @Test func theMatchCodeShowsAtEverySize() {
+        func facts(_ code: String?) -> CGFloat {
+            let view = Facts(approval: Samples.auth("am", purpose: .signin, matchCode: code), name: "VettID Member Service")
+            return UIHostingController(rootView: view.vettIDTheme(.light)).sizeThatFits(in: CGSize(width: 390, height: 2000)).height
+        }
+        #expect(facts("42") > facts(nil) + 40)
+        let large = UIHostingController(rootView: MatchCodeBlock(code: "123").environment(\.dynamicTypeSize, .accessibility5).vettIDTheme(.light))
+        let fit = large.sizeThatFits(in: CGSize(width: 320, height: 2000))
+        let normal = UIHostingController(rootView: MatchCodeBlock(code: "123").vettIDTheme(.light)).sizeThatFits(in: CGSize(width: 320, height: 2000))
+        #expect(fit.width <= 320 && fit.height > normal.height)
     }
 
     private func height(_ view: some View) -> CGFloat {

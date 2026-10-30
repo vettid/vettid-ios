@@ -409,6 +409,24 @@ enum ApprovalsStrings {
         String(localized: "approvals_auth_signin_body", defaultValue: "Only approve if you are signing in right now.", bundle: .module)
     }
 
+    /// The heading of a sign-in's match code (VAULT-MESSAGING 0.79.0 §10.4; IOS-PLAN §4.14, draft text).
+    static var matchCodeLabel: String {
+        String(localized: "approvals_match_code_label", defaultValue: "Match code", bundle: .module)
+    }
+
+    /// What to do with the match code (draft text).
+    static func matchCodeInstruction(_ value: String) -> String {
+        String(
+            localized: "approvals_match_code_instruction", defaultValue: "Check that the sign-in screen shows the same number: \(value)",
+            bundle: .module
+        )
+    }
+
+    /// The match code as VoiceOver reads it, [value] being its digits one by one ("Match code 4 2"; draft text).
+    static func matchCodeSpoken(_ value: String) -> String {
+        String(localized: "approvals_match_code_a11y", defaultValue: "Match code \(value)", bundle: .module)
+    }
+
     /// A `signin` challenge's decline: it sends `connection.authenticate.deny`, as "Deny" does.
     static var authSigninDeny: String { String(localized: "approvals_auth_signin_deny", defaultValue: "Not me", bundle: .module) }
 

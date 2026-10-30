@@ -96,11 +96,12 @@ enum ApprovalTexts {
     }
 
     /// The decision screen's body. An `approval` challenge has none: its title says who asks, and its note follows in full
-    /// (chosen; not in the spec).
+    /// (chosen; not in the spec). A sign-in with a match code has none either: its code comes first and its warning follows
+    /// the note (ANDROID-PLAN 0.1.100).
     static func body(_ a: PendingApproval, name: String?) -> String? {
         let conn = AccountNames.isolateOrNull(name) ?? ApprovalsStrings.aConnection
         switch a {
-        case .authentication(let x) where x.purpose == .signin: return ApprovalsStrings.authSigninBody
+        case .authentication(let x) where x.purpose == .signin: return x.matchCode == nil ? ApprovalsStrings.authSigninBody : nil
         case .authentication(let x) where x.purpose == .approval: return nil
         case .connection(.incoming(let r)):
             let n = AccountNames.isolateOrNull(r.name) ?? ApprovalsStrings.someone
