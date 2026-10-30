@@ -338,8 +338,7 @@ public final class ApprovalsManager: ApprovalsRepository {
     /// `sync.event`: another device decided (§10.1).
     private func onSync(_ o: JsonObject, ts: Date) {
         let kind = VaultJSON.string(o, "kind") ?? ""
-        // Withdrawn by its challenger (0.80.0 §10.4): noted whether or not a list already judged the ask, so that a screen
-        // showing it says so rather than "Already decided"; closed here like any other close.
+        // Withdrawn by its challenger (0.80.0 §10.4, ``withdrawn(_:ts:apply:)``): closed here like any other close.
         if kind == "connection.authenticate.decided", VaultJSON.bool(o, "withdrawn") == true, let id = VaultJSON.string(o, "request_id") {
             return withdrawn("auth:\(id)", ts: ts, apply: mergedListTs.map { ts > $0 } ?? true)
         }
@@ -484,6 +483,7 @@ public final class ApprovalsManager: ApprovalsRepository {
         if case .answered(let asks, let readTs) = pending.result {
             mergePendingAsks(asks, readTs: readTs, at: t, since: since, changed: changed)
         }
+        withdrawnBatchesListed()
     }
 
     /// The ids of the items each share question's batches brought after change [since].

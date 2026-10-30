@@ -11,28 +11,46 @@ extension ApprovalsManager {
 
     public func wasWithdrawn(_ key: String) -> Bool { withdrawnKeys.contains(key) }
 
-    /// The ask [key] was withdrawn by its challenger: noted (an unknown one too, harmlessly). [apply] false: a list already
-    /// read after the event judges whether the ask is open, as for any closing event (0.70.0 §10.4.2).
+    /// The ask [key] was withdrawn by its challenger: noted (an unknown one too, harmlessly), and closed. [apply] false: a
+    /// list already read after the event judges whether a held ask is open, as for any closing event (0.70.0 §10.4.2).
+    ///
+    /// Its feed item: an item that stands for this ask alone (`count` below 2) is always read, held or not, since reading
+    /// is harmless; an item standing for a batch is read once no ask of the batch is open. The batch is judged by the
+    /// asks' arrival here (§10.4.1's 10 minutes), which a list read blurs (every listed ask arrives at the read), so only a
+    /// batch's own item waits on it (chosen; not in the spec).
     func withdrawn(_ key: String, ts: Date, apply: Bool) {
         withdrawnKeys.removeAll { $0 == key }
         withdrawnKeys.append(key)
         if withdrawnKeys.count > Self.maxClosedAsks { withdrawnKeys.removeFirst() }
         guard let (_, ref) = FeedAsks.of(key) else { return }
         guard let ask = approvals.first(where: { $0.key == key }), let conn = ask.connectionID else {
-            // Not held here (its `.pending` not yet arrived, or a read on its way): the screens show nothing, and its own
-            // item is read unless it stands for a batch (chosen; not in the spec).
-            if apply { onAskRead(ref, true) }
+            // Not held here (its `.pending` not yet arrived, or a read on its way): the screens show nothing, and a late
+            // `.pending` or a list read begun before does not bring it back.
+            if apply { drop(key, closedAt: ts) }
+            onAskRead(ref, true)
             return
         }
         guard apply else { return }
         let batch = Self.batch(of: ask, connection: conn, in: approvals)
         drop(key, closedAt: ts)
+        onAskRead(ref, true)
         let others = Set(batch.map(\.key)).subtracting([key])
         if others.isEmpty {
             onAskRead(ref, false)
         } else if batch.first?.key == key {
-            // The batch's item is this ask's (its first): read once the others close.
+            // A batch's item is its first ask's: read once the others close.
             withdrawnBatches[ref] = others
+        }
+    }
+
+    /// After a list read: a batch waiting on asks the lists no longer hold (decided elsewhere or expired without an event
+    /// here) has its item read.
+    func withdrawnBatchesListed() {
+        let held = Set(approvals.map(\.key))
+        for (ref, open) in withdrawnBatches {
+            let left = open.intersection(held)
+            withdrawnBatches[ref] = left.isEmpty ? nil : left
+            if left.isEmpty { onAskRead(ref, false) }
         }
     }
 

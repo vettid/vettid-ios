@@ -71,7 +71,7 @@ final class WithdrawClock: @unchecked Sendable {
         arrives(m, "a1", at: 0)
         #expect(m.approvals.map(\.key) == ["auth:a1"])
         m.onEvent(withdrawn("a1"))
-        #expect(m.approvals.isEmpty && m.wasWithdrawn("auth:a1") && told() == ["a1"])
+        #expect(m.approvals.isEmpty && m.wasWithdrawn("auth:a1") && told() == ["a1:single", "a1"])
         // A late creation event does not bring it back.
         arrives(m, "a1", at: 5)
         #expect(m.approvals.isEmpty)
@@ -108,25 +108,26 @@ final class WithdrawClock: @unchecked Sendable {
         arrives(m, "a2", at: 60)
         arrives(m, "b1", conn: "c2", at: 90)
         m.onEvent(withdrawn("a1"))
-        #expect(Set(m.approvals.map(\.key)) == ["auth:a2", "auth:b1"] && told().isEmpty)
+        #expect(Set(m.approvals.map(\.key)) == ["auth:a2", "auth:b1"] && told() == ["a1:single"], "only an item of its own")
         m.onEvent(decidedElsewhere("a2"))
-        #expect(told() == ["a1"])
+        #expect(told() == ["a1:single", "a1"])
 
         arrives(m, "a3", at: 1_000)
         arrives(m, "a4", at: 1_060)
         m.onEvent(withdrawn("a3"))
         try await m.denyAuthentication("a4")
-        #expect(told() == ["a1", "a3"], "decided here")
+        #expect(told() == ["a1:single", "a1", "a3:single", "a3"], "decided here")
     }
 
-    /// A later ask of a batch (no item of its own) is withdrawn: nothing is read while the batch's first is open.
-    @Test func aLaterAskOfABatchReadsNothing() {
+    /// A later ask of a batch is withdrawn: only an item of its own is read (none, from the vault), never the batch's while
+    /// its first is open.
+    @Test func aLaterAskOfABatchReadsOnlyItsOwn() {
         let m = manager()
         let told = reads(m)
         arrives(m, "a1", at: 0)
         arrives(m, "a2", at: 60)
         m.onEvent(withdrawn("a2"))
-        #expect(m.approvals.map(\.key) == ["auth:a1"] && told().isEmpty)
+        #expect(m.approvals.map(\.key) == ["auth:a1"] && told() == ["a2:single"])
     }
 
     /// Asks more than 10 minutes apart are two batches: withdrawing the first reads its own item at once.
@@ -136,7 +137,59 @@ final class WithdrawClock: @unchecked Sendable {
         arrives(m, "a1", at: 0)
         arrives(m, "a2", at: 11 * 60)
         m.onEvent(withdrawn("a1"))
-        #expect(m.approvals.map(\.key) == ["auth:a2"] && told() == ["a1"])
+        #expect(m.approvals.map(\.key) == ["auth:a2"] && told() == ["a1:single", "a1"])
+    }
+
+    /// A withdrawal for an ask not yet held closes it: its late `.pending` does not bring it back.
+    @Test func anUnheldWithdrawalStaysClosed() {
+        let m = manager()
+        let told = reads(m)
+        m.onEvent(withdrawn("a1"))
+        arrives(m, "a1", at: 5)
+        #expect(m.approvals.isEmpty && told() == ["a1:single"])
+    }
+
+    /// A list read begun before the withdrawal of an ask not held still lists it: the withdrawal wins.
+    @Test func aListBegunBeforeAnUnheldWithdrawalDoesNotBringItBack() async throws {
+        let m = manager()
+        ops.pendingAsks = [(kind: "authenticate", body: auth("a1"))]
+        ops.pendingTs = t0
+        let gate = TestDeferred<Void>()
+        ops.listGate = gate
+        let read = Task { try await m.refreshApprovals() }
+        while ops.pendingCalls.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        m.onEvent(withdrawn("a1", ts: t0.addingTimeInterval(20)))
+        gate.complete(())
+        try await read.value
+        #expect(m.approvals.isEmpty)
+    }
+
+    /// After a list read every listed ask arrives at once, so two of the vault's batches look like one here: a withdrawn
+    /// ask's own item is read all the same.
+    @Test func askListedTogetherStillReadTheirOwnItems() async throws {
+        let m = manager()
+        let told = reads(m)
+        ops.pendingAsks = [(kind: "authenticate", body: auth("a1")), (kind: "authenticate", body: auth("a2"))]
+        ops.pendingTs = t0
+        try await m.refreshApprovals()
+        clock.now = t0.addingTimeInterval(60)
+        m.onEvent(withdrawn("a2"))
+        #expect(m.approvals.map(\.key) == ["auth:a1"] && told().contains("a2:single"))
+    }
+
+    /// A batch waiting on an ask that a list read no longer holds (decided elsewhere, no event here) has its item read.
+    @Test func aListReadEndsAWaitingBatch() async throws {
+        let m = manager()
+        let told = reads(m)
+        arrives(m, "a1", at: 0)
+        arrives(m, "a2", at: 60)
+        m.onEvent(withdrawn("a1"))
+        #expect(told() == ["a1:single"])
+        ops.pendingAsks = []
+        ops.pendingTs = t0.addingTimeInterval(120)
+        clock.now = t0.addingTimeInterval(120)
+        try await m.refreshApprovals()
+        #expect(m.approvals.isEmpty && told() == ["a1:single", "a1"])
     }
 
     /// A list already read after the event judges the ask; the flag is noted all the same, for a screen still showing it.
