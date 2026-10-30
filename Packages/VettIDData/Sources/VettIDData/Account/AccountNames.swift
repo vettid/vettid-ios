@@ -58,7 +58,8 @@ public enum AccountNames {
 
     /// ``isolateOrNull(_:)`` without the isolation (an initial, a search key): steps 1-4 as one line (every break and tab a
     /// space; Cc and Cf removed but ZWJ and ZWNJ; White_Space trimmed). Nil when nothing is left once
-    /// Default_Ignorable_Code_Point and White_Space code points are set aside. Also strips an isolate it is given.
+    /// Default_Ignorable_Code_Point and White_Space code points and U+2800 are set aside (``isEmptyText(_:)``). Also strips
+    /// an isolate it is given.
     public static func cleaned(_ s: String?) -> String? {
         s.map { scrub($0, keepLines: false, keepMarks: false, wholeText: false) }.flatMap { isEmptyText($0) ? nil : $0 }
     }

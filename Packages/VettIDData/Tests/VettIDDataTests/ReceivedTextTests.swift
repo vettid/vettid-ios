@@ -53,6 +53,8 @@ import Testing
         #expect(AccountNames.isolateOrNull("\u{2800}") == nil)
         #expect(AccountNames.cleanedLines("\u{2800}\n\u{3164}") == nil)
         #expect(AccountNames.cleaned("a\u{2800}b") == "a\u{2800}b")
+        // Not White_Space: the step-3 trim leaves it at either end.
+        #expect(AccountNames.cleaned(" \u{2800}a\u{2800} ") == "\u{2800}a\u{2800}")
         #expect(AccountNames.firstLineIsolated("\u{2800}\nPay") == AccountNames.isolate("Pay"))
         // Its neighbours in the Braille Patterns block are dots, not blanks.
         #expect(!AccountNames.isEmptyText("\u{2801}"))
