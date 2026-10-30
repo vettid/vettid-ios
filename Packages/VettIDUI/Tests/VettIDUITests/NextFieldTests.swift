@@ -10,7 +10,8 @@ import UIKit
 @Suite(.serialized) struct NextFieldTests {
     @Test func nextGivesTheKeyboardToTheFieldBelow() async throws {
         let submitted = Box()
-        let window = host(Form(submitted: submitted))
+        let form = Form(submitted: submitted)
+        let window = host(form)
         defer { window.isHidden = true }
         let fields = textFields(in: window).sorted { $0.convert($0.bounds, to: window).minY < $1.convert($1.bounds, to: window).minY }
         try #require(fields.count == 3)
@@ -20,20 +21,24 @@ import UIKit
         #expect(await eventually { fields[1].isFirstResponder })
         #expect(fields[1].delegate?.textFieldShouldReturn?(fields[1]) == true)
         #expect(await eventually { fields[2].isFirstResponder })
-        #expect(!submitted.value)
+        #expect(!submitted.value && !form.wrongSubmit.value, "a field with Next never submits")
         _ = fields[2].delegate?.textFieldShouldReturn?(fields[2])
         #expect(submitted.value)
     }
 
-    /// The last field of a form with "Next" (nothing below it) closes the keyboard.
+    /// The last field of a form with "Next" (nothing below it in the form) closes the keyboard; a field below the form, out
+    /// of it, is not given the keyboard.
     @Test func nextWithNothingBelowClosesTheKeyboard() async throws {
         let window = host(Lone())
         defer { window.isHidden = true }
-        let field = try #require(textFields(in: window).first)
+        let fields = textFields(in: window).sorted { $0.convert($0.bounds, to: window).minY < $1.convert($1.bounds, to: window).minY }
+        try #require(fields.count == 2)
+        let field = fields[0]
         field.becomeFirstResponder()
         #expect(await eventually { field.isFirstResponder })
         _ = field.delegate?.textFieldShouldReturn?(field)
         #expect(await eventually { !field.isFirstResponder })
+        #expect(!fields[1].isFirstResponder)
     }
 
     // MARK: - Helpers
@@ -68,6 +73,7 @@ private final class Box {
 
 private struct Form: View {
     let submitted: Box
+    let wrongSubmit = Box()
     @State private var a = ""
     @State private var b = ""
     @State private var c = ""
@@ -75,7 +81,7 @@ private struct Form: View {
     var body: some View {
         ScrollView {
             VStack(spacing: Spacing.l) {
-                SecretField("Current password", text: $a, next: true)
+                SecretField("Current password", text: $a, next: true) { wrongSubmit.value = true }
                 SecretField("New password", text: $b, next: true)
                 SecretField("Confirm", text: $c) { submitted.value = true }
             }
@@ -85,9 +91,13 @@ private struct Form: View {
 
 private struct Lone: View {
     @State private var a = ""
+    @State private var b = ""
 
     var body: some View {
-        ScrollView { SecretField("Password", text: $a, next: true) }
+        VStack {
+            ScrollView { SecretField("Password", text: $a, next: true) }
+            SecretField("Outside the form", text: $b)
+        }
     }
 }
 #endif

@@ -243,22 +243,25 @@ enum SecretFocus {
         DispatchQueue.main.async { [weak view] in view?.becomeFirstResponder() }
     }
 
-    /// Gives the keyboard to the editable text input that comes after [view] in its form (its scroll view, else its
-    /// window): the nearest one below it, the leftmost of a row. Without one, the keyboard closes.
+    /// Gives the keyboard to the editable text input that comes after [view] in its form (its scroll view, else its view
+    /// controller's view, never another screen's): the nearest one below it, the leftmost of a row. Without one, the
+    /// keyboard closes. VoiceOver's cursor goes with the keyboard.
     static func next(after view: UIView) {
         guard let window = view.window else { return }
         var form: UIView? = view.superview
-        while let v = form, !(v is UIScrollView) { form = v.superview }
+        while let v = form, !(v is UIScrollView), !(v.next is UIViewController) { form = v.superview }
         let top = view.convert(view.bounds, to: window).minY
         func inputs(_ v: UIView) -> [UIView] {
             guard !v.isHidden, v.alpha > 0, v.isUserInteractionEnabled else { return [] }
             let editable = (v as? UITextField)?.isEnabled ?? (v as? UITextView)?.isEditable ?? false
             return (editable && v !== view ? [v] : []) + v.subviews.flatMap(inputs)
         }
-        let below = inputs(form ?? window)
+        let below = inputs(form ?? view)
             .map { ($0, $0.convert($0.bounds, to: window)) }
             .filter { $0.1.minY > top }
             .min { ($0.1.minY, $0.1.minX) < ($1.1.minY, $1.1.minX) }
-        if let below { below.0.becomeFirstResponder() } else { view.resignFirstResponder() }
+        guard let below else { return _ = view.resignFirstResponder() }
+        below.0.becomeFirstResponder()
+        UIAccessibility.post(notification: .layoutChanged, argument: below.0)
     }
 }

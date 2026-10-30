@@ -116,6 +116,9 @@ public struct SetupTypeScreen: View {
     let state: OnboardingState
     let actions: any OnboardingActions
     let onBack: (@MainActor () -> Void)?
+    @FocusState private var emailFocused: Bool
+    /// The code field takes the keyboard: after "Next" on the email, until the email has it again.
+    @State private var codeFocused = false
 
     public init(state: OnboardingState, actions: any OnboardingActions, onBack: (@MainActor () -> Void)?) {
         self.state = state
@@ -145,7 +148,11 @@ public struct SetupTypeScreen: View {
                     .keyboardType(.emailAddress)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                    .submitLabel(.done)
+                    // "Next" goes on to the code (as vettid-android's `ImeAction.Next`).
+                    .submitLabel(.next)
+                    .focused($emailFocused)
+                    .onSubmit { codeFocused = true }
+                    .onChange(of: emailFocused) { _, now in if now { codeFocused = false } }
                     .accessibilityIdentifier("setup_email")
             }
             LabeledField(
@@ -162,6 +169,7 @@ public struct SetupTypeScreen: View {
                     capitalization: .allCharacters,
                     monospaced: true,
                     isError: state.codeInvalid,
+                    focus: codeFocused,
                     onSubmit: { actions.submitCode() }
                 )
                 .accessibilityIdentifier("setup_code")
