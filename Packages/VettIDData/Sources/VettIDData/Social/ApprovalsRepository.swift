@@ -107,6 +107,9 @@ public protocol ApprovalsRepository: ConnectionRequestsRepository {
     var vaultHeld: Bool { get }
     /// Reads `device.list` for the sessions' ends; a failure changes nothing.
     func readDeviceSessions() async throws
+    /// A screen asks for the sessions to be read again on `device.session` events and the lists' reads while it holds the
+    /// answer (let go when it goes; a lock ends it).
+    func askDeviceSessions() -> DeviceSessionsAsk
     /// "Deny and end access now": `device.session.end{device_id}` alone; the device's asks leave with it.
     func endDeviceAccess(_ deviceID: String) async throws
 }

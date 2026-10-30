@@ -211,10 +211,24 @@ public final class FakeApprovals: ApprovalsRepository {
 
     /// When set, ``endDeviceAccess(_:)`` waits for it (an end on its way).
     public var endGate: (@MainActor () async -> Void)?
+    /// When set, a failed end reads the sessions again with these, as ``ApprovalsManager`` does.
+    public var sessionsAfterFailedEnd: [String: Date]?
+    /// The screens asking for the sessions (``askDeviceSessions()``).
+    public private(set) var sessionAskers = 0
+
+    public func askDeviceSessions() -> DeviceSessionsAsk {
+        sessionAskers += 1
+        return DeviceSessionsAsk { [weak self] in Task { @MainActor in self?.sessionAskers -= 1 } }
+    }
 
     public func endDeviceAccess(_ deviceID: String) async throws {
         if let endGate { await endGate() }
-        try call("endDeviceAccess", deviceID)
+        do {
+            try call("endDeviceAccess", deviceID)
+        } catch {
+            if let again = sessionsAfterFailedEnd { sessionsRead(again) }
+            throw error
+        }
         deviceSessions[deviceID] = nil
         listed.removeAll { if case .device(let d) = $0 { d.deviceID == deviceID } else { false } }
     }

@@ -155,6 +155,10 @@ public final class ApprovalDetailViewModel {
     @ObservationIgnored private let sessionReadsAtOpen: Int
     /// Whether the device's session was last known live: a failed end is cleared when it then ends (nil: not known yet).
     @ObservationIgnored private var sessionWasLive: Bool?
+    /// A session request's screen asks for the sessions while it is open: given back when the model goes.
+    @ObservationIgnored private var sessionsAsk: DeviceSessionsAsk?
+    /// The device of the session request the screen opened on (nil for any other request).
+    @ObservationIgnored private var sessionDeviceID: String?
 
     /// [key]: the approval's ``PendingApproval/key``. [connections]: for the requester's name. [items]: the member's items a
     /// category entry can be answered with; [vault] in its place: the Vault list, read quietly when it has not been read
@@ -177,7 +181,9 @@ public final class ApprovalDetailViewModel {
         }))
         // A session request: whether it renews a live session comes from the device list, read now (0.78.0 §6.8 step 3).
         // The read never holds the request back; if it fails the request is a first request, until a later read answers.
-        if Self.sessionDevice(local.approval) != nil {
+        sessionDeviceID = Self.sessionDevice(local.approval)
+        if sessionDeviceID != nil {
+            sessionsAsk = repo.askDeviceSessions()
             let repo = repo
             work.launch { try? await repo.readDeviceSessions() }
             // A hold closes an open confirmation: nothing is ended while held (§6.8); a due check does not (chosen; not in
@@ -266,7 +272,7 @@ public final class ApprovalDetailViewModel {
     /// Whether this request's device has a live session now, nil while nothing is known (before a read, during a hold).
     private func sessionLive() -> Bool? {
         guard repo.deviceSessionsKnown, repo.deviceSessionReads > sessionReadsAtOpen else { return nil }
-        return sessionEnd(of: Self.sessionDevice(local.approval)).map { $0 > Date() } ?? false
+        return sessionEnd(of: sessionDeviceID).map { $0 > Date() } ?? false
     }
 
     /// The Vault list's items as answers, by name.
@@ -401,6 +407,9 @@ public final class ApprovalDetailViewModel {
                 local.done = true
             } catch {
                 guard let self else { return }
+                // What the clock says now: a session that passed while the end was on its way is not "ended" again by the
+                // read the failure brings, which would clear the failure at once.
+                sessionWasLive = state.renewalUntil() != nil
                 local.busy = false
                 local.ending = false
                 local.endFailure = failureKind(error)

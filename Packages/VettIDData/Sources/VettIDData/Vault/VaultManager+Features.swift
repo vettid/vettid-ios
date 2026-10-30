@@ -107,6 +107,7 @@ extension VaultManager {
     func forgetOpenLists() {
         forgetOwnProfile()
         forgetHeld()
+        approvals.vaultClosed()
     }
 
     /// The vault opened, or an owner check passed (§3.6.3: nothing held back is replayed as events): the member's own

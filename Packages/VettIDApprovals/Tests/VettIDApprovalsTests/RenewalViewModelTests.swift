@@ -263,6 +263,28 @@ import VettIDDataTesting
         #expect(!m.state.confirmEnd, "nothing to retry once the session ended")
     }
 
+    /// A failed end after the session passed by the clock (no event said so): the read the failure brings does not clear it.
+    @Test func aFailureAfterTheSessionPassedByTheClockStays() async throws {
+        let end = Date().addingTimeInterval(0.3)
+        let m = await model(["dev1": end])
+        m.askEndAccess()
+        try await Task.sleep(for: .milliseconds(400))
+        fake.fail["endDeviceAccess"] = VaultFailure(.network)
+        fake.sessionsAfterFailedEnd = ["dev1": end]
+        m.endAccess()
+        await m.settle()
+        for _ in 0..<20 { await Task.yield() }
+        #expect(m.state.endFailure == .network)
+    }
+
+    /// The screen asks for the sessions while it is open, and gives the ask back when it goes.
+    @Test func theScreenAsksWhileOpen() async {
+        var m: ApprovalDetailViewModel? = await model(["dev1": now.addingTimeInterval(1_800)])
+        #expect(fake.sessionAskers == 1)
+        m = nil
+        #expect(await eventually { fake.sessionAskers == 0 }, "\(String(describing: m))")
+    }
+
     func eventually(_ condition: @MainActor () -> Bool) async -> Bool {
         for _ in 0..<200 {
             if condition() { return true }

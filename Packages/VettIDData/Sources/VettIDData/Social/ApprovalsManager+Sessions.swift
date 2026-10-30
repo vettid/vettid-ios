@@ -1,12 +1,25 @@
 import Foundation
 import VettIDVault
 
+/// A screen's ask for the desktops' and agents' sessions (``ApprovalsRepository/askDeviceSessions()``), given back when it
+/// is let go.
+public final class DeviceSessionsAsk: Sendable {
+    private let release: @Sendable () -> Void
+
+    public init(_ release: @escaping @Sendable () -> Void) { self.release = release }
+
+    deinit { release() }
+}
+
 /// The bookkeeping of the sessions' reads and events, in the order they reach the app (``ApprovalsManager``'s
 /// `sessionBook`).
 final class DeviceSessionBook {
-    /// A screen asked for the sessions: a `device.session` event and a read of the lists (after an unlock, or when a hold
-    /// lifts) read them again. Kept across a hold, so a screen left open learns the sessions again when it lifts.
-    var wanted = false
+    /// The screens asking for the sessions (``DeviceSessionsAsk``): while one is open, a `device.session` event and a read
+    /// of the lists (an unlock, a hold that lifts) read them again. A hold keeps them (a screen that outlives it learns the
+    /// sessions again when it lifts); a lock ends them all (``ApprovalsManager/vaultClosed()``).
+    var askers = 0
+    /// Bumped at each lock: a screen's ask from before it is not given back twice.
+    var epoch = 0
     /// Bumped at each read's start and each event, so that an answer and the events are put in the order they came.
     var tick = 0
     /// The start of the newest read applied: an answer to a read begun before it is dropped.
@@ -29,15 +42,33 @@ final class DeviceSessionBook {
 /// `device.session` (§10.1). "Deny and end access now" ends the session with `device.session.end` alone.
 extension ApprovalsManager {
     /// Reads `device.list` for the sessions' ends. A read that fails changes nothing: until one is answered, no request is
-    /// a renewal. From now on a `device.session` event, and every read of the lists, reads it again.
+    /// a renewal.
     public func readDeviceSessions() async throws {
-        sessionBook.wanted = true
         try await readDeviceSessions(quietly: false)
     }
 
-    /// The sessions are read again, quietly, when a screen asked for them (``readDeviceSessions()``).
+    /// A screen asks for the sessions while it holds the answer: a `device.session` event, and every read of the lists,
+    /// read them again until it is let go (when the screen goes) or the vault locks.
+    public func askDeviceSessions() -> DeviceSessionsAsk {
+        sessionBook.askers += 1
+        let epoch = sessionBook.epoch
+        return DeviceSessionsAsk { [weak self] in Task { @MainActor in self?.stopAsking(epoch) } }
+    }
+
+    private func stopAsking(_ epoch: Int) {
+        guard epoch == sessionBook.epoch, sessionBook.askers > 0 else { return }
+        sessionBook.askers -= 1
+    }
+
+    /// The vault locked: every screen's ask ends with it.
+    public func vaultClosed() {
+        sessionBook.askers = 0
+        sessionBook.epoch += 1
+    }
+
+    /// The sessions are read again, quietly, while a screen asks for them (``askDeviceSessions()``).
     func rereadDeviceSessions() {
-        guard sessionBook.wanted else { return }
+        guard sessionBook.askers > 0 else { return }
         Task { [weak self] in try? await self?.readDeviceSessions(quietly: true) }
     }
 
@@ -96,7 +127,7 @@ extension ApprovalsManager {
     public var vaultHeld: Bool { held() }
 
     /// What the vault said of the sessions goes with the vault (a lock, a hold): nothing is known until it is read again.
-    /// Whether a screen asked stays, so the read when the hold lifts includes them.
+    /// The screens asking stay through a hold; a lock ends them (``vaultClosed()``).
     func forgetDeviceSessions() {
         deviceSessions = [:]
         deviceSessionsKnown = false

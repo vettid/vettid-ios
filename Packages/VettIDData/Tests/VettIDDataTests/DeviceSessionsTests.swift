@@ -51,6 +51,8 @@ import VettIDDataTesting
         m.onEvent(event("sync.event", #"{"kind":"device.session","device_id":"d1","expires_at":"\#(at(60))"}"#))
         #expect(m.deviceSessions == ["d1": now.addingTimeInterval(3_600)])
         #expect(!ops.calls.contains("deviceList"), "no screen asked: no read")
+        let ask = m.askDeviceSessions()
+        defer { withExtendedLifetime(ask) {} }
         try await m.readDeviceSessions()
         m.onEvent(event("sync.event", #"{"kind":"device.session","device_id":"d1"}"#))
         #expect(m.deviceSessions["d1"] == nil)
@@ -58,6 +60,26 @@ import VettIDDataTesting
     }
 
     /// Ending access sends `device.session.end` alone, never a deny, and the device's asks leave with it.
+    /// Once no screen asks (it went, or the vault locked), nothing reads the list again: not an event, not the lists' read.
+    @Test func noScreenNoReads() async throws {
+        let m = manager()
+        var ask: DeviceSessionsAsk? = m.askDeviceSessions()
+        m.onEvent(event("sync.event", #"{"kind":"device.session","device_id":"d1"}"#))
+        #expect(await eventually { ops.calls.filter { $0 == "deviceList" }.count == 1 })
+        ask = nil
+        for _ in 0..<20 { await Task.yield() }
+        m.onEvent(event("sync.event", #"{"kind":"device.session","device_id":"d1"}"#))
+        try await m.refreshApprovals()
+        for _ in 0..<20 { await Task.yield() }
+        #expect(ops.calls.filter { $0 == "deviceList" }.count == 1, "\(String(describing: ask))")
+        let kept = m.askDeviceSessions()
+        m.vaultClosed()
+        m.onEvent(event("sync.event", #"{"kind":"device.session","device_id":"d1"}"#))
+        for _ in 0..<20 { await Task.yield() }
+        #expect(ops.calls.filter { $0 == "deviceList" }.count == 1, "a lock ends every ask")
+        withExtendedLifetime(kept) {}
+    }
+
     @Test func endingAccessSendsTheEndAloneAndDropsTheAsks() async throws {
         ops.devices = [("d1", at(30))]
         let m = manager()
@@ -73,6 +95,8 @@ import VettIDDataTesting
     @Test func aFailedEndLeavesTheRequestOpen() async throws {
         ops.devices = [("d1", at(30))]
         let m = manager()
+        let ask = m.askDeviceSessions()
+        defer { withExtendedLifetime(ask) {} }
         try await m.readDeviceSessions()
         m.onEvent(event("device.session.pending", #"{"request_id":"s1","device_id":"d1","exp":"\#(at(10))"}"#))
         ops.errors["sessionEnd"] = FakeApprovalOps.error("retry")
@@ -115,6 +139,8 @@ import VettIDDataTesting
         let m = manager()
         try await m.refreshApprovals()
         #expect(!ops.calls.contains("deviceList"), "no screen asked: not read")
+        let ask = m.askDeviceSessions()
+        defer { withExtendedLifetime(ask) {} }
         try await m.readDeviceSessions()
         m.forgetOpenVault()
         try await m.refreshApprovals()
@@ -127,6 +153,8 @@ import VettIDDataTesting
         let m = manager()
         let gate = TestDeferred<Void>()
         ops.devicesGate = gate
+        let ask = m.askDeviceSessions()
+        defer { withExtendedLifetime(ask) {} }
         let read = Task { try await m.readDeviceSessions() }
         #expect(await eventually { ops.calls.contains("deviceList") })
         ops.devices = []
