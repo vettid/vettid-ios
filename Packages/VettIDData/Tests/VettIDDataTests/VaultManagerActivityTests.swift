@@ -275,12 +275,19 @@ import VettIDVault
         #expect(feed.items.isEmpty && feed.badge == FeedBadge())
         #expect(approvals.approvals.isEmpty && m.connections.requests.isEmpty && m.connections.local.requestNames.isEmpty)
         let grantReads = { service.requestsSeen.filter { $0 == "grant.list" }.count }
+        // The read of every list the unlock began may still be on its way (it reads the approvals' lists late on a loaded
+        // machine): it is not the check's read, so it ends before the count starts.
+        await m.listsRead?.value
         let before = grantReads()
+        let readsBefore = m.listsReads
         #expect(try await m.ownerChecks.check(pin: pin, password: password) == .passed)
         #expect(await eventually { feed.items.count == 1 }, "read again after the check")
         #expect(await eventually { Set(approvals.approvals.map(\.key)) == ["grant:\(grant)", "outgoing:\(r.connectionID)"] })
         #expect(m.connections.requests.map(\.sas) == [sas])
-        // This phone's own check reads every list once (`onPassed`), not again for the end of the hold.
+        // This phone's own check reads every list once (`onPassed`), not again for the end of the hold: the read of the
+        // end of the hold sees the count of reads changed and stands down.
+        #expect(m.listsReads == readsBefore + 1)
+        await m.listsRead?.value
         try await Task.sleep(for: .milliseconds(200))
         #expect(grantReads() == before + 1)
     }

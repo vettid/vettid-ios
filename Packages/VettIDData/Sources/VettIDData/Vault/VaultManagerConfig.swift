@@ -138,6 +138,10 @@ public struct VaultManagerConfig: Sendable {
     public var requestTimeout: TimeInterval
     /// TEST ONLY. ``DeviceConfig/requestTimeoutOf``: a request timeout by request type instead of [requestTimeout].
     public var requestTimeoutOf: (@Sendable (String) -> TimeInterval)?
+    /// TEST ONLY. How the owner check waits for the `vault.status` read after a failed check or a probe
+    /// (``OwnerCheckManager/statusAfterFailure``) instead of ``LockTiming/sleep``: a test lengthens the wait while the vault
+    /// answers, so that a loaded machine does not turn a slow answer into the app's estimate.
+    public var ownerCheckSleep: LockSleep?
     /// How long an enrollment waits for a `vault.enrolled` that a request whose answer was lost may have caused, before
     /// it sends another or reports `vault_exists` as another phone's vault (chosen; not in the spec: 15 s, a relay
     /// round trip with margin).
