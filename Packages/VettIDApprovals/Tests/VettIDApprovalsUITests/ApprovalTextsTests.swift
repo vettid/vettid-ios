@@ -263,6 +263,8 @@ import VettIDApprovals
     @Test func theMatchCodeSaysItsDraftTexts() {
         #expect(ApprovalsStrings.matchCodeLabel == "Match code")
         #expect(ApprovalsStrings.matchCodeInstruction("42") == "Check that the sign-in screen shows the same number: 42")
+        #if os(iOS)
+        // The block is the iPhone's (SwiftUI on iOS only).
         let spoken = MatchCodeBlock.spoken("07")
         #expect(String(spoken.characters) == "Match code 0 7")
         for digit in ["0", "7"] {
@@ -270,6 +272,7 @@ import VettIDApprovals
         }
         #expect(spoken.range(of: "0 7").map { spoken[$0].runs.count } == 3, "the space between the digits is not spelled out")
         #expect(spoken.range(of: "Match code").map { spoken[$0].accessibilitySpeechSpellsOutCharacters } == .some(nil))
+        #endif
         let coded = Samples.auth(purpose: .signin, matchCode: "42")
         #expect(ApprovalTexts.body(coded, name: "Sam") == nil)
         #expect(ApprovalTexts.body(Samples.auth(purpose: .signin), name: "Sam") == ApprovalsStrings.authSigninBody)

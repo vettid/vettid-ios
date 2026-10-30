@@ -109,6 +109,52 @@ import VettIDDataTesting
         #expect(m.deviceSessions["d1"] == now.addingTimeInterval(1_800))
     }
 
+    /// A screen that asked keeps asking across a hold: the read of the lists when it lifts reads the sessions too.
+    @Test func theListsReadAfterAHoldReadTheSessions() async throws {
+        ops.devices = [("d1", at(30))]
+        let m = manager()
+        try await m.refreshApprovals()
+        #expect(!ops.calls.contains("deviceList"), "no screen asked: not read")
+        try await m.readDeviceSessions()
+        m.forgetOpenVault()
+        try await m.refreshApprovals()
+        #expect(await eventually { m.deviceSessionsKnown && m.deviceSessions["d1"] != nil })
+    }
+
+    /// An event that comes while a read is on its way is newer than what the read answers.
+    @Test func anEventDuringAReadWins() async throws {
+        ops.devices = [("d1", at(30))]
+        let m = manager()
+        let gate = TestDeferred<Void>()
+        ops.devicesGate = gate
+        let read = Task { try await m.readDeviceSessions() }
+        #expect(await eventually { ops.calls.contains("deviceList") })
+        ops.devices = []
+        m.onEvent(event("sync.event", #"{"kind":"device.session","device_id":"d1"}"#))
+        gate.complete(())
+        try await read.value
+        #expect(m.deviceSessionsKnown && m.deviceSessions["d1"] == nil, "the stale answer does not bring the session back")
+        #expect(await eventually { m.deviceSessionReads == 2 } && m.deviceSessions["d1"] == nil)
+    }
+
+    /// An answer to a read begun before one already applied is dropped.
+    @Test func anOlderReadIsDropped() async throws {
+        ops.devices = [("d1", at(30))]
+        let m = manager()
+        let gate = TestDeferred<Void>()
+        ops.devicesGate = gate
+        let older = Task { try await m.readDeviceSessions() }
+        #expect(await eventually { ops.calls.contains("deviceList") })
+        ops.devicesGate = nil
+        ops.devices = [("d1", at(90))]
+        try await m.readDeviceSessions()
+        #expect(m.deviceSessions["d1"] == now.addingTimeInterval(5_400))
+        ops.devices = [("d1", at(30))]
+        gate.complete(())
+        try await older.value
+        #expect(m.deviceSessions["d1"] == now.addingTimeInterval(5_400) && m.deviceSessionReads == 1)
+    }
+
     @Test func theHoldIsAskedOfTheVault() {
         var held = false
         let m = manager { held }

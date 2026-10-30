@@ -209,7 +209,11 @@ public final class FakeApprovals: ApprovalsRepository {
         deviceSessionReads += 1
     }
 
+    /// When set, ``endDeviceAccess(_:)`` waits for it (an end on its way).
+    public var endGate: (@MainActor () async -> Void)?
+
     public func endDeviceAccess(_ deviceID: String) async throws {
+        if let endGate { await endGate() }
         try call("endDeviceAccess", deviceID)
         deviceSessions[deviceID] = nil
         listed.removeAll { if case .device(let d) = $0 { d.deviceID == deviceID } else { false } }

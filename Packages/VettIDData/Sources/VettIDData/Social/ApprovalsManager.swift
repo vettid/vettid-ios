@@ -121,8 +121,7 @@ public final class ApprovalsManager: ApprovalsRepository {
     public internal(set) var deviceSessionsKnown = false
     public internal(set) var deviceSessionReads = 0
     public internal(set) var deviceSessionsVersion = 0
-    /// A screen asked for the sessions since the vault was last forgotten: a `device.session` event reads them again.
-    @ObservationIgnored var deviceSessionsWanted = false
+    @ObservationIgnored let sessionBook = DeviceSessionBook()
     @ObservationIgnored let held: @MainActor () -> Bool
 
     /// [ops] the vault's calls, opened when needed; [quietOps] those of the background reads (nil: [ops]);
@@ -442,6 +441,7 @@ public final class ApprovalsManager: ApprovalsRepository {
 
     /// [requests] false: the connection requests are read by the caller.
     func refreshApprovals(quietly: Bool, requests: Bool = true) async throws {
+        rereadDeviceSessions()
         let g = generation
         let since = changes
         let t = now()

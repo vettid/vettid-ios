@@ -97,7 +97,7 @@ import VettIDDataTesting
         await m.settle()
         #expect(m.state.endFailure == .network)
         fake.sessionsRead([:])
-        #expect(m.state.endFailure == nil, "the session ended: nothing left to retry")
+        #expect(await eventually { m.state.endFailure == nil }, "the session ended: nothing left to retry")
     }
 
     /// The hold: a confirmation open closes and ends nothing; a failure stays said while nothing is known.
@@ -134,6 +134,141 @@ import VettIDDataTesting
         m.endAccess()
         await m.settle()
         #expect(fake.calls.contains("endDeviceAccess:dev1") && m.state.done)
+    }
+
+    func failedEnd(_ m: ApprovalDetailViewModel) async {
+        fake.fail["endDeviceAccess"] = VaultFailure(.network)
+        m.askEndAccess()
+        m.endAccess()
+        await m.settle()
+    }
+
+    /// What a hold does, and its lift: the request and the sessions drop, then come back with the next reads.
+    func holdAndLift(sessions: [String: Date]) async {
+        fake.vaultHeld = true
+        fake.forgetOpenVault()
+        await Task.yield()
+        fake.vaultHeld = false
+        fake.listed = [Self.session()]
+        fake.sessionsRead(sessions)
+    }
+
+    /// After a hold lifts, the request is a renewal again; a session still live keeps a failure, with Try again.
+    @Test func aLiveSessionAfterTheHoldKeepsTheFailure() async {
+        let m = await model(["dev1": now.addingTimeInterval(1_800)])
+        await failedEnd(m)
+        await holdAndLift(sessions: ["dev1": now.addingTimeInterval(1_800)])
+        #expect(await eventually { m.state.renewalUntil(at: now) != nil && m.state.endFailure == .network })
+        m.askEndAccess()
+        #expect(m.state.confirmEnd, "Try again asks again")
+    }
+
+    @Test func aSessionThatEndedDuringTheHoldClearsTheFailureWhenItLifts() async {
+        let m = await model(["dev1": now.addingTimeInterval(1_800)])
+        await failedEnd(m)
+        await holdAndLift(sessions: [:])
+        #expect(await eventually { m.state.endFailure == nil && m.state.renewalUntil(at: now) == nil })
+    }
+
+    /// A failure recorded after the session already ended stays: only a change from live to ended clears it.
+    @Test func aFailureRecordedAfterTheSessionPassedIsStillShown() async {
+        let m = await model(["dev1": now.addingTimeInterval(1_800)])
+        m.askEndAccess()
+        fake.sessionEvent("dev1", expiresAt: nil)
+        #expect(await eventually { m.state.renewalUntil(at: now) == nil })
+        fake.fail["endDeviceAccess"] = VaultFailure(.network)
+        m.endAccess()
+        await m.settle()
+        #expect(m.state.endFailure == .network)
+        fake.sessionsRead(["other": now.addingTimeInterval(60)])
+        fake.sessionEvent("other", expiresAt: nil)
+        for _ in 0..<20 { await Task.yield() }
+        #expect(m.state.endFailure == .network)
+    }
+
+    /// A due check (a forget without a hold) leaves an open confirmation open.
+    @Test func aDueCheckKeepsTheConfirmation() async {
+        let m = await model(["dev1": now.addingTimeInterval(1_800)])
+        m.askEndAccess()
+        fake.forgetOpenVault()
+        for _ in 0..<20 { await Task.yield() }
+        #expect(m.state.confirmEnd)
+    }
+
+    /// A hold closes the confirmation for good: it does not come back when the hold lifts.
+    @Test func theHoldClosesTheConfirmationForGood() async {
+        let m = await model(["dev1": now.addingTimeInterval(1_800)])
+        m.askEndAccess()
+        await holdAndLift(sessions: ["dev1": now.addingTimeInterval(1_800)])
+        for _ in 0..<20 { await Task.yield() }
+        #expect(!m.state.confirmEnd)
+    }
+
+    /// The session ends elsewhere (`sync.event device.session`): an open screen reads as a first request.
+    @Test func aSyncedEndMakesAFirstRequest() async {
+        let m = await model(["dev1": now.addingTimeInterval(1_800)])
+        fake.sessionEvent("dev1", expiresAt: nil)
+        #expect(m.state.renewalUntil(at: now) == nil && m.state.sessionEnd == nil)
+    }
+
+    @Test func cancellingTheConfirmationSendsNothing() async {
+        let m = await model(["dev1": now.addingTimeInterval(1_800)])
+        m.askEndAccess()
+        m.dismissEndAccess()
+        m.endAccess()
+        await m.settle()
+        #expect(!fake.calls.contains { $0.hasPrefix("endDeviceAccess") } && !m.state.done)
+    }
+
+    /// Ending access from the screen of a request that left keeps that screen while it is sent; ended from the request, the
+    /// screen never reads as gone before it closes.
+    @Test func theScreenStaysWhileAccessIsEnded() async {
+        var open: (@MainActor () -> Void)?
+        fake.endGate = { await withCheckedContinuation { c in open = { c.resume() } } }
+        let left = await model(["dev1": now.addingTimeInterval(1_800)])
+        left.askEndAccess()
+        fake.listed = []
+        left.endAccess()
+        #expect(await eventually { open != nil })
+        #expect(left.state.gone && left.state.busy)
+        open?()
+        await left.settle()
+        #expect(left.state.done)
+        open = nil
+        let shown = await model(["dev1": now.addingTimeInterval(1_800)])
+        shown.askEndAccess()
+        shown.endAccess()
+        #expect(await eventually { open != nil })
+        #expect(!shown.state.gone)
+        open?()
+        await shown.settle()
+        #expect(shown.state.done && !shown.state.gone)
+    }
+
+    /// A failed end on the screen of a request that left: said, with Try again only while the session is live.
+    @Test func aFailedEndOnTheGoneScreen() async {
+        let m = await model(["dev1": now.addingTimeInterval(1_800)])
+        m.askEndAccess()
+        fake.listed = []
+        fake.fail["endDeviceAccess"] = VaultFailure(.network)
+        m.endAccess()
+        await m.settle()
+        #expect(m.state.gone && m.state.endFailure == .network && m.state.renewalUntil(at: now) != nil)
+        m.askEndAccess()
+        #expect(m.state.confirmEnd, "Try again while the session is live")
+        m.dismissEndAccess()
+        fake.sessionEvent("dev1", expiresAt: nil)
+        #expect(await eventually { m.state.renewalUntil(at: now) == nil })
+        m.askEndAccess()
+        #expect(!m.state.confirmEnd, "nothing to retry once the session ended")
+    }
+
+    func eventually(_ condition: @MainActor () -> Bool) async -> Bool {
+        for _ in 0..<200 {
+            if condition() { return true }
+            await Task.yield()
+        }
+        return condition()
     }
 }
 

@@ -174,6 +174,15 @@ import VettIDUI
         return [renewal, confirming, failed, goneFailed, held, checkRefused]
     }
 
+    /// A failed end says what did not happen to the device, by its name or kind; a refused daily check says why in the
+    /// vault's words.
+    @Test func aFailedEndSaysWhy() {
+        let request = PendingApproval.device(DeviceRequest(type: "device.session.pending", id: "s1", deviceName: nil, role: "agent", requestType: nil, receivedAt: Samples.t0, exp: nil, deviceID: "dev1"))
+        #expect(EndFailureNotice.message(.network, request, timeScale: 1) == "Access for an agent could not be ended. Try again.")
+        let check = EndFailureNotice.message(.ownerCheckRequired, request, timeScale: 1)
+        #expect(check == ApprovalTexts.failure(.ownerCheckRequired, retryUntil: nil, limit: nil, now: Date(), timeScale: 1) && check != ApprovalsStrings.endFailed("an agent"))
+    }
+
     /// The renewal's notice says the approved words, and the decline-only line gives way to it.
     @Test func aRenewalSaysWhatADenyKeeps() {
         let request = DeviceRequest(type: "device.session.pending", id: "s1", deviceName: nil, role: "agent", requestType: nil, receivedAt: Samples.t0, exp: nil, deviceID: "dev1")

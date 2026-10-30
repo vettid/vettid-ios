@@ -71,6 +71,8 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
     public var ending = false
     /// The vault is held (§3.6.3): a confirmation ends nothing, and a failed end is not offered again.
     public var held = false
+    /// The session request the renewal's texts name, kept when it left the screen (a hold drops it).
+    public var endRequest: PendingApproval?
 
     public init(key: String) { self.key = key }
 
@@ -151,11 +153,8 @@ public final class ApprovalDetailViewModel {
     /// The repository's ``ApprovalsRepository/deviceSessionReads`` when the screen opened: a session request is judged by
     /// a read answered since (0.78.0 §6.8 step 3: the list is read when the request is shown).
     @ObservationIgnored private let sessionReadsAtOpen: Int
-    /// The repository's ``ApprovalsRepository/forgetCount`` when "End access for <device>?" opened: a lock or a hold
-    /// since closes it, and nothing is ended.
-    @ObservationIgnored private var forgetCountAtConfirm = 0
-    /// The sessions' version when ending access failed: the failure stays until the device list says the session ended.
-    @ObservationIgnored private var sessionsVersionAtFailure = 0
+    /// Whether the device's session was last known live: a failed end is cleared when it then ends (nil: not known yet).
+    @ObservationIgnored private var sessionWasLive: Bool?
 
     /// [key]: the approval's ``PendingApproval/key``. [connections]: for the requester's name. [items]: the member's items a
     /// category entry can be answered with; [vault] in its place: the Vault list, read quietly when it has not been read
@@ -181,6 +180,18 @@ public final class ApprovalDetailViewModel {
         if Self.sessionDevice(local.approval) != nil {
             let repo = repo
             work.launch { try? await repo.readDeviceSessions() }
+            // A hold closes an open confirmation: nothing is ended while held (§6.8); a due check does not (chosen; not in
+            // the spec, as vettid-android).
+            follows.add(follow(self, read: { m in m.repo.forgetCount }, apply: { m, _ in
+                if m.repo.vaultHeld { m.local.confirmEnd = false }
+            }))
+            // A failed end has nothing left to retry once the session it was about ends: cleared on that change only, so a
+            // failure recorded after the session had passed stays, as one kept while nothing is known (a hold).
+            follows.add(follow(self, read: { m in m.sessionLive() }, apply: { m, live in
+                guard let live else { return }
+                if m.sessionWasLive == true && !live { m.local.endFailure = nil }
+                m.sessionWasLive = live
+            }))
         }
         // A critical-item request from the list has only the payload's hash: the payload is fetched (§10.13).
         if case .critical(let c)? = local.approval, c.payload.isEmpty {
@@ -234,19 +245,28 @@ public final class ApprovalDetailViewModel {
         return d.deviceID
     }
 
-    /// The renewal's part of [s]: the session's end, the hold, the confirmation (closed by a lock or a hold since it
-    /// opened) and a failed end (until the device list says the session ended; kept while nothing is known, as during a
-    /// hold). The request kept when it left still names its device.
+    /// The renewal's part of [s]: the request it names (kept when it left), the session's end as a read since the screen
+    /// opened says, the hold, and the confirmation (closed while held).
     private func sessions(_ s: inout ApprovalDetailState) {
-        let device = Self.sessionDevice(s.approval ?? local.approval)
+        let request = s.approval ?? local.approval
+        let device = Self.sessionDevice(request)
+        s.endRequest = device == nil ? nil : request
         s.held = device != nil && repo.vaultHeld
-        let read = repo.deviceSessionsKnown && repo.deviceSessionReads > sessionReadsAtOpen
-        s.sessionEnd = read ? device.flatMap { repo.deviceSessions[$0] } : nil
-        s.confirmEnd = local.confirmEnd && repo.forgetCount == forgetCountAtConfirm && !s.held
-        if local.endFailure != nil, repo.deviceSessionsKnown, repo.deviceSessionsVersion != sessionsVersionAtFailure,
-           s.renewalUntil() == nil {
-            s.endFailure = nil
-        }
+        s.sessionEnd = sessionEnd(of: device)
+        s.confirmEnd = local.confirmEnd && !s.held
+    }
+
+    /// The end of [device]'s session as a `device.list` read answered since the screen opened says, nil when it has none
+    /// or nothing is known.
+    private func sessionEnd(of device: String?) -> Date? {
+        guard repo.deviceSessionsKnown, repo.deviceSessionReads > sessionReadsAtOpen else { return nil }
+        return device.flatMap { repo.deviceSessions[$0] }
+    }
+
+    /// Whether this request's device has a live session now, nil while nothing is known (before a read, during a hold).
+    private func sessionLive() -> Bool? {
+        guard repo.deviceSessionsKnown, repo.deviceSessionReads > sessionReadsAtOpen else { return nil }
+        return sessionEnd(of: Self.sessionDevice(local.approval)).map { $0 > Date() } ?? false
     }
 
     /// The Vault list's items as answers, by name.
@@ -351,7 +371,6 @@ public final class ApprovalDetailViewModel {
         let s = state
         guard !s.busy, !s.held, s.renewalUntil() != nil else { return }
         if (s.gone || s.notHeld) && s.endFailure == nil { return }
-        forgetCountAtConfirm = repo.forgetCount
         local.confirmEnd = true
         local.endFailure = nil
     }
@@ -385,7 +404,6 @@ public final class ApprovalDetailViewModel {
                 local.busy = false
                 local.ending = false
                 local.endFailure = failureKind(error)
-                sessionsVersionAtFailure = repo.deviceSessionsVersion
             }
         }
     }

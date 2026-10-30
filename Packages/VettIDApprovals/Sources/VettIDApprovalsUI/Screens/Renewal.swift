@@ -15,7 +15,7 @@ struct RenewalNotices: View {
 
     var body: some View {
         if let until = state.renewalUntil(at: now) {
-            Text(ApprovalsStrings.renewalNotice(ApprovalTexts.deviceSentenceStart(state.approval), ApprovalTimes.full(until)))
+            Text(ApprovalsStrings.renewalNotice(ApprovalTexts.deviceSentenceStart(state.endRequest), ApprovalTimes.full(until)))
                 .vettIDFont(.bodyLarge)
                 .padding(.top, Spacing.l)
                 .accessibilityIdentifier("renewal_notice")
@@ -23,7 +23,7 @@ struct RenewalNotices: View {
                 label: ApprovalsStrings.denyEndAccess, identifier: "deny_end_access", destructive: true, action: actions.onAskEndAccess
             )
             .disabled(state.busy)
-                .padding(.top, Spacing.m)
+            .padding(.top, Spacing.m)
         }
         if let failure = state.endFailure {
             EndFailureNotice(failure: failure, state: state, actions: actions, canRetry: state.renewalUntil(at: now) != nil)
@@ -54,10 +54,15 @@ struct EndFailureNotice: View {
     let actions: DecisionActions
     let canRetry: Bool
 
-    var body: some View {
-        let message = failure == .ownerCheckRequired
+    /// The failure's words: the vault's for a refused daily check, else what did not happen to [request]'s device.
+    static func message(_ failure: FailureKind, _ request: PendingApproval?, timeScale: UInt64) -> String {
+        failure == .ownerCheckRequired
             ? ApprovalTexts.failure(failure, retryUntil: nil, limit: nil, now: Date(), timeScale: timeScale)
-            : ApprovalsStrings.endFailed(ApprovalTexts.deviceSentenceInline(state.approval))
+            : ApprovalsStrings.endFailed(ApprovalTexts.deviceSentenceInline(request))
+    }
+
+    var body: some View {
+        let message = Self.message(failure, state.endRequest, timeScale: timeScale)
         NoticeCard(.warning, title: ApprovalsStrings.endFailedTitle, message: message, announce: .assertive) {
             HStack(spacing: Spacing.m) {
                 // Nothing to retry once the session has passed.
@@ -74,7 +79,7 @@ extension View {
     func endAccessConfirmation(_ state: ApprovalDetailState, _ actions: DecisionActions) -> some View {
         confirmDialog(
             isPresented: Binding(get: { state.confirmEnd }, set: { if !$0 { actions.onDismissEndAccess() } }),
-            title: ApprovalsStrings.endAccessTitle(ApprovalTexts.deviceSentenceInline(state.approval)),
+            title: ApprovalsStrings.endAccessTitle(ApprovalTexts.deviceSentenceInline(state.endRequest)),
             message: ApprovalsStrings.endAccessBody,
             confirmLabel: ApprovalsStrings.endAccess,
             destructive: true,

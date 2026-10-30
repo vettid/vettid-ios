@@ -122,7 +122,7 @@ enum ApprovalsStrings {
     /// A desktop that gave no name, in the device row and on its decision screen (VAULT-MESSAGING 0.76.0 §10.8 step 4).
     static var aDesktop: String { String(localized: "approvals_a_desktop", defaultValue: "A desktop", bundle: .module) }
 
-    /// An agent that gave no name, inside a sentence (same key as vettid-android's `approvals_an_agent_inline`).
+    /// A desktop that gave no name, inside a sentence (same key as vettid-android's `approvals_a_desktop_inline`).
     static var aDesktopInline: String {
         String(localized: "approvals_a_desktop_inline", defaultValue: "a desktop", bundle: .module)
     }
@@ -166,6 +166,7 @@ enum ApprovalsStrings {
         String(localized: "approvals_end_failed", defaultValue: "Access for \(device) could not be ended. Try again.", bundle: .module)
     }
 
+    /// An agent that gave no name, inside a sentence (same key as vettid-android's `approvals_an_agent_inline`).
     static var anAgentInline: String {
         String(localized: "approvals_an_agent_inline", defaultValue: "an agent", bundle: .module)
     }
