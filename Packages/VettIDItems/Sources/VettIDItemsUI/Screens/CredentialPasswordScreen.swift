@@ -42,6 +42,8 @@ struct CredentialPasswordScreen: View {
                     ItemsStrings.passwordLabel,
                     text: Binding(get: { prompt.password }, set: { onPassword($0) }),
                     error: prompt.errorText(now),
+                    spokenError: prompt.spokenError(now),
+                    errorPriority: .assertive,
                     onSubmit: { if prompt.canSend(Date()) { onSubmit() } }
                 )
                 .disabled(prompt.busy)

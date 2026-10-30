@@ -38,7 +38,11 @@ struct ClaimFailure: View {
         } else if let kind = state.error {
             let text = kind == .rateLimited && state.retrySeconds > 0
                 ? RecoveryStrings.recoverRateLimitedWait(formatWait(state.retrySeconds)) : kind.message(timeScale: timeScale)
-            NoticeCard(.urgent, title: MoveStrings.recoverFailedTitle, message: text, announce: .assertive)
+            // The wait counts down in the text: the failure's own text is what is said, once.
+            NoticeCard(
+                .urgent, title: MoveStrings.recoverFailedTitle, message: text, announce: .assertive,
+                announcement: "\(MoveStrings.recoverFailedTitle). \(kind.message(timeScale: timeScale))"
+            )
                 .accessibilityIdentifier("error")
         }
     }

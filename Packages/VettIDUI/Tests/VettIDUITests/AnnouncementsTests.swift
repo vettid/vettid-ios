@@ -35,6 +35,18 @@ import UIKit
         #expect(!events.contains { if case .announcement(let t, _) = $0 { t.contains("Quiet notice") } else { false } })
     }
 
+    @Test func aNoticeWhoseMessageCountsDownIsSpokenOnce() async {
+        let model = Live(text: "Try again in 0:30")
+        let events = await recording {
+            let window = host(Countdown(model: model))
+            #expect(await eventually { $0.contains(.announcement("Failed. Too many tries.", .assertive)) })
+            model.text = "Try again in 0:29"
+            try? await Task.sleep(for: .milliseconds(200))
+            window.isHidden = true
+        }
+        #expect(events.filter { $0 == .announcement("Failed. Too many tries.", .assertive) }.count == 1)
+    }
+
     @Test func aCountdownIsSpokenOnce() async {
         let model = Live(text: "Try again in 30 s")
         let events = await recording {
@@ -112,6 +124,15 @@ private struct LiveText: View {
 private struct Once: View {
     let model: Live
     var body: some View { Text(model.text ?? "").announcedOnce(model.text ?? "") }
+}
+
+private struct Countdown: View {
+    let model: Live
+    var body: some View {
+        NoticeCard(
+            .urgent, title: "Failed", message: model.text ?? "", announce: .assertive, announcement: "Failed. Too many tries."
+        )
+    }
 }
 
 private struct Steps: View {

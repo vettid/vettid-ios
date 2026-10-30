@@ -1,5 +1,6 @@
 #if os(iOS)
 import Foundation
+import Observation
 import SwiftUI
 import Testing
 import UIKit
@@ -32,6 +33,28 @@ import VettIDOnboarding
         var s = unlock
         s.message = .badPin
         #expect(await spoken(UnlockScreen(state: s, actions: NoUnlockActions()), OnboardingStrings.unlockBadPin, .assertive))
+    }
+
+    /// The failure is cleared when the next attempt starts (`setPin`), so a second wrong PIN is said again.
+    @Test func aSecondWrongPinIsSpokenAgain() async {
+        var bad = unlock
+        bad.message = .badPin
+        let holder = UnlockHolder(bad)
+        let saved = Announcer.sink
+        Self.recorded = []
+        Announcer.sink = { Self.recorded.append($0) }
+        defer { Announcer.sink = saved }
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.rootViewController = UIHostingController(rootView: HeldUnlock(holder: holder).vettIDTheme())
+        window.isHidden = false
+        window.layoutIfNeeded()
+        defer { window.isHidden = true }
+        let wrong = Announcer.Event.announcement(OnboardingStrings.unlockBadPin, .assertive)
+        #expect(await eventually { Self.recorded.filter { $0 == wrong }.count == 1 })
+        holder.state = unlock
+        try? await Task.sleep(for: .milliseconds(100))
+        holder.state = bad
+        #expect(await eventually { Self.recorded.filter { $0 == wrong }.count == 2 })
     }
 
     @Test func aFailedUnlockIsSpokenAtOnce() async {
@@ -68,13 +91,28 @@ import VettIDOnboarding
         window.isHidden = false
         window.layoutIfNeeded()
         defer { window.isHidden = true }
+        return await eventually { Self.recorded.contains(.announcement(text, priority)) }
+    }
+
+    private func eventually(_ condition: @MainActor () -> Bool) async -> Bool {
         let clock = ContinuousClock()
         let end = clock.now.advanced(by: .seconds(5))
         while clock.now < end {
-            if Self.recorded.contains(.announcement(text, priority)) { return true }
+            if condition() { return true }
             try? await Task.sleep(for: .milliseconds(10))
         }
-        return false
+        return condition()
     }
+}
+
+@MainActor @Observable
+private final class UnlockHolder {
+    var state: UnlockState
+    init(_ state: UnlockState) { self.state = state }
+}
+
+private struct HeldUnlock: View {
+    let holder: UnlockHolder
+    var body: some View { UnlockScreen(state: holder.state, actions: NoUnlockActions()) }
 }
 #endif

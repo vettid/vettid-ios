@@ -55,6 +55,11 @@ public struct PasswordPrompt: Equatable, Sendable, CustomStringConvertible, Cust
         }
     }
 
+    /// What VoiceOver says of ``errorText(_:)`` at [now]: a running backoff without its seconds, which change each second.
+    public func spokenError(_ now: Date) -> String? {
+        waiting(now) > 0 ? ItemsStrings.passwordBackoffUndated : errorText(now)
+    }
+
     /// The step's title, by its purpose.
     public var title: String {
         switch purpose {

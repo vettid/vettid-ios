@@ -56,7 +56,8 @@ public struct RecoverContent: View {
 
     public var body: some View {
         screen
-            .announcesStepChanges(of: state.step)
+            // Loading and the intro are one screen.
+            .announcesStepChanges(of: state.step == .loading ? .intro : state.step)
             .confirmDialog(
                 isPresented: Binding(get: { state.confirmStartOver }, set: { if !$0 { actions.dismissStartOver() } }),
                 // What "Start over" does, said plainly: the app cannot cancel the recovery itself (§11.11.4).
@@ -183,7 +184,7 @@ public struct RecoverContent: View {
                 .accessibilityIdentifier("recover_typed")
                 Text(groups)
                     .vettIDFont(.bodySmall)
-                    .accessibilityAddTraits(.updatesFrequently)
+                    .announced(groups)
                     .accessibilityIdentifier("typed_groups")
                 if let problem {
                     TypedProblemText(text: problem)

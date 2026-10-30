@@ -48,7 +48,9 @@ public enum Announcer {
 
 public extension View {
     /// Android's live region: [text] is spoken when this view appears with it and each time it changes to another text,
-    /// wherever VoiceOver is. For a result or a notice that comes by itself, never for a countdown that ticks.
+    /// wherever VoiceOver is. For a result or a notice that comes by itself, never for a countdown that ticks. The same
+    /// text twice in a row is said again only if it went in between (nil, or the view gone): the models clear a failure
+    /// when the next attempt starts.
     func announced(_ text: String?, _ priority: Announce = .polite) -> some View {
         modifier(Announced(text: text, priority: priority))
     }

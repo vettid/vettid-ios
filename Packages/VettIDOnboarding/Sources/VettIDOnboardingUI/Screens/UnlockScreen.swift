@@ -170,6 +170,7 @@ public struct UnlockScreen: View {
             label: OnboardingStrings.unlockPinLabel,
             buffer: pin,
             error: state.message == .badPin && pin.count == 0 ? OnboardingStrings.unlockBadPin : nil,
+            failure: state.message == .badPin ? OnboardingStrings.unlockBadPin : nil,
             identifier: "unlock_pin"
         )
         .disabled(!state.pinAllowed)
@@ -258,6 +259,7 @@ struct UnlockNotices: View {
         if state.serviceWaitSeconds > 0 {
             Text(OnboardingStrings.unlockServiceWait(formatWait(state.serviceWaitSeconds)))
                 .vettIDFont(.bodyMedium)
+                .announcedOnce(OnboardingStrings.unlockServiceWait(formatWait(state.serviceWaitSeconds)))
                 .accessibilityIdentifier("unlock_service_wait")
         }
         if let p = state.preflight {

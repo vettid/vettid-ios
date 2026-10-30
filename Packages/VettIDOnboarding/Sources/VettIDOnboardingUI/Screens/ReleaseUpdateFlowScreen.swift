@@ -65,7 +65,7 @@ public struct ReleaseUpdateFlowContent: View {
                 screen(p)
             }
         }
-        .announcesStepChanges(of: state.progress?.step)
+        .announcesStepChanges(of: state.progress.map { Self.screenOf($0.step) })
         .confirmDialog(
             isPresented: Binding(get: { state.abandonConfirm }, set: { if !$0 { actions.dismissAbandon() } }),
             title: OnboardingStrings.releaseUpdateReturnConfirmTitle(from),
@@ -94,6 +94,15 @@ public struct ReleaseUpdateFlowContent: View {
 
     private var from: Int { Int(state.progress?.from.number ?? 0) }
     private var to: Int { Int(state.progress?.to.number ?? 0) }
+
+    /// The screen a step shows: the steps that share one are not a new screen for VoiceOver.
+    private static func screenOf(_ step: UpdateStep) -> String {
+        switch step {
+        case .locking, .approving, .reopening, .abandoning: "progress"
+        case .badPin, .failed: "retry"
+        default: "\(step)"
+        }
+    }
 
     @ViewBuilder private func screen(_ p: UpdateProgress) -> some View {
         switch p.step {
@@ -245,6 +254,7 @@ private struct UpdatePin: View {
         PinEntry(
             label: OnboardingStrings.unlockPinLabel, buffer: pin,
             error: progress.failure == .badPin && pin.count == 0 ? OnboardingStrings.unlockBadPin : nil,
+            failure: progress.failure == .badPin ? OnboardingStrings.unlockBadPin : nil,
             identifier: "release_update_pin"
         )
         .disabled(!state.pinAllowed)
@@ -252,6 +262,7 @@ private struct UpdatePin: View {
             Text(OnboardingStrings.unlockWait(formatWait(state.waitSeconds)))
                 .vettIDFont(.bodySmall)
                 .frame(maxWidth: .infinity)
+                .announcedOnce(OnboardingStrings.unlockWait(formatWait(state.waitSeconds)))
                 .accessibilityIdentifier("release_update_wait")
         }
     }

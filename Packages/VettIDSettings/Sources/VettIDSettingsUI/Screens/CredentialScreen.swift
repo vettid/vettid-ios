@@ -262,7 +262,7 @@ struct WindowPasswordSheet: View {
             Text(CredentialStrings.windowDialogBody).vettIDFont(.bodyMedium).foregroundStyle(colors.onSurfaceVariant)
             SecretField(
                 CredentialStrings.passwordLabel, text: Binding(get: { state.windowPassword }, set: { actions.setWindowPassword($0) }),
-                error: state.windowError?.message(timeScale: timeScale), onSubmit: actions.openWindow
+                error: state.windowError?.message(timeScale: timeScale), errorPriority: .assertive, onSubmit: actions.openWindow
             )
             .disabled(state.busy)
             .accessibilityIdentifier("dialog_password")

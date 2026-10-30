@@ -195,11 +195,13 @@ public struct TransferOutContent: View {
                         .vettIDFont(.bodySmall)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
+                        .announcedOnce(TransferStrings.transferWait(Self.mmss(state.waitSeconds)))
                         .accessibilityIdentifier("transfer_wait")
                 }
                 SecretField(
                     TransferStrings.transferPassword, text: Binding(get: { state.password }, set: { actions.setPassword($0) }),
-                    error: state.error == .badPassword ? TransferStrings.transferBadPassword : nil, onSubmit: askApprove
+                    error: state.error == .badPassword ? TransferStrings.transferBadPassword : nil, errorPriority: .assertive,
+                    onSubmit: askApprove
                 )
                 .disabled(state.waitSeconds > 0 || state.busy)
                 .accessibilityIdentifier("transfer_password")

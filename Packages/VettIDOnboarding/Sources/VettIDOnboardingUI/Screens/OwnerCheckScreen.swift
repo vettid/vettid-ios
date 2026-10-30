@@ -264,6 +264,7 @@ public struct OwnerCheckScreen: View {
                 label: OnboardingStrings.ownerCheckPinLabel,
                 buffer: pin,
                 error: badPin && pin.count == 0 ? OnboardingStrings.ownerCheckBadPin : nil,
+                failure: badPin ? OnboardingStrings.ownerCheckBadPin : nil,
                 identifier: "owner_check_pin"
             )
             .disabled(!state.entriesAllowed)
@@ -273,6 +274,7 @@ public struct OwnerCheckScreen: View {
             OnboardingStrings.ownerCheckPasswordLabel,
             text: Binding(get: { state.password }, set: { actions.setPassword($0) }),
             error: badPassword ? OnboardingStrings.ownerCheckBadPassword : nil,
+            errorPriority: .assertive,
             onSubmit: submit
         )
         .disabled(!state.entriesAllowed)
