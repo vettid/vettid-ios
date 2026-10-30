@@ -31,11 +31,18 @@ struct MatchCodeBlock: View {
         .padding(.bottom, Spacing.l)
     }
 
-    /// "Match code 4 2": the digits apart and marked to be spelled out, so that 42 is never read as "forty-two".
+    /// "Match code 4 2": the digits apart, each marked to be spelled out (the spaces between them are not), so that 42 is
+    /// never read as "forty-two".
     static func spoken(_ code: String) -> AttributedString {
         let digits = code.map(String.init).joined(separator: " ")
         var text = AttributedString(ApprovalsStrings.matchCodeSpoken(digits))
-        if let range = text.range(of: digits) { text[range].accessibilitySpeechSpellsOutCharacters = true }
+        guard let range = text.range(of: digits) else { return text }
+        var i = range.lowerBound
+        while i < range.upperBound {
+            let next = text.characters.index(after: i)
+            if text.characters[i] != " " { text[i..<next].accessibilitySpeechSpellsOutCharacters = true }
+            i = next
+        }
         return text
     }
 }

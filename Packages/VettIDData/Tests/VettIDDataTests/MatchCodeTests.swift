@@ -51,6 +51,19 @@ import VettIDVault
         #expect(try code(nil, context: "Sign in to VettID Member Service, match code 42") == nil)
         #expect(try code(#""17""#, context: "match code 42") == "17")
     }
+
+    /// The feed's words, which a notification uses, never carry the number: it is for the member who opened the prompt, and a
+    /// notification can be read on a locked phone.
+    @Test func theFeedNeverCarriesTheCode() {
+        var sam = ConnectionInfo(id: "c1", name: "", state: .active)
+        sam.firstName = "Sam"
+        let coded = PendingApproval.authentication(AuthenticationRequest(requestID: "s1", connectionID: "c1", context: "Sign in", receivedAt: at, exp: nil, purpose: .signin, matchCode: "42"))
+        let names = FeedNames(connections: ["c1": sam], approvals: ["auth:s1": coded])
+        let item = FeedItem(itemID: "i", seq: 1, kind: "connection.authenticate.requested", at: "2026-10-27T12:00:00Z", status: "active", priority: "high", connectionID: "c1", ref: "s1")
+        let texts = [FeedKinds.title(item, names), FeedKinds.title(item, names, details: false), FeedKinds.supporting(item, names) ?? ""]
+        #expect(texts[0].hasPrefix("Sign in to"))
+        for text in texts { #expect(!text.contains("42"), "\(text)") }
+    }
 }
 
 // swiftlint:enable line_length

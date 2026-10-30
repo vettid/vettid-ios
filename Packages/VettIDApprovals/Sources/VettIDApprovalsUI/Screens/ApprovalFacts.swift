@@ -45,10 +45,14 @@ struct Facts: View {
             case .connection(.incoming(let r)): incoming(r)
             case .connection(.outgoing(let r)): outgoing(r)
             case .authentication(let x):
-                // A sign-in's match code comes first, directly under the title (0.79.0).
-                if let code = x.matchCode { MatchCodeBlock(code: code) }
-                FactLabel(ApprovalsStrings.from)
-                FactValue(AccountNames.isolateOrNull(name) ?? ApprovalsStrings.aConnectionInline)
+                // A sign-in's match code comes first, directly under the title (0.79.0); its title already names the
+                // connection, so the note follows the code (ANDROID-PLAN 0.1.100).
+                if let code = x.matchCode {
+                    MatchCodeBlock(code: code)
+                } else {
+                    FactLabel(ApprovalsStrings.from)
+                    FactValue(AccountNames.isolateOrNull(name) ?? ApprovalsStrings.aConnectionInline)
+                }
                 // The challenger's claim (§10.4), in full whatever the purpose; a fixed line when a purpose comes without one.
                 if let c = ApprovalTexts.contextNote(x) {
                     FactLabel(ApprovalsStrings.context)

@@ -265,8 +265,10 @@ import VettIDApprovals
         #expect(ApprovalsStrings.matchCodeInstruction("42") == "Check that the sign-in screen shows the same number: 42")
         let spoken = MatchCodeBlock.spoken("07")
         #expect(String(spoken.characters) == "Match code 0 7")
-        let digits = spoken.range(of: "0 7")
-        #expect(digits.map { spoken[$0].accessibilitySpeechSpellsOutCharacters } == true)
+        for digit in ["0", "7"] {
+            #expect(spoken.range(of: digit).map { spoken[$0].accessibilitySpeechSpellsOutCharacters } == true, "\(digit)")
+        }
+        #expect(spoken.range(of: "0 7").map { spoken[$0].runs.count } == 3, "the space between the digits is not spelled out")
         #expect(spoken.range(of: "Match code").map { spoken[$0].accessibilitySpeechSpellsOutCharacters } == .some(nil))
         let coded = Samples.auth(purpose: .signin, matchCode: "42")
         #expect(ApprovalTexts.body(coded, name: "Sam") == nil)
