@@ -265,16 +265,30 @@ import VettIDDataTesting
 
     /// A failed end after the session passed by the clock (no event said so): the read the failure brings does not clear it.
     @Test func aFailureAfterTheSessionPassedByTheClockStays() async throws {
-        let end = Date().addingTimeInterval(0.3)
+        let end = Date().addingTimeInterval(1)
         let m = await model(["dev1": end])
         m.askEndAccess()
-        try await Task.sleep(for: .milliseconds(400))
+        try await Task.sleep(for: .milliseconds(1_200))
         fake.fail["endDeviceAccess"] = VaultFailure(.network)
         fake.sessionsAfterFailedEnd = ["dev1": end]
         m.endAccess()
         await m.settle()
         for _ in 0..<20 { await Task.yield() }
         #expect(m.state.endFailure == .network)
+    }
+
+    /// A screen opened before its request is held (from the feed, before the list answered) follows the request from when
+    /// it arrives: it asks, reads, and becomes a renewal.
+    @Test func aRequestHeldAfterTheScreenOpenedBecomesARenewal() async {
+        fake.sessionsGate = { [fake, now] in fake.deviceSessions = ["dev1": now.addingTimeInterval(1_800)] }
+        let m = ApprovalDetailViewModel(key: key, approvals: fake, connections: connections)
+        await m.settle()
+        #expect(m.state.approval == nil && fake.sessionAskers == 0 && !fake.calls.contains("readDeviceSessions:"))
+        fake.listed = [Self.session()]
+        #expect(await eventually { fake.calls.contains("readDeviceSessions:") })
+        await m.settle()
+        #expect(await eventually { m.state.renewalUntil(at: now) != nil })
+        #expect(fake.sessionAskers == 1)
     }
 
     /// The screen asks for the sessions while it is open, and gives the ask back when it goes.

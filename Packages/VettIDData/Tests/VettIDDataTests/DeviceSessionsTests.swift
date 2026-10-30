@@ -59,7 +59,6 @@ import VettIDDataTesting
         #expect(await eventually { ops.calls.filter { $0 == "deviceList" }.count == 2 })
     }
 
-    /// Ending access sends `device.session.end` alone, never a deny, and the device's asks leave with it.
     /// Once no screen asks (it went, or the vault locked), nothing reads the list again: not an event, not the lists' read.
     @Test func noScreenNoReads() async throws {
         let m = manager()
@@ -80,6 +79,7 @@ import VettIDDataTesting
         withExtendedLifetime(kept) {}
     }
 
+    /// Ending access sends `device.session.end` alone, never a deny, and the device's asks leave with it.
     @Test func endingAccessSendsTheEndAloneAndDropsTheAsks() async throws {
         ops.devices = [("d1", at(30))]
         let m = manager()
