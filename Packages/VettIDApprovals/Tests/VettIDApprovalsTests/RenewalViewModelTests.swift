@@ -147,7 +147,8 @@ import VettIDDataTesting
     func holdAndLift(sessions: [String: Date]) async {
         fake.vaultHeld = true
         fake.forgetOpenVault()
-        await Task.yield()
+        // A hold lasts at least until the owner check passes: the screen's followers see it before it lifts.
+        try? await Task.sleep(for: .milliseconds(200))
         fake.vaultHeld = false
         fake.listed = [Self.session()]
         fake.sessionsRead(sessions)
