@@ -72,7 +72,7 @@ public struct SecretField: View {
             .padding(.leading, Spacing.l)
             .overlay(RoundedRectangle(cornerRadius: VettIDShape.small).stroke(error == nil ? colors.outline : colors.error))
             if let error {
-                Text(error).vettIDFont(.bodySmall).foregroundStyle(colors.error).accessibilityAddTraits(.updatesFrequently)
+                Text(error).vettIDFont(.bodySmall).foregroundStyle(colors.error).announced(error, .assertive)
             }
             if let supporting { Text(supporting).vettIDFont(.bodySmall).foregroundStyle(colors.onSurfaceVariant) }
         }

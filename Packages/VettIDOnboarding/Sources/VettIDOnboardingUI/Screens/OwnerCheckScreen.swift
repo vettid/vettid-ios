@@ -216,34 +216,36 @@ public struct OwnerCheckScreen: View {
         if state.locked, state.lockCauseUnknown {
             Text(OnboardingStrings.unlockLockConfirmed)
                 .vettIDFont(.bodyMedium)
+                .announced(OnboardingStrings.unlockLockConfirmed)
                 .accessibilityIdentifier("owner_check_locked_unknown")
         }
         // Probably locked: the approved lines; the fields are not offered.
         if state.watch != .none, !state.locked {
-            Text(
-                state.watch == .checking
-                    ? OnboardingStrings.ownerCheckProbablyLockedChecking : OnboardingStrings.ownerCheckProbablyLockedSilent
-            )
-            .vettIDFont(.bodyMedium)
-            .accessibilityAddTraits(.updatesFrequently)
-            .accessibilityIdentifier("owner_check_probably_locked")
+            let text = state.watch == .checking
+                ? OnboardingStrings.ownerCheckProbablyLockedChecking : OnboardingStrings.ownerCheckProbablyLockedSilent
+            Text(text)
+                .vettIDFont(.bodyMedium)
+                .announced(text, .assertive)
+                .accessibilityIdentifier("owner_check_probably_locked")
         }
         if state.locked, !state.lockCauseUnknown {
             NoticeCard(
-                .urgent, title: OnboardingStrings.unlockOwnerCheckLockedTitle, message: OnboardingStrings.unlockOwnerCheckLockedBody
+                .urgent, title: OnboardingStrings.unlockOwnerCheckLockedTitle, message: OnboardingStrings.unlockOwnerCheckLockedBody,
+                announce: .assertive
             )
             .accessibilityIdentifier("owner_check_locked")
         }
         if let left = state.unlockedWrong, !state.locked {
             Text(OnboardingStrings.unlockCheckPasswordWrong(left))
                 .vettIDFont(.bodyMedium)
-                .accessibilityAddTraits(.updatesFrequently)
+                .announced(OnboardingStrings.unlockCheckPasswordWrong(left), .assertive)
                 .accessibilityIdentifier("owner_check_unlocked_wrong")
         }
         if state.unlockedOpen, !state.locked {
             // The approved wording of the backoff state (IOS-PLAN 0.1.48; VAULT-MESSAGING 0.71.1 §3.6.5).
             Text(OnboardingStrings.unlockCheckOpenWaiting)
                 .vettIDFont(.bodyMedium)
+                .announced(OnboardingStrings.unlockCheckOpenWaiting)
                 .accessibilityIdentifier("owner_check_unlocked_open")
         }
     }
@@ -295,22 +297,25 @@ struct OwnerCheckMessageView: View {
             Text(OnboardingStrings.ownerCheckChecksLeft(left))
                 .vettIDFont(.bodyMedium)
                 .foregroundStyle(left <= OwnerCheckScreen.warnLeft ? colors.error : colors.onSurfaceVariant)
+                .announced(OnboardingStrings.ownerCheckChecksLeft(left))
                 .accessibilityIdentifier("owner_check_left")
         }
         if state.waitSeconds > 0 {
             Text(OnboardingStrings.ownerCheckBackoffWait(formatWait(state.waitSeconds)))
                 .vettIDFont(.bodyMedium)
+                // Said once when the wait starts, never at each tick.
+                .announcedOnce(OnboardingStrings.ownerCheckBackoffWait(formatWait(state.waitSeconds)))
                 .accessibilityIdentifier("owner_check_wait")
         } else if state.message == .backoff {
-            Text(OnboardingStrings.ownerCheckBackoff).vettIDFont(.bodyMedium)
+            Text(OnboardingStrings.ownerCheckBackoff).vettIDFont(.bodyMedium).announced(OnboardingStrings.ownerCheckBackoff)
         } else if case .maybeCounted(let atLeast)? = state.message {
             // (VAULT-MESSAGING 0.73.2 §3.6.5) The check may have counted: the fewest tries that may remain.
             Text(OnboardingStrings.unlockCheckMaybeCounted(atLeast))
                 .vettIDFont(.bodyMedium)
-                .accessibilityAddTraits(.updatesFrequently)
+                .announced(OnboardingStrings.unlockCheckMaybeCounted(atLeast), .assertive)
                 .accessibilityIdentifier("owner_check_maybe_counted")
         } else if case .failed(let kind, _)? = state.message {
-            NoticeCard(.urgent, title: kind.title(or: title), message: kind.message(timeScale: state.timeScale))
+            NoticeCard(.urgent, title: kind.title(or: title), message: kind.message(timeScale: state.timeScale), announce: .assertive)
                 .accessibilityIdentifier("owner_check_failed")
         }
     }
@@ -327,8 +332,7 @@ struct PresenceNotice: View {
     }
 
     var body: some View {
-        NoticeCard(.warning, title: OnboardingStrings.ownerCheckPresenceTitle, message: Self.body(scaledQuiet))
-            .accessibilityAddTraits(.updatesFrequently)
+        NoticeCard(.warning, title: OnboardingStrings.ownerCheckPresenceTitle, message: Self.body(scaledQuiet), announce: .polite)
             .accessibilityIdentifier("owner_check_presence")
     }
 }

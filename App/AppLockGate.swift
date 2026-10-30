@@ -122,12 +122,15 @@ final class AppLockWindow {
         }
         guard window.isHidden else { return }
         window.makeKeyAndVisible()
+        // VoiceOver moves into the lock, which came up by itself.
+        Announcer.screenChanged()
     }
 
     func hide() {
         guard !window.isHidden else { return }
         window.isHidden = true
         scene?.windows.first { $0 !== window && $0.windowLevel == .normal }?.makeKey()
+        Announcer.screenChanged()
     }
 }
 

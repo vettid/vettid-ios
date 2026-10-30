@@ -226,7 +226,7 @@ public struct ScannerNoCameraNote: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .accessibilityIdentifier("scanner_no_camera")
             // Appears by itself where the preview would be: spoken (vettid-android's polite live region).
-            .onAppear { AccessibilityNotification.Announcement(UIStrings.scannerNoCamera).post() }
+            .announcedOnce(UIStrings.scannerNoCamera)
     }
 }
 

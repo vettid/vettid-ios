@@ -53,7 +53,7 @@ public struct ApprovalsScreen: View {
             ProgressView().tint(colors.primary.color).frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityIdentifier("approvals_loading")
         } else if state.nothing, let error = state.error {
-            NoticeCard(.warning, title: ApprovalsStrings.errorTitle, message: error.message(timeScale: timeScale)) {
+            NoticeCard(.warning, title: ApprovalsStrings.errorTitle, message: error.message(timeScale: timeScale), announce: .polite) {
                 NoticeAction(label: ApprovalsStrings.retry, identifier: "approvals_retry", action: actions.onRetry)
             }
             .padding(Spacing.xl)
@@ -78,7 +78,7 @@ public struct ApprovalsScreen: View {
             let held = error == .ownerCheckRequired
             NoticeCard(
                 held ? .info : .warning, title: held ? ApprovalsStrings.openAsksHeldTitle : ApprovalsStrings.openAsksErrorTitle,
-                message: error.message(timeScale: timeScale)
+                message: error.message(timeScale: timeScale), announce: .polite
             ) {
                 if !held { NoticeAction(label: ApprovalsStrings.retry, identifier: "open_asks_retry", action: actions.onRetry) }
             }

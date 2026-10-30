@@ -60,6 +60,8 @@ public struct ApprovalDetailScreen: View {
                 gone
             }
         }
+        // The result, "Already decided" or "No longer on this phone" replaces the request in place: a new screen for VoiceOver.
+        .announcesStepChanges(of: step)
         .onChange(of: state.done, initial: true) { _, done in if done { actions.onBack() } }
         .onDisappear { actions.onForgetSecrets() }
         .onChange(of: scenePhase) { _, now in if now == .background { actions.onForgetSecrets() } }
@@ -88,8 +90,17 @@ public struct ApprovalDetailScreen: View {
         .accessibilityIdentifier("approval_not_held")
     }
 
+    private enum Step { case decision, result, notHeld, gone }
+
+    /// Which of the screen's steps shows, apart from an expiry while open (``live(_:now:)``).
+    private var step: Step {
+        if state.approval == nil || state.gone { return state.notHeld ? .notHeld : .gone }
+        return state.criticalResult == nil ? .decision : .result
+    }
+
     @ViewBuilder private func live(_ a: PendingApproval, now: Date) -> some View {
-        if state.expired(at: now) { gone } else { decision(a, now: now) }
+        // Expired while open: "Already decided" in its place, a new screen for VoiceOver.
+        if state.expired(at: now) { gone.onAppear { Announcer.screenChanged() } } else { decision(a, now: now) }
     }
 
     private func result(_ status: String) -> some View {
@@ -159,10 +170,13 @@ struct DecisionContent: View {
                     .padding(.top, Spacing.m)
             }
             if let error = state.error {
-                Text(ApprovalTexts.failure(error, retryUntil: state.retryUntil, limit: state.limit, now: now, timeScale: timeScale))
+                let text = ApprovalTexts.failure(error, retryUntil: state.retryUntil, limit: state.limit, now: now, timeScale: timeScale)
+                Text(text)
                     .vettIDFont(.bodyMedium)
                     .foregroundStyle(colors.error)
                     .padding(.top, Spacing.m)
+                    // Once: a password backoff counts down in it.
+                    .announcedOnce(text, .assertive)
                     .accessibilityIdentifier("failure")
             }
         }

@@ -22,6 +22,7 @@ struct FailureLine: View {
                 .vettIDFont(.bodyMedium)
                 .foregroundStyle(colors.error)
                 .padding(.top, Spacing.s)
+                .announced(kind.message(timeScale: timeScale), .assertive)
                 .accessibilityIdentifier("failure")
         }
     }

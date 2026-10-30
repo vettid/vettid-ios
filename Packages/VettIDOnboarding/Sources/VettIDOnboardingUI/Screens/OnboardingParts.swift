@@ -17,7 +17,7 @@ struct ErrorNotice: View {
         if let kind = state.error {
             let text = override != nil && kind == override
                 ? overrideText ?? kind.message(timeScale: timeScale) : Self.message(kind, state.errorRetryAt, timeScale: timeScale)
-            NoticeCard(.urgent, title: OnboardingStrings.progressFailed, message: text)
+            NoticeCard(.urgent, title: OnboardingStrings.progressFailed, message: text, announce: .assertive)
                 .padding(.top, Spacing.l)
                 .accessibilityIdentifier("error")
         }
@@ -158,6 +158,7 @@ public struct PinEntry: View {
                     .vettIDFont(.bodySmall)
                     .foregroundStyle(colors.error)
                     .multilineTextAlignment(.center)
+                    .announced(error, .assertive)
                     .accessibilityIdentifier("\(identifier)_error")
             }
         }

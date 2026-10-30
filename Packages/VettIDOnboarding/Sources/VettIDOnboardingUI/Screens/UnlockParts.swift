@@ -68,7 +68,10 @@ struct SignerRefusedNotice: View {
     let actions: any UnlockActions
 
     var body: some View {
-        NoticeCard(.urgent, title: OnboardingStrings.unlockSignerRefusedTitle, message: OnboardingStrings.unlockSignerRefusedBody) {
+        NoticeCard(
+            .urgent, title: OnboardingStrings.unlockSignerRefusedTitle, message: OnboardingStrings.unlockSignerRefusedBody,
+            announce: .assertive
+        ) {
             TextLink(
                 help ? OnboardingStrings.unlockSignerRefusedHelpHide : OnboardingStrings.unlockSignerRefusedHelp,
                 identifier: "signer_refused_help"
@@ -120,7 +123,10 @@ struct NotRecognisedNotice: View {
     let onErase: @MainActor () -> Void
 
     var body: some View {
-        NoticeCard(.urgent, title: OnboardingStrings.unlockNotRecognisedTitle, message: OnboardingStrings.unlockNotRecognisedBody) {
+        NoticeCard(
+            .urgent, title: OnboardingStrings.unlockNotRecognisedTitle, message: OnboardingStrings.unlockNotRecognisedBody,
+            announce: .assertive
+        ) {
             DestructiveLink(label: OnboardingStrings.unlockErase, identifier: "erase_phone", action: onErase).disabled(erasing)
         }
         .accessibilityIdentifier("unlock_not_recognised")
@@ -139,7 +145,7 @@ struct StuckNotice: View {
     let onEarlierSecret: @MainActor () -> Void
 
     var body: some View {
-        NoticeCard(.urgent, title: OnboardingStrings.unlockStuckTitle, message: OnboardingStrings.unlockStuckBody) {
+        NoticeCard(.urgent, title: OnboardingStrings.unlockStuckTitle, message: OnboardingStrings.unlockStuckBody, announce: .polite) {
             VStack(alignment: .leading, spacing: 0) {
                 TextLink(OnboardingStrings.unlockRecover, identifier: "recover_vault", action: onRecover)
                 if earlierSecret {
@@ -162,7 +168,10 @@ struct RecoverOnlyNotice: View {
     @State private var noMailApp = false
 
     var body: some View {
-        NoticeCard(.urgent, title: OnboardingStrings.unlockStuckTitle, message: OnboardingStrings.unlockRecoverOnlyBody) {
+        NoticeCard(
+            .urgent, title: OnboardingStrings.unlockStuckTitle, message: OnboardingStrings.unlockRecoverOnlyBody,
+            announce: .polite
+        ) {
             VStack(alignment: .leading, spacing: 0) {
                 TextLink(OnboardingStrings.unlockRecover, identifier: "recover_vault", action: onRecover)
                 TextLink(OnboardingStrings.unlockContactSupport, identifier: "contact_support") {

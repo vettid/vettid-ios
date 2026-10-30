@@ -93,7 +93,10 @@ public struct ReleaseUpdateContent: View {
                     }
                     // VAULT-MESSAGING §11.14.9: no update while a PIN or password change is being decided.
                     if let why = state.changeHold {
-                        NoticeCard(.warning, title: OnboardingStrings.releaseUpdateTitle, message: why.message(timeScale: timeScale))
+                        NoticeCard(
+                            .warning, title: OnboardingStrings.releaseUpdateTitle, message: why.message(timeScale: timeScale),
+                            announce: .polite
+                        )
                             .accessibilityIdentifier("release_update_change_unresolved")
                     }
                     PinEntry(label: OnboardingStrings.unlockPinLabel, buffer: pin, identifier: "release_update_pin")

@@ -115,9 +115,7 @@ public struct VaultDeletingScreen: View {
     }
 
     private func announce() {
-        var s = AttributedString(title)
-        s.accessibilitySpeechAnnouncementPriority = .default
-        AccessibilityNotification.Announcement(s).post()
+        Announcer.announce(title)
     }
 }
 #endif

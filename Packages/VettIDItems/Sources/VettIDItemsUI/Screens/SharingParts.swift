@@ -14,7 +14,7 @@ struct SharingErrorNotice: View {
     var body: some View {
         if let error {
             let message = ItemsText.failure(error, limit: limit, shownCode: code)
-            NoticeCard(.warning, title: error.title(or: ItemsStrings.errorItem), message: message) {
+            NoticeCard(.warning, title: error.title(or: ItemsStrings.errorItem), message: message, announce: .assertive) {
                 Button(ItemsStrings.ok) { onDismiss() }
             }
             .padding(.horizontal, Spacing.s)

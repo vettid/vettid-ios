@@ -17,9 +17,8 @@ struct CodeRefusalNotice: View {
             let mild = r == .badCode || r == .notACode || r == .retry
             NoticeCard(
                 mild ? .warning : .urgent, title: MoveStrings.recoverFailedTitle,
-                message: RecoveryTexts.refusal(r, state, timeScale: timeScale)
+                message: RecoveryTexts.refusal(r, state, timeScale: timeScale), announce: .polite
             )
-            .accessibilityAddTraits(.updatesFrequently)
             .accessibilityIdentifier("code_refused")
         }
     }
@@ -39,7 +38,7 @@ struct ClaimFailure: View {
         } else if let kind = state.error {
             let text = kind == .rateLimited && state.retrySeconds > 0
                 ? RecoveryStrings.recoverRateLimitedWait(formatWait(state.retrySeconds)) : kind.message(timeScale: timeScale)
-            NoticeCard(.urgent, title: MoveStrings.recoverFailedTitle, message: text)
+            NoticeCard(.urgent, title: MoveStrings.recoverFailedTitle, message: text, announce: .assertive)
                 .accessibilityIdentifier("error")
         }
     }
@@ -80,7 +79,7 @@ struct GuidanceNotice: View {
     private var goesOn: Bool { guidance != .retry }
 
     var body: some View {
-        NoticeCard(.warning, title: RecoveryOpenStrings.onboardingOpenAnswerTitle, message: message) {
+        NoticeCard(.warning, title: RecoveryOpenStrings.onboardingOpenAnswerTitle, message: message, announce: .assertive) {
             VStack(alignment: .leading, spacing: 0) {
                 if let onFinishWithPin, Self.offersFinish(guidance) {
                     TextLink(RecoveryScreenStrings.onboardingOpenLostTitle, identifier: "guidance_finish", action: onFinishWithPin)
@@ -90,7 +89,6 @@ struct GuidanceNotice: View {
                 }
             }
         }
-        .accessibilityAddTraits(.updatesFrequently)
         .accessibilityIdentifier(identifier)
     }
 }

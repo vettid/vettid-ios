@@ -234,7 +234,7 @@ struct ItemEditForm: View {
             let other = problems.subtracting([.nameEmpty, .nameTooLong, .notesTooLong])
             if show && !other.isEmpty {
                 let lines = other.map { ItemsText.problem($0) }.sorted().joined(separator: "\n")
-                NoticeCard(.warning, title: ItemsStrings.problemsTitle, message: lines)
+                NoticeCard(.warning, title: ItemsStrings.problemsTitle, message: lines, announce: .assertive)
                     .accessibilityIdentifier("item_edit_problems")
             }
             if let size = ItemsText.sizeNote(state.check) {
@@ -251,7 +251,7 @@ struct ItemEditForm: View {
                 e, creating: state.isNew, critical: state.draft.sensitivity == .critical, profile: state.inProfile, limit: state.limit,
                 shownCode: state.errorCode
             )
-            NoticeCard(.warning, title: ItemsStrings.errorSave, message: text) {
+            NoticeCard(.warning, title: ItemsStrings.errorSave, message: text, announce: .assertive) {
                 Button(ItemsStrings.ok) { actions.onDismissError() }
             }
             .accessibilityIdentifier("item_edit_error")

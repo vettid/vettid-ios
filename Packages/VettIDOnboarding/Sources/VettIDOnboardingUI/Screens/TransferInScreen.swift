@@ -40,6 +40,10 @@ public struct TransferInContent: View {
     }
 
     public var body: some View {
+        Group { screen }.announcesStepChanges(of: state.step)
+    }
+
+    @ViewBuilder private var screen: some View {
         switch state.step {
         case .intro: intro
         case .scan: scan
@@ -166,7 +170,7 @@ private struct MoveFailure: View {
         if let kind {
             NoticeCard(
                 .urgent, title: MoveStrings.recoverFailedTitle,
-                message: kind == .noResponse ? MoveStrings.transferInNoAnswer : kind.message(timeScale: timeScale)
+                message: kind == .noResponse ? MoveStrings.transferInNoAnswer : kind.message(timeScale: timeScale), announce: .assertive
             )
             .accessibilityIdentifier("error")
         }
@@ -181,7 +185,8 @@ private struct InputProblem: View {
         if let kind {
             NoticeCard(
                 .warning, title: MoveStrings.recoverFailedTitle,
-                message: kind == .inviteExpired ? MoveStrings.transferInExpiredCode : MoveStrings.transferInNotTransfer
+                message: kind == .inviteExpired ? MoveStrings.transferInExpiredCode : MoveStrings.transferInNotTransfer,
+                announce: .assertive
             )
             .accessibilityIdentifier("code_refused")
         }

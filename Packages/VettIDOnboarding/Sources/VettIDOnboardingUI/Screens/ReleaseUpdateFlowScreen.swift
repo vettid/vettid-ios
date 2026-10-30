@@ -65,6 +65,7 @@ public struct ReleaseUpdateFlowContent: View {
                 screen(p)
             }
         }
+        .announcesStepChanges(of: state.progress?.step)
         .confirmDialog(
             isPresented: Binding(get: { state.abandonConfirm }, set: { if !$0 { actions.dismissAbandon() } }),
             title: OnboardingStrings.releaseUpdateReturnConfirmTitle(from),
@@ -203,7 +204,7 @@ private struct UpdateRefusedScreen: View {
         ) {
             NoticeCard(
                 .warning, title: OnboardingStrings.releaseUpdateRefusedWhy,
-                message: refusalText(progress.refusal ?? "", Int(progress.to.number))
+                message: refusalText(progress.refusal ?? "", Int(progress.to.number)), announce: .assertive
             )
         }
         .accessibilityIdentifier("release_update_refused")
@@ -289,7 +290,8 @@ private struct UpdateRetryScreen: View {
                 // (§11.14.9) Also on the PIN step: a change being decided holds the update ("still checking").
                 if p.step == .failed || p.failureCode == ReleaseUpdateManager.codeChangeHeld {
                     NoticeCard(
-                        .warning, title: OnboardingStrings.releaseUpdateFailedTitle, message: updateFailureText(p, timeScale: timeScale)
+                        .warning, title: OnboardingStrings.releaseUpdateFailedTitle, message: updateFailureText(p, timeScale: timeScale),
+                        announce: .assertive
                     )
                 }
                 UpdatePin(progress: p, state: state, pin: pin)
@@ -323,7 +325,10 @@ private struct UpdateNewReleaseFailedScreen: View {
             onPrimary: retry, onSecondary: askAbandon, onBack: onBack, header: { UpdateGlyph() }
         ) {
             VStack(alignment: .leading, spacing: Spacing.m) {
-                NoticeCard(.urgent, title: OnboardingStrings.releaseUpdateNewFailedWhy, message: updateFailureText(p, timeScale: timeScale))
+                NoticeCard(
+                    .urgent, title: OnboardingStrings.releaseUpdateNewFailedWhy, message: updateFailureText(p, timeScale: timeScale),
+                    announce: .assertive
+                )
                 UpdatePin(progress: p, state: state, pin: pin)
             }
         }

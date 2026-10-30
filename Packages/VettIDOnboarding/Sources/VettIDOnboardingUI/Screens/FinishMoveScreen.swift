@@ -85,11 +85,14 @@ public struct FinishMoveContent: View {
         PinEntry(label: OnboardingStrings.pinLabel, buffer: pin, identifier: "finish_move_pin")
             .disabled(!state.pinAllowed)
         if let held = state.held {
-            NoticeCard(.warning, title: OnboardingStrings.finishMoveTitle, message: held.message(timeScale: timeScale))
+            NoticeCard(.warning, title: OnboardingStrings.finishMoveTitle, message: held.message(timeScale: timeScale), announce: .polite)
                 .accessibilityIdentifier("finish_move_held")
         }
         if let failure = state.failure {
-            NoticeCard(.warning, title: OnboardingStrings.finishMoveTitle, message: failure.message(timeScale: timeScale))
+            NoticeCard(
+                .warning, title: OnboardingStrings.finishMoveTitle, message: failure.message(timeScale: timeScale),
+                announce: .assertive
+            )
                 .accessibilityIdentifier("finish_move_failure")
         }
         HStack(spacing: Spacing.m) {
