@@ -26,8 +26,9 @@ extension StagingTests {
         print("SIGNIN_INDICATOR: \(bell.waitForExistence(timeout: 10) && bell.label.contains { $0.isNumber } ? "shown" : "none")")
 
         var state = "missing"
-        guard openFromDrawer(app, item: "drawer_approvals", screen: "approvals_screen", what: "Approvals") else { return }
-        var row = signInRow(app, matchCode: matchCode, timeout: wait)
+        // Every path reaches the lock at the end (STAGING-TESTING §5): no early return once unlocked.
+        let opened = openFromDrawer(app, item: "drawer_approvals", screen: "approvals_screen", what: "Approvals")
+        var row = opened ? signInRow(app, matchCode: matchCode, timeout: wait) : nil
         if cycle, let before = row {
             lock(app)
             unlock(app, pin: pin, password: password)

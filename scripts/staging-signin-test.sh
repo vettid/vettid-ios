@@ -49,7 +49,7 @@ while [[ $# -gt 0 ]]; do
     *) echo "unknown argument: $1" >&2; usage ;;
   esac
 done
-case "${HOST}" in *.staging.vettid.org) ;; *) echo "refusing: VETTID_MEMBER_HOST must end in .staging.vettid.org" >&2; exit 1 ;; esac
+[[ "${HOST}" =~ ^[a-z0-9.-]+\.staging\.vettid\.org$ ]] || { echo "refusing: VETTID_MEMBER_HOST must be a host name ending in .staging.vettid.org" >&2; exit 1; }
 if [[ ${BUILD} -eq 0 && ${SKIP} -eq 0 ]]; then echo "give --build (build first) or --skip-build (reuse the last build)" >&2; exit 2; fi
 [[ -n "${DEVICE}" && -n "${INPUTS}" ]] || { echo "--device and --inputs are required" >&2; usage; }
 [[ "${TIMEOUT}" =~ ^[0-9]+$ ]] || { echo "--timeout is a number of seconds" >&2; exit 2; }
