@@ -1,5 +1,6 @@
 #if os(iOS)
 import SwiftUI
+import UIKit
 import VettIDData
 import VettIDOnboarding
 import VettIDUI
@@ -104,13 +105,25 @@ struct GuidanceNotice: View {
 enum TypedCodeFormat {
     static let groupsPerRow = 4
 
-    static func grouped(_ canonical: String) -> String {
+    /// The groups to a row that fit a line [width] wide in the monospaced [font]: four, else (at the larger text sizes) two,
+    /// else one, so a row never wraps on its own into a ragged 3 + 1 and each row is a whole row, or half of one, of the
+    /// account site's grid.
+    static func groupsPerRow(fitting width: CGFloat, font: UIFont) -> Int {
+        let character = ("0" as NSString).size(withAttributes: [.font: font]).width
+        let fits = { (groups: Int) in
+            (CGFloat(groups * (RecoverState.codeGroup + 1) - 1) * character).rounded(.up) <= width.rounded(.down)
+        }
+        return [groupsPerRow, 2].first(where: fits) ?? 1
+    }
+
+    /// [canonical] in groups, [perRow] groups to a row.
+    static func grouped(_ canonical: String, perRow: Int = groupsPerRow) -> String {
         var out = ""
         var group = 0
         var index = canonical.startIndex
         while index < canonical.endIndex {
             let end = canonical.index(index, offsetBy: RecoverState.codeGroup, limitedBy: canonical.endIndex) ?? canonical.endIndex
-            if group > 0 { out += group % groupsPerRow == 0 ? "\n" : " " }
+            if group > 0 { out += group % perRow == 0 ? "\n" : " " }
             out += canonical[index..<end]
             group += 1
             index = end

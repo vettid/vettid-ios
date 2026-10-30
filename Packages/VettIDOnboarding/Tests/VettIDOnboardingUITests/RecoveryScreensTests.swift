@@ -41,6 +41,44 @@ import VettIDDataTesting
         #expect(TypedCodeFormat.grouped("7ZK3M9QX2HTDCDEFGHJKMNPQ") == "7ZK3 M9QX 2HTD CDEF\nGHJK MNPQ")
         #expect(TypedCodeFormat.grouped("7ZK3M9QX2HTDCDEFGHJKMNPQRSTVWXYZ0123456789ABV3A1").split(separator: "\n").count == 3)
         #expect(RecoverState.codeGroup == 4 && RecoverState.codeGroups == 12)
+        #expect(TypedCodeFormat.grouped("7ZK3M9QX2HTDCDEFGHJK", perRow: 2) == "7ZK3 M9QX\n2HTD CDEF\nGHJK")
+        #expect(TypedCodeFormat.grouped("7ZK3M9QX", perRow: 1) == "7ZK3\nM9QX")
+    }
+
+    /// Four groups to a row where a row of four fits, else two, else one: never a row that wraps on its own.
+    @Test func theRowsAreAsLongAsFit() {
+        let font = UIFont.monospacedSystemFont(ofSize: 20, weight: .regular)
+        let character = ("0" as NSString).size(withAttributes: [.font: font]).width
+        #expect(TypedCodeFormat.groupsPerRow(fitting: (19 * character).rounded(.up), font: font) == 4)
+        #expect(TypedCodeFormat.groupsPerRow(fitting: (19 * character).rounded(.up) - 1, font: font) == 2)
+        #expect(TypedCodeFormat.groupsPerRow(fitting: (9 * character).rounded(.up), font: font) == 2)
+        #expect(TypedCodeFormat.groupsPerRow(fitting: (9 * character).rounded(.up) - 1, font: font) == 1)
+    }
+
+    /// At every text size and on a narrow phone, each row of the code is one line: four groups at the default size, fewer at
+    /// the accessibility sizes, never a ragged 3 + 1.
+    @Test func theCodeGridStaysWholeAtLargeSizes() async throws {
+        var state = RecoverState(step: .type, accountHost: "account.vettid.org")
+        state.typed = "7ZK3M9QX2HTDCDEFGHJKMNPQRSTVWXYZ0123456789ABV3A1"
+        let sizes: [(DynamicTypeSize, CGFloat, Int?)] = [
+            (.large, 390, 4), (.large, 320, 4), (.xxxLarge, 390, 4),
+            (.accessibility3, 390, nil), (.accessibility5, 390, nil), (.accessibility5, 320, nil),
+        ]
+        for (size, width, expected) in sizes {
+            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: width, height: 844))
+            window.rootViewController = UIHostingController(rootView: RecoverContent(state: state).environment(\.dynamicTypeSize, size).vettIDTheme())
+            window.isHidden = false
+            window.layoutIfNeeded()
+            defer { window.isHidden = true }
+            let editor = try #require(views(in: window).compactMap { $0 as? UITextView }.first)
+            let whole = await eventually {
+                window.layoutIfNeeded()
+                let rows = editor.text.split(separator: "\n")
+                let perRow = rows.first.map { $0.split(separator: " ").count } ?? 0
+                return lines(editor) == rows.count && (expected.map { perRow == $0 } ?? (perRow < 4))
+            }
+            #expect(whole, "\(size) at \(width): \(editor.text.split(separator: "\n")) in \(lines(editor)) lines")
+        }
     }
 
     // MARK: - Every step renders
@@ -424,6 +462,17 @@ import VettIDDataTesting
         window.isHidden = false
         window.layoutIfNeeded()
         return window
+    }
+
+    /// The lines [v] lays its text out in.
+    private func lines(_ v: UITextView) -> Int {
+        guard let layout = v.textLayoutManager else { return -1 }
+        var count = 0
+        layout.enumerateTextLayoutFragments(from: layout.documentRange.location, options: [.ensuresLayout]) { fragment in
+            count += fragment.textLineFragments.count
+            return true
+        }
+        return count
     }
 
     private func views(in view: UIView) -> [UIView] { [view] + view.subviews.flatMap { views(in: $0) } }
