@@ -13,6 +13,9 @@ import VettIDUI
 public struct RecoverContent: View {
     @Environment(\.vettIDTimeScale) private var timeScale
     @Environment(\.openURL) private var openURL
+    @Environment(\.dynamicTypeSize) private var typeSize
+    /// The width of a line of the typed code, once laid out.
+    @State private var codeWidth: CGFloat?
     let state: RecoverState
     let actions: any RecoverActions
     let onLeave: @MainActor () -> Void
@@ -163,6 +166,10 @@ public struct RecoverContent: View {
     private var type: some View {
         let problem = RecoveryTexts.typedProblem(state)
         let groups = RecoveryScreenStrings.recoverTypeGroups(state.typedGroups, RecoverState.codeGroups)
+        let perRow = codeWidth.map { width in
+            let traits = UITraitCollection(preferredContentSizeCategory: UIContentSizeCategory(typeSize))
+            return TypedCodeFormat.groupsPerRow(fitting: width, font: SecretTextEditor.font(monospaced: true, compatibleWith: traits))
+        } ?? (typeSize.isAccessibilitySize ? 2 : TypedCodeFormat.fullRow) // until the field is laid out
         return FormScaffold(
             title: RecoveryScreenStrings.recoverTypeTitle, message: RecoveryScreenStrings.recoverTypeBody,
             primaryLabel: OnboardingStrings.continueLabel, primaryEnabled: state.typedComplete, busy: state.busy,
@@ -173,11 +180,11 @@ public struct RecoverContent: View {
                 CaptureProtected {
                     SecretTextEditor(
                         RecoveryScreenStrings.recoverTypeLabel,
-                        text: Binding(get: { TypedCodeFormat.grouped(state.typed) }, set: { actions.setTyped($0) }),
+                        text: Binding(get: { TypedCodeFormat.grouped(state.typed, perRow: perRow) }, set: { actions.setTyped($0) }),
                         placeholder: RecoveryScreenStrings.recoverTypeLabel, isError: problem != nil, pasteOnly: true,
                         // Return is Done (as on Android): it continues when Continue is enabled.
                         onSubmit: { if state.typedComplete && !state.busy { actions.submitTyped() } },
-                        keeps: RecoverState.keepsTyped
+                        keeps: RecoverState.keepsTyped, monospaced: true, onTextWidth: { codeWidth = $0 }
                     )
                     .disabled(state.busy)
                 }

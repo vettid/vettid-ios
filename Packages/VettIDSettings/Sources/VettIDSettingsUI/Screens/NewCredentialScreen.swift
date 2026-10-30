@@ -69,10 +69,14 @@ public struct NewCredentialContent: View {
             VStack(alignment: .leading, spacing: Spacing.l) {
                 NoticeCard(.urgent, title: CredentialStrings.newWarningTitle, message: CredentialStrings.newWarning)
                 PinEntry(label: CredentialStrings.newPin, buffer: pin, identifier: "new_credential_pin")
-                SecretField(CredentialStrings.passwordCurrent, text: Binding(get: { state.current }, set: { actions.setCurrent($0) }))
+                SecretField(
+                    CredentialStrings.passwordCurrent, text: Binding(get: { state.current }, set: { actions.setCurrent($0) }), next: true
+                )
                     .accessibilityIdentifier("new_credential_current")
                 VStack(alignment: .leading, spacing: Spacing.s) {
-                    SecretField(CredentialStrings.passwordNew, text: Binding(get: { state.password }, set: { actions.setPassword($0) }))
+                    SecretField(
+                        CredentialStrings.passwordNew, text: Binding(get: { state.password }, set: { actions.setPassword($0) }), next: true
+                    )
                         .accessibilityIdentifier("new_credential_new")
                     PasswordRuleText(rule: state.rule, refused: state.refused).accessibilityIdentifier("password_rule")
                 }

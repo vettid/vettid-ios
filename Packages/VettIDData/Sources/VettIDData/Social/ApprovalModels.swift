@@ -100,6 +100,18 @@ public struct AuthenticationRequest: Equatable, Sendable {
     public var exp: Date?
     /// Why it is asked (0.65.0); ``AuthenticationPurpose/absent`` when the challenge has none.
     public var purpose: AuthenticationPurpose = .absent
+    /// The number the sign-in screen shows too (0.79.0 §10.4 "Match code"), only on a sign-in and only when valid
+    /// (``matchCode(_:purpose:)``); display only, never a proof that the screen is the real service.
+    public var matchCode: String?
+
+    /// [raw] as a challenge's match code: exactly 2 or 3 ASCII digits, kept as written ("07" stays "07"), and only with
+    /// `purpose: "signin"`. Anything else is ignored, not refused: the challenge is shown as one without a code. The code
+    /// is never read from `context` (§10.4).
+    public static func matchCode(_ raw: String?, purpose: AuthenticationPurpose) -> String? {
+        guard purpose == .signin, let raw, (2...3).contains(raw.utf8.count), raw.utf8.allSatisfy({ (0x30...0x39).contains($0) })
+        else { return nil }
+        return raw
+    }
 }
 
 /// `grant.pending`, or an entry of `grant.list`'s `pending` (§10.12): a connection asks to read items.

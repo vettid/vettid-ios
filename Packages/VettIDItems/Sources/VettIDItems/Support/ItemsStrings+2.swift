@@ -211,6 +211,11 @@ public extension ItemsStrings {
         String(localized: "items_otp_left", defaultValue: "\(a) s", bundle: .module)
     }
 
+    /// What VoiceOver says for ``otpLeft(_:)``, whose "12 s" is not a time when read out (chosen; not in the spec).
+    static func iosOtpLeftSpoken(_ a: Int) -> String {
+        String(localized: "ios_items_otp_left_spoken", defaultValue: "\(a) seconds left", bundle: .module)
+    }
+
     static var otpUnreadable: String {
         String(localized: "items_otp_unreadable", defaultValue: "This setup key cannot make codes", bundle: .module)
     }

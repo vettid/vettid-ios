@@ -87,6 +87,8 @@ struct HeaderGlyph: View {
 /// The two names, checked with the registration rule before the PIN and the password are asked for.
 struct ChangeNameNamesStep: View {
     @Environment(\.vettIDColors) private var colors
+    /// The name field with the keyboard: "Next" on the first gives it to the last.
+    @FocusState private var focused: NameFocus?
     let state: ChangeNameState
     let actions: ChangeNameActions
     let now: Date
@@ -120,11 +122,11 @@ struct ChangeNameNamesStep: View {
                 }
                 NameField(
                     label: NameStrings.first, text: state.first, error: state.checked ? Self.error(state.firstCheck) : nil,
-                    identifier: "name_first", onChange: actions.onFirst
+                    identifier: "name_first", onChange: actions.onFirst, focus: $focused, own: .first, onSubmit: { focused = .last }
                 )
                 NameField(
                     label: NameStrings.last, text: state.last, error: state.checked ? Self.error(state.lastCheck) : nil,
-                    identifier: "name_last", onChange: actions.onLast, onSubmit: actions.onNext
+                    identifier: "name_last", onChange: actions.onLast, focus: $focused, own: .last, onSubmit: actions.onNext
                 )
                 if let problem = problem {
                     Text(problem).vettIDFont(.bodyMedium).foregroundStyle(colors.error).accessibilityIdentifier("name_problem")
@@ -141,7 +143,11 @@ struct ChangeNameNamesStep: View {
     }
 }
 
+/// Which of the two names has the keyboard.
+enum NameFocus: Hashable { case first, last }
+
 /// A name, with its label above and the rule (or its error) below. Not a secret: the system keyboard, words capitalised.
+/// [focus] is the form's keyboard focus and [own] this field's place in it.
 struct NameField: View {
     @Environment(\.vettIDColors) private var colors
     let label: String
@@ -149,6 +155,8 @@ struct NameField: View {
     let error: String?
     let identifier: String
     let onChange: @MainActor (String) -> Void
+    let focus: FocusState<NameFocus?>.Binding
+    let own: NameFocus
     var onSubmit: @MainActor () -> Void = {}
 
     var body: some View {
@@ -158,6 +166,7 @@ struct NameField: View {
                 .textInputAutocapitalization(.words)
                 .autocorrectionDisabled()
                 .submitLabel(.next)
+                .focused(focus, equals: own)
                 .onSubmit { onSubmit() }
                 .vettIDFont(.bodyLarge)
                 .frame(minHeight: Spacing.touchTarget)

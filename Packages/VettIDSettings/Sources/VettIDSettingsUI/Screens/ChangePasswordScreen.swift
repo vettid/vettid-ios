@@ -63,12 +63,14 @@ public struct ChangePasswordContent: View {
                     // Release R (§11.14.9): the vault verifies its PIN with the password change.
                     PinEntry(label: CredentialStrings.changePin, buffer: pin, identifier: "change_password_pin").disabled(state.busy)
                 }
-                SecretField(CredentialStrings.passwordCurrent, text: Binding(get: { state.current }, set: { actions.onCurrent($0) }))
+                SecretField(
+                    CredentialStrings.passwordCurrent, text: Binding(get: { state.current }, set: { actions.onCurrent($0) }), next: true
+                )
                     .accessibilityIdentifier("change_password_current")
                 VStack(alignment: .leading, spacing: Spacing.s) {
                     SecretField(
                         CredentialStrings.passwordNew, text: Binding(get: { state.password }, set: { actions.onPassword($0) }),
-                        error: state.same ? CredentialStrings.passwordSame : nil
+                        error: state.same ? CredentialStrings.passwordSame : nil, next: true
                     )
                     .accessibilityIdentifier("change_password_new")
                     PasswordRuleText(rule: state.rule, refused: state.refused).accessibilityIdentifier("password_rule")
