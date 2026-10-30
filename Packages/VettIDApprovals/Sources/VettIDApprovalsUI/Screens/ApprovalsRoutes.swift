@@ -103,6 +103,10 @@ public struct ApprovalDetailRoute: View {
         a.onGrantUses = { m.setGrantUses($0) }
         a.onGrantExpiresIn = { m.setGrantExpiresIn($0) }
         a.onFinish = { m.finish() }
+        a.onAskEndAccess = { m.askEndAccess() }
+        a.onEndAccess = { m.endAccess() }
+        a.onDismissEndAccess = { m.dismissEndAccess() }
+        a.onDismissEndFailure = { m.dismissEndFailure() }
         a.onForgetSecrets = { m.forgetSecrets() }
         return a
     }

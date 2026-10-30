@@ -871,6 +871,94 @@
         }
       }
     },
+    "approvals_renewal_notice": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Denying refuses only the extra time. %1$@ keeps its current access until %2$@."
+          }
+        }
+      }
+    },
+    "approvals_deny_end_access": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deny and end access now"
+          }
+        }
+      }
+    },
+    "approvals_a_desktop_inline": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a desktop"
+          }
+        }
+      }
+    },
+    "approvals_end_access": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "End access"
+          }
+        }
+      }
+    },
+    "approvals_end_access_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "End access for %@?"
+          }
+        }
+      }
+    },
+    "approvals_end_access_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "It stops at once, and any of its requests still waiting for you are declined. It can ask for access again; you decide then."
+          }
+        }
+      }
+    },
+    "approvals_end_failed_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Access not ended"
+          }
+        }
+      }
+    },
+    "approvals_end_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Access for %@ could not be ended. Try again."
+          }
+        }
+      }
+    },
     "approvals_context": {
       "extractionState": "manual",
       "localizations": {

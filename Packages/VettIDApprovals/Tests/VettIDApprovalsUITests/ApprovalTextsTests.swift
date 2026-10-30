@@ -18,7 +18,7 @@ import VettIDApprovals
             .appendingPathComponent("Sources/VettIDApprovalsUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 158)
+        #expect(keys.count == 166)
         let missing = "\u{0}missing"
         for key in keys {
             let text = ApprovalsStrings.bundle.localizedString(forKey: key, value: missing, table: nil)
@@ -277,6 +277,21 @@ import VettIDApprovals
         for text in [ApprovalsStrings.matchCodeLabel, ApprovalsStrings.matchCodeInstruction("42"), ApprovalsStrings.matchCodeSpoken("4 2")] {
             #expect(!text.lowercased().contains("verif") && !text.lowercased().contains("safe") && !text.lowercased().contains("secure"))
         }
+    }
+
+    /// A renewal request's texts (VAULT-MESSAGING 0.78.0 §6.8 step 3, approved by the owner), word for word, and the end
+    /// access confirmation in the words of vettid-android's Devices page; the device by name, else by kind.
+    @Test func theRenewalTextsAreTheApprovedOnes() {
+        #expect(ApprovalsStrings.renewalNotice("Laptop", "Oct 30, 2026 at 5:00 PM") == "Denying refuses only the extra time. Laptop keeps its current access until Oct 30, 2026 at 5:00 PM.")
+        #expect(ApprovalsStrings.denyEndAccess == "Deny and end access now")
+        #expect(ApprovalsStrings.endAccess == "End access" && ApprovalsStrings.endAccessTitle("a desktop") == "End access for a desktop?")
+        #expect(ApprovalsStrings.endAccessBody == "It stops at once, and any of its requests still waiting for you are declined. It can ask for access again; you decide then.")
+        #expect(ApprovalsStrings.endFailedTitle == "Access not ended" && ApprovalsStrings.endFailed("Laptop") == "Access for Laptop could not be ended. Try again.")
+        let unnamed = { (role: String) in PendingApproval.device(DeviceRequest(type: "device.session.pending", id: "s1", deviceName: nil, role: role, requestType: nil, receivedAt: Date(), exp: nil, deviceID: "d")) }
+        #expect(ApprovalTexts.deviceSentenceStart(unnamed("agent")) == "An agent" && ApprovalTexts.deviceSentenceInline(unnamed("agent")) == "an agent")
+        #expect(ApprovalTexts.deviceSentenceStart(unnamed("desktop")) == "A desktop" && ApprovalTexts.deviceSentenceInline(unnamed("desktop")) == "a desktop")
+        let named = PendingApproval.device(DeviceRequest(type: "device.session.pending", id: "s1", deviceName: "Laptop", role: "desktop", requestType: nil, receivedAt: Date(), exp: nil, deviceID: "d"))
+        #expect(ApprovalTexts.deviceSentenceStart(named) == AccountNames.isolate("Laptop"))
     }
 
 }

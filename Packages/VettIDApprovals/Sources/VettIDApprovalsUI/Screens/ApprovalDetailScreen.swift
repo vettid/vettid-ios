@@ -22,6 +22,12 @@ public struct DecisionActions {
     public var onGrantExpiresIn: @MainActor (Int?) -> Void = { _ in }
     /// Leaves a critical use's result.
     public var onFinish: @MainActor () -> Void = {}
+    /// A renewal request (VAULT-MESSAGING 0.78.0 §6.8 step 3): "Deny and end access now" asks the confirmation; it ends
+    /// access; it closes; a failure's OK.
+    public var onAskEndAccess: @MainActor () -> Void = {}
+    public var onEndAccess: @MainActor () -> Void = {}
+    public var onDismissEndAccess: @MainActor () -> Void = {}
+    public var onDismissEndFailure: @MainActor () -> Void = {}
     /// The screen left or the app went to the background: the password goes.
     public var onForgetSecrets: @MainActor () -> Void = {}
 
@@ -47,9 +53,9 @@ public struct ApprovalDetailScreen: View {
             if let a = state.approval, !state.gone {
                 if let status = state.criticalResult {
                     result(status)
-                } else if state.retryUntil != nil || a.exp != nil {
+                } else if state.retryUntil != nil || a.exp != nil || state.sessionEnd != nil {
                     // A password backoff counts down and the approve button comes back at its end; a request that expires
-                    // while open turns into "Already decided".
+                    // while open turns into "Already decided"; a renewal whose session passes reads as a first request.
                     TimelineView(.periodic(from: .now, by: 1)) { context in live(a, now: context.date) }
                 } else {
                     decision(a, now: Date())
@@ -70,22 +76,26 @@ public struct ApprovalDetailScreen: View {
         }
     }
 
-    /// Decided on another device, or expired.
+    /// Decided on another device, or expired. A failed end of a renewal's access is said here too, never silent, with Try
+    /// again while the session is live; a confirmation already open stays and still ends access (0.78.0 §6.8 step 3).
     private var gone: some View {
         FormScaffold(
             title: ApprovalsStrings.goneTitle, message: ApprovalsStrings.goneBody, primaryLabel: ApprovalsStrings.back,
             onPrimary: actions.onBack, onBack: actions.onBack
-        ) { EmptyView() }
+        ) { LeftEndAccess(state: state, actions: actions) }
+        .endAccessConfirmation(state, actions)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("approval_gone")
     }
 
-    /// Not on this phone since a lock or a restart, and never said to be decided or expired (chosen; not in the spec).
+    /// Not on this phone since a lock or a restart, and never said to be decided or expired (chosen; not in the spec). A
+    /// hold drops a session request too: a failed end stays said here (chosen; not in the spec).
     private var notHeld: some View {
         FormScaffold(
             title: ApprovalsStrings.notHeldTitle, message: ApprovalsStrings.notHeldBody, primaryLabel: ApprovalsStrings.back,
             onPrimary: actions.onBack, onBack: actions.onBack
-        ) { EmptyView() }
+        ) { LeftEndAccess(state: state, actions: actions) }
+        .endAccessConfirmation(state, actions)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("approval_not_held")
     }
@@ -134,6 +144,7 @@ public struct ApprovalDetailScreen: View {
             destructive: true,
             onConfirm: actions.onBlock
         )
+        .endAccessConfirmation(state, actions)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("approval_detail")
     }
@@ -154,7 +165,7 @@ struct DecisionContent: View {
             case .share(let d):
                 ShareFacts(decision: d, excluded: state.shareExcluded, name: state.connectionName, onToggle: actions.onToggleShareItem)
             case .grant(let g): GrantFacts(request: g, state: state, actions: actions)
-            default: Facts(approval: approval, name: state.connectionName)
+            default: Facts(approval: approval, name: state.connectionName, renewal: state.renewalUntil(at: now) != nil)
             }
             if state.needs == .password {
                 SecretField(
@@ -169,6 +180,7 @@ struct DecisionContent: View {
                     .disabled(state.busy)
                     .padding(.top, Spacing.m)
             }
+            RenewalNotices(state: state, actions: actions, now: now)
             if let error = state.error {
                 let text = ApprovalTexts.failure(error, retryUntil: state.retryUntil, limit: state.limit, now: now, timeScale: timeScale)
                 Text(text)

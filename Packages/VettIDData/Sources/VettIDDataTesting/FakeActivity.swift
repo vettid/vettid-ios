@@ -92,6 +92,8 @@ public final class FakeApprovals: ApprovalsRepository {
         listed = []
         arrived = []
         pendingListAnswered = false
+        deviceSessions = [:]
+        deviceSessionsKnown = false
         forgetCount += 1
     }
 
@@ -177,6 +179,40 @@ public final class FakeApprovals: ApprovalsRepository {
     public func declineDeviceRequest(_ key: String) async throws {
         try call("declineDeviceRequest", key)
         drop(key)
+    }
+
+    /// The sessions' ends, by device; a test sets them and ``deviceSessionsKnown`` (or lets ``readDeviceSessions()`` set it).
+    public var deviceSessions: [String: Date] = [:] {
+        didSet { deviceSessionsVersion += 1 }
+    }
+    public var deviceSessionsKnown = false
+    public private(set) var deviceSessionReads = 0
+    public private(set) var deviceSessionsVersion = 0
+    public var vaultHeld = false
+    /// When set, ``readDeviceSessions()`` waits for it (a read on its way).
+    public var sessionsGate: (@MainActor () async -> Void)?
+
+    public func readDeviceSessions() async throws {
+        try call("readDeviceSessions", "")
+        if let sessionsGate { await sessionsGate() }
+        deviceSessionsKnown = true
+        deviceSessionReads += 1
+    }
+
+    /// What a `sync.event` `device.session` does: the device's session ends at [expiresAt], or it has none.
+    public func sessionEvent(_ deviceID: String, expiresAt: Date?) { deviceSessions[deviceID] = expiresAt }
+
+    /// What a read that answers does: the sessions as the vault lists them now.
+    public func sessionsRead(_ sessions: [String: Date]) {
+        deviceSessions = sessions
+        deviceSessionsKnown = true
+        deviceSessionReads += 1
+    }
+
+    public func endDeviceAccess(_ deviceID: String) async throws {
+        try call("endDeviceAccess", deviceID)
+        deviceSessions[deviceID] = nil
+        listed.removeAll { if case .device(let d) = $0 { d.deviceID == deviceID } else { false } }
     }
 
     // MARK: - ConnectionRequestsRepository, through the connections

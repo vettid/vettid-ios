@@ -115,6 +115,15 @@ public final class ApprovalsManager: ApprovalsRepository {
     static func subjectKey(_ d: ShareDecision) -> String { ShareQuestions.subject(d) ?? "rule:\(d.ruleID)" }
     /// Told of each decided ask, with its feed item's kinds and `ref` (``FeedAsks``): the item is marked read.
     @ObservationIgnored public var onDecided: @MainActor (_ kinds: Set<String>, _ ref: String) -> Void = { _, _ in }
+    // Desktops' and agents' access sessions, for a renewal request (VAULT-MESSAGING 0.78.0 §6.8 step 3): memory only,
+    // dropped with the vault (ApprovalsManager+Sessions.swift; ``ApprovalsRepository`` says what each one is).
+    public internal(set) var deviceSessions: [String: Date] = [:]
+    public internal(set) var deviceSessionsKnown = false
+    public internal(set) var deviceSessionReads = 0
+    public internal(set) var deviceSessionsVersion = 0
+    /// A screen asked for the sessions since the vault was last forgotten: a `device.session` event reads them again.
+    @ObservationIgnored var deviceSessionsWanted = false
+    @ObservationIgnored let held: @MainActor () -> Bool
 
     /// [ops] the vault's calls, opened when needed; [quietOps] those of the background reads (nil: [ops]);
     /// [openUnlockWindow] the credential's `credential.unlock` with the password (§3.5.3).
@@ -124,9 +133,11 @@ public final class ApprovalsManager: ApprovalsRepository {
         quietOps: (@MainActor () async throws -> any ApprovalOps)? = nil,
         openUnlockWindow: @escaping @MainActor (String) async throws -> Void = { _ in },
         now: @escaping @Sendable () -> Date = { Date() },
-        itemNames: @escaping @MainActor () -> [String: ShareItem] = { [:] }
+        itemNames: @escaping @MainActor () -> [String: ShareItem] = { [:] },
+        held: @escaping @MainActor () -> Bool = { false }
     ) {
         self.itemNames = itemNames
+        self.held = held
         self.connections = connections
         self.ops = ops
         self.quietOps = quietOps ?? ops
@@ -214,6 +225,7 @@ public final class ApprovalsManager: ApprovalsRepository {
         }
         decidedLog = []
         batchLog = []
+        forgetDeviceSessions()
     }
 
     public func mayHaveBeenDropped(_ key: String) -> Bool {
@@ -332,6 +344,10 @@ public final class ApprovalsManager: ApprovalsRepository {
         // (VAULT-MESSAGING 0.70.0 §10.4.2).
         // Only against a list already merged, not a read on its way: that read may still fail, and a close applied is
         // protected by the merge (``mergePendingAsks``), not undone by it.
+        // What the event says of the device's session holds whatever the list says of its request (0.78.0 §6.8 step 3).
+        if kind == "device.session", let device = VaultJSON.string(o, "device_id") {
+            deviceSessionEvent(device, expiresAt: ApprovalParser.instant(VaultJSON.string(o, "expires_at")))
+        }
         if let cut = mergedListTs, Self.pendingClosing.contains(kind), ts <= cut { return }
         if kind == "share.decided", let id = VaultJSON.string(o, "rule_id") {
             return shareDecided(id, VaultJSON.strings(o, "included") + VaultJSON.strings(o, "declined"))
