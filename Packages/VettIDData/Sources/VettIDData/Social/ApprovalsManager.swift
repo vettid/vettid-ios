@@ -580,7 +580,6 @@ public final class ApprovalsManager: ApprovalsRepository {
         }
     }
 
-    /// Runs [body] and turns every failure into a ``VaultFailure`` (a cancellation stays one).
     public func loadCriticalUse(_ requestID: String) async throws {
         let key = "critical:\(requestID)"
         let g = generation

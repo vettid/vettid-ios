@@ -173,7 +173,7 @@ public final class ApprovalDetailViewModel {
     @ObservationIgnored private var sessionWasLive: Bool?
     /// A session request's screen asks for the sessions while it is open: given back when the model goes.
     @ObservationIgnored private var sessionsAsk: DeviceSessionsAsk?
-    /// The device of the session request the screen opened on (nil for any other request).
+    /// The device of the session request, from when the screen first holds it (nil for any other request).
     @ObservationIgnored private var sessionDeviceID: String?
     /// How long a decision answered `not_found` waits for a withdrawn flag before it says the ask is gone (ANDROID-PLAN
     /// 0.1.101: about 2 seconds). Tests shorten it.
@@ -298,8 +298,8 @@ public final class ApprovalDetailViewModel {
         s.confirmEnd = local.confirmEnd && !s.held
     }
 
-    /// The end of [device]'s session as a `device.list` read answered since the screen opened says, nil when it has none
-    /// or nothing is known.
+    /// The end of [device]'s session as a `device.list` read answered since the screen first held the request says, nil
+    /// when it has none or nothing is known.
     private func sessionEnd(of device: String?) -> Date? {
         guard sessionDeviceID != nil, repo.deviceSessionsKnown, repo.deviceSessionReads > sessionReadsAtOpen else { return nil }
         return device.flatMap { repo.deviceSessions[$0] }
