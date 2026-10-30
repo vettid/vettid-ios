@@ -72,6 +72,7 @@ public enum ConnectionParser {
         i.asks = c.asks.map {
             AskState(muted: $0.muted, paused: $0.paused, pausedAt: instant($0.pausedAt), cooldowns: max($0.cooldowns, 0))
         }
+        i.isService = c.peerKind == "service"
         return i
     }
 

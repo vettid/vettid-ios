@@ -307,6 +307,21 @@ extension FakeVaultService {
         }
     }
 
+    /// The challenger withdrew the open member authentication [id] (VAULT-MESSAGING 0.80.0 §10.4): `pending.list` no longer
+    /// holds it, a later approve or deny is answered `not_found`, and this phone gets `sync.event{connection.authenticate
+    /// .decided, approved: false, withdrawn: true}`.
+    public func challengerWithdraws(_ id: String) throws {
+        try locked {
+            guard activity.asks.open.contains(where: { $0.id == id && $0.kind == "authenticate" }) else { return }
+            activity.asks.open.removeAll { $0.id == id }
+            record("connection.authenticate.withdrawn", connectionID: activity.asks.challenges[id], ref: id, direction: "in")
+            activity.asks.challenges[id] = nil
+            let body = JsonBuilder().string("kind", "connection.authenticate.decided").string("request_id", id).bool("approved", false)
+                .bool("withdrawn", true).build()
+            try reply("sync.event", body)
+        }
+    }
+
     /// The open ask [id] expired or was withdrawn: `pending.list` no longer holds it, and no event says so.
     public func openAskGoes(_ id: String) {
         locked {

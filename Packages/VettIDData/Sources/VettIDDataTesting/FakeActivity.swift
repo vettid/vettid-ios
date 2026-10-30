@@ -103,6 +103,18 @@ public final class FakeApprovals: ApprovalsRepository {
     public func mayHaveBeenDropped(_ key: String) -> Bool {
         PendingApproval.eventOnly(key: key) && !arrived.contains(key) && !pendingListAnswered
     }
+
+    /// The asks withdrawn by their challenger (VAULT-MESSAGING 0.80.0 §10.4); ``withdraw(_:)`` adds one.
+    public var withdrawn: Set<String> = []
+
+    public func wasWithdrawn(_ key: String) -> Bool { withdrawn.contains(key) }
+
+    /// What `sync.event{connection.authenticate.decided, withdrawn: true}` does to ``ApprovalsManager``: the ask closes
+    /// and is noted as withdrawn.
+    public func withdraw(_ key: String) {
+        withdrawn.insert(key)
+        drop(key)
+    }
     /// What ``approveCriticalUse(_:password:)`` returns.
     public var criticalStatus: String? = "ok"
     /// The payload ``loadCriticalUse(_:)`` fills in (standard base64).
@@ -136,13 +148,22 @@ public final class FakeApprovals: ApprovalsRepository {
 
     public func approveAuthentication(_ requestID: String, password: String) async throws {
         lastPassword = password
-        try call("approveAuthentication", requestID)
-        drop("auth:\(requestID)")
+        try decided("approveAuthentication", "auth:\(requestID)", requestID)
     }
 
     public func denyAuthentication(_ requestID: String) async throws {
-        try call("denyAuthentication", requestID)
-        drop("auth:\(requestID)")
+        try decided("denyAuthentication", "auth:\(requestID)", requestID)
+    }
+
+    /// A decision of [key]: like ``ApprovalsManager``, a request the vault no longer knows (`not_found`) leaves the list too.
+    private func decided(_ name: String, _ key: String, _ id: String) throws {
+        do {
+            try call(name, id)
+        } catch let f as VaultFailure where f.kind == .notFound {
+            drop(key)
+            throw f
+        }
+        drop(key)
     }
 
     public func decideGrant(_ requestID: String, approve: Bool) async throws {

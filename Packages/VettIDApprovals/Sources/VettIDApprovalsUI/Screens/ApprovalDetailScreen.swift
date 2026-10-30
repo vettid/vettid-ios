@@ -22,6 +22,10 @@ public struct DecisionActions {
     public var onGrantExpiresIn: @MainActor (Int?) -> Void = { _ in }
     /// Leaves a critical use's result.
     public var onFinish: @MainActor () -> Void = {}
+    /// A withdrawn request's "Mute requests from …": asks (true) or cancels (false); a service connection's is confirmed.
+    public var onAskMute: @MainActor (Bool) -> Void = { _ in }
+    /// The mute confirmed.
+    public var onMute: @MainActor () -> Void = {}
     /// The screen left or the app went to the background: the password goes.
     public var onForgetSecrets: @MainActor () -> Void = {}
 
@@ -45,7 +49,10 @@ public struct ApprovalDetailScreen: View {
     public var body: some View {
         Group {
             if let a = state.approval, !state.gone {
-                if let status = state.criticalResult {
+                if state.withdrawn {
+                    // No countdown: a withdrawn request no longer expires on screen.
+                    withdrawn(a)
+                } else if let status = state.criticalResult {
                     result(status)
                 } else if state.retryUntil != nil || a.exp != nil {
                     // A password backoff counts down and the approve button comes back at its end; a request that expires
@@ -90,11 +97,47 @@ public struct ApprovalDetailScreen: View {
         .accessibilityIdentifier("approval_not_held")
     }
 
-    private enum Step { case decision, result, notHeld, gone }
+    /// Withdrawn by its challenger (VAULT-MESSAGING 0.80.0 §10.4; ANDROID-PLAN 0.1.101): the request stays where it was,
+    /// with the notice and Close in place of the decision, in a neutral style (never an error, never "declined"), and the
+    /// existing mute as a secondary action until the connection's asks are muted. Without the connection's names the
+    /// notice says "A connection", and the mute's confirmation is titled with the action's words (chosen; not in the spec).
+    private func withdrawn(_ a: PendingApproval) -> some View {
+        let who = AccountNames.isolateOrNull(state.connectionName) ?? ApprovalsStrings.aConnection
+        return FormScaffold(
+            title: ApprovalTexts.title(a, name: state.connectionName), primaryLabel: ApprovalsStrings.withdrawnClose,
+            onPrimary: actions.onBack, onBack: actions.onBack
+        ) {
+            VStack(alignment: .leading, spacing: Spacing.m) {
+                NoticeCard(.info, title: ApprovalsStrings.withdrawnNotice(who), announce: .polite)
+                    .accessibilityIdentifier("approval_withdrawn")
+                if !state.asksMuted, a.connectionID != nil {
+                    NoticeAction(label: ApprovalsStrings.withdrawnMute(who), identifier: "withdrawn_mute") { actions.onAskMute(true) }
+                        .disabled(state.muting)
+                }
+                if let text = state.muteError.map({ ApprovalTexts.failure($0, retryUntil: nil, limit: nil, now: Date()) }) {
+                    Text(text).vettIDFont(.bodyMedium).announced(text, .assertive).accessibilityIdentifier("withdrawn_error")
+                }
+                Facts(approval: a, name: state.connectionName)
+            }
+        }
+        .confirmDialog(
+            isPresented: Binding(get: { state.confirmMute }, set: { if !$0 { actions.onAskMute(false) } }),
+            title: ApprovalsStrings.withdrawnMute(who),
+            message: ApprovalsStrings.withdrawnMuteConfirmService(who),
+            confirmLabel: ApprovalsStrings.withdrawnMuteConfirm,
+            dismissLabel: ApprovalsStrings.withdrawnMuteCancel,
+            onConfirm: actions.onMute
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("approval_detail")
+    }
+
+    private enum Step { case decision, result, notHeld, gone, withdrawn }
 
     /// Which of the screen's steps shows, apart from an expiry while open (``live(_:now:)``).
     private var step: Step {
         if state.approval == nil || state.gone { return state.notHeld ? .notHeld : .gone }
+        if state.withdrawn { return .withdrawn }
         return state.criticalResult == nil ? .decision : .result
     }
 

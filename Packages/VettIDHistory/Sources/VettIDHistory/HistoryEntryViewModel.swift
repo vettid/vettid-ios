@@ -9,6 +9,15 @@ public struct HistoryEntryState: Equatable, Sendable, CustomStringConvertible, C
     public var connectionName: String?
     /// The entry's connection is still in the vault's list (the detail opens it).
     public var connectionExists = false
+    /// The entry's connection is a service (VAULT-MESSAGING 0.69.0 §6.4): muting its asks is confirmed first.
+    public var connectionIsService = false
+    /// The entry's connection's asks are muted (§10.4.1).
+    public var asksMuted = false
+    /// The mute's confirmation is showing (a service connection's).
+    public var confirmMute = false
+    public var muting = false
+    /// Why the mute failed, nil otherwise.
+    public var muteError: FailureKind?
     /// The item the entry refers to (§10.9 item kinds): its current name, and whether it is still in the vault.
     public var itemName: String?
     public var itemExists = false
@@ -29,6 +38,12 @@ public struct HistoryEntryState: Equatable, Sendable, CustomStringConvertible, C
     public var error: FailureKind?
 
     public init() {}
+
+    /// A withdrawn request's entry offers "Mute requests from …" while its connection is there and not muted
+    /// (VAULT-MESSAGING 0.80.0 §10.4; ANDROID-PLAN 0.1.101).
+    public var offersMute: Bool {
+        entry?.kind == "connection.authenticate.withdrawn" && connectionExists && connectionName != nil && !asksMuted
+    }
 
     public var description: String {
         "HistoryEntryState(entry: \(entry != nil), loading: \(loading), missing: \(missing), error: \(error.map { "\($0)" } ?? "nil"))"
@@ -117,6 +132,8 @@ public final class HistoryEntryViewModel {
         let c = e?.entry.connectionID.flatMap { id in connections?.connections.first { $0.id == id } }
         s.connectionName = AccountNames.cleaned(c?.displayName)
         s.connectionExists = c != nil
+        s.connectionIsService = c?.isService ?? false
+        s.asksMuted = s.asksMuted || c?.asks?.muted == true
         Self.named(&s, itemNames?())
         let id = e?.entry.deviceID
         let listed = id.flatMap { devices?.names[$0] }
@@ -146,6 +163,30 @@ public final class HistoryEntryViewModel {
             local.outcome = .matched(m.outcome, phoneName: m.phoneName)
         } else {
             local.outcome = AuditKinds.Outcome.none
+        }
+    }
+
+    /// "Mute requests from …" on a withdrawn request's entry: a service connection's is confirmed first, a person's is
+    /// muted at once (ANDROID-PLAN 0.1.101).
+    public func askMute(_ show: Bool) {
+        guard show else { return local.confirmMute = false }
+        if local.connectionIsService { local.confirmMute = true } else { mute() }
+    }
+
+    /// Mutes the entry's connection's asks (`connection.asks.mute`, §10.4.1), as its detail does.
+    public func mute() {
+        local.confirmMute = false
+        guard let id = local.entry?.entry.connectionID, let connections, !local.muting else { return }
+        local.muting = true
+        local.muteError = nil
+        work.launch { [weak self] in
+            do {
+                try await connections.setAsksMuted(id, muted: true)
+                self?.local.asksMuted = true
+            } catch {
+                self?.local.muteError = failureKind(error)
+            }
+            self?.local.muting = false
         }
     }
 

@@ -333,6 +333,15 @@ public final class FeedManager: FeedRepository {
         for id in ids { markReadQuietly(id) }
     }
 
+    /// A withdrawn ask's item, or the item of a batch none of whose asks is open, by its [ref] (VAULT-MESSAGING 0.80.0
+    /// §10.4 "Closing": the vault leaves it as it is). [onlySingle]: only an item that stands for no batch (`count` below 2).
+    public func markAskRead(ref: String, onlySingle: Bool) {
+        let ids = byID.values.filter { i in
+            i.status == Self.statusActive && FeedAsks.askKinds.contains(i.kind) && i.ref == ref && (!onlySingle || (i.count ?? 1) < 2)
+        }.map(\.itemID)
+        for id in ids { markReadQuietly(id) }
+    }
+
     public func delete(_ itemID: String) async throws {
         do {
             try await ops().feedDelete(itemID)

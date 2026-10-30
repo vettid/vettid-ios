@@ -309,6 +309,72 @@
         }
       }
     },
+    "history_authn_withdrawn_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Request withdrawn"
+          }
+        }
+      }
+    },
+    "history_authn_withdrawn_detail": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ withdrew this request before it was answered."
+          }
+        }
+      }
+    },
+    "history_authn_withdrawn_mute": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mute requests from %@"
+          }
+        }
+      }
+    },
+    "history_authn_withdrawn_mute_confirm_service": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You won't be asked to sign in or approve anything for %@ until you unmute."
+          }
+        }
+      }
+    },
+    "history_authn_withdrawn_mute_confirm_button": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mute"
+          }
+        }
+      }
+    },
+    "history_authn_withdrawn_mute_cancel_button": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        }
+      }
+    },
     "history_connection_removed": {
       "extractionState": "manual",
       "localizations": {

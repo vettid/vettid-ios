@@ -45,6 +45,7 @@ extension VaultManager {
             }
         )
         approvals.onDecided = { [weak feed] kinds, ref in feed?.markReadWhere(kinds: kinds, ref: ref) }
+        approvals.onAskRead = { [weak feed] ref, onlySingle in feed?.markAskRead(ref: ref, onlySingle: onlySingle) }
         followHold(checks, ref)
         let selfID = { @MainActor in ref.manager?.session?.device.deviceID }
         return (

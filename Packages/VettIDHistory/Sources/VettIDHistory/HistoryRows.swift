@@ -110,7 +110,8 @@ public extension HistoryEntryState {
             HistoryField(label: HistoryStrings.detailWhen, value: r.at.map(Self.fullTime) ?? HistoryStrings.detailUnknownTime),
             HistoryField(label: HistoryStrings.detailCategory, value: AuditKinds.categoryLabel(r.category)),
         ]
-        let details = HistoryText.details(r.kind, e.ref, outcome: outcome, timeScale: timeScale)
+        let names = EntryNames(connection: connectionName)
+        let details = HistoryText.details(r.kind, e.ref, outcome: outcome, timeScale: timeScale, names: names)
         if !details.isEmpty {
             let label = HistoryKindTexts.text("history_detail_details")
             out.append(HistoryField(label: label, value: details.joined(separator: "\n"), id: "history_entry_details"))
