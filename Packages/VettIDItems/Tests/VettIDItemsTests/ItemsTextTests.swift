@@ -8,8 +8,8 @@ import VettIDData
 
 /// The Vault's texts: every key of vettid-android's `feature/items` `strings.xml` (278 strings) and `strings_sharing.xml`
 /// (158 strings, 24 plurals) resolves to its own text (0.55.0 adds `items_phone_extension_note` and the plural
-/// `items_share_preview_more`, 0.55.5 `items_rule_month`; the iPhone's two secret-item texts are `ios_items_…`), and
-/// the tags screen's words.
+/// `items_share_preview_more`, 0.55.5 `items_rule_month`; the iPhone's two secret-item texts and the one-time code's time
+/// left as VoiceOver says it are `ios_items_…`), and the tags screen's words.
 @Suite struct ItemsTextTests {
     @Test func everyStringResolves() throws {
         let url = URL(fileURLWithPath: #filePath)
@@ -17,7 +17,7 @@ import VettIDData
             .appendingPathComponent("Sources/VettIDItems/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let strings = try #require(doc["strings"] as? [String: Any])
-        let expected = 278 + 158 + 24 + 2
+        let expected = 278 + 158 + 24 + 3
         #expect(strings.count == expected)
         let missing = "\u{0}missing"
         for key in strings.keys {
