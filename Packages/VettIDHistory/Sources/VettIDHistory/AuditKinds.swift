@@ -160,6 +160,8 @@ public enum AuditKinds {
         case scaled(String, scaled: String, realSeconds: TimeInterval)
         /// A line with a name the vault recorded.
         case named(String, name: String)
+        /// A line with the entry's connection's "First Last", left out without it.
+        case connection(String)
     }
 
     /// What is known of a `not_success` attempt's outcome (the matching `recovery.open`, ``RecoveryRefs/matches(_:)``).
@@ -201,6 +203,7 @@ public enum AuditKinds {
         case "leash.item.proxy": return [.line("history_detail_leash_item_proxy")]
         case "credential.utk_resync": return [.line("history_detail_credential_utk_resync")]
         case "credential.holder_cleared": return [.line("history_detail_credential_holder_cleared")]
+        case "connection.authenticate.withdrawn": return [.connection("history_authn_withdrawn_detail")]
         default: return []
         }
     }

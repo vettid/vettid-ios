@@ -18,7 +18,7 @@ import VettIDApprovals
             .appendingPathComponent("Sources/VettIDApprovalsUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 155)
+        #expect(keys.count == 161)
         let missing = "\u{0}missing"
         for key in keys {
             let text = ApprovalsStrings.bundle.localizedString(forKey: key, value: missing, table: nil)
@@ -257,6 +257,20 @@ import VettIDApprovals
         #expect(ApprovalTexts.summary(blank) == nil)
         #expect(ApprovalTexts.supporting(blank, name: "Sam Lee") == row("Sam Lee"))
     }
+
+    /// A withdrawn request's texts (VAULT-MESSAGING 0.80.0 §10.4; ANDROID-PLAN 0.1.101, approved 2026-10-30), word for word,
+    /// and never a decline.
+    @Test func theWithdrawnTextsAreTheApprovedOnes() {
+        let sam = AccountNames.isolate("Sam Lee")
+        #expect(ApprovalsStrings.withdrawnNotice(sam) == "\(sam) withdrew this request. You don't need to answer it.")
+        #expect(ApprovalsStrings.withdrawnMute(sam) == "Mute requests from \(sam)")
+        #expect(ApprovalsStrings.withdrawnMuteConfirmService(sam) == "You won't be asked to sign in or approve anything for \(sam) until you unmute.")
+        #expect(ApprovalsStrings.withdrawnMuteConfirm == "Mute" && ApprovalsStrings.withdrawnMuteCancel == "Cancel" && ApprovalsStrings.withdrawnClose == "Close")
+        for text in [ApprovalsStrings.withdrawnNotice(sam), ApprovalsStrings.withdrawnMute(sam)] {
+            #expect(!text.lowercased().contains("declin") && !text.lowercased().contains("denied"))
+        }
+    }
+
 }
 
 // swiftlint:enable line_length

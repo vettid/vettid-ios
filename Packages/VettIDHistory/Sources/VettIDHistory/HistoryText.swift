@@ -46,14 +46,17 @@ public enum HistoryText {
     }
 
     /// An entry's detail lines (IOS-PLAN §4.1). A duration the vault's time scale divides is said in real time at
-    /// scale 1, else as the vault runs it.
-    public static func details(_ kind: String, _ ref: String?, outcome: AuditKinds.Outcome, timeScale: UInt64 = 1) -> [String] {
+    /// scale 1, else as the vault runs it. [names]: the entry's names, for a line that names its connection.
+    public static func details(
+        _ kind: String, _ ref: String?, outcome: AuditKinds.Outcome, timeScale: UInt64 = 1, names: EntryNames = EntryNames()
+    ) -> [String] {
         AuditKinds.details(kind, ref, outcome: outcome).compactMap { d in
             switch d {
             case .line(let key): HistoryKindTexts.text(key)
             case .scaled(let key, let scaled, let seconds):
                 TimeScales.scaledText(seconds, by: timeScale).map { HistoryKindTexts.text(scaled, $0) } ?? HistoryKindTexts.text(key)
             case .named(let key, let name): AccountNames.isolateOrNull(name).map { HistoryKindTexts.text(key, $0) }
+            case .connection(let key): AccountNames.isolateOrNull(names.connection).map { HistoryKindTexts.text(key, $0) }
             }
         }
     }

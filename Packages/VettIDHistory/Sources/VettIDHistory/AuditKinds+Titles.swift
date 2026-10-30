@@ -40,6 +40,8 @@ extension AuditKinds {
         "connection.authenticate_failed": "history_kind_connection_authenticate_failed",
         "connection.authenticate.key_rotated": "history_kind_connection_authenticate_key_rotated",
         "connection.authenticate.rotation_rejected": "history_kind_connection_authenticate_rotation_rejected",
+        // VAULT-MESSAGING 0.80.0 §10.4: the challenger withdrew the request (ANDROID-PLAN 0.1.101, approved 2026-10-30).
+        "connection.authenticate.withdrawn": "history_authn_withdrawn_title",
         "identity.rotated": "history_kind_identity_rotated",
         "intro.created": "history_kind_intro_created",
         "intro.offered": "history_kind_intro_offered",

@@ -47,6 +47,8 @@ public struct ConnectionInfo: Equatable, Sendable, Identifiable {
     public var lastActiveAt: Date?
     /// Whether the connection's asks are muted or paused (`<connection>.asks`, 0.23.0 §10.4.1); nil from an older vault.
     public var asks: AskState?
+    /// The connection is a service (`peer_kind: "service"`, VAULT-MESSAGING 0.69.0 §6.4), as its invitation declared.
+    public var isService = false
 
     public init(id: String, name: String, state: ConnectionState) {
         self.id = id

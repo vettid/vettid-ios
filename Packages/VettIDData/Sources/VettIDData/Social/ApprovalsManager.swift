@@ -115,6 +115,12 @@ public final class ApprovalsManager: ApprovalsRepository {
     static func subjectKey(_ d: ShareDecision) -> String { ShareQuestions.subject(d) ?? "rule:\(d.ruleID)" }
     /// Told of each decided ask, with its feed item's kinds and `ref` (``FeedAsks``): the item is marked read.
     @ObservationIgnored public var onDecided: @MainActor (_ kinds: Set<String>, _ ref: String) -> Void = { _, _ in }
+    /// Told of each ask held here that its challenger withdrew (VAULT-MESSAGING 0.80.0 §10.4): its `request_id`, its
+    /// connection, and whether another ask of that connection is still open, for its feed item (``FeedAsks``).
+    @ObservationIgnored public var onWithdrawn: @MainActor (_ ref: String, _ connection: String, _ others: Bool) -> Void = { _, _, _ in }
+    /// The asks closed as withdrawn (`sync.event{connection.authenticate.decided, withdrawn: true}`), newest last, at most
+    /// ``maxClosedAsks``: a screen showing one says so, also after the vault answered its decision `not_found`.
+    var withdrawnKeys: [String] = []
 
     /// [ops] the vault's calls, opened when needed; [quietOps] those of the background reads (nil: [ops]);
     /// [openUnlockWindow] the credential's `credential.unlock` with the password (§3.5.3).
@@ -214,6 +220,7 @@ public final class ApprovalsManager: ApprovalsRepository {
         }
         decidedLog = []
         batchLog = []
+        withdrawnKeys = []
     }
 
     public func mayHaveBeenDropped(_ key: String) -> Bool {
@@ -328,6 +335,11 @@ public final class ApprovalsManager: ApprovalsRepository {
     /// `sync.event`: another device decided (§10.1).
     private func onSync(_ o: JsonObject, ts: Date) {
         let kind = VaultJSON.string(o, "kind") ?? ""
+        // Withdrawn by its challenger (0.80.0 §10.4): noted whether or not a list already closed the ask, so that a screen
+        // showing it says so rather than "Already decided".
+        if kind == "connection.authenticate.decided", VaultJSON.bool(o, "withdrawn") == true, let id = VaultJSON.string(o, "request_id") {
+            withdrawn("auth:\(id)", ts: ts)
+        }
         // A closing event no later than the list read is ignored too: the list already says whether the ask is open
         // (VAULT-MESSAGING 0.70.0 §10.4.2).
         // Only against a list already merged, not a read on its way: that read may still fail, and a close applied is

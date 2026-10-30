@@ -133,6 +133,17 @@ import VettIDUI
             s.approval = Samples.auth("a\(p)", purpose: p)
             return s
         }
+        // Withdrawn by its challenger (0.80.0 §10.4): the notice with the mute, the mute's confirmation, a failed mute, muted.
+        var withdrawn = out[4]
+        withdrawn.withdrawn = true
+        var confirming = withdrawn
+        confirming.connectionIsService = true
+        confirming.confirmMute = true
+        var failedMute = withdrawn
+        failedMute.error = .network
+        var muted = withdrawn
+        muted.asksMuted = true
+        out += [withdrawn, confirming, failedMute, muted]
         return out
     }
 

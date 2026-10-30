@@ -23,6 +23,9 @@ public enum FeedAsks {
         return ([kind], String(rest[rest.index(after: last)...]))
     }
 
+    /// The feed kinds of a connection's asks, the kinds a batch is made of (VAULT-MESSAGING 0.23.0 §10.4.1).
+    public static let askKinds: Set<String> = ["connection.authenticate.requested", "grant.request", "critical-secret.use.request"]
+
     /// The feed kind of each approval key's type (but `device`).
     static let kinds: [String: String] = [
         "connection": "connection.request", "auth": "connection.authenticate.requested", "grant": "grant.request",

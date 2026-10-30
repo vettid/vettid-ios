@@ -259,6 +259,9 @@ public enum HistoryKindTexts {
         "history_detail_leash_item_proxy": "The secret went to your VettID connector, which added it to the agent's requests to a site you allowed. The agent was not given it.",
         "history_detail_credential_utk_resync": "This phone's one-time keys were replaced with a fresh set.",
         "history_detail_credential_holder_cleared": "Your vault found its credential holder missing and cleared it. If you didn't remove a phone, contact VettID.",
+        // ANDROID-PLAN 0.1.101 "Withdrawn requests" (approved 2026-10-30); the detail names the connection.
+        "history_authn_withdrawn_title": "Request withdrawn",
+        "history_authn_withdrawn_detail": "%@ withdrew this request before it was answered.",
     ]
 }
 

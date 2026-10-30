@@ -27,6 +27,8 @@ public struct Connection: Sendable {
     public let archived: Bool
     /// The connection's asks (VAULT-MESSAGING 0.23.0 §10.4.1); nil from an older vault.
     public let asks: ConnectionAsks?
+    /// `peer_kind` (VAULT-MESSAGING 0.69.0 §6.4 "Service connections"): `"service"` for a service, nil for a person.
+    public var peerKind: String?
 
     /// A `<connection>` object; nil without its `id` or `state`.
     public static func of(_ o: JsonObject) -> Connection? {
@@ -38,7 +40,8 @@ public struct Connection: Sendable {
             ik: VaultJSON.string(o, "ik") ?? "", profile: profile, createdAt: VaultJSON.string(o, "created_at"),
             lastActiveAt: VaultJSON.string(o, "last_active_at"), version: VaultJSON.int(o, "version") ?? 0,
             alias: VaultJSON.string(o, "alias"), note: VaultJSON.string(o, "note"), tags: VaultJSON.strings(o, "tags"),
-            favorite: VaultJSON.bool(o, "favorite") ?? false, archived: VaultJSON.bool(o, "archived") ?? false, asks: asks
+            favorite: VaultJSON.bool(o, "favorite") ?? false, archived: VaultJSON.bool(o, "archived") ?? false, asks: asks,
+            peerKind: VaultJSON.string(o, "peer_kind")
         )
     }
 }

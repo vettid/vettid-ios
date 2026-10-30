@@ -34,6 +34,15 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
     public var done = false
     /// It left the list without a decision here (decided on another device, or expired).
     public var gone = false
+    /// Its challenger withdrew it (VAULT-MESSAGING 0.80.0 §10.4): the screen stays, says so and offers Close in place of
+    /// the decision, also once a decision in flight was answered `not_found` (ANDROID-PLAN 0.1.101).
+    public var withdrawn = false
+    /// The requesting connection is a service (VAULT-MESSAGING 0.69.0 §6.4): muting its asks is confirmed first.
+    public var connectionIsService = false
+    /// The requesting connection's asks are muted (§10.4.1): the withdrawn notice no longer offers the mute.
+    public var asksMuted = false
+    /// The mute's confirmation is showing (a service connection's).
+    public var confirmMute = false
     /// Not held in memory since the screen opened, and the vault never said it was decided or expired: an approval that
     /// arrived only as an event is not read again after a lock or a restart (IOS-PLAN §6.9; no vault list names it), so
     /// its feed item opens this rather than "Already decided" (chosen; not in the spec). One that arrives meanwhile (a
@@ -111,7 +120,8 @@ public struct ApprovalDetailState: Equatable, Sendable, CustomStringConvertible,
     }
 
     public var description: String {
-        "ApprovalDetailState(busy: \(busy), done: \(done), gone: \(gone), notHeld: \(notHeld), error: \(error.map { "\($0)" } ?? "nil"))"
+        "ApprovalDetailState(busy: \(busy), done: \(done), gone: \(gone), withdrawn: \(withdrawn), notHeld: \(notHeld), "
+            + "error: \(error.map { "\($0)" } ?? "nil"))"
     }
     public var debugDescription: String { description }
     public var customMirror: Mirror { Mirror(self, children: [:]) }
@@ -132,6 +142,9 @@ public final class ApprovalDetailViewModel {
     private var local: ApprovalDetailState
     /// The repository's ``ApprovalsRepository/forgetCount`` when the screen opened.
     @ObservationIgnored private let forgetCountAtOpen: Int
+    /// How long a decision answered `not_found` waits for a withdrawn flag before it says the ask is gone (ANDROID-PLAN
+    /// 0.1.101: about 2 seconds). Tests shorten it.
+    @ObservationIgnored var withdrawnWait: Duration = .seconds(2)
 
     /// [key]: the approval's ``PendingApproval/key``. [connections]: for the requester's name. [items]: the member's items a
     /// category entry can be answered with; [vault] in its place: the Vault list, read quietly when it has not been read
@@ -186,10 +199,19 @@ public final class ApprovalDetailViewModel {
         let missing = local.approval == nil && repo.mayHaveBeenDropped(local.key)
         s.notHeld = now == nil && (missing || left && lost)
         if left && lost { s.approval = nil }
-        s.connectionName = s.approval.flatMap { a -> String? in
-            guard let id = Self.connectionID(a) else { return nil }
-            return AccountNames.cleaned(connections?.connections.first(where: { $0.id == id })?.displayName)
+        // Withdrawn by its challenger (0.80.0 §10.4): the screen keeps its place and says so, with no error and no countdown.
+        if repo.wasWithdrawn(local.key), local.approval != nil, !local.done, !local.busy, local.criticalResult == nil {
+            s.withdrawn = true
+            s.gone = false
+            s.notHeld = false
+            // The decision's `not_found` is the withdrawal itself, not a failure; a failed mute is still said.
+            if s.error == .notFound { s.error = nil }
+            s.approval = now ?? local.approval
         }
+        let connection = s.approval.flatMap(Self.connectionID).flatMap { id in connections?.connections.first { $0.id == id } }
+        s.connectionName = AccountNames.cleaned(connection?.displayName)
+        s.connectionIsService = connection?.isService ?? false
+        s.asksMuted = local.asksMuted || connection?.asks?.muted == true
         return s
     }
 
@@ -210,6 +232,30 @@ public final class ApprovalDetailViewModel {
     public func forgetSecrets() { local.password = "" }
 
     public func askBlock(_ show: Bool) { local.confirmBlock = show }
+
+    /// "Mute requests from …" on a withdrawn request (ANDROID-PLAN 0.1.101): a service connection's is confirmed first
+    /// (superseded sign-ins are routine for a service), a person's is muted at once.
+    public func askMute(_ show: Bool) {
+        guard show else { return local.confirmMute = false }
+        if state.connectionIsService { local.confirmMute = true } else { mute() }
+    }
+
+    /// Mutes the requesting connection's asks (`connection.asks.mute`, §10.4.1), as its detail does.
+    public func mute() {
+        local.confirmMute = false
+        guard let id = state.approval.flatMap(Self.connectionID), let connections, !local.busy else { return }
+        local.busy = true
+        local.error = nil
+        work.launch { [weak self] in
+            do {
+                try await connections.setAsksMuted(id, muted: true)
+                self?.local.asksMuted = true
+            } catch {
+                self?.local.error = failureKind(error)
+            }
+            self?.local.busy = false
+        }
+    }
 
     private func chosen() -> Set<Int> {
         if let s = local.grantSelected { return s }
@@ -315,8 +361,21 @@ public final class ApprovalDetailViewModel {
                 local.password = ""
                 local.busy = false
             } catch {
+                await self?.waitForWithdrawal(error)
                 self?.failed(error)
             }
+        }
+    }
+
+    /// A member authentication answered `not_found` (unknown, decided, expired or withdrawn alike, 0.80.0 §10.4): the
+    /// screen keeps showing progress while it waits up to ``withdrawnWait`` for the withdrawn flag, then says withdrawn, or
+    /// that the request left. A flag that comes later still turns the screen to withdrawn (``state``).
+    private func waitForWithdrawal(_ error: any Error) async {
+        guard (error as? VaultFailure)?.kind == .notFound, local.key.hasPrefix("auth:") else { return }
+        let clock = ContinuousClock()
+        let end = clock.now.advanced(by: withdrawnWait)
+        while !repo.wasWithdrawn(local.key), clock.now < end {
+            try? await Task.sleep(for: .milliseconds(50))
         }
     }
 
