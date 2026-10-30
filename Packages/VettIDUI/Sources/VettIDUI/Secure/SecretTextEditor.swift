@@ -14,6 +14,8 @@ public struct SecretTextEditor: View {
     private let pasteOnly: Bool
     private let onSubmit: (() -> Void)?
     private let keeps: ((Character) -> Bool)?
+    private let monospaced: Bool
+    private let onTextWidth: ((CGFloat) -> Void)?
     @Environment(\.vettIDColors) private var colors
 
     /// [focus]: the editor takes the keyboard (once, each time it turns true). [pasteOnly]: the text menu offers no Copy or
@@ -21,11 +23,12 @@ public struct SecretTextEditor: View {
     /// not go to a clipboard"); a paste is allowed. A paste-only editor also shows the model's text again when the model refuses
     /// what was typed, and keeps the cursor after the same characters when the text is drawn again (a text in groups); [keeps] says
     /// which characters the model keeps (default: those that are not whitespace). [onSubmit]: the Return key calls it instead of
-    /// adding a line (and is labelled Done).
+    /// adding a line (and is labelled Done). [monospaced]: every character as wide as the next (a code, as vettid-android
+    /// draws it; read when the editor is made). [onTextWidth]: told the width a line of text has, as it changes (a text in rows can choose what fits).
     public init(
         _ label: String, text: Binding<String>, placeholder: String? = nil, isError: Bool = false, focus: Bool = false,
         pasteOnly: Bool = false, onSubmit: (() -> Void)? = nil,
-        keeps: ((Character) -> Bool)? = nil
+        keeps: ((Character) -> Bool)? = nil, monospaced: Bool = false, onTextWidth: ((CGFloat) -> Void)? = nil
     ) {
         self.label = label
         _text = text
@@ -35,10 +38,23 @@ public struct SecretTextEditor: View {
         self.pasteOnly = pasteOnly
         self.onSubmit = onSubmit
         self.keeps = keeps
+        self.monospaced = monospaced
+        self.onTextWidth = onTextWidth
+    }
+
+    /// The editor's font: the body style, scaled for Dynamic Type ([traits]: for a given size; default: the current one).
+    public static func font(monospaced: Bool, compatibleWith traits: UITraitCollection? = nil) -> UIFont {
+        guard monospaced else { return .preferredFont(forTextStyle: .body, compatibleWith: traits) }
+        let base = UIFont.preferredFont(forTextStyle: .body, compatibleWith: UITraitCollection(preferredContentSizeCategory: .large))
+        return UIFontMetrics(forTextStyle: .body)
+            .scaledFont(for: .monospacedSystemFont(ofSize: base.pointSize, weight: .regular), compatibleWith: traits)
     }
 
     public var body: some View {
-        SecretTextView(text: $text, focus: focus, pasteOnly: pasteOnly, onSubmit: onSubmit, keeps: keeps)
+        SecretTextView(text: $text, focus: focus, pasteOnly: pasteOnly, onSubmit: onSubmit, keeps: keeps, monospaced: monospaced)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+                onTextWidth?(width - 2 * SecretTextView.lineFragmentPadding)
+            }
             .frame(minHeight: Spacing.touchTarget * 2)
             .overlay(alignment: .topLeading) {
                 if text.isEmpty, let placeholder {
@@ -65,6 +81,10 @@ struct SecretTextView: UIViewRepresentable {
     var pasteOnly = false
     var onSubmit: (() -> Void)?
     var keeps: ((Character) -> Bool)?
+    var monospaced = false
+
+    /// The space each side of a line, inside the view.
+    static let lineFragmentPadding: CGFloat = 5
 
     final class Coordinator: NSObject, UITextViewDelegate {
         var parent: SecretTextView
@@ -104,7 +124,8 @@ struct SecretTextView: UIViewRepresentable {
         v.inlinePredictionType = .no
         v.keyboardType = .asciiCapable
         if onSubmit != nil { v.returnKeyType = .done }
-        v.font = UIFont.preferredFont(forTextStyle: .body)
+        v.font = SecretTextEditor.font(monospaced: monospaced)
+        v.textContainer.lineFragmentPadding = Self.lineFragmentPadding
         v.adjustsFontForContentSizeCategory = true
         v.backgroundColor = .clear
         v.isScrollEnabled = false
