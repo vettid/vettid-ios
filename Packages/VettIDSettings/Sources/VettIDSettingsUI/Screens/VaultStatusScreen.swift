@@ -180,7 +180,10 @@ struct LoadFailure: View {
 
     var body: some View {
         VStack(spacing: Spacing.l) {
-            NoticeCard(.warning, title: error.title(or: SettingsStrings.title), message: error.message(timeScale: timeScale))
+            NoticeCard(
+                .warning, title: error.title(or: SettingsStrings.title), message: error.message(timeScale: timeScale),
+                announce: .polite
+            )
             if let retry { SecondaryButton(SettingsStrings.retry, action: retry) }
         }
         .padding(Spacing.gutter)

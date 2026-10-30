@@ -85,6 +85,20 @@ import VettIDUI
         }
     }
 
+    /// A backoff's line counts down each second; what VoiceOver is told of it does not, so it is said once.
+    @Test func aBackoffIsSpokenWithoutItsSeconds() {
+        let now = Date()
+        var waiting = PasswordPrompt(.open)
+        waiting.error = .backoff
+        waiting.retryUntil = now.addingTimeInterval(30)
+        #expect(waiting.errorText(now) != waiting.errorText(now.addingTimeInterval(1)))
+        #expect(waiting.spokenError(now) == waiting.spokenError(now.addingTimeInterval(1)))
+        #expect(waiting.spokenError(now) == waiting.spokenError(now.addingTimeInterval(31)))
+        var wrong = PasswordPrompt(.save)
+        wrong.error = .badPassword
+        #expect(wrong.spokenError(now) == wrong.errorText(now))
+    }
+
     @Test func theFormRendersEveryKindAndEveryDialog() {
         var s = ItemEditState()
         s.nameHint = "Login"

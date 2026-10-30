@@ -150,6 +150,7 @@ public struct OnboardingContent: View {
         let actions = actions
         let back: (@MainActor () -> Void)? = canBack ? { @MainActor in actions.back() } : nil
         screen(back: back)
+            .announcesStepChanges(of: state.step)
     }
 
     @ViewBuilder

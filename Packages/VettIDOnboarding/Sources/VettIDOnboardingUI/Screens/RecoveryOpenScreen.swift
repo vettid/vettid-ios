@@ -103,6 +103,7 @@ public struct RecoveryOpenContent: View {
 
     public var body: some View {
         screen
+            .announcesStepChanges(of: state.step)
             .confirmDialog(
                 isPresented: Binding(get: { state.confirmErase && state.canErase }, set: { if !$0 { actions.dismissErase() } }),
                 title: OnboardingStrings.unlockEraseConfirmTitle, message: RecoveryScreenStrings.onboardingOpenFinishEraseBody,
@@ -222,7 +223,7 @@ private struct OpenSideNoticeView: View {
             GuidanceNotice(guidance: g, onFinishWithPin: GuidanceNotice.offersFinish(g) && finishLink ? side.finishWithPin : nil)
                 .onAppear { side.probe?("guidance") }
         } else if case .failure(let kind) = side.problem {
-            NoticeCard(.urgent, title: MoveStrings.recoverFailedTitle, message: kind.message(timeScale: timeScale))
+            NoticeCard(.urgent, title: MoveStrings.recoverFailedTitle, message: kind.message(timeScale: timeScale), announce: .assertive)
                 .accessibilityIdentifier("error")
                 .onAppear { side.probe?("error") }
         }
@@ -330,12 +331,14 @@ private struct OpenAnswer: View {
                 NoticeCard(
                     ended ? .urgent : .warning, title: RecoveryOpenStrings.onboardingOpenAnswerTitle,
                     message: o.contactCouldNotRecover
-                        ? RecoveryStrings.recoverCouldNotRecover : RecoveryTexts.openAnswer(t, retryAt: RecoveryTexts.retryAt(o.retryAt))
+                        ? RecoveryStrings.recoverCouldNotRecover : RecoveryTexts.openAnswer(t, retryAt: RecoveryTexts.retryAt(o.retryAt)),
+                    announce: .assertive
                 )
-                .accessibilityAddTraits(.updatesFrequently)
                 .accessibilityIdentifier("open_answer_\(o.code)")
                 if let left = t.attemptsLeft {
-                    Text(RecoveryOpenStrings.onboardingOpenAttemptsLeft(left)).vettIDFont(.bodyMedium)
+                    Text(RecoveryOpenStrings.onboardingOpenAttemptsLeft(left))
+                        .vettIDFont(.bodyMedium)
+                        .announced(RecoveryOpenStrings.onboardingOpenAttemptsLeft(left))
                 }
                 if let at = o.retryAt, waiting {
                     Text(RecoveryOpenStrings.onboardingOpenCountdown(openCountdown(until: at, now: now)))
@@ -366,8 +369,7 @@ private struct OpenAnswer: View {
         ) {
             VStack(alignment: .leading, spacing: Spacing.m) {
                 OpenSideNoticeView(side: side)
-                NoticeCard(.warning, title: RecoveryOpenStrings.onboardingOpenAnswerTitle, message: text)
-                    .accessibilityAddTraits(.updatesFrequently)
+                NoticeCard(.warning, title: RecoveryOpenStrings.onboardingOpenAnswerTitle, message: text, announce: .assertive)
                     .accessibilityIdentifier("open_no_answer")
                 // The answer may have been a lost `ok` (§11.14.6): the PIN finishes it, without an attempt.
                 if unreadable || failure == .noResponse {
@@ -462,7 +464,8 @@ private struct OpenFinish: View {
                     .accessibilityIdentifier("open_finish_answer")
                 } else if let failure = state.failure {
                     NoticeCard(
-                        .warning, title: RecoveryOpenStrings.onboardingOpenAnswerTitle, message: failure.message(timeScale: timeScale)
+                        .warning, title: RecoveryOpenStrings.onboardingOpenAnswerTitle, message: failure.message(timeScale: timeScale),
+                        announce: .assertive
                     )
                     .accessibilityIdentifier("open_finish_failure")
                 }

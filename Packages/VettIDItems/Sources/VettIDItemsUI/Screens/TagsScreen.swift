@@ -77,7 +77,7 @@ public struct TagsScreen: View {
                 LargeTitle(ItemsStrings.tagsTitle).padding(.horizontal, Spacing.gutter)
                 if let e = state.error {
                     let message = ItemsText.failure(e, limit: state.limit, shownCode: state.errorCode)
-                    NoticeCard(.warning, title: e.title(or: ItemsStrings.errorItem), message: message) {
+                    NoticeCard(.warning, title: e.title(or: ItemsStrings.errorItem), message: message, announce: .assertive) {
                         Button(ItemsStrings.ok) { actions.onDismissError() }
                     }
                     .padding(.horizontal, Spacing.s)

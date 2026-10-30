@@ -239,6 +239,8 @@ public struct AppShell: View {
                     mode: mode, repo: ownerChecks, vault: vault, onDone: { model.ownerCheckDone() }, onCancel: { model.ownerCheckDone() }
                 )
                 .accessibilityAddTraits(.isModal)
+                // It comes up by itself: VoiceOver moves into it, and back to the app when it goes.
+                .announcesAsLayer()
                 .transition(.move(edge: .bottom))
                 .zIndex(1)
             }

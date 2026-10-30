@@ -17,7 +17,7 @@ struct ErrorNotice: View {
         if let kind = state.error {
             let text = override != nil && kind == override
                 ? overrideText ?? kind.message(timeScale: timeScale) : Self.message(kind, state.errorRetryAt, timeScale: timeScale)
-            NoticeCard(.urgent, title: OnboardingStrings.progressFailed, message: text)
+            NoticeCard(.urgent, title: OnboardingStrings.progressFailed, message: text, announce: .assertive)
                 .padding(.top, Spacing.l)
                 .accessibilityIdentifier("error")
         }
@@ -130,18 +130,23 @@ struct LabeledField<Field: View>: View {
 }
 
 /// The label over a PIN keypad and, when there is one, the problem under it. Every PIN entry of the app (IOS-PLAN §6.5):
-/// onboarding's, the unlock's, the owner check's and those of Settings.
+/// onboarding's, the unlock's, the owner check's and those of Settings. [failure]: where the shown error hides while
+/// digits are typed, the vault's answer it stands for, spoken to VoiceOver once when it occurs (not again when the keypad
+/// is emptied). Without one the shown error is spoken whenever it appears: the phone's own checks, whose failure is set
+/// again in the same update as the submit, so that only its reappearance can tell a second failure.
 public struct PinEntry: View {
     @Environment(\.vettIDColors) private var colors
     let label: String
     let buffer: PinBuffer
     var error: String?
+    var failure: String?
     let identifier: String
 
-    public init(label: String, buffer: PinBuffer, error: String? = nil, identifier: String) {
+    public init(label: String, buffer: PinBuffer, error: String? = nil, failure: String? = nil, identifier: String) {
         self.label = label
         self.buffer = buffer
         self.error = error
+        self.failure = failure
         self.identifier = identifier
     }
 
@@ -158,10 +163,12 @@ public struct PinEntry: View {
                     .vettIDFont(.bodySmall)
                     .foregroundStyle(colors.error)
                     .multilineTextAlignment(.center)
+                    .announced(failure == nil ? error : nil, .assertive)
                     .accessibilityIdentifier("\(identifier)_error")
             }
         }
         .frame(maxWidth: .infinity)
+        .announced(failure, .assertive)
     }
 }
 

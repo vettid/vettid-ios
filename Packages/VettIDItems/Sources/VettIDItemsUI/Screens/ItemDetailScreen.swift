@@ -141,7 +141,7 @@ public struct ItemDetailScreen: View {
             ProgressView().tint(colors.primary.color).frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             let message = ItemsText.failure(state.error ?? .other, shownCode: state.errorCode)
-            NoticeCard(.warning, title: ItemsStrings.errorItem, message: message) {
+            NoticeCard(.warning, title: ItemsStrings.errorItem, message: message, announce: .polite) {
                 Button(ItemsStrings.retry) { actions.onRetry() }
             }
             .padding(Spacing.xl)
@@ -180,7 +180,7 @@ struct ItemDetailBody: View {
                 Spacer().frame(height: Spacing.m)
                 if let e = state.error {
                     let message = ItemsText.failure(e, limit: state.limit, shownCode: state.errorCode)
-                    NoticeCard(.warning, title: ItemsStrings.errorItem, message: message) {
+                    NoticeCard(.warning, title: ItemsStrings.errorItem, message: message, announce: .assertive) {
                         Button(ItemsStrings.ok) { actions.onDismissError() }
                     }
                     .padding(.horizontal, Spacing.s)

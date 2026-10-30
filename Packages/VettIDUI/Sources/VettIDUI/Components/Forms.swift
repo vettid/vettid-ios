@@ -134,20 +134,32 @@ public struct PasswordRuleLine: View {
 public enum NoticeKind: CaseIterable, Sendable { case info, success, warning, urgent }
 
 /// A notice in a form or detail screen: release updates, warnings before an irreversible choice, the clone alarm.
-/// [actions] go under the text. Mirrors vettid-android `NoticeCard`.
+/// [actions] go under the text. [announce]: for a notice that appears by itself (not on the member's tap), spoken by
+/// VoiceOver when it does and when its text changes; [announcement] replaces the spoken text where the message changes
+/// by itself (a wait counting down), so that it is said once. Mirrors vettid-android `NoticeCard`.
 public struct NoticeCard<Actions: View>: View {
     @Environment(\.vettIDColors) private var colors
     let kind: NoticeKind
     let title: String
     let message: String
+    let announce: Announce?
+    let announcement: String?
     let actions: Actions
 
-    public init(_ kind: NoticeKind, title: String, message: String, @ViewBuilder actions: () -> Actions = { EmptyView() }) {
+    public init(
+        _ kind: NoticeKind, title: String, message: String, announce: Announce? = nil, announcement: String? = nil,
+        @ViewBuilder actions: () -> Actions = { EmptyView() }
+    ) {
         self.kind = kind
         self.title = title
         self.message = message
+        self.announce = announce
+        self.announcement = announcement
         self.actions = actions()
     }
+
+    /// What VoiceOver says when the notice is announced.
+    var spoken: String { announcement ?? (message.isEmpty ? title : "\(title). \(message)") }
 
     public var body: some View {
         let (accent, icon): (ThemeColor, VettIDSymbol) = switch kind {
@@ -170,6 +182,7 @@ public struct NoticeCard<Actions: View>: View {
         }
         .padding(Spacing.l)
         .background(colors.surfaceContainer, in: VettIDShape.card)
+        .announced(announce == nil ? nil : spoken, announce ?? .polite)
     }
 }
 

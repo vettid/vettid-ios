@@ -45,19 +45,12 @@ public struct DrawerContainer<Drawer: View, Content: View>: View {
                         .accessibilityAction(.escape) { isOpen = false }
                         // VoiceOver moves into the drawer once it is in place (the content is hidden from it then), and
                         // back to the content once it has gone.
-                        .onAppear { Self.screenChanged() }
-                        .onDisappear { Self.screenChanged() }
+                        .announcesAsLayer()
                         .transition(.move(edge: .leading))
                 }
             }
             .animation(.easeOut(duration: 0.25), value: isOpen)
         }
-    }
-
-    /// Tells VoiceOver that the screen changed, on the next turn of the main run loop (after the drawer was inserted or
-    /// removed).
-    private static func screenChanged() {
-        DispatchQueue.main.async { UIAccessibility.post(notification: .screenChanged, argument: nil) }
     }
 
     /// How far the drawer has been dragged back towards its edge.

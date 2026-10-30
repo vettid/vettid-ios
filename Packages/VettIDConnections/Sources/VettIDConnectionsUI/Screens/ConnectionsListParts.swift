@@ -53,7 +53,7 @@ struct ConnectionsError: View {
     let action: @MainActor () -> Void
 
     var body: some View {
-        NoticeCard(.warning, title: ConnectStrings.errorTitle, message: kind.message(timeScale: timeScale)) {
+        NoticeCard(.warning, title: ConnectStrings.errorTitle, message: kind.message(timeScale: timeScale), announce: .polite) {
             ListNoticeAction(label: actionLabel, identifier: "connections_error_action", action: action)
         }
         .accessibilityIdentifier("connections_error")

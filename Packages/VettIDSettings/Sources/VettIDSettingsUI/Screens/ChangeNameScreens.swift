@@ -198,12 +198,13 @@ struct ChangeNameConfirmStep: View {
         ) {
             VStack(alignment: .leading, spacing: Spacing.m) {
                 PinEntry(
-                    label: NameStrings.pin, buffer: pin, error: badPin && pin.count == 0 ? NameStrings.badPin : nil, identifier: "name_pin"
+                    label: NameStrings.pin, buffer: pin, error: badPin && pin.count == 0 ? NameStrings.badPin : nil,
+                    failure: badPin ? NameStrings.badPin : nil, identifier: "name_pin"
                 )
                 .disabled(!state.entriesAllowed)
                 SecretField(
                     NameStrings.password, text: Binding(get: { state.password }, set: { actions.onPassword($0) }),
-                    error: badPassword ? NameStrings.badPassword : nil, onSubmit: submit
+                    error: badPassword ? NameStrings.badPassword : nil, errorPriority: .assertive, onSubmit: submit
                 )
                 .disabled(!state.entriesAllowed)
                 .accessibilityIdentifier("name_password")
@@ -236,7 +237,10 @@ struct ChangeNameConfirmStep: View {
                 .accessibilityIdentifier("name_checks_left")
         }
         if state.waitSeconds > 0 {
-            Text(NameStrings.wait(SettingsTimes.wait(state.waitSeconds))).vettIDFont(.bodyMedium).accessibilityIdentifier("name_wait")
+            Text(NameStrings.wait(SettingsTimes.wait(state.waitSeconds)))
+                .vettIDFont(.bodyMedium)
+                .announcedOnce(NameStrings.wait(SettingsTimes.wait(state.waitSeconds)))
+                .accessibilityIdentifier("name_wait")
         } else if state.message == .backoff {
             Text(NameStrings.backoff).vettIDFont(.bodyMedium)
         } else if case .failed(let kind)? = state.message {

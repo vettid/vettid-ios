@@ -38,7 +38,7 @@ struct TagSheet: View {
         .presentationBackground(colors.surfaceContainerLow.color)
         .environment(\.vettIDColors, colors)
         // An action's failure is said inside the sheet while it is up (VoiceOver announces it), as well as under it.
-        .onChange(of: errorText) { _, text in if let text { AccessibilityNotification.Announcement(text).post() } }
+        .onChange(of: errorText) { _, text in if let text { Announcer.announce(text, .assertive) } }
     }
 
     private var errorText: String? {

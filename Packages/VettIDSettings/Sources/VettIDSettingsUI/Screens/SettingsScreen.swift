@@ -184,7 +184,10 @@ public struct SettingsContent: View {
 
     @ViewBuilder private var notices: some View {
         if let error = state.error {
-            NoticeCard(.urgent, title: error.title(or: SettingsStrings.title), message: error.message(timeScale: timeScale)) {
+            NoticeCard(
+                .urgent, title: error.title(or: SettingsStrings.title), message: error.message(timeScale: timeScale),
+                announce: .assertive
+            ) {
                 NoticeAction(label: SettingsStrings.done, identifier: "settings_error_done", action: actions.dismissError)
             }
             .padding(.horizontal, Spacing.gutter)
@@ -206,7 +209,10 @@ public struct SettingsContent: View {
             .accessibilityIdentifier("app_lock_use_passcode")
         }
         if state.appLockUnavailable {
-            NoticeCard(.warning, title: SettingsStrings.securityAppLock, message: SettingsStrings.appLockEnableFailed) {
+            NoticeCard(
+                .warning, title: SettingsStrings.securityAppLock, message: SettingsStrings.appLockEnableFailed,
+                announce: .assertive
+            ) {
                 NoticeAction(label: SettingsStrings.done, action: actions.dismissAppLockUnavailable)
             }
             .padding(.horizontal, Spacing.gutter)

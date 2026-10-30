@@ -163,13 +163,14 @@ public struct UnlockScreen: View {
             NoticeCard(.info, title: OnboardingStrings.unlockPreviousPinTitle, message: OnboardingStrings.unlockPreviousPinBody)
                 .accessibilityIdentifier("unlock_previous_pin")
         case .new:
-            NoticeCard(.success, title: OnboardingStrings.unlockNewPinTitle, message: OnboardingStrings.unlockNewPinBody)
+            NoticeCard(.success, title: OnboardingStrings.unlockNewPinTitle, message: OnboardingStrings.unlockNewPinBody, announce: .polite)
                 .accessibilityIdentifier("unlock_new_pin")
         }
         PinEntry(
             label: OnboardingStrings.unlockPinLabel,
             buffer: pin,
             error: state.message == .badPin && pin.count == 0 ? OnboardingStrings.unlockBadPin : nil,
+            failure: state.message == .badPin ? OnboardingStrings.unlockBadPin : nil,
             identifier: "unlock_pin"
         )
         .disabled(!state.pinAllowed)
@@ -178,6 +179,8 @@ public struct UnlockScreen: View {
             Text(OnboardingStrings.unlockWait(formatWait(state.waitSeconds)))
                 .vettIDFont(.bodySmall)
                 .frame(maxWidth: .infinity)
+                // Said once when the wait starts, never at each tick.
+                .announcedOnce(OnboardingStrings.unlockWait(formatWait(state.waitSeconds)))
                 .accessibilityIdentifier("unlock_wait")
         }
         if state.checkDue {
@@ -250,12 +253,13 @@ struct UnlockNotices: View {
             }
             // The vault's software did not verify: alarming, unlike a list that could not be loaded.
             let level: NoticeKind = state.recoverOnly || error == .enclave ? .urgent : .warning
-            NoticeCard(level, title: title, message: error.message(timeScale: state.timeScale))
+            NoticeCard(level, title: title, message: error.message(timeScale: state.timeScale), announce: .polite)
                 .accessibilityIdentifier("unlock_preflight_error")
         }
         if state.serviceWaitSeconds > 0 {
             Text(OnboardingStrings.unlockServiceWait(formatWait(state.serviceWaitSeconds)))
                 .vettIDFont(.bodyMedium)
+                .announcedOnce(OnboardingStrings.unlockServiceWait(formatWait(state.serviceWaitSeconds)))
                 .accessibilityIdentifier("unlock_service_wait")
         }
         if let p = state.preflight {
@@ -263,7 +267,10 @@ struct UnlockNotices: View {
         }
         LockNoticeView(lock: state.lock, actions: actions)
         if state.refused && !state.notRecognised {
-            NoticeCard(.warning, title: OnboardingStrings.unlockRefusedTitle, message: OnboardingStrings.unlockRefusedBody)
+            NoticeCard(
+                .warning, title: OnboardingStrings.unlockRefusedTitle, message: OnboardingStrings.unlockRefusedBody,
+                announce: .assertive
+            )
                 .accessibilityIdentifier("unlock_refused")
         }
         if state.lockedByOwnerCheck {
@@ -282,7 +289,9 @@ struct UnlockNotices: View {
                 .accessibilityIdentifier("unlock_owner_check")
         }
         if let f = state.moveFailure {
-            NoticeCard(.warning, title: OnboardingStrings.finishMoveTitle, message: f.message(timeScale: state.timeScale)) {
+            NoticeCard(
+                .warning, title: OnboardingStrings.finishMoveTitle, message: f.message(timeScale: state.timeScale), announce: .polite
+            ) {
                 TextLink(OnboardingStrings.continueLabel) { actions.dismissMoveFailure() }
             }
             .accessibilityIdentifier("unlock_move_failure")
@@ -306,7 +315,7 @@ struct UnlockNotices: View {
 }
 
 /// The lock the member asked for, until the vault has confirmed it. These appear and change by themselves, so each is
-/// announced to VoiceOver when it does.
+/// announced to VoiceOver when it does (as vettid-android: the failures interrupt).
 struct LockNoticeView: View {
     let lock: LockNotice
     let actions: any UnlockActions
@@ -319,22 +328,26 @@ struct LockNoticeView: View {
             Text(OnboardingStrings.unlockLockLocking)
                 .vettIDFont(.bodyMedium)
                 .foregroundStyle(colors.onSurfaceVariant)
-                .accessibilityAddTraits(.updatesFrequently)
+                .announced(OnboardingStrings.unlockLockLocking)
                 .accessibilityIdentifier("unlock_lock_locking")
         case .unconfirmed:
-            NoticeCard(.urgent, title: OnboardingStrings.unlockLockUnconfirmedTitle, message: OnboardingStrings.unlockLockUnconfirmedBody) {
+            NoticeCard(
+                .urgent, title: OnboardingStrings.unlockLockUnconfirmedTitle, message: OnboardingStrings.unlockLockUnconfirmedBody,
+                announce: .assertive
+            ) {
                 TextLink(OnboardingStrings.unlockLockTryAgain) { actions.retryLock() }
             }
             .accessibilityIdentifier("unlock_lock_unconfirmed")
         case .confirmedLate:
-            NoticeCard(.success, title: OnboardingStrings.unlockLockConfirmed, message: "") {
+            NoticeCard(.success, title: OnboardingStrings.unlockLockConfirmed, message: "", announce: .polite) {
                 TextLink(OnboardingStrings.unlockLockOk) { actions.dismissLockNotice() }
             }
             .accessibilityIdentifier("unlock_lock_confirmed")
         // (Release L) The vault was opened again after this lock: not locked, and said so. This phone stays locked.
         case .openedAgain:
             NoticeCard(
-                .warning, title: OnboardingStrings.unlockLockOpenedAgainTitle, message: OnboardingStrings.unlockLockOpenedAgainBody
+                .warning, title: OnboardingStrings.unlockLockOpenedAgainTitle, message: OnboardingStrings.unlockLockOpenedAgainBody,
+                announce: .assertive
             ) {
                 // (Owner decision 2026-10-24) A fresh lock of the vault as it is now.
                 TextLink(OnboardingStrings.unlockLockAgain) { actions.lockAgain() }
@@ -385,10 +398,13 @@ struct UnlockMessageNotice: View {
     var body: some View {
         switch state.message {
         case .moveBackFailed:
-            NoticeCard(.urgent, title: OnboardingStrings.moveDidntFinish, message: OnboardingStrings.moveBackFailed)
+            NoticeCard(.urgent, title: OnboardingStrings.moveDidntFinish, message: OnboardingStrings.moveBackFailed, announce: .assertive)
                 .accessibilityIdentifier("move_back_failed")
         case .updateRefused(let code):
-            NoticeCard(.warning, title: OnboardingStrings.unlockTitle, message: OnboardingStrings.unlockUpdateRefused(code))
+            NoticeCard(
+                .warning, title: OnboardingStrings.unlockTitle, message: OnboardingStrings.unlockUpdateRefused(code),
+                announce: .assertive
+            )
         // An unreadable result is the "not recognised" notice, with its erase action.
         case .failed(let kind, let code) where code != UnlockState.codeUnreadable || !state.notRecognised:
             let text = switch code {
@@ -401,7 +417,7 @@ struct UnlockMessageNotice: View {
             }
             // The service paused for maintenance or not there yet: temporary, not alarming.
             let temporary = kind == .servicePaused || kind == .vaultUnavailable
-            NoticeCard(temporary ? .warning : .urgent, title: OnboardingStrings.unlockTitle, message: text)
+            NoticeCard(temporary ? .warning : .urgent, title: OnboardingStrings.unlockTitle, message: text, announce: .assertive)
                 .accessibilityIdentifier("unlock_failed")
         default:
             EmptyView()

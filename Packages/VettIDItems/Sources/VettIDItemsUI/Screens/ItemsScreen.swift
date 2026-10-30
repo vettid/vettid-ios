@@ -95,7 +95,10 @@ public struct ItemsScreen: View {
         if state.loading {
             ProgressView().tint(colors.primary.color).frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let e = state.error, state.items.isEmpty {
-            NoticeCard(.warning, title: ItemsStrings.errorList, message: ItemsText.failure(e, shownCode: state.errorCode)) {
+            NoticeCard(
+                .warning, title: ItemsStrings.errorList, message: ItemsText.failure(e, shownCode: state.errorCode),
+                announce: .polite
+            ) {
                 Button(ItemsStrings.retry) { actions.onRetry() }
             }
             .padding(Spacing.xl)

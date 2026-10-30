@@ -56,6 +56,8 @@ public struct RecoverContent: View {
 
     public var body: some View {
         screen
+            // Loading and the intro are one screen.
+            .announcesStepChanges(of: state.step == .loading ? .intro : state.step)
             .confirmDialog(
                 isPresented: Binding(get: { state.confirmStartOver }, set: { if !$0 { actions.dismissStartOver() } }),
                 // What "Start over" does, said plainly: the app cannot cancel the recovery itself (§11.11.4).
@@ -125,7 +127,10 @@ public struct RecoverContent: View {
             primaryLabel: RecoveryScreenStrings.onboardingOpenTryAgain, onPrimary: actions.retryStage, onBack: back
         ) {
             if let kind = state.error {
-                NoticeCard(.urgent, title: MoveStrings.recoverFailedTitle, message: kind.message(timeScale: timeScale))
+                NoticeCard(
+                    .urgent, title: MoveStrings.recoverFailedTitle, message: kind.message(timeScale: timeScale),
+                    announce: .assertive
+                )
                     .accessibilityIdentifier("error")
             }
         }
@@ -179,7 +184,8 @@ public struct RecoverContent: View {
                 .accessibilityIdentifier("recover_typed")
                 Text(groups)
                     .vettIDFont(.bodySmall)
-                    .accessibilityAddTraits(.updatesFrequently)
+                    // Spoken as it changes, not when the step opens (as vettid-android's live region).
+                    .onChange(of: groups) { _, now in Announcer.announce(now) }
                     .accessibilityIdentifier("typed_groups")
                 if let problem {
                     TypedProblemText(text: problem)
@@ -227,7 +233,7 @@ private struct TypedProblemText: View {
         Text(text)
             .vettIDFont(.bodyMedium)
             .foregroundStyle(colors.error)
-            .accessibilityAddTraits(.updatesFrequently)
+            .announced(text, .assertive)
             .accessibilityIdentifier("typed_problem")
     }
 }
@@ -294,7 +300,7 @@ public struct RecoverRoute: View {
         }
         // The ended step replacing the open step while the member looks is announced, once (vettid-android's live region).
         .onChange(of: model?.state.step) { old, now in
-            if old == .open && now == .couldNotTell { AccessibilityNotification.Announcement(RecoveryStrings.recoverCouldNotTell).post() }
+            if old == .open && now == .couldNotTell { Announcer.announce(RecoveryStrings.recoverCouldNotTell) }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.protectedDataWillBecomeUnavailableNotification)) { _ in
             Self.forget(model)

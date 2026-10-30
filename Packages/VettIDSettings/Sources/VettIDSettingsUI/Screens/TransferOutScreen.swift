@@ -59,6 +59,7 @@ public struct TransferOutContent: View {
         // No identifier of its own: on `screen` it would land on the step's element and replace the step's identifier (UI
         // tests find each step by its own).
         screen
+            .announcesStepChanges(of: state.step)
             .confirmDialog(
                 isPresented: Binding(get: { state.confirmReject }, set: { if !$0 { actions.askReject(false) } }),
                 title: TransferStrings.transferRejectTitle,
@@ -194,11 +195,13 @@ public struct TransferOutContent: View {
                         .vettIDFont(.bodySmall)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
+                        .announcedOnce(TransferStrings.transferWait(Self.mmss(state.waitSeconds)))
                         .accessibilityIdentifier("transfer_wait")
                 }
                 SecretField(
                     TransferStrings.transferPassword, text: Binding(get: { state.password }, set: { actions.setPassword($0) }),
-                    error: state.error == .badPassword ? TransferStrings.transferBadPassword : nil, onSubmit: askApprove
+                    error: state.error == .badPassword ? TransferStrings.transferBadPassword : nil, errorPriority: .assertive,
+                    onSubmit: askApprove
                 )
                 .disabled(state.waitSeconds > 0 || state.busy)
                 .accessibilityIdentifier("transfer_password")
@@ -336,7 +339,10 @@ struct TransferError: View {
 
     var body: some View {
         if let kind = state.error {
-            NoticeCard(.urgent, title: kind.title(or: TransferStrings.transferTitle), message: Self.text(kind, state.errorCode, timeScale))
+            NoticeCard(
+                .urgent, title: kind.title(or: TransferStrings.transferTitle), message: Self.text(kind, state.errorCode, timeScale),
+                announce: .assertive
+            )
                 .padding(.top, Spacing.l)
                 .accessibilityIdentifier("transfer_error")
         }

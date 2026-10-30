@@ -36,7 +36,10 @@ public struct HistoryEntryScreen: View {
             if state.loading {
                 ProgressView().tint(colors.primary.color).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let error = state.error {
-                NoticeCard(.warning, title: error.title(or: HistoryStrings.errorTitle), message: error.message(timeScale: timeScale)) {
+                NoticeCard(
+                    .warning, title: error.title(or: HistoryStrings.errorTitle), message: error.message(timeScale: timeScale),
+                    announce: .polite
+                ) {
                     Button(HistoryStrings.retry, action: actions.onRetry).accessibilityIdentifier("history_retry")
                 }
                 .padding(Spacing.xl)

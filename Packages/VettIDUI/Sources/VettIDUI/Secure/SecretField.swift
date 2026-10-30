@@ -38,20 +38,27 @@ public struct SecretField: View {
     @Binding private var text: String
     private let label: String
     private let error: String?
+    private let spokenError: String?
+    private let errorPriority: Announce
     private let supporting: String?
     private let onSubmit: () -> Void
     private let focus: Bool
     @State private var shown = false
     @Environment(\.vettIDColors) private var colors
 
-    /// [focus]: the field takes the keyboard (once, each time it turns true).
+    /// [focus]: the field takes the keyboard (once, each time it turns true). The error is spoken to VoiceOver when it
+    /// appears or changes, politely as on vettid-android (a check made while typing must not cut off the typing's echo);
+    /// [errorPriority] `.assertive` for the result of an attempt. [spokenError]: what is said instead of an error that
+    /// changes by itself (a backoff counting down), so that it is said once.
     public init(
-        _ label: String, text: Binding<String>, error: String? = nil, supporting: String? = nil, focus: Bool = false,
-        onSubmit: @escaping () -> Void = {}
+        _ label: String, text: Binding<String>, error: String? = nil, spokenError: String? = nil,
+        errorPriority: Announce = .polite, supporting: String? = nil, focus: Bool = false, onSubmit: @escaping () -> Void = {}
     ) {
         self.label = label
         _text = text
         self.error = error
+        self.spokenError = spokenError
+        self.errorPriority = errorPriority
         self.supporting = supporting
         self.focus = focus
         self.onSubmit = onSubmit
@@ -72,7 +79,7 @@ public struct SecretField: View {
             .padding(.leading, Spacing.l)
             .overlay(RoundedRectangle(cornerRadius: VettIDShape.small).stroke(error == nil ? colors.outline : colors.error))
             if let error {
-                Text(error).vettIDFont(.bodySmall).foregroundStyle(colors.error).accessibilityAddTraits(.updatesFrequently)
+                Text(error).vettIDFont(.bodySmall).foregroundStyle(colors.error).announced(spokenError ?? error, errorPriority)
             }
             if let supporting { Text(supporting).vettIDFont(.bodySmall).foregroundStyle(colors.onSurfaceVariant) }
         }

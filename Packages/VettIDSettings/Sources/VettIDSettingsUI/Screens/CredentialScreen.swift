@@ -103,7 +103,10 @@ public struct CredentialContent: View {
         } else if state.status == nil, let error = state.error {
             VStack(spacing: Spacing.l) {
                 LargeTitle(CredentialStrings.title)
-                NoticeCard(.warning, title: error.title(or: CredentialStrings.title), message: error.message(timeScale: timeScale))
+                NoticeCard(
+                    .warning, title: error.title(or: CredentialStrings.title), message: error.message(timeScale: timeScale),
+                    announce: .polite
+                )
                 SecondaryButton(CredentialStrings.retry, action: actions.retry)
                 Spacer()
             }
@@ -259,7 +262,7 @@ struct WindowPasswordSheet: View {
             Text(CredentialStrings.windowDialogBody).vettIDFont(.bodyMedium).foregroundStyle(colors.onSurfaceVariant)
             SecretField(
                 CredentialStrings.passwordLabel, text: Binding(get: { state.windowPassword }, set: { actions.setWindowPassword($0) }),
-                error: state.windowError?.message(timeScale: timeScale), onSubmit: actions.openWindow
+                error: state.windowError?.message(timeScale: timeScale), errorPriority: .assertive, onSubmit: actions.openWindow
             )
             .disabled(state.busy)
             .accessibilityIdentifier("dialog_password")
