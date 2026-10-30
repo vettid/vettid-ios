@@ -184,7 +184,8 @@ public struct RecoverContent: View {
                 .accessibilityIdentifier("recover_typed")
                 Text(groups)
                     .vettIDFont(.bodySmall)
-                    .announced(groups)
+                    // Spoken as it changes, not when the step opens (as vettid-android's live region).
+                    .onChange(of: groups) { _, now in Announcer.announce(now) }
                     .accessibilityIdentifier("typed_groups")
                 if let problem {
                     TypedProblemText(text: problem)

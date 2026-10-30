@@ -34,7 +34,7 @@ public struct PinCreateScreen: View {
             PinEntry(
                 label: OnboardingStrings.pinLabel,
                 buffer: pin,
-                error: pin.count == 0 ? state.pinProblem?.message : nil, failure: state.pinProblem?.message,
+                error: pin.count == 0 ? state.pinProblem?.message : nil,
                 identifier: "pin"
             )
             ErrorNotice(state: state)
@@ -71,7 +71,6 @@ public struct PinConfirmScreen: View {
                 label: OnboardingStrings.pinConfirmLabel,
                 buffer: pin,
                 error: state.pinMismatch && pin.count == 0 ? OnboardingStrings.pinMismatch : nil,
-                failure: state.pinMismatch ? OnboardingStrings.pinMismatch : nil,
                 identifier: "pin_confirm"
             )
         }

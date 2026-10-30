@@ -91,10 +91,7 @@ public struct ChangePinContent: View {
                     NoticeCard(.warning, title: PinStrings.pinTitle, message: PinStrings.pinPasswordToo)
                         .accessibilityIdentifier("pin_password_too")
                 }
-                PinEntry(
-                    label: label, buffer: pin, error: pin.count == 0 ? pinError : nil, failure: pinError,
-                    identifier: "change_pin_\(stepTag)"
-                )
+                PinEntry(label: label, buffer: pin, error: pin.count == 0 ? pinError : nil, identifier: "change_pin_\(stepTag)")
                     .disabled(state.busy)
                 if last && state.withPassword {
                     // Release R (§11.14.9): the credential password goes with the change.
