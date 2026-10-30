@@ -158,7 +158,11 @@ public struct HistoryEntryRoute: View {
         a.onBack = host.onBack
         a.onOpenConnection = host.onOpenConnection
         a.onOpenItem = host.onOpenItem
-        if let m = model { a.onRetry = { m.load() } }
+        if let m = model {
+            a.onRetry = { m.load() }
+            a.onAskMute = { m.askMute($0) }
+            a.onMute = { m.mute() }
+        }
         return a
     }
 }

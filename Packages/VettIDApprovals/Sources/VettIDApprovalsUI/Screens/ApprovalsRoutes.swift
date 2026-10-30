@@ -97,6 +97,8 @@ public struct ApprovalDetailRoute: View {
         a.onDeny = { m.deny(shown: shown) }
         a.onAskBlock = { m.askBlock($0) }
         a.onBlock = { m.block() }
+        a.onAskMute = { m.askMute($0) }
+        a.onMute = { m.mute() }
         a.onToggleShareItem = { m.toggleShareItem($0) }
         a.onToggleGrant = { m.toggleGrantEntry($0) }
         a.onAnswerGrant = { m.answerGrantEntry($0, itemID: $1) }

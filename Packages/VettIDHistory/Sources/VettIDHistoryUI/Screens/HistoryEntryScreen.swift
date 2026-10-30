@@ -12,6 +12,10 @@ public struct HistoryEntryActions {
     public var onOpenConnection: @MainActor (String) -> Void = { _ in }
     /// Opens the entry's item, while it is still in the vault; nil until the Vault screens (IOS-PLAN §8 I3.1).
     public var onOpenItem: (@MainActor (String) -> Void)?
+    /// A withdrawn request's "Mute requests from …": asks (true) or cancels (false); a service connection's is confirmed.
+    public var onAskMute: @MainActor (Bool) -> Void = { _ in }
+    /// The mute confirmed.
+    public var onMute: @MainActor () -> Void = {}
 
     public init() {}
 }
@@ -102,6 +106,9 @@ public struct HistoryEntryScreen: View {
                     .frame(minHeight: Spacing.touchTarget)
                     .accessibilityIdentifier("history_open_connection")
             }
+            if state.offersMute, let who = AccountNames.isolateOrNull(state.connectionName) {
+                mute(who)
+            }
         case "history_entry_item":
             if state.itemExists, let open = actions.onOpenItem, let id = AuditKinds.itemOf(e.kind, e.entry.ref) {
                 Button(HistoryStrings.detailOpenItem) { open(id) }
@@ -117,6 +124,27 @@ public struct HistoryEntryScreen: View {
         default:
             EmptyView()
         }
+    }
+
+    /// A withdrawn request's mute, a secondary action (VAULT-MESSAGING 0.80.0 §10.4; ANDROID-PLAN 0.1.101).
+    private func mute(_ who: String) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            Button(HistoryStrings.withdrawnMute(who)) { actions.onAskMute(true) }
+                .disabled(state.muting)
+                .frame(minHeight: Spacing.touchTarget)
+                .accessibilityIdentifier("history_withdrawn_mute")
+            if let text = state.muteError.map({ $0.message(timeScale: timeScale) }) {
+                Text(text).vettIDFont(.bodySmall).announced(text, .assertive)
+            }
+        }
+        .confirmDialog(
+            isPresented: Binding(get: { state.confirmMute }, set: { if !$0 { actions.onAskMute(false) } }),
+            title: HistoryStrings.withdrawnMute(who),
+            message: HistoryStrings.withdrawnMuteConfirmService(who),
+            confirmLabel: HistoryStrings.withdrawnMuteConfirm,
+            dismissLabel: HistoryStrings.withdrawnMuteCancel,
+            onConfirm: actions.onMute
+        )
     }
 }
 #endif

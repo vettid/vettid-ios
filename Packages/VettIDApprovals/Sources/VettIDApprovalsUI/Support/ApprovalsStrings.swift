@@ -117,6 +117,38 @@ enum ApprovalsStrings {
 
     static var aConnection: String { String(localized: "approvals_a_connection", defaultValue: "A connection", bundle: .module) }
 
+    /// A withdrawn request's notice (VAULT-MESSAGING 0.80.0 §10.4; ANDROID-PLAN 0.1.101, approved 2026-10-30): [value] is the
+    /// connection's "First Last". A newer request may be waiting.
+    static func withdrawnNotice(_ value: String) -> String {
+        String(
+            localized: "approvals_authn_withdrawn_notice", defaultValue: "\(value) withdrew this request. You don't need to answer it.",
+            bundle: .module
+        )
+    }
+
+    /// The withdrawn notice's secondary action: the existing mute (`connection.asks.mute`).
+    static func withdrawnMute(_ value: String) -> String {
+        String(localized: "approvals_authn_withdrawn_mute", defaultValue: "Mute requests from \(value)", bundle: .module)
+    }
+
+    /// The mute's confirmation, on a service connection only.
+    static func withdrawnMuteConfirmService(_ value: String) -> String {
+        String(
+            localized: "approvals_authn_withdrawn_mute_confirm_service",
+            defaultValue: "You won't be asked to sign in or approve anything for \(value) until you unmute.", bundle: .module
+        )
+    }
+
+    static var withdrawnMuteConfirm: String {
+        String(localized: "approvals_authn_withdrawn_mute_confirm_button", defaultValue: "Mute", bundle: .module)
+    }
+
+    static var withdrawnMuteCancel: String {
+        String(localized: "approvals_authn_withdrawn_mute_cancel_button", defaultValue: "Cancel", bundle: .module)
+    }
+
+    static var withdrawnClose: String { String(localized: "approvals_authn_withdrawn_close", defaultValue: "Close", bundle: .module) }
+
     static var anAgent: String { String(localized: "approvals_an_agent", defaultValue: "An agent", bundle: .module) }
 
     /// A desktop that gave no name, in the device row and on its decision screen (VAULT-MESSAGING 0.76.0 §10.8 step 4).

@@ -1,4 +1,6 @@
 import Foundation
+import Observation
+import VettIDCrypto
 import VettIDVault
 
 /// A screen's ask for the desktops' and agents' sessions (``ApprovalsRepository/askDeviceSessions()``), given back when it
@@ -11,21 +13,30 @@ public final class DeviceSessionsAsk: Sendable {
     deinit { release() }
 }
 
-/// The bookkeeping of the sessions' reads and events, in the order they reach the app (``ApprovalsManager``'s
-/// `sessionBook`).
+/// The desktops' and agents' access sessions as the vault last said, memory only and dropped with the vault, and the
+/// bookkeeping of their reads and events, in the order they reach the app (``ApprovalsManager``'s `sessionBook`;
+/// ``ApprovalsRepository`` says what each one is). Observed, so a screen follows them.
+@MainActor
+@Observable
 final class DeviceSessionBook {
+    var sessions: [String: Date] = [:]
+    var known = false
+    var reads = 0
+    var version = 0
+    /// Whether the vault is held (§3.6.3): nothing is ended while it is.
+    @ObservationIgnored var held: @MainActor () -> Bool = { false }
     /// The screens asking for the sessions (``DeviceSessionsAsk``): while one is open, a `device.session` event and a read
     /// of the lists (an unlock, a hold that lifts) read them again. A hold keeps them (a screen that outlives it learns the
     /// sessions again when it lifts); a lock ends them all (``ApprovalsManager/vaultClosed()``).
-    var askers = 0
+    @ObservationIgnored var askers = 0
     /// Bumped at each lock: a screen's ask from before it is not given back twice.
-    var epoch = 0
+    @ObservationIgnored var epoch = 0
     /// Bumped at each read's start and each event, so that an answer and the events are put in the order they came.
-    var tick = 0
+    @ObservationIgnored var tick = 0
     /// The start of the newest read applied: an answer to a read begun before it is dropped.
-    var lastRead = 0
+    @ObservationIgnored var lastRead = 0
     /// The events applied, with their tick, while a read may be on its way: applied again over a read begun before them.
-    var events: [Event] = []
+    @ObservationIgnored var events: [Event] = []
 
     struct Event {
         var tick: Int
@@ -41,6 +52,11 @@ final class DeviceSessionBook {
 /// device's `session_expires_at` of `device.list` (§10.3), read when the request is shown, or a later `sync.event`
 /// `device.session` (§10.1). "Deny and end access now" ends the session with `device.session.end` alone.
 extension ApprovalsManager {
+    public var deviceSessions: [String: Date] { sessionBook.sessions }
+    public var deviceSessionsKnown: Bool { sessionBook.known }
+    public var deviceSessionReads: Int { sessionBook.reads }
+    public var deviceSessionsVersion: Int { sessionBook.version }
+
     /// Reads `device.list` for the sessions' ends. A read that fails changes nothing: until one is answered, no request is
     /// a renewal.
     public func readDeviceSessions() async throws {
@@ -90,21 +106,27 @@ extension ApprovalsManager {
         }
         sessionBook.lastRead = start
         sessionBook.events.removeAll { $0.tick <= start }
-        deviceSessions = ends
-        deviceSessionsKnown = true
-        deviceSessionReads += 1
-        deviceSessionsVersion += 1
+        sessionBook.sessions = ends
+        sessionBook.known = true
+        sessionBook.reads += 1
+        sessionBook.version += 1
     }
 
-    /// `sync.event` `device.session` (0.77.0 §6.8): the device's current session ends at [expiresAt], or it has none. The
-    /// list is read again when a screen asked for it, so that one whose read failed learns the rest (chosen; not in the
-    /// spec).
+    /// `sync.event` `device.session` (0.77.0 §6.8): what it says of the device's session holds whatever the list says of
+    /// its request, so it is applied before the list's cut.
+    func deviceSessionEvent(_ o: JsonObject) {
+        guard let device = VaultJSON.string(o, "device_id") else { return }
+        deviceSessionEvent(device, expiresAt: ApprovalParser.instant(VaultJSON.string(o, "expires_at")))
+    }
+
+    /// The device's current session ends at [expiresAt], or it has none. The list is read again when a screen asked for it,
+    /// so that one whose read failed learns the rest (chosen; not in the spec).
     func deviceSessionEvent(_ deviceID: String, expiresAt: Date?) {
         sessionBook.tick += 1
         sessionBook.events.append(DeviceSessionBook.Event(tick: sessionBook.tick, deviceID: deviceID, end: expiresAt))
         if sessionBook.events.count > DeviceSessionBook.maxEvents { sessionBook.events.removeFirst() }
-        if let expiresAt { deviceSessions[deviceID] = expiresAt } else { deviceSessions.removeValue(forKey: deviceID) }
-        deviceSessionsVersion += 1
+        if let expiresAt { sessionBook.sessions[deviceID] = expiresAt } else { sessionBook.sessions.removeValue(forKey: deviceID) }
+        sessionBook.version += 1
         rereadDeviceSessions()
     }
 
@@ -124,14 +146,14 @@ extension ApprovalsManager {
     }
 
     /// Whether the vault is held (§3.6.3): nothing is ended while it is.
-    public var vaultHeld: Bool { held() }
+    public var vaultHeld: Bool { sessionBook.held() }
 
     /// What the vault said of the sessions goes with the vault (a lock, a hold): nothing is known until it is read again.
     /// The screens asking stay through a hold; a lock ends them (``vaultClosed()``).
     func forgetDeviceSessions() {
-        deviceSessions = [:]
-        deviceSessionsKnown = false
+        sessionBook.sessions = [:]
+        sessionBook.known = false
         sessionBook.events = []
-        deviceSessionsVersion += 1
+        sessionBook.version += 1
     }
 }

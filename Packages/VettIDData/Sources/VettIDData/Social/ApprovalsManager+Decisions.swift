@@ -26,6 +26,15 @@ extension ApprovalsManager {
         if let (kinds, ref) = FeedAsks.of(key) { onDecided(kinds, ref) }
     }
 
+    /// A vault call's failure as the approvals say it (``VaultFailures``).
+    func guarded<T>(_ body: () async throws -> T) async throws -> T {
+        do {
+            return try await body()
+        } catch {
+            throw VaultFailures.map(error)
+        }
+    }
+
     private func pending(_ key: String) -> PendingApproval? { approvals.first { $0.key == key } }
 
     public func approveAuthentication(_ requestID: String, password: String) async throws {

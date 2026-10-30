@@ -243,6 +243,72 @@
         }
       }
     },
+    "approvals_authn_withdrawn_notice": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ withdrew this request. You don't need to answer it."
+          }
+        }
+      }
+    },
+    "approvals_authn_withdrawn_mute": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mute requests from %@"
+          }
+        }
+      }
+    },
+    "approvals_authn_withdrawn_mute_confirm_service": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You won't be asked to sign in or approve anything for %@ until you unmute."
+          }
+        }
+      }
+    },
+    "approvals_authn_withdrawn_mute_confirm_button": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mute"
+          }
+        }
+      }
+    },
+    "approvals_authn_withdrawn_mute_cancel_button": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        }
+      }
+    },
+    "approvals_authn_withdrawn_close": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close"
+          }
+        }
+      }
+    },
     "approvals_a_connection": {
       "extractionState": "manual",
       "localizations": {

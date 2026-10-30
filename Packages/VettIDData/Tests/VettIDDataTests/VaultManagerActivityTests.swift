@@ -153,6 +153,20 @@ import VettIDVault
         #expect(await eventually { approvals.approvals.isEmpty })
     }
 
+    /// VAULT-MESSAGING 0.80.0 §10.4: the challenger withdraws a sign-in; the phone closes it as withdrawn, its feed item is
+    /// read, `pending.list` no longer holds it, and a later approve is answered `not_found`.
+    @Test func aWithdrawnSignInCloses() async throws {
+        defer { phone.close() }
+        let id = try await connected()
+        let auth = try service.peerAsksAuthentication(id, purpose: "signin")
+        #expect(await eventually { approvals.approvals.map(\.key) == ["auth:\(auth)"] && feed.badge.unread == 1 })
+        try service.challengerWithdraws(auth)
+        #expect(await eventually { approvals.approvals.isEmpty && approvals.wasWithdrawn("auth:\(auth)") })
+        #expect(await eventually { feed.badge.unread == 0 }, "its feed item is read")
+        #expect(await kind { try await approvals.approveAuthentication(auth, password: password) } == .notFound)
+        #expect(service.asksAnswered.isEmpty, "nothing goes to the challenger")
+    }
+
     /// The same after a hold: this phone's own passed owner check reads the list again, once.
     @Test func openAsksComeBackAfterAPassedOwnerCheck() async throws {
         defer { phone.close() }

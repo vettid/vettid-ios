@@ -148,7 +148,7 @@ public struct NoticeCard<Actions: View>: View {
     let actions: Actions
 
     public init(
-        _ kind: NoticeKind, title: String, message: String, announce: Announce? = nil, announcement: String? = nil,
+        _ kind: NoticeKind, title: String, message: String = "", announce: Announce? = nil, announcement: String? = nil,
         spokenMessage: String? = nil, @ViewBuilder actions: () -> Actions = { EmptyView() }
     ) {
         self.spokenMessage = spokenMessage
@@ -178,7 +178,8 @@ public struct NoticeCard<Actions: View>: View {
             VStack(alignment: .leading, spacing: Spacing.s) {
                 VStack(alignment: .leading, spacing: Spacing.xs) {
                     Text(title).vettIDFont(.titleSmall, weight: .semibold)
-                    Text(message).vettIDFont(.bodyMedium).foregroundStyle(colors.onSurfaceVariant)
+                    // A notice that is all title (a message "") draws no empty line.
+                    if !message.isEmpty { Text(message).vettIDFont(.bodyMedium).foregroundStyle(colors.onSurfaceVariant) }
                 }
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(Self.label(title, spokenMessage ?? message))

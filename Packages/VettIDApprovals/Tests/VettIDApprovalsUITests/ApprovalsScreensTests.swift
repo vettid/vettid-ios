@@ -137,7 +137,25 @@ import VettIDUI
         var coded = out[4]
         coded.approval = Samples.auth("am", purpose: .signin, matchCode: "07")
         out.append(coded)
+        out += withdrawnStates(out[4])
         return out
+    }
+
+    /// Withdrawn by its challenger (0.80.0 §10.4): the notice with the mute, the mute's confirmation, a failed mute, the
+    /// mute on its way, muted.
+    private func withdrawnStates(_ base: ApprovalDetailState) -> [ApprovalDetailState] {
+        var withdrawn = base
+        withdrawn.withdrawn = true
+        var confirming = withdrawn
+        confirming.connectionIsService = true
+        confirming.confirmMute = true
+        var failedMute = withdrawn
+        failedMute.muteError = .network
+        var muting = withdrawn
+        muting.muting = true
+        var muted = withdrawn
+        muted.asksMuted = true
+        return [withdrawn, confirming, failedMute, muting, muted]
     }
 
     /// A sign-in with a match code: its block adds to the screen, and the digits are never cut at the largest text size.

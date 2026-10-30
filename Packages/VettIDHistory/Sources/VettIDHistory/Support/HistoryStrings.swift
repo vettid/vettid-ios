@@ -153,6 +153,28 @@ public enum HistoryStrings {
 
     public static var connectionPick: String { String(localized: "history_connection_pick", defaultValue: "Connection", bundle: .module) }
 
+    /// A withdrawn request's entry offers the existing mute (`connection.asks.mute`; ANDROID-PLAN 0.1.101, approved
+    /// 2026-10-30): [value] is the connection's "First Last".
+    public static func withdrawnMute(_ value: String) -> String {
+        String(localized: "history_authn_withdrawn_mute", defaultValue: "Mute requests from \(value)", bundle: .module)
+    }
+
+    /// The mute's confirmation, on a service connection only.
+    public static func withdrawnMuteConfirmService(_ value: String) -> String {
+        String(
+            localized: "history_authn_withdrawn_mute_confirm_service",
+            defaultValue: "You won't be asked to sign in or approve anything for \(value) until you unmute.", bundle: .module
+        )
+    }
+
+    public static var withdrawnMuteConfirm: String {
+        String(localized: "history_authn_withdrawn_mute_confirm_button", defaultValue: "Mute", bundle: .module)
+    }
+
+    public static var withdrawnMuteCancel: String {
+        String(localized: "history_authn_withdrawn_mute_cancel_button", defaultValue: "Cancel", bundle: .module)
+    }
+
     public static var connectionRemoved: String {
         String(
             localized: "history_connection_removed",
