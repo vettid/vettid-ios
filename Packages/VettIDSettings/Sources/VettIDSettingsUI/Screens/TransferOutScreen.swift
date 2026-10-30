@@ -196,7 +196,7 @@ public struct TransferOutContent: View {
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
                         .accessibilityLabel(TransferStrings.transferWait(spokenDuration(state.waitSeconds)))
-                .announcedOnce(TransferStrings.transferWait(spokenDuration(state.waitSeconds)))
+                        .announcedOnce(TransferStrings.transferWait(spokenDuration(state.waitSeconds)))
                         .accessibilityIdentifier("transfer_wait")
                 }
                 SecretField(

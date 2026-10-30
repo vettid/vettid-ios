@@ -15,9 +15,9 @@ public func spokenDuration(_ seconds: Int64) -> String {
     return f.string(from: TimeInterval(s)) ?? ""
 }
 
-/// When a timed window warns that it is running out: at 2 minutes and at 30 seconds (as IOS-PLAN §4.12 asks of the
+/// When a timed window warns that it is running out: at 2 minutes and at 1 minute (as IOS-PLAN §4.12 asks of the
 /// approvals indicator).
-public let timeLeftWarnings: [Int64] = [120, 30]
+public let timeLeftWarnings: [Int64] = [120, 60]
 
 public extension View {
     /// A timed window's line: VoiceOver reads [spoken] (its time in words, ``spokenDuration(_:)``) instead of the clock
