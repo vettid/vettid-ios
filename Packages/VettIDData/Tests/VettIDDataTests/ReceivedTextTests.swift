@@ -45,6 +45,19 @@ import Testing
         #expect(!AccountNames.isEmptyText("a"))
     }
 
+    /// U+2800 BRAILLE PATTERN BLANK counts as blank (0.78.1 §10.8 step 4): a name of nothing else gets its placeholder, the
+    /// first non-empty line skips it (step 6), and it stays in text that has something else to show.
+    @Test func aBrailleBlankIsBlank() {
+        #expect(AccountNames.isEmptyText("\u{2800}") && AccountNames.isEmptyText("\u{2800} \u{200D}\u{2800}"))
+        #expect(AccountNames.cleaned("\u{2800}\u{2800}") == nil)
+        #expect(AccountNames.isolateOrNull("\u{2800}") == nil)
+        #expect(AccountNames.cleanedLines("\u{2800}\n\u{3164}") == nil)
+        #expect(AccountNames.cleaned("a\u{2800}b") == "a\u{2800}b")
+        #expect(AccountNames.firstLineIsolated("\u{2800}\nPay") == AccountNames.isolate("Pay"))
+        // Its neighbours in the Braille Patterns block are dots, not blanks.
+        #expect(!AccountNames.isEmptyText("\u{2801}"))
+    }
+
     @Test func privateUseAndUnassignedCodePointsAreKept() {
         #expect(AccountNames.cleaned("a\u{E000}b") == "a\u{E000}b")
         #expect(AccountNames.cleaned("a\u{0378}b") == "a\u{0378}b")

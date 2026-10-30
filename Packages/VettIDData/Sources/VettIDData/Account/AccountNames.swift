@@ -98,10 +98,14 @@ public enum AccountNames {
         s.split(separator: "\n", omittingEmptySubsequences: false).map { wrapIsolated(String($0)) }.joined(separator: "\n")
     }
 
-    /// True when [s] shows nothing: only Default_Ignorable_Code_Point and White_Space code points remain (step 4).
+    /// True when [s] shows nothing: only Default_Ignorable_Code_Point and White_Space code points and U+2800 BRAILLE
+    /// PATTERN BLANK (a symbol that draws as a blank, 0.78.1) remain (step 4).
     public static func isEmptyText(_ s: String) -> Bool {
-        !s.unicodeScalars.contains { !$0.properties.isWhitespace && !$0.properties.isDefaultIgnorableCodePoint }
+        !s.unicodeScalars.contains { !$0.properties.isWhitespace && !$0.properties.isDefaultIgnorableCodePoint && $0 != brailleBlank }
     }
+
+    /// U+2800 BRAILLE PATTERN BLANK: not a default ignorable, yet it draws as nothing (VAULT-MESSAGING 0.78.1 §10.8 step 4).
+    static let brailleBlank: Unicode.Scalar = "\u{2800}"
 
     /// The first line of [s] (steps 1-3, lines kept) that is not empty by step 4, isolated; nil when there is none (step 6:
     /// a one-line summary of a multi-line text).
