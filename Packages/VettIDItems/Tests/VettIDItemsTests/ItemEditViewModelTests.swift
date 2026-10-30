@@ -74,6 +74,36 @@ struct EditFixture {
         #expect(!f.items.calls.contains("create"))
     }
 
+    /// Each refused save is counted, so that the screen takes the member to the first problem every time, and names how
+    /// many there are (I4 audit, accessibility).
+    @Test func aRefusedSavePointsToTheFirstProblem() async {
+        let vm = f.vm()
+        vm.addField("Expires", kind: FieldKinds.date)
+        vm.setFieldText(0, "1st of May")
+        #expect(vm.state.firstProblem == nil && vm.state.refusedSaves == 0)
+        vm.save()
+        await vm.settle()
+        #expect(vm.state.refusedSaves == 1 && vm.state.firstProblem == .name && vm.state.problemCount == 2)
+        vm.setName("Card")
+        vm.save()
+        await vm.settle()
+        #expect(vm.state.refusedSaves == 2 && vm.state.firstProblem == .field(0) && vm.state.problemCount == 1)
+    }
+
+    /// The order is the form's: the name, the fields by index, the notes, then the list of the others.
+    @Test func theFirstProblemFollowsTheForm() {
+        var s = ItemEditState()
+        s.showErrors = true
+        s.check = DraftCheck(problems: [.notesTooLong, .tooManyTags], fieldProblems: [3: [.labelEmpty], 1: [.valueInvalid, .labelEmpty]])
+        #expect(s.firstProblem == .field(1) && s.problemCount == 5)
+        s.check.fieldProblems = [:]
+        #expect(s.firstProblem == .notes && s.problemCount == 2)
+        s.check.problems = [.tooLarge]
+        #expect(s.firstProblem == .summary && s.problemCount == 1)
+        s.showErrors = false
+        #expect(s.firstProblem == nil)
+    }
+
     @Test func aStandardItemIsCreated() async throws {
         let vm = f.vm(template: "postal_address")
         vm.setFieldAddress(0, AddressValue(city: "London", country: "GB"))

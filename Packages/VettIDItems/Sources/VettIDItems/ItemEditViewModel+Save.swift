@@ -11,6 +11,7 @@ extension ItemEditViewModel {
         guard check.ok else {
             state.check = check
             state.showErrors = true
+            state.refusedSaves += 1
             return
         }
         let to = s.protectionTo

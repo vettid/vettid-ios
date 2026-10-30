@@ -149,6 +149,8 @@ public struct ItemEditScreen: View {
     @Environment(ScreenshotAllowance.self) private var allowance: ScreenshotAllowance?
     let state: ItemEditState
     let actions: ItemEditActions
+    /// Where the form shows each problem, in its own space (the form may be hosted apart, out of captures).
+    @State private var places: [ProblemPlace: CGRect] = [:]
 
     public init(state: ItemEditState, actions: ItemEditActions) {
         self.state = state
@@ -177,21 +179,35 @@ public struct ItemEditScreen: View {
     private var form: some View {
         let d = state.draft
         let leave = { @MainActor in if state.dirty { actions.onAskDiscard() } else { actions.onBack() } }
-        return FormScaffold(
-            title: state.isNew ? ItemsStrings.newTitle : ItemsStrings.editTitle,
-            primaryLabel: nil,
-            onPrimary: {},
-            onBack: leave,
-            header: { HeaderGlyph(symbol: state.isNew ? ItemSymbols.category(d.category) : .edit) },
-            topActions: {
-                TopBarTextAction(ItemsStrings.saveItem, enabled: !state.loading, busy: state.busy, action: actions.onSave)
-                    .accessibilityIdentifier("item_edit_save")
-            }
-        ) {
-            // What is typed and shown here (values, notes, a one-time code seed) stays out of screenshots and recordings
-            // unless "Allow screenshots" is on, as on the item's screen (IOS-PLAN §6.4, ID10, I3.1).
-            SecureContainer(isSecure: !(allowance?.allowed ?? false)) {
-                ItemEditForm(state: state, actions: actions)
+        // The reader holds the scaffold, whose scroll view it scrolls: a reader only reaches the scroll views inside it.
+        return ScrollViewReader { proxy in
+            FormScaffold(
+                title: state.isNew ? ItemsStrings.newTitle : ItemsStrings.editTitle,
+                primaryLabel: nil,
+                onPrimary: {},
+                onBack: leave,
+                header: { HeaderGlyph(symbol: state.isNew ? ItemSymbols.category(d.category) : .edit) },
+                topActions: {
+                    TopBarTextAction(ItemsStrings.saveItem, enabled: !state.loading, busy: state.busy, action: actions.onSave)
+                        .accessibilityIdentifier("item_edit_save")
+                }
+            ) {
+                // What is typed and shown here (values, notes, a one-time code seed) stays out of screenshots and recordings
+                // unless "Allow screenshots" is on, as on the item's screen (IOS-PLAN §6.4, ID10, I3.1).
+                // A refused save takes the member to the first problem and says how many there are, wherever "Save item" was
+                // pressed (I4 audit, accessibility). The anchors stand beside the secure host, in the scroll view's own
+                // layout (a scroll view does not scroll to an overlay).
+                ZStack(alignment: .topLeading) {
+                    SecureContainer(isSecure: !(allowance?.allowed ?? false)) {
+                        ItemEditForm(state: state, actions: actions) { place, frame in places[place] = frame }
+                    }
+                    ProblemAnchors(places: places)
+                }
+                .onChange(of: state.refusedSaves) {
+                    if let first = state.firstProblem { withAnimation { proxy.scrollTo(first, anchor: .top) } }
+                    // Queued: VoiceOver reads the problem it moves to first.
+                    Announcer.announce(ItemsStrings.iosSaveRefused(state.problemCount), .queued)
+                }
             }
         }
         .accessibilityIdentifier("item_edit")
@@ -205,6 +221,12 @@ struct ItemEditForm: View {
     @Environment(\.vettIDColors) private var colors
     let state: ItemEditState
     let actions: ItemEditActions
+    /// Told where each problem's place is, in the form's space.
+    var onPlace: (ProblemPlace, CGRect) -> Void = { _, _ in }
+    /// VoiceOver's cursor, moved to the first problem when a save is refused.
+    @AccessibilityFocusState private var focused: ProblemPlace?
+
+    static let space = "item_edit_form"
 
     var body: some View {
         let d = state.draft
@@ -214,7 +236,7 @@ struct ItemEditForm: View {
         let secret = d.sensitivity != .data || state.protection != .data
         VStack(alignment: .leading, spacing: Spacing.m) {
             notices
-            NameInput(state: state, actions: actions)
+            NameInput(state: state, actions: actions).problemPlace(.name, focus: $focused, onPlace: onPlace)
             CategoryPicker(category: d.category, customs: state.pickerCustoms, actions: actions)
             SensitivitySection(state: state, actions: actions)
             TagsSection(state: state, actions: actions)
@@ -228,13 +250,16 @@ struct ItemEditForm: View {
                     index: i, count: d.fields.count, field: f, problems: show ? state.check.fieldProblems[i] ?? [] : [],
                     focus: state.focusField == i, secret: secret, actions: actions
                 )
+                .problemPlace(.field(i), focus: $focused, onPlace: onPlace)
             }
             AddFieldButton(enabled: d.fields.count < ItemChecks.maxFields, onAdd: actions.onAskAddField)
-            NotesInput(state: state, secret: secret, actions: actions)
-            let other = problems.subtracting([.nameEmpty, .nameTooLong, .notesTooLong])
+            NotesInput(state: state, secret: secret, actions: actions).problemPlace(.notes, focus: $focused, onPlace: onPlace)
+            let other = problems.subtracting(ProblemPlace.inline)
             if show && !other.isEmpty {
                 let lines = other.map { ItemsText.problem($0) }.sorted().joined(separator: "\n")
-                NoticeCard(.warning, title: ItemsStrings.problemsTitle, message: lines, announce: .assertive)
+                // Not announced on its own: a refused save says how many problems there are and moves VoiceOver to the first.
+                NoticeCard(.warning, title: ItemsStrings.problemsTitle, message: lines)
+                    .problemPlace(.summary, focus: $focused, onPlace: onPlace)
                     .accessibilityIdentifier("item_edit_problems")
             }
             if let size = ItemsText.sizeNote(state.check) {
@@ -243,6 +268,8 @@ struct ItemEditForm: View {
                     .accessibilityIdentifier("item_edit_size")
             }
         }
+        .coordinateSpace(.named(Self.space))
+        .onChange(of: state.refusedSaves) { focused = state.firstProblem }
     }
 
     @ViewBuilder private var notices: some View {
@@ -260,6 +287,36 @@ struct ItemEditForm: View {
             NoticeCard(.info, title: ItemsStrings.savedProtectionNotTitle, message: ItemsStrings.savedProtectionNotBody)
                 .accessibilityIdentifier("item_edit_saved_protection_not")
         }
+    }
+}
+
+/// Invisible marks where the form shows each problem, for the scroll view to scroll to: the form itself may be hosted in a
+/// view of its own (``SecureContainer``), out of the scroll view's reach.
+private struct ProblemAnchors: View {
+    let places: [ProblemPlace: CGRect]
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            ForEach(Array(places.keys), id: \.self) { place in
+                let frame = places[place] ?? .zero
+                Color.clear
+                    .frame(width: 1, height: max(frame.height, 1))
+                    .padding(.top, max(frame.minY, 0))
+                    .id(place)
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+private extension View {
+    /// Marks a problem's [place]: where it is in the form, and VoiceOver's cursor when it is the first one.
+    func problemPlace(
+        _ place: ProblemPlace, focus: AccessibilityFocusState<ProblemPlace?>.Binding, onPlace: @escaping (ProblemPlace, CGRect) -> Void
+    ) -> some View {
+        accessibilityFocused(focus, equals: place)
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(ItemEditForm.space)) } action: { onPlace(place, $0) }
     }
 }
 #endif

@@ -3401,6 +3401,29 @@
         }
       }
     },
+    "ios_items_save_refused": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Check the item: %lld problem"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Check the item: %lld problems"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "items_tag_items": {
       "extractionState": "manual",
       "localizations": {

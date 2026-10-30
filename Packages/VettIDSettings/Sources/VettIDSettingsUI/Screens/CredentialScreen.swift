@@ -183,7 +183,9 @@ struct CredentialRows: View {
         SettingsGroup {
             SettingsInfoRow(CredentialStrings.version, value: st.version.map { String($0) } ?? CredentialStrings.unknown, icon: .shield)
             SettingsDivider()
-            SettingsInfoRow(CredentialStrings.key, value: st.keyFingerprint ?? CredentialStrings.unknown, icon: .key)
+            SettingsInfoRow(
+                CredentialStrings.key, value: st.keyFingerprint ?? CredentialStrings.unknown, icon: .key, code: st.keyFingerprint != nil
+            )
             SettingsDivider()
             SettingsInfoRow(
                 CredentialStrings.updated, value: CredentialContent.date(st.updatedAt) ?? CredentialStrings.unknown, icon: .sync

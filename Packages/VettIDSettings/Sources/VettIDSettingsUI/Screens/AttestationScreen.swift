@@ -75,7 +75,7 @@ public struct AttestationContent: View {
         }
         SettingsSectionHeader(SettingsStrings.attestationEnclave)
         SettingsGroup {
-            SettingsInfoRow(SettingsStrings.attestationRelease, value: Self.releaseText(a), icon: .update)
+            SettingsInfoRow(SettingsStrings.attestationRelease, value: Self.releaseText(a), icon: .update, code: true)
             SettingsDivider()
             SettingsInfoRow(SettingsStrings.attestationEnvironment, value: a.environment, icon: .storage)
         }
@@ -88,6 +88,12 @@ public struct AttestationContent: View {
     static func releaseText(_ a: AttestationInfo) -> String {
         guard a.lastRelease > 0 else { return "-" }
         return SettingsStrings.attestationReleaseValue(Int(a.lastRelease), a.lastReleaseFingerprint ?? "-")
+    }
+
+    /// A fingerprint as it is compared: in groups of 8 (as vettid-android groups a digest), unless it is already grouped.
+    static func fingerprintText(_ fp: String?) -> String {
+        guard let fp, !fp.isEmpty else { return "-" }
+        return fp.contains(" ") ? fp : VaultStatusContent.grouped(fp, 8)
     }
 }
 
@@ -149,7 +155,9 @@ private struct AndroidDeviceRows: View {
             SettingsDivider()
             SettingsInfoRow(SettingsStrings.attestationLocked, value: VaultStatusContent.yesNo(a.deviceLocked), icon: .lock)
             SettingsDivider()
-            SettingsInfoRow(SettingsStrings.attestationBootKey, value: a.bootKeyFingerprint ?? "-", icon: .key)
+            SettingsInfoRow(
+                SettingsStrings.attestationBootKey, value: AttestationContent.fingerprintText(a.bootKeyFingerprint), icon: .key, code: true
+            )
         }
     }
 }

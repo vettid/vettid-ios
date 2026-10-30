@@ -64,7 +64,7 @@ public struct VaultStatusContent: View {
             SettingsInfoRow(Self.installedText(installedFrom), value: SettingsStrings.installedAppAttest, icon: .verifiedUser)
                 .accessibilityIdentifier("installed_from")
             SettingsDivider()
-            SettingsInfoRow(SettingsStrings.statusVaultId, value: v.vaultID.map { Self.grouped($0, 8) } ?? "-", icon: .tag)
+            SettingsInfoRow(SettingsStrings.statusVaultId, value: v.vaultID.map { Self.grouped($0, 8) } ?? "-", icon: .tag, code: true)
             SettingsDivider()
             SettingsInfoRow(SettingsStrings.statusRelease, value: Self.releaseText(v.release), icon: .update)
             SettingsDivider()
