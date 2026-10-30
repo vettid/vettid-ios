@@ -17,6 +17,10 @@ public protocol ApprovalOps: Sendable {
     func shareDecide(_ ruleID: String, include: [String], decline: [String]) async throws -> JsonObject
     func shareDecide(_ ruleID: String, items: [String], approve: Bool) async throws -> JsonObject
     func sessionDeny(_ requestID: String) async throws
+    /// Ends a desktop's or an agent's access session (`device.session.end`, §6.8).
+    func sessionEnd(deviceID: String) async throws
+    /// `device.list` (§10.3): the member's devices, with each access session's end.
+    func deviceList() async throws -> [DeviceEntry]
     func approvalDecide(_ approvalID: String, approve: Bool) async throws -> String?
     /// One page of `share.pending.list` (0.21.0, §10.12) from [after].
     func sharePendingPage(after: String?, limit: Int?) async throws -> JsonObject
@@ -94,4 +98,22 @@ public protocol ApprovalsRepository: ConnectionRequestsRepository {
 
     /// Declines a desktop's or agent's request (§6.8), by its ``PendingApproval/key``.
     func declineDeviceRequest(_ key: String) async throws
+    /// When each desktop's or agent's access session ends, by device, as the vault last said (VAULT-MESSAGING 0.78.0 §6.8
+    /// step 3: a renewal request is one from a device whose session has not expired).
+    var deviceSessions: [String: Date] { get }
+    /// A `device.list` read was answered since the vault was last forgotten.
+    var deviceSessionsKnown: Bool { get }
+    /// Counts the answered `device.list` reads.
+    var deviceSessionReads: Int { get }
+    /// Bumped at every change of ``deviceSessions``.
+    var deviceSessionsVersion: Int { get }
+    /// Whether the vault is held (§3.6.3): nothing is ended while it is.
+    var vaultHeld: Bool { get }
+    /// Reads `device.list` for the sessions' ends; a failure changes nothing.
+    func readDeviceSessions() async throws
+    /// A screen asks for the sessions to be read again on `device.session` events and the lists' reads while it holds the
+    /// answer (let go when it goes; a lock ends it).
+    func askDeviceSessions() -> DeviceSessionsAsk
+    /// "Deny and end access now": `device.session.end{device_id}` alone; the device's asks leave with it.
+    func endDeviceAccess(_ deviceID: String) async throws
 }

@@ -79,6 +79,20 @@ enum ApprovalTexts {
         return line.isEmpty ? "?" : line
     }
 
+    /// The device of a request starting a sentence: its name, else "A desktop" or "An agent" (§10.8 step 4, 0.78.0).
+    static func deviceSentenceStart(_ a: PendingApproval?) -> String {
+        guard case .device(let d)? = a else { return ApprovalsStrings.aDesktop }
+        let agent = AccountNames.cleaned(d.role)?.lowercased() == "agent"
+        return AccountNames.isolateOrNull(d.deviceName) ?? (agent ? ApprovalsStrings.anAgent : ApprovalsStrings.aDesktop)
+    }
+
+    /// The device of a request inside a sentence: its name, else "a desktop" or "an agent" (§10.8).
+    static func deviceSentenceInline(_ a: PendingApproval?) -> String {
+        guard case .device(let d)? = a else { return ApprovalsStrings.aDesktopInline }
+        let agent = AccountNames.cleaned(d.role)?.lowercased() == "agent"
+        return AccountNames.isolateOrNull(d.deviceName) ?? (agent ? ApprovalsStrings.anAgentInline : ApprovalsStrings.aDesktopInline)
+    }
+
     /// The kind of a desktop or agent request ("A desktop", "An agent"), or nil for a kind this app does not name (§10.8
     /// step 4).
     static func deviceKind(_ d: DeviceRequest) -> String? {

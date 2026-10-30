@@ -115,6 +115,8 @@ public final class ApprovalsManager: ApprovalsRepository {
     static func subjectKey(_ d: ShareDecision) -> String { ShareQuestions.subject(d) ?? "rule:\(d.ruleID)" }
     /// Told of each decided ask, with its feed item's kinds and `ref` (``FeedAsks``): the item is marked read.
     @ObservationIgnored public var onDecided: @MainActor (_ kinds: Set<String>, _ ref: String) -> Void = { _, _ in }
+    /// Desktops' and agents' access sessions, for a renewal request (VAULT-MESSAGING 0.78.0 §6.8 step 3).
+    @ObservationIgnored let sessionBook = DeviceSessionBook()
     /// Told of a withdrawn ask's feed item to mark read, by its `ref` (VAULT-MESSAGING 0.80.0 §10.4 "Closing"): [onlySingle]
     /// for an ask this phone does not hold, whose item is read only if it stands for no batch.
     @ObservationIgnored public var onAskRead: @MainActor (_ ref: String, _ onlySingle: Bool) -> Void = { _, _ in }
@@ -132,9 +134,11 @@ public final class ApprovalsManager: ApprovalsRepository {
         quietOps: (@MainActor () async throws -> any ApprovalOps)? = nil,
         openUnlockWindow: @escaping @MainActor (String) async throws -> Void = { _ in },
         now: @escaping @Sendable () -> Date = { Date() },
-        itemNames: @escaping @MainActor () -> [String: ShareItem] = { [:] }
+        itemNames: @escaping @MainActor () -> [String: ShareItem] = { [:] },
+        held: @escaping @MainActor () -> Bool = { false }
     ) {
         self.itemNames = itemNames
+        sessionBook.held = held
         self.connections = connections
         self.ops = ops
         self.quietOps = quietOps ?? ops
@@ -222,6 +226,7 @@ public final class ApprovalsManager: ApprovalsRepository {
         }
         decidedLog = []
         batchLog = []
+        forgetDeviceSessions()
         withdrawnKeys = []
         withdrawnBatches = [:]
     }
@@ -346,6 +351,7 @@ public final class ApprovalsManager: ApprovalsRepository {
         // (VAULT-MESSAGING 0.70.0 §10.4.2).
         // Only against a list already merged, not a read on its way: that read may still fail, and a close applied is
         // protected by the merge (``mergePendingAsks``), not undone by it.
+        if kind == "device.session" { deviceSessionEvent(o) }
         if let cut = mergedListTs, Self.pendingClosing.contains(kind), ts <= cut { return }
         if kind == "share.decided", let id = VaultJSON.string(o, "rule_id") {
             return shareDecided(id, VaultJSON.strings(o, "included") + VaultJSON.strings(o, "declined"))
@@ -441,6 +447,7 @@ public final class ApprovalsManager: ApprovalsRepository {
 
     /// [requests] false: the connection requests are read by the caller.
     func refreshApprovals(quietly: Bool, requests: Bool = true) async throws {
+        rereadDeviceSessions()
         let g = generation
         let since = changes
         let t = now()
@@ -570,15 +577,6 @@ public final class ApprovalsManager: ApprovalsRepository {
                 }
             }
             return d.items.isEmpty ? nil : .share(d)
-        }
-    }
-
-    /// Runs [body] and turns every failure into a ``VaultFailure`` (a cancellation stays one).
-    func guarded<T>(_ body: () async throws -> T) async throws -> T {
-        do {
-            return try await body()
-        } catch {
-            throw VaultFailures.map(error)
         }
     }
 

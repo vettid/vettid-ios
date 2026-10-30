@@ -128,6 +128,7 @@ import VettIDUI
         var notHeld = ApprovalDetailState(key: "auth:a9")
         notHeld.notHeld = true
         out += [failing, backoff, limit, result, unsuitable, gone, notHeld, ApprovalDetailState(key: "none")]
+        out += renewalStates()
         out += [AuthenticationPurpose.signin, .approval].map { p in
             var s = out[4]
             s.approval = Samples.auth("a\(p)", purpose: p)
@@ -168,6 +169,53 @@ import VettIDUI
         let fit = large.sizeThatFits(in: CGSize(width: 320, height: 2000))
         let normal = UIHostingController(rootView: MatchCodeBlock(code: "123").vettIDTheme(.light)).sizeThatFits(in: CGSize(width: 320, height: 2000))
         #expect(fit.width <= 320 && fit.height > normal.height)
+    }
+
+    /// A renewal request (0.78.0 §6.8 step 3): its notice and "Deny and end access now", the confirmation, a failed end on
+    /// the request and on the screen of a request that left, and the hold.
+    private func renewalStates() -> [ApprovalDetailState] {
+        var renewal = ApprovalDetailState(key: "device:device.session.pending:s1")
+        renewal.approval = .device(DeviceRequest(type: "device.session.pending", id: "s1", deviceName: nil, role: "agent", requestType: nil, receivedAt: Samples.t0, exp: nil, deviceID: "dev1"))
+        renewal.sessionEnd = Date().addingTimeInterval(3_600)
+        var confirming = renewal
+        confirming.confirmEnd = true
+        var failed = renewal
+        failed.endFailure = .network
+        var goneFailed = failed
+        goneFailed.gone = true
+        var held = failed
+        held.notHeld = true
+        held.approval = nil
+        held.held = true
+        var checkRefused = renewal
+        checkRefused.endFailure = .ownerCheckRequired
+        return [renewal, confirming, failed, goneFailed, held, checkRefused]
+    }
+
+    /// A failed end says what did not happen to the device, by its name or kind; a refused daily check says why in the
+    /// vault's words.
+    @Test func aFailedEndSaysWhy() {
+        let request = PendingApproval.device(DeviceRequest(type: "device.session.pending", id: "s1", deviceName: nil, role: "agent", requestType: nil, receivedAt: Samples.t0, exp: nil, deviceID: "dev1"))
+        #expect(EndFailureNotice.message(.network, request, timeScale: 1) == "Access for an agent could not be ended. Try again.")
+        let check = EndFailureNotice.message(.ownerCheckRequired, request, timeScale: 1)
+        #expect(check == ApprovalTexts.failure(.ownerCheckRequired, retryUntil: nil, limit: nil, now: Date(), timeScale: 1) && check != ApprovalsStrings.endFailed("an agent"))
+    }
+
+    /// The renewal's notice says the approved words, and the decline-only line gives way to it.
+    @Test func aRenewalSaysWhatADenyKeeps() {
+        let request = DeviceRequest(type: "device.session.pending", id: "s1", deviceName: nil, role: "agent", requestType: nil, receivedAt: Samples.t0, exp: nil, deviceID: "dev1")
+        func facts(_ renewal: Bool) -> CGFloat {
+            UIHostingController(rootView: Facts(approval: .device(request), name: nil, renewal: renewal).vettIDTheme(.light))
+                .sizeThatFits(in: CGSize(width: 390, height: 2000)).height
+        }
+        #expect(facts(true) < facts(false), "no decline-only line on a renewal")
+        var s = ApprovalDetailState(key: "k")
+        s.approval = .device(request)
+        s.sessionEnd = Date().addingTimeInterval(3_600)
+        let content = UIHostingController(rootView: RenewalNotices(state: s, actions: DecisionActions(), now: Date()).vettIDTheme(.light))
+        s.sessionEnd = Date().addingTimeInterval(-1)
+        let passed = UIHostingController(rootView: RenewalNotices(state: s, actions: DecisionActions(), now: Date()).vettIDTheme(.light))
+        #expect(content.sizeThatFits(in: CGSize(width: 390, height: 2000)).height > passed.sizeThatFits(in: CGSize(width: 390, height: 2000)).height)
     }
 
     private func height(_ view: some View) -> CGFloat {

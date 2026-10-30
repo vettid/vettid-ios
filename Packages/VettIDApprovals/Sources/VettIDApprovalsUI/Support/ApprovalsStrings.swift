@@ -154,6 +154,50 @@ enum ApprovalsStrings {
     /// A desktop that gave no name, in the device row and on its decision screen (VAULT-MESSAGING 0.76.0 §10.8 step 4).
     static var aDesktop: String { String(localized: "approvals_a_desktop", defaultValue: "A desktop", bundle: .module) }
 
+    /// A desktop that gave no name, inside a sentence (same key as vettid-android's `approvals_a_desktop_inline`).
+    static var aDesktopInline: String {
+        String(localized: "approvals_a_desktop_inline", defaultValue: "a desktop", bundle: .module)
+    }
+
+    /// A renewal request's notice above its choices (VAULT-MESSAGING 0.78.0 §6.8 step 3; texts approved by the owner):
+    /// [device] starts the sentence, [until] is the session's end in local time.
+    static func renewalNotice(_ device: String, _ until: String) -> String {
+        String(
+            localized: "approvals_renewal_notice",
+            defaultValue: "Denying refuses only the extra time. \(device) keeps its current access until \(until).", bundle: .module
+        )
+    }
+
+    static var denyEndAccess: String {
+        String(localized: "approvals_deny_end_access", defaultValue: "Deny and end access now", bundle: .module)
+    }
+
+    /// The end-access confirmation (vettid-android's Devices page words, `devices_end_access*`; iOS has no Devices page yet).
+    static var endAccess: String { String(localized: "approvals_end_access", defaultValue: "End access", bundle: .module) }
+
+    static func endAccessTitle(_ device: String) -> String {
+        String(localized: "approvals_end_access_title", defaultValue: "End access for \(device)?", bundle: .module)
+    }
+
+    static var endAccessBody: String {
+        String(
+            localized: "approvals_end_access_body",
+            defaultValue: """
+                It stops at once, and any of its requests still waiting for you are declined. It can ask for access again; you \
+                decide then.
+                """,
+            bundle: .module
+        )
+    }
+
+    static var endFailedTitle: String {
+        String(localized: "approvals_end_failed_title", defaultValue: "Access not ended", bundle: .module)
+    }
+
+    static func endFailed(_ device: String) -> String {
+        String(localized: "approvals_end_failed", defaultValue: "Access for \(device) could not be ended. Try again.", bundle: .module)
+    }
+
     /// An agent that gave no name, inside a sentence (same key as vettid-android's `approvals_an_agent_inline`).
     static var anAgentInline: String {
         String(localized: "approvals_an_agent_inline", defaultValue: "an agent", bundle: .module)

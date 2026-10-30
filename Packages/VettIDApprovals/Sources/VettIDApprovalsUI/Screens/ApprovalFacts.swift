@@ -38,6 +38,8 @@ struct Facts: View {
     @Environment(\.vettIDColors) private var colors
     let approval: PendingApproval
     let name: String?
+    /// A renewal request (0.78.0 §6.8 step 3): its notice says what a deny does instead of the decline-only line.
+    var renewal = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -71,7 +73,7 @@ struct Facts: View {
                     FactLabel(ApprovalsStrings.request)
                     FactValue(t)
                 }
-                Text(ApprovalsStrings.deviceV1).vettIDFont(.bodyMedium)
+                if !renewal { Text(ApprovalsStrings.deviceV1).vettIDFont(.bodyMedium) }
             case .grant, .share: EmptyView()
             }
         }

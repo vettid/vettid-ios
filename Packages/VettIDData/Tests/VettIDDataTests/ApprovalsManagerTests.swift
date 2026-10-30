@@ -114,6 +114,22 @@ final class FakeApprovalOps: ApprovalOps, @unchecked Sendable {
         return answer
     }
     func sessionDeny(_ requestID: String) async throws { try call("sessionDeny:\(requestID)") }
+    func sessionEnd(deviceID: String) async throws { try call("sessionEnd:\(deviceID)") }
+    /// What `device.list` answers: each device's id and `session_expires_at`.
+    var devices: [(id: String, sessionExpiresAt: String?)] = []
+    /// When set, `device.list` waits for it (a read on its way).
+    var devicesGate: TestDeferred<Void>?
+    func deviceList() async throws -> [DeviceEntry] {
+        try call("deviceList")
+        struct List: Decodable { let devices: [DeviceEntry] }
+        // The answer is what the vault said when asked: a gate holds it back, never changes it.
+        let entries = devices.map { d in
+            #"{"id":"\#(d.id)","kind":"desktop","state":"active""# + (d.sessionExpiresAt.map { #","session_expires_at":"\#($0)""# } ?? "") + "}"
+        }
+        let answer = try VaultJSON.decode(List.self, Array(#"{"devices":[\#(entries.joined(separator: ","))]}"#.utf8)).devices
+        if let devicesGate { try await devicesGate.value() }
+        return answer
+    }
     func approvalDecide(_ approvalID: String, approve: Bool) async throws -> String? {
         try call("approvalDecide:\(approvalID):\(approve)")
         return nil

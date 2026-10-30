@@ -42,7 +42,8 @@ extension VaultManager {
                     names[i.itemID] = ShareItem(itemID: i.itemID, name: i.name, category: i.category, sensitivity: i.sensitivity.wire)
                 }
                 return names
-            }
+            },
+            held: { ref.manager?.ownerChecks.ownerCheck?.state == .held }
         )
         approvals.onDecided = { [weak feed] kinds, ref in feed?.markReadWhere(kinds: kinds, ref: ref) }
         approvals.onAskRead = { [weak feed] ref, onlySingle in feed?.markAskRead(ref: ref, onlySingle: onlySingle) }
