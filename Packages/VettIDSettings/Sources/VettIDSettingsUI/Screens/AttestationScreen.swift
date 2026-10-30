@@ -89,7 +89,6 @@ public struct AttestationContent: View {
         guard a.lastRelease > 0 else { return "-" }
         return SettingsStrings.attestationReleaseValue(Int(a.lastRelease), a.lastReleaseFingerprint ?? "-")
     }
-
 }
 
 /// The canary manifest installed on this phone (VAULT-RELEASES §10.1 step 9): its serial and key, the releases it lists,

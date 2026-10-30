@@ -51,6 +51,33 @@ import VettIDData
         #expect(await eventually { Self.recorded.filter { $0 == .announcement("Check the item: 1 problem", .queued) }.count == 2 } != nil)
     }
 
+    /// A refusal already counted when the screen appears, or the form coming back after the password step, says nothing
+    /// and moves nothing: only a new refusal is acted on.
+    @Test func onlyANewRefusalIsActedOn() async throws {
+        let saved = Announcer.sink
+        Self.recorded = []
+        Announcer.sink = { Self.recorded.append($0) }
+        defer { Announcer.sink = saved }
+        var already = refused
+        already.refusedSaves = 1
+        let holder = EditHolder(already)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.rootViewController = UIHostingController(rootView: HeldEdit(holder: holder).vettIDTheme())
+        window.isHidden = false
+        window.layoutIfNeeded()
+        defer { window.isHidden = true }
+        try await Task.sleep(for: .milliseconds(800))
+        #expect(Self.recorded.isEmpty)
+        holder.state.refusedSaves += 1
+        #expect(await eventually { Self.recorded.count == 1 } != nil)
+        // The password step takes the form away and gives it back: nothing is said again.
+        holder.state.prompt = PasswordPrompt(.save)
+        try await Task.sleep(for: .milliseconds(300))
+        holder.state.prompt = nil
+        try await Task.sleep(for: .milliseconds(800))
+        #expect(Self.recorded.count == 1)
+    }
+
     /// The scroll waits for the first problem's place: the list of the others appears with the refusal, so its place is
     /// known only after the form's next layout. Then it is taken once.
     @Test func theScrollWaitsForTheProblemsPlace() {

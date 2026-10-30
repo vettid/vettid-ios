@@ -153,6 +153,9 @@ public struct ItemEditScreen: View {
     @State private var places: [ProblemPlace: CGRect] = [:]
     /// The first problem of a refused save, until its place is known.
     @State private var scroll = ProblemScroll()
+    /// A refused save whose problem VoiceOver has not been moved to yet. Held here, where it outlives the form leaving for
+    /// the password step or a reload, and cleared once the form has acted on it.
+    @State private var focusRequest: Int?
 
     public init(state: ItemEditState, actions: ItemEditActions) {
         self.state = state
@@ -201,7 +204,9 @@ public struct ItemEditScreen: View {
                 // layout (a scroll view does not scroll to an overlay).
                 ZStack(alignment: .topLeading) {
                     SecureContainer(isSecure: !(allowance?.allowed ?? false)) {
-                        ItemEditForm(state: state, actions: actions) { place, frame in places[place] = frame }
+                        ItemEditForm(
+                            state: state, actions: actions, focusRequest: focusRequest, onFocusDone: { focusRequest = nil }
+                        ) { place, frame in places[place] = frame }
                     }
                     ProblemAnchors(places: places)
                 }
@@ -209,6 +214,7 @@ public struct ItemEditScreen: View {
                 .onChange(of: state.refusedSaves) {
                     scroll.pending = state.firstProblem
                     scrollIfPlaced(proxy)
+                    focusRequest = state.firstProblem == nil ? nil : state.refusedSaves
                 }
                 .onChange(of: places) { scrollIfPlaced(proxy) }
             }
@@ -219,7 +225,11 @@ public struct ItemEditScreen: View {
 
     private func scrollIfPlaced(_ proxy: ScrollViewProxy) {
         guard let target = scroll.take(places) else { return }
-        withAnimation { proxy.scrollTo(target, anchor: .top) }
+        // One turn later: an anchor inserted in this update is then known to the scroll view.
+        Task { @MainActor in
+            await Task.yield()
+            withAnimation { proxy.scrollTo(target, anchor: .top) }
+        }
     }
 }
 
@@ -241,6 +251,10 @@ struct ItemEditForm: View {
     @Environment(\.vettIDColors) private var colors
     let state: ItemEditState
     let actions: ItemEditActions
+    /// A refused save to move VoiceOver to (``ItemEditScreen``'s request); nil when there is none.
+    var focusRequest: Int?
+    /// Called once the request is acted on, or found to have nothing to point to.
+    var onFocusDone: () -> Void = {}
     /// Told where each problem's place is, in the form's space; nil once it is gone.
     var onPlace: (ProblemPlace, CGRect?) -> Void = { _, _ in }
     /// VoiceOver's cursor, moved to the first problem when a save is refused.
@@ -296,19 +310,31 @@ struct ItemEditForm: View {
         .coordinateSpace(.named(Self.space))
         // After the refusal's own update (the list of the others may appear with it), VoiceOver's cursor moves to the
         // first problem's text, then hears how many there are, after the move so that the move does not cut it off.
-        .task(id: state.refusedSaves) {
-            guard state.refusedSaves > 0 else { return }
+        // Only for a request not yet acted on: the form appearing again (after the password step) does nothing. The request
+        // carries the problem and the count as they are now; a change starts it again with the new ones.
+        .task(id: focusRequest.map { FocusRequest(id: $0, place: state.firstProblem, count: state.problemCount) }) {
+            guard let request = focusRequest.map({ FocusRequest(id: $0, place: state.firstProblem, count: state.problemCount) })
+            else { return }
+            guard let place = request.place else { return onFocusDone() }
             try? await Task.sleep(for: Self.focusDelay)
             guard !Task.isCancelled else { return }
-            focused = state.firstProblem
+            focused = place
             try? await Task.sleep(for: Self.focusDelay)
             guard !Task.isCancelled else { return }
-            Announcer.announce(ItemsStrings.iosSaveRefused(state.problemCount), .queued)
+            Announcer.announce(ItemsStrings.iosSaveRefused(request.count), .queued)
+            onFocusDone()
         }
     }
 
     /// How long the form waits after a refused save's update before moving VoiceOver, and again before speaking.
     static let focusDelay = Duration.milliseconds(250)
+
+    /// A refused save to act on: its first problem and how many there are, as the form shows them.
+    struct FocusRequest: Equatable {
+        let id: Int
+        let place: ProblemPlace?
+        let count: Int
+    }
 
     @ViewBuilder private var notices: some View {
         if let e = state.error {
