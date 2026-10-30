@@ -739,6 +739,39 @@
         }
       }
     },
+    "approvals_match_code_label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Match code"
+          }
+        }
+      }
+    },
+    "approvals_match_code_instruction": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check that the sign-in screen shows the same number: %@"
+          }
+        }
+      }
+    },
+    "approvals_match_code_a11y": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Match code %@"
+          }
+        }
+      }
+    },
     "approvals_auth_signin_body": {
       "extractionState": "manual",
       "localizations": {

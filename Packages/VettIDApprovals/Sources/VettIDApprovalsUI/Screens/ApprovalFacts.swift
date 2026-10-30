@@ -45,12 +45,18 @@ struct Facts: View {
             case .connection(.incoming(let r)): incoming(r)
             case .connection(.outgoing(let r)): outgoing(r)
             case .authentication(let x):
+                // A sign-in's match code comes first, directly under the title (0.79.0).
+                if let code = x.matchCode { MatchCodeBlock(code: code) }
                 FactLabel(ApprovalsStrings.from)
                 FactValue(AccountNames.isolateOrNull(name) ?? ApprovalsStrings.aConnectionInline)
                 // The challenger's claim (§10.4), in full whatever the purpose; a fixed line when a purpose comes without one.
                 if let c = ApprovalTexts.contextNote(x) {
                     FactLabel(ApprovalsStrings.context)
                     FactValue(c).accessibilityIdentifier("auth_context")
+                }
+                // With a code, the sign-in's warning follows the note instead of the title (ANDROID-PLAN 0.1.100).
+                if x.matchCode != nil {
+                    Text(ApprovalsStrings.authSigninBody).vettIDFont(.bodyMedium).accessibilityIdentifier("auth_signin_body")
                 }
                 expires(x.exp)
             case .critical(let c): CriticalFacts(use: c, name: name)
