@@ -14,9 +14,9 @@
 #   --email-from <file>  a private file with the VETTID_STAGING_EMAIL line (only that line is read)
 #   --lock-cycle         the test locks and unlocks the vault before it looks for the request, which must still be
 #                        listed (pending.list, VAULT-MESSAGING §10.4.2)
-#   --build              first build the Staging app and the tests (through scripts/staging-ui-test.sh, whose test is
-#                        skipped without inputs), so that the sign-in's few minutes are not spent building
-#   --skip-build         reuse the last build-for-testing
+#   --build              build the Staging app and the tests first (through scripts/staging-ui-test.sh, whose test is
+#                        skipped without inputs), before the sign-in starts, so that its minutes are not spent building
+#   --skip-build         reuse the last build-for-testing (one of --build and --skip-build is required)
 #   --keep-result        keep the result bundle (see scripts/staging-ui-test.sh)
 #   --timeout <s>        how long to poll the site after the test (60)
 #
@@ -34,20 +34,23 @@ HOST=${VETTID_MEMBER_HOST:-member.staging.vettid.org}
 usage() { sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//' >&2; exit 2; }
 
 DEVICE="" INPUTS="" EMAIL_FROM="" CYCLE=0 BUILD=0 SKIP=0 KEEP=0 TIMEOUT=60
+need() { [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || { echo "$1 needs a value (see --help)" >&2; exit 2; }; }
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --device) DEVICE=${2:-}; shift 2 ;;
-    --inputs) INPUTS=${2:-}; shift 2 ;;
-    --email-from) EMAIL_FROM=${2:-}; shift 2 ;;
+    --device) need "$1" "${2:-}"; DEVICE=${2:-}; shift 2 ;;
+    --inputs) need "$1" "${2:-}"; INPUTS=${2:-}; shift 2 ;;
+    --email-from) need "$1" "${2:-}"; EMAIL_FROM=${2:-}; shift 2 ;;
     --lock-cycle) CYCLE=1; shift ;;
     --build) BUILD=1; shift ;;
     --skip-build) SKIP=1; shift ;;
     --keep-result) KEEP=1; shift ;;
-    --timeout) TIMEOUT=${2:-}; shift 2 ;;
+    --timeout) need "$1" "${2:-}"; TIMEOUT=${2:-}; shift 2 ;;
     -h|--help) usage ;;
     *) echo "unknown argument: $1" >&2; usage ;;
   esac
 done
+case "${HOST}" in *.staging.vettid.org) ;; *) echo "refusing: VETTID_MEMBER_HOST must end in .staging.vettid.org" >&2; exit 1 ;; esac
+if [[ ${BUILD} -eq 0 && ${SKIP} -eq 0 ]]; then echo "give --build (build first) or --skip-build (reuse the last build)" >&2; exit 2; fi
 [[ -n "${DEVICE}" && -n "${INPUTS}" ]] || { echo "--device and --inputs are required" >&2; usage; }
 [[ "${TIMEOUT}" =~ ^[0-9]+$ ]] || { echo "--timeout is a number of seconds" >&2; exit 2; }
 
@@ -73,7 +76,7 @@ EMAIL=$(email_line "${EMAIL_FROM:-${INPUTS}}")
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/vettid-signin.XXXXXX")
 chmod 700 "${WORK}"
 trap 'rm -rf "${WORK}"' EXIT
-trap 'exit 130' INT TERM
+trap 'exit 130' INT TERM HUP
 
 if [[ ${BUILD} -eq 1 ]]; then
   echo "== build (Staging)"

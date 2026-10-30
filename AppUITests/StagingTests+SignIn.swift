@@ -21,47 +21,58 @@ extension StagingTests {
         let app = launch()
         guard openAtStart(app, pin: pin, password: password) else { return }
         continueAfterFailure = true
-        print("SIGNIN_INDICATOR: \(approvalsIndicator(app, timeout: wait) ? "shown" : "none")")
+        // Informational only: the bell's count is read from its label (the badge itself is hidden from accessibility).
+        let bell = app.buttons["top_bar_bell"]
+        print("SIGNIN_INDICATOR: \(bell.waitForExistence(timeout: 10) && bell.label.contains { $0.isNumber } ? "shown" : "none")")
 
         var state = "missing"
-        if cycle {
+        guard openFromDrawer(app, item: "drawer_approvals", screen: "approvals_screen", what: "Approvals") else { return }
+        var row = signInRow(app, matchCode: matchCode, timeout: wait)
+        if cycle, let before = row {
             lock(app)
             unlock(app, pin: pin, password: password)
-            let listed = openFromDrawer(app, item: "drawer_approvals", screen: "approvals_screen", what: "Approvals")
-                && signInRow(app, matchCode: matchCode, timeout: wait) != nil
-            print("SIGNIN_AFTER_LOCK: \(listed ? "listed" : "missing")")
-            if !listed { fail(app, "The sign-in request was not listed after the lock and the unlock.") }
-        }
-        if openFromDrawer(app, item: "drawer_approvals", screen: "approvals_screen", what: "Approvals") {
-            if let row = signInRow(app, matchCode: matchCode, timeout: wait) {
-                state = decide(app, row: row, matchCode: matchCode, password: password)
+            var after: String?
+            if openFromDrawer(app, item: "drawer_approvals", screen: "approvals_screen", what: "Approvals") {
+                after = signInRow(app, matchCode: matchCode, timeout: wait)
             }
+            print("SIGNIN_AFTER_LOCK: \(after == before ? "listed" : "missing")")
+            if after != before { fail(app, "The same sign-in request was not listed after the lock and the unlock.") }
+            row = after
+        } else if cycle {
+            print("SIGNIN_AFTER_LOCK: missing")
         }
+        if let row { state = decide(app, row: row, matchCode: matchCode, password: password) }
         print("SIGNIN_STATE: \(state)")
         lock(app)
         if state != "approved" { fail(app, "The sign-in was not approved: \(state).") }
     }
 
-    /// Whether the top bar's bell (the approvals and notices indicator) carries a count in its label, waiting for it.
-    @MainActor
-    private func approvalsIndicator(_ app: XCUIApplication, timeout: TimeInterval) -> Bool {
-        let bell = app.buttons["top_bar_bell"]
-        guard bell.waitForExistence(timeout: 10) else { return false }
-        return waitUntil(timeout: timeout) { bell.label.contains { $0.isNumber } || shown(app)["bell_badge"] != nil }
-    }
-
-    /// The identifier of the row titled "Sign in to …" that has not been decided, waiting for it to be listed.
+    /// The identifier of the undecided "Sign in to …" row whose summary (the context's first line) holds the match
+    /// code, waiting for it to be listed. Batches of asks are expanded and their rows read; the batch itself is skipped.
     @MainActor
     private func signInRow(_ app: XCUIApplication, matchCode: String, timeout: TimeInterval) -> String? {
         var found: String?
+        var expanded = false
         _ = waitUntil(timeout: timeout) {
             guard let root = try? app.snapshot() else { return false }
-            found = ordered(under: root).first { e in
-                e.identifier.hasPrefix("approval_") && Self.plain(e.label).contains("Sign in to")
+            let all = ordered(under: root)
+            if !expanded, let toggle = all.first(where: { $0.identifier.hasPrefix("approval_batch_toggle_") }) {
+                expanded = true
+                anyElement(app, toggle.identifier).tap()
+                return false
+            }
+            found = all.first { e in
+                e.identifier.hasPrefix("approval_") && !e.identifier.hasPrefix("approval_batch_toggle_")
+                    && Self.plain(e.label).hasPrefix("Sign in to ") && Self.hasMatchCode(Self.plain(e.label), matchCode)
             }?.identifier
             return found != nil
         }
         return found
+    }
+
+    /// "match code NN" with exactly that number (the context reads "… match code NN").
+    static func hasMatchCode(_ text: String, _ code: String) -> Bool {
+        text.range(of: "match code \(NSRegularExpression.escapedPattern(for: code))(?!\\d)", options: .regularExpression) != nil
     }
 
     /// The request opened, its screen checked and approved; `approved`, `not_approved`, `not_opened` or `wrong_screen`.
@@ -69,16 +80,18 @@ extension StagingTests {
     private func decide(_ app: XCUIApplication, row: String, matchCode: String, password: String) -> String {
         tap(anyElement(app, row))
         guard waitForAny(app, ["approval_detail"], timeout: 30) != nil else { return "not_opened" }
-        let texts: [String] = (try? app.snapshot()).map { root in
-            ordered(under: root).map { Self.plain($0.label) } + ordered(under: root).map { Self.plain($0.value as? String ?? "") }
-        } ?? []
-        let screen = texts.joined(separator: "\n")
-        let right = screen.contains("Sign in to") && screen.contains("Only approve if you are signing in right now.")
-            && screen.contains(matchCode)
-        XCTAssertTrue(screen.contains("Sign in to"), "The screen has no \"Sign in to <name>?\" title.")
-        XCTAssertTrue(screen.contains("Only approve if you are signing in right now."), "The screen lacks its warning line.")
-        XCTAssertTrue(screen.contains(matchCode), "The screen does not show the match code.")
-        guard right else {
+        // The title is its own text ("Sign in to <name>?"); the context also begins "Sign in to", and ends otherwise.
+        let title = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Sign in to ' AND label ENDSWITH '?'"))
+            .firstMatch
+        let warning = app.staticTexts["Only approve if you are signing in right now."]
+        let context = shown(app)["auth_context"].map(Self.plain) ?? ""
+        let hasTitle = title.waitForExistence(timeout: 10)
+        let hasWarning = warning.exists
+        let hasCode = Self.hasMatchCode(context, matchCode)
+        XCTAssertTrue(hasTitle, "The screen has no \"Sign in to <name>?\" title.")
+        XCTAssertTrue(hasWarning, "The screen lacks its warning line.")
+        XCTAssertTrue(hasCode, "The context does not show the match code.")
+        guard hasTitle && hasWarning && hasCode else {
             tap(app.buttons["top_bar_back"].firstMatch)
             return "wrong_screen"
         }

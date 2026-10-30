@@ -365,8 +365,7 @@ xcodebuild test-without-building \
       @s = sort { length($b) <=> length($a) } grep { length }
         map { my $v = $ENV{"TEST_RUNNER_$_"} // ""; ($v, ($_ eq "VETTID_STAGING_PEER_NAME" ? map { my $n = (split /=/, $_, 2)[0]; $n =~ s/^\s+|\s+$//g; $n } split(/;/, $v) : ())) }
         qw(VETTID_STAGING_EMAIL VETTID_STAGING_CODE VETTID_STAGING_PIN VETTID_STAGING_PASSWORD VETTID_STAGING_LINK
-           VETTID_STAGING_TRANSFER_CODE VETTID_STAGING_PEER_NAME VETTID_STAGING_MESSAGE VETTID_STAGING_EXPECT
-           VETTID_STAGING_MATCH_CODE)
+           VETTID_STAGING_TRANSFER_CODE VETTID_STAGING_PEER_NAME VETTID_STAGING_MESSAGE VETTID_STAGING_EXPECT)
     }
     # The connect, message and photo tests report lines: the code, the state or the answer alone, never anything else of the
     # line.

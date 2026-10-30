@@ -16,27 +16,33 @@
 # Limits (README): 3 codes per address per hour, 10 per day; one start per run and no retry. The address, the code,
 # the link and the safety code are never printed (only the comparison), and live in a private temporary directory
 # that is removed however the run ends.
-#   --vettid-org <dir>  the vettid.org checkout with packages installed (default: ../vettid.org beside this repository's
-#                       parent, or $VETTID_ORG)
+#   --vettid-org <dir>  the vettid.org checkout with packages installed (default: $VETTID_ORG, or ../vettid.org beside
+#                       this repository)
+#
+# The mail tool takes the address only as `--to`, so it is visible in the process list (`ps`) while it runs. Its error
+# output goes to a file in the private temporary directory, never to the terminal. The output of each iPhone run is kept
+# in a private log (mode 700 cache directory, printed at the end) for diagnosis; the script prints generic messages.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 REPO=$(pwd -P)
 HOST=${VETTID_MEMBER_HOST:-member.staging.vettid.org}
-ORG=${VETTID_ORG:-/Users/al/Projects/vettid.org}
+ORG=${VETTID_ORG:-${REPO}/../vettid.org}
 
 DEVICE="" INPUTS="" EMAIL_FROM="" SKIP=0
+need() { [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || { echo "$1 needs a value (see --help)" >&2; exit 2; }; }
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --device) DEVICE=${2:-}; shift 2 ;;
-    --inputs) INPUTS=${2:-}; shift 2 ;;
-    --email-from) EMAIL_FROM=${2:-}; shift 2 ;;
-    --vettid-org) ORG=${2:-}; shift 2 ;;
+    --device) need "$1" "${2:-}"; DEVICE=${2:-}; shift 2 ;;
+    --inputs) need "$1" "${2:-}"; INPUTS=${2:-}; shift 2 ;;
+    --email-from) need "$1" "${2:-}"; EMAIL_FROM=${2:-}; shift 2 ;;
+    --vettid-org) need "$1" "${2:-}"; ORG=${2:-}; shift 2 ;;
     --skip-build) SKIP=1; shift ;;
     -h|--help) sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
+case "${HOST}" in *.staging.vettid.org) ;; *) echo "refusing: VETTID_MEMBER_HOST must end in .staging.vettid.org" >&2; exit 1 ;; esac
 [[ -n "${DEVICE}" && -n "${INPUTS}" ]] || { echo "--device and --inputs are required" >&2; exit 2; }
 
 private_file() {
@@ -54,7 +60,7 @@ EMAIL=$(grep -E '^VETTID_STAGING_EMAIL=' "${EMAIL_FROM:-${INPUTS}}" | head -1 | 
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/vettid-connect.XXXXXX")
 chmod 700 "${WORK}"
 trap 'rm -rf "${WORK}"' EXIT
-trap 'exit 130' INT TERM
+trap 'exit 130' INT TERM HUP
 
 call() { # method path [body file]
   local args=(-sS --max-time 30 -b "${WORK}/jar" -c "${WORK}/jar" -X "$1" -H 'Content-Type: application/json'
@@ -64,6 +70,12 @@ call() { # method path [body file]
 }
 json() { python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1])).get(sys.argv[2], ""))' "${WORK}/out" "$1"; }
 
+LOGDIR="${XDG_CACHE_HOME:-${HOME}/Library/Caches}/vettid-ios/staging-ui-test/logs"
+mkdir -p "${LOGDIR}"
+chmod 700 "${LOGDIR}"
+LOG="${LOGDIR}/connect-$(date +%Y%m%d-%H%M%S).log"
+: >"${LOG}"
+chmod 600 "${LOG}"
 SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 printf '{"email":"%s"}' "${EMAIL}" >"${WORK}/body"
 echo "== connect start"
@@ -71,7 +83,7 @@ code=$(call POST /api/connect/start "${WORK}/body")
 [[ "${code}" == 202 ]] || { echo "connect start answered ${code} ($(json error))" >&2; exit 1; }
 
 echo "== the code from the test mail"
-(cd "${ORG}" && npm run -s staging:mail -- wait --to "${EMAIL}" --since "${SINCE}" --timeout 120) >"${WORK}/mail" ||
+(cd "${ORG}" && npm run -s staging:mail -- wait --to "${EMAIL}" --since "${SINCE}" --timeout 120) >"${WORK}/mail" 2>"${WORK}/mail.err" ||
   { echo "no mail arrived (or the mail reader failed: aws sso login --profile vault-staging-test-mail)" >&2; exit 1; }
 CODE=$(python3 -I -c 'import json,re,sys; m=re.search(r"(?<!\d)\d{6}(?!\d)", json.load(open(sys.argv[1])).get("text","")); print(m.group(0) if m else "")' "${WORK}/mail")
 [[ -n "${CODE}" ]] || { echo "the mail holds no 6-digit code" >&2; exit 1; }
@@ -92,7 +104,9 @@ chmod 600 "${IN}"
 args=(--device "${DEVICE}" --inputs "${IN}")
 if [[ ${SKIP} -eq 1 ]]; then args+=(--skip-build); fi
 echo "== accept the invitation on the iPhone"
-scripts/staging-ui-test.sh "${args[@]}" --test testStagingConnectAccept | tee "${WORK}/accept" | grep -E 'SAFETY_CODE|CONNECT_STATE|Test Case.*(passed|failed)' || true
+scripts/staging-ui-test.sh "${args[@]}" --test testStagingConnectAccept >"${WORK}/accept" 2>&1 || true
+cat "${WORK}/accept" >>"${LOG}"
+grep -E 'CONNECT_STATE|Test Case.*(passed|failed)' "${WORK}/accept" || true
 PHONE=$(sed -n 's/^SAFETY_CODE: \([0-9]\{6\}\)$/\1/p' "${WORK}/accept" | head -1)
 [[ -n "${PHONE}" ]] || { echo "the phone showed no safety code" >&2; exit 1; }
 
@@ -106,16 +120,20 @@ for _ in $(seq 1 30); do
   sleep 4
 done
 echo "site status: ${st:-none}"
-if [[ "${site}" == "${PHONE}" ]]; then echo "SAFETY_CODES: match"; else echo "SAFETY_CODES: differ"; exit 1; fi
+if [[ -z "${site}" ]]; then echo "SAFETY_CODES: no site code"; exit 1
+elif [[ "${site}" == "${PHONE}" ]]; then echo "SAFETY_CODES: match"
+else echo "SAFETY_CODES: differ"; exit 1; fi
 
 # The member's side: the request on the phone, found by its safety code.
 printf 'VETTID_STAGING_SAFETY_CODE=%s\n' "${PHONE}" >>"${IN}"
 echo "== approve on the iPhone"
-scripts/staging-ui-test.sh "${args[@]}" --skip-build --test testStagingApproveRequest | grep -E 'CONNECT_STATE|Test Case.*(passed|failed)' || true
+scripts/staging-ui-test.sh "${args[@]}" --skip-build --test testStagingApproveRequest >"${WORK}/approve" 2>&1 || true
+cat "${WORK}/approve" >>"${LOG}"
+grep -E 'CONNECT_STATE|Test Case.*(passed|failed)' "${WORK}/approve" || true
 for _ in $(seq 1 15); do
   if [[ $(call GET /api/connect/status) == 200 ]]; then st=$(json status); fi
   [[ "${st}" == connected || "${st}" == declined || "${st}" == expired ]] && break
   sleep 4
 done
-echo "final site status: ${st:-none}"
+echo "final site status: ${st:-none} (log: ${LOG})"
 [[ "${st}" == connected ]]
