@@ -7,7 +7,7 @@ struct AppEnvironmentTests {
     static var production: [String: Any] {
         [
             "VettIDEnvironment": "production", "VettIDAccountHost": "account.vettid.org", "VettIDRelayHost": "relay.vettid.org",
-            "VettIDManifestHost": "vettid.org", "VettIDManifestKeys": "",
+            "VettIDManifestHost": "vettid.org", "VettIDManifestKeys": "", "VettIDVotesHost": "votes.vettid.org",
         ]
     }
 
@@ -19,6 +19,7 @@ struct AppEnvironmentTests {
         #expect(env.apiOrigin == "https://account.staging.vettid.org")
         #expect(env.relayURL == "https://relay.vettid.org")
         #expect(env.manifestURL == "https://staging.vettid.org/.well-known/vettid/pcr-manifest.json")
+        #expect(env.votesURL == "https://votes.staging.vettid.org")
         // The staging channel's key A (key id e9b3a403423120ac), and only it.
         #expect(try env.trust().manifestKeys.map(\.keyID) == ["e9b3a403423120ac"])
     }
@@ -41,6 +42,7 @@ struct AppEnvironmentTests {
         #expect(env.accountHost == "account.vettid.org")
         #expect(env.apiOrigin == "https://account.vettid.org" && env.relayURL == "https://relay.vettid.org")
         #expect(env.manifestURL == "https://vettid.org/.well-known/vettid/pcr-manifest.json")
+        #expect(env.votesURL == "https://votes.vettid.org")
         // Release pins the production keys in code, whatever its Info.plist says.
         var planted = Self.production
         planted["VettIDManifestKeys"] = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEok8gqeC5VcGx4KL+B5fL7UgENBXf"
@@ -57,6 +59,8 @@ struct AppEnvironmentTests {
         ]))
         #expect(env.apiOrigin == "http://127.0.0.1:18081" && env.relayURL == "https://relay.vettid.test")
         #expect(env.manifestKeys.isEmpty)
+        // No votes site on the dev stack: nothing is fetched.
+        #expect(env.votesHost == nil && env.votesURL == nil)
     }
 
     /// STAGING-TIME-SCALE §4 item 4: a Release build accepts only real time; Staging and Debug 1 and 24; DevStack its own.
