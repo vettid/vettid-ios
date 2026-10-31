@@ -75,7 +75,7 @@ public struct AttestationContent: View {
         }
         SettingsSectionHeader(SettingsStrings.attestationEnclave)
         SettingsGroup {
-            SettingsInfoRow(SettingsStrings.attestationRelease, value: Self.releaseText(a), icon: .update)
+            SettingsInfoRow(SettingsStrings.attestationRelease, value: Self.releaseText(a), icon: .update, code: true)
             SettingsDivider()
             SettingsInfoRow(SettingsStrings.attestationEnvironment, value: a.environment, icon: .storage)
         }
@@ -149,7 +149,7 @@ private struct AndroidDeviceRows: View {
             SettingsDivider()
             SettingsInfoRow(SettingsStrings.attestationLocked, value: VaultStatusContent.yesNo(a.deviceLocked), icon: .lock)
             SettingsDivider()
-            SettingsInfoRow(SettingsStrings.attestationBootKey, value: a.bootKeyFingerprint ?? "-", icon: .key)
+            SettingsInfoRow(SettingsStrings.attestationBootKey, value: a.bootKeyFingerprint ?? "-", icon: .key, code: true)
         }
     }
 }

@@ -13,6 +13,16 @@ public enum EditDialog: Equatable, Sendable {
     case newCategory(name: String = "")
 }
 
+/// Where on the editor a problem is shown: under the name, under a field, under the notes, or in the list of the others.
+public enum ProblemPlace: Hashable, Sendable {
+    case name, field(Int), notes, summary
+
+    /// The name's problems, shown under the name.
+    public static let nameProblems: Set<DraftProblem> = [.nameEmpty, .nameTooLong]
+    /// The item's problems shown in place (the name's, the notes'); the rest are listed together.
+    public static let inline: Set<DraftProblem> = nameProblems.union([.notesTooLong])
+}
+
 /// The add/edit screen's state; never printed or reflected with its values. Mirrors vettid-android `ItemEditUiState`.
 public struct ItemEditState: Equatable, Sendable, CustomStringConvertible, CustomReflectable {
     public var itemID: String?
@@ -50,6 +60,9 @@ public struct ItemEditState: Equatable, Sendable, CustomStringConvertible, Custo
     public var confirmLeaveCritical = false
     /// The content was saved but the protection change was refused: the editor shows the item as saved.
     public var savedButProtection = false
+    /// Counts the saves refused for the draft's problems: each one takes the member to the first problem (I4 audit,
+    /// accessibility).
+    public var refusedSaves = 0
 
     public init(itemID: String? = nil) { self.itemID = itemID }
 
@@ -75,6 +88,25 @@ public struct ItemEditState: Equatable, Sendable, CustomStringConvertible, Custo
         if inProfile && protection == .data { return ItemsStrings.protectionProfile }
         guard protectionTo != nil else { return nil }
         return ItemsStrings.protectionChange(ItemsText.sensitivity(draft.sensitivity), ItemsText.sensitivity(protection))
+    }
+
+    /// Where the first problem shown is, in the form's order: the name, a field, the notes, then the list of the others.
+    public var firstProblem: ProblemPlace? {
+        guard showErrors else { return nil }
+        let p = check.problems
+        if !p.isDisjoint(with: ProblemPlace.nameProblems) { return .name }
+        if let i = check.fieldProblems.filter({ !$0.value.isEmpty }).keys.min() { return .field(i) }
+        if p.contains(.notesTooLong) { return .notes }
+        return p.subtracting(ProblemPlace.inline).isEmpty ? nil : .summary
+    }
+
+    /// How many problems are shown: one under the name, one under each field that has any (a field shows one text), one
+    /// under the notes, and each in the list of the others.
+    public var problemCount: Int {
+        let p = check.problems
+        let name = p.isDisjoint(with: ProblemPlace.nameProblems) ? 0 : 1
+        let notes = p.contains(.notesTooLong) ? 1 : 0
+        return name + notes + check.fieldProblems.values.count(where: { !$0.isEmpty }) + p.subtracting(ProblemPlace.inline).count
     }
 
     public var description: String { "ItemEditState(\(itemID ?? "new"), busy: \(busy), error: \(error.map { "\($0)" } ?? "nil"))" }

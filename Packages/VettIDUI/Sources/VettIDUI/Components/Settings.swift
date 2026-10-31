@@ -151,21 +151,26 @@ public struct SettingsAccountRow: View {
     }
 }
 
-/// A read-only settings row: label and value (status screens). Not tappable; read as one item.
-/// Mirrors vettid-android `SettingsInfoRow`.
+/// A read-only settings row: label and value (status screens). Not tappable; read as one item. The value is never cut: a
+/// fingerprint or an id a member compares is shown in full at every text size (I4 audit, accessibility). Mirrors
+/// vettid-android `SettingsInfoRow`.
 public struct SettingsInfoRow: View {
     let label: String
     let value: String
     let icon: VettIDSymbol?
+    let code: Bool
 
-    public init(_ label: String, value: String, icon: VettIDSymbol? = nil) {
+    /// [code]: the value is a fingerprint or an id (not a secret), shown monospaced and selectable so that it can be
+    /// compared and copied.
+    public init(_ label: String, value: String, icon: VettIDSymbol? = nil, code: Bool = false) {
         self.label = label
         self.value = value
         self.icon = icon
+        self.code = code
     }
 
     public var body: some View {
-        SettingsRowLayout(label: label, supporting: value, tag: nil) {
+        SettingsRowLayout(label: label, supporting: value, tag: nil, supportingLimited: false, supportingCode: code) {
             if let icon { RowIcon(icon: icon, tint: nil) }
         } trailing: {
             EmptyView()
@@ -196,6 +201,10 @@ private struct SettingsRowLayout<Leading: View, Trailing: View>: View {
     let tag: String?
     var minHeight: CGFloat = 72
     var horizontalPadding = true
+    /// The supporting line is cut at two lines below the accessibility sizes (a tappable row's description).
+    var supportingLimited = true
+    /// The supporting line is a code: monospaced and selectable.
+    var supportingCode = false
     @ViewBuilder let leading: Leading
     @ViewBuilder let trailing: Trailing
 
@@ -205,6 +214,8 @@ private struct SettingsRowLayout<Leading: View, Trailing: View>: View {
         tag: String?,
         minHeight: CGFloat = 72,
         horizontalPadding: Bool = true,
+        supportingLimited: Bool = true,
+        supportingCode: Bool = false,
         @ViewBuilder leading: () -> Leading,
         @ViewBuilder trailing: () -> Trailing
     ) {
@@ -213,6 +224,8 @@ private struct SettingsRowLayout<Leading: View, Trailing: View>: View {
         self.tag = tag
         self.minHeight = minHeight
         self.horizontalPadding = horizontalPadding
+        self.supportingLimited = supportingLimited
+        self.supportingCode = supportingCode
         self.leading = leading()
         self.trailing = trailing()
     }
@@ -233,10 +246,13 @@ private struct SettingsRowLayout<Leading: View, Trailing: View>: View {
                         title
                     }
                     if let supporting {
-                        Text(supporting)
+                        let text = Text(supporting)
                             .vettIDFont(.bodyMedium)
+                            .monospaced(supportingCode)
                             .foregroundStyle(colors.onSurfaceVariant)
-                            .lineLimit(lines)
+                            .lineLimit(supportingLimited ? lines : nil)
+                            .fixedSize(horizontal: false, vertical: !supportingLimited)
+                        if supportingCode { text.textSelection(.enabled) } else { text }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

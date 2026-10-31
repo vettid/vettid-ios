@@ -216,6 +216,12 @@ public extension ItemsStrings {
         String(localized: "ios_items_otp_left_spoken", defaultValue: "\(a) seconds left", bundle: .module)
     }
 
+    /// What VoiceOver is told when a save is refused for the draft's problems: the problems title and how many there are
+    /// (chosen; not in the spec; I4 audit, accessibility).
+    static func iosSaveRefused(_ a: Int) -> String {
+        String(localized: "ios_items_save_refused", defaultValue: "Check the item: \(a) problems", bundle: .module)
+    }
+
     static var otpUnreadable: String {
         String(localized: "items_otp_unreadable", defaultValue: "This setup key cannot make codes", bundle: .module)
     }
