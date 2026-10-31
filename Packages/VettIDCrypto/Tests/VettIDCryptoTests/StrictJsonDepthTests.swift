@@ -25,7 +25,8 @@ struct StrictJsonDepthTests {
     @Test func aDuplicateNameDeepInsideAndBadUTF8AreRefusedAtAnyLimit() {
         let dup = Array((String(repeating: #"{"a":"#, count: 20) + #"{"k":1,"k":2}"# + String(repeating: "}", count: 20)).utf8)
         #expect(throws: CryptoError.self) { try StrictJson.parseObject(dup, maxDepth: 29) }
-        #expect(throws: CryptoError.self) { try StrictJson.compactObject([0x7B, 0x22, 0x61, 0x22, 0x3A, 0x22, 0xFF, 0x22, 0x7D], maxDepth: 29) }
+        let bad: [UInt8] = [0x7B, 0x22, 0x61, 0x22, 0x3A, 0x22, 0xFF, 0x22, 0x7D]
+        #expect(throws: CryptoError.self) { try StrictJson.compactObject(bad, maxDepth: 29) }
     }
 
     @Test func compactObjectKeepsTheDepthLimit() throws {
