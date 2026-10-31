@@ -128,6 +128,7 @@ public struct HTTPTransport: Sendable {
         let (bytes, response) = try await session.bytes(for: r)
         guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
         guard readsBody(http.statusCode) else {
+            bytes.task.cancel()
             return HTTPAnswer(status: http.statusCode, headers: [:], body: [])
         }
         if http.expectedContentLength > Int64(maxBody) { throw BodyTooLarge(status: http.statusCode) }
