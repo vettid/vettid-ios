@@ -111,6 +111,12 @@ enum MessagesStrings {
         String(localized: "messages_cd_incoming", defaultValue: "\(name): \(text). \(time)", bundle: .module)
     }
 
+    /// What VoiceOver is told when a message arrives in the open conversation: who sent it and its text, without the time
+    /// the bubble's label adds (chosen; not in the spec; I4 audit, accessibility).
+    static func iosArrived(_ name: String, _ text: String) -> String {
+        String(localized: "messages_ios_arrived", defaultValue: "\(name): \(text)", bundle: .module)
+    }
+
     static func replyHint(_ name: String) -> String {
         String(localized: "messages_reply_hint", defaultValue: "Message \(name)", bundle: .module)
     }

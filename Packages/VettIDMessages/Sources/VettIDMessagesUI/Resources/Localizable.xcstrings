@@ -377,6 +377,17 @@
         }
       }
     },
+    "messages_ios_arrived": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: %@"
+          }
+        }
+      }
+    },
     "messages_reply_hint": {
       "extractionState": "manual",
       "localizations": {

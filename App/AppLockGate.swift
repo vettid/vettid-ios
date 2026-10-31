@@ -24,6 +24,7 @@ struct AppLockGate<Content: View>: View {
     var body: some View {
         ZStack {
             content()
+                .environment(\.vettIDLocked, covered)
                 .disabled(covered)
                 .accessibilityHidden(covered)
                 .opacity(covered ? 0 : 1)

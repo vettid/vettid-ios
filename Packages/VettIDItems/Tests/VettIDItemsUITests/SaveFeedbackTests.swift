@@ -15,12 +15,19 @@ import VettIDData
 @Suite(.serialized) struct SaveFeedbackTests {
     private static var recorded: [Announcer.Event] = []
 
-    /// A long form whose only problem is the last field's value.
-    private var refused: ItemEditState {
+    /// This test's announcements only: the sink is shared by the suites running in parallel, whose screens say other
+    /// things meanwhile, and by this suite's earlier forms, which may still be going away. Each test's form has its own
+    /// number of problems.
+    private static func ours(_ text: String) -> (Announcer.Event) -> Bool {
+        { if case .announcement(let t, _) = $0 { t == text } else { false } }
+    }
+
+    /// A long form whose problems are its last fields' values.
+    private func refused(problems: Int) -> ItemEditState {
         var s = ItemEditState()
         s.loading = false
         var fields = (0..<14).map { DraftField(label: "Line \($0)", kind: FieldKinds.text, text: "Value \($0)") }
-        fields.append(DraftField(label: "Expires", kind: FieldKinds.date, text: "1st of May"))
+        fields += (0..<problems).map { DraftField(label: "Expires \($0)", kind: FieldKinds.date, text: "1st of May") }
         s.draft = ItemDraft(name: "Card", fields: fields)
         s.check = ItemChecks.check(s.draft)
         s.showErrors = true
@@ -33,22 +40,25 @@ import VettIDData
     @Test func aRefusedSaveSaysHowManyProblems() async throws {
         let saved = Announcer.sink
         Self.recorded = []
-        Announcer.sink = { Self.recorded.append($0) }
+        let ours = Self.ours("Check the item: 1 problem")
+        Announcer.sink = { if ours($0) { Self.recorded.append($0) } }
         defer { Announcer.sink = saved }
-        let holder = EditHolder(refused)
+        let holder = EditHolder(refused(problems: 1))
         #expect(holder.state.firstProblem == .field(14) && holder.state.problemCount == 1)
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
         window.rootViewController = UIHostingController(rootView: HeldEdit(holder: holder).vettIDTheme())
         window.isHidden = false
         window.layoutIfNeeded()
-        defer { window.isHidden = true }
+        defer { window.rootViewController = nil; window.isHidden = true }
         try await Task.sleep(for: .milliseconds(200))
-        #expect(!Self.recorded.contains { if case .announcement(let t, _) = $0 { t.hasPrefix("Check the item:") } else { false } })
+        #expect(Self.recorded.isEmpty)
         holder.state.refusedSaves += 1
         #expect(await eventually { Self.recorded.contains(.announcement("Check the item: 1 problem", .queued)) } != nil)
         // Said again at the next refusal.
         holder.state.refusedSaves += 1
         #expect(await eventually { Self.recorded.filter { $0 == .announcement("Check the item: 1 problem", .queued) }.count == 2 } != nil)
+        try await Task.sleep(for: .milliseconds(1_000))
+        #expect(Self.recorded.count == 2, "\(Self.recorded)")
     }
 
     /// A refusal already counted when the screen appears, or the form coming back after the password step, says nothing
@@ -56,16 +66,17 @@ import VettIDData
     @Test func onlyANewRefusalIsActedOn() async throws {
         let saved = Announcer.sink
         Self.recorded = []
-        Announcer.sink = { Self.recorded.append($0) }
+        let ours = Self.ours("Check the item: 2 problems")
+        Announcer.sink = { if ours($0) { Self.recorded.append($0) } }
         defer { Announcer.sink = saved }
-        var already = refused
+        var already = refused(problems: 2)
         already.refusedSaves = 1
         let holder = EditHolder(already)
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
         window.rootViewController = UIHostingController(rootView: HeldEdit(holder: holder).vettIDTheme())
         window.isHidden = false
         window.layoutIfNeeded()
-        defer { window.isHidden = true }
+        defer { window.rootViewController = nil; window.isHidden = true }
         try await Task.sleep(for: .milliseconds(800))
         #expect(Self.recorded.isEmpty)
         holder.state.refusedSaves += 1

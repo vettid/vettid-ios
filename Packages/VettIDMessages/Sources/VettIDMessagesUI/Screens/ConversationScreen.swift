@@ -88,6 +88,8 @@ public struct ConversationScreen: View {
                 PhotoDraftOverlay(draft: draft, name: isolated, actions: actions.photos)
             }
         }
+        // On the screen, not its body: the body swaps loading, empty and the list, and would lose track of being shown.
+        .announcesArrivals(state, name: isolated, covered: photoCover)
         .accessibilityIdentifier("conversation_screen")
     }
 
