@@ -15,6 +15,12 @@ import VettIDData
 @Suite(.serialized) struct SaveFeedbackTests {
     private static var recorded: [Announcer.Event] = []
 
+    /// This suite's announcements only: the sink is shared by the suites running in parallel, whose screens say other
+    /// things meanwhile.
+    private static func ours(_ event: Announcer.Event) -> Bool {
+        if case .announcement(let text, _) = event { text.hasPrefix("Check the item:") } else { false }
+    }
+
     /// A long form whose only problem is the last field's value.
     private var refused: ItemEditState {
         var s = ItemEditState()
@@ -33,7 +39,7 @@ import VettIDData
     @Test func aRefusedSaveSaysHowManyProblems() async throws {
         let saved = Announcer.sink
         Self.recorded = []
-        Announcer.sink = { Self.recorded.append($0) }
+        Announcer.sink = { if Self.ours($0) { Self.recorded.append($0) } }
         defer { Announcer.sink = saved }
         let holder = EditHolder(refused)
         #expect(holder.state.firstProblem == .field(14) && holder.state.problemCount == 1)
@@ -56,7 +62,7 @@ import VettIDData
     @Test func onlyANewRefusalIsActedOn() async throws {
         let saved = Announcer.sink
         Self.recorded = []
-        Announcer.sink = { Self.recorded.append($0) }
+        Announcer.sink = { if Self.ours($0) { Self.recorded.append($0) } }
         defer { Announcer.sink = saved }
         var already = refused
         already.refusedSaves = 1

@@ -4,6 +4,10 @@ public extension EnvironmentValues {
     /// A full screen covers the app (IOS-PLAN §4.4 (1), "This phone can't use your vault"): every sheet and alert closes,
     /// since a presentation would stay above the cover and usable (``View/closesWhenCovered(_:)``).
     @Entry var vettIDCovered: Bool = false
+
+    /// The app lock covers the app (the app's `AppLockGate`): the content underneath stays, its sheets included, but says nothing
+    /// by itself (no announcement of what arrives meanwhile). Unlike ``vettIDCovered``, it closes nothing.
+    @Entry var vettIDLocked: Bool = false
 }
 
 public extension View {

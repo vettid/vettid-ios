@@ -55,7 +55,6 @@ public struct ConversationScreen: View {
                 CenteredTitle(name)
                 ConversationBody(state: state, name: isolated, actions: actions)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .announcesArrivals(state, name: isolated, covered: photoCover)
                 if let error = state.error {
                     MessagesError(kind: error, actionLabel: MessagesStrings.ok, action: actions.onDismissError)
                         .padding(.horizontal, Spacing.gutter).padding(.vertical, Spacing.s)
@@ -89,6 +88,8 @@ public struct ConversationScreen: View {
                 PhotoDraftOverlay(draft: draft, name: isolated, actions: actions.photos)
             }
         }
+        // On the screen, not its body: the body swaps loading, empty and the list, and would lose track of being shown.
+        .announcesArrivals(state, name: isolated, covered: photoCover)
         .accessibilityIdentifier("conversation_screen")
     }
 
