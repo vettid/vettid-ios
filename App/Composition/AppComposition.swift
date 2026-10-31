@@ -89,6 +89,8 @@ final class AppComposition {
             environment: environment.kind.rawValue.uppercased()
         )
         config.attestStartOver = startOver
+        // The public votes site (IOS-PLAN §4.16): its own ephemeral session, no cookies, no cache, no redirects.
+        config.votesSite = URLSessionVoteSite(base: environment.votesURL)
         vault = VaultManager(config: config)
         releaseNotes = ReleaseNotesClient(manifestURL: environment.manifestURL)
         appLock = AppLock(

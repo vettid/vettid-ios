@@ -33,4 +33,7 @@ public final class NoVotes: VotesRepository {
     public func release(_ key: VoteKey, pin: String) async throws { throw unsupported() }
     public func acknowledgeDropped(_ connectionIDs: [String]) {}
     public func titleOf(_ key: VoteKey) -> String? { nil }
+    public func siteCheck(_ key: VoteKey) async throws {}
+    public func checkResults(_ key: VoteKey) async throws -> ResultsOutcome { throw unsupported() }
+    public func diagnoseGaveUp(_ key: VoteKey) async {}
 }

@@ -14,6 +14,9 @@ extension FakeVaultService {
         switch m.type {
         case "vote.list":
             try reply(m.type, #"{"votes":\#(JsonBuilder.array(votes)),"dropped":[],"problems":[],"reconnect":[]}"#, re: m.id)
+        case "vote.site.sync":
+            // The vault decides what it keeps; the app is told nothing it acts on (§10.19.8).
+            try reply(m.type, "{}", re: m.id)
         case "vote.release":
             // The PIN alone, sealed to a UTK (§3.5.4), as `audit.export` carries it.
             guard let p = try opened(m, body) else { return }

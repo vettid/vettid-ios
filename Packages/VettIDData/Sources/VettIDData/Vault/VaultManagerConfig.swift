@@ -190,6 +190,11 @@ public struct VaultManagerConfig: Sendable {
     /// How a change of PIN or password waits for the credential operations before it (VAULT-MESSAGING §11.14.9 step 1:
     /// at most 30 s): a sleep of the given length (tests pass their own).
     public var changeWaitSleep: @Sendable (TimeInterval) async throws -> Void = VaultApi.sleep
+    /// The public votes site the app reads for the vault (IOS-PLAN §4.16 "The site"); nil where the build has none (the
+    /// dev stack, the tests that do not set one): nothing is fetched or sent.
+    public var votesSite: (any VoteSite)?
+    /// The waits of the hourly work with the votes site (a sleep the tests release).
+    public var votesSleep: @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
 
     public init(
         apiOrigin: String,

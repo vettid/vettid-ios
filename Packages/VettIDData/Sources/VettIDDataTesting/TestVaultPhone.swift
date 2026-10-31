@@ -293,9 +293,11 @@ public final class TestVaultPhone {
     /// ``roomyRequestTimeout``. [wipes]: false for a build that cannot wipe. [lockStatusWait]: how long "Lock it now" waits for the status
     /// that names the opening (``LockTiming/lockStatusWait``).
     public init(
-        service: FakeVaultService, requestTimeout: TimeInterval = 5, wipes: Bool = true, lockStatusWait: TimeInterval = 5
+        service: FakeVaultService, requestTimeout: TimeInterval = 5, wipes: Bool = true, lockStatusWait: TimeInterval = 5,
+        votesSite: (any VoteSite)? = nil
     ) throws {
         self.service = service
+        self.votesSite = votesSite
         self.lockStatusWait = lockStatusWait
         self.requestTimeout = requestTimeout
         self.wipes = wipes
@@ -313,11 +315,17 @@ public final class TestVaultPhone {
             transfer: transferPauses, keep: keepPauses, keptEnd: keptEndPauses, deadline: deadlinePauses,
             collect: collectPauses, lockStatusWait: lockStatusWait
         )
-        manager = VaultManager(config: try Self.configured(
+        var config = try Self.configured(
             service, appKeys, seedWrap, wrapped, phoneKeys, fileKeys, protectedData, directory, gate, clock,
             wipes ? wipeTargets : nil, attester, startOver, waits, uptime
-        ))
+        )
+        Self.votes(&config, votesSite, votesPauses)
+        manager = VaultManager(config: config)
     }
+
+    /// The public votes site the test serves (nil: none), and the hourly wait of the work with it, released by the test.
+    public let votesSite: (any VoteSite)?
+    public let votesPauses = TestPauses()
 
     /// How long a recovered phone waits for the vault's `hs.resp` (90 s, or 30 s when resuming, when nil): a test of the handshake
     /// the vault does not answer sets it, then ``restart()``s.
@@ -334,6 +342,7 @@ public final class TestVaultPhone {
             wipes ? wipeTargets : nil, attester, attestStartOver, waits, uptime
         )
         config.pairingWait = pairingWait
+        Self.votes(&config, votesSite, votesPauses)
         manager = VaultManager(config: config)
     }
 

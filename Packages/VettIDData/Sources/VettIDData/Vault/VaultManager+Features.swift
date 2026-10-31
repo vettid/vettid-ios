@@ -129,6 +129,8 @@ extension VaultManager {
             try? await items.refresh(quietly: true)
             // The votes after the items (chosen; not in the spec): nothing that expires within minutes waits on them.
             await votes.openNow()
+            // Then the public site, and every hour while the vault stays open (not when a lock or a hold came meanwhile).
+            if phase == .unlocked { votes.startSync() }
         }
     }
 }

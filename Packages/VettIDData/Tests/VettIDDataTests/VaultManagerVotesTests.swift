@@ -14,6 +14,8 @@ import VettIDVault
 @Suite(.serialized) struct VaultManagerVotesTests {
     let service: FakeVaultService
     let phone: TestVaultPhone
+    /// The public votes site this phone reads.
+    let site = FakeVoteSite()
     let pin = "402817"
     let password = "correct horse battery"
     static let pid = "01JBQZ0000000000000000000A"
@@ -21,7 +23,7 @@ import VettIDVault
 
     init() throws {
         service = try FakeVaultService()
-        phone = try TestVaultPhone(service: service)
+        phone = try TestVaultPhone(service: service, votesSite: site)
     }
 
     var m: VaultManager { phone.manager }
@@ -118,6 +120,25 @@ import VettIDVault
         try service.otherDevicePassesCheck()
         #expect(await eventually { m.ownerChecks.ownerCheck?.state == .ok })
         #expect(await eventually { m.votes.votes.count == 1 })
+    }
+
+    /// The public votes site (IOS-PLAN §4.16 "The site"): read after the opening's list, its documents handed to the
+    /// vault in `vote.site.sync`, then every hour while the vault is open; nothing after a lock.
+    @Test func theOpeningHandsTheSiteToTheVaultAndALockStopsTheWork() async throws {
+        defer { phone.close() }
+        site.put("index.json", "[]")
+        service.setVotes([Self.vote])
+        try await open()
+        #expect(await eventually { service.voteRequests.contains("vote.site.sync") })
+        #expect(site.reads.contains("index.json") && site.reads.contains("p/\(Self.pid)/proposal.json"))
+        let entry = try #require(service.voteBodies.last { $0.type == "vote.site.sync" }?.body)
+        #expect(try entry.array("entries").count == 1)
+        #expect(await eventually { phone.votesPauses.lengths == [3600] })
+        try await m.lock()
+        site.clearReads()
+        phone.votesPauses.release()
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(site.reads.isEmpty)
     }
 }
 
