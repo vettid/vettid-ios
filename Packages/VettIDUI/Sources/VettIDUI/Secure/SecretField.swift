@@ -198,6 +198,14 @@ public struct SecretTextInput: UIViewRepresentable {
 
     public func makeCoordinator() -> Coordinator { Coordinator(self) }
 
+    /// The field's font, scaled with Dynamic Type ([traits]: for a given size; default: the current one): the type
+    /// scale's body (Inter, ``VettIDTextStyle/bodyLarge``), or for a code a monospaced face at Title 3.
+    public static func font(monospaced: Bool, compatibleWith traits: UITraitCollection? = nil) -> UIFont {
+        guard monospaced else { return VettIDTextStyle.bodyLarge.uiFont(compatibleWith: traits) }
+        return UIFontMetrics(forTextStyle: .title3)
+            .scaledFont(for: .monospacedSystemFont(ofSize: 20, weight: .regular), compatibleWith: traits)
+    }
+
     public func makeUIView(context: Context) -> UITextField {
         let f = UITextField()
         SecretInput.configure(f, visible: visible)
@@ -205,12 +213,10 @@ public struct SecretTextInput: UIViewRepresentable {
         if let style {
             f.autocapitalizationType = style.capitalization
             f.keyboardType = style.keyboard
-            if style.monospaced {
-                // Title 3 at the default text size, scaled with the member's text size.
-                f.font = UIFontMetrics(forTextStyle: .title3).scaledFont(for: .monospacedSystemFont(ofSize: 20, weight: .regular))
-                f.adjustsFontForContentSizeCategory = true
-            }
         }
+        // The text and the placeholder (the field's label) follow the member's text size, as the labels around it do.
+        f.font = Self.font(monospaced: style?.monospaced == true)
+        f.adjustsFontForContentSizeCategory = true
         if next { f.returnKeyType = .next }
         f.delegate = context.coordinator
         f.addTarget(context.coordinator, action: #selector(Coordinator.changed(_:)), for: .editingChanged)

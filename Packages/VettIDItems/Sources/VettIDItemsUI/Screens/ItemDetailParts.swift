@@ -172,6 +172,7 @@ struct OtpCode: View {
 /// covered.
 struct ItemDetailDialogs: ViewModifier {
     @Environment(\.vettIDCovered) private var covered
+    @Environment(\.vettIDColors) private var colors
     let state: ItemDetailState
     let actions: ItemDetailActions
 
@@ -193,7 +194,8 @@ struct ItemDetailDialogs: ViewModifier {
             )
             .sheet(isPresented: uncovered(shown(.protectionPick), covered: covered)) {
                 ProtectionPicker(current: state.item?.sensitivity ?? .data, actions: actions)
-                    .presentationDetents([.medium])
+                    .vettIDGrowingSheet()
+                    .presentationBackground(colors.surfaceContainerLow.color)
             }
     }
 }
@@ -219,7 +221,6 @@ struct ProtectionPicker: View {
             }
         }
         .padding(Spacing.xl)
-        .presentationBackground(colors.surfaceContainerLow.color)
         .accessibilityIdentifier("item_protection_dialog")
     }
 }

@@ -87,6 +87,26 @@ import VettIDUI
         #expect(row(FieldKinds.text, "Ada").spoken("Ada", masked: false) == "Ada")
     }
 
+    /// "Protection" opens at half height and can be pulled to full height; at the largest text size its choices scroll, so
+    /// the last one and Cancel can be reached.
+    @Test func theProtectionSheetGrowsAndScrollsAtLargeSizes() {
+        let sheet = ProtectionPicker(current: .data, actions: ItemDetailActions())
+            .vettIDGrowingSheet()
+            .environment(\.dynamicTypeSize, .accessibility5)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 420))
+        window.rootViewController = UIHostingController(rootView: sheet.vettIDTheme(.dark))
+        window.isHidden = false
+        window.layoutIfNeeded()
+        let scroll = scrollViews(in: window).first
+        #expect(scroll != nil)
+        if let scroll { #expect(scroll.contentSize.height > scroll.bounds.height) }
+        window.isHidden = true
+    }
+
+    private func scrollViews(in view: UIView) -> [UIScrollView] {
+        (view as? UIScrollView).map { [$0] } ?? view.subviews.flatMap { scrollViews(in: $0) }
+    }
+
     @Test func theOneTimeCodeIsInGroupsOfThree() {
         #expect(OtpCode.grouped("123456") == "123 456" && OtpCode.grouped("12345678") == "123 456 78")
         // VoiceOver: the digits one by one, the time left in words.

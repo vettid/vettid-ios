@@ -30,8 +30,7 @@ public struct AddConnectionControls: View {
             AddConnectionSheet(
                 onInvite: { choose(.invite) }, onScan: { choose(.scan) }, onPaste: { choose(.accept(AcceptInput())) }
             )
-            .presentationDetents([.medium])
-            .presentationDragIndicator(.visible)
+            .vettIDGrowingSheet()
             .presentationBackground(colors.surfaceContainerLow.color)
             .environment(\.vettIDColors, colors)
         }

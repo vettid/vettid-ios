@@ -118,6 +118,42 @@ import UIKit
         hidden.view.layoutIfNeeded()
         #expect(UIStrings.captureHidden == "Hidden while your screen is being recorded or shared.")
     }
+
+    /// The secret fields' text and placeholder (their label) follow the member's text size, in the type scale's body face
+    /// (Inter), as the labels around them do; a code keeps its monospaced face, also scaled.
+    @Test func theSecretFieldsFollowTheTextSize() throws {
+        let standard = UITraitCollection(preferredContentSizeCategory: .large)
+        let largest = UITraitCollection(preferredContentSizeCategory: .accessibilityExtraExtraExtraLarge)
+        for monospaced in [false, true] {
+            let small = SecretTextInput.font(monospaced: monospaced, compatibleWith: standard)
+            let large = SecretTextInput.font(monospaced: monospaced, compatibleWith: largest)
+            #expect(large.pointSize > small.pointSize * 2, "monospaced: \(monospaced)")
+        }
+        let body = SecretTextInput.font(monospaced: false, compatibleWith: standard)
+        #expect(body.familyName.hasPrefix("Inter"))
+        #expect(body.pointSize == 16, "the type scale's bodyLarge at the default size")
+
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+        window.rootViewController = UIHostingController(rootView: VStack {
+            SecretField("Password", text: .constant(""))
+            VisibleSecretField("Code", text: .constant(""))
+            VisibleSecretField("Code", text: .constant(""), monospaced: true)
+        })
+        window.isHidden = false
+        window.layoutIfNeeded()
+        let fields = textFields(in: window)
+        #expect(fields.count == 3)
+        for f in fields {
+            #expect(f.adjustsFontForContentSizeCategory)
+            let monospaced = f.font?.fontDescriptor.symbolicTraits.contains(.traitMonoSpace) == true
+            #expect(f.font?.familyName.hasPrefix("Inter") == true || monospaced)
+        }
+        window.isHidden = true
+    }
+
+    private func textFields(in view: UIView) -> [UITextField] {
+        (view as? UITextField).map { [$0] } ?? view.subviews.flatMap { textFields(in: $0) }
+    }
 }
 
 @MainActor
