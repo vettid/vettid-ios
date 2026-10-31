@@ -3,11 +3,15 @@ import Foundation
 /// A member's row of a vote's published results (BALLOT-PROTOCOL §8.2, §8.5): the row `rows.json` holds under the
 /// member's record tag, with its inclusion proof to the results' `rows_root`. [ballot] is the row's `ballot` object as
 /// the site has it (`vk`, `choice_id`, `ballot_sig`), or nil for an empty row.
-public struct OwnRow: Sendable {
+public struct OwnRow: Sendable, CustomStringConvertible, CustomDebugStringConvertible {
     public let ballot: JsonObject?
     public let index: UInt64
     public let treeSize: UInt64
     public let path: [[UInt8]]
+
+    /// Never the row's ballot (its choice) in a log line.
+    public var description: String { "OwnRow(\(index) of \(treeSize))" }
+    public var debugDescription: String { description }
 }
 
 /// Why the site's results could not be taken as they are: said to the member as a problem with the published results.
@@ -22,7 +26,8 @@ public struct ResultsProblem: Error, Equatable, Sendable {
 /// they make against `rows_root`, and the member's row. The signature, the anchor and the verdict are the vault's; it
 /// never relies on this. Mirrors vettid-android `VoteRows`.
 public enum VoteRows {
-    /// The most rows read (the site's results are at most 512 KiB; a row is about 250 bytes).
+    /// The most rows read: a ceiling far above any electorate the results can name (the site's results are at most 512 KiB
+    /// and a row is about 250 bytes, so about 2,000 rows), small enough to bound the work on a hostile `rows.json`.
     public static let maxRows = 100_000
 
     private static let keySize = 32
@@ -86,7 +91,9 @@ public enum VoteRows {
         let vk = try b.base64("vk", keySize)
         let sig = try b.base64("ballot_sig", sigSize)
         let choice = Array(try b.string("choice_id").utf8)
-        if choice.isEmpty || choice.count > maxId { throw ResultsProblem("rows") }
+        // [a-z0-9-]{1,32}, as vettid-vault's ValidChoiceID: a row with another id is not one the vault would accept.
+        let valid = choice.allSatisfy { (0x61...0x7A).contains($0) || (0x30...0x39).contains($0) || $0 == 0x2D }
+        if choice.isEmpty || choice.count > maxId || !valid { throw ResultsProblem("rows") }
         return Bytes.concat(tag, lp(vk), lp(choice), lp(sig))
     }
 

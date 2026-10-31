@@ -17,8 +17,15 @@ extension VaultManager {
             windowUntil: { ref.manager?.unlockWindow },
             openWindow: { password in try await ref.manager?.openUnlockWindow(password: password) },
             closeWindow: { try await ref.manager?.closeUnlockWindow() },
-            unlockTtl: { try? await ref.manager?.status().unlockTtlSeconds },
+            // The setting alone (one `settings.get`), not the whole credential status.
+            unlockTtl: { await ref.manager?.unlockTtlSetting() },
             now: now
         )
+    }
+
+    /// `credential.unlock_ttl_seconds` (VAULT-MESSAGING §10.8) over the session already open; nil when it can't be read.
+    func unlockTtlSetting() async -> Int? {
+        guard let s = session, let api = try? openApi(s), let values = try? await api.settingsGet().values else { return nil }
+        return values[Self.keyUnlockTtl].flatMap { Int($0) }
     }
 }

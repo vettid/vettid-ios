@@ -46,6 +46,10 @@ struct FakeActivity {
     /// feature (`unsupported_type`).
     var votes: [String]?
     var voteRequests: [String] = []
+    /// The bodies of the `vote.*` requests, in order (the type, the body as sent).
+    var voteBodies: [(type: String, body: JsonObject)] = []
+    /// The PINs `vote.release` carried, opened from their UTK seal.
+    var votePins: [String] = []
 }
 
 extension FakeVaultService {

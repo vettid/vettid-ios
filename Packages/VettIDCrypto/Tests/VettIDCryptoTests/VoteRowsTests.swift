@@ -77,6 +77,26 @@ struct VoteRowsTests {
         }
     }
 
+    @Test func aChoiceIdTheVaultWouldRefuseIsNotARow() throws {
+        func ballot(_ choice: String) throws -> JsonObject {
+            try StrictJson.parseObject(
+                JsonBuilder().base64("vk", rep(1, 32)).string("choice_id", choice).base64("ballot_sig", rep(2, 64)).build()
+            )
+        }
+        #expect(throws: Never.self) { try VoteRows.leaf(tag: rep(0, 32), ballot: try ballot("abstain-2")) }
+        for bad in ["", "Yes", "yes!", "y\u{0301}", String(repeating: "a", count: 33)] {
+            #expect(throws: ResultsProblem("rows")) { try VoteRows.leaf(tag: rep(0, 32), ballot: try ballot(bad)) }
+        }
+    }
+
+    @Test func theRowSaysNothingOfItsBallotInALogLine() throws {
+        let results = Array(try docs.str("results").utf8)
+        let rowsBytes = Array(try docs.str("rows").utf8)
+        let own = try VoteRows.ownRow(results: results, rows: rowsBytes, recordTag: try rows()[0].base64("record_tag", 32))
+        #expect("\(own)" == "OwnRow(0 of 3)")
+        #expect(!String(reflecting: own).contains("choice"))
+    }
+
     @Test func anUnknownTagHasNoRow() throws {
         let results = Array(try docs.str("results").utf8)
         let rowsBytes = Array(try docs.str("rows").utf8)

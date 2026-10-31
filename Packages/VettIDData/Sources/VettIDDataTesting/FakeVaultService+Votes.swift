@@ -9,10 +9,16 @@ extension FakeVaultService {
     /// Callers hold ``cond``.
     func voteRequest(_ m: Inner, _ body: JsonObject) throws {
         activity.voteRequests.append(m.type)
+        activity.voteBodies.append((m.type, body))
         guard let votes = activity.votes else { return try reply(m.type, "{}", re: m.id, error: "unsupported_type") }
         switch m.type {
         case "vote.list":
             try reply(m.type, #"{"votes":\#(JsonBuilder.array(votes)),"dropped":[],"problems":[],"reconnect":[]}"#, re: m.id)
+        case "vote.release":
+            // The PIN alone, sealed to a UTK (§3.5.4), as `audit.export` carries it.
+            guard let p = try opened(m, body) else { return }
+            activity.votePins.append((try? p.string("pin")) ?? "")
+            try reply(m.type, "{}", re: m.id)
         default:
             try reply(m.type, "{}", re: m.id, error: "not_found")
         }
@@ -34,4 +40,10 @@ extension FakeVaultService {
 
     /// The `vote.*` requests the vault received, in order.
     public var voteRequests: [String] { locked { activity.voteRequests } }
+
+    /// The bodies of the `vote.*` requests the vault received, in order.
+    public var voteBodies: [(type: String, body: JsonObject)] { locked { activity.voteBodies } }
+
+    /// The PINs `vote.release` carried, opened from their UTK seal.
+    public var votePins: [String] { locked { activity.votePins } }
 }

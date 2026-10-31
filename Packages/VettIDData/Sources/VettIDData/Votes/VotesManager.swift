@@ -135,6 +135,9 @@ public final class VotesManager: VotesRepository {
     /// `vote.list`'s largest page (§10.19.8).
     public nonisolated static let page = 100
     static let maxPages = 5
+    /// The most connections one `vote.list` acknowledges (vettid-vault refuses a longer `ack_dropped`); the rest wait for
+    /// the next read (chosen; not in the spec: VAULT-MESSAGING §10.19.8 states no bound).
+    public nonisolated static let maxAcks = 128
     /// A failure that says the vault did not open the window (it refused); any other may have followed the opening.
     static let definiteRefusals: Set<FailureKind> = [
         .badPassword, .backoff, .credentialFrozen, .rotationRequired, .ownerCheckRequired, .credentialUnsettled,
@@ -161,6 +164,8 @@ public final class VotesManager: VotesRepository {
     @ObservationIgnored private var queued = false
     /// `dropped` notices shown and not yet acknowledged to the vault.
     @ObservationIgnored private var pendingAck: [String] = []
+    /// The lock of the window a cast opened, running on its own (tests wait for it).
+    @ObservationIgnored private(set) var windowLock: Task<Void, Never>?
 
     @ObservationIgnored let ops: @MainActor () async throws -> any VoteOps
     /// The calls of a read nobody asked for (the opening, an event): only over the session already open.
@@ -171,7 +176,7 @@ public final class VotesManager: VotesRepository {
     @ObservationIgnored private let windowUntil: @MainActor () -> Date?
     @ObservationIgnored private let openWindow: @MainActor (String) async throws -> Void
     @ObservationIgnored private let closeWindow: @MainActor () async throws -> Void
-    /// The vault setting `credential.unlock_ttl_seconds`; nil when it can't be read.
+    /// The vault setting `credential.unlock_ttl_seconds` alone; nil when it can't be read. Asked only after a lock failed.
     @ObservationIgnored private let unlockTtl: @MainActor () async -> Int?
     @ObservationIgnored let now: @Sendable () -> Date
 
@@ -247,7 +252,7 @@ public final class VotesManager: VotesRepository {
         guard availability != .unsupported, !gated() else { return }
         let g = generation
         if votes.isEmpty { load = .loading }
-        let acks = pendingAck
+        let acks = Array(pendingAck.prefix(Self.maxAcks))
         do {
             let o = quietly ? quietOps : ops
             var all: [VoteSummary] = []
@@ -265,7 +270,8 @@ public final class VotesManager: VotesRepository {
             let shown = all.filter { seen.insert($0.key).inserted }
             votes = shown
             reconnect = head.reconnect
-            dropped = head.dropped
+            // A notice acknowledged while this read was on its way stays acknowledged.
+            dropped = head.dropped.filter { !pendingAck.contains($0.connectionID) }
             problems = head.problems
             listVersion = head.listVersion
             listSha256 = head.listSha256
@@ -337,31 +343,32 @@ public final class VotesManager: VotesRepository {
             // Sent once: never repeated after an answer or a failure (§10.19.8); the device's own re-sends keep the same id.
             let body = try await guarded { try await self.ops().voteCast(key, choiceID: choiceID) }
             refreshQuietly()
-            if toLock { await closeOpenedWindow() }
+            // The ballot's state is the member's at once; the lock does not hold it back.
+            if toLock { lockOpenedWindow() }
             return VoteWire.ballotState(body)
         } catch {
             // A window this prompt opened does not stay open for its full length; one that was open is left as it was.
-            if toLock { await closeOpenedWindow() }
+            if toLock { lockOpenedWindow() }
             throw error
         }
     }
 
-    /// The lock after a cast runs to its end even when the caller was cancelled (a screen that left); a lock that failed
-    /// is not swallowed: the member is told that the window stays open until it closes by itself.
-    private func closeOpenedWindow() async {
+    /// The lock after a cast, on its own task: it runs to its end even when the caller was cancelled (a screen that left)
+    /// and never delays the cast's answer. A lock that failed is not swallowed: the member is told that the window stays
+    /// open until it closes by itself (``windowNotClosed``).
+    private func lockOpenedWindow() {
         let close = closeWindow
         let ttl = unlockTtl
-        let failed = await Task { @MainActor in
+        let before = windowLock
+        windowLock = Task { @MainActor [weak self] in
+            await before?.value
             do {
                 try await close()
-                return false
             } catch {
-                return true
+                let seconds = await ttl()
+                self?.windowNotClosed = WindowNotClosed(ttlSeconds: seconds)
             }
-        }.value
-        guard failed else { return }
-        let seconds = await Task { @MainActor in await ttl() }.value
-        windowNotClosed = WindowNotClosed(ttlSeconds: seconds)
+        }
     }
 
     public func closeWindowNow() async throws {
