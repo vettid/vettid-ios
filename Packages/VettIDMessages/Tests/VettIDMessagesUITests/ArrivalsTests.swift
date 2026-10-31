@@ -16,7 +16,7 @@ import VettIDMessages
     /// What this suite's messages said: every text here has [tag], so another suite's announcements (the sink is shared by
     /// the suites running in parallel) are not counted.
     private static var recorded: [String] = []
-    private static let tag = "a10-"
+    private static let tag = "arrival-"
 
     private func message(_ id: String, outgoing: Bool = false, text: String? = nil) -> MessageInfo {
         MessagesScreensTests.message(id, outgoing: outgoing, text: text ?? "\(Self.tag)\(id)")
