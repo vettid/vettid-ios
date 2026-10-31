@@ -16,6 +16,8 @@ final class FakeVoteSite: VoteSite, @unchecked Sendable {
     private var docs: [String: SiteAnswer] = [:]
     private var log: [String] = []
     var configured = true
+    /// Called with a path before it is answered (a test holds a read here); not under the lock.
+    nonisolated(unsafe) var hold: (@Sendable (String) async -> Void)?
 
     subscript(path: String) -> SiteAnswer? {
         get { lock.withLock { docs[path] } }
@@ -29,7 +31,11 @@ final class FakeVoteSite: VoteSite, @unchecked Sendable {
     func clearReads() { lock.withLock { log = [] } }
 
     func get(_ path: String, maxBytes: Int) async -> SiteAnswer {
-        lock.withLock {
+        // As the real site: a read of cancelled work is not made.
+        if Task.isCancelled { return .unreachable }
+        await hold?(path)
+        if Task.isCancelled { return .unreachable }
+        return lock.withLock {
             log.append(path)
             guard let a = docs[path] else { return .absent }
             if case .found(let b) = a, b.count > maxBytes { return .tooLarge }
@@ -53,6 +59,9 @@ final class FakeVoteSiteOps: VoteSiteOps, @unchecked Sendable {
     /// Refuses the next uploads with the relay's storage-full answer; [syncRefusal] the next `vote.site.sync` once.
     var quotaRefusals = 0
     var syncRefusal: String?
+    /// Refuses the next `vote.site.sync` by blob once, after the upload; the blobs asked to be deleted.
+    var blobSyncRefusal: String?
+    var deleted: [String] = []
 
     nonisolated func voteSiteSync(body: [UInt8]) async throws -> JsonObject {
         try await MainActor.run {
@@ -68,6 +77,10 @@ final class FakeVoteSiteOps: VoteSiteOps, @unchecked Sendable {
 
     nonisolated func voteSiteSyncBlob(blobID: String, key: [UInt8], sha256: [UInt8], size: Int) async throws -> JsonObject {
         try await MainActor.run {
+            if let code = blobSyncRefusal {
+                blobSyncRefusal = nil
+                throw VaultOpError(type: "vote.site.sync", code: code, detail: "", body: nil)
+            }
             let blob = try #require(uploads[blobID])
             syncs.append(try ClaimBlob.open(blob, key: key, sha256: sha256, size: UInt64(size)))
             blobSyncs += 1
@@ -85,6 +98,13 @@ final class FakeVoteSiteOps: VoteSiteOps, @unchecked Sendable {
             let id = "blob-\(uploads.count + 1)"
             uploads[id] = blob
             return id
+        }
+    }
+
+    nonisolated func deleteBlob(_ blobID: String) async throws {
+        await MainActor.run {
+            deleted.append(blobID)
+            uploads[blobID] = nil
         }
     }
 

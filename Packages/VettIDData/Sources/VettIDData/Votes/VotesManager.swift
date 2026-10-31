@@ -244,7 +244,7 @@ public final class VotesManager: VotesRepository {
         if VaultJSON.string(m.object, "event") == "check_due", let runner = siteRunner {
             Task { [weak self] in
                 try? await self?.read(quietly: true)
-                await runner.submitDue()
+                await runner.submitDueNow()
             }
         }
     }

@@ -1,7 +1,7 @@
 import Foundation
 import VettIDRelay
 
-/// What one read of the public votes site came to (VAULT-MESSAGING 0.81.3 §10.19.8; ANDROID-PLAN 0.1.107).
+/// What one read of the public votes site came to (VAULT-MESSAGING 0.81.4 §10.19.8; ANDROID-PLAN 0.1.107).
 public enum SiteAnswer: Sendable, Equatable {
     /// HTTP 200 with a whole body.
     case found([UInt8])
@@ -34,8 +34,13 @@ public enum VoteSiteLimits {
     public static let defaultMax = 1 << 20
     /// A service list: the encoded request body's own limit (VAULT-MESSAGING 0.81.2, `attachment_max_bytes`).
     public static let listMax = 8_257_532
-    /// A detached Ed25519 signature is 64 bytes.
+    /// A detached Ed25519 signature is 64 bytes; a longer read is already wrong.
     public static let sigMax = 256
+    public static let sigLength = 64
+    /// The decoded proposal the vault takes (`votewire.MaxProposal`): a larger one makes it refuse the whole call.
+    public static let proposalMax = 65_536
+    /// An extension document the vault takes (`votewire.MaxExtensionDoc`, VAULT-MESSAGING 0.81.2).
+    public static let extensionMax = 4_096
     public static let bundleMax = 64 * 1024
     /// The vault's `MaxResultsDoc`.
     public static let resultsMax = 196_608

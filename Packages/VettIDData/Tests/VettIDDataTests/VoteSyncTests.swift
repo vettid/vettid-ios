@@ -3,7 +3,7 @@ import Testing
 import VettIDCrypto
 @testable import VettIDData
 
-/// The plan of the work with the public votes site (VAULT-MESSAGING 0.81.3 §10.19.8 `vote.site.sync`; ANDROID-PLAN
+/// The plan of the work with the public votes site (VAULT-MESSAGING 0.81.4 §10.19.8 `vote.site.sync`; ANDROID-PLAN
 /// 0.1.107): which lists go and how they are split, how entries are batched, and what an entry says. Mirrors the
 /// planning part of vettid-android `VoteSyncTest`.
 struct VoteSyncTests {

@@ -1,7 +1,7 @@
 import Foundation
 import VettIDVault
 
-// The member's votes (VAULT-MESSAGING 0.81.3 §10.19, IOS-PLAN §4.16) over this manager's session, with the rules of the
+// The member's votes (VAULT-MESSAGING 0.81.4 §10.19, IOS-PLAN §4.16) over this manager's session, with the rules of the
 // feed (``VaultManager+Activity``): a read nobody asked for never opens a session, nothing is read while the vault is
 // held or due, and what was read is dropped when the vault is no longer open. Mirrors the votes part of vettid-android
 // `VaultManager`. The work with the public votes site runs while the vault is open and unlocked: started at the opening

@@ -1,7 +1,7 @@
 import Foundation
 import VettIDCrypto
 
-/// The app's work with the public votes site for the vault (VAULT-MESSAGING 0.81.3 §10.19.8 `vote.site.sync`;
+/// The app's work with the public votes site for the vault (VAULT-MESSAGING 0.81.4 §10.19.8 `vote.site.sync`;
 /// ANDROID-PLAN 0.1.107): what it fetches, and the requests it makes of it within the per-call limits. The vault decides
 /// everything; the app hands over public documents, with no time of its own. Mirrors vettid-android `VoteSync`.
 public enum VoteSync {
@@ -40,6 +40,10 @@ public enum VoteSync {
             self.sig = sig
             self.version = version
         }
+
+        /// What the vault takes of a list at all: a document and a signature of exactly 64 bytes. Anything else makes it
+        /// refuse the whole call, so such a list is never sent (VAULT-MESSAGING §10.19.8).
+        public var sendable: Bool { !doc.isEmpty && sig.count == VoteSiteLimits.sigLength }
     }
 
     /// `services.json`'s `version`; nil when the document does not read (the vault judges it, so it is still sent).
@@ -81,16 +85,17 @@ public enum VoteSync {
         JsonBuilder().base64("doc", l.doc).base64("sig", l.sig).build()
     }
 
-    /// The bodies that carry [lists] (oldest first): at most ``maxLists`` each, one alone when it is over ``bigList``, and
-    /// none over ``bodyMax`` once encoded (chosen; not in the spec: eight lists of 1 MiB each would pass it as base64).
-    /// A list that alone would pass ``bodyMax`` and the later ones, which cannot chain without it, are not sent.
-    public static func listCalls(_ lists: [ServedList]) -> [[UInt8]] {
+    /// The calls that carry [lists] (oldest first), as the lists each call holds: at most ``maxLists`` each, one alone when
+    /// it is over ``bigList``, and none over ``bodyMax`` once encoded (chosen; not in the spec: eight lists of 1 MiB each
+    /// would pass it as base64). A list the vault would refuse (``ServedList/sendable``) or that alone would pass
+    /// ``bodyMax``, and the later ones, which cannot chain without it, are not sent.
+    public static func listBatches(_ lists: [ServedList]) -> [[ServedList]] {
         var calls: [[ServedList]] = []
         var current: [ServedList] = []
         var size = listsEnvelope
         for l in lists {
             let n = encodedSize(l) + 1
-            if l.doc.count > bodyMax || n + listsEnvelope > bodyMax { break }
+            if !l.sendable || l.doc.count > bodyMax || n + listsEnvelope > bodyMax { break }
             let big = l.doc.count > bigList
             let full = current.count >= maxLists || current.contains { $0.doc.count > bigList } || size + n > bodyMax
             if !current.isEmpty, big || full {
@@ -102,8 +107,16 @@ public enum VoteSync {
             size += n
         }
         if !current.isEmpty { calls.append(current) }
-        return calls.map { JsonBuilder().raw("services", JsonBuilder.array($0.map(listJson))).bytes() }
+        return calls
     }
+
+    /// The body of one call of ``listBatches(_:)``.
+    public static func listBody(_ batch: [ServedList]) -> [UInt8] {
+        JsonBuilder().raw("services", JsonBuilder.array(batch.map(listJson))).bytes()
+    }
+
+    /// All the bodies at once (the tests); the runner builds one at a time.
+    public static func listCalls(_ lists: [ServedList]) -> [[UInt8]] { listBatches(lists).map(listBody) }
 
     private static let listsEnvelope = 15 // {"services":[]}
 
@@ -189,18 +202,22 @@ public enum VoteSync {
         return String(bytes: c, encoding: .utf8)
     }
 
-    /// The index's elements (`index.json` is an array) as compact JSON objects with their `proposal_id`; an unreadable
+    /// The index's elements (`index.json` is an array) with their `proposal_id` and as compact JSON objects; an unreadable
     /// index yields none. An element whose id is not a canonical ULID is left out: the id becomes part of a path on the
-    /// site, and the site's index is not verified (chosen; not in the spec).
-    public static func indexOf(_ bytes: [UInt8]) -> [(proposalID: String, json: String)] {
+    /// site, and the site's index is not verified (chosen; not in the spec). An element the vault would refuse the call
+    /// for (a `service_id` that is not a string) is kept for its id, with no `json`: it is sent without `index`.
+    public static func indexOf(_ bytes: [UInt8]) -> [(proposalID: String, json: String?)] {
         // The strict parser reads objects only: the array is read as the one member of an object around it.
         guard let o = try? StrictJson.parseObject(Array(#"{"i":"#.utf8) + bytes + Array("}".utf8)),
               let items = try? o.array("i")
         else { return [] }
         return items.compactMap { v in
-            guard case .object(let e) = v, let id = try? e.string("proposal_id"), Ulid.isValid(id),
+            guard case .object(let e) = v, let id = try? e.string("proposal_id"), Ulid.isValid(id) else { return nil }
+            let serviceIDReads: Bool
+            do { _ = try e.optString("service_id"); serviceIDReads = true } catch { serviceIDReads = false }
+            guard serviceIDReads,
                   let json = String(bytes: StrictJson.compact(Array(e.raw.utf8)), encoding: .utf8)
-            else { return nil }
+            else { return (id, nil) }
             return (id, json)
         }
     }

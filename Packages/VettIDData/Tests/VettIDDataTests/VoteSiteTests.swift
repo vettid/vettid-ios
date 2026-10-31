@@ -13,7 +13,7 @@ private let pid = VoteFixture.pid
 private let key = VoteFixture.key
 
 /// The app's work with the public votes site for the vault (IOS-PLAN §4.16 "The site"; ANDROID-PLAN 0.1.107/0.1.108;
-/// VAULT-MESSAGING 0.81.3 §10.19.8): the runs, their limits and schedule, the documents of a vote, and the results check.
+/// VAULT-MESSAGING 0.81.4 §10.19.8): the runs, their limits and schedule, the documents of a vote, and the results check.
 /// Mirrors vettid-android `VoteSyncTest` and the site part of `VotesManagerTest`.
 @MainActor
 struct VoteSiteTests: VotesTestCase {
@@ -186,6 +186,8 @@ struct VoteSiteTests: VotesTestCase {
         site["p/\(pid)/proposal.json.sig"] = .found([UInt8](repeating: 8, count: 64))
         site.put("p/\(pid)/proposal.json.sigstore.json", #"{ "b" : 1 }"#)
         site.put("p/\(pid)/extension-1.json", #"{"x":1}"#)
+        site["p/\(pid)/extension-1.json.sig"] = .found([UInt8](repeating: 9, count: 64))
+        site.put("p/\(pid)/extension-1.json.sigstore.json", #"{ "e" : 1 }"#)
         let ops = FakeVoteOps()
         ops.list = listing(summary())
         let m = siteManager(ops)
@@ -195,6 +197,7 @@ struct VoteSiteTests: VotesTestCase {
         #expect(try d.obj("bundle").raw == #"{"b":1}"#)
         let x = try d.array("extensions").map { try $0.asObject() }
         #expect(try x.count == 1 && x[0].base64("extension") == Array(#"{"x":1}"#.utf8))
+        #expect(try x[0].base64("extension_sig", 64) == [UInt8](repeating: 9, count: 64) && x[0].obj("bundle").raw == #"{"e":1}"#)
         // `extended` 1: the second extension is not asked for.
         #expect(!site.reads.contains("p/\(pid)/extension-2.json"))
     }
@@ -273,6 +276,8 @@ struct VoteSiteTests: VotesTestCase {
         sleeper.release()
         try await Task.sleep(for: .milliseconds(50))
         #expect(site.reads.isEmpty)
+        // Away for a quarter of an hour: the run follows the return.
+        clock.advance(15 * 60_000)
         m.resumeSync()
         #expect(await eventually { sleeper.waits.count == 2 })
         #expect(site.reads.contains("services.json") && ops.calls.count == 2)
