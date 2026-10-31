@@ -74,6 +74,19 @@ struct URLSessionVoteSiteTests {
         #expect(await s.get("nowhere.json") == .unreachable)
     }
 
+    @Test func anErrorPageOverTheLimitIsStillA404OrUnreachableAndNeverTooLarge() async {
+        let page = [UInt8](repeating: 0x3C, count: 4096)
+        let s = site([
+            "/v1/a.sig": .init(status: 404, body: page),
+            "/v1/b.sig": .init(status: 503, body: page),
+            "/v1/c.sig": .init(status: 200, body: page),
+        ])
+        #expect(await s.get("a.sig", maxBytes: 256) == .absent)
+        #expect(await s.get("b.sig", maxBytes: 256) == .unreachable)
+        // Only a 200 is "too large".
+        #expect(await s.get("c.sig", maxBytes: 256) == .tooLarge)
+    }
+
     @Test func aRedirectIsNotFollowed() async {
         let s = site([
             "/v1/services.json": .init(status: 302, headers: ["Location": "https://elsewhere.example/v1/services.json"]),

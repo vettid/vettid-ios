@@ -78,9 +78,10 @@ public struct URLSessionVoteSite: VoteSite {
     }
 
     public func get(_ path: String, maxBytes: Int) async -> SiteAnswer {
-        guard let root, let url = URL(string: "\(root)/v1/\(path.drop { $0 == "/" })") else { return .unreachable }
+        // A read of work that was cancelled (a lock, the app leaving) is not made.
+        guard !Task.isCancelled, let root, let url = URL(string: "\(root)/v1/\(path.drop { $0 == "/" })") else { return .unreachable }
         do {
-            let answer = try await transport.send(policy: .idempotent, maxBody: maxBytes) {
+            let answer = try await transport.send(policy: .idempotent, maxBody: maxBytes, readsBody: { $0 == 200 }) {
                 var r = URLRequest(url: url)
                 r.httpMethod = "GET"
                 r.setValue("*/*", forHTTPHeaderField: "Accept")
