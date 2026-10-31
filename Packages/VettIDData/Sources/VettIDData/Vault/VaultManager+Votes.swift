@@ -19,7 +19,8 @@ extension VaultManager {
             closeWindow: { try await ref.manager?.closeUnlockWindow() },
             // The setting alone (one `settings.get`), not the whole credential status.
             unlockTtl: { await ref.manager?.unlockTtlSetting() },
-            now: now
+            now: now,
+            backgroundTasks: manager.config.backgroundTasks
         )
     }
 

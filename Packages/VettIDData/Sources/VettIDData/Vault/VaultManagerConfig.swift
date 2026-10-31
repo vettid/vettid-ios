@@ -154,6 +154,8 @@ public struct VaultManagerConfig: Sendable {
     /// The build's environment as Settings → Attestation names it (`production`, `staging`, …).
     public var environment: String
     public var now: @Sendable () -> Date
+    /// (iPhone) The background time the lock of a vote's unlock window asks iOS for (``BackgroundTasks``); nil where there is none.
+    public var backgroundTasks: (any BackgroundTasks)?
     /// (iPhone) Told whether no vault made or being made here can hold an App Attest key of this phone, from the account
     /// record (``AttestStartOver``); nil where nothing listens.
     public var attestStartOver: AttestStartOver?
