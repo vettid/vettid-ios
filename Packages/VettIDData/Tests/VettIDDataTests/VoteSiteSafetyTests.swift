@@ -246,6 +246,80 @@ struct VoteSiteSafetyTests: VotesTestCase {
         #expect(sleeper.waits[2] == .seconds(3600) && site.reads.contains("services.json"))
     }
 
+    // MARK: Work begun just before a halt
+
+    @Test func aCheckBegunJustBeforeALockDoesNotRun() async throws {
+        VoteResultsFixture.publish(site, pid)
+        let ops = closedOps()
+        let m = manager(ops)
+        try await m.refresh()
+        let caller = Task { try? await m.checkResults(key) }
+        // The call has made its work and waits; the lock comes before that work starts.
+        await Task.yield()
+        m.clear()
+        _ = await caller.value
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(vault.submits.isEmpty && site.reads.isEmpty)
+    }
+
+    @Test func aCheckDueEventWhoseReadMeetsTheAppLeavingSendsNothing() async throws {
+        VoteResultsFixture.publish(site, pid)
+        let ops = closedOps()
+        let m = manager(ops)
+        try await m.refresh()
+        m.startSync()
+        #expect(await eventually { sleeper.waits.count == 1 })
+        vault.submits = []
+        site.clearReads()
+        let gate = TestDeferred<Void>()
+        ops.listGate = gate
+        m.onEvent(event("vote.event", #"{"proposal_id":"\#(pid)","connection_id":"\#(VoteFixture.conn)","event":"check_due","state":"closed"}"#))
+        try await Task.sleep(for: .milliseconds(50))
+        m.pauseSync()
+        gate.complete(())
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(vault.submits.isEmpty && site.reads.isEmpty)
+    }
+
+    // MARK: A lost session ends the run
+
+    @Test func aLostSessionOnTheListsEndsTheRunAtOnce() async throws {
+        serve(1)
+        site.put("index.json", "[]")
+        let ops = FakeVoteOps()
+        ops.list = listing(summary())
+        let c = clock
+        let m = VotesManager(
+            ops: { ops }, now: { c.date }, site: site,
+            siteOps: { _ in throw VaultFailure(.other, code: "session_dropped") }, sleep: { _ in }
+        )
+        await #expect(throws: VaultFailure.self) { try await m.syncOnce() }
+        #expect(!site.reads.contains("index.json") && !site.reads.contains { $0.hasPrefix("p/") })
+    }
+
+    @Test func aRefusalOfTheListsLetsTheOtherStagesGoOn() async throws {
+        serve(1)
+        vault.syncRefusal = "limit"
+        let (_, m) = opened()
+        await #expect(throws: VaultFailure.self) { try await m.syncOnce() }
+        #expect(site.reads.contains("index.json"))
+    }
+
+    @Test func aRunThatFailedStillEndsTheReturnThrottle() async throws {
+        serve(1)
+        vault.syncRefusal = "bad_request"
+        let (_, m) = opened()
+        try await m.refresh()
+        m.startSync()
+        #expect(await eventually { sleeper.waits.count == 1 })
+        m.pauseSync()
+        site.clearReads()
+        clock.advance(5 * 60_000)
+        m.resumeSync()
+        #expect(await eventually { sleeper.waits.count == 2 })
+        #expect(site.reads.isEmpty)
+    }
+
     // MARK: The attempts at the results
 
     @Test func aCheckAlreadyOnItsWayIsNotSubmittedTwice() async throws {
@@ -267,17 +341,6 @@ struct VoteSiteSafetyTests: VotesTestCase {
         await hourly.value
         try await Task.sleep(for: .milliseconds(100))
         #expect(vault.submits.count == 1)
-    }
-
-    // MARK: The blob
-
-    @Test func aBlobTheVaultRefusedIsDiscardedAfterItsUpload() async throws {
-        site["services.json"] = .found(VoteSyncTests.list(1, size: 300_000).doc)
-        site["services.json.sig"] = .found([UInt8](repeating: 7, count: 64))
-        vault.blobSyncRefusal = "bad_request"
-        let (_, m) = opened()
-        await #expect(throws: VaultFailure.self) { try await m.syncOnce() }
-        #expect(vault.uploadCalls == 1 && vault.deleted == ["blob-1"] && vault.uploads.isEmpty)
     }
 
     // MARK: The runner and its manager

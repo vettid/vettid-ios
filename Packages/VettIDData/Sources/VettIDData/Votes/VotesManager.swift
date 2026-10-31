@@ -242,9 +242,11 @@ public final class VotesManager: VotesRepository {
         guard m.type == VaultApi.typeVoteEvent, !gated() else { return }
         refreshQuietly()
         if VaultJSON.string(m.object, "event") == "check_due", let runner = siteRunner {
+            let generation = runner.haltGeneration
             Task { [weak self] in
                 try? await self?.read(quietly: true)
-                await runner.submitDueNow()
+                // Not when a lock or the app leaving came during the read.
+                await runner.submitDueNow(ifGeneration: generation)
             }
         }
     }

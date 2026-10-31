@@ -22,8 +22,6 @@ public protocol VoteSiteOps: Sendable {
     func voteSiteSyncBlob(blobID: String, key: [UInt8], sha256: [UInt8], size: Int) async throws -> JsonObject
     func uploadBlob(_ blob: [UInt8]) async throws -> String
     func voteResultsSubmit(body: [UInt8]) async throws -> JsonObject
-    /// Discards a blob the vault was not (or could not be) handed, so that it does not hold the single slot.
-    func deleteBlob(_ blobID: String) async throws
 }
 
 extension VaultApi: VoteSiteOps {}
@@ -66,6 +64,8 @@ final class VoteSiteRunner {
     /// The work going on or queued, to cancel at a lock or when the app leaves.
     private var cancellers: [Int: () -> Void] = [:]
     private var nextWork = 0
+    /// Counts the halts: work begun before one and started after it does not run.
+    private(set) var haltGeneration = 0
     /// The attempts at a vote's results that are on their way: one at a time for a vote.
     private var inflight: [VoteKey: Task<ResultsOutcome, any Error>] = [:]
 
@@ -122,6 +122,7 @@ final class VoteSiteRunner {
     var running: Bool { loop != nil }
 
     private func halt() {
+        haltGeneration += 1
         loop?.cancel()
         loop = nil
         for cancel in cancellers.values { cancel() }
@@ -169,17 +170,28 @@ final class VoteSiteRunner {
                     throw CancellationError()
                 } catch let f as VaultFailure where f.code == Self.codeTooLarge {
                     // A list the vault refused as too large leaves its held list; the proposals and the results go on.
+                } catch let f as VaultFailure where Self.contentRefusal(f) {
+                    // The vault refused what was sent: the next stage sends other things.
+                    failure = failure ?? f
                 } catch {
-                    failure = failure ?? error
+                    // The session is gone, the vault is locked or held: the later stages would fail the same way.
+                    lastRun = votes.now()
+                    throw error
                 }
                 try Task.checkCancellation()
             }
             try await stage { try await syncLists() }
             try await stage { try await syncProposals(only: nil) }
             try await stage { try await submitDue() }
-            if let failure { throw failure }
+            // A run that was not cancelled ends the return throttle, a failed one too (its retry is the hourly one).
             lastRun = votes.now()
+            if let failure { throw failure }
         }
+    }
+
+    /// A refusal of the vault to what it was sent (`bad_request`, `limit`, `payload_too_large`), not a lost session.
+    private static func contentRefusal(_ f: VaultFailure) -> Bool {
+        f.kind == .limit || f.code == "bad_request" || f.code == codeTooLarge
     }
 
     /// A vote's screen opened: its documents and the index, so that the vault can compare them with what it holds.
@@ -266,7 +278,7 @@ final class VoteSiteRunner {
 
     /// Sends one `vote.site.sync` body within the limits (§10.19.8): inline when its padded inner plaintext fits §5.5's
     /// 245,760 bytes, otherwise as a claim-check blob to the app's own vault, and never over 8,257,532 bytes. Nil when it
-    /// was not sent. A blob the vault was not handed after the upload is discarded, as attachments do.
+    /// was not sent.
     private func send(_ body: [UInt8], quietly: Bool) async throws -> JsonObject? {
         guard body.count <= VoteSync.bodyMax else { return nil }
         let inline = await Task.detached { VoteSync.fitsInline(body) }.value
@@ -276,14 +288,10 @@ final class VoteSiteRunner {
         defer { sealed.wipe() }
         try Task.checkCancellation()
         let id = try await upload(sealed.blob, quietly: quietly)
-        do {
-            return try await guarded {
-                try await self.ops(quietly).voteSiteSyncBlob(blobID: id, key: sealed.key, sha256: sealed.sha256, size: sealed.size)
-            }
-        } catch {
-            // It would hold the mailbox's single slot until it expires otherwise.
-            _ = try? await ops(quietly).deleteBlob(id)
-            throw error
+        // The vault deletes a blob that fails its checks (§5.5); one it never received expires with the relay's TTL
+        // (chosen; not in the spec: this app has no way to delete from the vault's mailbox).
+        return try await guarded {
+            try await self.ops(quietly).voteSiteSyncBlob(blobID: id, key: sealed.key, sha256: sealed.sha256, size: sealed.size)
         }
     }
 
@@ -328,9 +336,10 @@ final class VoteSiteRunner {
         }
     }
 
-    /// The due checks after a `check_due` event: in the line of the runs (cancelled with them).
-    func submitDueNow() async {
-        guard site.configured else { return }
+    /// The due checks after a `check_due` event, when no halt came since [generation] was read: in the line of the runs
+    /// (cancelled with them).
+    func submitDueNow(ifGeneration generation: Int) async {
+        guard site.configured, generation == haltGeneration else { return }
         try? await serially(.runs) { [self] in try await submitDue() }
     }
 
@@ -340,8 +349,11 @@ final class VoteSiteRunner {
     func checkResults(_ key: VoteKey, quietly: Bool) async throws -> ResultsOutcome {
         guard site.configured else { return .siteUnreachable }
         if let running = inflight[key] { return try await running.value }
+        let generation = haltGeneration
         let task = Task { @MainActor [self] () -> ResultsOutcome in
             defer { inflight[key] = nil }
+            // A lock or the app leaving between the call and this start: it does not begin.
+            guard generation == haltGeneration else { throw CancellationError() }
             return try await serially(.attempts) { [self] in try await attempt(key, quietly: quietly) }
         }
         inflight[key] = task
@@ -460,10 +472,11 @@ final class VoteSiteRunner {
         let before = chain == .runs ? runs : attempts
         let id = nextWork
         nextWork += 1
+        let generation = haltGeneration
         let task = Task { @MainActor [self] () -> Result<T, any Error> in
             await before?.value
             defer { cancellers[id] = nil }
-            if Task.isCancelled { return .failure(CancellationError()) }
+            if Task.isCancelled || generation != haltGeneration { return .failure(CancellationError()) }
             do { return .success(try await work()) } catch { return .failure(error) }
         }
         cancellers[id] = { task.cancel() }

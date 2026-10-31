@@ -59,9 +59,6 @@ final class FakeVoteSiteOps: VoteSiteOps, @unchecked Sendable {
     /// Refuses the next uploads with the relay's storage-full answer; [syncRefusal] the next `vote.site.sync` once.
     var quotaRefusals = 0
     var syncRefusal: String?
-    /// Refuses the next `vote.site.sync` by blob once, after the upload; the blobs asked to be deleted.
-    var blobSyncRefusal: String?
-    var deleted: [String] = []
 
     nonisolated func voteSiteSync(body: [UInt8]) async throws -> JsonObject {
         try await MainActor.run {
@@ -77,10 +74,6 @@ final class FakeVoteSiteOps: VoteSiteOps, @unchecked Sendable {
 
     nonisolated func voteSiteSyncBlob(blobID: String, key: [UInt8], sha256: [UInt8], size: Int) async throws -> JsonObject {
         try await MainActor.run {
-            if let code = blobSyncRefusal {
-                blobSyncRefusal = nil
-                throw VaultOpError(type: "vote.site.sync", code: code, detail: "", body: nil)
-            }
             let blob = try #require(uploads[blobID])
             syncs.append(try ClaimBlob.open(blob, key: key, sha256: sha256, size: UInt64(size)))
             blobSyncs += 1
@@ -98,13 +91,6 @@ final class FakeVoteSiteOps: VoteSiteOps, @unchecked Sendable {
             let id = "blob-\(uploads.count + 1)"
             uploads[id] = blob
             return id
-        }
-    }
-
-    nonisolated func deleteBlob(_ blobID: String) async throws {
-        await MainActor.run {
-            deleted.append(blobID)
-            uploads[blobID] = nil
         }
     }
 
