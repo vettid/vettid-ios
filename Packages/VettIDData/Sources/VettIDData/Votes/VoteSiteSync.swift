@@ -150,7 +150,7 @@ public enum VoteSync {
             if let bundle { doc.raw("bundle", bundle) }
             let xs = extensions.map { x in
                 let b = JsonBuilder().base64("extension", x.doc)
-                if let s = x.sig { b.base64("docsig", s) }
+                if let s = x.sig { b.base64("extension_sig", s) }
                 if let bundle = x.bundle { b.raw("bundle", bundle) }
                 return b.build()
             }

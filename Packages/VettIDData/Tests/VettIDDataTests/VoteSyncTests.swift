@@ -95,6 +95,19 @@ struct VoteSyncTests {
         #expect(try x.count == 1 && x[0].base64("extension") == Array("x1".utf8) && !x[0].has("extension_sig"))
     }
 
+    @Test func anExtensionIsSentWithExactlyTheMembersTheVaultReads() throws {
+        let sig = [UInt8](repeating: 7, count: 64)
+        let e = try StrictJson.parseObject(VoteSync.entryJson("p1", index: nil, .found(
+            proposal: Array("p".utf8), proposalSig: sig, bundle: nil,
+            extensions: [VoteSync.Extension(Array("x1".utf8), sig: sig, bundle: #"{"b":2}"#)]
+        )))
+        let x = try e.obj("document").array("extensions").map { try $0.asObject() }
+        #expect(x.count == 1)
+        #expect(x[0].has("bundle") && x[0].has("extension") && x[0].has("extension_sig") && !x[0].has("docsig") && !x[0].has("sig"))
+        #expect(try x[0].base64("extension_sig", 64) == sig && x[0].base64("extension") == Array("x1".utf8))
+        #expect(try x[0].obj("bundle").uint("b", min: 0, max: 9) == 2)
+    }
+
     @Test func aBodyGoesInlineOnlyWhenItsPaddedEnvelopeFits() {
         #expect(VoteSync.fitsInline(Array(#"{"entries":[]}"#.utf8)))
         func body(_ n: Int) -> [UInt8] { Array(#"{"pad":""#.utf8) + [UInt8](repeating: 0x61, count: n) + Array(#""}"#.utf8) }
