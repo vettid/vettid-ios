@@ -1,7 +1,7 @@
 import Foundation
 import VettIDCrypto
 
-/// The app's work with the public votes site for the vault (VAULT-MESSAGING 0.81.4 §10.19.8 `vote.site.sync`;
+/// The app's work with the public votes site for the vault (VAULT-MESSAGING 0.81.6 §10.19.8 `vote.site.sync`;
 /// ANDROID-PLAN 0.1.107): what it fetches, and the requests it makes of it within the per-call limits. The vault decides
 /// everything; the app hands over public documents, with no time of its own. Mirrors vettid-android `VoteSync`.
 public enum VoteSync {
@@ -196,31 +196,96 @@ public enum VoteSync {
         return calls
     }
 
-    /// A site JSON document that is one object, as compact JSON; nil when it is not (the vault judges what it is sent).
-    public static func compactObject(_ bytes: [UInt8]) -> String? {
-        guard let c = try? StrictJson.compactObject(bytes) else { return nil }
+    /// Where the site's own JSON sits in a `vote.site.sync` (or `vote.results.submit`) body, counting the body as level 1:
+    /// the vault parses the whole request strictly with a nesting limit of 32 for all of it, so a value at level L may be
+    /// `32 - L + 1` deep (VAULT-MESSAGING 0.81.6 §10.19.8 "Strict JSON").
+    public enum Level {
+        /// `{entries: [ {index: …} ]}`: body, `entries`, the entry, `index`.
+        public static let index = 4
+        /// … the entry, `document`, `bundle`.
+        public static let proposalBundle = 5
+        /// … `document`, `extensions`, the extension, `bundle`.
+        public static let extensionBundle = 7
+        /// `vote.results.submit`: the body, `bundle` (the erratum does not name this one; the vault parses that request
+        /// the same way).
+        public static let resultsBundle = 2
+    }
+
+    /// A site JSON document that is one object, as compact JSON, parsed strictly (valid UTF-8, no duplicate member name at
+    /// any depth) and deep enough to sit at [level] of the request; nil when it is not (VAULT-MESSAGING 0.81.6 §10.19.8:
+    /// "not an object").
+    public static func compactObject(_ bytes: [UInt8], level: Int) -> String? {
+        guard let c = try? StrictJson.compactObject(bytes, maxDepth: StrictJson.maxDepth - level + 1) else { return nil }
         return String(bytes: c, encoding: .utf8)
     }
 
     /// The index's elements (`index.json` is an array) with their `proposal_id` and as compact JSON objects; an unreadable
-    /// index yields none. An element whose id is not a canonical ULID is left out: the id becomes part of a path on the
-    /// site, and the site's index is not verified (chosen; not in the spec). An element the vault would refuse the call
-    /// for (a `service_id` that is not a string) is kept for its id, with no `json`: it is sent without `index`.
+    /// index yields none. Each element is read on its own, strictly, so that one bad element leaves out only itself:
+    /// - an element that is no strict object, or whose `proposal_id` is not a valid proposal id, is not sent at all, nor
+    ///   an entry for it (0.81.6; the id also becomes part of a path on the site);
+    /// - an element the vault would refuse the call for (a `service_id` that is no string, or deeper than the request
+    ///   allows at its place) is kept for its id, with no `json`: the entry goes without `index`.
     public static func indexOf(_ bytes: [UInt8]) -> [(proposalID: String, json: String?)] {
-        // The strict parser reads objects only: the array is read as the one member of an object around it.
-        guard let o = try? StrictJson.parseObject(Array(#"{"i":"#.utf8) + bytes + Array("}".utf8)),
-              let items = try? o.array("i")
-        else { return [] }
-        return items.compactMap { v in
-            guard case .object(let e) = v, let id = try? e.string("proposal_id"), Ulid.isValid(id) else { return nil }
+        guard let elements = arrayElements(bytes) else { return [] }
+        return elements.compactMap { raw in
+            guard let o = try? StrictJson.parseObject(raw), let id = try? o.string("proposal_id"), Ulid.isValid(id) else {
+                return nil
+            }
             let serviceIDReads: Bool
-            do { _ = try e.optString("service_id"); serviceIDReads = true } catch { serviceIDReads = false }
-            guard serviceIDReads,
-                  let json = String(bytes: StrictJson.compact(Array(e.raw.utf8)), encoding: .utf8)
-            else { return (id, nil) }
-            return (id, json)
+            do { _ = try o.optString("service_id"); serviceIDReads = true } catch { serviceIDReads = false }
+            return (id, serviceIDReads ? compactObject(raw, level: Level.index) : nil)
         }
     }
+
+    // swiftlint:disable cyclomatic_complexity
+    /// The top-level elements of the JSON array [bytes] as byte slices, found by a scan that parses nothing (so that a
+    /// hostile element cannot cost the others); nil when [bytes] is not one array.
+    static func arrayElements(_ bytes: [UInt8]) -> [[UInt8]]? {
+        var i = 0
+        func skipSpace() { while i < bytes.count, [0x20, 0x09, 0x0A, 0x0D].contains(bytes[i]) { i += 1 } }
+        skipSpace()
+        guard i < bytes.count, bytes[i] == UInt8(ascii: "[") else { return nil }
+        i += 1
+        var out: [[UInt8]] = []
+        var depth = 0
+        var start = i
+        var inString = false
+        var escaped = false
+        var closed = false
+        while i < bytes.count, !closed {
+            let c = bytes[i]
+            if inString {
+                if escaped { escaped = false } else if c == 0x5C { escaped = true } else if c == 0x22 { inString = false }
+            } else {
+                switch c {
+                case 0x22: inString = true
+                case UInt8(ascii: "["), UInt8(ascii: "{"): depth += 1
+                case UInt8(ascii: "}"): depth -= 1
+                case UInt8(ascii: "]"):
+                    if depth == 0 {
+                        closed = true
+                        out.append(Array(bytes[start..<i]))
+                    } else {
+                        depth -= 1
+                    }
+                case UInt8(ascii: ","):
+                    if depth == 0 {
+                        out.append(Array(bytes[start..<i]))
+                        start = i + 1
+                    }
+                default: break
+                }
+            }
+            if depth < 0 { return nil }
+            i += 1
+        }
+        guard closed else { return nil }
+        skipSpace()
+        guard i == bytes.count else { return nil }
+        // An empty array has no element; an empty one between commas is no element either.
+        return out.filter { !$0.allSatisfy { [0x20, 0x09, 0x0A, 0x0D].contains($0) } }
+    }
+    // swiftlint:enable cyclomatic_complexity
 
     /// An index element's `extended` count when it reads.
     public static func extendedOf(_ index: String?) -> Int? {

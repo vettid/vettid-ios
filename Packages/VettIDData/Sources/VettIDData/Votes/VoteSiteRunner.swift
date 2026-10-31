@@ -15,7 +15,7 @@ public enum ResultsOutcome: Equatable, Sendable {
     case problem
 }
 
-/// The vault calls of the work with the public site (VAULT-MESSAGING 0.81.4 §10.19.8): `vote.site.sync` inline or by
+/// The vault calls of the work with the public site (VAULT-MESSAGING 0.81.6 §10.19.8): `vote.site.sync` inline or by
 /// claim-check blob (§5.5), the blob's upload to the app's own vault, and `vote.results.submit`.
 public protocol VoteSiteOps: Sendable {
     func voteSiteSync(body: [UInt8]) async throws -> JsonObject
@@ -373,7 +373,8 @@ final class VoteSiteRunner {
         case .files(let f): files = f
         }
         // The vault refuses a signature of another length, and a bundle that is no object, with the whole call.
-        guard files.sig.count == VoteSiteLimits.sigLength, let bundle = VoteSync.compactObject(files.bundle) else {
+        let level = VoteSync.Level.resultsBundle
+        guard files.sig.count == VoteSiteLimits.sigLength, let bundle = VoteSync.compactObject(files.bundle, level: level) else {
             return fail(key, .problem)
         }
         let doc = files.doc

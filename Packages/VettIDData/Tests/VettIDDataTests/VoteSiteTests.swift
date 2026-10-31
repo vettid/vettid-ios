@@ -13,7 +13,7 @@ private let pid = VoteFixture.pid
 private let key = VoteFixture.key
 
 /// The app's work with the public votes site for the vault (IOS-PLAN §4.16 "The site"; ANDROID-PLAN 0.1.107/0.1.108;
-/// VAULT-MESSAGING 0.81.4 §10.19.8): the runs, their limits and schedule, the documents of a vote, and the results check.
+/// VAULT-MESSAGING 0.81.6 §10.19.8): the runs, their limits and schedule, the documents of a vote, and the results check.
 /// Mirrors vettid-android `VoteSyncTest` and the site part of `VotesManagerTest`.
 @MainActor
 struct VoteSiteTests: VotesTestCase {

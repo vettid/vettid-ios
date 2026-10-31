@@ -2,7 +2,7 @@ import Foundation
 
 /// Reads the documents of the public votes site for ``VoteSiteRunner``: a proposal with its signature, bundle and
 /// extensions, the versions of the service list, a vote's results. Each read stops cancelled work. Everything is as the
-/// site served it; what the vault would refuse a whole call for (VAULT-MESSAGING 0.81.4 §10.19.8; vettid-vault
+/// site served it; what the vault would refuse a whole call for (VAULT-MESSAGING 0.81.6 §10.19.8; vettid-vault
 /// `features/vote/sync.go`) is not passed on.
 struct VoteSiteReader: Sendable {
     let site: any VoteSite
@@ -42,10 +42,11 @@ struct VoteSiteReader: Sendable {
 
     /// One proposal's documents from the site: `proposal.json` with its signature and bundle, and each extension in order.
     /// A 404 for the proposal is `absent` (sent again at the next run and when the screen opens), a 5xx or a timeout, and
-    /// a proposal over the vault's 65,536 bytes, `unreachable`, an odd body `found`: the vault judges it. The vault refuses
-    /// a whole call for an extension over 4,096 bytes or without a signature of 64 bytes and a bundle that is an object,
-    /// so the extensions stop at the first such one and the entry goes with those before it (chosen; not in the spec: the
-    /// later ones could not be applied before it anyway, and the next run reads them again).
+    /// a proposal over the vault's 65,536 bytes, `unreachable`, an odd body `found`: the vault judges it. A bundle that is
+    /// no strict JSON object (or too deep for its place in the request) is left out. The extensions are at most 24 and end
+    /// at the first one over 4,096 bytes, without a signature of 64 bytes or without a bundle that is a strict object; the
+    /// entry goes with those before it (VAULT-MESSAGING 0.81.6 §10.19.8 "Shape checks before sending"). An extension the
+    /// site could not answer for makes the whole entry `unreachable` (the erratum is silent on it).
     func readDocument(_ id: String, index: String?) async throws -> VoteSync.Document {
         let p: [UInt8]
         switch try await get("p/\(id)/proposal.json", VoteSiteLimits.proposalMax) {
@@ -80,7 +81,7 @@ struct VoteSiteReader: Sendable {
         var bundle: String?
         switch try await part("p/\(id)/proposal.json.sigstore.json", VoteSiteLimits.bundleMax) {
         case .down: return nil
-        case .found(let b): bundle = VoteSync.compactObject(b)
+        case .found(let b): bundle = VoteSync.compactObject(b, level: VoteSync.Level.proposalBundle)
         case .missing: break
         }
         return (sig, bundle)
@@ -111,7 +112,9 @@ struct VoteSiteReader: Sendable {
         }
         switch try await part(base + ".sigstore.json", VoteSiteLimits.bundleMax) {
         case .down: return .down
-        case .found(let b): return VoteSync.compactObject(b).map { .read(VoteSync.Extension(doc, sig: sig, bundle: $0)) } ?? .stop
+        case .found(let b):
+            guard let bundle = VoteSync.compactObject(b, level: VoteSync.Level.extensionBundle) else { return .stop }
+            return .read(VoteSync.Extension(doc, sig: sig, bundle: bundle))
         case .missing: return .stop
         }
     }

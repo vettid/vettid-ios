@@ -1,7 +1,7 @@
 import Foundation
 import VettIDRelay
 
-/// What one read of the public votes site came to (VAULT-MESSAGING 0.81.4 §10.19.8; ANDROID-PLAN 0.1.107).
+/// What one read of the public votes site came to (VAULT-MESSAGING 0.81.6 §10.19.8; ANDROID-PLAN 0.1.107).
 public enum SiteAnswer: Sendable, Equatable {
     /// HTTP 200 with a whole body.
     case found([UInt8])

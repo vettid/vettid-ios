@@ -3,7 +3,7 @@ import Testing
 import VettIDCrypto
 @testable import VettIDData
 
-/// The plan of the work with the public votes site (VAULT-MESSAGING 0.81.4 §10.19.8 `vote.site.sync`; ANDROID-PLAN
+/// The plan of the work with the public votes site (VAULT-MESSAGING 0.81.6 §10.19.8 `vote.site.sync`; ANDROID-PLAN
 /// 0.1.107): which lists go and how they are split, how entries are batched, and what an entry says. Mirrors the
 /// planning part of vettid-android `VoteSyncTest`.
 struct VoteSyncTests {
@@ -127,6 +127,16 @@ struct VoteSyncTests {
         #expect(VoteSync.extendedOf(read[0].json) == 2 && VoteSync.extendedOf(read[1].json) == nil)
         #expect(VoteSync.indexOf(Array("not json".utf8)).isEmpty)
         #expect(VoteSync.indexOf(Array(#"{"proposal_id":"\#(a)"}"#.utf8)).isEmpty)
+    }
+
+    @Test func theIndexIsSplitByAScanThatKnowsStringsAndNesting() {
+        let a = "01JBQZ0000000000000000000A"
+        let b = "01JBQZ0000000000000000000B"
+        let text = #" [ {"proposal_id":"\#(a)","t":"x],{[,\"}"} , {"proposal_id":"\#(b)","n":[1,[2,{"k":"]"}]]} ] "#
+        let read = VoteSync.indexOf(Array(text.utf8))
+        #expect(read.map(\.proposalID) == [a, b] && read.allSatisfy { $0.json != nil })
+        // Not one array, unbalanced, or with something after it.
+        for bad in ["{}", "[", "[{]", "[{}] x", "[}]", ""] { #expect(VoteSync.indexOf(Array(bad.utf8)).isEmpty, Comment(rawValue: bad)) }
     }
 
     @Test func anIndexIdThatIsNoUlidIsNotUsedInAPath() {

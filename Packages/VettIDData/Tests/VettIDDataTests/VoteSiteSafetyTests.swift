@@ -167,6 +167,125 @@ struct VoteSiteSafetyTests: VotesTestCase {
         #expect(!vault.syncs.isEmpty)
     }
 
+    // MARK: Strict JSON for what the site's own JSON is copied into (VAULT-MESSAGING 0.81.6 §10.19.8)
+
+    /// An object nested [depth] deep (1: `{}`).
+    func nested(_ depth: Int) -> String {
+        String(repeating: #"{"a":"#, count: depth - 1) + "{}" + String(repeating: "}", count: depth - 1)
+    }
+
+    /// An index element for [id] that is [depth] deep.
+    func element(_ id: String, depth: Int) -> String {
+        depth == 1 ? #"{"proposal_id":"\#(id)"}"# : #"{"proposal_id":"\#(id)","n":\#(nested(depth - 1))}"#
+    }
+
+    func sentIndex() throws -> JsonObject? {
+        let e = try entry()
+        return e.has("index") ? try e.obj("index") : nil
+    }
+
+    @Test func anIndexElementIsSentToTheDepthTheRequestAllowsAtItsPlace() async throws {
+        site.put("p/\(pid)/proposal.json", "{}")
+        for (depth, sent) in [(29, true), (30, false), (31, false)] {
+            site.put("index.json", "[" + element(pid, depth: depth) + "]")
+            vault.syncs = []
+            let (_, m) = opened()
+            try await m.syncOnce()
+            #expect((try sentIndex() != nil) == sent, Comment(rawValue: "depth \(depth)"))
+            // The entry itself goes either way.
+            #expect(try entry().has("document"))
+        }
+    }
+
+    @Test func aProposalBundleIsSentToDepth28AndLeftOutBeyond() async throws {
+        site.put("p/\(pid)/proposal.json", "{}")
+        for (depth, sent) in [(28, true), (29, false)] {
+            site.put("p/\(pid)/proposal.json.sigstore.json", nested(depth))
+            vault.syncs = []
+            let (_, m) = opened()
+            try await m.syncOnce()
+            let d = try entry().obj("document")
+            #expect(d.has("bundle") == sent, Comment(rawValue: "depth \(depth)"))
+            #expect(try d.string("status") == "found")
+        }
+    }
+
+    @Test func anExtensionBundleIsSentToDepth26AndTheExtensionsEndAtOneBeyond() async throws {
+        site.put("p/\(pid)/proposal.json", "{}")
+        site.put("index.json", #"[{"proposal_id":"\#(pid)","extended":2}]"#)
+        for (depth, count) in [(26, 2), (27, 1)] {
+            serveExtension(1)
+            serveExtension(2, bundle: nested(depth))
+            vault.syncs = []
+            let (_, m) = opened()
+            try await m.syncOnce()
+            #expect(try extensions() == count, Comment(rawValue: "depth \(depth)"))
+        }
+    }
+
+    @Test func aDuplicateNameDeepInsideOrBadUTF8LeavesOutTheValue() async throws {
+        site.put("p/\(pid)/proposal.json", "{}")
+        let dup = String(repeating: #"{"a":"#, count: 20) + #"{"k":1,"k":2}"# + String(repeating: "}", count: 20)
+        let bad = Array(#"{"a":""#.utf8) + [0xFF] + Array(#""}"#.utf8)
+        // The proposal bundle.
+        site.put("p/\(pid)/proposal.json.sigstore.json", dup)
+        let (_, m) = opened()
+        try await m.syncOnce()
+        #expect(try !entry().obj("document").has("bundle"))
+        site["p/\(pid)/proposal.json.sigstore.json"] = .found(bad)
+        vault.syncs = []
+        try await m.syncOnce()
+        #expect(try !entry().obj("document").has("bundle"))
+        // An extension bundle ends the extensions.
+        site.put("index.json", #"[{"proposal_id":"\#(pid)","extended":1}]"#)
+        serveExtension(1, bundle: dup)
+        vault.syncs = []
+        try await m.syncOnce()
+        #expect(try extensions() == 0)
+        site["p/\(pid)/extension-1.json.sigstore.json"] = .found(bad)
+        vault.syncs = []
+        try await m.syncOnce()
+        #expect(try extensions() == 0)
+        // An index element: the entry goes without it.
+        site["index.json"] = .found(Array(("[" + #"{"proposal_id":"\#(pid)","d":{"k":1,"k":2}}"# + "]").utf8))
+        vault.syncs = []
+        try await m.syncOnce()
+        #expect(try sentIndex() == nil)
+    }
+
+    @Test func anIndexElementWithAnInvalidProposalIDIsNotSentNorIsAnEntryForIt() async throws {
+        let bad = ["01JBQZ000000000000000000I0", "81JBQZ0000000000000000000A", "01jbqz0000000000000000000a", "01JBQZ0000000000000000001", ""]
+        for id in bad { site.put("p/\(id)/proposal.json", "{}") }
+        site.put("index.json", "[" + (bad.map { #"{"proposal_id":"\#($0)"}"# } + [#"{"service_id":"x"}"#, "7"]).joined(separator: ",") + "]")
+        let (_, m) = opened()
+        try await m.syncOnce()
+        #expect(try vault.entries().map { try $0.string("proposal_id") } == [pid])
+        #expect(!site.reads.contains { r in bad.contains { !$0.isEmpty && r.contains($0) } })
+    }
+
+    @Test func oneBadIndexElementLeavesOutOnlyItself() async throws {
+        site.put("p/\(pid2)/proposal.json", "{}")
+        let deep = element(pid2, depth: 31)
+        site.put("index.json", "[" + #"{"proposal_id":"\#(pid)","k":1,"k":2}"# + "," + deep + "]")
+        let (_, m) = opened()
+        try await m.syncOnce()
+        let e = try #require(try vault.entries().first { try $0.string("proposal_id") == pid2 })
+        #expect(!e.has("index") && e.has("document"))
+    }
+
+    @Test func aResultsBundleIsSentToDepth31AndABeyondOneIsAProblem() async throws {
+        for (depth, sent) in [(31, true), (32, false)] {
+            VoteResultsFixture.publish(site, pid)
+            site.put("p/\(pid)/results.json.sigstore.json", nested(depth))
+            vault.submits = []
+            let ops = closedOps()
+            let m = manager(ops)
+            try await m.syncOnce()
+            #expect(vault.submits.count == (sent ? 1 : 0), Comment(rawValue: "depth \(depth)"))
+            #expect((m.hints[key]?.resultsProblem == true) == !sent)
+        }
+    }
+
     // MARK: A lock or the app leaving ends what goes on
 
     /// Holds the read of [path] until the test lets it go.
