@@ -1,5 +1,6 @@
 import CoreText
 import SwiftUI
+import UIKit
 
 /// The bundled faces, as on the website: Plus Jakarta Sans for headings, Inter
 /// for body and UI text (both SIL OFL 1.1, `Resources/Fonts`). Each is one
@@ -89,6 +90,36 @@ public enum VettIDTextStyle: CaseIterable, Sendable {
             size: size ?? s.size,
             relativeTo: s.relativeTo
         )
+    }
+}
+
+public extension VettIDTextStyle {
+    /// The style as a UIKit font (for the UIKit text fields), scaled with Dynamic Type as ``font(weight:size:)`` is
+    /// ([traits]: for a given size; default: the current one).
+    func uiFont(weight: Font.Weight? = nil, compatibleWith traits: UITraitCollection? = nil) -> UIFont {
+        VettIDFonts.register()
+        let s = spec
+        let base = UIFont(name: VettIDFonts.postScriptName(s.family, weight ?? s.weight), size: s.size)
+            ?? .systemFont(ofSize: s.size)
+        return UIFontMetrics(forTextStyle: s.relativeTo.uiTextStyle).scaledFont(for: base, compatibleWith: traits)
+    }
+}
+
+private extension Font.TextStyle {
+    var uiTextStyle: UIFont.TextStyle {
+        switch self {
+        case .largeTitle: .largeTitle
+        case .title: .title1
+        case .title2: .title2
+        case .title3: .title3
+        case .headline: .headline
+        case .subheadline: .subheadline
+        case .callout: .callout
+        case .footnote: .footnote
+        case .caption: .caption1
+        case .caption2: .caption2
+        default: .body
+        }
     }
 }
 

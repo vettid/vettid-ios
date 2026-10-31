@@ -30,8 +30,6 @@ public struct AddConnectionControls: View {
             AddConnectionSheet(
                 onInvite: { choose(.invite) }, onScan: { choose(.scan) }, onPaste: { choose(.accept(AcceptInput())) }
             )
-            .presentationDetents([.medium])
-            .presentationDragIndicator(.visible)
             .presentationBackground(colors.surfaceContainerLow.color)
             .environment(\.vettIDColors, colors)
         }
@@ -78,6 +76,8 @@ public struct AddConnectionSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("add_connection_sheet")
+        // Half height, and full height with the options scrolling at the larger text sizes.
+        .vettIDGrowingSheet()
     }
 
     private func option(
