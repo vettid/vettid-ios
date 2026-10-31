@@ -172,7 +172,6 @@ struct OtpCode: View {
 /// covered.
 struct ItemDetailDialogs: ViewModifier {
     @Environment(\.vettIDCovered) private var covered
-    @Environment(\.vettIDColors) private var colors
     let state: ItemDetailState
     let actions: ItemDetailActions
 
@@ -194,8 +193,6 @@ struct ItemDetailDialogs: ViewModifier {
             )
             .sheet(isPresented: uncovered(shown(.protectionPick), covered: covered)) {
                 ProtectionPicker(current: state.item?.sensitivity ?? .data, actions: actions)
-                    .vettIDGrowingSheet()
-                    .presentationBackground(colors.surfaceContainerLow.color)
             }
     }
 }
@@ -222,6 +219,9 @@ struct ProtectionPicker: View {
         }
         .padding(Spacing.xl)
         .accessibilityIdentifier("item_protection_dialog")
+        // Half height, and full height with the choices and Cancel scrolling at the larger text sizes.
+        .vettIDGrowingSheet()
+        .presentationBackground(colors.surfaceContainerLow.color)
     }
 }
 #endif

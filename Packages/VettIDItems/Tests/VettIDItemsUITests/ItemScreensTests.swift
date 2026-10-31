@@ -87,11 +87,10 @@ import VettIDUI
         #expect(row(FieldKinds.text, "Ada").spoken("Ada", masked: false) == "Ada")
     }
 
-    /// "Protection" opens at half height and can be pulled to full height; at the largest text size its choices scroll, so
-    /// the last one and Cancel can be reached.
-    @Test func theProtectionSheetGrowsAndScrollsAtLargeSizes() {
+    /// "Protection" (the view the item screen presents) scrolls its choices at the largest text size, so the last one and
+    /// Cancel can be reached.
+    @Test func theProtectionSheetScrollsAtLargeSizes() {
         let sheet = ProtectionPicker(current: .data, actions: ItemDetailActions())
-            .vettIDGrowingSheet()
             .environment(\.dynamicTypeSize, .accessibility5)
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 420))
         window.rootViewController = UIHostingController(rootView: sheet.vettIDTheme(.dark))

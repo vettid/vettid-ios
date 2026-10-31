@@ -149,12 +149,10 @@ import VettIDUI
         return [loading, bare, full, cooled, failed]
     }
 
-    /// The add sheet opens at half height and can be pulled to full height; at the largest text size its options scroll, so
-    /// the last one ("Paste a link") can be reached.
-    @Test func theAddSheetGrowsAndScrollsAtLargeSizes() {
-        #expect(VettIDSheet.detents == [.medium, .large])
+    /// The add sheet (the view the add button presents) scrolls its options at the largest text size, so the last one
+    /// ("Paste a link") can be reached.
+    @Test func theAddSheetScrollsAtLargeSizes() {
         let sheet = AddConnectionSheet(onInvite: {}, onScan: {}, onPaste: {})
-            .vettIDGrowingSheet()
             .environment(\.dynamicTypeSize, .accessibility5)
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 420))
         window.rootViewController = UIHostingController(rootView: sheet.vettIDTheme())

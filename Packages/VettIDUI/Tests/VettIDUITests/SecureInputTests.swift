@@ -142,12 +142,10 @@ import UIKit
         window.isHidden = false
         window.layoutIfNeeded()
         let fields = textFields(in: window)
-        #expect(fields.count == 3)
-        for f in fields {
-            #expect(f.adjustsFontForContentSizeCategory)
-            let monospaced = f.font?.fontDescriptor.symbolicTraits.contains(.traitMonoSpace) == true
-            #expect(f.font?.familyName.hasPrefix("Inter") == true || monospaced)
-        }
+        try #require(fields.count == 3)
+        for f in fields { #expect(f.adjustsFontForContentSizeCategory) }
+        for f in fields[0...1] { #expect(f.font?.familyName.hasPrefix("Inter") == true, "the password and the visible field") }
+        #expect(fields[2].font?.fontDescriptor.symbolicTraits.contains(.traitMonoSpace) == true, "the code")
         window.isHidden = true
     }
 
