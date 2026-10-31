@@ -71,6 +71,22 @@ import VettIDUI
         }
     }
 
+    /// VoiceOver reads a masked value as "Hidden", not its bullets, and a shown or plain value as it is shown (I4 audit,
+    /// accessibility).
+    @Test func aMaskedValueIsReadAsHidden() {
+        func row(_ kind: String, _ value: String?, revealed: Bool = true, shown: Bool = false) -> ItemFieldRow {
+            let f = ItemFieldView(fieldID: "f1", label: "Password", kind: kind, value: value.map { .text($0) })
+            return ItemFieldRow(field: f, protection: .secret, revealed: revealed, shown: shown, actions: ItemDetailActions())
+        }
+        let password = FieldKinds.password
+        #expect(row(password, "hunter2").display("hunter2", masked: true) == ItemsStrings.maskedValue)
+        #expect(row(password, "hunter2").spoken("hunter2", masked: true) == "Hidden")
+        #expect(row(password, "hunter2", shown: true).spoken("hunter2", masked: true) == "hunter2")
+        #expect(row(password, nil, revealed: false).spoken(nil, masked: true) == "Hidden")
+        #expect(row(password, "").spoken("", masked: true) == ItemsStrings.emptyValue)
+        #expect(row(FieldKinds.text, "Ada").spoken("Ada", masked: false) == "Ada")
+    }
+
     @Test func theOneTimeCodeIsInGroupsOfThree() {
         #expect(OtpCode.grouped("123456") == "123 456" && OtpCode.grouped("12345678") == "123 456 78")
         // VoiceOver: the digits one by one, the time left in words.

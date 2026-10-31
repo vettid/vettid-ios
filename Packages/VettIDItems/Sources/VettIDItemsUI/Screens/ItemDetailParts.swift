@@ -45,7 +45,9 @@ struct ItemValues: View {
 }
 
 /// One field: its label, its value (hidden, masked or shown), the show and copy buttons, and a one-time code field's
-/// current code. Mirrors vettid-android `FieldRow`.
+/// current code. VoiceOver reads the label and the value as one element, a masked value as "Hidden" rather than its
+/// bullets, and a password shown character by character; the buttons stay elements of their own (I4 audit,
+/// accessibility). Mirrors vettid-android `FieldRow`.
 struct ItemFieldRow: View {
     @Environment(\.vettIDColors) private var colors
     let field: ItemFieldView
@@ -69,12 +71,15 @@ struct ItemFieldRow: View {
         let id = field.fieldID ?? ""
         VStack(alignment: .leading, spacing: Spacing.xxs) {
             Text(field.label).vettIDFont(.labelMedium).foregroundStyle(colors.onSurfaceVariant)
+                .accessibilityHidden(true)
             HStack(spacing: Spacing.xs) {
                 Text(display(text, masked: masked))
                     .vettIDFont(.bodyLarge)
                     .font(masked && shown ? .body.monospaced() : nil)
                     .foregroundStyle((text ?? "").isEmpty || (masked && !shown) ? colors.onSurfaceVariant : colors.onSurface)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityLabel(field.label)
+                    .accessibilityValue(Text(spoken(text, masked: masked)).speechSpellsOutCharacters(masked && shown))
                     .accessibilityIdentifier("item_value_\(id)")
                 if let text, !text.isEmpty, revealed {
                     if masked, let fid = field.fieldID {
@@ -101,11 +106,17 @@ struct ItemFieldRow: View {
         .accessibilityIdentifier("item_field_\(id)")
     }
 
-    private func display(_ text: String?, masked: Bool) -> String {
+    func display(_ text: String?, masked: Bool) -> String {
         guard let text, revealed else { return ItemsStrings.hiddenValue }
         if text.isEmpty { return ItemsStrings.emptyValue }
         if masked && !shown { return ItemsStrings.maskedValue }
         return field.kind == FieldKinds.phone ? PhoneInput.display(text) : text
+    }
+
+    /// The value as VoiceOver reads it: as shown, except a masked value, which is "Hidden" rather than its bullets.
+    func spoken(_ text: String?, masked: Bool) -> String {
+        if let text, !text.isEmpty, revealed, masked, !shown { return ItemsStrings.hiddenValue }
+        return display(text, masked: masked)
     }
 }
 
