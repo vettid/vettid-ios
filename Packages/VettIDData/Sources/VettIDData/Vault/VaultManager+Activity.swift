@@ -59,6 +59,7 @@ extension VaultManager {
     func activityEvent(_ m: VaultMessage) {
         feed.onEvent(m)
         approvals.onEvent(m)
+        votes.onEvent(m)
     }
 
     /// Held or due (§3.6.3): IOS-PLAN §6.9 clears vault content at a hold as at the vault lock. The feed, the photos, the
@@ -77,7 +78,7 @@ extension VaultManager {
     }
 
     /// Another device's owner check ended the hold (§3.6.3): what was dropped at it is read again, the tags at once, then
-    /// the connections and the requests, the approvals' lists, the conversations and the items, one after the other
+    /// the connections and the requests, the approvals' lists, the conversations, the items and the votes, one after the other
     /// (History is read by its screen). This phone's own check reads every list itself (`onPassed`, which follows at
     /// once), so then nothing is read here. A read of every list begun before (the unlock's) may have lost to the hold
     /// what it read: it is waited for, and the lists are read after it (a double read is harmless).
@@ -93,6 +94,7 @@ extension VaultManager {
             try? await approvals.refreshApprovals(quietly: true, requests: false)
             await messages.refreshConversationsQuietly()
             try? await items.refresh(quietly: true)
+            await votes.openNow()
         }
     }
 
@@ -122,6 +124,7 @@ extension VaultManager {
         feed.clear()
         approvals.forgetOpenVault()
         history.clear()
+        votes.clear()
     }
 
     /// A wipe, or a deleted vault: every list, and what the phone keeps of them.
@@ -135,5 +138,6 @@ extension VaultManager {
         feed.clear()
         approvals.clear()
         history.clear()
+        votes.clear()
     }
 }

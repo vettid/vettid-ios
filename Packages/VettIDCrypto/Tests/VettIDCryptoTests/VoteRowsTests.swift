@@ -113,10 +113,16 @@ struct VoteRowsTests {
         }
         let tag = try all[0].base64("record_tag", 32)
         let swapped = rowsDoc([all[1], all[0], all[2]])
-        #expect(throws: ResultsProblem("rows_order")) { try VoteRows.ownRow(results: try results(rows: swapped, eligible: 3), rows: swapped, recordTag: tag) }
+        #expect(throws: ResultsProblem("rows_order")) {
+            try VoteRows.ownRow(results: try results(rows: swapped, eligible: 3), rows: swapped, recordTag: tag)
+        }
         let twice = rowsDoc([all[0], all[0], all[2]])
-        #expect(throws: ResultsProblem("rows_order")) { try VoteRows.ownRow(results: try results(rows: twice, eligible: 3), rows: twice, recordTag: tag) }
-        #expect(throws: ResultsProblem("rows_count")) { try VoteRows.ownRow(results: try results(rows: rowsBytes, eligible: 2), rows: rowsBytes, recordTag: tag) }
+        #expect(throws: ResultsProblem("rows_order")) {
+            try VoteRows.ownRow(results: try results(rows: twice, eligible: 3), rows: twice, recordTag: tag)
+        }
+        #expect(throws: ResultsProblem("rows_count")) {
+            try VoteRows.ownRow(results: try results(rows: rowsBytes, eligible: 2), rows: rowsBytes, recordTag: tag)
+        }
         #expect(throws: ResultsProblem("rows_root")) {
             try VoteRows.ownRow(results: try results(rows: rowsBytes, eligible: 3, root: rep(1, 32)), rows: rowsBytes, recordTag: tag)
         }

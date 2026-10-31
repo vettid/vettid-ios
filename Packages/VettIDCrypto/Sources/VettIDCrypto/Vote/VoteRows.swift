@@ -29,6 +29,7 @@ public enum VoteRows {
     private static let sigSize = 64
     private static let maxId = 32
 
+    // swiftlint:disable cyclomatic_complexity
     /// Checks [rowsBytes] against [resultsBytes] and returns the row of [recordTag] with its proof. Throws
     /// ``ResultsProblem`` for anything that does not hold, including a tag that has no row.
     public static func ownRow(results resultsBytes: [UInt8], rows rowsBytes: [UInt8], recordTag: [UInt8]) throws -> OwnRow {
@@ -78,6 +79,7 @@ public enum VoteRows {
         guard let path = VoteMerkle.proof(leaves, found) else { throw ResultsProblem("rows") }
         return OwnRow(ballot: foundBallot, index: UInt64(found), treeSize: UInt64(leaves.count), path: path)
     }
+    // swiftlint:enable cyclomatic_complexity
 
     /// `ballot_leaf` (§5): `record_tag || lp(vk) || lp(choice_id) || lp(ballot_sig)`, `lp(x) = u16(len x) || x`.
     static func leaf(tag: [UInt8], ballot b: JsonObject) throws -> [UInt8] {
