@@ -8,137 +8,18 @@ import VettIDDataTesting
 // Fixtures stay on one line each.
 // swiftlint:disable line_length
 
-private let conn = "conn-1"
-private let pid = "01JBQZ0000000000000000000A"
-private let key = VoteKey(connectionID: conn, proposalID: pid)
+private let conn = VoteFixture.conn
+private let pid = VoteFixture.pid
+private let key = VoteFixture.key
 
-private func obj(_ s: String) -> JsonObject { (try? StrictJson.parseObject(s)) ?? VaultJSON.object([]) }
-
-/// TEST ONLY. The vault calls of ``VotesManager``, as vettid-vault's `features/vote` answers them.
-@MainActor
-final class FakeVoteOps: VoteOps, @unchecked Sendable {
-    var list = obj("{}")
-    var detail = obj("{}")
-    var evidence = obj(#"{"evidence":{"proposal":"AAAA","member":{"ballot":{"choice_id":"yes"}}}}"#)
-    var calls: [String] = []
-    var acks: [[String]] = []
-    var refuse: [String: String] = [:]
-    var castGate: TestDeferred<Void>?
-    var listGate: TestDeferred<Void>?
-
-    private func go(_ type: String) throws {
-        calls.append(type)
-        if let code = refuse[type] { throw VaultOpError(type: type, code: code, detail: "", body: nil) }
-    }
-
-    private static func name(_ k: VoteKey) -> String { "\(k.connectionID)/\(k.proposalID)" }
-
-    nonisolated func voteList(after: String?, ack: [String]) async throws -> JsonObject {
-        try await MainActor.run { try go("list"); acks.append(ack) }
-        let gate = await MainActor.run { listGate }
-        if let gate { try await gate.value() }
-        return await MainActor.run { list }
-    }
-
-    nonisolated func voteGet(_ key: VoteKey) async throws -> JsonObject {
-        try await MainActor.run { try go("get:\(Self.name(key))"); return detail }
-    }
-
-    nonisolated func voteCast(_ key: VoteKey, choiceID: String) async throws -> JsonObject {
-        let gate = await MainActor.run { castGate }
-        if let gate { try await gate.value() }
-        try await MainActor.run { try go("cast:\(Self.name(key)):\(choiceID)") }
-        return obj(#"{"proposal_id":"\#(key.proposalID)","ballot":{"state":"sending"}}"#)
-    }
-
-    nonisolated func voteCheck(_ key: VoteKey) async throws { try await MainActor.run { try go("check:\(Self.name(key))") } }
-
-    nonisolated func voteConfirm(_ key: VoteKey, mine: Bool) async throws -> JsonObject {
-        try await MainActor.run { try go("confirm:\(Self.name(key)):\(mine)") }
-        return obj(#"{"ballot":{"state":"\#(mine ? "recorded" : "disputed")"}}"#)
-    }
-
-    nonisolated func voteEvidence(_ key: VoteKey) async throws -> JsonObject {
-        try await MainActor.run { try go("evidence:\(Self.name(key))"); return evidence }
-    }
-
-    nonisolated func voteRelease(_ key: VoteKey, pin: String) async throws { try await MainActor.run { try go("release:\(Self.name(key))") } }
-}
-
-/// A vault whose answer to `vote.cast` never comes (the device's waits ran out).
-struct NoAnswerCast: VoteOps {
-    let inner: FakeVoteOps
-
-    func voteList(after: String?, ack: [String]) async throws -> JsonObject { try await inner.voteList(after: after, ack: ack) }
-    func voteGet(_ key: VoteKey) async throws -> JsonObject { try await inner.voteGet(key) }
-    func voteCast(_ key: VoteKey, choiceID: String) async throws -> JsonObject {
-        _ = try? await inner.voteCast(key, choiceID: choiceID)
-        throw VaultStateError(message: "vote.cast: no response")
-    }
-    func voteCheck(_ key: VoteKey) async throws { try await inner.voteCheck(key) }
-    func voteConfirm(_ key: VoteKey, mine: Bool) async throws -> JsonObject { try await inner.voteConfirm(key, mine: mine) }
-    func voteEvidence(_ key: VoteKey) async throws -> JsonObject { try await inner.voteEvidence(key) }
-    func voteRelease(_ key: VoteKey, pin: String) async throws { try await inner.voteRelease(key, pin: pin) }
-}
-
-/// The credential's unlock window as the tests drive it.
-@MainActor
-final class TestWindow {
-    var until: Date?
-    var opened: [String] = []
-    var closed = 0
-    var openFail: VaultFailure?
-    var closeFail: VaultFailure?
-}
+private func obj(_ s: String) -> JsonObject { voteObj(s) }
 
 /// The votes list and the cast (IOS-PLAN §4.16, ANDROID-PLAN 0.1.108 "Votes"; VAULT-MESSAGING 0.81.3 §10.19.8). Mirrors
 /// the list and cast part of vettid-android `VotesManagerTest` (the site and the results come with that work).
 @MainActor
-struct VotesManagerTests {
+struct VotesManagerTests: VotesTestCase {
     private static let start = Date(timeIntervalSince1970: 1_793_534_400) // 2026-11-01T12:00:00Z
-    private let clock = TestClock(1_793_534_400_000)
-
-    private func summary(id: String = pid, conn c: String = conn, state: String = "open", extra: String = "") -> String {
-        #"{"proposal_id":"\#(id)","connection_id":"\#(c)","title":"Adopt the budget","state":"\#(state)","opens_at":"2026-11-01T09:00:00.000Z","closes_at":"2026-11-06T17:00:00.000Z","can_cast":true\#(extra)}"#
-    }
-
-    private func listing(_ votes: String..., tail: String = "") -> JsonObject {
-        obj(#"{"votes":[\#(votes.joined(separator: ","))],"dropped":[],"problems":[],"reconnect":[]\#(tail)}"#)
-    }
-
-    private func event(_ type: String, _ body: String) -> VaultMessage {
-        VaultMessage(inner: Inner(id: Ulid.new(), type: type, ts: clock.date, body: Array(body.utf8)))
-    }
-
-    private func manager(_ ops: FakeVoteOps, window: TestWindow = TestWindow(), gated: @escaping @MainActor () -> Bool = { false }) -> VotesManager {
-        let c = clock
-        return VotesManager(
-            ops: { ops },
-            gated: gated,
-            windowUntil: { window.until },
-            openWindow: { password in
-                window.opened.append(password)
-                window.until = c.date.addingTimeInterval(300)
-                if let f = window.openFail { throw f }
-            },
-            closeWindow: {
-                window.closed += 1
-                window.until = nil
-                if let f = window.closeFail { throw f }
-            },
-            unlockTtl: { 300 },
-            now: { c.date }
-        )
-    }
-
-    private func failure(_ body: () async throws -> some Any) async -> VaultFailure? {
-        do {
-            _ = try await body()
-            return nil
-        } catch {
-            return error as? VaultFailure
-        }
-    }
+    let clock = TestClock(1_793_534_400_000)
 
     @Test func theListIsKeptByThePairAndNeverCarriesAChoice() async throws {
         let ops = FakeVoteOps()
@@ -261,130 +142,6 @@ struct VotesManagerTests {
         #expect(ops.acks.last == ["c1"])
     }
 
-    @Test func aCastOpensTheWindowOnlyWhenItIsClosedAndClosesWhatItOpened() async throws {
-        let ops = FakeVoteOps()
-        ops.list = listing(summary())
-        let window = TestWindow()
-        let m = manager(ops, window: window)
-        try await m.refresh()
-        #expect(try await m.cast(key, choiceID: "yes", password: "secret") == .sending)
-        #expect(window.opened == ["secret"])
-        await m.windowLock?.value
-        #expect(window.closed == 1)
-        #expect(ops.calls.contains("cast:\(conn)/\(pid):yes"))
-        // Sent once.
-        #expect(ops.calls.filter { $0.hasPrefix("cast") }.count == 1)
-
-        // A window that is already open is used and left as it was; the password is not used.
-        window.until = clock.date.addingTimeInterval(120)
-        #expect(m.windowOpen())
-        _ = try await m.cast(key, choiceID: "no", password: "unused")
-        #expect(window.opened.count == 1)
-        await m.windowLock?.value
-        #expect(window.closed == 1)
-    }
-
-    @Test func aCastWithAClosedWindowAndNoPasswordIsRefusedByTheVaultAndSaysSo() async throws {
-        let ops = FakeVoteOps()
-        ops.list = listing(summary())
-        ops.refuse["cast:\(conn)/\(pid):yes"] = "credential_locked"
-        let m = manager(ops)
-        try await m.refresh()
-        #expect(await failure { try await m.cast(key, choiceID: "yes", password: nil) }?.kind == .credentialLocked)
-        // Never tried again after the refusal.
-        #expect(ops.calls.filter { $0.hasPrefix("cast") }.count == 1)
-    }
-
-    @Test func noCastWhileARestoreWaitsForConfirmation() async throws {
-        let ops = FakeVoteOps()
-        ops.list = listing(summary(extra: #","confirm_pending":true"#))
-        let window = TestWindow()
-        let m = manager(ops, window: window)
-        try await m.refresh()
-        #expect(await failure { try await m.cast(key, choiceID: "yes", password: "pw") }?.code == "checking")
-        // Nothing was sent, and no window was opened for it.
-        #expect(!ops.calls.contains { $0.hasPrefix("cast") })
-        #expect(window.opened.isEmpty)
-    }
-
-    @Test func aWindowThePromptOpenedIsClosedEvenWhenTheCastFails() async {
-        let ops = FakeVoteOps()
-        ops.refuse["cast:\(conn)/\(pid):yes"] = "not_open"
-        let window = TestWindow()
-        let m = manager(ops, window: window)
-        #expect(await failure { try await m.cast(key, choiceID: "yes", password: "pw") }?.code == "not_open")
-        await m.windowLock?.value
-        #expect(window.closed == 1)
-    }
-
-    @Test func aCancelledCastStillLocksTheWindowItOpened() async throws {
-        let ops = FakeVoteOps()
-        ops.list = listing(summary())
-        let gate = TestDeferred<Void>()
-        ops.castGate = gate
-        let window = TestWindow()
-        let m = manager(ops, window: window)
-        try await m.refresh()
-        let job = Task { try await m.cast(key, choiceID: "yes", password: "pw") }
-        #expect(await eventually { !window.opened.isEmpty })
-        job.cancel()
-        _ = await job.result
-        // The lock ran to its end although its caller was cancelled (a screen that left).
-        await m.windowLock?.value
-        #expect(window.closed == 1)
-        #expect(m.windowNotClosed == nil)
-    }
-
-    @Test func anUnlockWhoseAnswerWasLostIsStillLocked() async {
-        let ops = FakeVoteOps()
-        let window = TestWindow()
-        window.openFail = VaultFailure(.noResponse)
-        let m = manager(ops, window: window)
-        #expect(await failure { try await m.cast(key, choiceID: "yes", password: "pw") }?.kind == .noResponse)
-        await m.windowLock?.value
-        #expect(window.closed == 1)
-        #expect(!ops.calls.contains { $0.hasPrefix("cast") })
-    }
-
-    @Test func anUnlockThatFailsInAnyWayButARefusalIsStillLocked() async {
-        for f in [VaultFailure(.other, code: "unreadable_result"), VaultFailure(.network)] {
-            let window = TestWindow()
-            window.openFail = f
-            let m = manager(FakeVoteOps(), window: window)
-            _ = await failure { try await m.cast(key, choiceID: "yes", password: "pw") }
-            await m.windowLock?.value
-            #expect(window.closed == 1, "\(f.kind)")
-        }
-        // Only a definite refusal opened nothing.
-        for kind: FailureKind in [.badPassword, .backoff, .credentialFrozen, .rotationRequired, .ownerCheckRequired, .credentialUnsettled] {
-            let window = TestWindow()
-            window.openFail = VaultFailure(kind)
-            let m = manager(FakeVoteOps(), window: window)
-            #expect(await failure { try await m.cast(key, choiceID: "yes", password: "pw") }?.kind == kind)
-            await m.windowLock?.value
-            #expect(window.closed == 0, "\(kind)")
-        }
-    }
-
-    @Test func aLockThatFailedIsToldNotSwallowed() async throws {
-        let ops = FakeVoteOps()
-        ops.list = listing(summary())
-        let window = TestWindow()
-        window.closeFail = VaultFailure(.noResponse)
-        let m = manager(ops, window: window)
-        try await m.refresh()
-        _ = try await m.cast(key, choiceID: "yes", password: "pw")
-        // The notice knows how long the window stays open unused.
-        await m.windowLock?.value
-        #expect(m.windowNotClosed == WindowNotClosed(ttlSeconds: 300))
-        // Close it now: the notice stays while the lock fails, and goes only when it went through.
-        #expect(await failure { try await m.closeWindowNow() } != nil)
-        #expect(m.windowNotClosed == WindowNotClosed(ttlSeconds: 300))
-        window.closeFail = nil
-        try await m.closeWindowNow()
-        #expect(m.windowNotClosed == nil)
-    }
-
     @Test func confirmCheckEvidenceAndReleaseNameTheConnection() async throws {
         let ops = FakeVoteOps()
         let m = manager(ops)
@@ -494,51 +251,6 @@ struct VotesManagerTests {
         #expect(m.hints.isEmpty)
     }
 
-    @Test func theBallotIsAnsweredBeforeTheLockOfTheWindowEnds() async throws {
-        let ops = FakeVoteOps()
-        ops.list = listing(summary())
-        let window = TestWindow()
-        let lockGate = TestDeferred<Void>()
-        let c = clock
-        let m = VotesManager(
-            ops: { ops }, windowUntil: { window.until },
-            openWindow: { _ in window.until = c.date.addingTimeInterval(300) },
-            closeWindow: {
-                try await lockGate.value()
-                window.closed += 1
-            },
-            now: { c.date }
-        )
-        try await m.refresh()
-        // A slow lock (a bad network) does not hold back the recorded vote.
-        #expect(try await m.cast(key, choiceID: "yes", password: "pw") == .sending)
-        #expect(window.closed == 0)
-        lockGate.complete(())
-        await m.windowLock?.value
-        #expect(window.closed == 1)
-        #expect(m.windowNotClosed == nil)
-    }
-
-    @Test func aCastWithNoAnswerIsNotSentAgainAndTheWindowItOpenedIsLocked() async throws {
-        let ops = FakeVoteOps()
-        ops.list = listing(summary())
-        let window = TestWindow()
-        let m = VotesManager(
-            ops: { NoAnswerCast(inner: ops) },
-            windowUntil: { window.until },
-            openWindow: { password in
-                window.opened.append(password)
-                window.until = Date().addingTimeInterval(300)
-            },
-            closeWindow: { window.closed += 1 }
-        )
-        try await m.refresh()
-        #expect(await failure { try await m.cast(key, choiceID: "yes", password: "pw") }?.kind == .noResponse)
-        await m.windowLock?.value
-        #expect(window.closed == 1)
-        #expect(ops.calls.filter { $0.hasPrefix("cast") }.count == 1)
-    }
-
     @Test func aNoticeAcknowledgedWhileAReadIsOnItsWayStaysAcknowledged() async throws {
         let ops = FakeVoteOps()
         ops.list = obj(#"{"votes":[],"dropped":[{"connection_id":"c1","count":3}],"problems":[],"reconnect":[]}"#)
@@ -566,10 +278,11 @@ struct VotesManagerTests {
         try await m.refresh()
         m.acknowledgeDropped(ids)
         #expect(m.dropped.isEmpty)
-        #expect(await eventually { ops.acks.count == 2 })
-        #expect(ops.acks.last == Array(ids.prefix(128)))
-        try await m.refresh()
-        #expect(ops.acks.last == ["c128", "c129"])
+        #expect(await eventually { ops.acks.count >= 2 })
+        #expect(ops.acks[1] == Array(ids.prefix(128)))
+        // The rest go with the read that follows at once.
+        #expect(await eventually { ops.acks.count == 3 })
+        #expect(ops.acks[2] == ["c128", "c129"])
         try await m.refresh()
         #expect(ops.acks.last == [])
     }

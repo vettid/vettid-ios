@@ -166,6 +166,8 @@ public final class VotesManager: VotesRepository {
     @ObservationIgnored private var pendingAck: [String] = []
     /// The lock of the window a cast opened, running on its own (tests wait for it).
     @ObservationIgnored private(set) var windowLock: Task<Void, Never>?
+    /// Locks of a cast's window not yet ended: the window counts as closed meanwhile (it is about to be).
+    @ObservationIgnored private var locksPending = 0
 
     @ObservationIgnored let ops: @MainActor () async throws -> any VoteOps
     /// The calls of a read nobody asked for (the opening, an event): only over the session already open.
@@ -276,6 +278,8 @@ public final class VotesManager: VotesRepository {
             listVersion = head.listVersion
             listSha256 = head.listSha256
             pendingAck.removeAll { acks.contains($0) }
+            // More than one read can carry: the rest go with the next read now.
+            if !pendingAck.isEmpty { refreshQuietly() }
             availability = .available
             load = .loaded
             hints = hintsFor(shown, hints)
@@ -322,11 +326,15 @@ public final class VotesManager: VotesRepository {
         return d
     }
 
-    public func windowOpen() -> Bool { windowUntil().map { $0 > now() } == true }
+    /// False while the lock of a window a cast opened is on its way: a screen asks for the password again rather than
+    /// rely on a window about to close.
+    public func windowOpen() -> Bool { locksPending == 0 && windowUntil().map { $0 > now() } == true }
 
     public func cast(_ key: VoteKey, choiceID: String, password: String?) async throws -> BallotState {
         // Fail secure: a vote that waits on "Is this your vote?" is never cast, whatever the screen thought.
         if votes.first(where: { $0.key == key })?.confirmPending == true { throw VaultFailure(.other, code: "checking") }
+        // A lock of an earlier cast's window ends first: this cast opens its own window rather than lose it to that lock.
+        await windowLock?.value
         // Set before the unlock is sent: an unlock whose answer was lost may still have opened the window, so it is locked.
         var toLock = password != nil && !windowOpen()
         do {
@@ -360,13 +368,19 @@ public final class VotesManager: VotesRepository {
         let close = closeWindow
         let ttl = unlockTtl
         let before = windowLock
+        let g = generation
+        locksPending += 1
         windowLock = Task { @MainActor [weak self] in
             await before?.value
             do {
                 try await close()
+                self?.locksPending -= 1
             } catch {
                 let seconds = await ttl()
-                self?.windowNotClosed = WindowNotClosed(ttlSeconds: seconds)
+                guard let self else { return }
+                locksPending -= 1
+                // Not after a lock, a hold or a wipe (``clear()``), nor once the window closed some other way.
+                if g == generation, windowOpen() { windowNotClosed = WindowNotClosed(ttlSeconds: seconds) }
             }
         }
     }
