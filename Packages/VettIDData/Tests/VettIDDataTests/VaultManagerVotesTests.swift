@@ -122,6 +122,19 @@ import VettIDVault
         #expect(await eventually { m.votes.votes.count == 1 })
     }
 
+    /// A hold that begins during the reads of the lists leaves the work with the site not started.
+    @Test func aHoldDuringTheReadsLeavesTheSiteWorkNotStarted() async throws {
+        defer { phone.close() }
+        service.setVotes([Self.vote])
+        try await open()
+        #expect(await eventually { m.votes.siteRunner?.wanted == true })
+        m.onEvent(VaultManagerActivityTests.held())
+        #expect(m.votes.siteRunner?.wanted == false)
+        m.refreshListsQuietly()
+        await m.listsRead?.value
+        #expect(m.votes.siteRunner?.wanted == false)
+    }
+
     /// The public votes site (IOS-PLAN §4.16 "The site"): read after the opening's list, its documents handed to the
     /// vault in `vote.site.sync`, then every hour while the vault is open; nothing after a lock.
     @Test func theOpeningHandsTheSiteToTheVaultAndALockStopsTheWork() async throws {
