@@ -47,6 +47,8 @@ public enum VoteSiteLimits {
     /// `rows.json`, bounded by the rows the app reads (about 256 bytes a row).
     public static let rowsMax = 100_000 * 256
     public static let indexMax = 8 << 20
+    /// An `index` element is read only up to this (VAULT-MESSAGING 0.81.6 §10.19.8): the vault reads only its `service_id`.
+    public static let indexElementMax = 65_536
 }
 
 /// The no-redirect rule of the site's session: an answer that points elsewhere is no answer.

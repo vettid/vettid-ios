@@ -139,6 +139,59 @@ struct VoteSyncTests {
         for bad in ["{}", "[", "[{]", "[{}] x", "[}]", ""] { #expect(VoteSync.indexOf(Array(bad.utf8)).isEmpty, Comment(rawValue: bad)) }
     }
 
+    @Test func anIndexElementOverTheCapIsLeftOutBeforeAnyParse() {
+        let a = "01JBQZ0000000000000000000A"
+        let b = "01JBQZ0000000000000000000B"
+        func element(_ id: String, size: Int) -> String {
+            let head = #"{"proposal_id":"\#(id)","p":""#
+            return head + String(repeating: "x", count: size - head.utf8.count - 2) + #""}"#
+        }
+        let cap = VoteSiteLimits.indexElementMax
+        let index = "[" + element(a, size: cap) + "," + element(b, size: cap + 1) + "]"
+        #expect(VoteSync.indexOf(Array(index.utf8)).map(\.proposalID) == [a])
+    }
+
+    /// A lone surrogate escape is read as U+FFFD, as the vault reads it: two names that differ only in it are one name.
+    @Test func aLoneSurrogateCollidingNamesLeaveOutTheValueAndWhatIsSentIsCheckedAgain() {
+        for doc in [#"{"\ud800":1,"\ud801":2}"#, #"{"a\ud800":1,"a\udfff":2}"#, #"{"x":{"\ud800":1,"\ud83d":2}}"#] {
+            #expect(VoteSync.compactObject(Array(doc.utf8), level: VoteSync.Level.proposalBundle) == nil, Comment(rawValue: doc))
+        }
+        // Distinct names, a pair read as one scalar, and white space only outside strings: sent as the compact original.
+        let ok = #"{ "\ud800\udc00" : 1 , "\ud800" : [ 2 ] }"#
+        #expect(VoteSync.compactObject(Array(ok.utf8), level: VoteSync.Level.proposalBundle) == #"{"\ud800\udc00":1,"\ud800":[2]}"#)
+        let index = Array(#"[{"proposal_id":"01JBQZ0000000000000000000A","\ud800":1,"\ud801":2}]"#.utf8)
+        #expect(VoteSync.indexOf(index).isEmpty)
+    }
+
+    @Test func theLevelsCountTheInnerMessageAsOneAndTheBodyAsTwo() {
+        #expect(VoteSync.Level.index == 5 && VoteSync.Level.proposalBundle == 6)
+        #expect(VoteSync.Level.extensionBundle == 8 && VoteSync.Level.resultsBundle == 3)
+        func nested(_ d: Int) -> [UInt8] {
+            Array((String(repeating: #"{"a":"#, count: d - 1) + "{}" + String(repeating: "}", count: d - 1)).utf8)
+        }
+        for (level, own) in [(5, 28), (6, 27), (8, 25), (3, 30)] {
+            #expect(VoteSync.compactObject(nested(own), level: level) != nil)
+            #expect(VoteSync.compactObject(nested(own + 1), level: level) == nil)
+        }
+    }
+
+    @Test(arguments: ["[}]", "[1}", "[{]}", "[,]", "[{", "[]", "[", "]", "[[[[[[", "[\"", "[\"\\", "[{\"a\":[}", ""])
+    func theIndexSplitterEndsQuicklyOnBrokenInput(_ text: String) {
+        let clock = ContinuousClock()
+        let took = clock.measure { #expect(VoteSync.indexOf(Array(text.utf8)).isEmpty) }
+        #expect(took < .seconds(1))
+    }
+
+    @Test func aHugeBrokenIndexIsScannedOnceAndQuickly() {
+        let clock = ContinuousClock()
+        let big = [UInt8](repeating: UInt8(ascii: "["), count: VoteSiteLimits.indexMax)
+        let took = clock.measure {
+            #expect(VoteSync.indexOf(big).isEmpty)
+            #expect(VoteSync.indexOf([UInt8(ascii: "[")] + [UInt8](repeating: UInt8(ascii: "}"), count: VoteSiteLimits.indexMax)).isEmpty)
+        }
+        #expect(took < .seconds(5))
+    }
+
     @Test func anIndexIdThatIsNoUlidIsNotUsedInAPath() {
         let bad = ["p1", "../x", "01JBQZ0000000000000000000A/../..", "01JBQZ000000000000000000?", "01jbqz0000000000000000000a", ""]
         let index = "[" + bad.map { #"{"proposal_id":"\#($0)"}"# }.joined(separator: ",") + "]"

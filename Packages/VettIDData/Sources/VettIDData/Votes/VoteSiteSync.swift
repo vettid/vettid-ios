@@ -196,26 +196,30 @@ public enum VoteSync {
         return calls
     }
 
-    /// Where the site's own JSON sits in a `vote.site.sync` (or `vote.results.submit`) body, counting the body as level 1:
-    /// the vault parses the whole request strictly with a nesting limit of 32 for all of it, so a value at level L may be
-    /// `32 - L + 1` deep (VAULT-MESSAGING 0.81.6 §10.19.8 "Strict JSON").
+    /// Where the site's own JSON sits in a `vote.site.sync` (or `vote.results.submit`) request, counting the inner message
+    /// as level 1 and the body as level 2: an inline request is parsed strictly as the whole inner message (§5.3), with a
+    /// nesting limit of 32 for all of it, so a value at level L may be `32 - L + 1` deep. A request carried as a blob has
+    /// its body parsed on its own, one level shallower; the inline count is used for both (VAULT-MESSAGING 0.81.6 §10.19.8
+    /// "Strict JSON"), which is the stricter.
     public enum Level {
-        /// `{entries: [ {index: …} ]}`: body, `entries`, the entry, `index`.
-        public static let index = 4
-        /// … the entry, `document`, `bundle`.
-        public static let proposalBundle = 5
-        /// … `document`, `extensions`, the extension, `bundle`.
-        public static let extensionBundle = 7
-        /// `vote.results.submit`: the body, `bundle` (the erratum does not name this one; the vault parses that request
-        /// the same way).
-        public static let resultsBundle = 2
+        /// Inner message, body, `entries`, the entry, `index`: at most 28 deep.
+        public static let index = 5
+        /// … the entry, `document`, `bundle`: at most 27.
+        public static let proposalBundle = 6
+        /// … `document`, `extensions`, the extension, `bundle`: at most 25.
+        public static let extensionBundle = 8
+        /// `vote.results.submit`: inner message, body, `bundle`: at most 30.
+        public static let resultsBundle = 3
     }
 
     /// A site JSON document that is one object, as compact JSON, parsed strictly (valid UTF-8, no duplicate member name at
-    /// any depth) and deep enough to sit at [level] of the request; nil when it is not (VAULT-MESSAGING 0.81.6 §10.19.8:
-    /// "not an object").
+    /// any depth, a lone surrogate escape read as U+FFFD as the vault reads it) and deep enough to sit at [level] of the
+    /// request; nil when it is not (VAULT-MESSAGING 0.81.6 §10.19.8: "not an object"). What is checked is what is sent: the
+    /// compact form that is returned is parsed again with the same rules.
     public static func compactObject(_ bytes: [UInt8], level: Int) -> String? {
-        guard let c = try? StrictJson.compactObject(bytes, maxDepth: StrictJson.maxDepth - level + 1) else { return nil }
+        let depth = StrictJson.maxDepth - level + 1
+        guard let c = try? StrictJson.compactObject(bytes, maxDepth: depth), (try? StrictJson.parseObject(c, maxDepth: depth)) != nil
+        else { return nil }
         return String(bytes: c, encoding: .utf8)
     }
 
@@ -228,7 +232,9 @@ public enum VoteSync {
     public static func indexOf(_ bytes: [UInt8]) -> [(proposalID: String, json: String?)] {
         guard let elements = arrayElements(bytes) else { return [] }
         return elements.compactMap { raw in
-            guard let o = try? StrictJson.parseObject(raw), let id = try? o.string("proposal_id"), Ulid.isValid(id) else {
+            // Over the cap: left out before any strict parse, so that a hostile index cannot make the app parse megabytes.
+            guard raw.count <= VoteSiteLimits.indexElementMax,
+                  let o = try? StrictJson.parseObject(raw), let id = try? o.string("proposal_id"), Ulid.isValid(id) else {
                 return nil
             }
             let serviceIDReads: Bool

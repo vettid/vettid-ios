@@ -186,7 +186,7 @@ struct VoteSiteSafetyTests: VotesTestCase {
 
     @Test func anIndexElementIsSentToTheDepthTheRequestAllowsAtItsPlace() async throws {
         site.put("p/\(pid)/proposal.json", "{}")
-        for (depth, sent) in [(29, true), (30, false), (31, false)] {
+        for (depth, sent) in [(28, true), (29, false), (30, false)] {
             site.put("index.json", "[" + element(pid, depth: depth) + "]")
             vault.syncs = []
             let (_, m) = opened()
@@ -197,9 +197,9 @@ struct VoteSiteSafetyTests: VotesTestCase {
         }
     }
 
-    @Test func aProposalBundleIsSentToDepth28AndLeftOutBeyond() async throws {
+    @Test func aProposalBundleIsSentToDepth27AndLeftOutBeyond() async throws {
         site.put("p/\(pid)/proposal.json", "{}")
-        for (depth, sent) in [(28, true), (29, false)] {
+        for (depth, sent) in [(27, true), (28, false)] {
             site.put("p/\(pid)/proposal.json.sigstore.json", nested(depth))
             vault.syncs = []
             let (_, m) = opened()
@@ -210,10 +210,10 @@ struct VoteSiteSafetyTests: VotesTestCase {
         }
     }
 
-    @Test func anExtensionBundleIsSentToDepth26AndTheExtensionsEndAtOneBeyond() async throws {
+    @Test func anExtensionBundleIsSentToDepth25AndTheExtensionsEndAtOneBeyond() async throws {
         site.put("p/\(pid)/proposal.json", "{}")
         site.put("index.json", #"[{"proposal_id":"\#(pid)","extended":2}]"#)
-        for (depth, count) in [(26, 2), (27, 1)] {
+        for (depth, count) in [(25, 2), (26, 1)] {
             serveExtension(1)
             serveExtension(2, bundle: nested(depth))
             vault.syncs = []
@@ -265,7 +265,7 @@ struct VoteSiteSafetyTests: VotesTestCase {
 
     @Test func oneBadIndexElementLeavesOutOnlyItself() async throws {
         site.put("p/\(pid2)/proposal.json", "{}")
-        let deep = element(pid2, depth: 31)
+        let deep = element(pid2, depth: 29)
         site.put("index.json", "[" + #"{"proposal_id":"\#(pid)","k":1,"k":2}"# + "," + deep + "]")
         let (_, m) = opened()
         try await m.syncOnce()
@@ -273,8 +273,8 @@ struct VoteSiteSafetyTests: VotesTestCase {
         #expect(!e.has("index") && e.has("document"))
     }
 
-    @Test func aResultsBundleIsSentToDepth31AndABeyondOneIsAProblem() async throws {
-        for (depth, sent) in [(31, true), (32, false)] {
+    @Test func aResultsBundleIsSentToDepth30AndABeyondOneIsAProblem() async throws {
+        for (depth, sent) in [(30, true), (31, false)] {
             VoteResultsFixture.publish(site, pid)
             site.put("p/\(pid)/results.json.sigstore.json", nested(depth))
             vault.submits = []
