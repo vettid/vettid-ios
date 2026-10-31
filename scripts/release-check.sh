@@ -53,8 +53,11 @@ DEV_ONLY=("127.0.0.1" "relay.vettid.test" "vettid.start" "vettid.theme" "Compone
   "Sharing: rules and grants"
   "Xcode (development)")
 
-PRODUCTION_HOSTS=("account.vettid.org")
+# The public votes site is part of each environment's hosts (IOS-PLAN §4.16): Release requires votes.vettid.org and Staging
+# refuses it; Staging requires votes.staging.vettid.org and Release refuses it (it holds "staging.vettid.org").
+PRODUCTION_HOSTS=("account.vettid.org" "votes.vettid.org")
 STAGING_HOSTS=("staging.vettid.org")
+STAGING_REQUIRED_HOSTS=("account.staging.vettid.org" "votes.staging.vettid.org")
 # The staging channel's manifest key A (its SPKI and its key id): pinned by Staging and Debug builds only (ID10 of the
 # manifest pins; VettIDAttestation's ManifestKeys holds only the production keys).
 STAGING_KEYS=("MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEok8gqeC5VcGx4KL+B5fL7UgENBXf" "e9b3a403423120ac")
@@ -133,7 +136,7 @@ check_release() {
 }
 
 check_staging() {
-  check_app "$1" com.vettid.app.staging "account.staging.vettid.org" "${HARDWARE_KEYS[@]}" "${DOCUMENT_TYPES[@]}" \
+  check_app "$1" com.vettid.app.staging "${STAGING_REQUIRED_HOSTS[@]}" "${HARDWARE_KEYS[@]}" "${DOCUMENT_TYPES[@]}" \
     -- "${TEST_MARKERS[@]}" "${DEV_ONLY[@]}" "${PRODUCTION_HOSTS[@]}" "${TEST_MANIFEST_KEY[@]}"
 }
 
@@ -385,6 +388,8 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
   plant Staging check_staging "SoftwareAppKeyStore"
   plant Release check_release "SoftwarePhoneSecretSource"
   plant Release check_release "account.staging.vettid.org"
+  plant Release check_release "votes.staging.vettid.org"
+  plant Staging check_staging "votes.vettid.org"
   plant Release check_release "Scan: another environment"
   plant Staging check_staging "Scan: another environment"
   plant Staging check_staging "TESTTEAM00.com.vettid.app"
