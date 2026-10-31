@@ -27,6 +27,10 @@ stop-and-report item, never a skip.
   checks the values §16 states for it.
 - `blob.json` and `attachment.json` (last commit touching them d95fb2fe65c81638b8f0bff6d05e5002549cf92d): copied
   2026-10-17 from commit 7f2c5b7bd8c6c04b6f46df610a6aa1f4d29104fe, for I0.8; the same hashes as vettid-android's.
+- `vote.json` is `testdata/vote/vectors.json` (VAULT-MESSAGING 0.81.0 §10.19, BALLOT-PROTOCOL §8.2: the Merkle
+  trees, the ballot leaf, the rows and the results of a vote; last commit touching it
+  be69f910f6432a5efd4515928e0df181d1183671): copied 2026-10-31 from commit a8a968e465ca2700d23d0f4ae6d93b2813a95b93
+  (the merge of vettid-vault #174), for the first votes PR; the same hash as vettid-android's copy.
 - Each later PR adds the files it checks.
 
 To refresh: copy the files again from a newer vettid-vault commit, update the commits
@@ -48,4 +52,5 @@ a890582a80e24cea9e10523f01f2f0040924aa47cd66cd8c442c0a1577e284b3  blob.json
 8944c466cd00ce5d606f310e954b8d13fdd4d65d598062b3ecc05de6d310ad6f  release.json
 0073c578252ba87960b74f6a1825b6dbb06f8762c77b7f8003d380b48c373905  unlock.json
 09540a0c78b03fb03cfdee762066a9f1171419d2958798b5b4cf054f7dda66a5  verdicts.json
+4afcaebdc9da8b6f6d26f6a469cfffe24797ce573163617fb4301d192627319e  vote.json
 ```
