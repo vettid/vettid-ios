@@ -89,6 +89,7 @@ final class AppComposition {
             environment: environment.kind.rawValue.uppercased()
         )
         config.attestStartOver = startOver
+        config.backgroundTasks = SystemBackgroundTasks()
         vault = VaultManager(config: config)
         releaseNotes = ReleaseNotesClient(manifestURL: environment.manifestURL)
         appLock = AppLock(
@@ -156,4 +157,18 @@ struct AppWiring {
     let hardware: @MainActor (any ProtectedData, AttestStartOver) -> HardwareKeys
     let transport: HTTPTransport
     let trust: AltTrust
+}
+
+/// ``BackgroundTasks`` over the system's background tasks (as `leaveForeground` asks for them).
+struct SystemBackgroundTasks: BackgroundTasks {
+    @MainActor func begin(name: String, expiration: @escaping @MainActor () -> Void) -> Int? {
+        let id = UIApplication.shared.beginBackgroundTask(withName: name) {
+            MainActor.assumeIsolated { expiration() }
+        }
+        return id == .invalid ? nil : id.rawValue
+    }
+
+    @MainActor func end(_ token: Int) {
+        UIApplication.shared.endBackgroundTask(UIBackgroundTaskIdentifier(rawValue: token))
+    }
 }

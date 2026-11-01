@@ -42,6 +42,14 @@ struct FakeActivity {
     var exports: [ExportSeen] = []
     /// The grants, critical-item uses, authentication and share questions waiting (FakeVaultService+Approvals.swift).
     var asks = FakeAsks()
+    /// The votes the vault holds, as `vote.list` summaries (FakeVaultService+Votes.swift); nil: a vault without the
+    /// feature (`unsupported_type`).
+    var votes: [String]?
+    var voteRequests: [String] = []
+    /// The bodies of the `vote.*` requests, in order (the type, the body as sent).
+    var voteBodies: [(type: String, body: JsonObject)] = []
+    /// The PINs `vote.release` carried, opened from their UTK seal.
+    var votePins: [String] = []
 }
 
 extension FakeVaultService {
@@ -56,6 +64,7 @@ extension FakeVaultService {
             try feedItem(m, body, i)
         case "audit.list", "connection.audit.list": try auditList(m, body)
         case "audit.export": try auditExport(m, body)
+        case let t where t.hasPrefix("vote."): try voteRequest(m, body)
         default: try approvalsRequest(m, body)
         }
     }

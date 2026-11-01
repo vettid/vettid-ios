@@ -112,7 +112,7 @@ extension VaultManager {
 
     /// The vault opened, or an owner check passed (§3.6.3: nothing held back is replayed as events): the member's own
     /// profile, the connections and the requests, the approvals' lists, the feed, then the conversations (one request per connection, last, so that asks
-    /// that expire are not kept waiting behind them) and the items are read again, one after the other; failures are left
+    /// that expire are not kept waiting behind them), the items and the votes are read again, one after the other; failures are left
     /// for the screens.
     func refreshListsQuietly() {
         listsReads += 1
@@ -127,6 +127,8 @@ extension VaultManager {
             // The items last (chosen; not in the spec: vettid-android reads them beside the others): nothing that expires
             // waits behind them, and no screen needs them before the member opens the Vault.
             try? await items.refresh(quietly: true)
+            // The votes after the items (chosen; not in the spec): nothing that expires within minutes waits on them.
+            await votes.openNow()
         }
     }
 }

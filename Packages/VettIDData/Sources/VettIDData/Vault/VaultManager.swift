@@ -126,6 +126,8 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     @ObservationIgnored public let approvals: ApprovalsManager
     @ObservationIgnored public let history: HistoryManager
     @ObservationIgnored public let historyExport: HistoryExportManager
+    /// The member's votes (VAULT-MESSAGING 0.81.3 §10.19, IOS-PLAN §4.16; ``VaultManager+Votes``), in memory only.
+    @ObservationIgnored public private(set) lazy var votes: VotesManager = Self.votesManager(self)
     /// The canary manifest installed out of band (VAULT-RELEASES §10.1 step 9, VAULT-MESSAGING §11.10.1): used by the
     /// alternate channel instead of the published manifest only while it is newer.
     @ObservationIgnored public let canary: CanaryManifestManager
@@ -282,11 +284,6 @@ public final class VaultManager: AccountRepository, VaultRepository, CredentialR
     private func refusedOnRelay() {
         phase = .locked
         refusedByVault = true
-    }
-
-    /// The gate of an operation that carries the PIN (VAULT-MESSAGING §11.14.9 steps 2 and 3).
-    static func pinGate(_ ref: ManagerRef) -> @Sendable () async throws -> Void {
-        { try await ref.manager?.decideFirst(carriesPin: true) }
     }
 
     // MARK: - Local state
