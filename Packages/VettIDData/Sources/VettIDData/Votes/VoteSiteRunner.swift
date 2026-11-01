@@ -174,6 +174,9 @@ final class VoteSiteRunner {
                     // The vault refused what was sent: the next stage sends other things.
                     failure = failure ?? f
                 } catch {
+                    // A lock or the app leaving cancelled a call that then failed as something else (a lost connection):
+                    // it is a cancellation, and the return throttle is not started.
+                    try Task.checkCancellation()
                     // The session is gone, the vault is locked or held: the later stages would fail the same way.
                     lastRun = votes.now()
                     throw error
@@ -480,7 +483,12 @@ final class VoteSiteRunner {
             await before?.value
             defer { cancellers[id] = nil }
             if Task.isCancelled || generation != haltGeneration { return .failure(CancellationError()) }
-            do { return .success(try await work()) } catch { return .failure(error) }
+            do {
+                return .success(try await work())
+            } catch {
+                // A call that a lock or the app leaving cut off can fail as something else (a lost connection).
+                return .failure(Task.isCancelled ? CancellationError() : error)
+            }
         }
         cancellers[id] = { task.cancel() }
         let link = Task { _ = await task.value }

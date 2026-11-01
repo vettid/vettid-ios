@@ -59,9 +59,12 @@ final class FakeVoteSiteOps: VoteSiteOps, @unchecked Sendable {
     /// Refuses the next uploads with the relay's storage-full answer; [syncRefusal] the next `vote.site.sync` once.
     var quotaRefusals = 0
     var syncRefusal: String?
+    /// Runs before each inline `vote.site.sync`; a throw fails the call (a lost connection, say).
+    nonisolated(unsafe) var syncHold: (@Sendable () async throws -> Void)?
 
     nonisolated func voteSiteSync(body: [UInt8]) async throws -> JsonObject {
-        try await MainActor.run {
+        try await syncHold?()
+        return try await MainActor.run {
             if let code = syncRefusal {
                 syncRefusal = nil
                 throw VaultOpError(type: "vote.site.sync", code: code, detail: "", body: nil)
