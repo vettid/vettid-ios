@@ -105,10 +105,16 @@ check_app() {
 
   local text
   text=$(mktemp)
-  # The owner-approved texts of the Votes screens name the production site ("... from votes.vettid.org ..." in
-  # vote_checking_list and vote_checking_site, ANDROID-PLAN 0.1.108 §4 "Votes"): that phrase is text for the member, not a
-  # host the app talks to, so it is not looked for. The configured host (the Info.plist's, without "from ") still is.
-  bundle_text "${app}" | LC_ALL=C sed 's/from votes\.vettid\.org//g' >"${text}"
+  # ALLOWED_TEXTS (newline-separated, set by the caller): exact sentences of the owner-approved texts that name a host for the
+  # member; each is removed, whole, before the strings are looked for. Nothing else is: a host anywhere else still counts.
+  bundle_text "${app}" >"${text}"
+  if [[ -n "${ALLOWED_TEXTS:-}" ]]; then
+    local sentence
+    while IFS= read -r sentence; do
+      [[ -n "${sentence}" ]] || continue
+      SENTENCE="${sentence}" LC_ALL=C perl -0777 -pi -e 's/\Q$ENV{SENTENCE}\E//g' "${text}"
+    done <<<"${ALLOWED_TEXTS}"
+  fi
 
   local problems=()
   local actual
@@ -138,9 +144,16 @@ check_release() {
     -- "${TEST_MARKERS[@]}" "${DEV_ONLY[@]}" "${STAGING_HOSTS[@]}" "${STAGING_KEYS[@]}" "${TEST_MANIFEST_KEY[@]}"
 }
 
+# The two owner-approved texts of the Votes screens that name the production site for the member (vote_checking_list and
+# vote_checking_site, ANDROID-PLAN 0.1.108 §4 "Votes"): they are text, not a host the app talks to, and only Staging needs them
+# set aside (it refuses the production site's name everywhere else, also as a URL or as the configured host).
+STAGING_ALLOWED_TEXTS="VettID is checking this vote. It needs the list of services from votes.vettid.org. Check that this phone is online.
+VettID is checking this vote. It is waiting for the vote's documents from votes.vettid.org."
+
 check_staging() {
-  check_app "$1" com.vettid.app.staging "${STAGING_REQUIRED_HOSTS[@]}" "${HARDWARE_KEYS[@]}" "${DOCUMENT_TYPES[@]}" \
-    -- "${TEST_MARKERS[@]}" "${DEV_ONLY[@]}" "${PRODUCTION_HOSTS[@]}" "${TEST_MANIFEST_KEY[@]}"
+  ALLOWED_TEXTS="${STAGING_ALLOWED_TEXTS}" check_app "$1" com.vettid.app.staging "${STAGING_REQUIRED_HOSTS[@]}" "${HARDWARE_KEYS[@]}" "${DOCUMENT_TYPES[@]}" \
+    -- "${TEST_MARKERS[@]}" "${DEV_ONLY[@]}" "${PRODUCTION_HOSTS[@]}" "https://votes.vettid.org" "<string>votes.vettid.org</string>" \
+    "${TEST_MANIFEST_KEY[@]}"
 }
 
 app_of() { echo "${OUT}/$1.xcarchive/Products/Applications/VettID.app"; }
@@ -393,6 +406,10 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
   plant Release check_release "account.staging.vettid.org"
   plant Release check_release "votes.staging.vettid.org"
   plant Staging check_staging "votes.vettid.org"
+  plant Staging check_staging "from votes.vettid.org/index.json"
+  plant Staging check_staging "https://votes.vettid.org"
+  plant Staging check_staging "<string>votes.vettid.org</string>"
+  plant Staging check_staging "VettID is checking this vote. It needs the list of services from votes.vettid.org/index.json. Check that this phone is online."
   plant Release check_release "Scan: another environment"
   plant Staging check_staging "Scan: another environment"
   plant Staging check_staging "TESTTEAM00.com.vettid.app"
