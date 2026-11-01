@@ -139,6 +139,34 @@ struct VoteSyncTests {
         for bad in ["{}", "[", "[{]", "[{}] x", "[}]", ""] { #expect(VoteSync.indexOf(Array(bad.utf8)).isEmpty, Comment(rawValue: bad)) }
     }
 
+    @Test func theCapIsForTheElementWithoutTheWhiteSpaceAroundIt() {
+        let a = "01JBQZ0000000000000000000A"
+        let b = "01JBQZ0000000000000000000B"
+        func element(_ id: String, size: Int) -> String {
+            let head = #"{"proposal_id":"\#(id)","p":""#
+            return head + String(repeating: "x", count: size - head.utf8.count - 2) + #""}"#
+        }
+        let cap = VoteSiteLimits.indexElementMax
+        let index = "[ \n\t" + element(a, size: cap) + " \r\n ,\n  " + element(b, size: cap + 1) + "\n ]"
+        #expect(VoteSync.indexOf(Array(index.utf8)).map(\.proposalID) == [a])
+    }
+
+    @Test func millionsOfTinyElementsAreScannedWithoutKeepingThem() {
+        let clock = ContinuousClock()
+        var kept = 0
+        var seen = 0
+        let ones = Array(("[" + String(repeating: "1,", count: 2_000_000) + "1]").utf8)
+        let commas = Array(("[" + String(repeating: ",", count: 4_000_000) + "]").utf8)
+        let took = clock.measure {
+            #expect(VoteSync.scanArray(ones) { _ in seen += 1 })
+            #expect(VoteSync.scanArray(commas) { _ in seen += 1 })
+            kept = VoteSync.indexOf(ones).count + VoteSync.indexOf(commas).count
+        }
+        // Every `1` is an element handed on (nothing is copied); the commas make none; nothing is kept.
+        #expect(seen == 2_000_001 && kept == 0)
+        #expect(took < .seconds(10))
+    }
+
     @Test func anIndexElementOverTheCapIsLeftOutBeforeAnyParse() {
         let a = "01JBQZ0000000000000000000A"
         let b = "01JBQZ0000000000000000000B"

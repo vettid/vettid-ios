@@ -230,29 +230,40 @@ public enum VoteSync {
     /// - an element the vault would refuse the call for (a `service_id` that is no string, or deeper than the request
     ///   allows at its place) is kept for its id, with no `json`: the entry goes without `index`.
     public static func indexOf(_ bytes: [UInt8]) -> [(proposalID: String, json: String?)] {
-        guard let elements = arrayElements(bytes) else { return [] }
-        return elements.compactMap { raw in
-            // Over the cap: left out before any strict parse, so that a hostile index cannot make the app parse megabytes.
-            guard raw.count <= VoteSiteLimits.indexElementMax,
-                  let o = try? StrictJson.parseObject(raw), let id = try? o.string("proposal_id"), Ulid.isValid(id) else {
-                return nil
-            }
+        var out: [(proposalID: String, json: String?)] = []
+        // Each element is handled as the scan finds it, and only a valid one is kept: a hostile index of millions of tiny
+        // elements costs no memory beyond the scan.
+        let closed = scanArray(bytes) { element in
+            // Not an object, or over the cap: left out before any parse, so that a hostile index cannot make the app
+            // parse megabytes (the cap is for the element without the white space around it).
+            guard element.first == UInt8(ascii: "{"), element.count <= VoteSiteLimits.indexElementMax else { return }
+            let raw = Array(element)
+            guard let o = try? StrictJson.parseObject(raw), let id = try? o.string("proposal_id"), Ulid.isValid(id) else { return }
             let serviceIDReads: Bool
             do { _ = try o.optString("service_id"); serviceIDReads = true } catch { serviceIDReads = false }
-            return (id, serviceIDReads ? compactObject(raw, level: Level.index) : nil)
+            out.append((id, serviceIDReads ? compactObject(raw, level: Level.index) : nil))
         }
+        return closed ? out : []
     }
 
     // swiftlint:disable cyclomatic_complexity
-    /// The top-level elements of the JSON array [bytes] as byte slices, found by a scan that parses nothing (so that a
-    /// hostile element cannot cost the others); nil when [bytes] is not one array.
-    static func arrayElements(_ bytes: [UInt8]) -> [[UInt8]]? {
+    /// Scans the JSON array [bytes] once, parsing nothing, and hands each top-level element (without the white space around
+    /// it; an empty one is skipped) to [element] as a slice of [bytes], so that a hostile element cannot cost the others
+    /// and no element is copied. False when [bytes] is not one array, in which case what [element] was given is to be
+    /// dropped.
+    static func scanArray(_ bytes: [UInt8], _ element: (ArraySlice<UInt8>) -> Void) -> Bool {
+        func isSpace(_ c: UInt8) -> Bool { c == 0x20 || c == 0x09 || c == 0x0A || c == 0x0D }
         var i = 0
-        func skipSpace() { while i < bytes.count, [0x20, 0x09, 0x0A, 0x0D].contains(bytes[i]) { i += 1 } }
-        skipSpace()
-        guard i < bytes.count, bytes[i] == UInt8(ascii: "[") else { return nil }
+        while i < bytes.count, isSpace(bytes[i]) { i += 1 }
+        guard i < bytes.count, bytes[i] == UInt8(ascii: "[") else { return false }
         i += 1
-        var out: [[UInt8]] = []
+        func emit(_ from: Int, _ to: Int) {
+            var lo = from
+            var hi = to
+            while lo < hi, isSpace(bytes[lo]) { lo += 1 }
+            while hi > lo, isSpace(bytes[hi - 1]) { hi -= 1 }
+            if lo < hi { element(bytes[lo..<hi]) }
+        }
         var depth = 0
         var start = i
         var inString = false
@@ -270,26 +281,24 @@ public enum VoteSync {
                 case UInt8(ascii: "]"):
                     if depth == 0 {
                         closed = true
-                        out.append(Array(bytes[start..<i]))
+                        emit(start, i)
                     } else {
                         depth -= 1
                     }
                 case UInt8(ascii: ","):
                     if depth == 0 {
-                        out.append(Array(bytes[start..<i]))
+                        emit(start, i)
                         start = i + 1
                     }
                 default: break
                 }
             }
-            if depth < 0 { return nil }
+            if depth < 0 { return false }
             i += 1
         }
-        guard closed else { return nil }
-        skipSpace()
-        guard i == bytes.count else { return nil }
-        // An empty array has no element; an empty one between commas is no element either.
-        return out.filter { !$0.allSatisfy { [0x20, 0x09, 0x0A, 0x0D].contains($0) } }
+        guard closed else { return false }
+        while i < bytes.count, isSpace(bytes[i]) { i += 1 }
+        return i == bytes.count
     }
     // swiftlint:enable cyclomatic_complexity
 
