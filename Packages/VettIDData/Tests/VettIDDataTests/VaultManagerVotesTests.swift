@@ -96,6 +96,24 @@ import VettIDVault
         #expect(try lists[3].uint("limit", min: 0, max: 1_000) == 1)
     }
 
+    /// Leaving the foreground while the lock of a vote's unlock window is on its way (IOS-PLAN §6.6): the collection runs
+    /// on, within the background time, so that the lock's answer can arrive; then it stops.
+    @Test func theBackgroundWaitsForAVoteWindowsLock() async throws {
+        defer { phone.close() }
+        service.setVotes([Self.vote])
+        try await open()
+        #expect(await eventually { m.votes.availability == .available })
+        service.loseAnswers(["credential.lock"])
+        // The cast opens the window with the password; whatever its answer, the window it opened is locked again.
+        _ = try? await m.votes.cast(VoteKey(connectionID: "conn-1", proposalID: Self.pid), choiceID: "yes", password: password)
+        #expect(m.votes.windowLock != nil)
+        let background = Task { @MainActor in await m.onBackground(budget: .seconds(1)) }
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(m.session?.device.collecting == true, "the collection waits for the window's lock")
+        await background.value
+        #expect(m.session == nil, "the collection stopped once the background time was up")
+    }
+
     /// A vault without votes: nothing is shown, and it is not asked again until the next opening.
     @Test func aVaultWithoutVotesShowsNothing() async throws {
         defer { phone.close() }

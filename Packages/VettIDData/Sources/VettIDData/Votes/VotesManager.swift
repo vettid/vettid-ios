@@ -442,6 +442,10 @@ public final class VotesManager: VotesRepository {
         }
     }
 
+    /// Waits for the locks of a cast's window still on their way; at once when there are none. The locks run on their own
+    /// task: a caller that stops waiting (its time is up) does not stop them.
+    func windowLocksEnded() async { await windowLock?.value }
+
     public func closeWindowNow() async throws {
         // The notice goes only when the lock went through; a failure is the caller's to show.
         let close = closeWindow
