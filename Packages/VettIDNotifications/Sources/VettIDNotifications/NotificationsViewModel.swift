@@ -72,6 +72,7 @@ public final class NotificationsViewModel {
     @ObservationIgnored private let connections: (any ConnectionsRepository)?
     @ObservationIgnored private let approvals: (any ApprovalsRepository)?
     @ObservationIgnored private let items: (any ItemsRepository)?
+    @ObservationIgnored private let votes: (any VotesRepository)?
     @ObservationIgnored private let work = Work()
     @ObservationIgnored private let follows = TaskBag()
     /// Whether the screen is in view.
@@ -82,16 +83,17 @@ public final class NotificationsViewModel {
     @ObservationIgnored private var handled = Set<String>()
     private var local: NotificationsState
 
-    /// [archived]: the Archived view. [connections], [approvals] and [items]: the names, followed as they change; the Vault
+    /// [archived]: the Archived view. [connections], [approvals], [items] and [votes]: the names, followed as they change; the Vault
     /// list is read quietly when it has not been read (an `item.revealed` opens its item).
     public init(
         feed: any FeedRepository, connections: (any ConnectionsRepository)? = nil, approvals: (any ApprovalsRepository)? = nil,
-        items: (any ItemsRepository)? = nil, archived: Bool = false
+        items: (any ItemsRepository)? = nil, votes: (any VotesRepository)? = nil, archived: Bool = false
     ) {
         self.feed = feed
         self.connections = connections
         self.approvals = approvals
         self.items = items
+        self.votes = votes
         local = NotificationsState(archived: archived)
         if feed.load == .notLoaded { refresh() }
         items?.readIfNotLoaded()
@@ -107,7 +109,10 @@ public final class NotificationsViewModel {
         var s = local
         s.items = feed.items
         s.load = feed.load
-        s.names = FeedNames(connections: connections?.connections ?? [], items: items?.names ?? [:], approvals: approvals?.approvals ?? [])
+        s.names = FeedNames(
+            connections: connections?.connections ?? [], items: items?.names ?? [:], approvals: approvals?.approvals ?? [],
+            votes: votes?.votes ?? []
+        )
         return s
     }
 

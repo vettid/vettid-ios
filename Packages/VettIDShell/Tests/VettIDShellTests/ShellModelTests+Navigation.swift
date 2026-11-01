@@ -206,6 +206,17 @@ import VettIDOnboarding
         #expect(m.destination == .settings && m.path.isEmpty)
     }
 
+    /// A vote item opens the vote by the pair over the screen on top, or the Votes list as a drawer destination.
+    @Test func aVoteItemOpensTheVoteOrTheList() {
+        let m = model
+        m.openNotifications()
+        m.openFeedTarget(.vote(connectionID: "c1", proposalID: "p1"))
+        m.openFeedTarget(.vote(connectionID: "c1", proposalID: "p1"))
+        #expect(m.path == [.notifications(archived: false), .vote(connectionID: "c1", proposalID: "p1")])
+        m.openFeedTarget(.voteList)
+        #expect(m.destination == .votes && m.path.isEmpty)
+    }
+
     /// History's entry over the list, and a connection's History over its page, each once.
     @Test func historyEntriesAndAConnectionsHistoryOpenOnce() {
         let m = model

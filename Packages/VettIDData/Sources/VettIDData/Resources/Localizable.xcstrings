@@ -2658,6 +2658,72 @@
           }
         }
       }
+    },
+    "data_feed_vote_open": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A new vote"
+          }
+        }
+      }
+    },
+    "data_feed_vote_closing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A vote closes soon"
+          }
+        }
+      }
+    },
+    "data_feed_vote_result": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vote results are out"
+          }
+        }
+      }
+    },
+    "data_feed_vote_problem": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check your vote"
+          }
+        }
+      }
+    },
+    "data_feed_vote_problem_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Something about your vote needs your attention."
+          }
+        }
+      }
+    },
+    "data_feed_vote_line": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: %@"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

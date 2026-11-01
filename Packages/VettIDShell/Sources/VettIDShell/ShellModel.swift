@@ -86,6 +86,7 @@ public final class ShellModel {
         case .history: navigate(.history)
         case .security: navigate(.settings)
         case .conversation(let id): openConversation(id)
+        case .voteList: navigate(.votes)
         case .sheet: break
         default: if let r = Self.screen(t) { pushOnce(r) }
         }
@@ -102,6 +103,7 @@ public final class ShellModel {
         case .alarm: .alarm
         case .credential: .credential
         case .item(let id): .item(id)
+        case .vote(let connectionID, let proposalID): .vote(connectionID: connectionID, proposalID: proposalID)
         default: nil
         }
     }

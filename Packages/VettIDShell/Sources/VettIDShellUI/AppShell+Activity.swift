@@ -18,18 +18,21 @@ extension AppShell {
         case .notifications(let archived):
             if let feed {
                 NotificationsRoute(
-                    feed: feed, connections: connections, approvals: approvals, items: items, archived: archived, host: notificationsHost
+                    feed: feed, connections: connections, approvals: approvals, items: items, votes: votes, archived: archived,
+                    host: notificationsHost
                 )
             }
         case .approval(let key):
             if let approvals { ApprovalDetailRoute(key, approvals: approvals, connections: connections, items: items, host: approvalsHost) }
         case .historyEntry(let seq):
-            if let history { HistoryEntryRoute(seq, history: history, connections: connections, items: items, host: historyHost) }
+            if let history {
+                HistoryEntryRoute(seq, history: history, connections: connections, items: items, votes: votes, host: historyHost)
+            }
         case .connectionHistory(let id):
             if let history, let historyExport {
                 HistoryRoute(
                     history: history, export: historyExport, connections: connections, ownerChecks: ownerChecks, items: items,
-                    connectionID: id, chrome: nil, host: historyHost
+                    votes: votes, connectionID: id, chrome: nil, host: historyHost
                 )
             }
         default:

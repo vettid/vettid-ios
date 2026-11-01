@@ -488,4 +488,29 @@ extension DataStrings {
             bundle: .module
         )
     }
+
+    // ANDROID-PLAN 0.1.102 "Votes": titles and second lines approved by the owner 2026-10-30.
+    static var feedVoteOpen: String {
+        String(localized: "data_feed_vote_open", defaultValue: "A new vote", bundle: .module)
+    }
+
+    static var feedVoteClosing: String {
+        String(localized: "data_feed_vote_closing", defaultValue: "A vote closes soon", bundle: .module)
+    }
+
+    static var feedVoteResult: String {
+        String(localized: "data_feed_vote_result", defaultValue: "Vote results are out", bundle: .module)
+    }
+
+    static var feedVoteProblem: String {
+        String(localized: "data_feed_vote_problem", defaultValue: "Check your vote", bundle: .module)
+    }
+
+    static var feedVoteProblemBody: String {
+        String(localized: "data_feed_vote_problem_body", defaultValue: "Something about your vote needs your attention.", bundle: .module)
+    }
+
+    static func feedVoteLine(_ service: String, _ title: String) -> String {
+        String(localized: "data_feed_vote_line", defaultValue: "\(service): \(title)", bundle: .module)
+    }
 }

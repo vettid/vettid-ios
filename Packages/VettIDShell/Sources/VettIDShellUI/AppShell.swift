@@ -350,7 +350,7 @@ public struct AppShell: View {
             if let history, let historyExport {
                 HistoryRoute(
                     history: history, export: historyExport, connections: connections, ownerChecks: ownerChecks, items: items,
-                    chrome: chrome, host: historyHost
+                    votes: votes, chrome: chrome, host: historyHost
                 )
             } else {
                 ComingLaterScreen(destination: model.destination, chrome: chrome)
