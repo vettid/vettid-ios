@@ -22,6 +22,14 @@ public struct VoteProblem: Equatable, Sendable {
     }
 }
 
+/// Whether a failure is work cut off by a lock or by the app leaving, which is silent: a ``CancellationError``, any failure that
+/// arrives in a task that was cancelled, and a transport's `URLError.cancelled` that a failure carries (``VaultFailures`` maps
+/// every `URLError` to ``FailureKind/network``; the relay and the site reader turn a cancelled request into a
+/// ``CancellationError`` themselves, so this is the net under any path that does not).
+func isSilent(_ e: any Error) -> Bool {
+    e is CancellationError || Task.isCancelled || ((e as? VaultFailure)?.cause as? URLError)?.code == .cancelled
+}
+
 /// The name a service connection is shown by: the name it gave (cleaned), else the connection's title; empty when neither
 /// shows. Mirrors vettid-android `serviceName`.
 func serviceName(_ c: ConnectionInfo?) -> String { AccountNames.cleaned(c?.name) ?? AccountNames.cleaned(c?.displayName) ?? "" }
@@ -120,7 +128,7 @@ public final class VotesViewModel {
         work.launch { [weak self] in
             do {
                 try await repo.refresh()
-            } catch is CancellationError {
+            } catch where isSilent(error) {
                 // A lock or the app leaving cut the read off: silent (the list is read again when the screen returns).
             } catch {
                 self?.local.error = failureKind(error)
@@ -141,7 +149,7 @@ public final class VotesViewModel {
             do {
                 try await repo.closeWindowNow()
                 self?.local.windowClosing = false
-            } catch is CancellationError {
+            } catch where isSilent(error) {
                 self?.local.windowClosing = false
             } catch {
                 self?.local.windowClosing = false

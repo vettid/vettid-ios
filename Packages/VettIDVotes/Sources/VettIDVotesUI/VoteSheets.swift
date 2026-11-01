@@ -12,7 +12,9 @@ struct CastSheet: View {
     let actions: VoteActions
 
     var body: some View {
-        let sendingWithPassword = state.cast == .sending && !state.password.isEmpty
+        // The step follows how the request was sent, not whether the typed password is still held (it is dropped when the app
+        // leaves the foreground, and the sheet must not flip to the confirm step with the request under way).
+        let sendingWithPassword = state.cast == .sending && state.castWithPassword
         SecureContainer(isSecure: true) {
             if state.cast == .password || sendingWithPassword {
                 PasswordStep(state: state, actions: actions)

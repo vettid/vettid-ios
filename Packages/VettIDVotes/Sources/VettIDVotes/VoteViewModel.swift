@@ -32,6 +32,9 @@ public struct VoteScreenState: Equatable, Sendable, CustomStringConvertible, Cus
     public var loadError: VoteProblem?
     public var selected: String?
     public var cast = CastStep.none
+    /// The request under way was sent with the credential password (the sheet stays on its password step, busy, even when the
+    /// typed password was dropped meanwhile).
+    public var castWithPassword = false
     public var password = ""
     public var passwordError: VoteProblem?
     /// The end of a password backoff (`retry_after`).
@@ -153,6 +156,9 @@ public final class VoteViewModel {
         guard let now else { return }
         if let last = lastSummary, now != last { loadDetail() }
         lastSummary = now
+        // "Is this your vote?" is held back while the cast sheet is up: the vault now waits on the member's answer about an
+        // earlier vote, so nothing is cast and the typed password goes.
+        if now.confirmPending, local.cast == .confirm || local.cast == .password { dismissCast() }
         if now.check?.state == .gaveUp {
             let repo = repo
             let key = key
@@ -174,7 +180,7 @@ public final class VoteViewModel {
         loadJob = work.launch { [weak self] in
             do {
                 try await repo.refresh()
-            } catch is CancellationError {
+            } catch where isSilent(error) {
                 return
             } catch {
                 self?.local.loadError = VoteProblem(error)
@@ -202,7 +208,7 @@ public final class VoteViewModel {
             local.loaded = true
             local.loadError = nil
             local.selected = local.selected.flatMap { s in d.choices.contains { $0.id == s } ? s : nil }
-        } catch is CancellationError {
+        } catch where isSilent(error) {
             // Cut off: the screen shows what it had.
         } catch {
             local.loaded = true
@@ -269,6 +275,7 @@ public final class VoteViewModel {
     private func send(_ password: String?) {
         guard let choice = local.selected else { return }
         local.cast = .sending
+        local.castWithPassword = password != nil
         local.castProblem = nil
         local.passwordError = nil
         let repo = repo
@@ -278,13 +285,15 @@ public final class VoteViewModel {
                 _ = try await repo.cast(key, choiceID: choice, password: password)
                 // The password is held only while the request runs.
                 self?.local.cast = .none
+                self?.local.castWithPassword = false
                 self?.local.password = ""
                 self?.local.selected = nil
                 self?.local.retryUntil = nil
                 self?.loadDetail()
-            } catch is CancellationError {
+            } catch where isSilent(error) {
                 // A lock or the app leaving cut the request off: silent. The vote may have been sent, so it is read again.
                 self?.local.cast = .none
+                self?.local.castWithPassword = false
                 self?.local.password = ""
                 self?.refresh()
             } catch {
@@ -294,6 +303,7 @@ public final class VoteViewModel {
     }
 
     private func onCastFailure(_ p: VoteProblem) {
+        local.castWithPassword = false
         switch p.kind {
         case .credentialLocked:
             // The window was closed after all: the prompt again (the member confirms; the app sends nothing by itself).
@@ -348,7 +358,7 @@ public final class VoteViewModel {
             do {
                 try await repo.closeWindowNow()
                 self?.local.windowClosing = false
-            } catch is CancellationError {
+            } catch where isSilent(error) {
                 self?.local.windowClosing = false
             } catch {
                 self?.local.windowClosing = false
@@ -378,7 +388,7 @@ public final class VoteViewModel {
                 }
                 self?.local.checking = false
                 self?.local.checkOutcome = out
-            } catch is CancellationError {
+            } catch where isSilent(error) {
                 // A lock or the app leaving cut the check off: silent, no outcome.
                 self?.local.checking = false
             } catch {
@@ -403,7 +413,7 @@ public final class VoteViewModel {
                 let state = try await repo.confirm(key, mine: mine)
                 self?.local.restoreBusy = false
                 if state == .recorded || state == .disputed { self?.loadDetail() }
-            } catch is CancellationError {
+            } catch where isSilent(error) {
                 self?.local.restoreBusy = false
             } catch {
                 self?.local.restoreBusy = false
@@ -416,6 +426,9 @@ public final class VoteViewModel {
 
     /// **Save the proof**: the warning first.
     public func askProof() {
+        // Evidence from an earlier Save that was never written goes: a second Save always opens the exporter again.
+        proof = nil
+        local.proofReady = false
         local.proofWarning = true
         local.proofProblem = nil
         local.proofSaved = false
@@ -428,6 +441,8 @@ public final class VoteViewModel {
     /// written until the member chooses where, in the system's exporter.
     public func fetchProof() {
         guard !local.proofBusy else { return }
+        proof = nil
+        local.proofReady = false
         local.proofWarning = false
         local.proofBusy = true
         local.proofProblem = nil
@@ -439,7 +454,7 @@ public final class VoteViewModel {
                 self?.proof = text
                 self?.local.proofBusy = false
                 self?.local.proofReady = true
-            } catch is CancellationError {
+            } catch where isSilent(error) {
                 self?.local.proofBusy = false
             } catch {
                 self?.local.proofBusy = false
@@ -515,7 +530,7 @@ public final class VoteViewModel {
                 self?.local.releaseBusy = false
                 self?.local.releaseDialog = false
                 self?.local.released = true
-            } catch is CancellationError {
+            } catch where isSilent(error) {
                 self?.local.releaseBusy = false
             } catch {
                 self?.local.releaseBusy = false

@@ -1,7 +1,6 @@
 #if os(iOS)
 import SwiftUI
 import UIKit
-import UniformTypeIdentifiers
 import VettIDData
 import VettIDUI
 import VettIDVotes
@@ -41,17 +40,15 @@ public struct VoteActions {
 }
 
 /// One vote (ANDROID-PLAN 0.1.102 to 0.1.108 §4 "Votes", screens 2 to 7). The service's words are shown as plain text; the
-/// disclosure sentence is the app's own and fixed. The screen, its sheets and the proof are kept out of screenshots and
-/// screen recordings (IOS-PLAN §4.16 "Screen privacy"): the vote's choice is shown here. Mirrors vettid-android
+/// disclosure sentence is the app's own and fixed. The screen and its sheets are always kept out of screenshots and screen
+/// recordings (IOS-PLAN §4.16 "Screen privacy", decision A): the vote's choice is shown here. Mirrors vettid-android
 /// `VoteScreen`.
 public struct VoteScreen: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.vettIDTimeScale) private var timeScale
-    @Environment(ScreenshotAllowance.self) private var allowance: ScreenshotAllowance?
     let state: VoteScreenState
     let proof: ProofFile?
     let actions: VoteActions
-    @State private var exporting = false
 
     public init(state: VoteScreenState, proof: ProofFile? = nil, actions: VoteActions) {
         self.state = state
@@ -60,7 +57,9 @@ public struct VoteScreen: View {
     }
 
     public var body: some View {
-        SecureContainer(isSecure: !(allowance?.allowed ?? false)) {
+        // Always protected, whatever "Allow screenshots" says (decision A, 2026-10-31: the vote screen joins the SecureWindow list, as
+        // Android's FLAG_SECURE does).
+        SecureContainer(isSecure: true) {
             DetailScaffold(onBack: actions.onBack) { content }
                 .accessibilityIdentifier("vote_screen")
         }
@@ -81,21 +80,10 @@ public struct VoteScreen: View {
             confirmLabel: VoteStrings.voteProofSave,
             onConfirm: actions.onFetchProof
         )
-        // The system's exporter writes the vault's evidence, unchanged, only where the member chooses (IOS-PLAN §4.16).
-        .fileExporter(
-            isPresented: $exporting, document: proof.map(ProofDocument.init), contentTypes: [.json],
-            defaultFilename: proof?.name ?? "vettid-vote.json",
-            onCompletion: { result in
-                switch result {
-                case .success: actions.onProofExporterAnswered(true)
-                case .failure(let error as CocoaError) where error.code == .userCancelled: actions.onProofExporterAnswered(false)
-                case .failure: actions.onProofExporterFailed()
-                }
-            },
-            onCancellation: { actions.onProofExporterAnswered(false) }
-        )
-        .onChange(of: state.proofReady, initial: true) { _, ready in if ready, proof != nil { exporting = true } }
-        .onChange(of: proof) { _, p in if p != nil, state.proofReady { exporting = true } }
+        // The system's document picker writes the vault's evidence, unchanged, only where the member chooses (owner decision,
+        // 2026-11-01; IOS-PLAN §4.16 names the share sheet). It is Android's "Save to…" and History's export. The temporary file
+        // it needs is made and removed here (``ProofTempFile``), not left in tmp/ as SwiftUI's `fileExporter` leaves it.
+        .background(ProofExporter(file: proof, onAnswered: actions.onProofExporterAnswered, onFailed: actions.onProofExporterFailed))
         // The result of a save is announced, once.
         .onChange(of: state.proofSaved) { _, saved in if saved { Announcer.announce(VoteStrings.voteProofSaved, .polite) } }
         .onChange(of: state.proofSaveFailed) { _, failed in if failed { Announcer.announce(VoteStrings.voteProofFailed, .assertive) } }
@@ -140,16 +128,4 @@ public struct VoteScreen: View {
     }
 }
 
-/// The evidence for `fileExporter`: its bytes from memory, never read back.
-struct ProofDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [.json] }
-
-    let bytes: Data
-
-    init(_ file: ProofFile) { bytes = file.bytes }
-
-    init(configuration: ReadConfiguration) throws { throw CocoaError(.fileReadUnsupportedScheme) }
-
-    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: bytes) }
-}
 #endif

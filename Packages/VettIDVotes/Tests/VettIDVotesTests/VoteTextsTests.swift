@@ -33,6 +33,11 @@ import Testing
         #expect(VoteTexts.text(.inResultsConflict, service: "Example", time: "") == VoteStrings.voteConflictAfterVerified("Example"))
     }
 
+    @Test func cancelIsCancel() {
+        #expect(VoteStrings.voteCancel == "Cancel")
+        #expect(VoteStrings.bundle.localizedString(forKey: "vote_cancel", value: nil, table: nil) == "Cancel")
+    }
+
     @Test func theClockCheckIsTheOwnersText() {
         #expect(VoteStrings.voteCheckingClock == "VettID can't finish checking this vote yet because of a time check on VettID's side. It will try again.")
         #expect(VoteTexts.text(.checkingClock, service: "Example", time: "") == VoteStrings.voteCheckingClock)

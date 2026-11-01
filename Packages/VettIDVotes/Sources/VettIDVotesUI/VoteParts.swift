@@ -61,7 +61,8 @@ struct ChoicesView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(VoteStrings.voteChoose).vettIDFont(.titleSmall).padding(.bottom, Spacing.xs).accessibilityAddTraits(.isHeader)
+            // The group below carries the label "Choose one"; the visible heading is not read a second time.
+            Text(VoteStrings.voteChoose).vettIDFont(.titleSmall).padding(.bottom, Spacing.xs).accessibilityHidden(true)
             ForEach(detail.choices, id: \.id) { c in
                 let selected = state.selected == c.id
                 Button { onSelect(c.id) } label: {

@@ -138,27 +138,108 @@ import VettIDUI
         #expect(fields.allSatisfy { $0.textContentType?.rawValue == "" })
     }
 
-    @Test func theProofDocumentIsTheEvidenceUnchanged() {
+    // MARK: The proof's temporary file
+
+    private func scratch() throws -> URL {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("votes-test-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        return root
+    }
+
+    private func entries(_ root: URL) -> [String] { (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? [] }
+
+    @Test func theTemporaryFileIsTheEvidenceUnchangedUnderItsNameAndGoesWhenRemoved() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
         let text = #"{"evidence":{"choice_id":"yes","sig":"AbC=="}}"#
-        let doc = ProofDocument(ProofFile(bytes: Data(text.utf8), name: "vettid-vote-p1.json"))
-        #expect(doc.bytes == Data(text.utf8) && ProofDocument.readableContentTypes == [.json])
+        let t = try ProofTempFile.write(ProofFile(bytes: Data(text.utf8), name: "vettid-vote-p1.json"), in: root)
+        #expect(try Data(contentsOf: t.url) == Data(text.utf8) && t.url.lastPathComponent == "vettid-vote-p1.json")
+        #expect(entries(root).count == 1 && entries(root)[0].hasPrefix(ProofTempFile.prefix))
+        // Complete file protection where the system reports it.
+        let attributes = try FileManager.default.attributesOfItem(atPath: t.url.path)
+        if let protection = attributes[.protectionKey] as? FileProtectionType { #expect(protection == .complete) }
+        t.remove()
+        #expect(entries(root).isEmpty)
+        #expect(ProofTempFile.removeLeftovers(in: root) == 0)
+    }
+
+    @Test func leftoversOfAKilledAppAreRemoved() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        _ = try ProofTempFile.write(ProofFile(bytes: Data("x".utf8), name: "a.json"), in: root)
+        _ = try ProofTempFile.write(ProofFile(bytes: Data("y".utf8), name: "b.json"), in: root)
+        try Data().write(to: root.appendingPathComponent("other.txt"))
+        #expect(ProofTempFile.removeLeftovers(in: root) == 2 && entries(root) == ["other.txt"])
+    }
+
+    /// The file is removed on every path: a pick, a cancel, the screen leaving, the file taken away, and the next file.
+    @Test func theTemporaryFileGoesOnEveryPath() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = ProofFile(bytes: Data("evidence".utf8), name: "p.json")
+        let host = UIViewController()
+        func run(_ end: (ProofExportCoordinator, UIDocumentPickerViewController) -> Void) -> [Bool] {
+            let c = ProofExportCoordinator()
+            c.root = root
+            var answers: [Bool] = []
+            c.onAnswered = { answers.append($0) }
+            c.update(file, host: host)
+            #expect(entries(root).count == 1, "the file exists while the picker is up")
+            end(c, UIDocumentPickerViewController(forOpeningContentTypes: [.json]))
+            #expect(entries(root).isEmpty, "removed")
+            return answers
+        }
+        #expect(run { c, p in c.documentPicker(p, didPickDocumentsAt: [c.temp!.url]) } == [true])
+        #expect(run { c, p in c.documentPickerWasCancelled(p) } == [false])
+        #expect(run { c, _ in c.leave() }.isEmpty)
+        #expect(run { c, _ in c.update(nil, host: host) }.isEmpty)
+        // The same file again while the picker is up makes no second file; a failure to write is told.
+        let c = ProofExportCoordinator()
+        c.root = root
+        c.update(file, host: host)
+        c.update(file, host: host)
+        #expect(entries(root).count == 1)
+        c.leave()
+        var failed = 0
+        c.onFailed = { failed += 1 }
+        c.root = root.appendingPathComponent("missing/deeper")
+        c.update(file, host: host)
+        #expect(failed == 1 && c.temp == nil)
+    }
+
+    /// The vote screen holds no exporter of its own: nothing is written until the evidence is ready.
+    @Test func nothingIsWrittenWhileTheEvidenceIsNotReady() throws {
+        let before = ProofTempFile.removeLeftovers()
+        _ = host(VoteScreen(state: Samples.screen(Samples.closed(VoteBallot(state: .conflict))), proof: nil, actions: VoteActions()))
+        #expect(ProofTempFile.removeLeftovers() == 0 && before >= 0)
     }
 
     // MARK: Capture and secrets
 
-    /// IOS-PLAN §4.16 "Screen privacy": the vote screen and its sheets are on the secure layer, unless screenshots are allowed.
-    @Test func theVoteIsKeptOutOfCaptures() {
+    /// IOS-PLAN §4.16 "Screen privacy", decision A (2026-10-31): the vote screen and its sheets are on the secure layer, always,
+    /// whatever "Allow screenshots" says (as Android's `FLAG_SECURE` and the recovery screen).
+    @Test func theVoteIsKeptOutOfCapturesWhateverTheAllowanceSays() {
         guard SecureLayer.isAvailable else { return }
         let screen = VoteScreen(state: Samples.screen(Samples.open()), actions: VoteActions())
         let protected = host(screen.environment(ScreenshotAllowance(onByDefault: false)))
         let allowed = host(screen.environment(ScreenshotAllowance(onByDefault: true)))
-        #expect(views(in: protected).contains(where: onSecureLayer))
-        #expect(views(in: protected).filter(onSecureLayer).count > views(in: allowed).filter(onSecureLayer).count)
+        #expect(views(in: protected).contains(where: onSecureLayer) && views(in: allowed).contains(where: onSecureLayer))
+        #expect(views(in: protected).filter(onSecureLayer).count == views(in: allowed).filter(onSecureLayer).count)
         for sheet in [
-            host(CastSheet(state: Samples.screen(Samples.open()) { $0.cast = .confirm }, actions: VoteActions())),
-            host(CastSheet(state: Samples.screen(Samples.open()) { $0.cast = .password }, actions: VoteActions())),
-            host(ReleaseSheet(state: Samples.screen(Samples.closed(VoteBallot(state: .conflict))), actions: VoteActions())),
+            host(CastSheet(state: Samples.screen(Samples.open()) { $0.cast = .confirm }, actions: VoteActions()).environment(ScreenshotAllowance(onByDefault: true))),
+            host(CastSheet(state: Samples.screen(Samples.open()) { $0.cast = .password }, actions: VoteActions()).environment(ScreenshotAllowance(onByDefault: true))),
+            host(ReleaseSheet(state: Samples.screen(Samples.closed(VoteBallot(state: .conflict))), actions: VoteActions()).environment(ScreenshotAllowance(onByDefault: true))),
+            host(RestoreSheet(state: Samples.screen(Samples.open(confirmPending: true)), actions: VoteActions()).environment(ScreenshotAllowance(onByDefault: true))),
         ] { #expect(views(in: sheet).contains(where: onSecureLayer)) }
+    }
+
+    /// The sheet keeps the password step while a request sent with the password is under way, though the password was dropped.
+    @Test func thePasswordStepStaysWhileTheRequestIsUnderWay() {
+        let password = Samples.screen(Samples.open()) { $0.cast = .sending; $0.castWithPassword = true; $0.password = "" }
+        let confirm = Samples.screen(Samples.open()) { $0.cast = .sending; $0.castWithPassword = false }
+        let passwordFields = views(in: host(CastSheet(state: password, actions: VoteActions()))).compactMap { $0 as? UITextField }
+        let confirmFields = views(in: host(CastSheet(state: confirm, actions: VoteActions()))).compactMap { $0 as? UITextField }
+        #expect(!passwordFields.isEmpty && confirmFields.isEmpty)
     }
 
     @Test func leavingTheScreenAsksTheModelToForgetThePasswordAndUnsavedEvidence() {

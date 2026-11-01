@@ -114,6 +114,8 @@ public struct VoteRoute: View {
         VoteScreen(state: model?.state ?? VoteScreenState(key: key), proof: model?.proofFile, actions: actions)
             .onAppear {
                 guard model == nil else { return }
+                // Evidence left in tmp/ by an app that was killed with the picker up.
+                ProofTempFile.removeLeftovers()
                 model = VoteViewModel(key: key, repo: votes, connections: connections, ownerChecks: ownerChecks)
             }
     }
