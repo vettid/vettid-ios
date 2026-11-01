@@ -93,9 +93,8 @@ extension VaultManager {
 
     /// Leaving the foreground (IOS-PLAN §6.6): the first attempt of a lock asked for is finished, what is in the outbox
     /// is sent (not while a lock is pending), a vote window's lock on its way ends, then the collection stops, unless the
-    /// app came back meanwhile. All of it
-    /// within [budget] (the background time iOS gives) and stopped when the calling task is cancelled (its expiration);
-    /// nothing assumes it ran longer. A pending lock's retries go on while the process runs and resume at the next start.
+    /// app came back meanwhile. All of it within [budget] (the background time iOS gives) and stopped when the calling
+    /// task is cancelled (its expiration); nothing assumes it ran longer. A pending lock's retries go on while the process runs and resume at the next start.
     public func onBackground(budget: Duration = .seconds(25)) async {
         let began = foregrounds
         moveFlags.book.lifecycle += 1

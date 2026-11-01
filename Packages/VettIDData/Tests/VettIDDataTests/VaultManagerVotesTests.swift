@@ -107,11 +107,25 @@ import VettIDVault
         // The cast opens the window with the password; whatever its answer, the window it opened is locked again.
         _ = try? await m.votes.cast(VoteKey(connectionID: "conn-1", proposalID: Self.pid), choiceID: "yes", password: password)
         #expect(m.votes.windowLock != nil)
-        let background = Task { @MainActor in await m.onBackground(budget: .seconds(1)) }
+        let background = Task { @MainActor in await m.onBackground(budget: .seconds(3)) }
         try await Task.sleep(for: .milliseconds(300))
         #expect(m.session?.device.collecting == true, "the collection waits for the window's lock")
         await background.value
         #expect(m.session == nil, "the collection stopped once the background time was up")
+    }
+
+    /// The window's lock answered within the background time: the wait ends with it, no notice, then the collection stops.
+    @Test func aVoteWindowsLockAnsweredInTheBackgroundEndsTheWaitEarly() async throws {
+        defer { phone.close() }
+        service.setVotes([Self.vote])
+        try await open()
+        #expect(await eventually { m.votes.availability == .available })
+        _ = try? await m.votes.cast(VoteKey(connectionID: "conn-1", proposalID: Self.pid), choiceID: "yes", password: password)
+        let start = ContinuousClock.now
+        await m.onBackground(budget: .seconds(25))
+        #expect(ContinuousClock.now - start < .seconds(10), "the wait ended with the lock, not with the budget")
+        #expect(m.session == nil)
+        #expect(m.votes.windowNotClosed == nil && m.unlockWindow == nil)
     }
 
     /// A vault without votes: nothing is shown, and it is not asked again until the next opening.

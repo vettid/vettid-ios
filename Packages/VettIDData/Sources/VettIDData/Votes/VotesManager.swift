@@ -414,10 +414,10 @@ public final class VotesManager: VotesRepository {
     /// The lock after a cast, on its own task: it runs to its end even when the caller was cancelled (a screen that left)
     /// and never delays the cast's answer. A lock that failed is not swallowed: the member is told that the window stays
     /// open until it closes by itself (``windowNotClosed``). The lock runs inside a background task, begun here and ended
-    /// once on every path (IOS-PLAN §6.6: finish what is in flight; nothing assumes it ran longer). If iOS suspends the
-    /// app, the request may still reach the vault: the collection stops almost at once, so its answer cannot arrive, and
-    /// the time only gives the request and its re-sends a better chance to leave the phone. On return the request fails
-    /// after its timeouts and sets ``windowNotClosed``, which can be a false alarm (the safe direction). At the task's
+    /// once on every path (IOS-PLAN §6.6: finish what is in flight; nothing assumes it ran longer). When the app leaves
+    /// the foreground, the collection runs on for the background time while this lock is on its way
+    /// (``windowLocksEnded()``), so that its answer can arrive. Only a lock that outlasts that time fails on return, after
+    /// its timeouts, and sets ``windowNotClosed``, which can then be a false alarm (the safe direction). At the task's
     /// expiration the task is ended and nothing else is done: ``windowNotClosed`` is left as it is.
     private func lockOpenedWindow() {
         let background = LockBackground(backgroundTasks)
