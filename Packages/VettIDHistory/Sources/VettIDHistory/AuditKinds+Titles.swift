@@ -171,5 +171,10 @@ extension AuditKinds {
         "drop.grant_limit": "history_kind_drop_grant_limit",
         "drop.critical_signature": "history_kind_drop_critical_signature",
         "drop.rate_limited": "history_kind_drop_rate_limited",
+        // ANDROID-PLAN 0.1.102 "Votes": a vote message the vault ignored, and the list of services it did not accept.
+        "drop.vote_malformed": "history_kind_vote_ignored",
+        "drop.vote_limit": "history_kind_vote_ignored",
+        "drop.vote_not_service": "history_kind_vote_ignored",
+        "vote.list_rejected": "history_kind_vote_list_rejected",
     ]
 }
