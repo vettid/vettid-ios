@@ -250,7 +250,8 @@ final class VoteSiteRunner {
             var seen = Set<String>()
             for e in await Task.detached(operation: { VoteSync.indexOf(bytes) }).value {
                 if seen.insert(e.proposalID).inserted { order.append(e.proposalID) }
-                if let json = e.json { byID[e.proposalID] = json } else { byID[e.proposalID] = nil }
+                // The first element of an id whose index can be sent is the one kept: a later one, good or not, changes nothing.
+                if let json = e.json, byID[e.proposalID] == nil { byID[e.proposalID] = json }
             }
         }
         // The held proposals, then the newest the vault lacks (it learns what to ask the service for from them).
@@ -374,9 +375,10 @@ final class VoteSiteRunner {
         }
         // The vault refuses a signature of another length, and a bundle that is no object, with the whole call.
         let level = VoteSync.Level.resultsBundle
-        guard files.sig.count == VoteSiteLimits.sigLength, let bundle = VoteSync.compactObject(files.bundle, level: level) else {
-            return fail(key, .problem)
-        }
+        let bundleBytes = files.bundle
+        let compact = await Task.detached { VoteSync.compactObject(bundleBytes, level: level) }.value
+        try Task.checkCancellation()
+        guard files.sig.count == VoteSiteLimits.sigLength, let bundle = compact else { return fail(key, .problem) }
         let doc = files.doc
         let rows = files.rows
         let sig = files.sig

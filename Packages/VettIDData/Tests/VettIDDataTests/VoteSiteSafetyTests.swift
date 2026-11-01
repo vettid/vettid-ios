@@ -263,6 +263,43 @@ struct VoteSiteSafetyTests: VotesTestCase {
         #expect(!site.reads.contains { r in bad.contains { !$0.isEmpty && r.contains($0) } })
     }
 
+    /// What the vault sees is the compact form of what was validated, byte for byte (VAULT-MESSAGING 0.81.6 "What is checked
+    /// is what is sent").
+    @Test func theBytesSentAreTheCompactValidatedBytes() async throws {
+        site.put("p/\(pid)/proposal.json", "{}")
+        site.put("p/\(pid)/proposal.json.sigstore.json", "{\n  \"b\" : [ 1 , { \"c\" : \"x y\" } ] \n}\n")
+        site.put("index.json", "[ {\"proposal_id\" : \"\(pid)\" ,\n \"extended\" : 1 , \"s\" : \"a b\" } ]")
+        serveExtension(1, bundle: "{ \"e\" :\t[ 1 ] }")
+        let (_, m) = opened()
+        try await m.syncOnce()
+        let text = try vault.syncs.map { String(decoding: $0, as: UTF8.self) }.joined()
+        #expect(text.contains(#""bundle":{"b":[1,{"c":"x y"}]}"#))
+        #expect(text.contains(#""index":{"proposal_id":"\#(pid)","extended":1,"s":"a b"}"#))
+        #expect(text.contains(#""bundle":{"e":[1]}"#))
+        // The results bundle too.
+        VoteResultsFixture.publish(site, pid)
+        site.put("p/\(pid)/results.json.sigstore.json", "{ \"mediaType\" : \"bundle\" ,\n \"n\" : [ 1 ] }")
+        let m2 = manager(closedOps())
+        try await m2.syncOnce()
+        let sent = String(decoding: try #require(vault.submits.last), as: UTF8.self)
+        #expect(sent.contains(#""bundle":{"mediaType":"bundle","n":[1]}"#))
+    }
+
+    @Test func theFirstIndexElementOfAnIDThatCanBeSentIsTheOneKept() async throws {
+        site.put("p/\(pid)/proposal.json", "{}")
+        let good = #"{"proposal_id":"\#(pid)","service_id":"ab"}"#
+        let bad = #"{"proposal_id":"\#(pid)","service_id":7}"#
+        let other = #"{"proposal_id":"\#(pid)","service_id":"cd"}"#
+        for list in [[good, bad], [bad, good], [good, other]] {
+            site.put("index.json", "[" + list.joined(separator: ",") + "]")
+            vault.syncs = []
+            let (_, m) = opened()
+            try await m.syncOnce()
+            let expected = list[0] == bad ? "ab" : try StrictJson.parseObject(list[0]).string("service_id")
+            #expect(try sentIndex()?.string("service_id") == expected)
+        }
+    }
+
     @Test func oneBadIndexElementLeavesOutOnlyItself() async throws {
         site.put("p/\(pid2)/proposal.json", "{}")
         let deep = element(pid2, depth: 29)

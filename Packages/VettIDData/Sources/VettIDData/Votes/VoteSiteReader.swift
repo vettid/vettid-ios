@@ -26,7 +26,8 @@ struct VoteSiteReader: Sendable {
     /// What one more document of a proposal came to.
     enum Part {
         case found([UInt8])
-        /// A 404, or a document over the limit the vault takes.
+        /// A 404, or a document over the app's read limit. For an extension that is the vault's own limit (4,096 bytes, a
+        /// signature of 64); for a proposal's signature and bundle it is the app's (256 and 65,536 bytes).
         case missing
         /// The site could not answer.
         case down
@@ -46,7 +47,9 @@ struct VoteSiteReader: Sendable {
     /// no strict JSON object (or too deep for its place in the request) is left out. The extensions are at most 24 and end
     /// at the first one over 4,096 bytes, without a signature of 64 bytes or without a bundle that is a strict object; the
     /// entry goes with those before it (VAULT-MESSAGING 0.81.6 §10.19.8 "Shape checks before sending"). An extension the
-    /// site could not answer for makes the whole entry `unreachable` (the erratum is silent on it).
+    /// site could not answer for makes the whole entry `unreachable` (chosen; not in the spec). A proposal signature served over
+    /// 256 bytes is left out, not sent as served (chosen; not in the spec: the vault takes a signature of any length and
+    /// judges it, and a missing one is judged the same).
     func readDocument(_ id: String, index: String?) async throws -> VoteSync.Document {
         let p: [UInt8]
         switch try await get("p/\(id)/proposal.json", VoteSiteLimits.proposalMax) {
