@@ -1,0 +1,1447 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "vote_already_voted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You had already voted: %@. Your vote can't be changed."
+          }
+        }
+      }
+    },
+    "vote_already_voted_any": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You had already voted. Your vote can't be changed."
+          }
+        }
+      }
+    },
+    "vote_binding_no": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The service says this vote is not binding."
+          }
+        }
+      }
+    },
+    "vote_binding_yes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The service says this vote is binding."
+          }
+        }
+      }
+    },
+    "vote_cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        }
+      }
+    },
+    "vote_cannot_cast_other": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can't vote in this one right now."
+          }
+        }
+      }
+    },
+    "vote_cast_button": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cast your vote"
+          }
+        }
+      }
+    },
+    "vote_cast_failed_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vote was not sent"
+          }
+        }
+      }
+    },
+    "vote_cast_unanswered": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vote may have been sent. This screen shows it as sent once VettID knows. If it does not, you can cast again. If your first vote did arrive, it is the one that counts: a vote can't be changed."
+          }
+        }
+      }
+    },
+    "vote_cast_unknown_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID got no answer"
+          }
+        }
+      }
+    },
+    "vote_check_again": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check again"
+          }
+        }
+      }
+    },
+    "vote_check_gave_up": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID could not check the results of this vote within 7 days, so your vote has not been checked."
+          }
+        }
+      }
+    },
+    "vote_check_gave_up_site": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID could not reach the votes site for 7 days, so your vote has not been checked."
+          }
+        }
+      }
+    },
+    "vote_check_gave_up_unpublished": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The results of this vote were not published within 7 days, so your vote has not been checked."
+          }
+        }
+      }
+    },
+    "vote_check_not_published_now": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The results of this vote are not on the votes site yet. VettID will try again."
+          }
+        }
+      }
+    },
+    "vote_check_pending": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID will check the published results against your vote."
+          }
+        }
+      }
+    },
+    "vote_check_results_problem": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID could not check the published results of this vote yet. They may be incomplete or not valid. It will try again."
+          }
+        }
+      }
+    },
+    "vote_check_results_too_large": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID can't check the published results of this vote: they are larger than your vault accepts. They may not be valid."
+          }
+        }
+      }
+    },
+    "vote_check_site_unreachable_now": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID could not reach the votes site just now. It will try again."
+          }
+        }
+      }
+    },
+    "vote_check_with_service": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check with the service"
+          }
+        }
+      }
+    },
+    "vote_checking_clock": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID can't finish checking this vote yet because of a time check on VettID's side. It will try again."
+          }
+        }
+      }
+    },
+    "vote_checking_list": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID is checking this vote. It needs the list of services from votes.vettid.org. Check that this phone is online."
+          }
+        }
+      }
+    },
+    "vote_checking_other": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID is still checking this vote. You can vote when the check is done."
+          }
+        }
+      }
+    },
+    "vote_checking_restore": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID is asking %@ what it recorded for you before you can vote."
+          }
+        }
+      }
+    },
+    "vote_checking_site": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID is checking this vote. It is waiting for the vote's documents from votes.vettid.org."
+          }
+        }
+      }
+    },
+    "vote_checking_trust": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID can't finish checking this vote yet: its list of trusted logs may be out of date. Update VettID if this lasts."
+          }
+        }
+      }
+    },
+    "vote_chip_checking": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Being checked"
+          }
+        }
+      }
+    },
+    "vote_chip_missed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You didn't vote"
+          }
+        }
+      }
+    },
+    "vote_chip_not_voted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not voted yet"
+          }
+        }
+      }
+    },
+    "vote_chip_problem": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Needs your attention"
+          }
+        }
+      }
+    },
+    "vote_chip_recorded": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You voted"
+          }
+        }
+      }
+    },
+    "vote_chip_results": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Results are out"
+          }
+        }
+      }
+    },
+    "vote_chip_waiting": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for the service"
+          }
+        }
+      }
+    },
+    "vote_choose": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose one"
+          }
+        }
+      }
+    },
+    "vote_closed_banner": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This vote has closed."
+          }
+        }
+      }
+    },
+    "vote_closes_line": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Closes %@"
+          }
+        }
+      }
+    },
+    "vote_closing_soon": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This vote closes in less than 2 minutes. It is too late to cast your vote from this phone."
+          }
+        }
+      }
+    },
+    "vote_confirm_back": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back"
+          }
+        }
+      }
+    },
+    "vote_confirm_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vote “%@”?"
+          }
+        }
+      }
+    },
+    "vote_confirm_yes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cast vote"
+          }
+        }
+      }
+    },
+    "vote_conflict_after_verified": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "**Your vote is in the published results.** %@ also once showed a different vote under your code. Save the proof and show it to the organisation."
+          }
+        }
+      }
+    },
+    "vote_conflict_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ holds a different vote under your code than the one you cast. Save the proof and show it to the organisation."
+          }
+        }
+      }
+    },
+    "vote_connection_row": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votes from %@"
+          }
+        }
+      }
+    },
+    "vote_disclosure": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ will see how you vote and keep that record. The published results show only an anonymous code for you."
+          }
+        }
+      }
+    },
+    "vote_disputed_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ holds a vote under your code that you said is not yours. Save the proof and show it to the organisation."
+          }
+        }
+      }
+    },
+    "vote_dropped": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ has more votes under way than your vault can keep, so %2$lld were not kept."
+          }
+        }
+      }
+    },
+    "vote_error_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not load this vote"
+          }
+        }
+      }
+    },
+    "vote_extended": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The closing time was extended to %@."
+          }
+        }
+      }
+    },
+    "vote_failed_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can save the proof and show it to the organisation."
+          }
+        }
+      }
+    },
+    "vote_failed_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The published results don't match your vote"
+          }
+        }
+      }
+    },
+    "vote_final": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vote can't be changed after you cast it."
+          }
+        }
+      }
+    },
+    "vote_gone_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This vote is no longer here"
+          }
+        }
+      }
+    },
+    "vote_name_by_service": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name given by the service"
+          }
+        }
+      }
+    },
+    "vote_no_connection": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You are no longer connected to %@, so you can't vote."
+          }
+        }
+      }
+    },
+    "vote_not_listed_late": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This vote is still not on the public site, which is unusual. You can vote, but keep the proof."
+          }
+        }
+      }
+    },
+    "vote_not_open": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This vote opens %@."
+          }
+        }
+      }
+    },
+    "vote_not_published": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This vote is not on the public site yet. You can still vote: VettID will compare it with the public copy when it appears."
+          }
+        }
+      }
+    },
+    "vote_not_signed_in": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Before you can vote, sign in to %@ once with VettID. This lets %@ check that your vote is yours."
+          }
+        }
+      }
+    },
+    "vote_password_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your vote is signed with your credential. Enter your credential password."
+          }
+        }
+      }
+    },
+    "vote_password_confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm"
+          }
+        }
+      }
+    },
+    "vote_password_label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Credential password"
+          }
+        }
+      }
+    },
+    "vote_password_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm with your credential password"
+          }
+        }
+      }
+    },
+    "vote_problems": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ has %2$lld unresolved vote problems. Save the proof of each and release them to receive new votes from %1$@."
+          }
+        }
+      }
+    },
+    "vote_proof_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The proof could not be saved. Try again."
+          }
+        }
+      }
+    },
+    "vote_proof_save": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save"
+          }
+        }
+      }
+    },
+    "vote_proof_saved": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The proof was saved."
+          }
+        }
+      }
+    },
+    "vote_quorum_line": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quorum, as the service states it: %@"
+          }
+        }
+      }
+    },
+    "vote_quorum_met": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enough votes were cast: %1$lld, and the service asked for at least %2$lld."
+          }
+        }
+      }
+    },
+    "vote_quorum_not_met": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not enough votes were cast: %1$lld, and the service asked for at least %2$lld."
+          }
+        }
+      }
+    },
+    "vote_reconnect_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is registered with VettID as a service. This connection was made before it said it was a service, so it can't take part in votes. Remove it and connect again from a new invitation from %@."
+          }
+        }
+      }
+    },
+    "vote_reconnect_open": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open the connection"
+          }
+        }
+      }
+    },
+    "vote_reconnect_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect again to vote"
+          }
+        }
+      }
+    },
+    "vote_refused_bad_ballot": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ did not accept your vote. You can save the proof and show it to the organisation."
+          }
+        }
+      }
+    },
+    "vote_refused_ended": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your connection to %@ ended before your vote was recorded."
+          }
+        }
+      }
+    },
+    "vote_refused_late": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The vote had closed when your vote arrived, so it was not counted."
+          }
+        }
+      }
+    },
+    "vote_refused_not_active": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ says you are no longer a member for this vote, so your vote was not counted."
+          }
+        }
+      }
+    },
+    "vote_refused_not_eligible": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ says you were not on the list for this vote. You can save the proof and show it to the organisation."
+          }
+        }
+      }
+    },
+    "vote_rejected_anchor": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The public record of this vote did not check out."
+          }
+        }
+      }
+    },
+    "vote_rejected_other": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This vote could not be read as a valid vote from the service."
+          }
+        }
+      }
+    },
+    "vote_rejected_record": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The list of members for this vote did not check out."
+          }
+        }
+      }
+    },
+    "vote_rejected_signature": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The service's signature on this vote did not check out."
+          }
+        }
+      }
+    },
+    "vote_rejected_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID set this vote aside"
+          }
+        }
+      }
+    },
+    "vote_release": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Release"
+          }
+        }
+      }
+    },
+    "vote_release_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This lets your vault keep new votes from %@. Every signed item that is not on the public site stays on your vault. Nothing is sent anywhere. Enter your vault PIN."
+          }
+        }
+      }
+    },
+    "vote_release_not_saved": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save the proof first: the record can be released only after it was saved."
+          }
+        }
+      }
+    },
+    "vote_release_pin": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault PIN"
+          }
+        }
+      }
+    },
+    "vote_release_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Release this vote record?"
+          }
+        }
+      }
+    },
+    "vote_released": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The vote record was released."
+          }
+        }
+      }
+    },
+    "vote_remove_warning": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You have a vote with %@ that isn't finished. If you remove this connection you can't vote in it."
+          }
+        }
+      }
+    },
+    "vote_restore_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ says it recorded this vote for you: “%2$@” on “%3$@”."
+          }
+        }
+      }
+    },
+    "vote_restore_no": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No, it isn't mine"
+          }
+        }
+      }
+    },
+    "vote_restore_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Is this your vote?"
+          }
+        }
+      }
+    },
+    "vote_restore_yes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yes, it's mine"
+          }
+        }
+      }
+    },
+    "vote_results_row": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@: %2$lld"
+          }
+        }
+      }
+    },
+    "vote_results_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Results"
+          }
+        }
+      }
+    },
+    "vote_results_turnout": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld of %2$lld eligible members voted."
+          }
+        }
+      }
+    },
+    "vote_results_unhandled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld messages sent to %2$@ during the vote were not handled; any vote among them was not counted."
+          }
+        }
+      }
+    },
+    "vote_row_closed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Closed %@"
+          }
+        }
+      }
+    },
+    "vote_row_closes": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Closes %@"
+          }
+        }
+      }
+    },
+    "vote_row_description": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@, from the service %2$@, %3$@"
+          }
+        }
+      }
+    },
+    "vote_row_opens": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opens %@"
+          }
+        }
+      }
+    },
+    "vote_save_proof": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save the proof"
+          }
+        }
+      }
+    },
+    "vote_save_proof_warning": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file shows how you voted. Keep it private, and share it only with the organisation."
+          }
+        }
+      }
+    },
+    "vote_service_fallback": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The service"
+          }
+        }
+      }
+    },
+    "vote_service_label": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Service"
+          }
+        }
+      }
+    },
+    "vote_site_mismatch": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The vote you received differs from the one published on the public site, so you can't vote in it. You can save the proof."
+          }
+        }
+      }
+    },
+    "vote_site_mismatch_after": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The vote you voted on differs from the one published on the public site, so your vote may not count. Save the proof and show it to the organisation."
+          }
+        }
+      }
+    },
+    "vote_site_unreachable": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID could not reach the votes site to compare this vote with the public copy. You can still vote: VettID will compare it later."
+          }
+        }
+      }
+    },
+    "vote_state_didnt_vote": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You didn't vote in this one."
+          }
+        }
+      }
+    },
+    "vote_state_in_results": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The published results include your vote."
+          }
+        }
+      }
+    },
+    "vote_state_late_pending": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ says the vote had closed. VettID is asking whether an earlier send arrived in time."
+          }
+        }
+      }
+    },
+    "vote_state_recorded": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ recorded your vote. It can't be changed."
+          }
+        }
+      }
+    },
+    "vote_state_sending": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sending your vote to %@…"
+          }
+        }
+      }
+    },
+    "vote_state_unconfirmed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not confirmed. %@ sent no receipt for your vote, and the published results don't settle whether it counted."
+          }
+        }
+      }
+    },
+    "vote_state_waiting": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for %@ to confirm. Your vote is saved on your vault and is sent again until %@ answers."
+          }
+        }
+      }
+    },
+    "vote_unpublished": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This vote was never published on the public site. Your vote may not count. Save the proof."
+          }
+        }
+      }
+    },
+    "vote_window_close_now": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close it now"
+          }
+        }
+      }
+    },
+    "vote_window_not_closed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID could not close the credential unlock window after your vote. It closes by itself once it has not been used for %#@minutes@."
+          },
+          "substitutions": {
+            "minutes": {
+              "argNum": 1,
+              "formatSpecifier": "lld",
+              "variations": {
+                "plural": {
+                  "one": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg minute"
+                    }
+                  },
+                  "other": {
+                    "stringUnit": {
+                      "state": "translated",
+                      "value": "%arg minutes"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "vote_window_not_closed_plain": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VettID could not close the credential unlock window after your vote. It closes by itself."
+          }
+        }
+      }
+    },
+    "vote_window_not_closed_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The unlock window may still be open"
+          }
+        }
+      }
+    },
+    "vote_written_by": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Written by %@"
+          }
+        }
+      }
+    },
+    "vote_your_choice": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your choice: %@"
+          }
+        }
+      }
+    },
+    "votes_empty_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votes from services you are connected to appear here."
+          }
+        }
+      }
+    },
+    "votes_empty_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No votes"
+          }
+        }
+      }
+    },
+    "votes_error_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not load your votes"
+          }
+        }
+      }
+    },
+    "votes_retry": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try again"
+          }
+        }
+      }
+    },
+    "votes_section_closed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Closed"
+          }
+        }
+      }
+    },
+    "votes_section_open": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open"
+          }
+        }
+      }
+    },
+    "votes_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votes"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}
