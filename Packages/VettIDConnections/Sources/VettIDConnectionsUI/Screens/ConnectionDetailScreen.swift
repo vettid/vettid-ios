@@ -33,6 +33,8 @@ public struct DetailActions {
     /// Asks to delete a share rule (nil: never mind); [onDeleteRule] deletes it once confirmed.
     public var onAskDeleteRule: @MainActor (ShareRule?) -> Void = { _ in }
     public var onDeleteRule: @MainActor () -> Void = {}
+    /// The votes from this service connection (ANDROID-PLAN 0.1.102 "Votes"); nil while the app has no Votes.
+    public var onOpenVotes: (@MainActor () -> Void)?
     /// Reads the connection again after a failed first read.
     public var onRetry: @MainActor () -> Void = {}
 
@@ -90,7 +92,8 @@ public struct ConnectionDetailScreen: View {
         .confirmDialog(
             isPresented: Binding(get: { state.confirm == .remove }, set: { if !$0 { actions.onAsk(nil) } }),
             title: ConnectStrings.removeTitle(isolated),
-            message: ConnectStrings.removeBody(isolated),
+            // A service with a vote that is not finished: the member is told first that removing it ends their part in it.
+            message: (state.votes.unfinished ? ConnectStrings.voteRemoveWarning(isolated) + "\n\n" : "") + ConnectStrings.removeBody(isolated),
             confirmLabel: ConnectStrings.remove,
             destructive: true,
             onConfirm: actions.onConfirm
@@ -146,7 +149,15 @@ struct DetailContent: View {
                         .padding(.horizontal, Spacing.s)
                 }
                 if let asks, asks.prominent { asksCard(asks, asksName) }
+                // A person connection that VettID's service list names as a service (made before it said so): it can't take part
+                // in votes, and the app changes nothing about it on its own (screen 8).
+                if state.votes.reconnect {
+                    NoticeCard(.info, title: ConnectStrings.voteReconnectTitle, message: ConnectStrings.voteReconnectBody(sharedName))
+                        .padding(.horizontal, Spacing.s)
+                        .accessibilityIdentifier("vote_reconnect")
+                }
                 ProfileCard(connection: c)
+                if c.isService, state.votes.count > 0, let open = actions.onOpenVotes { votesRow(open) }
                 if Self.showsSharing(c, actions) { sharingCards(c) }
                 if let asks, !asks.prominent { asksCard(asks, asksName) }
                 DetailCard {
@@ -158,6 +169,26 @@ struct DetailContent: View {
             }
             .padding(.bottom, 104)
         }
+    }
+
+    private var sharedName: String { AccountNames.isolateOrNull(connection.displayName) ?? ConnectStrings.nameNotShared }
+
+    /// "Votes from <name>": the votes of this service connection.
+    private func votesRow(_ open: @escaping @MainActor () -> Void) -> some View {
+        DetailCard {
+            Button(action: open) {
+                HStack {
+                    Text(ConnectStrings.voteRow(sharedName)).vettIDFont(.bodyLarge).foregroundStyle(colors.onSurface)
+                    Spacer(minLength: 0)
+                    VettIDSymbol.chevronForward.image.foregroundStyle(colors.onSurfaceVariant).accessibilityHidden(true)
+                }
+                .frame(minHeight: Spacing.touchTarget)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(.isButton)
+        }
+        .accessibilityIdentifier("detail_votes")
     }
 
     /// Whether the page shows the sharing cards: an active connection, with every sharing hook of the host.

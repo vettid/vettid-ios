@@ -7,6 +7,32 @@ public enum DetailConfirm: Equatable, Sendable {
     case remove
 }
 
+/// What the Votes feature knows of one connection (ANDROID-PLAN 0.1.102 "Votes"): [count] votes from it (a service
+/// connection gets the row "Votes from <name>"), whether one is [unfinished] (removing the connection asks first), and
+/// whether VettID's service list names this person connection as a service ([reconnect]: "Connect again to vote").
+public struct ConnectionVotes: Equatable, Sendable {
+    public var count = 0
+    public var unfinished = false
+    public var reconnect = false
+
+    public init(count: Int = 0, unfinished: Bool = false, reconnect: Bool = false) {
+        self.count = count
+        self.unfinished = unfinished
+        self.reconnect = reconnect
+    }
+
+    /// The votes of [connectionID] in the Votes list now; nothing where the vault has none.
+    @MainActor
+    public static func of(_ connectionID: String, _ votes: (any VotesRepository)?) -> ConnectionVotes {
+        guard let votes else { return ConnectionVotes() }
+        let mine = votes.votes.filter { $0.connectionID == connectionID }
+        return ConnectionVotes(
+            count: mine.count, unfinished: mine.contains(where: VoteRules.unfinished),
+            reconnect: votes.reconnect.contains { $0.connectionID == connectionID }
+        )
+    }
+}
+
 /// A connection's detail screen state. Names are the members' own: never printed, dumped or mirrored. Mirrors
 /// vettid-android `ConnectionDetailUiState` without member authentication (IOS-PLAN §8 I2.3).
 public struct ConnectionDetailState: Equatable, Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
@@ -22,6 +48,8 @@ public struct ConnectionDetailState: Equatable, Sendable, CustomStringConvertibl
     public var sharing = DetailSharing()
     /// A share rule the member asked to delete, waiting for the confirmation.
     public var deleteRule: ShareRule?
+    /// This connection's votes; nothing where the vault has none.
+    public var votes = ConnectionVotes()
 
     public init(connectionID: String) { self.connectionID = connectionID }
 
@@ -86,15 +114,21 @@ public final class ConnectionDetailViewModel {
     @ObservationIgnored private let connections: any ConnectionsRepository
     /// Nil while the app has no sharing (the cards are not shown then; chosen; not in the spec: vettid-android always has it).
     @ObservationIgnored private let sharing: (any SharingRepository)?
+    /// Nil while the app has no Votes (chosen; not in the spec: vettid-android defaults to `NoVotes`).
+    @ObservationIgnored private let votes: (any VotesRepository)?
     @ObservationIgnored private let work = Work()
     @ObservationIgnored private let follows = TaskBag()
     /// The connection was in the repository's list: once it is not, it is gone.
     @ObservationIgnored private var listed = false
     private var local: ConnectionDetailState
 
-    public init(connectionID: String, connections: any ConnectionsRepository, sharing: (any SharingRepository)? = nil) {
+    public init(
+        connectionID: String, connections: any ConnectionsRepository, sharing: (any SharingRepository)? = nil,
+        votes: (any VotesRepository)? = nil
+    ) {
         self.connections = connections
         self.sharing = sharing
+        self.votes = votes
         local = ConnectionDetailState(connectionID: connectionID)
         load()
         loadSharing()
@@ -174,6 +208,7 @@ public final class ConnectionDetailViewModel {
     public var state: ConnectionDetailState {
         var s = local
         if !s.gone, let c = connections.connections.first(where: { $0.id == s.connectionID }) { s.connection = c }
+        s.votes = s.gone ? ConnectionVotes() : ConnectionVotes.of(s.connectionID, votes)
         return s
     }
 

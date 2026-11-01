@@ -2333,6 +2333,50 @@
           }
         }
       }
+    },
+    "connections_vote_row": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votes from %@"
+          }
+        }
+      }
+    },
+    "connections_vote_remove_warning": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You have a vote with %@ that isn't finished. If you remove this connection you can't vote in it."
+          }
+        }
+      }
+    },
+    "connections_vote_reconnect_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect again to vote"
+          }
+        }
+      }
+    },
+    "connections_vote_reconnect_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is registered with VettID as a service. This connection was made before it said it was a service, so it can't take part in votes. Remove it and connect again from a new invitation from %@."
+          }
+        }
+      }
     }
   },
   "version": "1.0"
