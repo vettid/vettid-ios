@@ -281,7 +281,8 @@ struct VoteSiteSafetyTests: VotesTestCase {
         site.put("p/\(pid)/results.json.sigstore.json", "{ \"mediaType\" : \"bundle\" ,\n \"n\" : [ 1 ] }")
         let m2 = manager(closedOps())
         try await m2.syncOnce()
-        let sent = try #require(String(bytes: try #require(vault.submits.last), encoding: .utf8))
+        let last = try #require(vault.submits.last)
+        let sent = try #require(String(bytes: last, encoding: .utf8))
         #expect(sent.contains(#""bundle":{"mediaType":"bundle","n":[1]}"#))
     }
 
