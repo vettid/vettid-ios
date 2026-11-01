@@ -25,7 +25,9 @@ enum Samples {
         )
     }
 
-    static let choices = [VoteChoice(id: "yes", label: "Yes"), VoteChoice(id: "no", label: "No"), VoteChoice(id: "abstain", label: "Abstain")]
+    static let choices = [
+        VoteChoice(id: "yes", label: "Yes"), VoteChoice(id: "no", label: "No"), VoteChoice(id: "abstain", label: "Abstain"),
+    ]
 
     static func detail(
         _ s: VoteSummary, choiceID: String? = nil, serviceBallot: String? = nil, tally: [String: Int64]? = nil, counts: VoteCounts? = nil
@@ -37,7 +39,9 @@ enum Samples {
     }
 
     /// A state of the vote screen.
-    static func screen(_ s: VoteSummary?, detail: VoteDetail? = nil, _ change: (inout VoteScreenState) -> Void = { _ in }) -> VoteScreenState {
+    static func screen(
+        _ s: VoteSummary?, detail: VoteDetail? = nil, _ change: (inout VoteScreenState) -> Void = { _ in }
+    ) -> VoteScreenState {
         var st = VoteScreenState(key: key)
         st.summary = s
         st.detail = detail ?? s.map(plain)

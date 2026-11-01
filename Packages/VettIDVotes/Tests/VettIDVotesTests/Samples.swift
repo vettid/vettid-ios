@@ -15,7 +15,8 @@ enum Samples {
         reason: String? = nil
     ) -> VoteSummary {
         VoteSummary(
-            proposalID: p, connectionID: c, title: title, state: state, reason: reason, opensAt: t0, closesAt: t0.addingTimeInterval(86_400),
+            proposalID: p, connectionID: c, title: title, state: state, reason: reason, opensAt: t0,
+            closesAt: t0.addingTimeInterval(86_400),
             ballot: ballot, check: check, confirmPending: confirmPending, canCast: canCast, cannotCast: cannotCast
         )
     }

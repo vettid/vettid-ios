@@ -1,6 +1,6 @@
 import Foundation
 
-// swiftlint:disable file_length type_body_length line_length
+// swiftlint:disable line_length
 
 /// The texts of the Votes screens: every string of vettid-android `feature/votes` `strings.xml` (ANDROID-PLAN 0.1.102 to
 /// 0.1.108 §4 "Votes", approved by the owner on 2026-10-30, the proposed ones with them), word for word under the same
@@ -532,3 +532,4 @@ public enum VoteStrings {
         )
     }
 }
+// swiftlint:enable line_length

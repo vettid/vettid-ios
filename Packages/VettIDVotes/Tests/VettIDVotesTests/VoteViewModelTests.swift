@@ -4,9 +4,6 @@ import Testing
 import VettIDDataTesting
 @testable import VettIDVotes
 
-// Fixtures stay on one line each.
-// swiftlint:disable line_length
-
 /// One vote's screen (ANDROID-PLAN 0.1.102 to 0.1.108 §4 "Votes", screens 2 to 7; IOS-PLAN §4.16): the reads, the cast and
 /// its prompts, the cast that is never retried and never made while a restore waits, cancellation that stays silent, the
 /// proof written only where the member chooses and Release after it, the unlock window notice. Mirrors vettid-android

@@ -94,3 +94,4 @@ import Testing
         #expect(String(boldMarked("a ** b").characters) == "a ** b")
     }
 }
+// swiftlint:enable line_length

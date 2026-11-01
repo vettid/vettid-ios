@@ -67,7 +67,9 @@ struct VoteContent: View {
             if let text = facts.alreadyVoted {
                 VStack(alignment: .leading, spacing: 0) {
                     NoteCard(severity: .info, heading: nil, text: text)
-                    NoticeAction(label: VoteStrings.voteConfirmBack, identifier: "vote_already_voted_back", action: actions.onDismissAlreadyVoted)
+                    NoticeAction(
+                        label: VoteStrings.voteConfirmBack, identifier: "vote_already_voted_back", action: actions.onDismissAlreadyVoted
+                    )
                 }
                 .accessibilityIdentifier("vote_already_voted")
             }

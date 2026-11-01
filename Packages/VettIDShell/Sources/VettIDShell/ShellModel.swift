@@ -106,6 +106,14 @@ public final class ShellModel {
         }
     }
 
+    /// A vote over the Votes list (or the screen on top), once.
+    public func openVote(_ connectionID: String, _ proposalID: String) {
+        pushOnce(.vote(connectionID: connectionID, proposalID: proposalID))
+    }
+
+    /// A service connection's votes over its page, once.
+    public func openConnectionVotes(_ connectionID: String) { pushOnce(.connectionVotes(connectionID)) }
+
     /// An item of the Vault over the current screen, once (a History entry's "Open the item").
     public func openItem(_ itemID: String) { pushOnce(.item(itemID)) }
 

@@ -457,7 +457,10 @@ public final class VoteViewModel {
     /// The file name offered to "Save to Files": the proposal's id, never the title or the choice. (Chosen; not in the
     /// spec: only letters, digits, `-` and `_` of the id are kept, so that a file name never holds anything else.)
     public var proofFileName: String {
-        let id = String(key.proposalID.unicodeScalars.filter { $0.isASCII && ($0.properties.isAlphabetic || ("0"..."9").contains($0) || $0 == "-" || $0 == "_") })
+        let kept = key.proposalID.unicodeScalars.filter { c in
+            c.isASCII && (c.properties.isAlphabetic || ("0"..."9").contains(c) || c == "-" || c == "_")
+        }
+        let id = String(kept)
         return "vettid-vote-\(id.isEmpty ? "proof" : id).json"
     }
 

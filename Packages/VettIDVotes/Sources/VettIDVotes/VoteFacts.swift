@@ -68,7 +68,7 @@ public struct VoteFacts: Equatable, Sendable {
     public var released = false
 
     /// [timeScale]: the vault's, for the failures that name a wait.
-    public static func of(_ s: VoteScreenState, summary: VoteSummary, now: Date, timeScale: UInt64 = 1) -> VoteFacts { // swiftlint:disable:this function_body_length
+    public static func of(_ s: VoteScreenState, summary: VoteSummary, now: Date, timeScale: UInt64 = 1) -> VoteFacts {
         let service = AccountNames.isolateOrNull(s.serviceName) ?? VoteStrings.voteServiceFallback
         let time = summary.opensAt.map(VoteFormat.full) ?? ""
         var f = VoteFacts(
@@ -98,13 +98,16 @@ public struct VoteFacts: Equatable, Sendable {
             return VoteMessage(title: VoteStrings.voteWindowNotClosedTitle, text: VoteTexts.windowNotClosed(w) + failure)
         }
         if s.alreadyVoted {
-            f.alreadyVoted = AccountNames.isolateOrNull(s.choiceLabel).map { VoteStrings.voteAlreadyVoted($0) } ?? VoteStrings.voteAlreadyVotedAny
+            let label = AccountNames.isolateOrNull(s.choiceLabel)
+            f.alreadyVoted = label.map { VoteStrings.voteAlreadyVoted($0) } ?? VoteStrings.voteAlreadyVotedAny
         }
         f.castProblem = s.castProblem.map { castProblem($0, service, time, timeScale) }
         f.checkProblem = s.checkProblem.map { $0.kind.message(timeScale: timeScale) }
         switch s.checkOutcome {
-        case .siteUnreachable?: f.checkOutcome = VoteMessage(title: VoteStrings.voteCheckWithService, text: VoteStrings.voteCheckSiteUnreachableNow)
-        case .notPublished?: f.checkOutcome = VoteMessage(title: VoteStrings.voteCheckWithService, text: VoteStrings.voteCheckNotPublishedNow)
+        case .siteUnreachable?:
+            f.checkOutcome = VoteMessage(title: VoteStrings.voteCheckWithService, text: VoteStrings.voteCheckSiteUnreachableNow)
+        case .notPublished?:
+            f.checkOutcome = VoteMessage(title: VoteStrings.voteCheckWithService, text: VoteStrings.voteCheckNotPublishedNow)
         default: break
         }
         buttons(&f, s, summary)
@@ -138,7 +141,9 @@ public struct VoteFacts: Equatable, Sendable {
         if let c = d.counts {
             lines.append(VoteStrings.voteResultsTurnout(Int(c.ballots), Int(c.eligible)))
             if let min = d.minBallots {
-                lines.append(c.ballots >= min ? VoteStrings.voteQuorumMet(Int(c.ballots), Int(min)) : VoteStrings.voteQuorumNotMet(Int(c.ballots), Int(min)))
+                let met = c.ballots >= min
+                let (ballots, least) = (Int(c.ballots), Int(min))
+                lines.append(met ? VoteStrings.voteQuorumMet(ballots, least) : VoteStrings.voteQuorumNotMet(ballots, least))
             }
             if c.unhandled > 0 { lines.append(VoteStrings.voteResultsUnhandled(Int(c.unhandled), service)) }
         }
@@ -196,7 +201,8 @@ public struct VoteRowFacts: Equatable, Sendable {
         let service = AccountNames.isolateOrNull(serviceName) ?? ""
         let title = AccountNames.isolateOrNull(v.title) ?? VoteStrings.votesTitle
         let time = timeLine(v)
-        let supporting = [service.isEmpty ? nil : "\(service) · \(VoteStrings.voteServiceLabel)", time].compactMap { $0 }.joined(separator: " · ")
+        let named = service.isEmpty ? nil : "\(service) · \(VoteStrings.voteServiceLabel)"
+        let supporting = [named, time].compactMap { $0 }.joined(separator: " · ")
         return VoteRowFacts(
             title: title, supporting: supporting.isEmpty ? nil : supporting, chip: chip, chipText: chipText,
             spoken: VoteStrings.voteRowDescription(title, service, chipText) + (time.map { ", \($0)" } ?? "")

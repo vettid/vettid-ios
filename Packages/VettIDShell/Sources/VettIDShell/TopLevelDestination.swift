@@ -2,10 +2,13 @@ import Foundation
 import VettIDConnections
 
 /// The drawer's destinations (ANDROID-PLAN §4 "Drawer"; IOS-PLAN ID14), in drawer order and groups: Messages,
-/// Connections, Approvals | Vault, History | Settings, Help. The only top-level navigation: no tab bar. Mirrors
+/// Connections, Approvals, Votes | Vault, History | Settings, Help. The only top-level navigation: no tab bar. Mirrors
 /// vettid-android `TopLevelDestination`.
 public enum TopLevelDestination: String, CaseIterable, Sendable {
     case messages, connections, approvals
+    /// Votes (IOS-PLAN §4.16), after Approvals: shown only when the vault answers `vote.list` and holds a vote or a
+    /// connection to connect again (no empty screen); its badge counts open votes not yet voted on. Not in Approvals.
+    case votes
     /// "Vault" in the UI; the code keeps the Items names (as vettid-android does).
     case items
     /// The member's audit log (VAULT-MESSAGING §10.9).
@@ -15,7 +18,7 @@ public enum TopLevelDestination: String, CaseIterable, Sendable {
     /// The drawer's group: hairlines between groups.
     public var group: Int {
         switch self {
-        case .messages, .connections, .approvals: 0
+        case .messages, .connections, .approvals, .votes: 0
         case .items, .history: 1
         case .settings, .help: 3
         }
@@ -82,6 +85,11 @@ public enum ShellRoute: Hashable, Sendable {
     case photo(connectionID: String, messageID: String)
     /// The Notifications screen from the bell, or [archived] its Archived view (ANDROID-PLAN §4 Notifications).
     case notifications(archived: Bool)
+    /// One vote by the pair (connection, proposal), never the proposal id alone (VAULT-MESSAGING 0.81.2 §10.19), from the
+    /// Votes list.
+    case vote(connectionID: String, proposalID: String)
+    /// The votes of one service connection ("Votes from <name>"), from its page.
+    case connectionVotes(String)
     /// One approval by its key (VAULT-MESSAGING §10.4, §10.12, §10.13, §6.8), from Approvals or a feed item.
     case approval(String)
     /// One History entry by its `seq` (VAULT-MESSAGING §10.9), from History or a connection's History.

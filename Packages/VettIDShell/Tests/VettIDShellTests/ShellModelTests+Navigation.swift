@@ -13,6 +13,20 @@ import VettIDOnboarding
     let repo = FakeVaultRepository(.unlocked)
     var model: ShellModel { ShellModel(account: repo, vault: repo, ownerChecks: repo) }
 
+    /// A vote opens by the pair, once, over the Votes list; a service's votes over its page.
+    @Test func aVoteOpensByThePairOnce() {
+        let m = model
+        m.navigate(.votes)
+        m.openVote("c1", "p1")
+        m.openVote("c1", "p1")
+        m.openVote("c2", "p1")
+        #expect(m.path == [.vote(connectionID: "c1", proposalID: "p1"), .vote(connectionID: "c2", proposalID: "p1")])
+        m.navigate(.messages)
+        m.openConnectionVotes("c1")
+        m.openConnectionVotes("c1")
+        #expect(m.path == [.connectionVotes("c1")])
+    }
+
     /// One copy of each top-level screen: a drawer destination drops what was pushed and closes the drawer; Settings'
     /// back arrow returns to the start.
     @Test func theDrawerNavigates() {

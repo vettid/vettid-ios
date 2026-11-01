@@ -17,10 +17,11 @@ public enum VoteTexts {
         }
     }
 
+    // swiftlint:disable cyclomatic_complexity
     /// The text of a note. [service] is the service's name (isolated), [time] the time ``VoteNote/notOpen`` names;
     /// a note whose text names neither ignores the arguments. A ``VoteNote/rejected`` note with a [rejected] reason says
     /// the reason.
-    public static func text(_ n: VoteNote, service: String, time: String, rejected: RejectedWhy? = nil) -> String { // swiftlint:disable:this cyclomatic_complexity function_body_length
+    public static func text(_ n: VoteNote, service: String, time: String, rejected: RejectedWhy? = nil) -> String {
         if n == .rejected, let rejected { return rejectedText(rejected) }
         switch n {
         case .sending: return VoteStrings.voteStateSending(service)
@@ -66,6 +67,8 @@ public enum VoteTexts {
         case .notListedLate: return VoteStrings.voteNotListedLate
         }
     }
+
+    // swiftlint:enable cyclomatic_complexity
 
     /// A heading over a note's body, for the two that have one.
     public static func title(_ n: VoteNote) -> String? {

@@ -100,3 +100,4 @@ import VettIDDataTesting
         #expect(m.state.windowCloseProblem == nil && !m.state.windowClosing && m.state.windowNotClosed != nil)
     }
 }
+// swiftlint:enable line_length

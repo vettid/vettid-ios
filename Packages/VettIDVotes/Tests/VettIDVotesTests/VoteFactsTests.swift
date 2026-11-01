@@ -4,7 +4,7 @@ import Testing
 @testable import VettIDVotes
 
 // Fixtures and expected texts stay on one line each.
-// swiftlint:disable line_length file_length
+// swiftlint:disable line_length
 
 /// What a vote screen and a list row say and offer (``VoteFacts``, ``VoteRowFacts``): ANDROID-PLAN 0.1.102 to 0.1.108 §4
 /// "Votes", screens 1 to 7. Mirrors vettid-android `VoteScreenTest`'s reads of the screen's words.
@@ -263,3 +263,4 @@ extension VoteSummary {
         return s
     }
 }
+// swiftlint:enable line_length

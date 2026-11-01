@@ -97,7 +97,9 @@ private struct VotesContent: View {
             LazyVStack(alignment: .leading, spacing: 0) {
                 if let error = state.error {
                     // The list on screen is what was read before; a refresh that failed says so above it.
-                    NoticeCard(.warning, title: VoteStrings.votesErrorTitle, message: error.message(timeScale: timeScale), announce: .polite) {
+                    NoticeCard(
+                        .warning, title: VoteStrings.votesErrorTitle, message: error.message(timeScale: timeScale), announce: .polite
+                    ) {
                         NoticeAction(label: VoteStrings.votesRetry, identifier: "votes_retry", action: actions.onRetry)
                     }
                     .padding(.horizontal, Spacing.gutter).padding(.vertical, Spacing.s)
@@ -111,12 +113,16 @@ private struct VotesContent: View {
                         .padding(.horizontal, Spacing.gutter).padding(.vertical, Spacing.s)
                 }
                 ForEach(state.dropped, id: \.connectionID) { d in
-                    NoticeCard(.warning, title: VoteStrings.votesTitle, message: VoteStrings.voteDropped(service(d.connectionID), Int(d.count)))
+                    NoticeCard(
+                        .warning, title: VoteStrings.votesTitle, message: VoteStrings.voteDropped(service(d.connectionID), Int(d.count))
+                    )
                         .accessibilityIdentifier("vote_dropped")
                         .padding(.horizontal, Spacing.gutter).padding(.vertical, Spacing.s)
                 }
                 ForEach(state.problems, id: \.connectionID) { p in
-                    NoticeCard(.urgent, title: VoteStrings.votesTitle, message: VoteStrings.voteProblems(service(p.connectionID), Int(p.count)))
+                    NoticeCard(
+                        .urgent, title: VoteStrings.votesTitle, message: VoteStrings.voteProblems(service(p.connectionID), Int(p.count))
+                    )
                         .accessibilityIdentifier("vote_problems")
                         .padding(.horizontal, Spacing.gutter).padding(.vertical, Spacing.s)
                 }

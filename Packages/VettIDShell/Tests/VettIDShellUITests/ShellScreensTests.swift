@@ -28,7 +28,7 @@ import VettIDVault
             .appendingPathComponent("Sources/VettIDShellUI/Resources/Localizable.xcstrings")
         let doc = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let keys = try #require((doc["strings"] as? [String: Any])?.keys)
-        #expect(keys.count == 83)
+        #expect(keys.count == 84)
         let missing = "\u{0}missing"
         for key in keys {
             let text = Bundle.module.localizedString(forKey: key, value: missing, table: nil)
@@ -317,6 +317,12 @@ import VettIDVault
         }
         let items = TopLevelDestination.drawerSections(badges: [.approvals: 1]).flatMap { $0 }
         #expect(items.first { $0.key == "approvals" }?.badge == 1 && items.first { $0.key == "messages" }?.badge == 0)
+        // The Votes entry is there only when the vault has a vote or a connection to connect again, with its badge.
+        #expect(!items.contains { $0.key == "votes" })
+        let withVotes = TopLevelDestination.drawerSections(badges: [.votes: 2], votesShown: true).flatMap { $0 }
+        #expect(withVotes.map(\.key).prefix(4) == ["messages", "connections", "approvals", "votes"])
+        #expect(withVotes.first { $0.key == "votes" }?.badge == 2)
+        #expect(withVotes.first { $0.key == "votes" }?.label == "Votes")
     }
 
     /// History in the placeholder's place, an entry and a connection's History over it; a connection's page offers it.

@@ -200,4 +200,5 @@ import VettIDUI
 
     private func onSecureLayer(_ v: UIView) -> Bool { String(describing: type(of: v)).contains("Canvas") }
 }
+// swiftlint:enable line_length
 #endif
