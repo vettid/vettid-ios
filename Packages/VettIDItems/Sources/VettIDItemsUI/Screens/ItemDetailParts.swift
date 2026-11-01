@@ -193,7 +193,6 @@ struct ItemDetailDialogs: ViewModifier {
             )
             .sheet(isPresented: uncovered(shown(.protectionPick), covered: covered)) {
                 ProtectionPicker(current: state.item?.sensitivity ?? .data, actions: actions)
-                    .presentationDetents([.medium])
             }
     }
 }
@@ -219,8 +218,10 @@ struct ProtectionPicker: View {
             }
         }
         .padding(Spacing.xl)
-        .presentationBackground(colors.surfaceContainerLow.color)
         .accessibilityIdentifier("item_protection_dialog")
+        // Half height, and full height with the choices and Cancel scrolling at the larger text sizes.
+        .vettIDGrowingSheet()
+        .presentationBackground(colors.surfaceContainerLow.color)
     }
 }
 #endif
