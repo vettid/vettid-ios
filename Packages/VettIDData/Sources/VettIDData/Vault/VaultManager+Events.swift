@@ -92,9 +92,9 @@ extension VaultManager {
     }
 
     /// Leaving the foreground (IOS-PLAN §6.6): the first attempt of a lock asked for is finished, what is in the outbox
-    /// is sent (not while a lock is pending), then the collection stops, unless the app came back meanwhile. All of it
-    /// within [budget] (the background time iOS gives) and stopped when the calling task is cancelled (its expiration);
-    /// nothing assumes it ran longer. A pending lock's retries go on while the process runs and resume at the next start.
+    /// is sent (not while a lock is pending), a vote window's lock on its way ends, then the collection stops, unless the
+    /// app came back meanwhile. All of it within [budget] (the background time iOS gives) and stopped when the calling
+    /// task is cancelled (its expiration); nothing assumes it ran longer. A pending lock's retries go on while the process runs and resume at the next start.
     public func onBackground(budget: Duration = .seconds(25)) async {
         let began = foregrounds
         moveFlags.book.lifecycle += 1
@@ -109,6 +109,9 @@ extension VaultManager {
             await lockGuard.keeper.firstAttemptDone()
             if Task.isCancelled { return }
             if let s = session, lockGuard.admits() { await s.device.flushOutbox() }
+            if Task.isCancelled { return }
+            // The lock of a vote's unlock window (IOS-PLAN §6.6): its answer can arrive only while the collection runs.
+            await votes.windowLocksEnded()
         }
         let done = KickableWait()
         let watcher = Task { @MainActor in
