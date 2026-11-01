@@ -24,7 +24,8 @@ extension VaultManager {
             site: manager.config.votesSite,
             // A run nobody asked for never opens a session; the member's own (Check again, a vote's screen) may.
             siteOps: { quietly in quietly ? try quietApi(ref) : try await memberApi(ref) },
-            sleep: manager.config.votesSleep
+            sleep: manager.config.votesSleep,
+            backgroundTasks: manager.config.backgroundTasks
         )
     }
 

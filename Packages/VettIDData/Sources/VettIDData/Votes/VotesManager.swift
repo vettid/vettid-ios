@@ -190,6 +190,8 @@ public final class VotesManager: VotesRepository {
     @ObservationIgnored let now: @Sendable () -> Date
     /// The work with the public site (``VoteSiteRunner``); nil where the app hands the vault nothing from it (tests).
     @ObservationIgnored private(set) var siteRunner: VoteSiteRunner?
+    /// The background time the lock of a cast's window asks iOS for; nil where there is none (tests, other builds).
+    @ObservationIgnored private let backgroundTasks: (any BackgroundTasks)?
 
     public init(
         ops: @escaping @MainActor () async throws -> any VoteOps,
@@ -203,7 +205,8 @@ public final class VotesManager: VotesRepository {
         site: (any VoteSite)? = nil,
         siteOps: (@MainActor (_ quietly: Bool) async throws -> any VoteSiteOps)? = nil,
         syncEvery: Duration = .seconds(3600),
-        sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+        sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+        backgroundTasks: (any BackgroundTasks)? = nil
     ) {
         self.ops = ops
         self.quietOps = quietOps ?? ops
@@ -213,6 +216,7 @@ public final class VotesManager: VotesRepository {
         self.closeWindow = closeWindow
         self.unlockTtl = unlockTtl
         self.now = now
+        self.backgroundTasks = backgroundTasks
         if let site, let siteOps {
             siteRunner = VoteSiteRunner(votes: self, site: site, ops: siteOps, every: syncEvery, sleep: sleep)
         }
@@ -409,14 +413,21 @@ public final class VotesManager: VotesRepository {
 
     /// The lock after a cast, on its own task: it runs to its end even when the caller was cancelled (a screen that left)
     /// and never delays the cast's answer. A lock that failed is not swallowed: the member is told that the window stays
-    /// open until it closes by itself (``windowNotClosed``).
+    /// open until it closes by itself (``windowNotClosed``). The lock runs inside a background task, begun here and ended
+    /// once on every path (IOS-PLAN §6.6: finish what is in flight; nothing assumes it ran longer). If iOS suspends the
+    /// app, the request may still reach the vault: the collection stops almost at once, so its answer cannot arrive, and
+    /// the time only gives the request and its re-sends a better chance to leave the phone. On return the request fails
+    /// after its timeouts and sets ``windowNotClosed``, which can be a false alarm (the safe direction). At the task's
+    /// expiration the task is ended and nothing else is done: ``windowNotClosed`` is left as it is.
     private func lockOpenedWindow() {
+        let background = LockBackground(backgroundTasks)
         let close = closeWindow
         let ttl = unlockTtl
         let before = windowLock
         let g = generation
         locksPending += 1
         windowLock = Task { @MainActor [weak self] in
+            defer { background.end() }
             await before?.value
             do {
                 try await close()
@@ -488,5 +499,27 @@ public final class VotesManager: VotesRepository {
         } catch {
             throw VaultFailures.map(error)
         }
+    }
+}
+
+/// One lock's background task: begun with the lock, ended once (by the lock's end or by the expiration, whichever is first).
+@MainActor
+private final class LockBackground {
+    private let tasks: (any BackgroundTasks)?
+    private var token: Int?
+    private var ended = false
+
+    init(_ tasks: (any BackgroundTasks)?) {
+        self.tasks = tasks
+        token = tasks?.begin(name: "vote-window-lock") { [weak self] in self?.end() }
+        // The expiration may have run before `begin` returned.
+        if ended { end() }
+    }
+
+    func end() {
+        ended = true
+        guard let t = token, let tasks else { return }
+        token = nil
+        tasks.end(t)
     }
 }
