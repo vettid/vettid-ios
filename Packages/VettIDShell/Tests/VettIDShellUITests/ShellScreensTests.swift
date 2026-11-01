@@ -73,7 +73,7 @@ import VettIDVault
     }
 
     @Test func theTextsAreAndroids() {
-        let labels = ["Messages", "Connections", "Approvals", "Vault", "History", "Settings", "Help"]
+        let labels = ["Messages", "Connections", "Approvals", "Votes", "Vault", "History", "Settings", "Help"]
         #expect(TopLevelDestination.allCases.map(\.label) == labels)
         #expect(ShellStrings.drawerVersion("2.0.0", 1) == "VettID 2.0.0 (1)")
         #expect(ShellStrings.ownerCheckWarning("3:00 PM") == "Your daily check is due at 3:00 PM.")
