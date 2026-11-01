@@ -170,7 +170,10 @@ extension ConnectStrings {
     static func voteReconnectBody(_ name: String) -> String {
         String(
             localized: "connections_vote_reconnect_body",
-            defaultValue: "\(name) is registered with VettID as a service. This connection was made before it said it was a service, so it can't take part in votes. Remove it and connect again from a new invitation from \(name).",
+            defaultValue: """
+                \(name) is registered with VettID as a service. This connection was made before it said it was a service, \
+                so it can't take part in votes. Remove it and connect again from a new invitation from \(name).
+                """,
             bundle: .module
         )
     }

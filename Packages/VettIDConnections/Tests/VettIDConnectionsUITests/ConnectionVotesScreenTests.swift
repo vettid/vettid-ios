@@ -8,6 +8,9 @@ import UIKit
 @testable import VettIDData
 import VettIDUI
 
+// Expected texts stay on one line each.
+// swiftlint:disable line_length
+
 /// The votes on a connection's page (ANDROID-PLAN 0.1.102 "Votes", screens 8 and 9): the approved words, word for word, and
 /// the page rendering with each. Mirrors vettid-android `ConnectionVotesTest`'s screen cases.
 @MainActor
@@ -56,4 +59,5 @@ import VettIDUI
         #expect(page(ConnectionVotes(reconnect: true), service: false, actions: actions) > none)
     }
 }
+// swiftlint:enable line_length
 #endif

@@ -93,7 +93,8 @@ public struct ConnectionDetailScreen: View {
             isPresented: Binding(get: { state.confirm == .remove }, set: { if !$0 { actions.onAsk(nil) } }),
             title: ConnectStrings.removeTitle(isolated),
             // A service with a vote that is not finished: the member is told first that removing it ends their part in it.
-            message: (state.votes.unfinished ? ConnectStrings.voteRemoveWarning(isolated) + "\n\n" : "") + ConnectStrings.removeBody(isolated),
+            message: (state.votes.unfinished ? ConnectStrings.voteRemoveWarning(isolated) + "\n\n" : "")
+                + ConnectStrings.removeBody(isolated),
             confirmLabel: ConnectStrings.remove,
             destructive: true,
             onConfirm: actions.onConfirm
