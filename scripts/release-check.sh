@@ -105,7 +105,10 @@ check_app() {
 
   local text
   text=$(mktemp)
-  bundle_text "${app}" >"${text}"
+  # The owner-approved texts of the Votes screens name the production site ("... from votes.vettid.org ..." in
+  # vote_checking_list and vote_checking_site, ANDROID-PLAN 0.1.108 §4 "Votes"): that phrase is text for the member, not a
+  # host the app talks to, so it is not looked for. The configured host (the Info.plist's, without "from ") still is.
+  bundle_text "${app}" | LC_ALL=C sed 's/from votes\.vettid\.org//g' >"${text}"
 
   local problems=()
   local actual
@@ -201,7 +204,7 @@ check_archive_products() {
 # The package products the VettID app links: exactly these (one per shipping package of project.yml).
 APP_PRODUCTS="VettIDCrypto VettIDAttestation VettIDRelay VettIDAltChan VettIDVault VettIDKeys VettIDData VettIDMedia
 VettIDNotify VettIDUI VettIDOnboarding VettIDSettings VettIDShell VettIDConnections VettIDMessages VettIDApprovals
-VettIDNotifications VettIDHistory VettIDItems"
+VettIDNotifications VettIDHistory VettIDItems VettIDVotes"
 
 # The VettID app target (whatever the scheme) links exactly APP_PRODUCTS (each product id resolved to its productName)
 # and compiles no file of AppDevStack/, read from the project file: its package products and its Sources phase.
