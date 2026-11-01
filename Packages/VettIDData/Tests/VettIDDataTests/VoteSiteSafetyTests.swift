@@ -272,7 +272,7 @@ struct VoteSiteSafetyTests: VotesTestCase {
         serveExtension(1, bundle: "{ \"e\" :\t[ 1 ] }")
         let (_, m) = opened()
         try await m.syncOnce()
-        let text = try vault.syncs.map { String(decoding: $0, as: UTF8.self) }.joined()
+        let text = vault.syncs.compactMap { String(bytes: $0, encoding: .utf8) }.joined()
         #expect(text.contains(#""bundle":{"b":[1,{"c":"x y"}]}"#))
         #expect(text.contains(#""index":{"proposal_id":"\#(pid)","extended":1,"s":"a b"}"#))
         #expect(text.contains(#""bundle":{"e":[1]}"#))
@@ -281,7 +281,7 @@ struct VoteSiteSafetyTests: VotesTestCase {
         site.put("p/\(pid)/results.json.sigstore.json", "{ \"mediaType\" : \"bundle\" ,\n \"n\" : [ 1 ] }")
         let m2 = manager(closedOps())
         try await m2.syncOnce()
-        let sent = String(decoding: try #require(vault.submits.last), as: UTF8.self)
+        let sent = try #require(String(bytes: try #require(vault.submits.last), encoding: .utf8))
         #expect(sent.contains(#""bundle":{"mediaType":"bundle","n":[1]}"#))
     }
 
